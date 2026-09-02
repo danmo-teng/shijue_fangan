@@ -114,13 +114,29 @@ void test_kinematics()
 void test_projection_gate_and_filter()
 {
     omni::LocalizationConfig config;
+    config.start_center_m = 1.20;
+    const double expected_x[] = {0.0, -1.20, 1.20, -1.20, 1.20};
+    const double expected_y[] = {0.0, 1.20, 1.20, -1.20, -1.20};
+    const double expected_heading[] = {0.0, 135.0, 45.0, -135.0, -45.0};
+    for (int zone = 1; zone <= 4; ++zone) {
+        config.start_zone = zone;
+        omni::T265FieldProjector zone_projector(config);
+        omni::T265RawPose zone_raw;
+        zone_raw.tracker_confidence = 3;
+        const omni::T265FieldPose zone_field = zone_projector.project(zone_raw);
+        check(near(zone_field.pose.x_m, expected_x[zone]), "selected zone initial field X");
+        check(near(zone_field.pose.y_m, expected_y[zone]), "selected zone initial field Y");
+        check(near(omni::degrees(zone_field.pose.yaw_rad), expected_heading[zone]),
+              "selected zone outward heading");
+    }
+
     config.start_zone = 4;
     omni::T265FieldProjector projector(config);
     omni::T265RawPose raw;
     raw.tracker_confidence = 3;
     omni::T265FieldPose field = projector.project(raw);
-    check(near(field.pose.x_m, 1.35), "zone 4 initial field X");
-    check(near(field.pose.y_m, -1.35), "zone 4 initial field Y");
+    check(near(field.pose.x_m, 1.20), "zone 4 initial field X");
+    check(near(field.pose.y_m, -1.20), "zone 4 initial field Y");
     check(near(omni::degrees(field.pose.yaw_rad), -45.0), "zone 4 heading wraps to -45 degrees");
 
     omni::WheelIncrement wheel;

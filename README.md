@@ -100,6 +100,10 @@ ctest --test-dir build --output-on-failure
 - `localization/docs/uart_protocol.md`
 - `localization/firmware/`
 
+## 6. 四出发区救援地图
+
+`rescue_map/`提供四个出发区与红/蓝方选择，并在独立桌面窗口显示赛题场地、小车融合位置、方向、轨迹和行驶距离。它复用`localization/`的T265+F407编码器融合输出，详见[rescue_map/README.md](rescue_map/README.md)。
+
 ## 安全说明
 
 - RDK与F407连接前应断电，确认TX/RX交叉并共地；

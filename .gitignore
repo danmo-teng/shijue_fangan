@@ -19,3 +19,6 @@ navigation_world.json
 # Generated calibration and machine-specific runtime data
 vision/config/homography.txt
 vision/config/homography.txt.meta.json
+
+# Rescue-map session output
+rescue_map/runtime/

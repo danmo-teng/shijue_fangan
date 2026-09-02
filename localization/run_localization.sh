@@ -2,7 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-boot_tool="${script_dir}/../t265_standalone_debug/build/t265_boot"
+boot_tool="${script_dir}/../t265_trajectory/build/t265_boot"
 
 if [[ ! -x "${script_dir}/build/t265_omni_localizer" ]]; then
     echo "Error: build/t265_omni_localizer is missing; build the project first." >&2
