@@ -85,9 +85,9 @@
     "zone_fps": 30
   },
   "performance": {
-    "two_stage": false,
-    "coarse_width": 1280,
-    "coarse_height": 1024,
+    "two_stage": true,
+    "coarse_width": 320,
+    "coarse_height": 256,
     "refine_padding_px": 25
   },
   "classes": {

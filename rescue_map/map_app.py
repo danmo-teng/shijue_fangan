@@ -48,7 +48,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--launch-localization", action="store_true")
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
-    parser.add_argument("--tx-rate", type=float, default=20.0)
+    parser.add_argument(
+        "--tx-rate",
+        type=float,
+        default=50.0,
+        help="fused-pose UART transmit rate in Hz (default: 50)",
+    )
     parser.add_argument("--fullscreen", action="store_true")
     parser.add_argument("--demo", action="store_true", help="animate a hardware-free pose")
     parser.add_argument("--screenshot", type=Path, help="render one frame and exit")

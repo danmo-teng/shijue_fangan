@@ -13,7 +13,7 @@ NATIVE_HEIGHT = 1024
 def require_native_resolution(width: int, height: int) -> None:
     if (int(width), int(height)) != (NATIVE_WIDTH, NATIVE_HEIGHT):
         raise ValueError(
-            f"本项目的采集、处理和UART坐标固定为{NATIVE_WIDTH}x{NATIVE_HEIGHT}，"
+            f"本项目的采集和UART坐标固定为{NATIVE_WIDTH}x{NATIVE_HEIGHT}，"
             f"不能使用{width}x{height}"
         )
 
@@ -50,7 +50,15 @@ def validate_config(config: dict[str, Any]) -> None:
         )
     performance = config.get("performance", {})
     if bool(performance.get("two_stage", False)):
-        raise ValueError("本项目固定使用1280x1024原图处理，performance.two_stage必须为false")
+        coarse_width = int(performance.get("coarse_width", 0))
+        coarse_height = int(performance.get("coarse_height", 0))
+        native_width, native_height = expected_reference
+        if not (0 < coarse_width <= native_width and 0 < coarse_height <= native_height):
+            raise ValueError("两级检测候选分辨率必须为不超过原图的正整数")
+        if coarse_width * native_height != coarse_height * native_width:
+            raise ValueError("两级检测候选分辨率必须保持原图宽高比")
+        if int(performance.get("refine_padding_px", 0)) < 0:
+            raise ValueError("performance.refine_padding_px不能为负数")
     runtime = config.get("runtime", {})
     rate_limits = {
         "danger_fps": (60, 120),

@@ -16,9 +16,9 @@ def main() -> None:
     assert config["camera"]["width"] == IMAGE_WIDTH
     assert config["camera"]["height"] == IMAGE_HEIGHT
     assert config["threshold_reference_resolution"] == [IMAGE_WIDTH, IMAGE_HEIGHT]
-    assert config["performance"]["two_stage"] is False
-    assert config["performance"]["coarse_width"] == IMAGE_WIDTH
-    assert config["performance"]["coarse_height"] == IMAGE_HEIGHT
+    assert config["performance"]["two_stage"] is True
+    assert config["performance"]["coarse_width"] == 320
+    assert config["performance"]["coarse_height"] == 256
     for profile in config["classes"].values():
         for variant in [profile] + profile.get("references", []):
             low, high = variant["candidate"]["area_px"]

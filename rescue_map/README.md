@@ -39,6 +39,9 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 ./run_rescue_map.sh
 ```
 
+地图启动的融合定位程序默认以`50 Hz`（每20 ms一帧）向F407发送`TYPE=0x16`融合位姿。
+如需临时使用其他发送频率，可通过`--tx-rate`覆盖，例如`./run_rescue_map.sh --tx-rate 20`。
+
 运行依赖 Python 3、OpenCV、NumPy、Pillow，以及已经编译好的 `localization/build/t265_omni_localizer`。启动脚本会先检查这些依赖和 UART 权限。
 
 启动页可鼠标点击，也可使用：
