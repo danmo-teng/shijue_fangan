@@ -31,7 +31,10 @@ from field_model import (
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
 RUNTIME = ROOT / "runtime"
-WINDOW_NAME = "救援场地定位（F全屏 / S重选 / R清轨迹 / Q退出）"
+# OpenCV's Qt backend can create a window for a Unicode title but then fail to
+# retrieve the native handle in cvSetMouseCallback.  Keep the internal key ASCII;
+# all user-facing Chinese labels are drawn inside the canvas.
+WINDOW_NAME = "rescue_field_map"
 FONT_REGULAR = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 FONT_MEDIUM = "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc"
 
@@ -438,6 +441,10 @@ class RescueMapApp:
 
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
         cv2.resizeWindow(WINDOW_NAME, self.width, self.height)
+        # Qt creates the native window lazily.  Present one frame and process an
+        # event before registering callbacks, otherwise the handler may be NULL.
+        cv2.imshow(WINDOW_NAME, self.render())
+        cv2.waitKey(1)
         cv2.setMouseCallback(WINDOW_NAME, self.mouse_callback)
         if self.fullscreen:
             cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
