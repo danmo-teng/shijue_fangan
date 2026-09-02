@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.so
+*.o
+*.a
+build/
+build-*/
+.cache/
+captures/
+runtime_result.json
+localization_result.json
+navigation_world.json
+*.csv
+*.tmp
+*.log
+.idea/
+.vscode/
+
+# Generated calibration and machine-specific runtime data
+vision/config/homography.txt
+vision/config/homography.txt.meta.json

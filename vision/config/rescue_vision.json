@@ -1,0 +1,893 @@
+{
+  "schema_version": 1,
+  "threshold_reference_resolution": [
+    640,
+    480
+  ],
+  "camera": {
+    "width": 1280,
+    "height": 1024,
+    "fps": 180
+  },
+  "roi_polygon": [
+    [
+      0,
+      171
+    ],
+    [
+      1279,
+      171
+    ],
+    [
+      1279,
+      1023
+    ],
+    [
+      0,
+      1023
+    ]
+  ],
+  "calibration_ground_points_mm": [
+    [
+      -300,
+      400
+    ],
+    [
+      0,
+      400
+    ],
+    [
+      300,
+      400
+    ],
+    [
+      -300,
+      800
+    ],
+    [
+      0,
+      800
+    ],
+    [
+      300,
+      800
+    ],
+    [
+      -300,
+      1200
+    ],
+    [
+      0,
+      1200
+    ],
+    [
+      300,
+      1200
+    ]
+  ],
+  "runtime": {
+    "material_classes": [
+      "green_supply",
+      "danger_cyan",
+      "injured_orange",
+      "core_black"
+    ],
+    "danger_classes": [
+      "danger_cyan"
+    ],
+    "zone_classes": [
+      "safe_red",
+      "safe_blue",
+      "entrance_purple"
+    ],
+    "danger_fps": 120,
+    "material_fps": 90,
+    "zone_fps": 30
+  },
+  "performance": {
+    "two_stage": true,
+    "coarse_width": 640,
+    "coarse_height": 512,
+    "refine_padding_px": 12
+  },
+  "classes": {
+    "green_supply": {
+      "display_name": "普通物资（绿色方块）",
+      "enabled": true,
+      "kind": "material",
+      "display_bgr": [
+        0,
+        255,
+        0
+      ],
+      "hsv": [
+        0,
+        130,
+        60,
+        179,
+        255,
+        142
+      ],
+      "lab": [
+        26,
+        137,
+        131,
+        90,
+        184,
+        172
+      ],
+      "fusion": "and",
+      "morphology": {
+        "open": 3,
+        "close": 5,
+        "iterations": 1
+      },
+      "candidate": {
+        "area_px": [
+          80,
+          646
+        ],
+        "aspect": [
+          1.0,
+          1.9161290322580644
+        ],
+        "extent_min": 0.5298387096774194,
+        "extent_target": 0.75,
+        "solidity_min": 0.6415373059589384,
+        "solidity_target": 0.9,
+        "color_fill_min": 0.25,
+        "color_fill_target": 0.65,
+        "border_margin": 2,
+        "size_mm": [
+          [
+            25,
+            60
+          ],
+          [
+            25,
+            60
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.55,
+        "shape": 0.25,
+        "size": 0.2
+      },
+      "score_min": 0.65,
+      "confirmation": {
+        "min_hits": 3,
+        "max_misses": 5,
+        "match_distance": 90,
+        "position_alpha": 0.55
+      },
+      "references": [
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            35,
+            95,
+            18,
+            255,
+            228
+          ],
+          "lab": [
+            49,
+            118,
+            127,
+            211,
+            203,
+            193
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 3,
+            "close": 5,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              4142,
+              33139
+            ],
+            "aspect": [
+              1.0,
+              2.024
+            ],
+            "extent_min": 0.48791304347826087,
+            "extent_target": 0.75,
+            "solidity_min": 0.6248626988130704,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 2,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ]
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 90,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视"
+        },
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            192,
+            88,
+            6,
+            255,
+            213
+          ],
+          "lab": [
+            45,
+            153,
+            143,
+            116,
+            203,
+            193
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 3,
+            "close": 5,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              3692,
+              29541
+            ],
+            "aspect": [
+              1,
+              1.9722488038277513
+            ],
+            "extent_min": 0.5173006205470008,
+            "extent_target": 0.75,
+            "solidity_min": 0.6370996363794718,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 2,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ],
+            "use_shape": true,
+            "use_size": true
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 90,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视2"
+        },
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            148,
+            90,
+            179,
+            255,
+            173
+          ],
+          "lab": [
+            44,
+            149,
+            135,
+            105,
+            187,
+            177
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 3,
+            "close": 5,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              248,
+              1986
+            ],
+            "aspect": [
+              1.0,
+              2.033333333333333
+            ],
+            "extent_min": 0.505335458409229,
+            "extent_target": 0.75,
+            "solidity_min": 0.6213597599494631,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 2,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ]
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 90,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视"
+        },
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            138,
+            74,
+            179,
+            254,
+            171
+          ],
+          "lab": [
+            36,
+            147,
+            133,
+            110,
+            184,
+            172
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 3,
+            "close": 5,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              306,
+              2449
+            ],
+            "aspect": [
+              1,
+              1.9741935483870967
+            ],
+            "extent_min": 0.4869248102466794,
+            "extent_target": 0.75,
+            "solidity_min": 0.612967407781708,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 2,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ],
+            "use_shape": true,
+            "use_size": true
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 90,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视2"
+        }
+      ]
+    },
+    "danger_cyan": {
+      "display_name": "危险目标（浅蓝方块）",
+      "enabled": true,
+      "kind": "material",
+      "display_bgr": [
+        255,
+        255,
+        0
+      ],
+      "hsv": [
+        78,
+        45,
+        45,
+        105,
+        255,
+        255
+      ],
+      "lab": [
+        0,
+        55,
+        75,
+        255,
+        115,
+        150
+      ],
+      "fusion": "or",
+      "morphology": {
+        "open": 3,
+        "close": 5,
+        "iterations": 1
+      },
+      "candidate": {
+        "area_px": [
+          60,
+          28000
+        ],
+        "aspect": [
+          1.0,
+          2.4
+        ],
+        "extent_min": 0.28,
+        "extent_target": 0.72,
+        "solidity_min": 0.52,
+        "solidity_target": 0.88,
+        "color_fill_min": 0.18,
+        "color_fill_target": 0.55,
+        "border_margin": 1,
+        "size_mm": [
+          [
+            20,
+            70
+          ],
+          [
+            20,
+            70
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.62,
+        "shape": 0.2,
+        "size": 0.18
+      },
+      "score_min": 0.52,
+      "confirmation": {
+        "min_hits": 2,
+        "max_misses": 7,
+        "match_distance": 110,
+        "position_alpha": 0.6
+      }
+    },
+    "injured_orange": {
+      "display_name": "伤员（橙色长方体）",
+      "enabled": true,
+      "kind": "material",
+      "display_bgr": [
+        0,
+        140,
+        255
+      ],
+      "hsv": [
+        4,
+        70,
+        35,
+        28,
+        255,
+        255
+      ],
+      "lab": [
+        0,
+        130,
+        135,
+        255,
+        210,
+        255
+      ],
+      "fusion": "and",
+      "morphology": {
+        "open": 3,
+        "close": 7,
+        "iterations": 1
+      },
+      "candidate": {
+        "area_px": [
+          150,
+          45000
+        ],
+        "aspect": [
+          1.25,
+          3.5
+        ],
+        "extent_min": 0.4,
+        "extent_target": 0.78,
+        "solidity_min": 0.65,
+        "solidity_target": 0.92,
+        "color_fill_min": 0.3,
+        "color_fill_target": 0.7,
+        "border_margin": 2,
+        "size_mm": [
+          [
+            25,
+            60
+          ],
+          [
+            60,
+            105
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.48,
+        "shape": 0.3,
+        "size": 0.22
+      },
+      "score_min": 0.67,
+      "confirmation": {
+        "min_hits": 3,
+        "max_misses": 5,
+        "match_distance": 110,
+        "position_alpha": 0.55
+      }
+    },
+    "core_black": {
+      "display_name": "核心物资（黑色三棱锥）",
+      "enabled": true,
+      "kind": "core_black",
+      "display_bgr": [
+        80,
+        80,
+        80
+      ],
+      "hsv": [
+        0,
+        0,
+        0,
+        179,
+        255,
+        78
+      ],
+      "lab": [
+        0,
+        0,
+        0,
+        100,
+        255,
+        255
+      ],
+      "fusion": "and",
+      "morphology": {
+        "open": 3,
+        "close": 5,
+        "iterations": 1
+      },
+      "polygon_epsilon": 0.04,
+      "candidate": {
+        "area_px": [
+          60,
+          22000
+        ],
+        "aspect": [
+          1.0,
+          2.8
+        ],
+        "extent_min": 0.24,
+        "extent_target": 0.62,
+        "solidity_min": 0.48,
+        "solidity_target": 0.82,
+        "color_fill_min": 0.18,
+        "color_fill_target": 0.52,
+        "contrast_min": 10,
+        "contrast_max": 120,
+        "vertices": [
+          3,
+          8
+        ],
+        "border_margin": 3,
+        "size_mm": [
+          [
+            20,
+            70
+          ],
+          [
+            20,
+            70
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.42,
+        "shape": 0.38,
+        "size": 0.2
+      },
+      "score_min": 0.68,
+      "confirmation": {
+        "min_hits": 5,
+        "max_misses": 4,
+        "match_distance": 85,
+        "position_alpha": 0.5
+      }
+    },
+    "safe_red": {
+      "display_name": "红方安全区",
+      "enabled": true,
+      "kind": "zone",
+      "display_bgr": [
+        0,
+        0,
+        255
+      ],
+      "hsv": [
+        170,
+        75,
+        40,
+        12,
+        255,
+        255
+      ],
+      "lab": [
+        0,
+        145,
+        110,
+        255,
+        255,
+        255
+      ],
+      "fusion": "hsv",
+      "morphology": {
+        "open": 5,
+        "close": 15,
+        "iterations": 1
+      },
+      "candidate": {
+        "area_px": [
+          3000,
+          250000
+        ],
+        "aspect": [
+          1.0,
+          6.0
+        ],
+        "extent_min": 0.3,
+        "extent_target": 0.75,
+        "solidity_min": 0.55,
+        "solidity_target": 0.9,
+        "color_fill_min": 0.25,
+        "color_fill_target": 0.7,
+        "border_margin": 0,
+        "size_mm": [
+          [
+            120,
+            1000
+          ],
+          [
+            120,
+            1200
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.55,
+        "shape": 0.25,
+        "size": 0.2
+      },
+      "score_min": 0.62,
+      "confirmation": {
+        "min_hits": 3,
+        "max_misses": 10,
+        "match_distance": 250,
+        "position_alpha": 0.4
+      }
+    },
+    "safe_blue": {
+      "display_name": "蓝方安全区",
+      "enabled": true,
+      "kind": "zone",
+      "display_bgr": [
+        255,
+        80,
+        0
+      ],
+      "hsv": [
+        98,
+        65,
+        35,
+        132,
+        255,
+        255
+      ],
+      "lab": [
+        0,
+        80,
+        0,
+        255,
+        150,
+        135
+      ],
+      "fusion": "hsv",
+      "morphology": {
+        "open": 5,
+        "close": 15,
+        "iterations": 1
+      },
+      "candidate": {
+        "area_px": [
+          3000,
+          250000
+        ],
+        "aspect": [
+          1.0,
+          6.0
+        ],
+        "extent_min": 0.3,
+        "extent_target": 0.75,
+        "solidity_min": 0.55,
+        "solidity_target": 0.9,
+        "color_fill_min": 0.25,
+        "color_fill_target": 0.7,
+        "border_margin": 0,
+        "size_mm": [
+          [
+            120,
+            1000
+          ],
+          [
+            120,
+            1200
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.55,
+        "shape": 0.25,
+        "size": 0.2
+      },
+      "score_min": 0.62,
+      "confirmation": {
+        "min_hits": 3,
+        "max_misses": 10,
+        "match_distance": 250,
+        "position_alpha": 0.4
+      }
+    },
+    "entrance_purple": {
+      "display_name": "安全区紫色入口",
+      "enabled": true,
+      "kind": "zone",
+      "display_bgr": [
+        255,
+        0,
+        255
+      ],
+      "hsv": [
+        132,
+        50,
+        25,
+        169,
+        255,
+        255
+      ],
+      "lab": [
+        0,
+        130,
+        0,
+        255,
+        255,
+        155
+      ],
+      "fusion": "and",
+      "morphology": {
+        "open": 3,
+        "close": 11,
+        "iterations": 1
+      },
+      "candidate": {
+        "area_px": [
+          600,
+          180000
+        ],
+        "aspect": [
+          1.2,
+          12.0
+        ],
+        "extent_min": 0.2,
+        "extent_target": 0.62,
+        "solidity_min": 0.45,
+        "solidity_target": 0.82,
+        "color_fill_min": 0.18,
+        "color_fill_target": 0.58,
+        "border_margin": 0,
+        "size_mm": [
+          [
+            20,
+            800
+          ],
+          [
+            100,
+            1200
+          ]
+        ]
+      },
+      "weights": {
+        "color": 0.56,
+        "shape": 0.29,
+        "size": 0.15
+      },
+      "score_min": 0.6,
+      "confirmation": {
+        "min_hits": 3,
+        "max_misses": 10,
+        "match_distance": 250,
+        "position_alpha": 0.4
+      }
+    }
+  }
+}
