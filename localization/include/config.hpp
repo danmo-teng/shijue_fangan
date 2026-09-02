@@ -17,6 +17,7 @@ struct LocalizationConfig {
 
     double camera_offset_forward_m = 0.0;
     double camera_offset_left_m = 0.0;
+    double camera_to_robot_yaw_deg = 0.0;
 
     double startup_wheel_disable_distance_m = 0.70;
     double corner_exclusion_inner_m = 0.75;

@@ -136,8 +136,9 @@ python3 tools/merge_vision_pose.py \
 ## 实车标定顺序
 
 1. 填写 T265 tracking origin 相对车体旋转中心的 `camera_offset_forward_m/left_m`。
-2. 架空车轮，分别转动 M1/M2/M3，确认原始计数和 `encoder_sign` 一致。
-3. 平地前进 1 m、横移 1 m，核对轮径和 1768 counts/rev；不要用减速带路段标定轮径。
-4. 原地旋转 360°，测量 `wheel_center_radius_m`；未标定前保持 0。
-5. 从四个出发区分别越过/绕过减速带，确认 JSON 中 `wheel.gate` 显示 `startup_obstacle` 或 `corner_obstacle`。
-6. 在平地复测闭合路线，用 CSV 比较 T265、轮式预测和融合输出，再调整协方差和速度残差门限。
+2. 校正T265固定安装角：正值把T265平面位移逆时针旋转，负值顺时针旋转。本车实测地图方向比实际方向逆时针90°，因此`camera_to_robot_yaw_deg=-90.0`。
+3. 架空车轮，分别转动 M1/M2/M3，确认原始计数和 `encoder_sign` 一致。
+4. 平地前进 1 m、横移 1 m，核对轮径和 1768 counts/rev；不要用减速带路段标定轮径。
+5. 原地旋转 360°，测量 `wheel_center_radius_m`；未标定前保持 0。
+6. 从四个出发区分别越过/绕过减速带，确认 JSON 中 `wheel.gate` 显示 `startup_obstacle` 或 `corner_obstacle`。
+7. 在平地复测闭合路线，用 CSV 比较 T265、轮式预测和融合输出，再调整协方差和速度残差门限。

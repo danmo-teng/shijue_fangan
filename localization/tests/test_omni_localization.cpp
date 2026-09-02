@@ -165,6 +165,26 @@ void test_projection_gate_and_filter()
               "selected zone outward heading");
     }
 
+    omni::LocalizationConfig mounted_config = config;
+    mounted_config.start_zone = 2;
+    mounted_config.camera_to_robot_yaw_deg = -90.0;
+    omni::T265FieldProjector mounted_projector(mounted_config);
+    omni::T265RawPose mounted_origin;
+    mounted_origin.tracker_confidence = 3;
+    mounted_projector.project(mounted_origin);
+    omni::T265RawPose mounted_motion = mounted_origin;
+    mounted_motion.native_z_m = -1.0;
+    mounted_motion.native_vz_mps = -1.0;
+    const omni::T265FieldPose corrected_motion = mounted_projector.project(mounted_motion);
+    const double diagonal = std::sqrt(0.5);
+    check(near(corrected_motion.pose.x_m, 1.20 + diagonal, 1e-9),
+          "-90 camera mounting correction rotates map displacement clockwise");
+    check(near(corrected_motion.pose.y_m, 1.20 - diagonal, 1e-9),
+          "mount correction fixes the orthogonal field component");
+    check(near(corrected_motion.body_forward_velocity_mps, 0.0, 1e-9) &&
+          near(corrected_motion.body_left_velocity_mps, -1.0, 1e-9),
+          "camera mounting correction also rotates T265 velocity");
+
     config.start_zone = 4;
     omni::T265FieldProjector projector(config);
     omni::T265RawPose raw;

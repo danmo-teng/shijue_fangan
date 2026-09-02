@@ -86,6 +86,18 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double camera_initial_forward = c0 * camera_df + s0 * camera_dl;
     const double camera_initial_left = -s0 * camera_df + c0 * camera_dl;
 
+    // Fixed planar mounting correction from the T265-derived axes into chassis
+    // axes. Positive rotates the measured vector counter-clockwise; this robot
+    // uses -90 degrees because its old map motion was 90 degrees CCW from the
+    // actual travel direction.
+    const double mount = radians(config_.camera_to_robot_yaw_deg);
+    const double cm = std::cos(mount);
+    const double sm = std::sin(mount);
+    const double mounted_initial_forward =
+        cm * camera_initial_forward - sm * camera_initial_left;
+    const double mounted_initial_left =
+        sm * camera_initial_forward + cm * camera_initial_left;
+
     // Convert camera-origin motion to robot-centre motion using the configured
     // planar lever arm from robot centre to T265 tracking origin.
     const double cy = std::cos(dh);
@@ -94,8 +106,8 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double r0l = config_.camera_offset_left_m;
     const double rotated_rf = cy * r0f - sy * r0l;
     const double rotated_rl = sy * r0f + cy * r0l;
-    const double robot_initial_forward = camera_initial_forward - (rotated_rf - r0f);
-    const double robot_initial_left = camera_initial_left - (rotated_rl - r0l);
+    const double robot_initial_forward = mounted_initial_forward - (rotated_rf - r0f);
+    const double robot_initial_left = mounted_initial_left - (rotated_rl - r0l);
 
     const double cs = std::cos(start_pose_.yaw_rad);
     const double ss = std::sin(start_pose_.yaw_rad);
@@ -111,11 +123,13 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double native_left_velocity = -raw.native_vx_mps;
     const double camera_vf = c0 * native_forward_velocity + s0 * native_left_velocity;
     const double camera_vl = -s0 * native_forward_velocity + c0 * native_left_velocity;
+    const double mounted_vf = cm * camera_vf - sm * camera_vl;
+    const double mounted_vl = sm * camera_vf + cm * camera_vl;
     const double omega = raw.angular_velocity_y_radps;
     const double lever_cross_f = -omega * rotated_rl;
     const double lever_cross_l = omega * rotated_rf;
-    const double base_initial_vf = camera_vf - lever_cross_f;
-    const double base_initial_vl = camera_vl - lever_cross_l;
+    const double base_initial_vf = mounted_vf - lever_cross_f;
+    const double base_initial_vl = mounted_vl - lever_cross_l;
     // Initial robot axes -> current robot axes.
     result.body_forward_velocity_mps = cy * base_initial_vf + sy * base_initial_vl;
     result.body_left_velocity_mps = -sy * base_initial_vf + cy * base_initial_vl;
