@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from rescue_vision.camera import LatestFrameCamera
-from rescue_vision.config import load_config
+from rescue_vision.config import load_config, require_native_resolution
 from rescue_vision.localizer import GroundLocalizer
 
 
@@ -27,6 +27,7 @@ def main() -> int:
     camera_config = config.get("camera", {})
     width = int(args.width or camera_config.get("width", 1280))
     height = int(args.height or camera_config.get("height", 720))
+    require_native_resolution(width, height)
     camera_fps = int(args.camera_fps or camera_config.get("fps", 180))
     ground_points = [tuple(point) for point in config["calibration_ground_points_mm"]]
     clicked: list[tuple[float, float]] = []

@@ -13,6 +13,8 @@ constexpr std::uint8_t kFrameHead2 = 0xB3;
 constexpr std::uint8_t kFrameTail = 0xC3;
 constexpr std::uint8_t kOdomMessageType = 0x15;
 constexpr std::uint8_t kFusedPoseMessageType = 0x16;
+constexpr std::uint8_t kStmStatusMessageType = 0x17;
+constexpr std::uint8_t kMissionCommandMessageType = 0x18;
 constexpr std::size_t kFrameSize = 15;
 
 constexpr std::uint8_t kOdomM1Valid = 1u << 0;
@@ -45,6 +47,15 @@ struct FusedPoseFrame {
     std::uint8_t confidence_and_sigma = 0;
 };
 
+struct StmStatusFrame {
+    std::uint8_t sequence = 0;
+    std::uint8_t flags = 0;
+    std::uint8_t mode = 0;
+    std::uint16_t camera_pitch_cdeg = 0;
+    std::uint8_t acknowledged_sequence = 0;
+    std::uint8_t fault_code = 0;
+};
+
 struct ParserStats {
     std::uint64_t bytes = 0;
     std::uint64_t frames_ok = 0;
@@ -52,19 +63,24 @@ struct ParserStats {
     std::uint64_t malformed = 0;
     std::uint64_t sequence_gaps = 0;
     std::uint64_t duplicates = 0;
+    std::uint64_t status_frames = 0;
 };
 
 std::uint16_t modbus_crc16(const std::uint8_t *data, std::size_t size);
 std::array<std::uint8_t, kFrameSize> build_encoder_frame(const EncoderFrame &frame);
 std::array<std::uint8_t, kFrameSize> build_fused_pose_frame(const FusedPoseFrame &frame);
+std::array<std::uint8_t, kFrameSize> build_stm_status_frame(const StmStatusFrame &frame);
 bool decode_fused_pose_frame(const std::uint8_t *data, std::size_t size,
                              FusedPoseFrame &frame);
+bool validate_relay_frame(const std::uint8_t *data, std::size_t size);
 
 class F407FrameParser {
 public:
     using Callback = std::function<void(const EncoderFrame &)>;
+    using StatusCallback = std::function<void(const StmStatusFrame &)>;
 
-    explicit F407FrameParser(Callback callback);
+    explicit F407FrameParser(Callback callback,
+                             StatusCallback status_callback = StatusCallback{});
     void feed(const std::uint8_t *data, std::size_t size);
     const ParserStats &stats() const noexcept { return stats_; }
 
@@ -74,11 +90,14 @@ private:
     void resynchronize();
 
     Callback callback_;
+    StatusCallback status_callback_;
     std::array<std::uint8_t, kFrameSize> frame_{};
     std::size_t index_ = 0;
     ParserStats stats_{};
     bool have_sequence_ = false;
     std::uint8_t last_sequence_ = 0;
+    bool have_status_sequence_ = false;
+    std::uint8_t last_status_sequence_ = 0;
 };
 
 }  // namespace omni

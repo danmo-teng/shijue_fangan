@@ -72,10 +72,14 @@ ctest --test-dir build --output-on-failure
   --baud 115200 \
   --rate 20 \
   --tx-rate 20 \
+  --command-file ../rescue_map/runtime/uart_command.bin \
+  --stm-status ../rescue_map/runtime/stm32_status.json \
   --csv localization.csv
 ```
 
 `--tx-rate 20` 表示每秒向 F407 回传 20 帧融合位姿；调试旧版下位机时可以用 `--tx-rate 0` 禁止发送。UART 是全双工，F407 的 100 Hz 编码器上报和 RDK 的 20 Hz 位姿回传可同时进行。
+
+任务测试时，定位程序仍是 `/dev/ttyS1` 唯一所有者。`--command-file` 只转发新出现且通过长度、TYPE和CRC校验的 `0x11/0x12/0x18` 帧；`--stm-status` 把F407的 `0x17` 状态帧原子写成JSON，供 `mission_test` 读取。不要再让视觉Python进程直接打开同一串口。
 
 `run_localization.sh` 在 T265 为 `03e7:2150` 时会先调用长超时引导器，进入 `8087:0b37` 后再启动定位。
 

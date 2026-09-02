@@ -23,7 +23,12 @@ from rescue_vision.config import load_config
 from rescue_vision.detector import TraditionalDetector
 from rescue_vision.localizer import GroundLocalizer
 from rescue_vision.tracker import MultiFrameTracker
-from rescue_vision.vision_protocol import NormalSupplyReport, config_frame
+from rescue_vision.vision_protocol import (
+    IMAGE_HEIGHT,
+    IMAGE_WIDTH,
+    NormalSupplyReport,
+    config_frame,
+)
 
 
 def arguments() -> argparse.Namespace:
@@ -84,10 +89,6 @@ def draw_overlay(image, track, report: NormalSupplyReport | None, vision_ms: flo
     return view
 
 
-def protocol_coordinate(value: int, source_size: int, protocol_max: int) -> int:
-    return int(round(max(0, min(source_size - 1, value)) * protocol_max / max(source_size - 1, 1)))
-
-
 def detect_display_size() -> tuple[int, int]:
     try:
         output = subprocess.check_output(
@@ -125,6 +126,11 @@ def main() -> int:
     args.device = resolve_camera_device(args.device)
     if args.vision_fps <= 0 or args.uart_fps <= 0:
         raise ValueError("FPS must be positive")
+    if (args.width, args.height) != (IMAGE_WIDTH, IMAGE_HEIGHT):
+        raise ValueError(
+            f"视觉闭环和UART协议固定为{IMAGE_WIDTH}x{IMAGE_HEIGHT}；"
+            f"当前请求为{args.width}x{args.height}"
+        )
 
     config = load_config(args.config)
     detected_width, detected_height = detect_display_size()
@@ -179,7 +185,7 @@ def main() -> int:
             cv2.resizeWindow(window_name, min(display_width, 960), min(display_height, 720))
         print(f"camera: MJPEG {args.width}x{args.height}@{args.camera_fps} FPS; "
               f"decoder={args.decoder}@{args.decode_fps:g} FPS")
-        print("UART coordinates are scaled to the F407 640x480 contract")
+        print(f"UART coordinates use native {IMAGE_WIDTH}x{IMAGE_HEIGHT} pixels; no scaling")
         print("distance calibration is optional; current UART reports image position only")
         print(f"display: complete-image fit into {display_width}x{display_height}; no cropping")
         print(f"UART {args.uart} {args.baud} 8N1; only green_supply is enabled")
@@ -208,8 +214,8 @@ def main() -> int:
                     detection = last_track.last_detection
                     x, y, width, height = detection.bbox
                     report = NormalSupplyReport(
-                        x_px=protocol_coordinate(x + width // 2, args.width, 639),
-                        y_px=protocol_coordinate(y + height // 2, args.height, 479),
+                        x_px=max(0, min(IMAGE_WIDTH - 1, x + width // 2)),
+                        y_px=max(0, min(IMAGE_HEIGHT - 1, y + height // 2)),
                         distance_mm=0,
                         found=True,
                         # The current communication stage does not request a

@@ -41,3 +41,16 @@ RDK 默认以 20 Hz 回传 EKF 输出：
 F407 接收端必须设置独立看门狗，建议 150 ms。重复 `SEQ` 不得刷新时间戳；超时、CRC 错误或 `VALID=0` 立即停止使用上位机位置。`firmware/f407_fused_pose.[ch]` 提供载荷解码和新鲜度判断。
 
 当前 F407 `Vision_ParseBytes()` 已经是 USART3 的唯一公共字节流解析器，不要再并行启动第二个字节定界状态机。应在现有解析器中把 `0x16` 加入合法 TYPE，CRC 通过后将 `P0..P7` 交给 `F407_FusedPoseDecodePayload()`。
+
+## 共享串口任务扩展
+
+普通物资任务增加`TYPE=0x17` STM32状态和`TYPE=0x18` RDK任务命令，字段定义见仓库根目录`docs/f407_uart_integration_guide.md`。定位程序使用：
+
+```bash
+./run_localization.sh \
+  --uart /dev/ttyS1 \
+  --command-file ../rescue_map/runtime/uart_command.bin \
+  --stm-status ../rescue_map/runtime/stm32_status.json
+```
+
+命令文件必须恰好15字节，只允许`TYPE=0x11/0x12/0x18`且CRC正确；相同内容只转发一次。STM32状态JSON由合法`TYPE=0x17`生成。这样视觉任务与定位融合不会同时打开同一个UART。

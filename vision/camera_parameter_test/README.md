@@ -11,7 +11,7 @@ cd ~/RDK_X5/traditional_rescue_vision/camera_parameter_test
 python3 camera_parameter_test.py
 ```
 
-默认测试的是正式程序使用的模式：`MJPG 640x480@350`。
+默认测试的是正式程序使用的模式：`MJPG 1280x1024@180`。
 
 测试更高分辨率：
 
@@ -23,7 +23,7 @@ python3 camera_parameter_test.py --format MJPG --width 1280 --height 1024 --fps 
 测试 YUYV：
 
 ```bash
-python3 camera_parameter_test.py --format YUYV --width 640 --height 480 --fps 30
+python3 camera_parameter_test.py --format YUYV --width 1280 --height 1024 --fps 30
 ```
 
 启动时也可以设置参数：

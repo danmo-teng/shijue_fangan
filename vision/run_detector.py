@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from rescue_vision.camera import LatestFrameCamera
-from rescue_vision.config import load_config
+from rescue_vision.config import load_config, require_native_resolution
 from rescue_vision.detector import TraditionalDetector
 from rescue_vision.localizer import GroundLocalizer
 from rescue_vision.tracker import MultiFrameTracker
@@ -51,6 +51,7 @@ def main() -> int:
     camera_config = config.setdefault("camera", {})
     width = int(args.width or camera_config.get("width", 1280))
     height = int(args.height or camera_config.get("height", 720))
+    require_native_resolution(width, height)
     camera_fps = int(args.camera_fps or camera_config.get("fps", 180))
     camera_config.update({"width": width, "height": height, "fps": camera_fps})
     danger_classes = runtime.get("danger_classes", ["danger_cyan"])

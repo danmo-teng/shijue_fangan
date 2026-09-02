@@ -316,10 +316,14 @@ class RescueMapApp:
         self.started_monotonic = time.monotonic()
         self.message = "等待T265和编码器融合数据"
         if self.options.launch_localization and not self.options.screenshot:
+            command_file = RUNTIME / "uart_command.bin"
+            stm_status_file = RUNTIME / "stm32_status.json"
             command = [
                 str(PROJECT_ROOT / "localization/run_localization.sh"),
                 "--config", str(RUNTIME / "localization.conf"),
                 "--output", str(self.localization_json),
+                "--command-file", str(command_file),
+                "--stm-status", str(stm_status_file),
                 "--rate", "20",
                 "--tx-rate", str(self.options.tx_rate),
             ]
@@ -327,6 +331,8 @@ class RescueMapApp:
                 command += ["--uart", self.options.uart, "--baud", str(self.options.baud)]
             try:
                 self.localization_json.unlink(missing_ok=True)
+                command_file.unlink(missing_ok=True)
+                stm_status_file.unlink(missing_ok=True)
                 self.localization_process = subprocess.Popen(command, cwd=PROJECT_ROOT / "localization")
                 self.message = "融合定位进程已启动"
             except OSError as exc:

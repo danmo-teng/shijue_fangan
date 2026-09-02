@@ -394,9 +394,9 @@ class TraditionalDetector:
     ) -> tuple[list[Detection], dict[str, Any]]:
         """Two-stage detector: small full-frame proposal pass, then native ROI validation."""
         performance = self.config.get("performance", {})
-        coarse_width = int(performance.get("coarse_width", 640))
-        coarse_height = int(performance.get("coarse_height", 360))
-        two_stage = bool(performance.get("two_stage", True))
+        coarse_width = int(performance.get("coarse_width", 1280))
+        coarse_height = int(performance.get("coarse_height", 1024))
+        two_stage = bool(performance.get("two_stage", False))
         height, width = frame.shape[:2]
         if not two_stage or width <= coarse_width or height <= coarse_height:
             return self._detect_native(

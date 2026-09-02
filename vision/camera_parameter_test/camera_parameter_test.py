@@ -7,7 +7,7 @@ format, and allows common V4L2 controls to be changed while streaming.
 Examples:
     python3 camera_parameter_test.py
     python3 camera_parameter_test.py --width 1280 --height 720 --fps 180
-    python3 camera_parameter_test.py --format YUYV --width 640 --height 480 --fps 30
+    python3 camera_parameter_test.py --format YUYV --width 1280 --height 1024 --fps 30
     python3 camera_parameter_test.py --set-ctrl auto_exposure=1 --exposure 15
 
 This program intentionally lives outside the rescue-vision runtime. It is a
@@ -402,8 +402,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", default="/dev/video0")
     parser.add_argument("--format", choices=("MJPG", "YUYV"), default="MJPG")
-    parser.add_argument("--width", type=int, default=640)
-    parser.add_argument("--height", type=int, default=480)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=1024)
     parser.add_argument("--fps", type=int, default=350)
     parser.add_argument("--buffers", type=int, default=1)
     parser.add_argument("--display-width", type=int, default=1280)

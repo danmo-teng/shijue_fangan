@@ -75,6 +75,27 @@ std::array<std::uint8_t, kFrameSize> build_fused_pose_frame(const FusedPoseFrame
     return frame;
 }
 
+std::array<std::uint8_t, kFrameSize> build_stm_status_frame(const StmStatusFrame &input)
+{
+    std::array<std::uint8_t, kFrameSize> frame{};
+    frame[0] = kFrameHead1;
+    frame[1] = kFrameHead2;
+    frame[2] = kStmStatusMessageType;
+    frame[3] = input.sequence;
+    frame[4] = input.flags;
+    frame[5] = input.mode;
+    put_u16_be(&frame[6], input.camera_pitch_cdeg);
+    frame[8] = input.acknowledged_sequence;
+    frame[9] = input.fault_code;
+    frame[10] = 0;
+    frame[11] = 0;
+    const std::uint16_t crc = modbus_crc16(&frame[2], 10);
+    frame[12] = static_cast<std::uint8_t>(crc & 0xffu);
+    frame[13] = static_cast<std::uint8_t>((crc >> 8) & 0xffu);
+    frame[14] = kFrameTail;
+    return frame;
+}
+
 bool decode_fused_pose_frame(const std::uint8_t *data, std::size_t size,
                              FusedPoseFrame &output)
 {
@@ -96,8 +117,24 @@ bool decode_fused_pose_frame(const std::uint8_t *data, std::size_t size,
     return true;
 }
 
-F407FrameParser::F407FrameParser(Callback callback)
-    : callback_(std::move(callback))
+bool validate_relay_frame(const std::uint8_t *data, std::size_t size)
+{
+    if (!data || size != kFrameSize || data[0] != kFrameHead1 ||
+        data[1] != kFrameHead2 || data[14] != kFrameTail) {
+        return false;
+    }
+    if (data[2] != 0x11u && data[2] != 0x12u &&
+        data[2] != kMissionCommandMessageType) {
+        return false;
+    }
+    const std::uint16_t expected = modbus_crc16(&data[2], 10);
+    const std::uint16_t received = static_cast<std::uint16_t>(data[12]) |
+        static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[13]) << 8);
+    return expected == received;
+}
+
+F407FrameParser::F407FrameParser(Callback callback, StatusCallback status_callback)
+    : callback_(std::move(callback)), status_callback_(std::move(status_callback))
 {
 }
 
@@ -140,7 +177,8 @@ void F407FrameParser::validate_frame()
     const std::uint16_t expected = modbus_crc16(&frame_[2], 10);
     const std::uint16_t received = static_cast<std::uint16_t>(frame_[12]) |
         static_cast<std::uint16_t>(static_cast<std::uint16_t>(frame_[13]) << 8);
-    if (frame_[14] != kFrameTail || frame_[2] != kOdomMessageType) {
+    if (frame_[14] != kFrameTail ||
+        (frame_[2] != kOdomMessageType && frame_[2] != kStmStatusMessageType)) {
         ++stats_.malformed;
         resynchronize();
         return;
@@ -148,6 +186,35 @@ void F407FrameParser::validate_frame()
     if (received != expected) {
         ++stats_.crc_errors;
         resynchronize();
+        return;
+    }
+
+    if (frame_[2] == kStmStatusMessageType) {
+        StmStatusFrame status;
+        status.sequence = frame_[3];
+        status.flags = frame_[4];
+        status.mode = frame_[5];
+        status.camera_pitch_cdeg = get_u16_be(&frame_[6]);
+        status.acknowledged_sequence = frame_[8];
+        status.fault_code = frame_[9];
+        if (have_status_sequence_) {
+            const std::uint8_t difference =
+                static_cast<std::uint8_t>(status.sequence - last_status_sequence_);
+            if (difference == 0) {
+                ++stats_.duplicates;
+                index_ = 0;
+                return;
+            }
+            if (difference > 1) {
+                stats_.sequence_gaps += static_cast<std::uint8_t>(difference - 1);
+            }
+        }
+        have_status_sequence_ = true;
+        last_status_sequence_ = status.sequence;
+        ++stats_.frames_ok;
+        ++stats_.status_frames;
+        if (status_callback_) status_callback_(status);
+        index_ = 0;
         return;
     }
 
@@ -163,6 +230,8 @@ void F407FrameParser::validate_frame()
         const std::uint8_t difference = static_cast<std::uint8_t>(parsed.sequence - last_sequence_);
         if (difference == 0) {
             ++stats_.duplicates;
+            index_ = 0;
+            return;
         } else if (difference > 1) {
             stats_.sequence_gaps += static_cast<std::uint8_t>(difference - 1);
         }

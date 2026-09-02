@@ -11,7 +11,7 @@ class MultiFrameTracker:
         self.config = config
         self.tracks: list[Track] = []
         self.next_id = 1
-        reference_width, reference_height = config.get("threshold_reference_resolution", [640, 480])
+        reference_width, reference_height = config.get("threshold_reference_resolution", [1280, 1024])
         camera = config.get("camera", {})
         width = int(camera.get("width", reference_width))
         height = int(camera.get("height", reference_height))

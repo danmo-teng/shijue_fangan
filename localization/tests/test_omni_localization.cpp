@@ -50,7 +50,7 @@ void test_protocol()
     corrupt[8] ^= 0x40;
     parser.feed(corrupt.data(), corrupt.size());
     parser.feed(bytes.data(), bytes.size());
-    check(parsed.size() == 2, "parser recovers after CRC error");
+    check(parsed.size() == 1, "parser recovers after CRC error without forwarding duplicate");
     check(parser.stats().crc_errors == 1, "CRC error counted");
     check(parser.stats().duplicates == 1, "duplicate sequence counted");
 
@@ -72,6 +72,41 @@ void test_protocol()
     bad_pose[6] ^= 1;
     check(!omni::decode_fused_pose_frame(bad_pose.data(), bad_pose.size(), decoded),
           "fused pose CRC corruption rejected");
+
+    omni::StmStatusFrame expected_status;
+    expected_status.sequence = 9;
+    expected_status.flags = 0x09;
+    expected_status.mode = 2;
+    expected_status.camera_pitch_cdeg = 7350;
+    expected_status.acknowledged_sequence = 8;
+    expected_status.fault_code = 0;
+    const auto status_bytes = omni::build_stm_status_frame(expected_status);
+    std::vector<omni::StmStatusFrame> statuses;
+    omni::F407FrameParser mixed_parser(
+        [](const omni::EncoderFrame &) {},
+        [&](const omni::StmStatusFrame &status) { statuses.push_back(status); });
+    mixed_parser.feed(status_bytes.data(), status_bytes.size());
+    mixed_parser.feed(status_bytes.data(), status_bytes.size());
+    check(statuses.size() == 1, "TYPE 0x17 status parses on shared UART stream");
+    check(statuses[0].camera_pitch_cdeg == 7350 && statuses[0].flags == 0x09,
+          "STM32 camera/claw status round trip");
+    check(mixed_parser.stats().status_frames == 1, "status duplicate does not refresh output");
+
+    std::array<std::uint8_t, omni::kFrameSize> relay{};
+    relay[0] = omni::kFrameHead1;
+    relay[1] = omni::kFrameHead2;
+    relay[2] = omni::kMissionCommandMessageType;
+    relay[3] = 1;
+    relay[4] = 3;
+    const std::uint16_t relay_crc = omni::modbus_crc16(&relay[2], 10);
+    relay[12] = static_cast<std::uint8_t>(relay_crc & 0xffu);
+    relay[13] = static_cast<std::uint8_t>(relay_crc >> 8);
+    relay[14] = omni::kFrameTail;
+    check(omni::validate_relay_frame(relay.data(), relay.size()),
+          "valid TYPE 0x18 application frame accepted by relay");
+    relay[2] = omni::kFusedPoseMessageType;
+    check(!omni::validate_relay_frame(relay.data(), relay.size()),
+          "relay rejects TYPE 0x16 generated internally by localization");
 }
 
 void test_kinematics()

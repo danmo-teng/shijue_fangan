@@ -6,6 +6,18 @@ from pathlib import Path
 from typing import Any
 
 
+NATIVE_WIDTH = 1280
+NATIVE_HEIGHT = 1024
+
+
+def require_native_resolution(width: int, height: int) -> None:
+    if (int(width), int(height)) != (NATIVE_WIDTH, NATIVE_HEIGHT):
+        raise ValueError(
+            f"本项目的采集、处理和UART坐标固定为{NATIVE_WIDTH}x{NATIVE_HEIGHT}，"
+            f"不能使用{width}x{height}"
+        )
+
+
 def load_config(path: str | Path) -> dict[str, Any]:
     with Path(path).open("r", encoding="utf-8") as stream:
         data = json.load(stream)
@@ -26,9 +38,19 @@ def save_config(path: str | Path, config: dict[str, Any]) -> None:
 
 def validate_config(config: dict[str, Any]) -> None:
     camera = config.get("camera", {})
-    for key, fallback in (("width", 1280), ("height", 720), ("fps", 180)):
+    for key, fallback in (("width", NATIVE_WIDTH), ("height", NATIVE_HEIGHT), ("fps", 180)):
         if int(camera.get(key, fallback)) <= 0:
             raise ValueError(f"camera.{key}必须大于0")
+    reference = config.get("threshold_reference_resolution")
+    expected_reference = [int(camera.get("width", NATIVE_WIDTH)), int(camera.get("height", NATIVE_HEIGHT))]
+    require_native_resolution(*expected_reference)
+    if reference != expected_reference:
+        raise ValueError(
+            f"threshold_reference_resolution必须与原生处理分辨率一致：{expected_reference}"
+        )
+    performance = config.get("performance", {})
+    if bool(performance.get("two_stage", False)):
+        raise ValueError("本项目固定使用1280x1024原图处理，performance.two_stage必须为false")
     runtime = config.get("runtime", {})
     rate_limits = {
         "danger_fps": (60, 120),

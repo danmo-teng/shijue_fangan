@@ -37,6 +37,8 @@ struct Options {
     std::string serial;
     std::string output_path = "localization_result.json";
     std::string csv_path;
+    std::string command_file_path;
+    std::string stm_status_output_path;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 20.0;
@@ -114,6 +116,8 @@ void usage(const char *program)
         << "  --serial SERIAL     select T265 serial\n"
         << "  --output FILE       atomic JSON output\n"
         << "  --csv FILE          diagnostic CSV log\n"
+        << "  --command-file FILE relay new valid TYPE 0x11/0x12/0x18 frames\n"
+        << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --rate HZ           stdout/JSON rate, default 20\n"
         << "  --tx-rate HZ        fused-pose UART rate; 0 disables TX (default 20)\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
@@ -145,6 +149,10 @@ Options parse_options(int argc, char **argv)
             options.output_path = value("--output");
         } else if (argument == "--csv") {
             options.csv_path = value("--csv");
+        } else if (argument == "--command-file") {
+            options.command_file_path = value("--command-file");
+        } else if (argument == "--stm-status") {
+            options.stm_status_output_path = value("--stm-status");
         } else if (argument == "--rate") {
             options.output_rate_hz = parse_nonnegative(value("--rate"), "--rate");
         } else if (argument == "--tx-rate") {
@@ -186,6 +194,40 @@ const char *quality_name(std::uint8_t confidence, bool t265_update_accepted)
     if (confidence >= 2 && t265_update_accepted) return "GOOD";
     if (confidence >= 1) return "DEGRADED";
     return "LOST";
+}
+
+bool write_stm_status_json(const std::string &path, const omni::StmStatusFrame &status)
+{
+    if (path.empty()) return true;
+    const std::string temporary = path + ".tmp";
+    std::ofstream file(temporary, std::ios::trunc);
+    if (!file) return false;
+    file << "{\n"
+         << "  \"schema_version\": 1,\n"
+         << "  \"timestamp_monotonic_ns\": " << monotonic_ns() << ",\n"
+         << "  \"sequence\": " << static_cast<unsigned>(status.sequence) << ",\n"
+         << "  \"flags\": " << static_cast<unsigned>(status.flags) << ",\n"
+         << "  \"mode\": " << static_cast<unsigned>(status.mode) << ",\n"
+         << "  \"camera_pitch_cdeg\": " << status.camera_pitch_cdeg << ",\n"
+         << "  \"acknowledged_sequence\": "
+         << static_cast<unsigned>(status.acknowledged_sequence) << ",\n"
+         << "  \"fault_code\": " << static_cast<unsigned>(status.fault_code) << "\n"
+         << "}\n";
+    file.close();
+    return file && std::rename(temporary.c_str(), path.c_str()) == 0;
+}
+
+bool read_relay_frame(const std::string &path,
+                      std::array<std::uint8_t, omni::kFrameSize> &result)
+{
+    if (path.empty()) return false;
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return false;
+    file.read(reinterpret_cast<char *>(result.data()), result.size());
+    if (file.gcount() != static_cast<std::streamsize>(result.size())) return false;
+    char extra = 0;
+    if (file.get(extra)) return false;
+    return omni::validate_relay_frame(result.data(), result.size());
 }
 
 void write_atomic_json(const std::string &path,
@@ -284,19 +326,24 @@ int main(int argc, char **argv)
         std::atomic<std::uint64_t> live_uart_frames{0};
         std::atomic<std::uint64_t> live_crc_errors{0};
         std::atomic<std::uint64_t> live_sequence_gaps{0};
+        std::atomic<std::uint64_t> status_write_errors{0};
         std::atomic<std::int64_t> last_uart_ns{0};
         std::unique_ptr<omni::SerialPort> uart;
         if (!options.uart_path.empty()) {
             uart.reset(new omni::SerialPort(options.uart_path, options.baud));
             uart->open_port();
             std::cerr << "[UART] " << options.uart_path << " @ " << options.baud
-                      << " 8N1, RX TYPE=0x15, TX TYPE=0x16 @ "
+                      << " 8N1, RX TYPE=0x15/0x17, TX TYPE=0x16 @ "
                       << options.tx_rate_hz << " Hz\n";
             uart_thread = std::thread([&]() {
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
                     encoder_queue.push(frame);
                     last_uart_ns.store(static_cast<std::int64_t>(monotonic_ns()),
                                        std::memory_order_relaxed);
+                }, [&](const omni::StmStatusFrame &status) {
+                    if (!write_stm_status_json(options.stm_status_output_path, status)) {
+                        status_write_errors.fetch_add(1, std::memory_order_relaxed);
+                    }
                 });
                 std::uint8_t buffer[256];
                 while (running.load(std::memory_order_relaxed) && !g_stop) {
@@ -355,6 +402,10 @@ int main(int argc, char **argv)
         std::uint8_t pose_tx_sequence = 0;
         std::uint64_t pose_tx_frames = 0;
         std::uint64_t pose_tx_errors = 0;
+        std::uint64_t relay_tx_frames = 0;
+        std::uint64_t relay_tx_errors = 0;
+        std::array<std::uint8_t, omni::kFrameSize> last_relay_frame{};
+        bool have_last_relay_frame = false;
 
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
@@ -428,6 +479,20 @@ int main(int argc, char **argv)
             const bool uart_fresh = !options.uart_path.empty() && last_ns > 0 &&
                 static_cast<std::int64_t>(monotonic_ns()) - last_ns <=
                     static_cast<std::int64_t>(config.uart_stale_ms) * 1000000LL;
+
+            if (uart && !options.command_file_path.empty()) {
+                std::array<std::uint8_t, omni::kFrameSize> relay_frame{};
+                if (read_relay_frame(options.command_file_path, relay_frame) &&
+                    (!have_last_relay_frame || relay_frame != last_relay_frame)) {
+                    if (uart->write_all(relay_frame.data(), relay_frame.size(), 50)) {
+                        ++relay_tx_frames;
+                        last_relay_frame = relay_frame;
+                        have_last_relay_frame = true;
+                    } else {
+                        ++relay_tx_errors;
+                    }
+                }
+            }
 
             if (uart && options.tx_rate_hz > 0.0 && now >= next_pose_tx) {
                 next_pose_tx = now +
@@ -519,6 +584,11 @@ int main(int argc, char **argv)
                   << " sequence_gaps=" << final_parser_stats.sequence_gaps
                   << " pose_tx=" << pose_tx_frames
                   << " pose_tx_errors=" << pose_tx_errors
+                  << " relay_tx=" << relay_tx_frames
+                  << " relay_tx_errors=" << relay_tx_errors
+                  << " status_frames=" << final_parser_stats.status_frames
+                  << " status_write_errors="
+                  << status_write_errors.load(std::memory_order_relaxed)
                   << " queue_dropped=" << encoder_queue.dropped() << '\n';
         return EXIT_SUCCESS;
     } catch (const rs2::error &error) {

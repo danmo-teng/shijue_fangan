@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "threshold_reference_resolution": [
-    640,
-    480
+    1280,
+    1024
   ],
   "camera": {
     "width": 1280,
@@ -85,10 +85,10 @@
     "zone_fps": 30
   },
   "performance": {
-    "two_stage": true,
-    "coarse_width": 640,
-    "coarse_height": 512,
-    "refine_padding_px": 12
+    "two_stage": false,
+    "coarse_width": 1280,
+    "coarse_height": 1024,
+    "refine_padding_px": 25
   },
   "classes": {
     "green_supply": {
@@ -102,42 +102,42 @@
       ],
       "hsv": [
         0,
-        130,
-        60,
+        134,
+        97,
         179,
         255,
-        142
+        179
       ],
       "lab": [
-        26,
-        137,
-        131,
-        90,
-        184,
-        172
+        47,
+        151,
+        136,
+        114,
+        190,
+        179
       ],
       "fusion": "and",
       "morphology": {
-        "open": 3,
-        "close": 5,
+        "open": 7,
+        "close": 11,
         "iterations": 1
       },
       "candidate": {
         "area_px": [
-          80,
-          646
+          1233,
+          9869
         ],
         "aspect": [
-          1.0,
-          1.9161290322580644
+          1,
+          2.3433962264150945
         ],
-        "extent_min": 0.5298387096774194,
+        "extent_min": 0.5302980585179109,
         "extent_target": 0.75,
-        "solidity_min": 0.6415373059589384,
+        "solidity_min": 0.6272304324028463,
         "solidity_target": 0.9,
         "color_fill_min": 0.25,
         "color_fill_target": 0.65,
-        "border_margin": 2,
+        "border_margin": 4,
         "size_mm": [
           [
             25,
@@ -147,7 +147,9 @@
             25,
             60
           ]
-        ]
+        ],
+        "use_shape": true,
+        "use_size": true
       },
       "weights": {
         "color": 0.55,
@@ -158,7 +160,7 @@
       "confirmation": {
         "min_hits": 3,
         "max_misses": 5,
-        "match_distance": 90,
+        "match_distance": 186,
         "position_alpha": 0.55
       },
       "references": [
@@ -173,260 +175,42 @@
           ],
           "hsv": [
             0,
-            35,
-            95,
-            18,
-            255,
-            228
-          ],
-          "lab": [
-            49,
-            118,
-            127,
-            211,
-            203,
-            193
-          ],
-          "fusion": "and",
-          "morphology": {
-            "open": 3,
-            "close": 5,
-            "iterations": 1
-          },
-          "candidate": {
-            "area_px": [
-              4142,
-              33139
-            ],
-            "aspect": [
-              1.0,
-              2.024
-            ],
-            "extent_min": 0.48791304347826087,
-            "extent_target": 0.75,
-            "solidity_min": 0.6248626988130704,
-            "solidity_target": 0.9,
-            "color_fill_min": 0.25,
-            "color_fill_target": 0.65,
-            "border_margin": 2,
-            "size_mm": [
-              [
-                25,
-                60
-              ],
-              [
-                25,
-                60
-              ]
-            ]
-          },
-          "weights": {
-            "color": 0.55,
-            "shape": 0.25,
-            "size": 0.2
-          },
-          "score_min": 0.65,
-          "confirmation": {
-            "min_hits": 3,
-            "max_misses": 5,
-            "match_distance": 90,
-            "position_alpha": 0.55
-          },
-          "reference_name": "侧视"
-        },
-        {
-          "display_name": "普通物资（绿色方块）",
-          "enabled": true,
-          "kind": "material",
-          "display_bgr": [
-            0,
-            255,
-            0
-          ],
-          "hsv": [
-            0,
-            192,
-            88,
+            204,
+            94,
             6,
             255,
-            213
-          ],
-          "lab": [
-            45,
-            153,
-            143,
-            116,
-            203,
-            193
-          ],
-          "fusion": "and",
-          "morphology": {
-            "open": 3,
-            "close": 5,
-            "iterations": 1
-          },
-          "candidate": {
-            "area_px": [
-              3692,
-              29541
-            ],
-            "aspect": [
-              1,
-              1.9722488038277513
-            ],
-            "extent_min": 0.5173006205470008,
-            "extent_target": 0.75,
-            "solidity_min": 0.6370996363794718,
-            "solidity_target": 0.9,
-            "color_fill_min": 0.25,
-            "color_fill_target": 0.65,
-            "border_margin": 2,
-            "size_mm": [
-              [
-                25,
-                60
-              ],
-              [
-                25,
-                60
-              ]
-            ],
-            "use_shape": true,
-            "use_size": true
-          },
-          "weights": {
-            "color": 0.55,
-            "shape": 0.25,
-            "size": 0.2
-          },
-          "score_min": 0.65,
-          "confirmation": {
-            "min_hits": 3,
-            "max_misses": 5,
-            "match_distance": 90,
-            "position_alpha": 0.55
-          },
-          "reference_name": "侧视2"
-        },
-        {
-          "display_name": "普通物资（绿色方块）",
-          "enabled": true,
-          "kind": "material",
-          "display_bgr": [
-            0,
-            255,
-            0
-          ],
-          "hsv": [
-            0,
-            148,
-            90,
-            179,
-            255,
-            173
-          ],
-          "lab": [
-            44,
-            149,
-            135,
-            105,
-            187,
-            177
-          ],
-          "fusion": "and",
-          "morphology": {
-            "open": 3,
-            "close": 5,
-            "iterations": 1
-          },
-          "candidate": {
-            "area_px": [
-              248,
-              1986
-            ],
-            "aspect": [
-              1.0,
-              2.033333333333333
-            ],
-            "extent_min": 0.505335458409229,
-            "extent_target": 0.75,
-            "solidity_min": 0.6213597599494631,
-            "solidity_target": 0.9,
-            "color_fill_min": 0.25,
-            "color_fill_target": 0.65,
-            "border_margin": 2,
-            "size_mm": [
-              [
-                25,
-                60
-              ],
-              [
-                25,
-                60
-              ]
-            ]
-          },
-          "weights": {
-            "color": 0.55,
-            "shape": 0.25,
-            "size": 0.2
-          },
-          "score_min": 0.65,
-          "confirmation": {
-            "min_hits": 3,
-            "max_misses": 5,
-            "match_distance": 90,
-            "position_alpha": 0.55
-          },
-          "reference_name": "侧视"
-        },
-        {
-          "display_name": "普通物资（绿色方块）",
-          "enabled": true,
-          "kind": "material",
-          "display_bgr": [
-            0,
-            255,
-            0
-          ],
-          "hsv": [
-            0,
-            138,
-            74,
-            179,
-            254,
             171
           ],
           "lab": [
-            36,
+            44,
+            160,
             147,
-            133,
-            110,
-            184,
-            172
+            99,
+            189,
+            179
           ],
           "fusion": "and",
           "morphology": {
-            "open": 3,
-            "close": 5,
+            "open": 7,
+            "close": 11,
             "iterations": 1
           },
           "candidate": {
             "area_px": [
-              306,
-              2449
+              3072,
+              24585
             ],
             "aspect": [
-              1,
-              1.9741935483870967
+              1.0,
+              2.4750001287460575
             ],
-            "extent_min": 0.4869248102466794,
+            "extent_min": 0.5488439308172374,
             "extent_target": 0.75,
-            "solidity_min": 0.612967407781708,
+            "solidity_min": 0.6486335227272728,
             "solidity_target": 0.9,
             "color_fill_min": 0.25,
             "color_fill_target": 0.65,
-            "border_margin": 2,
+            "border_margin": 4,
             "size_mm": [
               [
                 25,
@@ -449,7 +233,81 @@
           "confirmation": {
             "min_hits": 3,
             "max_misses": 5,
-            "match_distance": 90,
+            "match_distance": 186,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视"
+        },
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            149,
+            109,
+            6,
+            234,
+            212
+          ],
+          "lab": [
+            62,
+            152,
+            140,
+            138,
+            189,
+            176
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 7,
+            "close": 11,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              3456,
+              27648
+            ],
+            "aspect": [
+              1,
+              2.848101265822785
+            ],
+            "extent_min": 0.55,
+            "extent_target": 0.75,
+            "solidity_min": 0.65,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 4,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ],
+            "use_shape": true,
+            "use_size": true
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 186,
             "position_alpha": 0.55
           },
           "reference_name": "侧视2"
@@ -483,14 +341,14 @@
       ],
       "fusion": "or",
       "morphology": {
-        "open": 3,
-        "close": 5,
+        "open": 7,
+        "close": 11,
         "iterations": 1
       },
       "candidate": {
         "area_px": [
-          60,
-          28000
+          256,
+          119467
         ],
         "aspect": [
           1.0,
@@ -502,7 +360,7 @@
         "solidity_target": 0.88,
         "color_fill_min": 0.18,
         "color_fill_target": 0.55,
-        "border_margin": 1,
+        "border_margin": 2,
         "size_mm": [
           [
             20,
@@ -523,7 +381,7 @@
       "confirmation": {
         "min_hits": 2,
         "max_misses": 7,
-        "match_distance": 110,
+        "match_distance": 227,
         "position_alpha": 0.6
       }
     },
@@ -554,14 +412,14 @@
       ],
       "fusion": "and",
       "morphology": {
-        "open": 3,
-        "close": 7,
+        "open": 7,
+        "close": 15,
         "iterations": 1
       },
       "candidate": {
         "area_px": [
-          150,
-          45000
+          640,
+          192000
         ],
         "aspect": [
           1.25,
@@ -573,7 +431,7 @@
         "solidity_target": 0.92,
         "color_fill_min": 0.3,
         "color_fill_target": 0.7,
-        "border_margin": 2,
+        "border_margin": 4,
         "size_mm": [
           [
             25,
@@ -594,7 +452,7 @@
       "confirmation": {
         "min_hits": 3,
         "max_misses": 5,
-        "match_distance": 110,
+        "match_distance": 227,
         "position_alpha": 0.55
       }
     },
@@ -625,15 +483,15 @@
       ],
       "fusion": "and",
       "morphology": {
-        "open": 3,
-        "close": 5,
+        "open": 7,
+        "close": 11,
         "iterations": 1
       },
       "polygon_epsilon": 0.04,
       "candidate": {
         "area_px": [
-          60,
-          22000
+          256,
+          93867
         ],
         "aspect": [
           1.0,
@@ -651,7 +509,7 @@
           3,
           8
         ],
-        "border_margin": 3,
+        "border_margin": 6,
         "size_mm": [
           [
             20,
@@ -672,7 +530,7 @@
       "confirmation": {
         "min_hits": 5,
         "max_misses": 4,
-        "match_distance": 85,
+        "match_distance": 176,
         "position_alpha": 0.5
       }
     },
@@ -703,14 +561,14 @@
       ],
       "fusion": "hsv",
       "morphology": {
-        "open": 5,
-        "close": 15,
+        "open": 11,
+        "close": 31,
         "iterations": 1
       },
       "candidate": {
         "area_px": [
-          3000,
-          250000
+          12800,
+          1066667
         ],
         "aspect": [
           1.0,
@@ -743,7 +601,7 @@
       "confirmation": {
         "min_hits": 3,
         "max_misses": 10,
-        "match_distance": 250,
+        "match_distance": 516,
         "position_alpha": 0.4
       }
     },
@@ -774,14 +632,14 @@
       ],
       "fusion": "hsv",
       "morphology": {
-        "open": 5,
-        "close": 15,
+        "open": 11,
+        "close": 31,
         "iterations": 1
       },
       "candidate": {
         "area_px": [
-          3000,
-          250000
+          12800,
+          1066667
         ],
         "aspect": [
           1.0,
@@ -814,7 +672,7 @@
       "confirmation": {
         "min_hits": 3,
         "max_misses": 10,
-        "match_distance": 250,
+        "match_distance": 516,
         "position_alpha": 0.4
       }
     },
@@ -845,14 +703,14 @@
       ],
       "fusion": "and",
       "morphology": {
-        "open": 3,
-        "close": 11,
+        "open": 7,
+        "close": 23,
         "iterations": 1
       },
       "candidate": {
         "area_px": [
-          600,
-          180000
+          2560,
+          768000
         ],
         "aspect": [
           1.2,
@@ -885,7 +743,7 @@
       "confirmation": {
         "min_hits": 3,
         "max_misses": 10,
-        "match_distance": 250,
+        "match_distance": 516,
         "position_alpha": 0.4
       }
     }

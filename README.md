@@ -104,6 +104,10 @@ ctest --test-dir build --output-on-failure
 
 `rescue_map/`提供四个出发区与红/蓝方选择，并在独立桌面窗口显示赛题场地、小车融合位置、方向、轨迹和行驶距离。它复用`localization/`的T265+F407编码器融合输出，详见[rescue_map/README.md](rescue_map/README.md)。
 
+## 7. 普通物资抓取与安全区投送测试
+
+`mission_test/`实现普通物资居中靠近、爪子入镜后底部抓取确认、融合地图直线导航、安全区入口对正以及物资入区视觉确认。视觉处理与UART坐标均为原生`1280×1024`，详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
+
 ## 安全说明
 
 - RDK与F407连接前应断电，确认TX/RX交叉并共地；

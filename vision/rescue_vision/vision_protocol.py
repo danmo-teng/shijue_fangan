@@ -9,6 +9,11 @@ FRAME_TAIL = 0xC3
 FRAME_SIZE = 15
 TYPE_CONFIG = 0x11
 TYPE_REPORT = 0x12
+TYPE_STM32_STATUS = 0x17
+TYPE_MISSION_COMMAND = 0x18
+
+IMAGE_WIDTH = 1280
+IMAGE_HEIGHT = 1024
 
 REPORT_FOUND = 0x01
 REPORT_NEAR = 0x02
@@ -70,8 +75,10 @@ class NormalSupplyReport:
             if self.near:
                 raise ValueError("near cannot be set when found is false")
             return bytes(8)
-        if not 0 <= self.x_px <= 639 or not 0 <= self.y_px <= 479:
-            raise ValueError("target pixel must be inside the 640x480 F407 image contract")
+        if not 0 <= self.x_px < IMAGE_WIDTH or not 0 <= self.y_px < IMAGE_HEIGHT:
+            raise ValueError(
+                f"target pixel must be inside the {IMAGE_WIDTH}x{IMAGE_HEIGHT} F407 image contract"
+            )
         if self.distance_valid:
             if not 1 <= self.distance_mm <= 0xFFFF:
                 raise ValueError("valid distance must be in 1..65535 mm")

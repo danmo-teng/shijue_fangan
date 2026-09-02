@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
-from rescue_vision.config import load_config, save_config
+from rescue_vision.config import load_config, require_native_resolution, save_config
 from rescue_vision.detector import TraditionalDetector
 from rescue_vision.localizer import GroundLocalizer
 from rescue_vision.tuning import auto_sample_profile, diagnose_frame
@@ -39,7 +39,7 @@ main{display:grid;grid-template-columns:minmax(660px,1.35fr) minmax(520px,1fr);g
 <main><div><div class="panel"><div class="row"><label>调节组：</label><select id="classSelect" onchange="selectClass()"></select><span id="groupBadge" class="badge"></span><span id="keyBadge" class="badge"></span></div>
 <div class="row"><label>组号</label><input id="groupIndex" type="number" min="1" max="99" style="width:75px"><label style="width:85px">组显示名称</label><input id="displayName" type="text"><button onclick="applyGroupMeta()">修改组号/组名</button><button onclick="applyAll()">应用参数</button></div>
 <div class="row"><label>参考阈值</label><select id="referenceSelect" onchange="selectReference()"></select><label>参考名称</label><input id="referenceName" type="text" style="max-width:180px"><button onclick="addReference()" class="good">复制并新增参考</button><button onclick="deleteReference()" class="warn">删除当前参考</button></div>
-<canvas id="canvas" width="1280" height="720"></canvas>
+<canvas id="canvas" width="1280" height="1024"></canvas>
 <div class="row"><button onclick="setView('original')">原图</button><button onclick="setView('mask')">白黑掩膜</button><button onclick="setView('annotated')">候选与分类</button><button class="warn" onclick="autoSample()">用框选区域自动取值</button></div>
 <div class="help">鼠标在画面上按住左键框住一个目标（尽量少带背景），点击“自动取值”。程序会用稳健分位数估算HSV/Lab，并估算面积、长宽比、填充率、实心度；之后再用右侧控件微调。框选时建议先冻结。</div>
 <pre id="sampleResult">尚未框选采样</pre></div>
@@ -52,8 +52,8 @@ main{display:grid;grid-template-columns:minmax(660px,1.35fr) minmax(520px,1fr);g
 <script>
 let state=null, view='original', frozen=false, rect=null, dragging=false, start=null, image=new Image();const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const defs=[['H min','hsv',0,0,179,1],['S min','hsv',1,0,255,1],['V min','hsv',2,0,255,1],['H max','hsv',3,0,179,1],['S max','hsv',4,0,255,1],['V max','hsv',5,0,255,1],['L min','lab',0,0,255,1],['A min','lab',1,0,255,1],['B min','lab',2,0,255,1],['L max','lab',3,0,255,1],['A max','lab',4,0,255,1],['B max','lab',5,0,255,1]];
-const shapes=[['开运算核(基准)','morphology.open',0,31,1],['闭运算核(基准)','morphology.close',0,31,1],['面积最小(基准)','candidate.area_px.0',0,200000,10],['面积最大(基准)','candidate.area_px.1',10,500000,10],['长宽比最小','candidate.aspect.0',1,12,.05],['长宽比最大','candidate.aspect.1',1,15,.05],['填充率最小','candidate.extent_min',0,1,.01],['实心度最小','candidate.solidity_min',0,1,.01],['颜色占比最小','candidate.color_fill_min',0,1,.01],['局部对比最小','candidate.contrast_min',0,150,1],['多边形顶点最小','candidate.vertices.0',3,15,1],['多边形顶点最大','candidate.vertices.1',3,20,1],['分类阈值','score_min',0,1,.01],['颜色权重','weights.color',0,1,.01],['形状权重','weights.shape',0,1,.01],['尺寸权重','weights.size',0,1,.01]];
-const tracks=[['确认命中帧数','confirmation.min_hits',1,30,1],['允许丢失帧数','confirmation.max_misses',0,60,1],['匹配距离','confirmation.match_distance',10,500,5]];
+const shapes=[['开运算核(1280基准)','morphology.open',0,31,1],['闭运算核(1280基准)','morphology.close',0,31,1],['面积最小(1280×1024像素)','candidate.area_px.0',0,1310720,10],['面积最大(1280×1024像素)','candidate.area_px.1',10,1310720,10],['长宽比最小','candidate.aspect.0',1,12,.05],['长宽比最大','candidate.aspect.1',1,15,.05],['填充率最小','candidate.extent_min',0,1,.01],['实心度最小','candidate.solidity_min',0,1,.01],['颜色占比最小','candidate.color_fill_min',0,1,.01],['局部对比最小','candidate.contrast_min',0,150,1],['多边形顶点最小','candidate.vertices.0',3,15,1],['多边形顶点最大','candidate.vertices.1',3,20,1],['分类阈值','score_min',0,1,.01],['颜色权重','weights.color',0,1,.01],['形状权重','weights.shape',0,1,.01],['尺寸权重','weights.size',0,1,.01]];
+const tracks=[['确认命中帧数','confirmation.min_hits',1,30,1],['允许丢失帧数','confirmation.max_misses',0,60,1],['匹配距离(1280像素)','confirmation.match_distance',10,1500,5]];
 function getPath(o,p){return p.split('.').reduce((a,k)=>a[k],o)}function setPath(o,p,v){let a=p.split('.'),x=o;for(let i=0;i<a.length-1;i++)x=x[a[i]];x[a.at(-1)]=v}
 function control(id,label,min,max,step,value){return `<div class="control"><label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}" value="${value}" oninput="document.getElementById('${id}n').value=this.value"><input id="${id}n" type="number" min="${min}" max="${max}" step="${step}" value="${value}" oninput="this.previousElementSibling.value=this.value"></div>`}
 async function api(path,body){let o={};if(body!==undefined)o={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};let r=await fetch(path,o);let j=await r.json();if(!r.ok)throw Error(j.error||r.statusText);return j}
@@ -95,6 +95,7 @@ class Runtime:
         camera_config = self.config.setdefault("camera", {})
         self.width = int(args.width or camera_config.get("width", 1280))
         self.height = int(args.height or camera_config.get("height", 720))
+        require_native_resolution(self.width, self.height)
         self.camera_fps = int(args.camera_fps or camera_config.get("fps", 180))
         camera_config.update({"width": self.width, "height": self.height, "fps": self.camera_fps})
         self.localizer = GroundLocalizer.load(args.homography, (self.width, self.height))

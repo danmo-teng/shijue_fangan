@@ -74,6 +74,8 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 - `runtime/session.json`：本次出发区、红蓝方和初始位姿；
 - `runtime/localization.conf`：传给融合定位程序的配置；
 - `runtime/localization_result.json`：T265+编码器融合实时输出。
+- `runtime/uart_command.bin`：任务程序交给定位进程转发的15字节UART帧；
+- `runtime/stm32_status.json`：STM32爪子、摄像头和任务状态。
 
 地图程序不会直接解释原始编码器帧，而是复用 `localization` 中已经测试过的 UART 协议、三轮全向运动学、减速带门控和 EKF。这能保证屏幕显示位置与回传给 F407 的融合位置使用同一套坐标。
 

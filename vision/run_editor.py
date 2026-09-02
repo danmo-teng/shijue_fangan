@@ -10,7 +10,7 @@ from pathlib import Path
 import cv2
 
 from rescue_vision.camera import LatestFrameCamera
-from rescue_vision.config import load_config
+from rescue_vision.config import load_config, require_native_resolution
 from rescue_vision.detector import TraditionalDetector
 from rescue_vision.editor import ThresholdEditor
 from rescue_vision.localizer import GroundLocalizer
@@ -38,6 +38,7 @@ def main() -> int:
     camera_config = config.setdefault("camera", {})
     args.width = int(args.width or camera_config.get("width", 1280))
     args.height = int(args.height or camera_config.get("height", 720))
+    require_native_resolution(args.width, args.height)
     args.camera_fps = int(args.camera_fps or camera_config.get("fps", 180))
     camera_config.update({"width": args.width, "height": args.height, "fps": args.camera_fps})
     localizer = GroundLocalizer.load(args.homography, (args.width, args.height))
