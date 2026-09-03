@@ -35,13 +35,23 @@ class Pose:
     wheel_gate: str = "waiting"
 
 
+def start_center_coordinate(corner_offset_m: float) -> float:
+    """Return one field-axis coordinate for a radial corner distance.
+
+    ``corner_offset_m`` is the straight-line distance from the field corner to
+    the robot reference point.  Each axis therefore uses its equal diagonal
+    component rather than the full radial distance.
+    """
+    return FIELD_HALF_M - corner_offset_m / math.sqrt(2.0)
+
+
 def initial_pose(zone: int, corner_offset_m: float = 0.30) -> Pose:
     if zone not in ZONE_SIGNS:
         raise ValueError("zone must be 1..4")
     if not 0.0 < corner_offset_m < FIELD_HALF_M:
         raise ValueError("corner offset must be inside the field")
     sx, sy = ZONE_SIGNS[zone]
-    coordinate = FIELD_HALF_M - corner_offset_m
+    coordinate = start_center_coordinate(corner_offset_m)
     return Pose(sx * coordinate, sy * coordinate, START_HEADINGS_DEG[zone])
 
 
@@ -161,7 +171,7 @@ def write_localization_config(
     corner_offset_m: float,
 ) -> None:
     """Generate the localization config matching the selected start pose."""
-    start_center_m = FIELD_HALF_M - corner_offset_m
+    start_center_m = start_center_coordinate(corner_offset_m)
     replacements = {"start_zone": str(zone), "start_center_m": f"{start_center_m:.6f}"}
     found: set[str] = set()
     lines: list[str] = []

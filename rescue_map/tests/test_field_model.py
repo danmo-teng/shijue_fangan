@@ -27,10 +27,10 @@ def near(a, b, tolerance=1e-9):
 
 def main():
     expected = {
-        1: (-1.2, 1.2, 135.0),
-        2: (1.2, 1.2, 45.0),
-        3: (-1.2, -1.2, 225.0),
-        4: (1.2, -1.2, 315.0),
+        1: (-1.5 + 0.30 / math.sqrt(2.0), 1.5 - 0.30 / math.sqrt(2.0), 135.0),
+        2: (1.5 - 0.30 / math.sqrt(2.0), 1.5 - 0.30 / math.sqrt(2.0), 45.0),
+        3: (-1.5 + 0.30 / math.sqrt(2.0), -1.5 + 0.30 / math.sqrt(2.0), 225.0),
+        4: (1.5 - 0.30 / math.sqrt(2.0), -1.5 + 0.30 / math.sqrt(2.0), 315.0),
     }
     for zone, values in expected.items():
         pose = initial_pose(zone)
@@ -86,7 +86,10 @@ def main():
         session = root / "session.json"
         write_session(session, 3, "blue", 0.30)
         saved = json.loads(session.read_text(encoding="utf-8"))
-        assert saved["initial_pose"] == {"x_m": -1.2, "y_m": -1.2, "yaw_deg": 225.0}
+        expected_coordinate = -1.5 + 0.30 / math.sqrt(2.0)
+        assert near(saved["initial_pose"]["x_m"], expected_coordinate)
+        assert near(saved["initial_pose"]["y_m"], expected_coordinate)
+        assert saved["initial_pose"]["yaw_deg"] == 225.0
         try:
             write_session(session, 1, "green", 0.30)
             raise AssertionError("invalid side accepted")
@@ -98,7 +101,8 @@ def main():
         template.write_text("start_zone = 4\nstart_center_m = 1.35\n", encoding="utf-8")
         write_localization_config(template, output, 2, 0.30)
         text = output.read_text(encoding="utf-8")
-        assert "start_zone = 2" in text and "start_center_m = 1.200000" in text
+        expected_center = 1.5 - 0.30 / math.sqrt(2.0)
+        assert "start_zone = 2" in text and f"start_center_m = {expected_center:.6f}" in text
 
     print("rescue_map field model PASS")
 

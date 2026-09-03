@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import tempfile
 import time
@@ -37,7 +38,8 @@ def main() -> None:
         snapshot = root / "pose.json"
         app = map_app.RescueMapApp(options(snapshot))
         app.start_session()
-        assert app.trajectory.points == [(1.2, 1.2)]
+        expected_coordinate = 1.5 - 0.30 / math.sqrt(2.0)
+        assert app.trajectory.points == [(expected_coordinate, expected_coordinate)]
         app.started_monotonic -= 0.4
         app.update_pose()
         assert app.pose.quality == "NO_DATA"
