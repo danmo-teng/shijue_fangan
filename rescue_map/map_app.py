@@ -44,6 +44,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zone", type=int, choices=range(1, 5), help="skip zone selection")
     parser.add_argument("--side", choices=("red", "blue"), help="skip side selection")
     parser.add_argument("--corner-offset-mm", type=float, default=300.0)
+    parser.add_argument(
+        "--localization-mode",
+        choices=("fusion", "t265"),
+        default="fusion",
+        help="fusion uses T265 plus F407 encoders; t265 does not open UART",
+    )
     parser.add_argument("--localization-json", type=Path)
     parser.add_argument("--launch-localization", action="store_true")
     parser.add_argument("--uart", default="/dev/ttyS1")
@@ -97,6 +103,7 @@ class RescueMapApp:
         self.side = options.side or "red"
         self.selecting = not (options.zone and options.side)
         self.corner_offset_m = options.corner_offset_mm / 1000.0
+        self.localization_mode = options.localization_mode
         initial_pose(self.zone, self.corner_offset_m)  # validates parameters
         self.localization_json = options.localization_json or (RUNTIME / "localization_result.json")
         self.trajectory = Trajectory()
@@ -244,13 +251,22 @@ class RescueMapApp:
             text.add("选择本方颜色", (x0, 300), 22, (230, 230, 230), True)
             self.button(canvas, text, "red", "红方", (x0, 330, x0 + 150, 382), self.side == "red", (55, 55, 185))
             self.button(canvas, text, "blue", "蓝方", (x0 + 175, 330, x0 + 325, 382), self.side == "blue", (185, 110, 20))
-            self.button(canvas, text, "start", "确认并开始", (x0, 430, x0 + 325, 492), True, (35, 135, 70))
-            text.add("快捷键：1–4、R红方、B蓝方、Enter开始", (x0, 525), 15, (170, 170, 175))
+            text.add("定位方式", (x0, 420), 22, (230, 230, 230), True)
+            self.button(canvas, text, "fusion", "T265+编码器", (x0, 450, x0 + 150, 502), self.localization_mode == "fusion", (55, 125, 80))
+            self.button(canvas, text, "t265", "仅T265", (x0 + 175, 450, x0 + 325, 502), self.localization_mode == "t265", (75, 100, 165))
+            text.add("距角落顶点（直线距离）", (x0, 545), 20, (230, 230, 230), True)
+            text.add(f"{self.corner_offset_m * 1000:.0f} mm", (x0 + 162, 578), 25, (245, 245, 245), True, "mm")
+            self.button(canvas, text, "offset_minus_50", "−50", (x0, 600, x0 + 75, 648))
+            self.button(canvas, text, "offset_minus_10", "−10", (x0 + 83, 600, x0 + 158, 648))
+            self.button(canvas, text, "offset_plus_10", "+10", (x0 + 167, 600, x0 + 242, 648))
+            self.button(canvas, text, "offset_plus_50", "+50", (x0 + 250, 600, x0 + 325, 648))
+            self.button(canvas, text, "start", "确认并开始", (x0, 685, x0 + 325, 747), True, (35, 135, 70))
+            text.add("快捷键：1–4、R/B、E切模式、Enter开始", (x0, 780), 14, (170, 170, 175))
+            text.add("−/+调10 mm，[/]调50 mm", (x0, 803), 14, (170, 170, 175))
             pose = initial_pose(self.zone, self.corner_offset_m)
-            text.add(f"初始 X={pose.x_m:+.2f} m  Y={pose.y_m:+.2f} m", (x0, 575), 18, (220, 220, 220))
-            text.add(f"车头={pose.yaw_deg:.0f}°（倒车驶入场内）", (x0, 605), 18, (220, 220, 220))
-            text.add(f"距外角={self.corner_offset_m:.2f} m", (x0, 635), 18, (220, 220, 220))
-            text.add(self.message, (x0, 700), 17, (0, 215, 255))
+            text.add(f"初始 X={pose.x_m:+.3f} m  Y={pose.y_m:+.3f} m", (x0, 835), 17, (220, 220, 220))
+            text.add(f"车头={pose.yaw_deg:.0f}°（倒车驶入场内）", (x0, 862), 17, (220, 220, 220))
+            text.add(self.message, (x0, 910), 16, (0, 215, 255))
         else:
             pose = self.pose
             quality_color = {
@@ -266,13 +282,17 @@ class RescueMapApp:
             text.add(f"融合轨迹：{self.trajectory.distance_m:.3f} m", (x0, 385), 23, (20, 170, 245), True)
             text.add(f"T265起点位移：{pose.t265_travel_m:.3f} m", (x0, 425), 18, (200, 200, 205))
             text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 475), 18, (200, 200, 205))
-            text.add(f"编码器UART：{'正常' if pose.uart_fresh else '未融合/超时'}", (x0, 510), 18, (200, 200, 205))
-            text.add(f"轮速门控：{pose.wheel_gate}", (x0, 545), 17, (175, 175, 180))
+            text.add(f"定位方式：{'T265+编码器融合' if self.localization_mode == 'fusion' else '仅T265'}", (x0, 510), 18, (200, 200, 205))
+            if self.localization_mode == "fusion":
+                text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 545), 18, (200, 200, 205))
+                text.add(f"轮速门控：{pose.wheel_gate}", (x0, 580), 17, (175, 175, 180))
+            else:
+                text.add("编码器融合：已关闭（UART未打开）", (x0, 545), 18, (200, 200, 205))
             age_text = "--" if math.isinf(pose.age_ms) else f"{pose.age_ms:.0f} ms"
-            text.add(f"数据年龄：{age_text}", (x0, 580), 17, (175, 175, 180))
+            text.add(f"数据年龄：{age_text}", (x0, 615), 17, (175, 175, 180))
             if abs(pose.x_m) > FIELD_HALF_M or abs(pose.y_m) > FIELD_HALF_M:
-                text.add("警告：融合坐标已越出场地边界", (x0, 620), 17, (40, 70, 235), True)
-            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 680), 17, (180, 180, 185))
+                text.add("警告：融合坐标已越出场地边界", (x0, 650), 17, (40, 70, 235), True)
+            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 700), 17, (180, 180, 185))
             if self.localization_process and self.localization_process.poll() is not None:
                 text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 735), 17, (50, 80, 235), True)
             elif self.message:
@@ -298,9 +318,29 @@ class RescueMapApp:
                     self.pose = initial_pose(self.zone, self.corner_offset_m)
                 elif name in {"red", "blue"}:
                     self.side = name
+                elif name in {"fusion", "t265"}:
+                    self.localization_mode = name
+                elif name.startswith("offset_"):
+                    offsets_mm = {
+                        "offset_minus_50": -50.0,
+                        "offset_minus_10": -10.0,
+                        "offset_plus_10": 10.0,
+                        "offset_plus_50": 50.0,
+                    }
+                    self.adjust_corner_offset(offsets_mm[name])
                 elif name == "start":
                     self.start_session()
                 break
+
+    def adjust_corner_offset(self, delta_mm: float) -> None:
+        candidate = self.corner_offset_m + delta_mm / 1000.0
+        try:
+            initial_pose(self.zone, candidate)
+        except ValueError:
+            self.message = "距角落顶点必须大于0且小于1500 mm"
+            return
+        self.corner_offset_m = candidate
+        self.pose = initial_pose(self.zone, self.corner_offset_m)
 
     def mouse_callback(self, event, x, y, _flags, _parameter) -> None:
         if event == cv2.EVENT_LBUTTONUP:
@@ -313,7 +353,13 @@ class RescueMapApp:
         self.trajectory.seed(self.pose.x_m, self.pose.y_m)
         self.last_live_read_monotonic = None
         RUNTIME.mkdir(parents=True, exist_ok=True)
-        write_session(RUNTIME / "session.json", self.zone, self.side, self.corner_offset_m)
+        write_session(
+            RUNTIME / "session.json",
+            self.zone,
+            self.side,
+            self.corner_offset_m,
+            self.localization_mode,
+        )
         write_localization_config(
             PROJECT_ROOT / "localization/config/localization.example.conf",
             RUNTIME / "localization.conf",
@@ -322,29 +368,36 @@ class RescueMapApp:
         )
         self.selecting = False
         self.started_monotonic = time.monotonic()
-        self.message = "等待T265和编码器融合数据"
+        self.message = "等待T265和编码器融合数据" if self.localization_mode == "fusion" else "等待T265定位数据"
         if self.options.launch_localization and not self.options.screenshot:
-            command_file = RUNTIME / "uart_command.bin"
-            stm_status_file = RUNTIME / "stm32_status.json"
-            command = [
-                str(PROJECT_ROOT / "localization/run_localization.sh"),
-                "--config", str(RUNTIME / "localization.conf"),
-                "--output", str(self.localization_json),
-                "--command-file", str(command_file),
-                "--stm-status", str(stm_status_file),
-                "--rate", "20",
-                "--tx-rate", str(self.options.tx_rate),
-            ]
-            if self.options.uart.lower() not in {"", "none", "off"}:
-                command += ["--uart", self.options.uart, "--baud", str(self.options.baud)]
+            command = self.localization_command()
             try:
                 self.localization_json.unlink(missing_ok=True)
-                command_file.unlink(missing_ok=True)
-                stm_status_file.unlink(missing_ok=True)
+                (RUNTIME / "uart_command.bin").unlink(missing_ok=True)
+                (RUNTIME / "stm32_status.json").unlink(missing_ok=True)
                 self.localization_process = subprocess.Popen(command, cwd=PROJECT_ROOT / "localization")
-                self.message = "融合定位进程已启动"
+                self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
             except OSError as exc:
                 self.message = f"定位启动失败：{exc}"
+
+    def localization_command(self) -> list[str]:
+        """Build the localizer invocation for the selected hardware mode."""
+        command = [
+            str(PROJECT_ROOT / "localization/run_localization.sh"),
+            "--config", str(RUNTIME / "localization.conf"),
+            "--output", str(self.localization_json),
+            "--rate", "20",
+            "--tx-rate", str(self.options.tx_rate),
+        ]
+        if self.localization_mode != "fusion":
+            return command
+        command += [
+            "--command-file", str(RUNTIME / "uart_command.bin"),
+            "--stm-status", str(RUNTIME / "stm32_status.json"),
+        ]
+        if self.options.uart.lower() not in {"", "none", "off"}:
+            command += ["--uart", self.options.uart, "--baud", str(self.options.baud)]
+        return command
 
     def stop_localization(self) -> None:
         process = self.localization_process
@@ -409,6 +462,16 @@ class RescueMapApp:
                 self.side = "red"
             elif key in (ord("b"), ord("B")):
                 self.side = "blue"
+            elif key in (ord("e"), ord("E")):
+                self.localization_mode = "t265" if self.localization_mode == "fusion" else "fusion"
+            elif key in (ord("-"), ord("_")):
+                self.adjust_corner_offset(-10.0)
+            elif key in (ord("+"), ord("=")):
+                self.adjust_corner_offset(10.0)
+            elif key == ord("["):
+                self.adjust_corner_offset(-50.0)
+            elif key == ord("]"):
+                self.adjust_corner_offset(50.0)
             elif key in (10, 13):
                 self.start_session()
         else:

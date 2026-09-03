@@ -147,15 +147,24 @@ class Trajectory:
         return True
 
 
-def write_session(path: Path, zone: int, side: str, corner_offset_m: float) -> None:
+def write_session(
+    path: Path,
+    zone: int,
+    side: str,
+    corner_offset_m: float,
+    localization_mode: str = "fusion",
+) -> None:
     if side not in {"red", "blue"}:
         raise ValueError("side must be red or blue")
+    if localization_mode not in {"fusion", "t265"}:
+        raise ValueError("localization mode must be fusion or t265")
     pose = initial_pose(zone, corner_offset_m)
     data = {
         "schema_version": 1,
         "start_zone": zone,
         "side": side,
         "corner_offset_m": corner_offset_m,
+        "localization_mode": localization_mode,
         "initial_pose": {"x_m": pose.x_m, "y_m": pose.y_m, "yaw_deg": pose.yaw_deg},
     }
     path.parent.mkdir(parents=True, exist_ok=True)

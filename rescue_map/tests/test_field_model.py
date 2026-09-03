@@ -84,15 +84,21 @@ def main():
         assert load_localization_pose(snapshot) is None
 
         session = root / "session.json"
-        write_session(session, 3, "blue", 0.30)
+        write_session(session, 3, "blue", 0.30, "t265")
         saved = json.loads(session.read_text(encoding="utf-8"))
         expected_coordinate = -1.5 + 0.30 / math.sqrt(2.0)
         assert near(saved["initial_pose"]["x_m"], expected_coordinate)
         assert near(saved["initial_pose"]["y_m"], expected_coordinate)
         assert saved["initial_pose"]["yaw_deg"] == 225.0
+        assert saved["localization_mode"] == "t265"
         try:
             write_session(session, 1, "green", 0.30)
             raise AssertionError("invalid side accepted")
+        except ValueError:
+            pass
+        try:
+            write_session(session, 1, "red", 0.30, "invalid")
+            raise AssertionError("invalid localization mode accepted")
         except ValueError:
             pass
 
