@@ -23,6 +23,7 @@ def options(snapshot: Path) -> argparse.Namespace:
         localization_mode="fusion",
         localization_json=snapshot,
         launch_localization=False,
+        launch_vision=False,
         uart="/dev/ttyS1",
         baud=115200,
         tx_rate=0.0,
@@ -42,9 +43,11 @@ def main() -> None:
         expected_coordinate = 1.5 - 0.30 / math.sqrt(2.0)
         assert app.trajectory.points == [(expected_coordinate, expected_coordinate)]
         assert "--uart" in app.localization_command()
+        assert "run_mission_test.sh" in app.vision_command()[0]
         app.localization_mode = "t265"
         assert "--uart" not in app.localization_command()
         assert "--command-file" not in app.localization_command()
+        assert app.vision_command()[1].endswith("run_detector.py")
         app.adjust_corner_offset(50.0)
         assert math.isclose(app.corner_offset_m, 0.35)
 
@@ -66,11 +69,13 @@ def main() -> None:
         map_app.subprocess.Popen = lambda command, cwd: (launched.append(command), FakeProcess())[1]
         try:
             app.options.launch_localization = True
+            app.options.launch_vision = True
             app.start_session()
-            assert launched and "--uart" not in launched[0]
+            assert len(launched) == 2 and "--uart" not in launched[0]
+            assert launched[1][1].endswith("run_detector.py")
             assert app.message == "T265定位进程已启动"
         finally:
-            app.stop_localization()
+            app.stop_session_processes()
             map_app.subprocess.Popen = original_popen
         app.started_monotonic -= 0.4
         app.update_pose()

@@ -52,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--localization-json", type=Path)
     parser.add_argument("--launch-localization", action="store_true")
+    parser.add_argument("--launch-vision", action="store_true")
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument(
@@ -109,6 +110,7 @@ class RescueMapApp:
         self.trajectory = Trajectory()
         self.pose = initial_pose(self.zone, self.corner_offset_m)
         self.localization_process: subprocess.Popen | None = None
+        self.vision_process: subprocess.Popen | None = None
         self.fullscreen = options.fullscreen
         self.hitboxes: dict[str, tuple[int, int, int, int]] = {}
         self.message = "请选择出发区和红蓝方，然后开始"
@@ -297,6 +299,10 @@ class RescueMapApp:
                 text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 735), 17, (50, 80, 235), True)
             elif self.message:
                 text.add(self.message, (x0, 735), 16, (0, 190, 255))
+            if self.vision_process and self.vision_process.poll() is not None:
+                text.add(f"识别进程已退出：{self.vision_process.returncode}", (x0, 770), 17, (50, 80, 235), True)
+            elif self.vision_process:
+                text.add("YOLO识别：运行中", (x0, 770), 17, (50, 210, 80), True)
 
     def render(self) -> np.ndarray:
         canvas = np.full((self.height, self.width, 3), (18, 19, 21), dtype=np.uint8)
@@ -347,7 +353,7 @@ class RescueMapApp:
             self.select_at(x, y)
 
     def start_session(self) -> None:
-        self.stop_localization()
+        self.stop_session_processes()
         self.trajectory.reset()
         self.pose = initial_pose(self.zone, self.corner_offset_m)
         self.trajectory.seed(self.pose.x_m, self.pose.y_m)
@@ -379,6 +385,17 @@ class RescueMapApp:
                 self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
             except OSError as exc:
                 self.message = f"定位启动失败：{exc}"
+        if self.options.launch_vision and not self.options.screenshot:
+            try:
+                command = self.vision_command()
+                self.vision_process = subprocess.Popen(
+                    command,
+                    cwd=(PROJECT_ROOT / "mission_test"
+                         if self.localization_mode == "fusion"
+                         else PROJECT_ROOT / "vision"),
+                )
+            except OSError as exc:
+                self.message = f"识别启动失败：{exc}"
 
     def localization_command(self) -> list[str]:
         """Build the localizer invocation for the selected hardware mode."""
@@ -399,10 +416,25 @@ class RescueMapApp:
             command += ["--uart", self.options.uart, "--baud", str(self.options.baud)]
         return command
 
-    def stop_localization(self) -> None:
-        process = self.localization_process
+    def vision_command(self) -> list[str]:
+        """Launch mission vision with UART fusion, or detection-only with T265."""
+        if self.localization_mode == "fusion":
+            return [
+                str(PROJECT_ROOT / "mission_test/run_mission_test.sh"),
+                "--window-mode", "normal",
+                "--display-fps", "15",
+            ]
+        return [
+            sys.executable,
+            str(PROJECT_ROOT / "vision/run_detector.py"),
+            "--device", "auto",
+            "--window-mode", "normal",
+            "--display-fps", "15",
+        ]
+
+    @staticmethod
+    def stop_process(process: subprocess.Popen | None) -> None:
         if process is None or process.poll() is not None:
-            self.localization_process = None
             return
         process.send_signal(signal.SIGINT)
         try:
@@ -413,7 +445,20 @@ class RescueMapApp:
                 process.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
                 process.kill()
+
+    def stop_vision(self) -> None:
+        self.stop_process(self.vision_process)
+        self.vision_process = None
+
+    def stop_localization(self) -> None:
+        self.stop_process(self.localization_process)
         self.localization_process = None
+
+    def stop_session_processes(self) -> None:
+        # Stop vision first so it releases the camera and stops producing UART
+        # command files before the localization relay closes the serial port.
+        self.stop_vision()
+        self.stop_localization()
 
     def update_pose(self) -> None:
         if self.selecting:
@@ -476,7 +521,7 @@ class RescueMapApp:
                 self.start_session()
         else:
             if key in (ord("s"), ord("S")):
-                self.stop_localization()
+                self.stop_session_processes()
                 self.selecting = True
                 self.message = "重新选择后需再次确认开始"
             elif key in (ord("r"), ord("R")):
@@ -504,7 +549,7 @@ class RescueMapApp:
             self.options.screenshot.parent.mkdir(parents=True, exist_ok=True)
             if not cv2.imwrite(str(self.options.screenshot), self.render()):
                 raise RuntimeError(f"cannot write screenshot: {self.options.screenshot}")
-            self.stop_localization()
+            self.stop_session_processes()
             return 0
 
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
@@ -525,7 +570,7 @@ class RescueMapApp:
                 if not self.handle_key(cv2.waitKey(20)):
                     break
         finally:
-            self.stop_localization()
+            self.stop_session_processes()
             cv2.destroyWindow(WINDOW_NAME)
         return 0
 

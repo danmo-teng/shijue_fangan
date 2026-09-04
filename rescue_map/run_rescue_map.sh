@@ -4,9 +4,16 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "${script_dir}/.." && pwd)"
 localizer="${project_dir}/localization/build/t265_omni_localizer"
+vision_model="${project_dir}/vision/models/best_bayese_320x320_nv12.bin"
+mission_runner="${project_dir}/mission_test/run_mission_test.sh"
 
 if ! python3 -c 'import cv2, numpy; from PIL import Image, ImageDraw, ImageFont' >/dev/null 2>&1; then
     echo "缺少Python依赖：需要OpenCV、NumPy和Pillow。" >&2
+    exit 1
+fi
+
+if [[ ! -f "${vision_model}" || ! -x "${mission_runner}" ]]; then
+    echo "YOLO模型或任务识别入口缺失；请确认vision/models与mission_test已完整部署。" >&2
     exit 1
 fi
 
@@ -27,6 +34,7 @@ fi
 export DISPLAY="${DISPLAY:-:0}"
 exec python3 "${script_dir}/map_app.py" \
     --launch-localization \
+    --launch-vision \
     --uart /dev/ttyS1 \
     --baud 115200 \
     --fullscreen \

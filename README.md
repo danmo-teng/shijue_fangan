@@ -107,7 +107,7 @@ ctest --test-dir build --output-on-failure
 
 ## 6. 四出发区救援地图
 
-`rescue_map/`提供四个出发区与红/蓝方选择，并在独立桌面窗口显示赛题场地、小车融合位置、方向、轨迹和行驶距离。它复用`localization/`的T265+F407编码器融合输出，详见[rescue_map/README.md](rescue_map/README.md)。
+`rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动对应的YOLO识别窗口；融合模式启动完整STM32任务，地图退出或重选时会一并停止识别和定位。详见[rescue_map/README.md](rescue_map/README.md)。
 
 ## 7. 普通物资抓取与安全区投送测试
 
