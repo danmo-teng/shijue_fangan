@@ -234,6 +234,8 @@ class X5YoloV8:
         self.layers = [] if self.flat_output else self._discover_layers()
 
     def _discover_flat_output(self) -> str | None:
+        if len(self.output_names) != 1:
+            return None
         channels = 4 + len(self.labels)
         for name in self.output_names:
             shape = self.output_shapes[name]

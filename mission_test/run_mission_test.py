@@ -170,7 +170,10 @@ def main() -> int:
     mission = RescueMission(settings)
     config = load_config(args.config)
     localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
-    traditional_detector = TraditionalDetector(config, localizer)
+    traditional_detector = (
+        TraditionalDetector(config, localizer)
+        if args.detector == "traditional" else None
+    )
     yolo_detector = None
     scaler = None
     if args.detector == "yolo":
@@ -263,18 +266,8 @@ def main() -> int:
                         )
                     else:
                         detections, _ = yolo_detector.infer(packet.image)
-                    # The current YOLO model has no safe-zone classes. Use the
-                    # retained traditional detector only for final zone proof.
-                    if mission.state == MissionState.ENTER_SAFE_ZONE:
-                        zone_image = (
-                            cv2.cvtColor(packet.image, cv2.COLOR_YUV2BGR_NV12)
-                            if packet.pixel_format == "nv12" else packet.image
-                        )
-                        zone_detections, _ = traditional_detector.detect(
-                            zone_image, [safe_class]
-                        )
-                        detections = [*detections, *zone_detections]
                 else:
+                    assert traditional_detector is not None
                     classes = ["green_supply"]
                     if mission.state == MissionState.ENTER_SAFE_ZONE:
                         classes.append(safe_class)

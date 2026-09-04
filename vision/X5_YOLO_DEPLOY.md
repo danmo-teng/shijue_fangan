@@ -1,15 +1,19 @@
 # 将训练模型部署到RDK X5
 
-`/home/sunrise/RDK_X5/yolo.zip`中的`best.pt`是四类别YOLOv8s模型，类别顺序为：
+仓库当前默认部署的是六类别YOLOv8s 320x320模型，类别顺序为：
 
 ```text
 conmon
 kernel
 risk
 wound
+safe_blue
+safe_red
 ```
 
 其中`conmon`是训练标签中已经存在的拼写，板端脚本会将其映射为`green_supply`。
+旧`/home/sunrise/RDK_X5/yolo.zip`中的权重只有前四类；若重新转换正式模型，应使用包含上述
+六类的新`best.pt`。
 
 压缩包自带的`convert_rknn.py`、`model.rknn`路径和`run_steelball.py`面向Orange Pi 5B/RK3588，
 不能用于地平线RDK X5。X5需要Bayes-e架构的BPU `.bin`模型。
