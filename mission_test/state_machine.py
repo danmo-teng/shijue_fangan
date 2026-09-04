@@ -62,9 +62,6 @@ class MissionOutput:
 @dataclass
 class MissionSettings:
     side: str
-    grab_y_min: int = 760
-    grab_x_min: int = 384
-    grab_x_max: int = 896
     confirmation_frames: int = 3
     approach_x_m: float = 0.0
     approach_y_abs_m: float = 0.95
@@ -158,21 +155,18 @@ class RescueMission:
             return MissionOutput(self.state, report, None, "STM32保持目标居中并靠近")
 
         if self.state == MissionState.GRAB_CHECK:
-            in_grab_window = (
-                vision.target_found
-                and self.settings.grab_x_min <= vision.target_x <= self.settings.grab_x_max
-                and vision.target_y >= self.settings.grab_y_min
-            )
-            self.grab_hits = self.grab_hits + 1 if in_grab_window else 0
+            camera_ready = stm.claw_visible and stm.age_ms <= 250.0
+            target_visible = camera_ready and vision.target_found
+            self.grab_hits = self.grab_hits + 1 if target_visible else 0
             if self.grab_hits >= self.settings.confirmation_frames:
                 self.state = MissionState.NAVIGATE
                 return MissionOutput(
                     self.state,
                     None,
                     MissionCommand(CMD_GRAB_CONFIRMED, self._flags()),
-                    "物资连续位于画面底部抓取窗，确认抓取",
+                    "摄像头下压后连续检测到物资，确认抓取",
                 )
-            return MissionOutput(self.state, report, None, "等待物资进入底部抓取确认区域")
+            return MissionOutput(self.state, report, None, "等待摄像头下压后在画面中确认物资")
 
         if self.state == MissionState.NAVIGATE:
             target = self.approach_point

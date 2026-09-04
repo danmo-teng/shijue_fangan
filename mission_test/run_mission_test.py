@@ -44,9 +44,6 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--nms-thres", type=float, default=0.45)
     parser.add_argument("--priority", type=int, default=0)
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
-    parser.add_argument("--grab-y-min", type=int, default=760)
-    parser.add_argument("--grab-x-min", type=int, default=384)
-    parser.add_argument("--grab-x-max", type=int, default=896)
     parser.add_argument("--confirm-frames", type=int, default=3)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
@@ -145,12 +142,11 @@ def draw(image, vision: VisionInput, output, pose: PoseInput, stm: Stm32Status):
     if vision.safe_bbox:
         x, y, w, h = vision.safe_bbox
         cv2.rectangle(view, (x, y), (x + w, y + h), (255, 0, 255), 3)
-    cv2.rectangle(view, (384, 760), (896, 1023), (0, 210, 255), 2)
     lines = [
         f"state={output.state.value}  {output.message}",
         f"target=({vision.target_x},{vision.target_y}) found={int(vision.target_found)} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
         f"pose=({pose.x_m:+.2f},{pose.y_m:+.2f}) yaw={pose.yaw_deg:.1f} valid={int(pose.valid)}",
-        "yellow box = grab confirmation area; F fullscreen; Q/Esc quit",
+        "camera-down + target anywhere x confirm-frames = grab; F fullscreen; Q/Esc quit",
     ]
     for index, line in enumerate(lines):
         cv2.putText(view, line, (14, 34 + index * 30), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2, cv2.LINE_AA)
@@ -169,9 +165,6 @@ def main() -> int:
     side = str(session["side"])
     settings = MissionSettings(
         side=side,
-        grab_y_min=args.grab_y_min,
-        grab_x_min=args.grab_x_min,
-        grab_x_max=args.grab_x_max,
         confirmation_frames=args.confirm_frames,
     )
     mission = RescueMission(settings)

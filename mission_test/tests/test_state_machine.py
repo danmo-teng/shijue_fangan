@@ -35,10 +35,21 @@ def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
     stm = Stm32Status(flags=STM_CLAW_VISIBLE, age_ms=5)
     output = mission.step(target(), PoseInput(), stm)
     assert output.state == MissionState.GRAB_CHECK
+
+    # Once the camera is down, position no longer matters. A missing target or
+    # stale STM32 camera status resets the consecutive confirmation count.
+    anywhere = target(x=20, y=20, bbox=(0, 0, 40, 40))
+    output = mission.step(anywhere, PoseInput(), stm)
+    assert output.state == MissionState.GRAB_CHECK
+    output = mission.step(VisionInput(), PoseInput(), stm)
+    assert output.state == MissionState.GRAB_CHECK
+    stale = Stm32Status(flags=STM_CLAW_VISIBLE, age_ms=300)
+    output = mission.step(anywhere, PoseInput(), stale)
+    assert output.state == MissionState.GRAB_CHECK
     for _ in range(2):
-        output = mission.step(target(y=800, bbox=(600, 760, 80, 80)), PoseInput(), stm)
+        output = mission.step(anywhere, PoseInput(), stm)
         assert output.state == MissionState.GRAB_CHECK
-    output = mission.step(target(y=800, bbox=(600, 760, 80, 80)), PoseInput(), stm)
+    output = mission.step(anywhere, PoseInput(), stm)
     assert output.state == MissionState.NAVIGATE
     assert output.command.command == CMD_GRAB_CONFIRMED
 
