@@ -8,6 +8,7 @@ build-*/
 .cache/
 captures/
 runtime_result.json
+yolo_runtime_result.json
 localization_result.json
 navigation_world.json
 *.csv

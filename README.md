@@ -2,7 +2,7 @@
 
 本仓库整理了RDK X5端本次救援机器人项目实际使用的代码，包含：
 
-- 原版完整Web视觉调参界面与传统视觉算法；
+- RDK X5 BPU YOLOv8物资主识别，以及保留的Web传统视觉备选；
 - MJPEG 1280×1024@180 FPS采集、最新压缩帧队列、JPU 60 FPS解码；
 - 普通物资识别、本地等比例全屏显示和STM32F407 UART上报；
 - T265二维轨迹、车头方向和累计行驶距离调试窗口；
@@ -30,8 +30,10 @@ bash deploy_rdkx5.sh
 ```text
 MJPEG 1280×1024 @ 180 FPS
   -> 始终覆盖保留最新压缩帧
-  -> RDK X5 JPU按60 FPS解码
-  -> 原版两级传统视觉检测
+  -> RDK X5 JPU直接输出NV12
+  -> VSE硬件缩放320×256并填充为320×320
+  -> BPU YOLOv8物资识别（置信度>=0.50）
+  -> 传统视觉仅作为回退及安全区临时补充
 ```
 
 ## 2. Web调参
@@ -51,7 +53,7 @@ python3 web_editor.py --device auto --decoder jpu --decode-fps 60
 
 电脑浏览器打开`http://127.0.0.1:8080`。界面保留原项目的多参考阈值、框选自动取值、形状规则、曝光/白平衡/焦距诊断及原图/掩膜/分类视图。点击“保存全部配置”后按`Ctrl-C`退出。
 
-## 3. 普通物资识别与UART
+## 3. 普通物资传统视觉备用识别与UART
 
 ```bash
 cd vision
@@ -60,6 +62,9 @@ python3 run_normal_supply_uart.py \
   --device auto --decoder jpu --decode-fps 60 \
   --window-mode fullscreen --uart /dev/ttyS1 --baud 115200
 ```
+
+该入口保留用于传统视觉和UART单项调试；完整任务默认通过`mission_test/run_mission_test.sh`
+使用YOLO识别，并由定位进程统一转发UART帧，避免两个进程争抢`/dev/ttyS1`。
 
 1280×1024画面会等比例完整缩小到桌面，绝不裁剪；1024×768屏幕上显示为960×768，左右各补32像素黑边。按`F`切换全屏，按`Q/Esc`退出。
 

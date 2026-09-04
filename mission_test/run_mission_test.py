@@ -25,15 +25,25 @@ from rescue_vision.detector import TraditionalDetector
 from rescue_vision.localizer import GroundLocalizer
 from rescue_vision.mission_protocol import Stm32Status, write_command_frame
 from rescue_vision.vision_protocol import IMAGE_HEIGHT, IMAGE_WIDTH, config_frame
+from rescue_vision.vse import VseScaler
+from run_yolo_x5 import DEFAULT_LABELS, DEFAULT_MODEL, X5YoloV8, load_labels
 
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="普通物资抓取与安全区投送测试")
+    parser.add_argument("--detector", choices=("yolo", "traditional"), default="yolo")
     parser.add_argument("--device", default="/dev/video0")
     parser.add_argument("--decoder", choices=("jpu", "software"), default="jpu")
     parser.add_argument("--camera-fps", type=int, default=180)
     parser.add_argument("--decode-fps", type=float, default=60.0)
-    parser.add_argument("--vision-fps", type=float, default=30.0)
+    parser.add_argument("--vision-fps", type=float, default=50.0)
+    parser.add_argument("--preprocess", choices=("auto", "vse", "cpu"), default="auto")
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--labels", type=Path, default=DEFAULT_LABELS)
+    parser.add_argument("--score-thres", type=float, default=0.50)
+    parser.add_argument("--nms-thres", type=float, default=0.45)
+    parser.add_argument("--priority", type=int, default=0)
+    parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--grab-y-min", type=int, default=760)
     parser.add_argument("--grab-x-min", type=int, default=384)
     parser.add_argument("--grab-x-max", type=int, default=896)
@@ -46,6 +56,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "vision/config/rescue_vision.json")
     parser.add_argument("--homography", type=Path, default=PROJECT_ROOT / "vision/config/homography.txt")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="fullscreen")
+    parser.add_argument("--display-fps", type=float, default=15.0)
+    parser.add_argument("--duration", type=float, default=0.0, help="seconds; 0 runs until stopped")
     return parser.parse_args()
 
 
@@ -147,6 +159,10 @@ def draw(image, vision: VisionInput, output, pose: PoseInput, stm: Stm32Status):
 
 def main() -> int:
     args = arguments()
+    if args.vision_fps <= 0 or args.display_fps <= 0:
+        raise ValueError("vision-fps和display-fps必须为正数")
+    if not 0.0 < args.score_thres < 1.0 or not 0.0 < args.nms_thres < 1.0:
+        raise ValueError("score-thres和nms-thres必须在0..1之间")
     session = load_json(args.session)
     if not session or session.get("side") not in {"red", "blue"}:
         raise RuntimeError(f"请先在rescue_map选择出发区和红蓝方：{args.session}")
@@ -160,9 +176,41 @@ def main() -> int:
     )
     mission = RescueMission(settings)
     config = load_config(args.config)
-    detector = TraditionalDetector(config, GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT)))
-    camera = LatestFrameCamera(resolve_camera_device(args.device), IMAGE_WIDTH, IMAGE_HEIGHT, args.camera_fps,
-                               decoder=args.decoder, decode_fps=args.decode_fps)
+    localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    traditional_detector = TraditionalDetector(config, localizer)
+    yolo_detector = None
+    scaler = None
+    if args.detector == "yolo":
+        yolo_detector = X5YoloV8(
+            args.model, load_labels(args.labels), args.score_thres, args.nms_thres,
+            args.priority, args.bpu_cores,
+        )
+        use_vse = args.preprocess in {"auto", "vse"} and args.decoder == "jpu"
+        if args.preprocess == "vse" and args.decoder != "jpu":
+            raise ValueError("VSE NV12路径要求--decoder jpu")
+        if use_vse:
+            scale = min(yolo_detector.input_width / IMAGE_WIDTH,
+                        yolo_detector.input_height / IMAGE_HEIGHT)
+            content_width = max(2, int(round(IMAGE_WIDTH * scale)) // 2 * 2)
+            content_height = max(2, int(round(IMAGE_HEIGHT * scale)) // 2 * 2)
+            try:
+                scaler = VseScaler(
+                    IMAGE_WIDTH, IMAGE_HEIGHT, content_width, content_height
+                )
+            except Exception as error:
+                if args.preprocess == "vse":
+                    raise
+                print(f"警告：VSE初始化失败，回退CPU预处理：{error}")
+    camera = LatestFrameCamera(
+        resolve_camera_device(args.device), IMAGE_WIDTH, IMAGE_HEIGHT, args.camera_fps,
+        decoder=args.decoder, decode_fps=args.decode_fps,
+        output_format="nv12" if scaler is not None else "bgr",
+    )
+    print(
+        f"识别器={args.detector}，"
+        f"置信度阈值={args.score_thres:.2f}，"
+        f"预处理={'JPU NV12 + VSE' if scaler is not None else 'CPU BGR'}"
+    )
     safe_class = "safe_red" if side == "red" else "safe_blue"
     team_color = 0x11 if side == "red" else 0x12
     deadline = time.monotonic() + args.startup_timeout
@@ -193,9 +241,12 @@ def main() -> int:
     fullscreen = args.window_mode == "fullscreen"
     cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL)
     camera.start()
-    next_vision = time.perf_counter()
+    started = time.perf_counter()
+    next_vision = started
+    next_display = next_vision
     last_id = 0
     latest_image = None
+    latest_pixel_format = "bgr"
     latest_vision = VisionInput()
     latest_output = mission.step(latest_vision, PoseInput(), Stm32Status())
     try:
@@ -208,12 +259,33 @@ def main() -> int:
                 time.sleep(0.002)
                 continue
             now = time.perf_counter()
+            if args.duration > 0 and now - started >= args.duration:
+                break
             if now >= next_vision and packet.frame_id != last_id:
                 next_vision = now + 1.0 / args.vision_fps
-                classes = ["green_supply"]
-                if mission.state == MissionState.ENTER_SAFE_ZONE:
-                    classes.append(safe_class)
-                detections, _ = detector.detect(packet.image, classes)
+                if yolo_detector is not None:
+                    if packet.pixel_format == "nv12":
+                        detections, _ = yolo_detector.infer_nv12(
+                            packet.image, IMAGE_WIDTH, IMAGE_HEIGHT, scaler
+                        )
+                    else:
+                        detections, _ = yolo_detector.infer(packet.image)
+                    # The current YOLO model has no safe-zone classes. Use the
+                    # retained traditional detector only for final zone proof.
+                    if mission.state == MissionState.ENTER_SAFE_ZONE:
+                        zone_image = (
+                            cv2.cvtColor(packet.image, cv2.COLOR_YUV2BGR_NV12)
+                            if packet.pixel_format == "nv12" else packet.image
+                        )
+                        zone_detections, _ = traditional_detector.detect(
+                            zone_image, [safe_class]
+                        )
+                        detections = [*detections, *zone_detections]
+                else:
+                    classes = ["green_supply"]
+                    if mission.state == MissionState.ENTER_SAFE_ZONE:
+                        classes.append(safe_class)
+                    detections, _ = traditional_detector.detect(packet.image, classes)
                 latest_vision = observation(detections, safe_class)
                 latest_output = mission.step(latest_vision, load_pose(args.pose), load_stm_status(args.stm_status))
                 if latest_output.command is not None:
@@ -227,9 +299,15 @@ def main() -> int:
                 if packet_out is not None:
                     write_command_frame(args.command_file, packet_out)
                 latest_image = packet.image
+                latest_pixel_format = packet.pixel_format
                 last_id = packet.frame_id
-            if latest_image is not None:
-                shown = fit_image(draw(latest_image, latest_vision, latest_output, load_pose(args.pose), load_stm_status(args.stm_status)), screen_width, screen_height)
+            if latest_image is not None and now >= next_display:
+                next_display = now + 1.0 / args.display_fps
+                display_image = (
+                    cv2.cvtColor(latest_image, cv2.COLOR_YUV2BGR_NV12)
+                    if latest_pixel_format == "nv12" else latest_image
+                )
+                shown = fit_image(draw(display_image, latest_vision, latest_output, load_pose(args.pose), load_stm_status(args.stm_status)), screen_width, screen_height)
                 cv2.imshow(window, shown)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord("q"), ord("Q")):
@@ -240,6 +318,8 @@ def main() -> int:
             time.sleep(0.0005)
     finally:
         camera.stop()
+        if scaler is not None:
+            scaler.close()
         cv2.destroyAllWindows()
     return 0
 

@@ -1,4 +1,4 @@
-# RDK X5 智能救援传统视觉系统
+# RDK X5 智能救援YOLO主识别与传统视觉备选系统
 
 本项目使用颜色、轮廓、几何尺寸和多帧跟踪识别：
 
@@ -30,7 +30,9 @@ MJPEG 1280x1024@180
 
 ```text
 run_editor.py                 可视化阈值编辑器
-run_detector.py               比赛用无界面识别程序
+run_detector.py               比赛识别入口，默认YOLO
+run_yolo_x5.py                X5 BPU YOLO实时识别核心
+run_traditional_detector.py   原比赛传统视觉备选入口
 calibrate_ground.py           图像到地面毫米坐标标定
 config/rescue_vision.json     全部现场参数
 config/homography.txt         标定后生成
@@ -70,6 +72,21 @@ EXPOSURE=15 WHITE_BALANCE=4600 FOCUS=220 bash set_camera_controls.sh /dev/video0
 ```
 
 每次改变曝光、白平衡、焦距或补光后，都应重新检查阈值。
+
+## 2.1 训练图片连拍
+
+训练数据采集固定使用摄像头原生`MJPEG 1280x1024@180 FPS`，直接保存相机输出的JPEG，
+不经过缩放或二次压缩：
+
+```bash
+export DISPLAY=:0
+python3 capture_training_burst.py
+```
+
+点击画面左上角`CAPTURE 20 FRAMES`按钮，或按空格/`B`，会保存连续20个新到达的真实帧到
+`captures/training/burst_时间/`。每组目录中的`timestamps.csv`记录每张图片的单调时钟时间戳和
+实际帧间隔。默认每隔0.5秒保存一张，一组20张约需9.5秒完成；可通过`--interval-ms`覆盖间隔。
+按`Q`或`Esc`退出。
 
 ## 3. 运行阈值编辑器
 
@@ -200,14 +217,21 @@ python3 calibrate_ground.py --device /dev/video0
 python3 run_detector.py --device /dev/video0
 ```
 
-默认参数来自`config/rescue_vision.json`：1280x1024 MJPEG@180、JPU只取最新帧按60Hz解码。检测调度会受实际解码帧率限制。需要降低负载时，可在规定范围内覆盖：
+该入口默认使用320x320 X5 BPU YOLO模型、JPU NV12与VSE预处理，只接受置信度不低于0.50的
+检测。需要临时回退到原传统视觉时：
 
 ```bash
-python3 run_detector.py --device /dev/video0 \
+python3 run_detector.py --detector traditional --device /dev/video0
+```
+
+以下分级调度参数只适用于传统视觉备选：
+
+```bash
+python3 run_detector.py --detector traditional --device /dev/video0 \
   --danger-fps 60 --material-fps 60 --zone-fps 20
 ```
 
-程序默认：
+传统视觉备选程序：
 
 - 危险青色物资默认按120Hz调度，可在60～120Hz配置；
 - 其余三类物资默认按90Hz调度，可在60～90Hz配置；
@@ -237,9 +261,49 @@ python3 run_detector.py --device /dev/video0 \
 
 导航程序必须执行安全策略：`danger_cyan`或无法可靠分类的目标不得进入收容动作。
 
+### X5 BPU YOLO模型
+
+训练模型需先在x86 Ubuntu电脑上使用D-Robotics官方Ultralytics转换流程，将`best.pt`导出并
+量化为RDK X5 Bayes-e NV12输入的`.bin`，再复制到：
+
+```text
+/home/sunrise/RDK_X5/shijue_fangan/vision/models/best_bayese_320x320_nv12.bin
+```
+
+电脑端完整转换步骤见[`X5_YOLO_DEPLOY.md`](X5_YOLO_DEPLOY.md)。
+
+板端实时识别：
+
+```bash
+export DISPLAY=:0
+python3 run_yolo_x5.py --device /dev/video0
+```
+
+程序复用1280x1024@180 FPS MJPEG、最新帧队列和JPU 60 FPS解码，在BPU上执行YOLOv8，
+检测框中心映射回原生1280x1024坐标，并原子写入`runtime_result.json`。训练包中的
+`model.rknn`只适用于RK3588，不能在RDK X5运行；训练包中的`model.onnx`在X5 CPU上实测
+单帧约1.6秒，只适合转换验证，不适合实时运行。
+
+窗口显示和推理使用独立线程，默认显示不会阻塞识别与JSON更新。仓库包含已转换的320x320
+YOLOv8s模型；原始1280x1024画面会等比例缩成320x256内容并填充为模型输入，检测坐标仍映射
+回1280x1024。
+
+320模型默认使用`--preprocess auto`：JPU直接发布NV12，VSE硬件缩放到320x256，再以灰色Y和
+中性UV填充成320x320送入BPU；BGR只在显示时按`--display-fps`生成。若现场发现弱目标置信度
+下降，可立即使用`--preprocess cpu`恢复原有BGR/OpenCV预处理。VSE原生库通过下列命令构建：
+
+```bash
+bash native/build_vse.sh
+```
+
+当前安全版本仍会在JPU、VSE和Python之间各复制一次NV12缓冲区，尚未跨硬件节点共享物理
+缓冲区。置信度阈值0.50时空场景实测约53～55 FPS，有多个目标时约43～48 FPS；同帧校准
+对比中高置信度目标类别保持一致。
+
 ## 6. 性能判定
 
-编辑器和运行程序会显示实际解码及三级检测帧率。配置中的危险120Hz、普通90Hz、安全区30Hz是调度上限；JPU设置为60Hz时，各检测分支不会超过新解码帧率。当前先在320x256图像上筛选候选，再回到1280x1024原图精确复核，最终识别框和UART坐标仍为原生分辨率。只有切换到“白黑掩膜”时才生成调试掩膜。如果单次检测长期超过16ms：
+YOLO入口会显示解码、VSE预处理、BPU和后处理帧率；传统视觉编辑器和备用入口仍显示原有
+分级检测帧率。传统视觉当前先在320x256图像上筛选候选，再回到1280x1024原图复核。
 
 1. 收紧`roi_polygon`，去除车身和远处无效画面；
 2. 降低安全区识别频率，不降低危险目标识别频率；

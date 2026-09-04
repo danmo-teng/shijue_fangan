@@ -1,6 +1,8 @@
 # 普通物资抓取与安全区投送测试
 
-本测试项目使用现有传统视觉、`rescue_map`选择结果以及T265+三轮编码器融合位姿，验证以下闭环：
+本测试项目默认使用X5 BPU YOLO物资识别、`rescue_map`选择结果以及T265+三轮编码器融合位姿，
+验证以下闭环。YOLO只接受置信度不低于0.50的结果；当前四类别模型未训练安全区，因此进入
+安全区确认阶段时临时调用保留的传统视觉识别本方安全区。
 
 ```text
 搜索普通物资
@@ -28,6 +30,12 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 ```bash
 cd /home/sunrise/RDK_X5/shijue_fangan/mission_test
 ./run_mission_test.sh
+```
+
+需要回退为原传统视觉物资识别时：
+
+```bash
+./run_mission_test.sh --detector traditional --vision-fps 30
 ```
 
 任务程序不直接打开`/dev/ttyS1`。`localization`是唯一串口所有者：任务程序原子更新`rescue_map/runtime/uart_command.bin`，定位程序校验帧头、TYPE、CRC和长度后转发，因而不会和编码器/T265进程争抢串口。

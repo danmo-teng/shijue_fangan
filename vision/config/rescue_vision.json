@@ -102,19 +102,19 @@
       ],
       "hsv": [
         0,
-        134,
-        97,
-        179,
+        234,
+        57,
+        7,
         255,
-        179
+        183
       ],
       "lab": [
-        47,
-        151,
-        136,
-        114,
-        190,
-        179
+        23,
+        147,
+        138,
+        99,
+        196,
+        187
       ],
       "fusion": "and",
       "morphology": {
@@ -124,16 +124,16 @@
       },
       "candidate": {
         "area_px": [
-          1233,
-          9869
+          14630,
+          117041
         ],
         "aspect": [
-          1,
-          2.3433962264150945
+          1.0,
+          2.279347905589876
         ],
-        "extent_min": 0.5302980585179109,
+        "extent_min": 0.5362540078437414,
         "extent_target": 0.75,
-        "solidity_min": 0.6272304324028463,
+        "solidity_min": 0.6386781143119072,
         "solidity_target": 0.9,
         "color_fill_min": 0.25,
         "color_fill_target": 0.65,
@@ -175,19 +175,19 @@
           ],
           "hsv": [
             0,
-            204,
-            94,
-            6,
+            162,
+            88,
+            4,
             255,
-            171
+            177
           ],
           "lab": [
-            44,
-            160,
-            147,
-            99,
-            189,
-            179
+            41,
+            158,
+            142,
+            109,
+            184,
+            173
           ],
           "fusion": "and",
           "morphology": {
@@ -197,16 +197,16 @@
           },
           "candidate": {
             "area_px": [
-              3072,
-              24585
+              2889,
+              23119
             ],
             "aspect": [
               1.0,
-              2.4750001287460575
+              2.0964706414562704
             ],
-            "extent_min": 0.5488439308172374,
+            "extent_min": 0.5396733826733381,
             "extent_target": 0.75,
-            "solidity_min": 0.6486335227272728,
+            "solidity_min": 0.6381368527435943,
             "solidity_target": 0.9,
             "color_fill_min": 0.25,
             "color_fill_target": 0.65,
@@ -249,18 +249,18 @@
           ],
           "hsv": [
             0,
-            149,
-            109,
+            183,
+            53,
             6,
-            234,
-            212
+            255,
+            182
           ],
           "lab": [
-            62,
-            152,
-            140,
-            138,
-            189,
+            17,
+            148,
+            135,
+            107,
+            190,
             176
           ],
           "fusion": "and",
@@ -271,12 +271,12 @@
           },
           "candidate": {
             "area_px": [
-              3456,
-              27648
+              8108,
+              64864
             ],
             "aspect": [
               1,
-              2.848101265822785
+              3.046153846153846
             ],
             "extent_min": 0.55,
             "extent_target": 0.75,
@@ -311,6 +311,154 @@
             "position_alpha": 0.55
           },
           "reference_name": "侧视2"
+        },
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            243,
+            117,
+            5,
+            255,
+            162
+          ],
+          "lab": [
+            58,
+            167,
+            157,
+            87,
+            191,
+            182
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 7,
+            "close": 11,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              9573,
+              76591
+            ],
+            "aspect": [
+              1,
+              2.4765958911210495
+            ],
+            "extent_min": 0.5500002055591635,
+            "extent_target": 0.75,
+            "solidity_min": 0.65,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 4,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ],
+            "use_shape": true,
+            "use_size": true
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 186,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视3"
+        },
+        {
+          "display_name": "普通物资（绿色方块）",
+          "enabled": true,
+          "kind": "material",
+          "display_bgr": [
+            0,
+            255,
+            0
+          ],
+          "hsv": [
+            0,
+            192,
+            117,
+            5,
+            255,
+            173
+          ],
+          "lab": [
+            60,
+            163,
+            149,
+            99,
+            190,
+            181
+          ],
+          "fusion": "and",
+          "morphology": {
+            "open": 7,
+            "close": 11,
+            "iterations": 1
+          },
+          "candidate": {
+            "area_px": [
+              24627,
+              197019
+            ],
+            "aspect": [
+              1,
+              2.231404958677686
+            ],
+            "extent_min": 0.5330606060606061,
+            "extent_target": 0.75,
+            "solidity_min": 0.6303106309087402,
+            "solidity_target": 0.9,
+            "color_fill_min": 0.25,
+            "color_fill_target": 0.65,
+            "border_margin": 4,
+            "size_mm": [
+              [
+                25,
+                60
+              ],
+              [
+                25,
+                60
+              ]
+            ],
+            "use_shape": true,
+            "use_size": true
+          },
+          "weights": {
+            "color": 0.55,
+            "shape": 0.25,
+            "size": 0.2
+          },
+          "score_min": 0.65,
+          "confirmation": {
+            "min_hits": 3,
+            "max_misses": 5,
+            "match_distance": 186,
+            "position_alpha": 0.55
+          },
+          "reference_name": "侧视4"
         }
       ]
     },

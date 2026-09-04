@@ -35,7 +35,7 @@ class JpuDecoder:
             raise RuntimeError("JPU初始化失败，可能没有可用实例或媒体服务未就绪")
         self.nv12 = np.empty((height * 3 // 2, width), dtype=np.uint8)
 
-    def decode(self, jpeg: bytes) -> np.ndarray:
+    def decode_nv12(self, jpeg: bytes) -> np.ndarray:
         source = (ctypes.c_uint8 * len(jpeg)).from_buffer_copy(jpeg)
         destination = self.nv12.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         result = self.library.rdk_jpu_decode(
@@ -44,7 +44,12 @@ class JpuDecoder:
             raise JpuDecodeTimeout("JPU输出等待超时")
         if result < 0:
             raise RuntimeError(f"JPU JPEG解码失败，错误码{result}")
-        return cv2.cvtColor(self.nv12, cv2.COLOR_YUV2BGR_NV12)
+        # The decoder reuses its destination buffer. Publish a copy so a
+        # consumer can safely process it while the next JPEG is decoded.
+        return self.nv12.copy()
+
+    def decode(self, jpeg: bytes) -> np.ndarray:
+        return cv2.cvtColor(self.decode_nv12(jpeg), cv2.COLOR_YUV2BGR_NV12)
 
     def close(self) -> None:
         if self.handle:

@@ -26,6 +26,7 @@ class CameraFrame:
     frame_id: int
     image: np.ndarray
     published_ns: int
+    pixel_format: str = "bgr"
 
 
 def resolve_camera_device(requested: str) -> str:
@@ -46,12 +47,14 @@ def resolve_camera_device(requested: str) -> str:
 
 class LatestFrameCamera:
     def __init__(self, device: str, width: int, height: int, fps: int,
-                 decoder: str = "jpu", decode_fps: float = 60.0) -> None:
+                 decoder: str = "jpu", decode_fps: float = 60.0,
+                 output_format: str = "bgr") -> None:
         Gst.init(None)
         self.width = width
         self.height = height
         self.decoder = decoder
         self.decode_fps = decode_fps
+        self.output_format = output_format
         self._lock = threading.Lock()
         self._latest: Optional[CameraFrame] = None
         self._decoded = 0
@@ -64,6 +67,10 @@ class LatestFrameCamera:
         self._start_ns = time.monotonic_ns()
         if decoder not in ("jpu", "software"):
             raise ValueError("decoder must be jpu or software")
+        if output_format not in ("bgr", "nv12"):
+            raise ValueError("output_format must be bgr or nv12")
+        if decoder != "jpu" and output_format != "bgr":
+            raise ValueError("NV12 output currently requires the JPU decoder")
         source = (
             f"v4l2src device={device} io-mode=mmap do-timestamp=true ! "
             f"image/jpeg,width={width},height={height},framerate={fps}/1 ! "
@@ -107,7 +114,7 @@ class LatestFrameCamera:
             buffer.unmap(mapping)
         with self._lock:
             self._decoded += 1
-            self._latest = CameraFrame(self._decoded, image, time.monotonic_ns())
+            self._latest = CameraFrame(self._decoded, image, time.monotonic_ns(), "bgr")
         return Gst.FlowReturn.OK
 
     def _jpu_decode_loop(self) -> None:
@@ -131,7 +138,11 @@ class LatestFrameCamera:
                     continue
                 captured_id, jpeg, captured_ns = packet
                 try:
-                    image = self._jpu.decode(jpeg)
+                    image = (
+                        self._jpu.decode_nv12(jpeg)
+                        if self.output_format == "nv12"
+                        else self._jpu.decode(jpeg)
+                    )
                     consecutive_timeouts = 0
                 except JpuDecodeTimeout:
                     consecutive_timeouts += 1
@@ -142,7 +153,9 @@ class LatestFrameCamera:
                 last_captured = captured_id
                 with self._lock:
                     self._decoded += 1
-                    self._latest = CameraFrame(self._decoded, image, captured_ns)
+                    self._latest = CameraFrame(
+                        self._decoded, image, captured_ns, self.output_format
+                    )
         except Exception as error:
             with self._lock:
                 self._worker_error = str(error)
