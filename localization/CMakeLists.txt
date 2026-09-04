@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(t265_omni_localization LANGUAGES CXX)
+project(t265_omni_localization LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,4 +39,9 @@ if(BUILD_TESTING)
     add_executable(test_omni_localization tests/test_omni_localization.cpp)
     target_link_libraries(test_omni_localization PRIVATE omni_localization_core)
     add_test(NAME omni_localization_tests COMMAND test_omni_localization)
+    add_executable(test_f407_mission_protocol
+        firmware/f407_mission_protocol.c
+        tests/test_f407_mission_protocol.c)
+    target_include_directories(test_f407_mission_protocol PRIVATE firmware)
+    add_test(NAME f407_mission_protocol_tests COMMAND test_f407_mission_protocol)
 endif()

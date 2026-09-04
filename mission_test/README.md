@@ -9,6 +9,7 @@
   → STM32按1280×1024目标坐标居中并靠近
   → STM32下转摄像头并置CLAW_VISIBLE
   → RDK连续3帧确认物资仍出现在画面任意位置
+  → RDK重复发送抓取命令，等待STM32确认GRIPPER_CLOSED
   → 直线导航到本方安全区前置点
   → 调整为正对安全区入口
   → 直行进入安全区
@@ -51,6 +52,10 @@ STM32确认摄像头已经下压后，只要普通物资仍出现在画面任意
 
 只有STM32的`TYPE=0x17`状态帧中`CLAW_VISIBLE=1`且状态帧不超过250 ms时，画面内物资确认才会累计；状态失效或物资消失都会把连续确认计数清零。
 
+确认目标后进入`GRABBING`状态，任务程序按实际视觉循环频率（通常20～50 Hz）重复发送
+`GRAB_CONFIRMED`。只有新鲜状态帧置`GRIPPER_CLOSED=1`后才开始导航；默认2秒超时后发送
+`STOP`并进入`FAULT`。可用`--grab-timeout`调整超时，但不建议取消握手。
+
 ## 安全区导航
 
 - 红方前置点：`(0,+950 mm)`，正对方向`90°`；安全区目标中心`(0,+1320 mm)`。
@@ -65,7 +70,7 @@ bearing = atan2(target_y - pose_y, target_x - pose_x)
 distance = hypot(target_x - pose_x, target_y - pose_y)
 ```
 
-先原地调整到`bearing`，再锁定该方向直行；到前置点后，使用命令给出的`heading_cdeg`对正安全区。任何视觉、任务命令或融合位姿看门狗超时都应停车。
+`NAVIGATE_WAYPOINT`由RDK计算并发送`bearing`，同时置`USE_FINAL_HEADING`，STM32先调整到该航向再锁定方向直行；到前置点后，`ALIGN_SAFE_ZONE`和`ENTER_SAFE_ZONE`改用红方90°或蓝方270°。任何视觉、任务命令或融合位姿看门狗超时都应停车。
 
 ## 安全区视觉完成条件
 

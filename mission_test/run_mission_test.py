@@ -45,6 +45,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--priority", type=int, default=0)
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--confirm-frames", type=int, default=3)
+    parser.add_argument("--grab-timeout", type=float, default=2.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
     parser.add_argument("--pose", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/localization_result.json")
@@ -166,6 +167,7 @@ def main() -> int:
     settings = MissionSettings(
         side=side,
         confirmation_frames=args.confirm_frames,
+        grab_timeout_s=args.grab_timeout,
     )
     mission = RescueMission(settings)
     config = load_config(args.config)
@@ -223,6 +225,7 @@ def main() -> int:
         time.sleep(0.04)
     report_sequence = 0
     mission_sequence = 0
+    last_command_signature = None
 
     running = True
     def stop(_signal, _frame):
@@ -276,6 +279,26 @@ def main() -> int:
                 latest_output = mission.step(latest_vision, load_pose(args.pose), load_stm_status(args.stm_status))
                 if latest_output.command is not None:
                     packet_out = latest_output.command.to_frame(mission_sequence)
+                    command_signature = (
+                        latest_output.state.value,
+                        latest_output.command.command,
+                        latest_output.command.flags,
+                        latest_output.command.target_x_mm,
+                        latest_output.command.target_y_mm,
+                        latest_output.command.heading_cdeg,
+                    )
+                    if command_signature != last_command_signature:
+                        print(
+                            "任务命令："
+                            f"state={latest_output.state.value} "
+                            f"cmd={latest_output.command.command} "
+                            f"flags=0x{latest_output.command.flags:02X} "
+                            f"target=({latest_output.command.target_x_mm},"
+                            f"{latest_output.command.target_y_mm}) "
+                            f"heading={latest_output.command.heading_cdeg / 100.0:.2f}° "
+                            f"seq={mission_sequence}"
+                        )
+                        last_command_signature = command_signature
                     mission_sequence = (mission_sequence + 1) & 0xFF
                 elif latest_output.report is not None:
                     packet_out = latest_output.report.to_frame(report_sequence)

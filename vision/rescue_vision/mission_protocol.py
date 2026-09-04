@@ -78,6 +78,10 @@ class Stm32Status:
         return bool(self.flags & STM_CLAW_VISIBLE)
 
     @property
+    def gripper_closed(self) -> bool:
+        return bool(self.flags & STM_GRIPPER_CLOSED)
+
+    @property
     def fault(self) -> bool:
         return bool(self.flags & STM_FAULT) or self.fault_code != 0
 

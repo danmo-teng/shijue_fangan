@@ -181,15 +181,18 @@ P0 COMMAND  P1 FLAGS  P2..P3 TARGET_X_mm  P4..P5 TARGET_Y_mm  P6..P7 HEADING_cde
 - `FLAGS bit0 VALID`、bit1要求直线行驶、bit2要求最终航向、bit3表示红方。
 - `COMMAND=0 STOP`；`2 GRAB_CONFIRMED`；`3 NAVIGATE_WAYPOINT`；`4 ALIGN_SAFE_ZONE`；`5 ENTER_SAFE_ZONE`；`6 TASK_COMPLETE`；`7 ABORT`。
 - 红方前置点`(0,+950)`、正方向`9000`；蓝方前置点`(0,-950)`、正方向`27000`。
+- `GRAB_CONFIRMED`会以20～50 Hz重复发送，直到新鲜的`TYPE=0x17`持续报告`GRIPPER_CLOSED=1`；STM32必须对重复抓取命令做幂等处理：每帧更新`acknowledged_sequence`，但`grab_in_progress=1`或夹爪已经闭合时不得重复启动舵机动作。
+- `NAVIGATE_WAYPOINT`的`HEADING_cdeg`是当前位置指向前置点的实时`atan2(dy,dx)`航向，`USE_FINAL_HEADING=1`；`ALIGN_SAFE_ZONE`与`ENTER_SAFE_ZONE`的航向才是红方90°或蓝方270°。
+- 抓取开始后2秒仍未收到新鲜`GRIPPER_CLOSED=1`，RDK发送`STOP`并进入故障状态；夹爪确认闭合前绝不发送导航命令。
 - F407必须对`TYPE=0x18`设置250 ms看门狗。超时、重复SEQ、`VALID=0`、融合位姿无效或故障位出现时立即停车。
 - `localization/firmware/f407_mission_protocol.[ch]`提供`TYPE=0x17`打包和`TYPE=0x18`载荷解码。
 
 RDK上的定位程序是`/dev/ttyS1`唯一所有者。视觉任务程序通过原子命令文件交给定位程序转发，不允许视觉和定位两个进程同时打开串口。
 
-已知帧：红方直线驶向`(0,+950 mm)`、最终方向`90°`、`SEQ=0x20`：
+已知帧：小车位于场地原点，红方直线驶向`(0,+950 mm)`，实时行驶航向`90°`、`USE_FINAL_HEADING=1`、`SEQ=0x20`：
 
 ```text
-A3 B3 18 20 03 0B 00 00 03 B6 23 28 6B E0 C3
+A3 B3 18 20 03 0F 00 00 03 B6 23 28 2E 20 C3
 ```
 
 ## 10. 电控侧交付与验收清单
@@ -204,3 +207,4 @@ A3 B3 18 20 03 0B 00 00 03 B6 23 28 6B E0 C3
 8. 通信测试模式确认无误后，再允许视觉快照进入底盘和舵机闭环。
 9. STM32以20 Hz持续发送`TYPE=0x17`，爪子入镜期间持续置位而不是发送单脉冲。
 10. 注入`TYPE=0x18`导航、对正和完成命令，确认各自看门狗、目标坐标和最终航向均生效。
+11. 连续注入多帧不同SEQ的`GRAB_CONFIRMED`，确认只启动一次夹爪动作，但每个合法SEQ都能更新ACK；置`GRIPPER_CLOSED`后，RDK才开始发送导航命令。

@@ -58,3 +58,12 @@ bool F407_MissionDecodePayload(const uint8_t payload[8], uint8_t sequence,
   if (result->command > F407_CMD_ABORT || result->command == 1U) return false;
   return result->heading_cdeg < 36000U;
 }
+
+bool F407_MissionShouldStartGrab(const F407MissionCommand *command,
+                                 bool grab_in_progress,
+                                 bool gripper_closed) {
+  if (command == NULL || command->command != F407_CMD_GRAB_CONFIRMED) {
+    return false;
+  }
+  return !grab_in_progress && !gripper_closed;
+}

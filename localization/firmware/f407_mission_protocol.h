@@ -53,4 +53,10 @@ void F407_StmStatusBuildFrame(const F407StmStatusPayload *payload,
 bool F407_MissionDecodePayload(const uint8_t payload[8], uint8_t sequence,
                                F407MissionCommand *result);
 
+/* Repeated GRAB_CONFIRMED frames are a reliability heartbeat.  Start the
+ * actuator only once; still acknowledge every valid frame sequence. */
+bool F407_MissionShouldStartGrab(const F407MissionCommand *command,
+                                 bool grab_in_progress,
+                                 bool gripper_closed);
+
 #endif
