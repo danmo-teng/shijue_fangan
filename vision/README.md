@@ -290,6 +290,8 @@ YOLOv8s模型；原始1280x1024画面会等比例缩成320x256内容并填充为
 
 仓库内默认模型是六类别YOLOv8s：`conmon`、`kernel`、`risk`、`wound`、`safe_blue`和
 `safe_red`，分别对应普通物资、核心物资、危险物资、伤员、蓝安全区和红安全区。
+独立识别程序仍会显示全部六类；普通物资投送状态机只读取普通物资类别，不再用
+`safe_blue/safe_red`判断是否投送完成。
 
 320模型默认使用`--preprocess auto`：JPU直接发布NV12，VSE硬件缩放到320x256，再以灰色Y和
 中性UV填充成320x320送入BPU；BGR只在显示时按`--display-fps`生成。若现场发现弱目标置信度

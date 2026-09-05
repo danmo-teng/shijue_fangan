@@ -111,7 +111,7 @@ ctest --test-dir build --output-on-failure
 
 ## 7. 普通物资抓取与安全区投送测试
 
-`mission_test/`实现普通物资居中靠近、摄像头下压后画面内物资确认、重复抓取命令与夹爪闭合握手、带实时航向的融合地图导航、安全区入口对正以及物资入区视觉确认。视觉处理与UART坐标均为原生`1280×1024`，详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
+`mission_test/`实现普通物资居中靠近、摄像头下压后画面内物资确认、重复抓取命令与夹爪闭合握手、带实时航向的融合地图导航、安全区入口对正，以及基于地图车体相交和融合位置静止的投送确认。安全区视觉类别不参与完成判断；视觉处理与UART坐标均为原生`1280×1024`，详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
 
 ## 安全说明
 

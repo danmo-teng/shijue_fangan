@@ -50,8 +50,6 @@ class VisionInput:
     target_x: int = 0
     target_y: int = 0
     target_bbox: tuple[int, int, int, int] | None = None
-    safe_found: bool = False
-    safe_bbox: tuple[int, int, int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +58,7 @@ class MissionOutput:
     report: NormalSupplyReport | None
     command: MissionCommand | None
     message: str
+    contact_pose: tuple[float, float, float] | None = None
 
 
 @dataclass
@@ -67,13 +66,15 @@ class MissionSettings:
     side: str
     confirmation_frames: int = 3
     grab_timeout_s: float = 3.0
-    approach_x_m: float = 0.0
+    material_target_x_abs_m: float = 0.15
     approach_y_abs_m: float = 1.20
     safe_center_y_abs_m: float = 1.32
     safe_zone_half_width_m: float = 0.30
     safe_zone_inner_edge_abs_m: float = 1.20
     safe_zone_outer_edge_abs_m: float = 1.50
     robot_radius_m: float = 0.12
+    delivery_stationary_s: float = 0.8
+    delivery_stationary_tolerance_m: float = 0.015
     align_tolerance_deg: float = 8.0
 
     def __post_init__(self) -> None:
@@ -85,26 +86,14 @@ class MissionSettings:
             raise ValueError("safe-zone edges must be positive and ordered")
         if self.safe_zone_half_width_m <= 0 or self.robot_radius_m <= 0:
             raise ValueError("safe-zone width and robot radius must be positive")
+        if not 0 < self.material_target_x_abs_m <= self.safe_zone_half_width_m - self.robot_radius_m:
+            raise ValueError("material target must keep the robot circle inside its half-zone")
+        if self.delivery_stationary_s <= 0 or self.delivery_stationary_tolerance_m <= 0:
+            raise ValueError("material target and stationary thresholds must be positive")
 
 
 def angle_error_deg(target: float, current: float) -> float:
     return (target - current + 180.0) % 360.0 - 180.0
-
-
-def target_inside_safe_zone(vision: VisionInput) -> bool:
-    if not vision.target_found or not vision.safe_found:
-        return False
-    if vision.target_bbox is None or vision.safe_bbox is None:
-        return False
-    tx, ty, tw, th = vision.target_bbox
-    sx, sy, sw, sh = vision.safe_bbox
-    center_x, center_y = tx + tw * 0.5, ty + th * 0.5
-    margin_x = max(4.0, sw * 0.03)
-    margin_y = max(4.0, sh * 0.03)
-    return (
-        sx + margin_x <= center_x <= sx + sw - margin_x
-        and sy + margin_y <= center_y <= sy + sh - margin_y
-    )
 
 
 def robot_intersects_safe_zone(pose: PoseInput, settings: MissionSettings) -> bool:
@@ -133,8 +122,9 @@ class RescueMission:
         self.clock = clock
         self.state = MissionState.SEARCH
         self.grab_hits = 0
-        self.safe_hits = 0
         self.grab_started_s: float | None = None
+        self.delivery_stationary_started_s: float | None = None
+        self.delivery_stationary_anchor: tuple[float, float] | None = None
 
     @property
     def desired_heading_deg(self) -> float:
@@ -142,13 +132,56 @@ class RescueMission:
 
     @property
     def approach_point(self) -> tuple[float, float]:
+        # The map labels the red-side material compartment on field-left and
+        # the blue-side material compartment on field-right. Aim at the centre
+        # of that 300mm-wide half instead of the x=0 divider.
+        target_x = (-self.settings.material_target_x_abs_m
+                    if self.settings.side == "red"
+                    else self.settings.material_target_x_abs_m)
         sign = 1.0 if self.settings.side == "red" else -1.0
-        return self.settings.approach_x_m, sign * self.settings.approach_y_abs_m
+        return target_x, sign * self.settings.approach_y_abs_m
 
     @property
     def safe_center(self) -> tuple[float, float]:
+        target_x = (-self.settings.material_target_x_abs_m
+                    if self.settings.side == "red"
+                    else self.settings.material_target_x_abs_m)
         sign = 1.0 if self.settings.side == "red" else -1.0
-        return 0.0, sign * self.settings.safe_center_y_abs_m
+        return target_x, sign * self.settings.safe_center_y_abs_m
+
+    def contact_pose(self, observed: PoseInput) -> tuple[float, float, float]:
+        """Apply only the boundary-normal constraint justified by fence contact."""
+        sign = 1.0 if self.settings.side == "red" else -1.0
+        tangent_y = sign * (
+            self.settings.safe_zone_inner_edge_abs_m - self.settings.robot_radius_m
+        )
+        return observed.x_m, tangent_y, observed.yaw_deg
+
+    def _stationary_at_safe_zone(self, pose: PoseInput) -> tuple[bool, float]:
+        if not robot_intersects_safe_zone(pose, self.settings):
+            self.delivery_stationary_started_s = None
+            self.delivery_stationary_anchor = None
+            return False, 0.0
+        now = self.clock()
+        if self.delivery_stationary_anchor is None:
+            self.delivery_stationary_anchor = (pose.x_m, pose.y_m)
+            self.delivery_stationary_started_s = now
+            return False, 0.0
+        moved = math.hypot(
+            pose.x_m - self.delivery_stationary_anchor[0],
+            pose.y_m - self.delivery_stationary_anchor[1],
+        )
+        if moved > self.settings.delivery_stationary_tolerance_m:
+            self.delivery_stationary_anchor = (pose.x_m, pose.y_m)
+            self.delivery_stationary_started_s = now
+            return False, 0.0
+        started = (
+            self.delivery_stationary_started_s
+            if self.delivery_stationary_started_s is not None
+            else now
+        )
+        elapsed = max(0.0, now - started)
+        return elapsed >= self.settings.delivery_stationary_s, elapsed
 
     def _flags(self, *, straight=False, heading=False) -> int:
         result = CMD_VALID | (CMD_RED_SIDE if self.settings.side == "red" else 0)
@@ -267,28 +300,29 @@ class RescueMission:
             command = self._waypoint_command(CMD_ALIGN_SAFE_ZONE, target, heading=True)
             if pose.valid and yaw_error <= self.settings.align_tolerance_deg:
                 self.state = MissionState.ENTER_SAFE_ZONE
+                self.delivery_stationary_started_s = None
+                self.delivery_stationary_anchor = None
                 command = self._waypoint_command(
                     CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True
                 )
             return MissionOutput(self.state, None, command, f"对正安全区入口，角度误差{yaw_error:.1f}°")
 
         if self.state == MissionState.ENTER_SAFE_ZONE:
-            map_contact = robot_intersects_safe_zone(pose, self.settings)
-            delivery_visible = target_inside_safe_zone(vision)
-            self.safe_hits = self.safe_hits + 1 if map_contact and delivery_visible else 0
-            if self.safe_hits >= self.settings.confirmation_frames:
+            stationary, stationary_s = self._stationary_at_safe_zone(pose)
+            if stationary:
                 self.state = MissionState.COMPLETE
                 return MissionOutput(
                     self.state,
                     None,
                     MissionCommand(CMD_TASK_COMPLETE, self._flags()),
-                    "普通物资已连续出现在本方安全区内，任务完成",
+                    "地图车体圆接触安全区且定位稳定不动，任务完成",
+                    self.contact_pose(pose),
                 )
             return MissionOutput(
                 self.state,
                 report,
                 self._waypoint_command(CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True),
-                "等待地图车体圆接触安全区并用视觉确认物资进入",
+                f"等待车体圆接触安全区并稳定{self.settings.delivery_stationary_s:.1f}s（当前{stationary_s:.2f}s）",
             )
 
         if self.state == MissionState.COMPLETE:

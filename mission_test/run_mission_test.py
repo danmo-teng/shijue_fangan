@@ -46,11 +46,15 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--confirm-frames", type=int, default=3)
     parser.add_argument("--grab-timeout", type=float, default=3.0)
+    parser.add_argument("--material-target-x-mm", type=float, default=150.0)
+    parser.add_argument("--delivery-stationary-seconds", type=float, default=0.8)
+    parser.add_argument("--delivery-stationary-tolerance-mm", type=float, default=15.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
     parser.add_argument("--pose", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/localization_result.json")
     parser.add_argument("--stm-status", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/stm32_status.json")
     parser.add_argument("--command-file", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/uart_command.bin")
+    parser.add_argument("--contact-output", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/delivery_contact_pose.json")
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "vision/config/rescue_vision.json")
     parser.add_argument("--homography", type=Path, default=PROJECT_ROOT / "vision/config/homography.txt")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="fullscreen")
@@ -92,24 +96,52 @@ def load_stm_status(path: Path) -> Stm32Status:
         return Stm32Status()
 
 
+def write_contact_pose(path: Path, observed: PoseInput,
+                       reference: tuple[float, float, float], side: str) -> None:
+    reference_x, reference_y, reference_yaw = reference
+    document = {
+        "schema_version": 1,
+        "timestamp_monotonic_ns": time.monotonic_ns(),
+        "side": side,
+        "source": "safe_zone_fence_contact",
+        "constraint_axis": "y",
+        "observed_pose": {
+            "x_m": observed.x_m,
+            "y_m": observed.y_m,
+            "yaw_deg": observed.yaw_deg,
+        },
+        "tangent_reference_pose": {
+            "x_m": reference_x,
+            "y_m": reference_y,
+            "yaw_deg": reference_yaw,
+        },
+        "suggested_position_correction_m": {
+            "x": reference_x - observed.x_m,
+            "y": reference_y - observed.y_m,
+        },
+        "applied_to_localization": False,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
 def largest(detections, class_name):
     matches = [item for item in detections if item.class_name == class_name]
     return max(matches, key=lambda item: item.bbox[2] * item.bbox[3], default=None)
 
 
-def observation(detections, safe_class: str) -> VisionInput:
+def observation(detections) -> VisionInput:
     target = largest(detections, "green_supply")
-    safe = largest(detections, safe_class)
     if target is None:
-        return VisionInput(safe_found=safe is not None, safe_bbox=None if safe is None else safe.bbox)
+        return VisionInput()
     x, y, width, height = target.bbox
     return VisionInput(
         target_found=True,
         target_x=max(0, min(IMAGE_WIDTH - 1, x + width // 2)),
         target_y=max(0, min(IMAGE_HEIGHT - 1, y + height // 2)),
         target_bbox=target.bbox,
-        safe_found=safe is not None,
-        safe_bbox=None if safe is None else safe.bbox,
     )
 
 
@@ -140,9 +172,6 @@ def draw(image, vision: VisionInput, output, pose: PoseInput, stm: Stm32Status):
         x, y, w, h = vision.target_bbox
         cv2.rectangle(view, (x, y), (x + w, y + h), (0, 255, 0), 3)
         cv2.circle(view, (vision.target_x, vision.target_y), 8, (0, 255, 0), 2)
-    if vision.safe_bbox:
-        x, y, w, h = vision.safe_bbox
-        cv2.rectangle(view, (x, y), (x + w, y + h), (255, 0, 255), 3)
     lines = [
         f"state={output.state.value}  {output.message}",
         f"target=({vision.target_x},{vision.target_y}) found={int(vision.target_found)} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
@@ -168,6 +197,9 @@ def main() -> int:
         side=side,
         confirmation_frames=args.confirm_frames,
         grab_timeout_s=args.grab_timeout,
+        material_target_x_abs_m=args.material_target_x_mm / 1000.0,
+        delivery_stationary_s=args.delivery_stationary_seconds,
+        delivery_stationary_tolerance_m=args.delivery_stationary_tolerance_mm / 1000.0,
     )
     mission = RescueMission(settings)
     config = load_config(args.config)
@@ -209,7 +241,6 @@ def main() -> int:
         f"置信度阈值={args.score_thres:.2f}，"
         f"预处理={'JPU NV12 + VSE' if scaler is not None else 'CPU BGR'}"
     )
-    safe_class = "safe_red" if side == "red" else "safe_blue"
     team_color = 0x11 if side == "red" else 0x12
     deadline = time.monotonic() + args.startup_timeout
     while not load_pose(args.pose).valid:
@@ -226,6 +257,7 @@ def main() -> int:
     report_sequence = 0
     mission_sequence = 0
     last_command_signature = None
+    contact_pose_written = False
 
     running = True
     def stop(_signal, _frame):
@@ -271,12 +303,21 @@ def main() -> int:
                         detections, _ = yolo_detector.infer(packet.image)
                 else:
                     assert traditional_detector is not None
-                    classes = ["green_supply"]
-                    if mission.state == MissionState.ENTER_SAFE_ZONE:
-                        classes.append(safe_class)
-                    detections, _ = traditional_detector.detect(packet.image, classes)
-                latest_vision = observation(detections, safe_class)
-                latest_output = mission.step(latest_vision, load_pose(args.pose), load_stm_status(args.stm_status))
+                    detections, _ = traditional_detector.detect(
+                        packet.image, ["green_supply"]
+                    )
+                latest_vision = observation(detections)
+                current_pose = load_pose(args.pose)
+                latest_output = mission.step(
+                    latest_vision, current_pose, load_stm_status(args.stm_status)
+                )
+                if latest_output.contact_pose is not None and not contact_pose_written:
+                    write_contact_pose(
+                        args.contact_output, current_pose,
+                        latest_output.contact_pose, side,
+                    )
+                    contact_pose_written = True
+                    print(f"安全区接触校正参考已保存：{args.contact_output}")
                 if latest_output.command is not None:
                     packet_out = latest_output.command.to_frame(mission_sequence)
                     command_signature = (

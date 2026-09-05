@@ -31,8 +31,8 @@ from rescue_vision.mission_protocol import (
 )
 
 
-def target(x=640, y=512, bbox=(600, 470, 80, 80), safe=None):
-    return VisionInput(True, x, y, bbox, safe is not None, safe)
+def target(x=640, y=512, bbox=(600, 470, 80, 80)):
+    return VisionInput(True, x, y, bbox)
 
 
 class FakeClock:
@@ -46,7 +46,7 @@ class FakeClock:
         self.now += seconds
 
 
-def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
+def run_side(side: str, desired_y: int, desired_heading: int):
     clock = FakeClock()
     mission = RescueMission(
         MissionSettings(side=side, confirmation_frames=3, grab_timeout_s=3.0),
@@ -93,9 +93,14 @@ def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
     output = mission.step(VisionInput(), pose, closed)
     assert output.state == MissionState.NAVIGATE
     assert output.command.command == CMD_NAVIGATE_WAYPOINT
+    expected_x = -150 if side == "red" else 150
+    assert output.command.target_x_mm == expected_x
     assert output.command.target_y_mm == desired_y
     assert output.command.flags & CMD_USE_FINAL_HEADING
-    expected_bearing = math.degrees(math.atan2(desired_y / 1000 - pose.y_m, -pose.x_m)) % 360
+    expected_bearing = math.degrees(math.atan2(
+        desired_y / 1000 - pose.y_m,
+        expected_x / 1000 - pose.x_m,
+    )) % 360
     assert output.command.heading_cdeg == round(expected_bearing * 100) % 36000
 
     output = mission.step(VisionInput(), PoseInput(True, 0.0, desired_y / 1000, 0), closed)
@@ -111,29 +116,35 @@ def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
     assert output.command.flags & CMD_USE_FINAL_HEADING
     assert output.command.heading_cdeg == desired_heading * 100
 
-    contained = target(y=700, bbox=(590, 680, 100, 80), safe=safe_bbox)
-    # A visual safe-zone match alone cannot complete delivery while the map
-    # robot circle is still separated from the physical safe-zone boundary.
+    # Target visibility no longer decides delivery. Map contact and stationary
+    # fused position are the only completion inputs.
     separated_y = 0.95 if side == "red" else -0.95
     for _ in range(4):
         output = mission.step(
-            contained, PoseInput(True, 0.0, separated_y, desired_heading), closed
+            VisionInput(), PoseInput(True, 0.0, separated_y, desired_heading), closed
         )
         assert output.state == MissionState.ENTER_SAFE_ZONE
     contact_y = 1.08 if side == "red" else -1.08
     assert robot_intersects_safe_zone(
         PoseInput(True, 0.0, contact_y, desired_heading), mission.settings
     )
-    for _ in range(2):
-        output = mission.step(
-            contained, PoseInput(True, 0.0, contact_y, desired_heading), closed
-        )
-        assert output.state == MissionState.ENTER_SAFE_ZONE
+    contact = PoseInput(True, 0.0, contact_y, desired_heading)
+    output = mission.step(VisionInput(), contact, closed)
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    clock.advance(0.70)
+    moved = PoseInput(True, 0.016, contact_y, desired_heading)
+    output = mission.step(VisionInput(), moved, closed)
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    clock.advance(0.79)
+    output = mission.step(VisionInput(), moved, closed)
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    clock.advance(0.02)
     output = mission.step(
-        contained, PoseInput(True, 0.0, contact_y, desired_heading), closed
+        VisionInput(), moved, closed
     )
     assert output.state == MissionState.COMPLETE
     assert output.command.command == CMD_TASK_COMPLETE
+    assert output.contact_pose == (moved.x_m, contact_y, float(desired_heading))
 
 
 def test_grab_timeout():
@@ -172,8 +183,8 @@ def test_safe_zone_circle_geometry():
 
 
 def main():
-    run_side("red", 1200, 90, (400, 600, 480, 300))
-    run_side("blue", -1200, 270, (400, 600, 480, 300))
+    run_side("red", 1200, 90)
+    run_side("blue", -1200, 270)
     test_grab_timeout()
     test_safe_zone_circle_geometry()
     print("mission state machine PASS")

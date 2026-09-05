@@ -372,6 +372,7 @@ class RescueMapApp:
             self.zone,
             self.corner_offset_m,
         )
+        (RUNTIME / "delivery_contact_pose.json").unlink(missing_ok=True)
         self.selecting = False
         self.started_monotonic = time.monotonic()
         self.message = "等待T265和编码器融合数据" if self.localization_mode == "fusion" else "等待T265定位数据"
