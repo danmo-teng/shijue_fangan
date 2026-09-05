@@ -16,6 +16,7 @@ from state_machine import PoseInput
 
 from rescue_vision.mission_protocol import (
     CMD_DRIVE_STRAIGHT,
+    CMD_DISTANCE_VALID,
     CMD_GRAB_CONFIRMED,
     CMD_NAVIGATE_WAYPOINT,
     CMD_RED_SIDE,
@@ -29,14 +30,15 @@ from rescue_vision.mission_protocol import (
 def main() -> None:
     command = MissionCommand(
         CMD_NAVIGATE_WAYPOINT,
-        CMD_VALID | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING | CMD_RED_SIDE,
-        target_x_mm=-150,
-        target_y_mm=1200,
-        heading_cdeg=9713,
+        CMD_VALID | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING |
+        CMD_RED_SIDE | CMD_DISTANCE_VALID,
+        target_x_mm=1374,
+        target_y_mm=0,
+        heading_cdeg=12821,
     )
     packet = command.to_frame(0x20)
     assert packet.hex(" ").upper() == (
-        "A3 B3 18 20 03 0F FF 6A 04 B0 25 F1 01 69 C3"
+        "A3 B3 18 20 03 1F 05 5E 00 00 32 15 BA 5A C3"
     )
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)

@@ -1,19 +1,22 @@
-From 53ddafb0188942d8e86ced03843742002fbda9e7 Mon Sep 17 00:00:00 2001
+From 907b13b0bec26f7a30d90a6a902add216a4f70e9 Mon Sep 17 00:00:00 2001
 From: ZMiaow <gandizm@users.noreply.github.com>
 Date: Sat, 5 Sep 2026 17:34:30 +0800
 Subject: [PATCH] Run continuous multi-cargo rescue cycles
 
 ---
- MISSION_PROTOCOL.md           | 16 +++----
- Main/Inc/app_config.h         |  2 +
- Main/Src/Lcd.c                |  3 ++
- Main/Src/Task.c               | 80 ++++++++++++++++++++---------------
- README.md                     | 14 +++---
- tools/test_vision_protocol.py |  9 ++++
- 6 files changed, 74 insertions(+), 50 deletions(-)
+ MISSION_PROTOCOL.md           |  26 ++--
+ Main/Inc/app_config.h         |   1 +
+ Main/Inc/vision.h             |   4 +-
+ Main/Src/Lcd.c                |   3 +
+ Main/Src/Task.c               | 258 ++++++++++++++++++----------------
+ Main/Src/vision.c             |   4 +-
+ README.md                     |  24 ++--
+ tools/test_vision_protocol.py |  27 ++++
+ tools/vision_protocol.py      |   6 +-
+ 9 files changed, 200 insertions(+), 153 deletions(-)
 
 diff --git a/MISSION_PROTOCOL.md b/MISSION_PROTOCOL.md
-index 162457f..516a2f8 100644
+index 162457f..626d382 100644
 --- a/MISSION_PROTOCOL.md
 +++ b/MISSION_PROTOCOL.md
 @@ -1,25 +1,25 @@
@@ -37,32 +40,78 @@ index 162457f..516a2f8 100644
  7. 摄像头到140°后停车并持续通过`TYPE=0x17`置`CLAW_VISIBLE=1`，让上位机检查抓取画面。
  8. 如果上位机报告画面无物体，摄像头每次抬高10°（舵机角度140→130→…→90），每次抬高后停车观察1秒；仍没有物体就以100 mm/s慢速旋转观察。转满一圈仍没有物体则再次抬高并重复。在视觉报告超时期间保持停车。
  9. 上位机在F407持续上报`CLAW_VISIBLE=1`且状态帧不超过250 ms时，连续3个视觉周期确认画面仍有目标，然后以20～50 Hz重复发送`TYPE=0x18 / GRAB_CONFIRMED`。F407第一次接受时让左右爪同时合到Touch姿态，后续帧只更新`acknowledged_sequence`而不重启舵机动作；仍保留2秒机构完成窗口，之后才通过20 Hz的`TYPE=0x17`持续置`GRIPPER_CLOSED=1`。合爪后摄像头保持当前抓取观察角，不提前抬头。
- 10. 上位机发送安全区前置点，并在`HEADING_cdeg`中给出当前位置指向前置点的实时行驶航向。F407优先使用带`USE_FINAL_HEADING`标志的该航向先原地对正，再沿车头方向直行；无该标志时才由目标点和融合位姿本地计算方位。距离目标500 mm内从800 mm/s降到250 mm/s，偏差达到7°时停车重新对正；若有效T265距离连续1.5秒没有减少至少20 mm，则按打滑、受阻或方向异常故障停车。NAV命令250 ms内按正常速度执行，250～1000 ms之间仅在融合位姿持续有效时沿已确认目标以不超过250 mm/s继续，超过1000 ms停车等待；命令恢复后自动继续。融合位姿失效时立即停车，恢复后自动继续，不使用旧位姿盲跑。
+-10. 上位机发送安全区前置点，并在`HEADING_cdeg`中给出当前位置指向前置点的实时行驶航向。F407优先使用带`USE_FINAL_HEADING`标志的该航向先原地对正，再沿车头方向直行；无该标志时才由目标点和融合位姿本地计算方位。距离目标500 mm内从800 mm/s降到250 mm/s，偏差达到7°时停车重新对正；若有效T265距离连续1.5秒没有减少至少20 mm，则按打滑、受阻或方向异常故障停车。NAV命令250 ms内按正常速度执行，250～1000 ms之间仅在融合位姿持续有效时沿已确认目标以不超过250 mm/s继续，超过1000 ms停车等待；命令恢复后自动继续。融合位姿失效时立即停车，恢复后自动继续，不使用旧位姿盲跑。
++10. 抓取闭合后，上位机根据当时T265融合位置计算一次到对应分区入口的绝对航向和直线距离。`TYPE=0x18`置`DISTANCE_VALID`，P2/P3携带距离毫米、P4/P5为0。F407先按本地IMU/Location对准该航向，再由编码器执行一次定距；不再要求RDK持续发送`TYPE=0x16`实时位置。
  11. 上位机发送`ALIGN_SAFE_ZONE`后，F407转到命令给出的最终航向。收到`ENTER_SAFE_ZONE`后左右爪同时张开，再以250 mm/s后退0.30 m；倒车结束制动并等待200 ms，再软启动加速到850 mm/s前冲0.55 m撞送物体，停车观察600 ms。打开夹爪、后退、换向等待和前冲期间均要求持续收到不超过250 ms且命令仍为`ENTER_SAFE_ZONE`的新帧，失联或命令改变立即停车；两段定距同时锁定各自动作开始时的IMU航向。
 -12. 如果上位机仍发送`ENTER_SAFE_ZONE`，说明尚未确认物体进入安全区，F407重复“后退0.30 m→前冲0.55 m→观察”。上位机连续3帧确认普通物资位于本方安全区框内后发送`TASK_COMPLETE`，F407才把摄像头抬到120°，随后后退0.45 m、根据`TYPE=0x16`当前位置计算指向场地中心`(0,0)`的航向并原地对正，最后进入`SEARCH`。
-+12. 如果上位机仍发送`ENTER_SAFE_ZONE`，说明尚未确认物体进入安全区，F407重复“后退0.30 m→前冲0.55 m→观察”。收到`TASK_COMPLETE`后摄像头抬到120°并后退0.45 m，再使用50 Hz融合位姿驶入场地中心300 mm范围，最后进入`SEARCH`。
++12. 如果上位机仍发送`ENTER_SAFE_ZONE`，说明尚未确认物体进入安全区，F407重复“后退0.30 m→前冲0.55 m→观察”。收到`TASK_COMPLETE`后摄像头抬到120°并后退0.45 m。随后等待`RETURN_CENTER`航向和距离，执行定距后在距中心约600 mm处进入`SEARCH`。
  
 -当前上位机在发出`TASK_COMPLETE`后会停留在`COMPLETE`且不再输出下一轮视觉报告。F407虽然会回到`SEARCH`，但要继续识别下一件物体，上位机还需要在收到STM32的`TYPE=0x17`搜索状态后复位其任务状态机。
 +上位机在收到STM32的`TYPE=0x17`退出、返中或搜索状态后进入下一轮；第一次投送完成前只发普通物资，之后允许四类目标。
  
 -发生电机故障或收到`ABORT`时立即停车并进入故障状态。`STOP`在NAV阶段表示上位机暂时无法提供安全航向，F407停车但保留NAV状态，收到新NAV后重新对正并自动继续；其他阶段的`STOP`仍为故障停车。安全区对正和撞送仍严格要求250 ms内的新命令。NAV中的融合位姿超过150 ms、T265质量无效或更新被拒绝时立即停车并等待恢复，绝不使用旧位姿继续。自主出发和搜索不依赖任务命令，但仍受电机、IMU和180秒总超时保护。
-+发生电机故障或收到`ABORT`时立即停车并进入故障状态。`STOP`在NAV阶段表示上位机暂时无法提供安全航向，F407停车但保留NAV状态，收到新NAV后重新对正并自动继续；其他阶段的`STOP`仍为故障停车。安全区对正和撞送仍严格要求250 ms内的新命令。NAV中的融合位姿超过150 ms、T265质量无效或更新被拒绝时立即停车并等待恢复，绝不使用旧位姿继续。自主出发和搜索不依赖任务命令；连续模式没有总时长终止，但仍保留通信、位姿、电机和IMU安全保护。
++发生电机故障或收到`ABORT`时立即停车并进入故障状态。安全区对正、撞送及航向定距命令仍要求持续保持新鲜；定距已经开始后若长时间失联则故障停车，不能恢复后把完整原距离再跑一遍。自主出发和搜索不依赖任务命令；连续模式没有总时长终止，但仍保留通信、电机和IMU安全保护。
  
  ## 公共帧
  
+@@ -36,7 +36,7 @@ CRC为CRC-16/Modbus，覆盖`TYPE、SEQ、P0..P7`共10字节，初值`0xFFFF`、
+ | `0x11` | RDK→F407 | 颜色与出发区配置 |
+ | `0x12` | RDK→F407 | 原生1280×1024普通物资坐标报告 |
+ | `0x15` | F407→RDK | 100 Hz三路编码器累计低16位 |
+-| `0x16` | RDK→F407 | 20 Hz融合场地位姿 |
++| `0x16` | RDK→F407 | 旧版可选融合位姿；当前默认不发送 |
+ | `0x17` | F407→RDK | 20 Hz任务状态 |
+ | `0x18` | RDK→F407 | 抓取、导航、对正、入区和完成命令 |
+ 
+@@ -65,11 +65,11 @@ A3 B3 12 10 02 80 02 00 00 00 01 09 DD FD C3
+ 
+ ### `TYPE=0x18`任务命令
+ 
+-`P0=COMMAND、P1=FLAGS、P2/P3=TARGET_X_mm、P4/P5=TARGET_Y_mm、P6/P7=HEADING_cdeg`。X/Y为有符号int16大端；航向范围0～35999，单位0.01°。FLAGS bit0必须为1，bit1要求直行，bit2使用最终航向，bit3表示红方。
++`P0=COMMAND、P1=FLAGS、P2/P3=DISTANCE_mm、P4/P5=0、P6/P7=HEADING_cdeg`。距离为非负int16大端；航向范围0～35999，单位0.01°。FLAGS bit0必须为1，bit1要求直行，bit2使用航向，bit3表示红方，bit4表示距离有效。
+ 
+-命令值：`0 STOP、2 GRAB_CONFIRMED、3 NAVIGATE_WAYPOINT、4 ALIGN_SAFE_ZONE、5 ENTER_SAFE_ZONE、6 TASK_COMPLETE、7 ABORT`。
++命令值：`0 STOP、2 GRAB_CONFIRMED、3 NAVIGATE_WAYPOINT、4 ALIGN_SAFE_ZONE、5 ENTER_SAFE_ZONE、6 TASK_COMPLETE、7 ABORT、8 RETURN_CENTER`。
+ 
+ 
+ - `GRAB_CONFIRMED`会重复发送直到新鲜`TYPE=0x17`置`GRIPPER_CLOSED=1`；F407对舵机动作幂等，但每个新SEQ都必须更新P4 ACK。
+-- `NAVIGATE_WAYPOINT`的`HEADING_cdeg`是实时行驶航向，`ALIGN_SAFE_ZONE`和`ENTER_SAFE_ZONE`的航向才是红方90°或蓝方270°。
++- `NAVIGATE_WAYPOINT`和`RETURN_CENTER`使用航向+距离；`ALIGN_SAFE_ZONE`和`ENTER_SAFE_ZONE`只使用红方90°或蓝方270°航向。
+ - 红方前置点为`(0,+950 mm)`，蓝方前置点为`(0,-950 mm)`。F407不接收PWM值，只接收任务目标并在本地完成转向、速度限制和失联停车。
 diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
-index 92bb10b..c95185a 100644
+index 92bb10b..b24c0f4 100644
 --- a/Main/Inc/app_config.h
 +++ b/Main/Inc/app_config.h
-@@ -264,6 +264,8 @@
+@@ -264,6 +264,7 @@
  #define APP_RAM_VERIFY_WAIT_MS            600U
  #define APP_SAFE_EXIT_DISTANCE_M            0.45f
  #define APP_SAFE_EXIT_SPEED_MM_S          300.0f
-+#define APP_RETURN_CENTER_HOLD_MM          300.0f
 +#define APP_RETURN_CENTER_SPEED_MM_S       500.0f
  
  /* This 1.8-inch 128x160 ST7735 panel exposes GRAM origin (0, 0). */
  #define APP_LCD_WIDTH       128U
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index b0b6a0a..dabf3f0 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -53,6 +53,7 @@
+ #define VISION_CMD_DRIVE_STRAIGHT    0x02U
+ #define VISION_CMD_USE_FINAL_HEADING 0x04U
+ #define VISION_CMD_RED_SIDE          0x08U
++#define VISION_CMD_DISTANCE_VALID    0x10U
+ 
+ typedef enum {
+   VISION_CMD_STOP = 0,
+@@ -61,7 +62,8 @@ typedef enum {
+   VISION_CMD_ALIGN_SAFE_ZONE = 4,
+   VISION_CMD_ENTER_SAFE_ZONE = 5,
+   VISION_CMD_TASK_COMPLETE = 6,
+-  VISION_CMD_ABORT = 7
++  VISION_CMD_ABORT = 7,
++  VISION_CMD_RETURN_CENTER = 8
+ } VisionMissionCode;
+ 
+ typedef struct {
 diff --git a/Main/Src/Lcd.c b/Main/Src/Lcd.c
 index e3761a1..f54d2b9 100644
 --- a/Main/Src/Lcd.c
@@ -78,7 +127,7 @@ index e3761a1..f54d2b9 100644
      (void)snprintf(text, sizeof(text), "STATE:%s T:%us",
                     task_state_name(task.state), task.remaining_s);
 diff --git a/Main/Src/Task.c b/Main/Src/Task.c
-index 9dd3d74..e8a2d77 100644
+index 9dd3d74..cc6194e 100644
 --- a/Main/Src/Task.c
 +++ b/Main/Src/Task.c
 @@ -40,7 +40,6 @@ static TurnTracker turn_tracker;
@@ -97,7 +146,16 @@ index 9dd3d74..e8a2d77 100644
  static bool tracking_valid;
  static bool mission_sequence_valid;
  static bool search_advancing;
-@@ -165,18 +163,10 @@ static void task_publish_status(uint32_t now_ms)
+@@ -60,6 +58,8 @@ static bool steering_active;
+ static bool nav_ready;
+ static bool search_report_gate_open;
+ static bool approach_target_lost;
++static bool distance_command_done;
++static bool distance_command_started;
+ static int8_t recover_dir;
+ 
+ static void task_enter(TaskState next, uint32_t now_ms);
+@@ -165,18 +165,10 @@ static void task_publish_status(uint32_t now_ms)
  
  static void task_update_match_time(uint32_t now_ms)
  {
@@ -120,7 +178,16 @@ index 9dd3d74..e8a2d77 100644
  }
  
  static void task_enter(TaskState next, uint32_t now_ms)
-@@ -250,12 +240,11 @@ static void task_initialize(uint32_t now_ms)
+@@ -229,6 +221,8 @@ static void task_enter(TaskState next, uint32_t now_ms)
+              (next == TASK_FACE_FIELD_CENTER)) {
+     nav_ready = false;
+     nav_progress.valid = false;
++    distance_command_done = false;
++    distance_command_started = false;
+   }
+ }
+ 
+@@ -250,12 +244,11 @@ static void task_initialize(uint32_t now_ms)
    Mechanism_Init();
    Lift_SetStartPosition();
    task_status = (TaskStatus){0};
@@ -134,7 +201,7 @@ index 9dd3d74..e8a2d77 100644
    status_sent_ms = now_ms - APP_TASK_STATUS_PERIOD_MS;
    camera_angle = (float)Camera_GetAngle();
    steering_mm_s = 0.0f;
-@@ -266,7 +255,6 @@ static void task_initialize(uint32_t now_ms)
+@@ -266,7 +259,6 @@ static void task_initialize(uint32_t now_ms)
    start_target_heading_deg = 0.0f;
    search_entry_report_generation = 0U;
    initial_claw_ready = false;
@@ -142,7 +209,15 @@ index 9dd3d74..e8a2d77 100644
    tracking_valid = false;
    mission_sequence_valid = false;
    search_advancing = false;
-@@ -280,14 +268,17 @@ static void task_initialize(uint32_t now_ms)
+@@ -274,20 +266,25 @@ static void task_initialize(uint32_t now_ms)
+   nav_ready = false;
+   search_report_gate_open = false;
+   approach_target_lost = false;
++  distance_command_done = false;
++  distance_command_started = false;
+   recover_dir = 1;
+   nav_progress = (NavProgress){0};
+   task_reset_turn_tracker();
    initialized = true;
  }
  
@@ -165,7 +240,7 @@ index 9dd3d74..e8a2d77 100644
  }
  
  static float task_tracking_dt(uint32_t tick_ms)
-@@ -530,7 +521,7 @@ static void task_process_search(const VisionData *vision, uint32_t now_ms)
+@@ -530,7 +527,7 @@ static void task_process_search(const VisionData *vision, uint32_t now_ms)
     * normal 250 ms timeout. They remain visible on the LCD, but cannot select
     * a target or enter APPROACH until a new valid report is received. */
    task_status.found = search_report_gate_open &&
@@ -174,7 +249,7 @@ index 9dd3d74..e8a2d77 100644
    if (task_status.found) {
      task_enter(TASK_APPROACH, now_ms);
      return;
-@@ -569,7 +560,7 @@ static void task_process_search(const VisionData *vision, uint32_t now_ms)
+@@ -569,7 +566,7 @@ static void task_process_search(const VisionData *vision, uint32_t now_ms)
  
  static void task_process_approach(const VisionData *vision, uint32_t now_ms)
  {
@@ -183,7 +258,7 @@ index 9dd3d74..e8a2d77 100644
    task_status.found = found;
    task_status.auto_approach = true;
    if (!found) {
-@@ -632,14 +623,14 @@ static void task_process_approach_recover(const VisionData *vision,
+@@ -632,14 +629,14 @@ static void task_process_approach_recover(const VisionData *vision,
                                            uint32_t now_ms)
  {
    task_status.auto_approach = true;
@@ -200,7 +275,7 @@ index 9dd3d74..e8a2d77 100644
      return;
    }
    if (!Vision_ReportIsFresh(vision, now_ms, APP_VISION_TIMEOUT_MS)) {
-@@ -659,7 +650,7 @@ static void task_process_approach_recover(const VisionData *vision,
+@@ -659,7 +656,7 @@ static void task_process_approach_recover(const VisionData *vision,
      Motor_Stop();
      task_status.motors_active = false;
      if (Camera_GetAngle() <= APP_GRAB_CAMERA_MIN_ANGLE) {
@@ -209,52 +284,278 @@ index 9dd3d74..e8a2d77 100644
        return;
      }
      task_raise_camera();
-@@ -998,17 +989,38 @@ static void task_process_safe_exit(uint32_t now_ms)
+@@ -772,37 +769,6 @@ static bool turn_to(float desired_deg, float current_deg, uint32_t now_ms)
+   return true;
+ }
+ 
+-static float distance_to_target(const VisionMissionCommand *command,
+-                                const VisionFusedPose *pose)
+-{
+-  const float dx = (float)command->target_x_mm - (float)pose->x_mm;
+-  const float dy = (float)command->target_y_mm - (float)pose->y_mm;
+-  return sqrtf(dx * dx + dy * dy);
+-}
+-
+-static bool navigation_progress_ok(const VisionMissionCommand *command,
+-                                   float distance_mm, uint32_t now_ms)
+-{
+-  const int32_t target_dx =
+-      (int32_t)nav_progress.target_x_mm - command->target_x_mm;
+-  const int32_t target_dy =
+-      (int32_t)nav_progress.target_y_mm - command->target_y_mm;
+-  const bool target_changed = nav_progress.valid &&
+-      ((task_abs((float)target_dx) >= APP_NAV_TARGET_CHANGE_MM) ||
+-       (task_abs((float)target_dy) >= APP_NAV_TARGET_CHANGE_MM));
+-  if (!nav_progress.valid || target_changed ||
+-      ((nav_progress.distance_mm - distance_mm) >= APP_NAV_PROGRESS_MM)) {
+-    nav_progress.distance_mm = distance_mm;
+-    nav_progress.tick_ms = now_ms;
+-    nav_progress.target_x_mm = command->target_x_mm;
+-    nav_progress.target_y_mm = command->target_y_mm;
+-    nav_progress.valid = true;
+-    return true;
+-  }
+-  return (uint32_t)(now_ms - nav_progress.tick_ms) <
+-         APP_NAV_NO_PROGRESS_MS;
+-}
+-
+ static void task_process_navigation(const VisionData *vision,
+                                     uint32_t now_ms)
+ {
+@@ -815,9 +781,8 @@ static void task_process_navigation(const VisionData *vision,
+   const bool command_in_grace = navigating && Vision_MissionIsFresh(
+       &vision->mission, now_ms, APP_NAV_COMMAND_GRACE_MS);
+ 
+-  /* In the updated RDK state machine, STOP during NAVIGATE means the current
+-   * fused pose cannot provide a safe travel heading.  Hold position without
+-   * leaving NAVIGATE so a later valid NAV command can resume the route. */
++  /* STOP during NAVIGATE holds the chassis. The normal distance command is
++   * latched by the RDK and repeated without streaming live position. */
+   if (navigating &&
+       (vision->mission.command == VISION_CMD_STOP)) {
+     Motor_Stop();
+@@ -835,31 +800,28 @@ static void task_process_navigation(const VisionData *vision,
+     /* A waypoint is safe to retain briefly, but a prolonged RDK outage must
+      * stop the chassis. Remain in NAVIGATE so a later fresh command can resume
+      * the route instead of leaving the robot in a permanent fault state. */
+-    Motor_Stop();
+-    task_status.motors_active = false;
+-    nav_ready = false;
+-    nav_progress.valid = false;
+-    return;
+-  }
+-  if (!fused_pose_ready(&vision->fused_pose, now_ms)) {
+-    if (!navigating) {
+-      task_stop(TASK_FAULT_POSE_TIMEOUT, now_ms);
++    if (distance_command_started) {
++      task_stop(TASK_FAULT_COMMAND_TIMEOUT, now_ms);
+       return;
+     }
+-    /* Never navigate blind. A transient T265 quality/freshness drop pauses
+-     * motion and automatically recovers when valid fused poses return. */
+     Motor_Stop();
+     task_status.motors_active = false;
+     nav_ready = false;
+     nav_progress.valid = false;
+     return;
+   }
+-
+   if (state == TASK_ALIGN_SAFE_ZONE) {
++    const LocationPose pose = Location_GetPose();
++    if (!pose.valid) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      nav_ready = false;
++      return;
++    }
+     const float desired_deg =
+         (float)vision->mission.heading_cdeg * 0.01f;
+     const float current_deg =
+-        (float)vision->fused_pose.heading_cdeg * 0.01f;
++        (float)pose.heading_mdeg * 0.001f;
+     const float error_deg = task_wrap_angle(desired_deg - current_deg);
+     if (nav_ready &&
+         ((uint32_t)(now_ms - step_started_ms) >=
+@@ -876,54 +838,56 @@ static void task_process_navigation(const VisionData *vision,
+     return;
+   }
+ 
+-  const float distance = distance_to_target(&vision->mission,
+-                                            &vision->fused_pose);
+-  if (distance <= APP_NAV_TARGET_HOLD_MM) {
+-    Motor_Stop();
+-    task_status.motors_active = false;
+-    nav_progress.valid = false;
++  if (((vision->mission.flags & VISION_CMD_DISTANCE_VALID) == 0U) ||
++      (vision->mission.target_x_mm < 0) ||
++      (vision->mission.target_y_mm != 0)) {
++    task_stop(TASK_FAULT_COMMAND_TIMEOUT, now_ms);
+     return;
+   }
+-  const float bearing_deg =
+-      ((vision->mission.flags & VISION_CMD_USE_FINAL_HEADING) != 0U) ?
+-      (float)vision->mission.heading_cdeg * 0.01f :
+-      bearing_to((float)vision->mission.target_x_mm,
+-                 (float)vision->mission.target_y_mm,
+-                 (float)vision->fused_pose.x_mm,
+-                 (float)vision->fused_pose.y_mm);
+-  const float heading_deg =
+-      (float)vision->fused_pose.heading_cdeg * 0.01f;
+-  const float heading_error = task_wrap_angle(bearing_deg - heading_deg);
+-  if (nav_ready &&
+-      (task_abs(heading_error) >= APP_NAV_REALIGN_DEG)) {
+-    Motor_Stop();
++  if (distance_command_done) {
+     task_status.motors_active = false;
+-    nav_ready = false;
+-    nav_progress.valid = false;
+     return;
+   }
+-  if (!nav_ready) {
+-    nav_progress.valid = false;
+-    if (!turn_to(bearing_deg, heading_deg, now_ms)) {
+-      task_stop(TASK_FAULT_MOTOR, now_ms);
++  if (!distance_command_started) {
++    const LocationPose pose = Location_GetPose();
++    if (!pose.valid) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      nav_ready = false;
++      return;
++    }
++    const float bearing_deg = (float)vision->mission.heading_cdeg * 0.01f;
++    const float heading_deg = (float)pose.heading_mdeg * 0.001f;
++    const float heading_error = task_wrap_angle(bearing_deg - heading_deg);
++    if (nav_ready &&
++        (task_abs(heading_error) >= APP_NAV_REALIGN_DEG)) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      nav_ready = false;
++      return;
++    }
++    if (!nav_ready) {
++      if (!turn_to(bearing_deg, heading_deg, now_ms)) {
++        task_stop(TASK_FAULT_MOTOR, now_ms);
++      }
++      return;
++    }
++    if ((uint32_t)(now_ms - step_started_ms) < APP_NAV_TURN_SETTLE_MS) {
++      return;
+     }
+-    return;
+-  }
+-  if ((uint32_t)(now_ms - step_started_ms) < APP_NAV_TURN_SETTLE_MS) {
+-    return;
+   }
+-  if (!navigation_progress_ok(&vision->mission, distance, now_ms)) {
++  const MotorDistanceStatus result = Motor_MoveDistance(
++      (float)vision->mission.target_x_mm * 0.001f,
++      command_fresh ? APP_NAV_FAST_SPEED_MM_S : APP_NAV_SLOW_SPEED_MM_S);
++  task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
++  if (result == MOTOR_DISTANCE_RUNNING) {
++    distance_command_started = true;
++  } else if (result == MOTOR_DISTANCE_DONE) {
++    distance_command_done = true;
++  } else if ((result == MOTOR_DISTANCE_FAULT) ||
++             (result == MOTOR_DISTANCE_INVALID)) {
+     task_stop(TASK_FAULT_MOTOR, now_ms);
+-    return;
+-  }
+-  float speed = APP_NAV_FAST_SPEED_MM_S;
+-  if (!command_fresh || (distance <= APP_NAV_SLOW_DISTANCE_MM)) {
+-    speed = APP_NAV_SLOW_SPEED_MM_S;
+   }
+-  /* Motor_MoveAngle() returns false while its non-blocking acceleration ramp
+-   * is still converging; faults are checked centrally on every task tick. */
+-  (void)Motor_MoveAngle(speed, 0.0f);
+-  task_status.motors_active = true;
+ }
+ 
+ static bool distance_failed(MotorDistanceStatus result)
+@@ -998,17 +962,64 @@ static void task_process_safe_exit(uint32_t now_ms)
  static void task_process_face_center(const VisionData *vision,
                                       uint32_t now_ms)
  {
 -  TaskPose pose;
 -  if (!read_field_pose(vision, now_ms, &pose)) {
 -    task_stop(TASK_FAULT_POSE_TIMEOUT, now_ms);
-+  if (!fused_pose_ready(&vision->fused_pose, now_ms)) {
++  const VisionMissionCommand *command = &vision->mission;
++  if (!Vision_MissionIsFresh(command, now_ms,
++                             APP_MISSION_COMMAND_TIMEOUT_MS) ||
++      (command->command != VISION_CMD_RETURN_CENTER) ||
++      ((command->flags & VISION_CMD_DISTANCE_VALID) == 0U) ||
++      (command->target_x_mm < 0) || (command->target_y_mm != 0)) {
++    if (distance_command_started) {
++      task_stop(TASK_FAULT_COMMAND_TIMEOUT, now_ms);
++      return;
++    }
 +    Motor_Stop();
 +    task_status.motors_active = false;
 +    nav_ready = false;
      return;
    }
-+  const float pose_x_mm = (float)vision->fused_pose.x_mm;
-+  const float pose_y_mm = (float)vision->fused_pose.y_mm;
-+  const float pose_heading_deg =
-+      (float)vision->fused_pose.heading_cdeg * 0.01f;
-   const float center_bearing = bearing_to(
+-  const float center_bearing = bearing_to(
 -      0.0f, 0.0f, pose.x_mm, pose.y_mm);
 -  if (!turn_to(center_bearing, pose.heading_deg, now_ms)) {
-+      0.0f, 0.0f, pose_x_mm, pose_y_mm);
-+  const float center_distance = sqrtf(
-+      pose_x_mm * pose_x_mm + pose_y_mm * pose_y_mm);
-+  if (center_distance <= APP_RETURN_CENTER_HOLD_MM) {
-+    task_enter(TASK_SEARCH, now_ms);
+-    task_stop(TASK_FAULT_MOTOR, now_ms);
+-  } else if (nav_ready) {
++  if (distance_command_done) {
+     task_enter(TASK_SEARCH, now_ms);
 +    return;
 +  }
-+  const float heading_error = task_wrap_angle(
-+      center_bearing - pose_heading_deg);
-+  if (nav_ready &&
-+      (task_abs(heading_error) >= APP_NAV_REALIGN_DEG)) {
-+    Motor_Stop();
-+    task_status.motors_active = false;
-+    nav_ready = false;
-+    return;
++  if (!distance_command_started) {
++    const LocationPose pose = Location_GetPose();
++    if (!pose.valid) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      nav_ready = false;
++      return;
++    }
++    const float center_bearing = (float)command->heading_cdeg * 0.01f;
++    const float pose_heading_deg = (float)pose.heading_mdeg * 0.001f;
++    const float heading_error = task_wrap_angle(
++        center_bearing - pose_heading_deg);
++    if (nav_ready &&
++        (task_abs(heading_error) >= APP_NAV_REALIGN_DEG)) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      nav_ready = false;
++      return;
++    }
++    if (!nav_ready) {
++      if (!turn_to(center_bearing, pose_heading_deg, now_ms)) {
++        task_stop(TASK_FAULT_MOTOR, now_ms);
++      }
++      return;
++    }
 +  }
-+  if (!nav_ready && !turn_to(center_bearing, pose_heading_deg, now_ms)) {
-     task_stop(TASK_FAULT_MOTOR, now_ms);
-   } else if (nav_ready) {
--    task_enter(TASK_SEARCH, now_ms);
-+    (void)Motor_MoveAngle(APP_RETURN_CENTER_SPEED_MM_S, 0.0f);
-+    task_status.motors_active = true;
++  if (nav_ready) {
++    const MotorDistanceStatus result = Motor_MoveDistance(
++        (float)command->target_x_mm * 0.001f,
++        APP_RETURN_CENTER_SPEED_MM_S);
++    task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
++    if (result == MOTOR_DISTANCE_RUNNING) {
++      distance_command_started = true;
++    } else if (result == MOTOR_DISTANCE_DONE) {
++      distance_command_done = true;
++    } else if ((result == MOTOR_DISTANCE_FAULT) ||
++               (result == MOTOR_DISTANCE_INVALID)) {
++      task_stop(TASK_FAULT_MOTOR, now_ms);
++    }
    }
  }
  
-@@ -1121,8 +1133,6 @@ void Task_Process(uint32_t now_ms)
+@@ -1089,6 +1100,9 @@ static void task_accept_mission(const VisionMissionCommand *command,
+               (state == TASK_RAM_VERIFY))) {
+     task_status.acknowledged_sequence = command->sequence;
+     task_enter(TASK_EXIT_SAFE_ZONE, now_ms);
++  } else if ((command->command == VISION_CMD_RETURN_CENTER) &&
++             (state == TASK_FACE_FIELD_CENTER)) {
++    task_status.acknowledged_sequence = command->sequence;
+   }
+ }
+ 
+@@ -1121,8 +1135,6 @@ void Task_Process(uint32_t now_ms)
        if (vision.config_ready) {
          Location_Reset((LocationStart)vision.start_zone);
          Vision_RequestConfigAck();
@@ -263,15 +564,49 @@ index 9dd3d74..e8a2d77 100644
          task_enter(TASK_START, now_ms);
        }
        break;
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 8b5b5d2..c39541b 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -188,7 +188,7 @@ static bool vision_mission_code_valid(uint8_t command)
+ {
+   return (command == VISION_CMD_STOP) ||
+          ((command >= VISION_CMD_GRAB_CONFIRMED) &&
+-          (command <= VISION_CMD_ABORT));
++          (command <= VISION_CMD_RETURN_CENTER));
+ }
+ 
+ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+@@ -204,7 +204,7 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+   const uint16_t heading = vision_u16_be(&payload[6]);
+   if (!vision_mission_code_valid(code) ||
+       ((flags & VISION_CMD_VALID) == 0U) ||
+-      ((flags & 0xF0U) != 0U) || (heading >= 36000U)) {
++      ((flags & 0xE0U) != 0U) || (heading >= 36000U)) {
+     return;
+   }
+ 
 diff --git a/README.md b/README.md
-index c68716b..b91585e 100644
+index c68716b..e459b50 100644
 --- a/README.md
 +++ b/README.md
-@@ -1,4 +1,4 @@
+@@ -1,6 +1,6 @@
 -# 当前固件：普通物资抓取与安全区投送Task
 +# 当前固件：连续物资抓取与分区投送Task
  
- 当前只启用完整`Task`，所有测试模式和独立`CenteringTask`均关闭。固件已对齐`danmo-teng/shijue_fangan@c09aef2`任务协议：视觉坐标为原生1280×1024、中心`(640,512)`；接收`TYPE=0x11/0x12/0x16/0x18`，发送`TYPE=0x15/0x17`。当前临时关闭开局打散；先保持机构收纳直线倒车500 mm，离开障碍区后再并行转向和打开双爪，累计1.70 m后直接搜索，抓取观察角为140°。抓取命令持续重发直到F407回报夹爪闭合，返航使用上位机实时航向并保留分层失联停车。详细状态机和协议见[MISSION_PROTOCOL.md](MISSION_PROTOCOL.md)，本轮临时修改、调试命令和恢复方法见[临时底盘修改交接记录](docs/TEMP_CHASSIS_HANDOFF.md)。
+-当前只启用完整`Task`，所有测试模式和独立`CenteringTask`均关闭。固件已对齐`danmo-teng/shijue_fangan@c09aef2`任务协议：视觉坐标为原生1280×1024、中心`(640,512)`；接收`TYPE=0x11/0x12/0x16/0x18`，发送`TYPE=0x15/0x17`。当前临时关闭开局打散；先保持机构收纳直线倒车500 mm，离开障碍区后再并行转向和打开双爪，累计1.70 m后直接搜索，抓取观察角为140°。抓取命令持续重发直到F407回报夹爪闭合，返航使用上位机实时航向并保留分层失联停车。详细状态机和协议见[MISSION_PROTOCOL.md](MISSION_PROTOCOL.md)，本轮临时修改、调试命令和恢复方法见[临时底盘修改交接记录](docs/TEMP_CHASSIS_HANDOFF.md)。
++当前只启用完整`Task`，所有测试模式和独立`CenteringTask`均关闭。视觉坐标为原生1280×1024、中心`(640,512)`；正常任务接收`TYPE=0x11/0x12/0x18`，发送`TYPE=0x15/0x17`。抓取命令持续重发直到F407回报夹爪闭合；返安全区和靠近中心均使用RDK发送的绝对航向+编码器定距，不接收周期性实时位置流。详细状态机和协议见[MISSION_PROTOCOL.md](MISSION_PROTOCOL.md)。
+ 
+ > 从“历史设计”到CLion章节之间保留的是旧状态机设计记录，不再作为当前烧录行为或通信协议依据。
+ 
+@@ -16,7 +16,7 @@
+ 
+ 该方案属于轮式航迹推算，不是绝对定位。全向轮滚子打滑、越减速带悬空、70 mm轮径误差、1768计数/圈误差和陀螺仪零偏都会随行驶距离累积；赛事文件还明确说明外围围栏不是定位基准。正式比赛应在视觉模块装好后，用已知安全区/出发区边界或场地图像周期性调用`Location_Reset()`或增加坐标校正，不能只凭该粗定位高速盲走。ROS 2官方全向轮控制器同样用轮位置/速度反馈计算里程计，并把轮半径列为决定速度与位移尺度的关键参数；三轮全向平台的系统误差需要通过多方向标定轨迹校正。[ROS 2 omni wheel controller](https://control.ros.org/rolling/doc/ros2_controllers/omni_wheel_drive_controller/doc/userdoc.html)、[三轮全向里程计系统误差研究](https://www.mdpi.com/2076-3417/12/5/2606)、[三轮全向运动学研究](https://doi.org/10.57417/jrnal.11.2_134)
+ 
+-Task模式上电时Location保持未配置状态，不再假定4号位；收到1帧合法赛前配置后，程序用`Location_Reset((LocationStart)start_zone)`按1～4号出发区建立对应初始坐标和航向。本地`Location`仍只由编码器和IMU推算；安全区导航和SEARCH边界预测优先使用上位机下发的T265融合位姿。融合位姿不可用时只有SEARCH边界判断和回正允许退回本地位姿；安全区NAV立即停车并等待融合位姿恢复，不使用本地位姿继续返航。
++Task模式收到赛前配置后，用`Location_Reset((LocationStart)start_zone)`建立初始坐标和航向。本地`Location`由编码器和IMU推算；RDK根据T265在每段运动开始前生成绝对航向和距离，F407随后仅用本地航向闭环和编码器定距执行，不持续接收T265位置。
+ 
+ # 历史设计（已停用，仅供追溯）
  
 @@ -150,7 +150,7 @@ A3 B3 01 C3
  | bit6 | `DISTANCE_VALID` | P4/P5为有效距离；置位时距离必须为1～65535 mm |
@@ -287,7 +622,7 @@ index c68716b..b91585e 100644
  当前实车参数为`进入0.20 m、退出0.50 m、夹内检查0°`：0.20 m要保证目标越过边界但车体不压线，0.50 m要保证旋转时机构不扫到已放下目标，0°要保证夹内ROI完整进入画面。摄像头软件最小限位已同步设为0°，因此检查命令不会再被夹到10°。
  
 -当前F407没有激光雷达、碰撞开关或本地地图，无法独立判断返航路径上突然出现的障碍；200 ms以内的短时断帧会沿用最后一条合法方向，超过200 ms强制停车。上位机识别不确定、目标被遮挡或路线被占用时必须先发送`HOLD`。电机堵转/反向故障、30秒返航超时和180秒总超时仍是底层最后保护，但不能替代上位机避障。
-+当前F407没有激光雷达、碰撞开关或本地地图，无法独立判断返航路径上突然出现的障碍；方向或融合位姿失效时会停车。连续任务不设置比赛总时长，但电机、机构、通信和定位看门狗仍是底层保护，不能替代上位机避障。
++当前F407没有激光雷达、碰撞开关或本地地图，无法独立判断路径上的突然障碍。连续任务不设置比赛总时长，但电机、机构和任务命令看门狗仍是底层保护，不能替代上位机避障。
  
  ## 抓取顺序与合规判断
  
@@ -300,25 +635,38 @@ index c68716b..b91585e 100644
  3. `DISPERSE`：原有“前进0.20 m、正反各转一圈、后退0.30 m”代码仍保留，但当前`APP_ENABLE_START_SCATTER=0`，正常流程不会进入这些状态。
  4. `FIND_OBJECT`：摄像头保持120°。进入每一轮搜索时记录最后一个合法视觉报告的本地接收代次，只有收到代次更新的新报告后才允许X/Y触发目标锁定；开局倒车、入堆和撞散期间收到的坐标不会参与运动控制。等待700 ms后以160 mm/s原地搜索；累计实际航向转满360°仍未找到目标时，先预测前进0.80 m后的落点。落点距离场地边界不足200 mm就先转向场地中心，防止继续向场外推进。只接近当前阶段允许且分类明确的单个目标。
  5. `GRAB_OBJECT`：Task起始搜索角为120°；收到1帧合法目标报告后按X修正底盘并由舵机3根据目标Y坐标执行视觉PID。水平和摄像头PID都只在新视觉`SEQ`到达时更新，并按实际帧间隔计算I/D。舵机3低于140°时丢失目标，先停车500 ms，再沿目标最后出现的方向进入`REACQ`；每转一圈反向并抬高摄像头10°，恢复目标后继续APPROACH，不返回SEARCH，最长25秒后故障停车。达到140°后进入抓取观察；收到`GRAB_CONFIRMED`时左右爪同时合到Touch姿态，保留2秒完成窗口再上报闭合。
- 6. `RETURN_SAFE`：夹紧目标后摄像头保持抓取观察角，等待上位机`TYPE=0x18`导航命令和`TYPE=0x16`融合位姿。F407先对准安全区前置点，再以800 mm/s直行，距离500 mm内降到250 mm/s；行驶期间持续更新目标方位，偏差达到7°时停车重新对正。NAV命令短暂中断时分级降速，超过1秒停车等待恢复；融合位姿失效也停车等待恢复。
+-6. `RETURN_SAFE`：夹紧目标后摄像头保持抓取观察角，等待上位机`TYPE=0x18`导航命令和`TYPE=0x16`融合位姿。F407先对准安全区前置点，再以800 mm/s直行，距离500 mm内降到250 mm/s；行驶期间持续更新目标方位，偏差达到7°时停车重新对正。NAV命令短暂中断时分级降速，超过1秒停车等待恢复；融合位姿失效也停车等待恢复。
 -7. `DELIVER`：完成安全区入口对正后，持续收到`ENTER_SAFE_ZONE`才允许左右爪同时打开、以250 mm/s后退0.30 m；制动等待200 ms后再软启动前冲0.55 m，最高850 mm/s。打开、后退、换向等待和前冲期间每20 ms检查命令新鲜度；失联立即停车。未送入就重复；收到`TASK_COMPLETE`确认送入后摄像头才抬到120°，随后后退0.45 m、转向场地中心并重新搜索。
 -8. `STOPPED`：180秒结束、上位机`STOP/ABORT`、电机/位姿/任务命令故障或目标重捕获失败后保持停车。
-+7. `DELIVER`：完成安全区入口对正后，持续收到`ENTER_SAFE_ZONE`才允许左右爪同时打开、以250 mm/s后退0.30 m；制动等待200 ms后再软启动前冲0.55 m，最高850 mm/s。收到`TASK_COMPLETE`后摄像头抬到120°，随后后退0.45 m，并依靠50 Hz融合位姿驶入场地中心300 mm范围后重新搜索。
++6. `RETURN_SAFE`：夹紧目标后等待上位机`TYPE=0x18`航向+距离。F407用本地IMU/Location完成绝对航向对准，再调用编码器定距直行，不需要`TYPE=0x16`实时位置。
++7. `DELIVER`：完成安全区入口对正后，持续收到`ENTER_SAFE_ZONE`才允许左右爪同时打开、后退0.30 m并前冲0.55 m。收到`TASK_COMPLETE`后再后退0.45 m；随后执行`RETURN_CENTER`航向+距离，在距中心约600 mm处重新搜索。
 +8. `STOPPED`：上位机`STOP/ABORT`、电机、位姿或任务命令安全故障后保持停车。连续任务不设置180秒总时长终止；目标重捕获失败则返回搜索而不是永久停车。
  
  当前夹爪角度为：收缩左23°/右147°，Touch左80°/右100°，Open左128°/右52°。安装机构后必须先断开机构负载标定角度，确认不会顶死舵机。
  
-@@ -331,7 +331,7 @@ Power the target, connect the USB/transmitter side, and verify that Windows show
+@@ -329,9 +329,9 @@ Power the target, connect the USB/transmitter side, and verify that Windows show
+ 3. LCD初始化完成后显示`IMU660RC: OK`一秒；连接失败时显示`IMU660RC: ERROR`一秒。提示结束后清屏并切换到当前任务状态界面，不执行RGB色块测试。
+ 4. TIM6提供1 ms基础节拍：每1 ms发布一次IMU主循环采样请求，每10 ms采样编码器并执行一次电机速度环；自主任务开启时每20 ms向最低优先级PendSV发布一次任务请求；每100 ms只发布一次LCD刷新请求。
  5. 新PCB“串口1”USART3使用PD8/PD9和64字节循环DMA接收视觉帧；通过统一的中断发送队列发送4字节配置ACK及100 Hz三路编码器累计计数帧。
- 6. 当前`APP_ENABLE_TASK=1`，独立视觉居中Task及所有运动测试、定位演示和舵机扫描均为0；收到配置后自动执行退出安全区、开爪直接搜索、视觉靠近、140°抓取观察、融合位姿返航和安全区投送。原打散状态保留但由`APP_ENABLE_START_SCATTER=0`暂时绕过。
+-6. 当前`APP_ENABLE_TASK=1`，独立视觉居中Task及所有运动测试、定位演示和舵机扫描均为0；收到配置后自动执行退出安全区、开爪直接搜索、视觉靠近、140°抓取观察、融合位姿返航和安全区投送。原打散状态保留但由`APP_ENABLE_START_SCATTER=0`暂时绕过。
++6. 当前`APP_ENABLE_TASK=1`，独立视觉居中Task及所有运动测试、定位演示和舵机扫描均为0；收到配置后自动执行退出安全区、开爪搜索、视觉靠近、140°抓取观察、航向定距返航和安全区投送。
  
 -接通电机12 V前应确认三轮与编码器方向正确，并在车后方预留至少1.8 m空间；上位机一旦发出1帧有效配置，F407就会自动开始180秒倒计时，保持IMU航向并按编码器倒车1.70 m，没有额外按键确认。
 +接通电机12 V前应确认三轮与编码器方向正确，并在车后方预留至少1.8 m空间；上位机一旦发出1帧有效配置，F407就会启动连续任务，保持IMU航向并按编码器倒车1.70 m，没有额外按键确认。
  
  ## 自主救援流程
  
+@@ -531,7 +531,7 @@ A3 B3 TYPE SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
+ - CRC按`TYPE`到`P7`共10字节计算，低字节先发；错误帧不更新任何任务数据。
+ - 视觉报告超过250 ms未更新即视为过期，不会继续驱动底盘靠近。
+ - 配置ACK保留原有4字节`A3 B3 01 C3`；`TYPE=0x15`是F407以100 Hz发出的三轮编码器累计计数低16位、10 ms采样间隔和状态位。
+-- `TYPE=0x16`是RDK以20 Hz发回的融合位姿，F407已接收并保存，但当前视觉居中Task不使用。
++- `TYPE=0x16`仅保留旧版解析兼容，当前连续任务的RDK默认不发送。
+ - `TYPE=0x17`是关闭中的完整救援Task状态上报，当前视觉居中模式不发送。
+ 
+ 循环DMA在`Size=64`时消费本圈剩余数据并把软件位置归零，可持续解析无IDLE的连续数据。DMA首次启动或错误恢复失败时，主循环每100 ms重试，LCD显示`DMA ERR`，不会静默失效。
 diff --git a/tools/test_vision_protocol.py b/tools/test_vision_protocol.py
-index a2b9aac..9e0bfc4 100644
+index a2b9aac..e9570e1 100644
 --- a/tools/test_vision_protocol.py
 +++ b/tools/test_vision_protocol.py
 @@ -33,6 +33,15 @@ class VisionProtocolTests(unittest.TestCase):
@@ -337,6 +685,61 @@ index a2b9aac..9e0bfc4 100644
      def test_no_target_payload_is_all_zero(self) -> None:
          frame = protocol.report_frame(0x11, 0, 0, 0, 0, 0)
          self.assertEqual(frame[4:12], bytes(8))
+@@ -60,6 +69,24 @@ class VisionProtocolTests(unittest.TestCase):
+             "A3 B3 18 20 03 0B 00 00 03 B6 23 28 6B E0 C3",
+         )
+ 
++    def test_heading_distance_and_return_commands(self) -> None:
++        flags = (
++            protocol.CMD_VALID | protocol.CMD_DRIVE_STRAIGHT |
++            protocol.CMD_USE_FINAL_HEADING | protocol.CMD_DISTANCE_VALID
++        )
++        outward = protocol.mission_frame(
++            0x21, protocol.CMD_NAVIGATE_WAYPOINT, flags,
++            1374, 0, 12821,
++        )
++        returning = protocol.mission_frame(
++            0x22, protocol.CMD_RETURN_CENTER, flags,
++            480, 0, 26915,
++        )
++        self.assertEqual(protocol.parse_frame(outward)[2][2:6],
++                         bytes.fromhex("05 5E 00 00"))
++        self.assertEqual(protocol.parse_frame(returning)[2][2:6],
++                         bytes.fromhex("01 E0 00 00"))
++
+     def test_stm_status_matches_upper_computer(self) -> None:
+         frame = protocol.stm_status_frame(9, 0x09, 2, 7350, 8, 0)
+         self.assertEqual(
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index a7b9562..233ac65 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -38,11 +38,13 @@ CMD_ALIGN_SAFE_ZONE = 0x04
+ CMD_ENTER_SAFE_ZONE = 0x05
+ CMD_TASK_COMPLETE = 0x06
+ CMD_ABORT = 0x07
++CMD_RETURN_CENTER = 0x08
+ 
+ CMD_VALID = 0x01
+ CMD_DRIVE_STRAIGHT = 0x02
+ CMD_USE_FINAL_HEADING = 0x04
+ CMD_RED_SIDE = 0x08
++CMD_DISTANCE_VALID = 0x10
+ 
+ 
+ def crc16_modbus(data: bytes) -> int:
+@@ -215,9 +217,9 @@ def mission_frame(
+ ) -> bytes:
+     if command not in (CMD_STOP, CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT,
+                        CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE,
+-                       CMD_TASK_COMPLETE, CMD_ABORT):
++                       CMD_TASK_COMPLETE, CMD_ABORT, CMD_RETURN_CENTER):
+         raise ValueError("invalid mission command")
+-    if not flags & CMD_VALID or flags & 0xF0:
++    if not flags & CMD_VALID or flags & 0xE0:
+         raise ValueError("invalid mission flags")
+     if not -32768 <= target_x_mm <= 32767 or not -32768 <= target_y_mm <= 32767:
+         raise ValueError("mission target must fit int16")
 -- 
 2.34.1
 

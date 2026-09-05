@@ -20,9 +20,11 @@ from state_machine import (
 )
 from rescue_vision.mission_protocol import (
     CMD_ALIGN_SAFE_ZONE,
+    CMD_DISTANCE_VALID,
     CMD_ENTER_SAFE_ZONE,
     CMD_GRAB_CONFIRMED,
     CMD_NAVIGATE_WAYPOINT,
+    CMD_RETURN_CENTER,
     CMD_TASK_COMPLETE,
     CMD_USE_FINAL_HEADING,
     STM_CLAW_VISIBLE,
@@ -97,13 +99,16 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     output = mission.step(VisionInput(), pose, closed)
     assert output.state == MissionState.NAVIGATE
     assert output.command.command == CMD_NAVIGATE_WAYPOINT
-    expected_x = -150 if side == "red" else 150
-    assert output.command.target_x_mm == expected_x
-    assert output.command.target_y_mm == desired_y
+    target_x = -0.15 if side == "red" else 0.15
+    target_y = 1.08 if side == "red" else -1.08
+    expected_distance = math.hypot(target_x - pose.x_m, target_y - pose.y_m)
+    assert output.command.target_x_mm == round(expected_distance * 1000)
+    assert output.command.target_y_mm == 0
     assert output.command.flags & CMD_USE_FINAL_HEADING
+    assert output.command.flags & CMD_DISTANCE_VALID
     expected_bearing = math.degrees(math.atan2(
-        desired_y / 1000 - pose.y_m,
-        expected_x / 1000 - pose.x_m,
+        target_y - pose.y_m,
+        target_x - pose.x_m,
     )) % 360
     assert output.command.heading_cdeg == round(expected_bearing * 100) % 36000
 
@@ -164,6 +169,13 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert output.state == MissionState.RETURN_CENTER and output.command is None
     output = mission.step(VisionInput(), moved, Stm32Status(mode=17, age_ms=5))
     assert output.state == MissionState.RETURN_CENTER
+    assert output.command.command == CMD_RETURN_CENTER
+    assert output.command.flags & CMD_DISTANCE_VALID
+    expected_return_distance = max(0.0, math.hypot(moved.x_m, moved.y_m) - 0.60)
+    assert output.command.target_x_mm == round(expected_return_distance * 1000)
+    assert output.command.target_y_mm == 0
+    expected_return_heading = math.degrees(math.atan2(-moved.y_m, -moved.x_m)) % 360
+    assert output.command.heading_cdeg == round(expected_return_heading * 100) % 36000
     output = mission.step(VisionInput(), moved, Stm32Status(mode=3, age_ms=5))
     assert output.state == MissionState.SEARCH
     assert mission.selected_class is None

@@ -58,8 +58,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tx-rate",
         type=float,
-        default=50.0,
-        help="fused-pose UART transmit rate in Hz (default: 50)",
+        default=0.0,
+        help="legacy fused-pose UART rate; default 0 disables position TX",
     )
     parser.add_argument("--fullscreen", action="store_true")
     parser.add_argument("--demo", action="store_true", help="animate a hardware-free pose")

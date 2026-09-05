@@ -56,7 +56,7 @@ bool F407_MissionDecodePayload(const uint8_t payload[8], uint8_t sequence,
   result->target_y_mm = (int16_t)get_u16_be(&payload[4]);
   result->heading_cdeg = get_u16_be(&payload[6]);
   if ((result->flags & F407_CMD_VALID) == 0U) return false;
-  if (result->command > F407_CMD_ABORT || result->command == 1U) return false;
+  if (result->command > F407_CMD_RETURN_CENTER || result->command == 1U) return false;
   return result->heading_cdeg < 36000U;
 }
 

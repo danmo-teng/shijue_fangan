@@ -10,11 +10,13 @@ from typing import Callable
 
 from rescue_vision.mission_protocol import (
     CMD_ALIGN_SAFE_ZONE,
+    CMD_DISTANCE_VALID,
     CMD_DRIVE_STRAIGHT,
     CMD_ENTER_SAFE_ZONE,
     CMD_GRAB_CONFIRMED,
     CMD_NAVIGATE_WAYPOINT,
     CMD_RED_SIDE,
+    CMD_RETURN_CENTER,
     CMD_TASK_COMPLETE,
     CMD_USE_FINAL_HEADING,
     CMD_VALID,
@@ -87,6 +89,7 @@ class MissionSettings:
     delivery_stationary_s: float = 0.8
     delivery_stationary_tolerance_m: float = 0.015
     align_tolerance_deg: float = 8.0
+    center_stop_radius_m: float = 0.60
 
     def __post_init__(self) -> None:
         if self.side not in {"red", "blue"}:
@@ -101,6 +104,8 @@ class MissionSettings:
             raise ValueError("zone center must keep the robot circle inside its half-zone")
         if self.delivery_stationary_s <= 0 or self.delivery_stationary_tolerance_m <= 0:
             raise ValueError("material target and stationary thresholds must be positive")
+        if self.center_stop_radius_m <= 0:
+            raise ValueError("center stop radius must be positive")
 
 
 def angle_error_deg(target: float, current: float) -> float:
@@ -139,6 +144,8 @@ class RescueMission:
         self.delivered_common = False
         self.delivery_count = 0
         self.approach_acknowledged = False
+        self.delivery_route: tuple[float, float] | None = None
+        self.return_route: tuple[float, float] | None = None
 
     @property
     def allowed_classes(self) -> tuple[str, ...]:
@@ -166,6 +173,14 @@ class RescueMission:
         target_x = self.approach_point[0]
         sign = 1.0 if self.settings.side == "red" else -1.0
         return target_x, sign * self.settings.safe_center_y_abs_m
+
+    @property
+    def delivery_contact_point(self) -> tuple[float, float]:
+        sign = 1.0 if self.settings.side == "red" else -1.0
+        return (
+            self.approach_point[0],
+            sign * (self.settings.safe_zone_inner_edge_abs_m - self.settings.robot_radius_m),
+        )
 
     def contact_pose(self, observed: PoseInput) -> tuple[float, float, float]:
         """Apply only the boundary-normal constraint justified by fence contact."""
@@ -221,36 +236,46 @@ class RescueMission:
             heading_cdeg=round(selected_heading * 100) % 36000,
         )
 
+    def _distance_command(self, command: int, heading_deg: float,
+                          distance_m: float) -> MissionCommand:
+        return MissionCommand(
+            command=command,
+            flags=self._flags(straight=True, heading=True) | CMD_DISTANCE_VALID,
+            target_x_mm=max(0, round(distance_m * 1000.0)),
+            target_y_mm=0,
+            heading_cdeg=round(heading_deg % 360.0 * 100.0) % 36000,
+        )
+
+    @staticmethod
+    def _route_to(pose: PoseInput, target: tuple[float, float]) -> tuple[float, float]:
+        dx = target[0] - pose.x_m
+        dy = target[1] - pose.y_m
+        return math.degrees(math.atan2(dy, dx)) % 360.0, math.hypot(dx, dy)
+
     def _navigate(self, pose: PoseInput) -> MissionOutput:
-        target = self.approach_point
-        if not pose.valid:
-            return MissionOutput(
-                self.state, None, MissionCommand(0),
-                "融合位姿无效，停止并等待导航航向",
-            )
-        delta_x = target[0] - pose.x_m
-        delta_y = target[1] - pose.y_m
-        distance = math.hypot(delta_x, delta_y)
-        travel_heading_deg = math.degrees(math.atan2(delta_y, delta_x)) % 360.0
-        if robot_intersects_safe_zone(pose, self.settings):
+        if self.delivery_route is None:
+            if not pose.valid:
+                return MissionOutput(
+                    self.state, None, None,
+                    "等待有效位姿计算一次性航向和距离",
+                )
+            self.delivery_route = self._route_to(pose, self.delivery_contact_point)
+        travel_heading_deg, distance = self.delivery_route
+        if pose.valid and robot_intersects_safe_zone(pose, self.settings):
             self.state = MissionState.ALIGN
             command = self._waypoint_command(
-                CMD_ALIGN_SAFE_ZONE, target, heading=True
+                CMD_ALIGN_SAFE_ZONE, self.approach_point, heading=True
             )
             return MissionOutput(
                 self.state, None, command,
                 f"地图车体圆已接触安全区，开始对正{self.desired_heading_deg:.1f}°",
             )
-        command = self._waypoint_command(
-            CMD_NAVIGATE_WAYPOINT,
-            target,
-            straight=True,
-            heading=True,
-            heading_deg=travel_heading_deg,
+        command = self._distance_command(
+            CMD_NAVIGATE_WAYPOINT, travel_heading_deg, distance
         )
         return MissionOutput(
             self.state, None, command,
-            f"直线驶向安全区前置点，航向{travel_heading_deg:.1f}°，剩余{distance:.2f}m",
+            f"定距驶向对应分区中心，航向{travel_heading_deg:.1f}°，距离{distance:.2f}m",
         )
 
     def step(self, vision: VisionInput, pose: PoseInput, stm: Stm32Status) -> MissionOutput:
@@ -318,6 +343,7 @@ class RescueMission:
             status_fresh = stm.age_ms <= 250.0
             if status_fresh and stm.gripper_closed:
                 self.state = MissionState.NAVIGATE
+                self.delivery_route = None
                 return self._navigate(pose)
             return MissionOutput(
                 self.state, None,
@@ -396,13 +422,37 @@ class RescueMission:
                 self.approach_acknowledged = False
                 self.delivery_stationary_started_s = None
                 self.delivery_stationary_anchor = None
+                self.delivery_route = None
+                self.return_route = None
                 return MissionOutput(
                     self.state, NormalSupplyReport(), None,
                     f"已回到中心搜索流程，累计投送{self.delivery_count}件",
                 )
+            if stm.age_ms <= 250.0 and stm.mode == STM_MODE_FACE_FIELD_CENTER:
+                if self.return_route is None:
+                    if not pose.valid:
+                        return MissionOutput(
+                            self.state, None, None,
+                            "等待有效位姿计算返中航向和距离",
+                        )
+                    center_distance = math.hypot(pose.x_m, pose.y_m)
+                    travel_distance = max(
+                        0.0, center_distance - self.settings.center_stop_radius_m
+                    )
+                    heading = math.degrees(
+                        math.atan2(-pose.y_m, -pose.x_m)
+                    ) % 360.0
+                    self.return_route = heading, travel_distance
+                heading, distance = self.return_route
+                return MissionOutput(
+                    self.state, None,
+                    self._distance_command(CMD_RETURN_CENTER, heading, distance),
+                    f"返中心区域：航向{heading:.1f}°，距离{distance:.2f}m，"
+                    f"距中心{self.settings.center_stop_radius_m:.2f}m停车",
+                )
             return MissionOutput(
                 self.state, None, None,
-                "等待STM32退出安全区、朝向中心并恢复搜索",
+                "等待STM32完成张爪和退出安全区",
             )
 
         return MissionOutput(self.state, None, MissionCommand(0), "故障停车")

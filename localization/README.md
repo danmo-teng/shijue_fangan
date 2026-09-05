@@ -16,7 +16,8 @@ T265 6DoF pose (200 Hz)
   -> 按 tracker confidence 选择测量协方差
   -> EKF 校正（T265为主定位）
   -> localization_result.json
-  -> TYPE=0x16 融合位姿以 50 Hz 回传 F407
+  -> localization_result.json供地图和任务程序读取
+  -> 默认不向F407连续回传TYPE=0x16
 ```
 
 减速带的单条尺寸为 300×60×10 mm，三条间隔 50 mm。默认在起步后前 0.70 m 以及四个场地角落排除区中禁用编码器，仅使用 T265；进入平地后才融合编码器。
@@ -71,13 +72,13 @@ ctest --test-dir build --output-on-failure
   --uart /dev/ttyS1 \
   --baud 115200 \
   --rate 20 \
-  --tx-rate 50 \
+  --tx-rate 0 \
   --command-file ../rescue_map/runtime/uart_command.bin \
   --stm-status ../rescue_map/runtime/stm32_status.json \
   --csv localization.csv
 ```
 
-`--tx-rate 50`表示每20 ms向F407回传一帧最新融合位姿，也是程序和地图入口的默认值；调试时可用`--tx-rate 0`禁止发送。UART是全双工，F407的100 Hz编码器上报和RDK的50 Hz位姿回传可同时进行。
+`--tx-rate 0`是默认设置：T265/编码器融合和地图显示继续运行，但不向F407发送实时位置。仅在旧协议调试时才显式设置非零值。
 
 任务测试时，定位程序仍是 `/dev/ttyS1` 唯一所有者。`--command-file` 只转发新出现且通过长度、TYPE和CRC校验的 `0x11/0x12/0x18` 帧；`--stm-status` 把F407的 `0x17` 状态帧原子写成JSON，供 `mission_test` 读取。不要再让视觉Python进程直接打开同一串口。
 
@@ -85,7 +86,7 @@ ctest --test-dir build --output-on-failure
 
 如果终端持续显示 `uart=stale` 且退出时 `UART frames=0`，表示 RDK 没有收到任何合法 `TYPE=0x15` 帧。依次检查 F407 是否上电、TX/RX 是否交叉、是否共地、两端是否均为 115200 8N1，以及 F407 是否真正每 10 ms 调用发送队列。
 
-## F407 使用回传位姿
+## 旧版可选：F407实时位姿回传
 
 RDK 回传帧使用同样的 15 字节外层，消息类型为 `TYPE=0x16`：
 

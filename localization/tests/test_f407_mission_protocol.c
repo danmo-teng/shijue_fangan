@@ -16,6 +16,15 @@ int main(void) {
   assert(!F407_MissionShouldStartGrab(&command, false, false));
   assert(!F407_MissionShouldStartGrab(NULL, false, false));
 
+  const uint8_t return_payload[8] = {
+      F407_CMD_RETURN_CENTER,
+      F407_CMD_VALID | F407_CMD_DRIVE_STRAIGHT |
+          F407_CMD_USE_FINAL_HEADING | F407_CMD_DISTANCE_VALID,
+      0x01, 0xE0, 0, 0, 0x69, 0x23};
+  assert(F407_MissionDecodePayload(return_payload, 8U, &command));
+  assert(command.target_x_mm == 480 && command.target_y_mm == 0);
+  assert(command.heading_cdeg == 26915U);
+
   F407MissionRuntime runtime;
   F407_MissionRuntimeInit(&runtime);
   command.command = F407_CMD_GRAB_CONFIRMED;

@@ -18,6 +18,7 @@
 #define F407_CMD_DRIVE_STRAIGHT    (1U << 1)
 #define F407_CMD_USE_FINAL_HEADING (1U << 2)
 #define F407_CMD_RED_SIDE          (1U << 3)
+#define F407_CMD_DISTANCE_VALID    (1U << 4)
 
 #define F407_GRAB_MIN_ACTION_MS 2000U
 #define F407_NAV_NORMAL_MAX_AGE_MS 250U
@@ -31,7 +32,8 @@ typedef enum {
   F407_CMD_ALIGN_SAFE_ZONE = 4,
   F407_CMD_ENTER_SAFE_ZONE = 5,
   F407_CMD_TASK_COMPLETE = 6,
-  F407_CMD_ABORT = 7
+  F407_CMD_ABORT = 7,
+  F407_CMD_RETURN_CENTER = 8
 } F407MissionCommandCode;
 
 typedef struct {

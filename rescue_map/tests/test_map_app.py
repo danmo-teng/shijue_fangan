@@ -43,6 +43,8 @@ def main() -> None:
         expected_coordinate = 1.5 - 0.30 / math.sqrt(2.0)
         assert app.trajectory.points == [(expected_coordinate, expected_coordinate)]
         assert "--uart" in app.localization_command()
+        tx_index = app.localization_command().index("--tx-rate")
+        assert app.localization_command()[tx_index + 1] == "0.0"
         assert "run_mission_test.sh" in app.vision_command()[0]
         app.localization_mode = "t265"
         assert "--uart" not in app.localization_command()

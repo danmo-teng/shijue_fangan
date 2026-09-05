@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
 sys.path.insert(0, str(PROJECT_ROOT / "vision"))
 
-from state_machine import MissionSettings, MissionState, PoseInput, RescueMission, VisionInput
+from state_machine import MissionSettings, PoseInput, RescueMission, VisionInput
 from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
 from rescue_vision.config import load_config
 from rescue_vision.detector import TraditionalDetector
@@ -48,6 +48,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--zone-center-x-mm", type=float, default=150.0)
     parser.add_argument("--delivery-stationary-seconds", type=float, default=0.8)
     parser.add_argument("--delivery-stationary-tolerance-mm", type=float, default=15.0)
+    parser.add_argument("--center-stop-radius-mm", type=float, default=600.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
     parser.add_argument("--pose", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/localization_result.json")
@@ -202,6 +203,7 @@ def main() -> int:
         zone_center_x_abs_m=args.zone_center_x_mm / 1000.0,
         delivery_stationary_s=args.delivery_stationary_seconds,
         delivery_stationary_tolerance_m=args.delivery_stationary_tolerance_mm / 1000.0,
+        center_stop_radius_m=args.center_stop_radius_mm / 1000.0,
     )
     mission = RescueMission(settings)
     config = load_config(args.config)

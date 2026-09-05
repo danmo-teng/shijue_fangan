@@ -111,7 +111,7 @@ ctest --test-dir build --output-on-failure
 
 ## 7. 连续物资抓取与分区投送
 
-`mission_test/`实现连续寻找、抓取和分区投送：开局强制先完成一次普通物资，之后允许搬运其他物资或伤员；每次投送后F407张爪退出并返回中心区域继续搜索。融合当前位置以50 Hz发送给下位机，安全区视觉类别不参与完成判断。详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
+`mission_test/`实现连续寻找、抓取和分区投送：开局强制先完成一次普通物资，之后允许搬运其他物资或伤员；每次投送后F407张爪退出并靠近中心区域继续搜索。RDK不再持续下发实时位置，而是在抓取后和投送后分别发送“航向+定距”命令。详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
 
 ## 安全说明
 
