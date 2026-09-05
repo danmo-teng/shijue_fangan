@@ -25,12 +25,12 @@ def main() -> None:
         CMD_NAVIGATE_WAYPOINT,
         CMD_VALID | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING | CMD_RED_SIDE,
         target_x_mm=0,
-        target_y_mm=950,
+        target_y_mm=1200,
         heading_cdeg=9000,
     )
     packet = command.to_frame(0x20)
     assert packet.hex(" ").upper() == (
-        "A3 B3 18 20 03 0F 00 00 03 B6 23 28 2E 20 C3"
+        "A3 B3 18 20 03 0F 00 00 04 B0 23 28 CF 55 C3"
     )
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "uart_command.bin"

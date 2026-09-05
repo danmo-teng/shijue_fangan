@@ -10,7 +10,14 @@ PROJECT = ROOT.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(PROJECT / "vision"))
 
-from state_machine import MissionSettings, MissionState, PoseInput, RescueMission, VisionInput
+from state_machine import (
+    MissionSettings,
+    MissionState,
+    PoseInput,
+    RescueMission,
+    VisionInput,
+    robot_intersects_safe_zone,
+)
 from rescue_vision.mission_protocol import (
     CMD_ALIGN_SAFE_ZONE,
     CMD_ENTER_SAFE_ZONE,
@@ -105,10 +112,26 @@ def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
     assert output.command.heading_cdeg == desired_heading * 100
 
     contained = target(y=700, bbox=(590, 680, 100, 80), safe=safe_bbox)
-    for _ in range(2):
-        output = mission.step(contained, PoseInput(True, 0.0, desired_y / 1000, desired_heading), closed)
+    # A visual safe-zone match alone cannot complete delivery while the map
+    # robot circle is still separated from the physical safe-zone boundary.
+    separated_y = 0.95 if side == "red" else -0.95
+    for _ in range(4):
+        output = mission.step(
+            contained, PoseInput(True, 0.0, separated_y, desired_heading), closed
+        )
         assert output.state == MissionState.ENTER_SAFE_ZONE
-    output = mission.step(contained, PoseInput(True, 0.0, desired_y / 1000, desired_heading), closed)
+    contact_y = 1.08 if side == "red" else -1.08
+    assert robot_intersects_safe_zone(
+        PoseInput(True, 0.0, contact_y, desired_heading), mission.settings
+    )
+    for _ in range(2):
+        output = mission.step(
+            contained, PoseInput(True, 0.0, contact_y, desired_heading), closed
+        )
+        assert output.state == MissionState.ENTER_SAFE_ZONE
+    output = mission.step(
+        contained, PoseInput(True, 0.0, contact_y, desired_heading), closed
+    )
     assert output.state == MissionState.COMPLETE
     assert output.command.command == CMD_TASK_COMPLETE
 
@@ -133,10 +156,26 @@ def test_grab_timeout():
     assert output.command.command == 0
 
 
+def test_safe_zone_circle_geometry():
+    red = MissionSettings(side="red")
+    blue = MissionSettings(side="blue")
+    assert not robot_intersects_safe_zone(PoseInput(), red)
+    # Regression for the recorded premature stop: this blue-side position is
+    # still about 326 mm away from first circle/zone contact.
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.043, -0.754, 267.4), blue)
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.0, 1.079, 90), red)
+    assert robot_intersects_safe_zone(PoseInput(True, 0.0, 1.08, 90), red)
+    assert robot_intersects_safe_zone(PoseInput(True, 0.0, -1.08, 270), blue)
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.0, -1.079, 270), blue)
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.421, 1.20, 90), red)
+    assert robot_intersects_safe_zone(PoseInput(True, 0.42, 1.20, 90), red)
+
+
 def main():
-    run_side("red", 950, 90, (400, 600, 480, 300))
-    run_side("blue", -950, 270, (400, 600, 480, 300))
+    run_side("red", 1200, 90, (400, 600, 480, 300))
+    run_side("blue", -1200, 270, (400, 600, 480, 300))
     test_grab_timeout()
+    test_safe_zone_circle_geometry()
     print("mission state machine PASS")
 
 

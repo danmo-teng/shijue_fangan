@@ -68,9 +68,12 @@ class MissionSettings:
     confirmation_frames: int = 3
     grab_timeout_s: float = 3.0
     approach_x_m: float = 0.0
-    approach_y_abs_m: float = 0.95
+    approach_y_abs_m: float = 1.20
     safe_center_y_abs_m: float = 1.32
-    approach_radius_m: float = 0.25
+    safe_zone_half_width_m: float = 0.30
+    safe_zone_inner_edge_abs_m: float = 1.20
+    safe_zone_outer_edge_abs_m: float = 1.50
+    robot_radius_m: float = 0.12
     align_tolerance_deg: float = 8.0
 
     def __post_init__(self) -> None:
@@ -78,6 +81,10 @@ class MissionSettings:
             raise ValueError("side must be red or blue")
         if self.confirmation_frames <= 0 or self.grab_timeout_s <= 0:
             raise ValueError("confirmation_frames and grab_timeout_s must be positive")
+        if not (0.0 < self.safe_zone_inner_edge_abs_m < self.safe_zone_outer_edge_abs_m):
+            raise ValueError("safe-zone edges must be positive and ordered")
+        if self.safe_zone_half_width_m <= 0 or self.robot_radius_m <= 0:
+            raise ValueError("safe-zone width and robot radius must be positive")
 
 
 def angle_error_deg(target: float, current: float) -> float:
@@ -98,6 +105,25 @@ def target_inside_safe_zone(vision: VisionInput) -> bool:
         sx + margin_x <= center_x <= sx + sw - margin_x
         and sy + margin_y <= center_y <= sy + sh - margin_y
     )
+
+
+def robot_intersects_safe_zone(pose: PoseInput, settings: MissionSettings) -> bool:
+    """Match the map: a 120mm robot circle must touch the own safe rectangle."""
+    if not pose.valid:
+        return False
+    x_min = -settings.safe_zone_half_width_m
+    x_max = settings.safe_zone_half_width_m
+    if settings.side == "red":
+        y_min = settings.safe_zone_inner_edge_abs_m
+        y_max = settings.safe_zone_outer_edge_abs_m
+    else:
+        y_min = -settings.safe_zone_outer_edge_abs_m
+        y_max = -settings.safe_zone_inner_edge_abs_m
+    nearest_x = min(max(pose.x_m, x_min), x_max)
+    nearest_y = min(max(pose.y_m, y_min), y_max)
+    dx = pose.x_m - nearest_x
+    dy = pose.y_m - nearest_y
+    return dx * dx + dy * dy <= settings.robot_radius_m * settings.robot_radius_m + 1e-12
 
 
 class RescueMission:
@@ -155,14 +181,14 @@ class RescueMission:
         delta_y = target[1] - pose.y_m
         distance = math.hypot(delta_x, delta_y)
         travel_heading_deg = math.degrees(math.atan2(delta_y, delta_x)) % 360.0
-        if distance <= self.settings.approach_radius_m:
+        if robot_intersects_safe_zone(pose, self.settings):
             self.state = MissionState.ALIGN
             command = self._waypoint_command(
                 CMD_ALIGN_SAFE_ZONE, target, heading=True
             )
             return MissionOutput(
                 self.state, None, command,
-                f"已到安全区前置点，开始对正{self.desired_heading_deg:.1f}°",
+                f"地图车体圆已接触安全区，开始对正{self.desired_heading_deg:.1f}°",
             )
         command = self._waypoint_command(
             CMD_NAVIGATE_WAYPOINT,
@@ -247,7 +273,9 @@ class RescueMission:
             return MissionOutput(self.state, None, command, f"对正安全区入口，角度误差{yaw_error:.1f}°")
 
         if self.state == MissionState.ENTER_SAFE_ZONE:
-            self.safe_hits = self.safe_hits + 1 if target_inside_safe_zone(vision) else 0
+            map_contact = robot_intersects_safe_zone(pose, self.settings)
+            delivery_visible = target_inside_safe_zone(vision)
+            self.safe_hits = self.safe_hits + 1 if map_contact and delivery_visible else 0
             if self.safe_hits >= self.settings.confirmation_frames:
                 self.state = MissionState.COMPLETE
                 return MissionOutput(
@@ -260,7 +288,7 @@ class RescueMission:
                 self.state,
                 report,
                 self._waypoint_command(CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True),
-                "识别本方安全区并确认物资进入",
+                "等待地图车体圆接触安全区并用视觉确认物资进入",
             )
 
         if self.state == MissionState.COMPLETE:
