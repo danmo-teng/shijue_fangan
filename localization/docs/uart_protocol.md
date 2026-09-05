@@ -40,6 +40,10 @@ RDK 默认以 20 Hz 回传 EKF 输出：
 
 F407 接收端必须设置独立看门狗，建议 150 ms。重复 `SEQ` 不得刷新时间戳；超时、CRC 错误或 `VALID=0` 立即停止使用上位机位置。`firmware/f407_fused_pose.[ch]` 提供载荷解码和新鲜度判断。
 
+位姿失效造成的停车是可恢复等待，不应等同永久故障：位姿恢复后，如果任务NAV方向仍在
+250 ms新鲜窗口内可直接继续，否则等待新的NAV。任务方向帧的分级超时、临时STOP与ABORT
+语义见根目录`docs/f407_uart_integration_guide.md`。
+
 当前 F407 `Vision_ParseBytes()` 已经是 USART3 的唯一公共字节流解析器，不要再并行启动第二个字节定界状态机。应在现有解析器中把 `0x16` 加入合法 TYPE，CRC 通过后将 `P0..P7` 交给 `F407_FusedPoseDecodePayload()`。
 
 ## 共享串口任务扩展

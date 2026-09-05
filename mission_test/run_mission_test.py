@@ -45,7 +45,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--priority", type=int, default=0)
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--confirm-frames", type=int, default=3)
-    parser.add_argument("--grab-timeout", type=float, default=2.0)
+    parser.add_argument("--grab-timeout", type=float, default=3.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
     parser.add_argument("--pose", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/localization_result.json")

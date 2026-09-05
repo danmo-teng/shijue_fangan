@@ -66,7 +66,7 @@ class MissionOutput:
 class MissionSettings:
     side: str
     confirmation_frames: int = 3
-    grab_timeout_s: float = 2.0
+    grab_timeout_s: float = 3.0
     approach_x_m: float = 0.0
     approach_y_abs_m: float = 0.95
     safe_center_y_abs_m: float = 1.32

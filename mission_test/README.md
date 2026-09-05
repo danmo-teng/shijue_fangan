@@ -53,8 +53,12 @@ STM32确认摄像头已经下压后，只要普通物资仍出现在画面任意
 只有STM32的`TYPE=0x17`状态帧中`CLAW_VISIBLE=1`且状态帧不超过250 ms时，画面内物资确认才会累计；状态失效或物资消失都会把连续确认计数清零。
 
 确认目标后进入`GRABBING`状态，任务程序按实际视觉循环频率（通常20～50 Hz）重复发送
-`GRAB_CONFIRMED`。只有新鲜状态帧置`GRIPPER_CLOSED=1`后才开始导航；默认2秒超时后发送
+`GRAB_CONFIRMED`。只有新鲜状态帧置`GRIPPER_CLOSED=1`后才开始导航；默认3秒超时后发送
 `STOP`并进入`FAULT`。可用`--grab-timeout`调整超时，但不建议取消握手。
+
+F407应保持2秒物理合爪窗口，并且只在左右两只爪子的动作都真正完成后置
+`GRIPPER_CLOSED=1`，随后每50 ms状态帧持续携带该位。重复抓取帧只更新ACK，不能重新计时或
+再次启动舵机；收到未合爪的NAV只能停车等待，不能执行旧的强制抓取兜底。
 
 ## 安全区导航
 
@@ -71,6 +75,10 @@ distance = hypot(target_x - pose_x, target_y - pose_y)
 ```
 
 `NAVIGATE_WAYPOINT`由RDK计算并发送`bearing`，同时置`USE_FINAL_HEADING`，STM32先调整到该航向再锁定方向直行；到前置点后，`ALIGN_SAFE_ZONE`和`ENTER_SAFE_ZONE`改用红方90°或蓝方270°。任何视觉、任务命令或融合位姿看门狗超时都应停车。
+
+返航/导航方向帧0～250 ms内使用正常速度，250～1000 ms限速250 mm/s，超过1000 ms临时停车
+但保留NAV状态。临时STOP和融合位姿失效同样只停车等待；新NAV或有效位姿恢复后继续。
+只有ABORT是永久停止。
 
 ## 安全区视觉完成条件
 

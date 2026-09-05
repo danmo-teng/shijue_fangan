@@ -42,7 +42,7 @@ class FakeClock:
 def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
     clock = FakeClock()
     mission = RescueMission(
-        MissionSettings(side=side, confirmation_frames=3, grab_timeout_s=2.0),
+        MissionSettings(side=side, confirmation_frames=3, grab_timeout_s=3.0),
         clock=clock,
     )
     output = mission.step(VisionInput(), PoseInput(), Stm32Status())
@@ -116,7 +116,7 @@ def run_side(side: str, desired_y: int, desired_heading: int, safe_bbox):
 def test_grab_timeout():
     clock = FakeClock()
     mission = RescueMission(
-        MissionSettings(side="red", confirmation_frames=1, grab_timeout_s=2.0),
+        MissionSettings(side="red", confirmation_frames=1, grab_timeout_s=3.0),
         clock=clock,
     )
     stm = Stm32Status(flags=STM_CLAW_VISIBLE, age_ms=5)
@@ -124,7 +124,7 @@ def test_grab_timeout():
     mission.step(target(), PoseInput(), stm)
     output = mission.step(target(), PoseInput(), stm)
     assert output.state == MissionState.GRABBING
-    clock.advance(1.99)
+    clock.advance(2.99)
     output = mission.step(target(), PoseInput(), stm)
     assert output.command.command == CMD_GRAB_CONFIRMED
     clock.advance(0.02)

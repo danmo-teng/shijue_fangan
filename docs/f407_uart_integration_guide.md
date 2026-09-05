@@ -152,7 +152,8 @@ A3 B3 16 SEQ X_BE Y_BE YAW_BE STATUS CONF_SIG CRC_LO CRC_HI C3
 
 ## 8. F407 → RDK：任务状态 `TYPE=0x17`
 
-STM32每50 ms发送一次，和`TYPE=0x15`编码器帧共用同一个TX队列：
+STM32每50 ms发送一次，和`TYPE=0x15`编码器帧共用同一个TX队列。两只爪子的物理动作均完成且
+从首次启动合爪起已满2秒后，才允许持续置`GRIPPER_CLOSED=1`，不能按固定延时提前虚报：
 
 | 载荷 | 内容 |
 |---|---|
@@ -183,9 +184,28 @@ P0 COMMAND  P1 FLAGS  P2..P3 TARGET_X_mm  P4..P5 TARGET_Y_mm  P6..P7 HEADING_cde
 - 红方前置点`(0,+950)`、正方向`9000`；蓝方前置点`(0,-950)`、正方向`27000`。
 - `GRAB_CONFIRMED`会以20～50 Hz重复发送，直到新鲜的`TYPE=0x17`持续报告`GRIPPER_CLOSED=1`；STM32必须对重复抓取命令做幂等处理：每帧更新`acknowledged_sequence`，但`grab_in_progress=1`或夹爪已经闭合时不得重复启动舵机动作。
 - `NAVIGATE_WAYPOINT`的`HEADING_cdeg`是当前位置指向前置点的实时`atan2(dy,dx)`航向，`USE_FINAL_HEADING=1`；`ALIGN_SAFE_ZONE`与`ENTER_SAFE_ZONE`的航向才是红方90°或蓝方270°。
-- 抓取开始后2秒仍未收到新鲜`GRIPPER_CLOSED=1`，RDK发送`STOP`并进入故障状态；夹爪确认闭合前绝不发送导航命令。
-- F407必须对`TYPE=0x18`设置250 ms看门狗。超时、重复SEQ、`VALID=0`、融合位姿无效或故障位出现时立即停车。
+- 抓取开始后3秒仍未收到新鲜`GRIPPER_CLOSED=1`，RDK发送`STOP`并进入故障状态；夹爪确认闭合前绝不发送导航命令。
+- F407返航/导航优先使用新协议中的`HEADING_cdeg`；方向命令年龄0～250 ms使用正常速度，超过250 ms且不超过1000 ms时限速250 mm/s，超过1000 ms时停车但保留`navigation_active`，收到新的合法NAV后自动恢复。
+- 临时`STOP`只置暂停并保留NAV状态，后续新NAV可恢复；`ABORT`必须锁存为永久停止，除非整机任务状态显式复位。
+- 融合位姿无效时立即停车，不盲跑；位姿恢复且方向命令仍新鲜时自动继续，否则等待新NAV刷新方向。
 - `localization/firmware/f407_mission_protocol.[ch]`提供`TYPE=0x17`打包和`TYPE=0x18`载荷解码。
+
+F407主循环推荐直接使用参考运行状态接口：
+
+```c
+action = F407_MissionApplyCommand(&mission_runtime, &command, HAL_GetTick());
+action = F407_MissionNavigationPolicy(&mission_runtime, HAL_GetTick(), fused_pose_valid);
+speed_limit_mmps = F407_MissionSpeedLimitMmps(action, requested_speed_mmps);
+
+F407_MissionUpdateGripper(&mission_runtime,
+                          left_claw_action_done,
+                          right_claw_action_done,
+                          HAL_GetTick());
+F407_MissionFillStatus(&mission_runtime, &status_payload);
+```
+
+收到`NAVIGATE_WAYPOINT/ALIGN_SAFE_ZONE/ENTER_SAFE_ZONE`但`gripper_closed=false`时返回
+`WAIT_GRIPPER`并保持停车，禁止旧协议的“收到NAV就强制启动抓取”兜底。
 
 RDK上的定位程序是`/dev/ttyS1`唯一所有者。视觉任务程序通过原子命令文件交给定位程序转发，不允许视觉和定位两个进程同时打开串口。
 
@@ -205,6 +225,9 @@ A3 B3 18 20 03 0F 00 00 03 B6 23 28 2E 20 C3
 6. ACK与编码器同时发送时不得发生帧字节交错。
 7. RDK停止发送`TYPE=0x12`超过250 ms后，F407不得继续沿用旧视觉坐标。
 8. 通信测试模式确认无误后，再允许视觉快照进入底盘和舵机闭环。
-9. STM32以20 Hz持续发送`TYPE=0x17`，爪子入镜期间持续置位而不是发送单脉冲。
+9. STM32以20 Hz持续发送`TYPE=0x17`；爪子入镜期间持续置`CLAW_VISIBLE`，双爪动作完成且至少经过2秒后持续置`GRIPPER_CLOSED`。
 10. 注入`TYPE=0x18`导航、对正和完成命令，确认各自看门狗、目标坐标和最终航向均生效。
 11. 连续注入多帧不同SEQ的`GRAB_CONFIRMED`，确认只启动一次夹爪动作，但每个合法SEQ都能更新ACK；置`GRIPPER_CLOSED`后，RDK才开始发送导航命令。
+12. 中断NAV方向帧，确认250 ms后限速250 mm/s、1000 ms后停车且NAV未清除；恢复NAV后自动继续。
+13. 注入临时STOP后恢复NAV应继续；注入ABORT后任何NAV都不得恢复。
+14. 令融合位姿失效后必须立即停车，恢复有效且NAV新鲜后允许继续。
