@@ -20,6 +20,13 @@ REPORT_NEAR = 0x02
 REPORT_CLASS_VALID = 0x08
 REPORT_DISTANCE_VALID = 0x40
 
+CARGO_COUNT_BITS = {
+    "green_supply": 0x01,
+    "core_black": 0x04,
+    "injured_orange": 0x10,
+    "danger_cyan": 0x40,
+}
+
 
 def modbus_crc16(data: bytes) -> int:
     """Return the CRC-16/Modbus value used by the F407 parser."""
@@ -61,7 +68,7 @@ def config_frame(sequence: int, color: int, start_zone: int) -> bytes:
 
 @dataclass(frozen=True)
 class NormalSupplyReport:
-    """One complete `TYPE=0x12` report for the ordinary-supply debug stage."""
+    """One selected cargo in a complete ``TYPE=0x12`` report."""
 
     x_px: int = 0
     y_px: int = 0
@@ -69,6 +76,7 @@ class NormalSupplyReport:
     found: bool = False
     near: bool = False
     distance_valid: bool = False
+    cargo_class: str = "green_supply"
 
     def payload(self) -> bytes:
         if not self.found:
@@ -84,18 +92,20 @@ class NormalSupplyReport:
                 raise ValueError("valid distance must be in 1..65535 mm")
         elif self.distance_mm != 0:
             raise ValueError("distance_mm must be zero when distance_valid is false")
+        try:
+            cargo_counts = CARGO_COUNT_BITS[self.cargo_class]
+        except KeyError as error:
+            raise ValueError(f"unsupported cargo class: {self.cargo_class}") from error
         flags = REPORT_FOUND | REPORT_CLASS_VALID
         if self.near:
             flags |= REPORT_NEAR
         if self.distance_valid:
             flags |= REPORT_DISTANCE_VALID
-        # P6 bit0..1 is ordinary-supply count.  The F407 deliberately accepts
-        # this debug runner only as one known, ordinary material.
         return (
             _u16be(self.x_px, "x_px")
             + _u16be(self.y_px, "y_px")
             + _u16be(self.distance_mm, "distance_mm")
-            + bytes((0x01, flags))
+            + bytes((cargo_counts, flags))
         )
 
     def to_frame(self, sequence: int) -> bytes:

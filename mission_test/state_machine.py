@@ -33,7 +33,18 @@ class MissionState(str, Enum):
     ALIGN = "ALIGN"
     ENTER_SAFE_ZONE = "ENTER_SAFE_ZONE"
     COMPLETE = "COMPLETE"
+    RETURN_CENTER = "RETURN_CENTER"
     FAULT = "FAULT"
+
+
+CARGO_CLASSES = ("green_supply", "core_black", "danger_cyan", "injured_orange")
+MATERIAL_CLASSES = frozenset(("green_supply", "core_black", "danger_cyan"))
+STM_MODE_SEARCH = 3
+STM_MODE_APPROACH = 4
+STM_MODE_RAM_FORWARD = 14
+STM_MODE_RAM_VERIFY = 15
+STM_MODE_EXIT_SAFE_ZONE = 16
+STM_MODE_FACE_FIELD_CENTER = 17
 
 
 @dataclass(frozen=True)
@@ -50,6 +61,7 @@ class VisionInput:
     target_x: int = 0
     target_y: int = 0
     target_bbox: tuple[int, int, int, int] | None = None
+    class_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -65,8 +77,7 @@ class MissionOutput:
 class MissionSettings:
     side: str
     confirmation_frames: int = 3
-    grab_timeout_s: float = 3.0
-    material_target_x_abs_m: float = 0.15
+    zone_center_x_abs_m: float = 0.15
     approach_y_abs_m: float = 1.20
     safe_center_y_abs_m: float = 1.32
     safe_zone_half_width_m: float = 0.30
@@ -80,14 +91,14 @@ class MissionSettings:
     def __post_init__(self) -> None:
         if self.side not in {"red", "blue"}:
             raise ValueError("side must be red or blue")
-        if self.confirmation_frames <= 0 or self.grab_timeout_s <= 0:
-            raise ValueError("confirmation_frames and grab_timeout_s must be positive")
+        if self.confirmation_frames <= 0:
+            raise ValueError("confirmation_frames must be positive")
         if not (0.0 < self.safe_zone_inner_edge_abs_m < self.safe_zone_outer_edge_abs_m):
             raise ValueError("safe-zone edges must be positive and ordered")
         if self.safe_zone_half_width_m <= 0 or self.robot_radius_m <= 0:
             raise ValueError("safe-zone width and robot radius must be positive")
-        if not 0 < self.material_target_x_abs_m <= self.safe_zone_half_width_m - self.robot_radius_m:
-            raise ValueError("material target must keep the robot circle inside its half-zone")
+        if not 0 < self.zone_center_x_abs_m <= self.safe_zone_half_width_m - self.robot_radius_m:
+            raise ValueError("zone center must keep the robot circle inside its half-zone")
         if self.delivery_stationary_s <= 0 or self.delivery_stationary_tolerance_m <= 0:
             raise ValueError("material target and stationary thresholds must be positive")
 
@@ -122,9 +133,18 @@ class RescueMission:
         self.clock = clock
         self.state = MissionState.SEARCH
         self.grab_hits = 0
-        self.grab_started_s: float | None = None
         self.delivery_stationary_started_s: float | None = None
         self.delivery_stationary_anchor: tuple[float, float] | None = None
+        self.selected_class: str | None = None
+        self.delivered_common = False
+        self.delivery_count = 0
+        self.approach_acknowledged = False
+
+    @property
+    def allowed_classes(self) -> tuple[str, ...]:
+        if self.selected_class is not None:
+            return (self.selected_class,)
+        return CARGO_CLASSES if self.delivered_common else ("green_supply",)
 
     @property
     def desired_heading_deg(self) -> float:
@@ -132,20 +152,18 @@ class RescueMission:
 
     @property
     def approach_point(self) -> tuple[float, float]:
-        # The map labels the red-side material compartment on field-left and
-        # the blue-side material compartment on field-right. Aim at the centre
-        # of that 300mm-wide half instead of the x=0 divider.
-        target_x = (-self.settings.material_target_x_abs_m
-                    if self.settings.side == "red"
-                    else self.settings.material_target_x_abs_m)
+        cargo_class = self.selected_class or "green_supply"
+        material_half = cargo_class in MATERIAL_CLASSES
+        red_material_x = -self.settings.zone_center_x_abs_m
+        target_x = red_material_x if material_half else -red_material_x
+        if self.settings.side == "blue":
+            target_x = -target_x
         sign = 1.0 if self.settings.side == "red" else -1.0
         return target_x, sign * self.settings.approach_y_abs_m
 
     @property
     def safe_center(self) -> tuple[float, float]:
-        target_x = (-self.settings.material_target_x_abs_m
-                    if self.settings.side == "red"
-                    else self.settings.material_target_x_abs_m)
+        target_x = self.approach_point[0]
         sign = 1.0 if self.settings.side == "red" else -1.0
         return target_x, sign * self.settings.safe_center_y_abs_m
 
@@ -240,30 +258,54 @@ class RescueMission:
             self.state = MissionState.FAULT
             return MissionOutput(self.state, None, MissionCommand(0), "STM32报告故障，停止任务")
 
+        target_allowed = (
+            vision.target_found
+            and vision.class_name in self.allowed_classes
+            and (self.selected_class is None or vision.class_name == self.selected_class)
+        )
         report = NormalSupplyReport(
-            x_px=vision.target_x if vision.target_found else 0,
-            y_px=vision.target_y if vision.target_found else 0,
-            found=vision.target_found,
+            x_px=vision.target_x if target_allowed else 0,
+            y_px=vision.target_y if target_allowed else 0,
+            found=target_allowed,
+            cargo_class=vision.class_name if target_allowed else "green_supply",
         )
 
+        status_fresh = stm.age_ms <= 250.0
+        if (self.state in {MissionState.APPROACH, MissionState.GRAB_CHECK}
+                and status_fresh):
+            if STM_MODE_APPROACH <= stm.mode <= 9:
+                self.approach_acknowledged = True
+            elif stm.mode == STM_MODE_SEARCH and self.approach_acknowledged:
+                self.state = MissionState.SEARCH
+                self.selected_class = None
+                self.grab_hits = 0
+                self.approach_acknowledged = False
+                return MissionOutput(
+                    self.state, NormalSupplyReport(), None,
+                    "STM32已放弃旧目标，重新选择搜索目标",
+                )
+
         if self.state == MissionState.SEARCH:
-            if vision.target_found:
+            if target_allowed:
+                self.selected_class = vision.class_name
+                self.approach_acknowledged = False
                 self.state = MissionState.APPROACH
-            return MissionOutput(self.state, report, None, "搜索普通物资并发送1280×1024坐标")
+            search_name = "普通物资" if not self.delivered_common else "下一件物资或伤员"
+            return MissionOutput(self.state, report, None, f"搜索{search_name}并发送1280×1024坐标")
 
         if self.state == MissionState.APPROACH:
             if stm.claw_visible and stm.age_ms <= 250.0:
                 self.state = MissionState.GRAB_CHECK
                 self.grab_hits = 0
+                self.approach_acknowledged = True
             return MissionOutput(self.state, report, None, "STM32保持目标居中并靠近")
 
         if self.state == MissionState.GRAB_CHECK:
             camera_ready = stm.claw_visible and stm.age_ms <= 250.0
-            target_visible = camera_ready and vision.target_found
+            target_visible = camera_ready and target_allowed
             self.grab_hits = self.grab_hits + 1 if target_visible else 0
             if self.grab_hits >= self.settings.confirmation_frames:
                 self.state = MissionState.GRABBING
-                self.grab_started_s = self.clock()
                 return MissionOutput(
                     self.state,
                     None,
@@ -277,18 +319,10 @@ class RescueMission:
             if status_fresh and stm.gripper_closed:
                 self.state = MissionState.NAVIGATE
                 return self._navigate(pose)
-            started = self.grab_started_s if self.grab_started_s is not None else self.clock()
-            elapsed = self.clock() - started
-            if elapsed >= self.settings.grab_timeout_s:
-                self.state = MissionState.FAULT
-                return MissionOutput(
-                    self.state, None, MissionCommand(0),
-                    f"夹爪{self.settings.grab_timeout_s:.1f}秒内未确认闭合，停止任务",
-                )
             return MissionOutput(
                 self.state, None,
                 MissionCommand(CMD_GRAB_CONFIRMED, self._flags()),
-                f"重复发送抓取命令并等待夹爪闭合（{elapsed:.2f}s）",
+                "持续发送抓取命令并等待夹爪闭合",
             )
 
         if self.state == MissionState.NAVIGATE:
@@ -308,26 +342,67 @@ class RescueMission:
             return MissionOutput(self.state, None, command, f"对正安全区入口，角度误差{yaw_error:.1f}°")
 
         if self.state == MissionState.ENTER_SAFE_ZONE:
-            stationary, stationary_s = self._stationary_at_safe_zone(pose)
+            ram_delivery_active = (
+                stm.age_ms <= 250.0
+                and stm.mode in {STM_MODE_RAM_FORWARD, STM_MODE_RAM_VERIFY}
+            )
+            if ram_delivery_active:
+                stationary, stationary_s = self._stationary_at_safe_zone(pose)
+            else:
+                self.delivery_stationary_started_s = None
+                self.delivery_stationary_anchor = None
+                stationary, stationary_s = False, 0.0
             if stationary:
                 self.state = MissionState.COMPLETE
+                self.delivery_count += 1
+                if self.selected_class == "green_supply":
+                    self.delivered_common = True
                 return MissionOutput(
                     self.state,
                     None,
                     MissionCommand(CMD_TASK_COMPLETE, self._flags()),
-                    "地图车体圆接触安全区且定位稳定不动，任务完成",
+                    f"第{self.delivery_count}件已放入对应分区，通知STM32张爪退出",
                     self.contact_pose(pose),
                 )
             return MissionOutput(
                 self.state,
                 report,
                 self._waypoint_command(CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True),
-                f"等待车体圆接触安全区并稳定{self.settings.delivery_stationary_s:.1f}s（当前{stationary_s:.2f}s）",
+                f"等待撞送阶段车体圆接触安全区并稳定{self.settings.delivery_stationary_s:.1f}s（当前{stationary_s:.2f}s）",
             )
 
         if self.state == MissionState.COMPLETE:
+            status_fresh = stm.age_ms <= 250.0
+            if status_fresh and stm.mode in {
+                STM_MODE_EXIT_SAFE_ZONE,
+                STM_MODE_FACE_FIELD_CENTER,
+                STM_MODE_SEARCH,
+            }:
+                self.state = MissionState.RETURN_CENTER
+                return MissionOutput(
+                    self.state, None, None,
+                    "STM32已张爪并退出安全区，返回中心区域",
+                )
             return MissionOutput(
-                self.state, None, MissionCommand(CMD_TASK_COMPLETE, self._flags()), "任务完成，等待STM32停车"
+                self.state, None, MissionCommand(CMD_TASK_COMPLETE, self._flags()),
+                "重复发送完成命令，等待STM32张爪并退出",
+            )
+
+        if self.state == MissionState.RETURN_CENTER:
+            if stm.age_ms <= 250.0 and stm.mode == STM_MODE_SEARCH:
+                self.state = MissionState.SEARCH
+                self.selected_class = None
+                self.grab_hits = 0
+                self.approach_acknowledged = False
+                self.delivery_stationary_started_s = None
+                self.delivery_stationary_anchor = None
+                return MissionOutput(
+                    self.state, NormalSupplyReport(), None,
+                    f"已回到中心搜索流程，累计投送{self.delivery_count}件",
+                )
+            return MissionOutput(
+                self.state, None, None,
+                "等待STM32退出安全区、朝向中心并恢复搜索",
             )
 
         return MissionOutput(self.state, None, MissionCommand(0), "故障停车")

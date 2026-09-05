@@ -20,7 +20,7 @@ F407 端可复用 `firmware/f407_odom_protocol.c` 打包，建议每 10 ms 在�
 
 ## RDK -> F407：`TYPE=0x16` 融合场地位姿
 
-RDK 默认以 20 Hz 回传 EKF 输出：
+RDK默认以50 Hz（每20 ms一帧）回传最新EKF输出：
 
 ```text
 索引:  0  1   2    3    4  5   6  7   8  9    10      11       12     13   14

@@ -23,6 +23,9 @@ def main() -> None:
         "A3 B3 12 10 02 80 02 00 01 5E 01 49 BC 23 C3"
     )
     assert NormalSupplyReport(IMAGE_WIDTH - 1, IMAGE_HEIGHT - 1, found=True).payload()
+    assert NormalSupplyReport(640, 512, found=True, cargo_class="core_black").payload()[6] == 0x04
+    assert NormalSupplyReport(640, 512, found=True, cargo_class="injured_orange").payload()[6] == 0x10
+    assert NormalSupplyReport(640, 512, found=True, cargo_class="danger_cyan").payload()[6] == 0x40
     for x, y in ((IMAGE_WIDTH, 0), (0, IMAGE_HEIGHT)):
         try:
             NormalSupplyReport(x, y, found=True).payload()

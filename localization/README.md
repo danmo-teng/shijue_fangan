@@ -16,7 +16,7 @@ T265 6DoF pose (200 Hz)
   -> 按 tracker confidence 选择测量协方差
   -> EKF 校正（T265为主定位）
   -> localization_result.json
-  -> TYPE=0x16 融合位姿以 20 Hz 回传 F407
+  -> TYPE=0x16 融合位姿以 50 Hz 回传 F407
 ```
 
 减速带的单条尺寸为 300×60×10 mm，三条间隔 50 mm。默认在起步后前 0.70 m 以及四个场地角落排除区中禁用编码器，仅使用 T265；进入平地后才融合编码器。
@@ -71,13 +71,13 @@ ctest --test-dir build --output-on-failure
   --uart /dev/ttyS1 \
   --baud 115200 \
   --rate 20 \
-  --tx-rate 20 \
+  --tx-rate 50 \
   --command-file ../rescue_map/runtime/uart_command.bin \
   --stm-status ../rescue_map/runtime/stm32_status.json \
   --csv localization.csv
 ```
 
-`--tx-rate 20` 表示每秒向 F407 回传 20 帧融合位姿；调试旧版下位机时可以用 `--tx-rate 0` 禁止发送。UART 是全双工，F407 的 100 Hz 编码器上报和 RDK 的 20 Hz 位姿回传可同时进行。
+`--tx-rate 50`表示每20 ms向F407回传一帧最新融合位姿，也是程序和地图入口的默认值；调试时可用`--tx-rate 0`禁止发送。UART是全双工，F407的100 Hz编码器上报和RDK的50 Hz位姿回传可同时进行。
 
 任务测试时，定位程序仍是 `/dev/ttyS1` 唯一所有者。`--command-file` 只转发新出现且通过长度、TYPE和CRC校验的 `0x11/0x12/0x18` 帧；`--stm-status` 把F407的 `0x17` 状态帧原子写成JSON，供 `mission_test` 读取。不要再让视觉Python进程直接打开同一串口。
 

@@ -41,7 +41,7 @@ struct Options {
     std::string stm_status_output_path;
     int baud = 115200;
     double output_rate_hz = 20.0;
-    double tx_rate_hz = 20.0;
+    double tx_rate_hz = 50.0;
     double duration_sec = 0.0;
     bool debug_sdk = false;
 };
@@ -119,7 +119,7 @@ void usage(const char *program)
         << "  --command-file FILE relay new valid TYPE 0x11/0x12/0x18 frames\n"
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --rate HZ           stdout/JSON rate, default 20\n"
-        << "  --tx-rate HZ        fused-pose UART rate; 0 disables TX (default 20)\n"
+        << "  --tx-rate HZ        fused-pose UART rate; 0 disables TX (default 50)\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
         << "  -h, --help          show help\n";

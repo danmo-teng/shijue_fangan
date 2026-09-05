@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Camera/state-machine adapter for the ordinary-supply delivery test."""
+"""Camera/state-machine adapter for continuous rescue cargo delivery."""
 from __future__ import annotations
 
 import argparse
@@ -30,7 +30,7 @@ from run_yolo_x5 import DEFAULT_LABELS, DEFAULT_MODEL, X5YoloV8, load_labels
 
 
 def arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="普通物资抓取与安全区投送测试")
+    parser = argparse.ArgumentParser(description="连续物资寻找、抓取与分区投送")
     parser.add_argument("--detector", choices=("yolo", "traditional"), default="yolo")
     parser.add_argument("--device", default="/dev/video0")
     parser.add_argument("--decoder", choices=("jpu", "software"), default="jpu")
@@ -45,8 +45,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--priority", type=int, default=0)
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--confirm-frames", type=int, default=3)
-    parser.add_argument("--grab-timeout", type=float, default=3.0)
-    parser.add_argument("--material-target-x-mm", type=float, default=150.0)
+    parser.add_argument("--zone-center-x-mm", type=float, default=150.0)
     parser.add_argument("--delivery-stationary-seconds", type=float, default=0.8)
     parser.add_argument("--delivery-stationary-tolerance-mm", type=float, default=15.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
@@ -97,12 +96,15 @@ def load_stm_status(path: Path) -> Stm32Status:
 
 
 def write_contact_pose(path: Path, observed: PoseInput,
-                       reference: tuple[float, float, float], side: str) -> None:
+                       reference: tuple[float, float, float], side: str,
+                       cargo_class: str, delivery_count: int) -> None:
     reference_x, reference_y, reference_yaw = reference
     document = {
         "schema_version": 1,
         "timestamp_monotonic_ns": time.monotonic_ns(),
         "side": side,
+        "cargo_class": cargo_class,
+        "delivery_count": delivery_count,
         "source": "safe_zone_fence_contact",
         "constraint_axis": "y",
         "observed_pose": {
@@ -127,13 +129,13 @@ def write_contact_pose(path: Path, observed: PoseInput,
     temporary.replace(path)
 
 
-def largest(detections, class_name):
-    matches = [item for item in detections if item.class_name == class_name]
-    return max(matches, key=lambda item: item.bbox[2] * item.bbox[3], default=None)
-
-
-def observation(detections) -> VisionInput:
-    target = largest(detections, "green_supply")
+def observation(detections, allowed_classes: tuple[str, ...]) -> VisionInput:
+    matches = [item for item in detections if item.class_name in allowed_classes]
+    target = max(
+        matches,
+        key=lambda item: item.bbox[2] * item.bbox[3],
+        default=None,
+    )
     if target is None:
         return VisionInput()
     x, y, width, height = target.bbox
@@ -142,6 +144,7 @@ def observation(detections) -> VisionInput:
         target_x=max(0, min(IMAGE_WIDTH - 1, x + width // 2)),
         target_y=max(0, min(IMAGE_HEIGHT - 1, y + height // 2)),
         target_bbox=target.bbox,
+        class_name=target.class_name,
     )
 
 
@@ -174,7 +177,7 @@ def draw(image, vision: VisionInput, output, pose: PoseInput, stm: Stm32Status):
         cv2.circle(view, (vision.target_x, vision.target_y), 8, (0, 255, 0), 2)
     lines = [
         f"state={output.state.value}  {output.message}",
-        f"target=({vision.target_x},{vision.target_y}) found={int(vision.target_found)} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
+        f"target={vision.class_name or '-'} ({vision.target_x},{vision.target_y}) found={int(vision.target_found)} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
         f"pose=({pose.x_m:+.2f},{pose.y_m:+.2f}) yaw={pose.yaw_deg:.1f} valid={int(pose.valid)}",
         "camera-down + target anywhere x confirm-frames = grab; F fullscreen; Q/Esc quit",
     ]
@@ -196,8 +199,7 @@ def main() -> int:
     settings = MissionSettings(
         side=side,
         confirmation_frames=args.confirm_frames,
-        grab_timeout_s=args.grab_timeout,
-        material_target_x_abs_m=args.material_target_x_mm / 1000.0,
+        zone_center_x_abs_m=args.zone_center_x_mm / 1000.0,
         delivery_stationary_s=args.delivery_stationary_seconds,
         delivery_stationary_tolerance_m=args.delivery_stationary_tolerance_mm / 1000.0,
     )
@@ -257,7 +259,7 @@ def main() -> int:
     report_sequence = 0
     mission_sequence = 0
     last_command_signature = None
-    contact_pose_written = False
+    contact_pose_written_for = 0
 
     running = True
     def stop(_signal, _frame):
@@ -304,19 +306,22 @@ def main() -> int:
                 else:
                     assert traditional_detector is not None
                     detections, _ = traditional_detector.detect(
-                        packet.image, ["green_supply"]
+                        packet.image, list(mission.allowed_classes)
                     )
-                latest_vision = observation(detections)
+                latest_vision = observation(detections, mission.allowed_classes)
                 current_pose = load_pose(args.pose)
                 latest_output = mission.step(
                     latest_vision, current_pose, load_stm_status(args.stm_status)
                 )
-                if latest_output.contact_pose is not None and not contact_pose_written:
+                if (latest_output.contact_pose is not None
+                        and mission.delivery_count > contact_pose_written_for):
                     write_contact_pose(
                         args.contact_output, current_pose,
                         latest_output.contact_pose, side,
+                        mission.selected_class or "unknown",
+                        mission.delivery_count,
                     )
-                    contact_pose_written = True
+                    contact_pose_written_for = mission.delivery_count
                     print(f"安全区接触校正参考已保存：{args.contact_output}")
                 if latest_output.command is not None:
                     packet_out = latest_output.command.to_frame(mission_sequence)

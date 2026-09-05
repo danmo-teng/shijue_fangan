@@ -109,9 +109,9 @@ ctest --test-dir build --output-on-failure
 
 `rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动对应的YOLO识别窗口；融合模式启动完整STM32任务，地图退出或重选时会一并停止识别和定位。详见[rescue_map/README.md](rescue_map/README.md)。
 
-## 7. 普通物资抓取与安全区投送测试
+## 7. 连续物资抓取与分区投送
 
-`mission_test/`实现普通物资居中靠近、摄像头下压后画面内物资确认、重复抓取命令与夹爪闭合握手、带实时航向的融合地图导航、安全区入口对正，以及基于地图车体相交和融合位置静止的投送确认。安全区视觉类别不参与完成判断；视觉处理与UART坐标均为原生`1280×1024`，详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
+`mission_test/`实现连续寻找、抓取和分区投送：开局强制先完成一次普通物资，之后允许搬运其他物资或伤员；每次投送后F407张爪退出并返回中心区域继续搜索。融合当前位置以50 Hz发送给下位机，安全区视觉类别不参与完成判断。详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
 
 ## 安全说明
 

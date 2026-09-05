@@ -31,8 +31,8 @@ from rescue_vision.mission_protocol import (
 )
 
 
-def target(x=640, y=512, bbox=(600, 470, 80, 80)):
-    return VisionInput(True, x, y, bbox)
+def target(x=640, y=512, bbox=(600, 470, 80, 80), class_name="green_supply"):
+    return VisionInput(True, x, y, bbox, class_name)
 
 
 class FakeClock:
@@ -49,10 +49,14 @@ class FakeClock:
 def run_side(side: str, desired_y: int, desired_heading: int):
     clock = FakeClock()
     mission = RescueMission(
-        MissionSettings(side=side, confirmation_frames=3, grab_timeout_s=3.0),
+        MissionSettings(side=side, confirmation_frames=3),
         clock=clock,
     )
     output = mission.step(VisionInput(), PoseInput(), Stm32Status())
+    assert output.state == MissionState.SEARCH and not output.report.found
+    output = mission.step(
+        target(class_name="core_black"), PoseInput(), Stm32Status()
+    )
     assert output.state == MissionState.SEARCH and not output.report.found
     output = mission.step(target(), PoseInput(), Stm32Status())
     assert output.state == MissionState.APPROACH and output.report.found
@@ -121,7 +125,8 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     separated_y = 0.95 if side == "red" else -0.95
     for _ in range(4):
         output = mission.step(
-            VisionInput(), PoseInput(True, 0.0, separated_y, desired_heading), closed
+            VisionInput(), PoseInput(True, 0.0, separated_y, desired_heading),
+            Stm32Status(mode=14, age_ms=5),
         )
         assert output.state == MissionState.ENTER_SAFE_ZONE
     contact_y = 1.08 if side == "red" else -1.08
@@ -129,28 +134,56 @@ def run_side(side: str, desired_y: int, desired_heading: int):
         PoseInput(True, 0.0, contact_y, desired_heading), mission.settings
     )
     contact = PoseInput(True, 0.0, contact_y, desired_heading)
-    output = mission.step(VisionInput(), contact, closed)
+    # Being stationary while the claw is only opening cannot prematurely
+    # complete delivery; the F407 must have reached RAM_FORWARD/RAM_VERIFY.
+    output = mission.step(VisionInput(), contact, Stm32Status(mode=12, age_ms=5))
+    clock.advance(2.0)
+    output = mission.step(VisionInput(), contact, Stm32Status(mode=12, age_ms=5))
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    output = mission.step(VisionInput(), contact, Stm32Status(mode=14, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
     clock.advance(0.70)
     moved = PoseInput(True, 0.016, contact_y, desired_heading)
-    output = mission.step(VisionInput(), moved, closed)
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=14, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
     clock.advance(0.79)
-    output = mission.step(VisionInput(), moved, closed)
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=14, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
     clock.advance(0.02)
     output = mission.step(
-        VisionInput(), moved, closed
+        VisionInput(), moved, Stm32Status(mode=14, age_ms=5)
     )
     assert output.state == MissionState.COMPLETE
     assert output.command.command == CMD_TASK_COMPLETE
     assert output.contact_pose == (moved.x_m, contact_y, float(desired_heading))
+    assert mission.delivered_common and mission.delivery_count == 1
+
+    # F407 opens the claw, backs out, faces the field centre and then reports
+    # SEARCH. The RDK waits for those mode acknowledgements before a new cycle.
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=16, age_ms=5))
+    assert output.state == MissionState.RETURN_CENTER and output.command is None
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=17, age_ms=5))
+    assert output.state == MissionState.RETURN_CENTER
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=3, age_ms=5))
+    assert output.state == MissionState.SEARCH
+    assert mission.selected_class is None
+    assert set(mission.allowed_classes) == {
+        "green_supply", "core_black", "danger_cyan", "injured_orange"
+    }
+
+    # After the mandatory ordinary supply, an injured target is accepted and
+    # uses the centre of the opposite (injured-person) half-zone.
+    output = mission.step(target(class_name="injured_orange"), moved, Stm32Status())
+    assert output.state == MissionState.APPROACH
+    assert output.report.cargo_class == "injured_orange"
+    injured_x = 150 if side == "red" else -150
+    assert round(mission.approach_point[0] * 1000) == injured_x
 
 
-def test_grab_timeout():
+def test_grab_wait_has_no_timeout():
     clock = FakeClock()
     mission = RescueMission(
-        MissionSettings(side="red", confirmation_frames=1, grab_timeout_s=3.0),
+        MissionSettings(side="red", confirmation_frames=1),
         clock=clock,
     )
     stm = Stm32Status(flags=STM_CLAW_VISIBLE, age_ms=5)
@@ -158,13 +191,10 @@ def test_grab_timeout():
     mission.step(target(), PoseInput(), stm)
     output = mission.step(target(), PoseInput(), stm)
     assert output.state == MissionState.GRABBING
-    clock.advance(2.99)
+    clock.advance(3600.0)
     output = mission.step(target(), PoseInput(), stm)
+    assert output.state == MissionState.GRABBING
     assert output.command.command == CMD_GRAB_CONFIRMED
-    clock.advance(0.02)
-    output = mission.step(target(), PoseInput(), stm)
-    assert output.state == MissionState.FAULT
-    assert output.command.command == 0
 
 
 def test_safe_zone_circle_geometry():
@@ -185,7 +215,7 @@ def test_safe_zone_circle_geometry():
 def main():
     run_side("red", 1200, 90)
     run_side("blue", -1200, 270)
-    test_grab_timeout()
+    test_grab_wait_has_no_timeout()
     test_safe_zone_circle_geometry()
     print("mission state machine PASS")
 

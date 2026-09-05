@@ -1,0 +1,342 @@
+From 53ddafb0188942d8e86ced03843742002fbda9e7 Mon Sep 17 00:00:00 2001
+From: ZMiaow <gandizm@users.noreply.github.com>
+Date: Sat, 5 Sep 2026 17:34:30 +0800
+Subject: [PATCH] Run continuous multi-cargo rescue cycles
+
+---
+ MISSION_PROTOCOL.md           | 16 +++----
+ Main/Inc/app_config.h         |  2 +
+ Main/Src/Lcd.c                |  3 ++
+ Main/Src/Task.c               | 80 ++++++++++++++++++++---------------
+ README.md                     | 14 +++---
+ tools/test_vision_protocol.py |  9 ++++
+ 6 files changed, 74 insertions(+), 50 deletions(-)
+
+diff --git a/MISSION_PROTOCOL.md b/MISSION_PROTOCOL.md
+index 162457f..516a2f8 100644
+--- a/MISSION_PROTOCOL.md
++++ b/MISSION_PROTOCOL.md
+@@ -1,25 +1,25 @@
+-# 当前普通物资抓取与投送流程
++# 连续物资抓取与分区投送流程
+ 
+-本固件按`danmo-teng/shijue_fangan`的`4bbbb83`任务命令语义工作，运行模式为`APP_ENABLE_TASK=1`，其他测试和独立视觉居中Task均关闭。RDK X5与F407使用USART3（PD8 TX、PD9 RX）、115200 8N1、3.3 V TTL和公共15字节帧。临时底盘改动及恢复方法见[`docs/TEMP_CHASSIS_HANDOFF.md`](docs/TEMP_CHASSIS_HANDOFF.md)。
++本固件与`danmo-teng/shijue_fangan`当前连续任务协议配套，运行模式为`APP_ENABLE_TASK=1`，其他测试和独立视觉居中Task均关闭。RDK X5与F407使用USART3（PD8 TX、PD9 RX）、115200 8N1、3.3 V TTL和公共15字节帧。临时底盘改动及恢复方法见[`docs/TEMP_CHASSIS_HANDOFF.md`](docs/TEMP_CHASSIS_HANDOFF.md)。
+ 
+ ## 整体流程
+ 
+ 1. 上电后停车，摄像头回90°，舵机1到55°，左右爪依次收缩到左23°、右147°。
+-2. 收到合法`TYPE=0x11`红蓝方和出发区配置后回复一次`A3 B3 01 C3`，开始180秒任务。
++2. 收到合法`TYPE=0x11`红蓝方和出发区配置后回复一次`A3 B3 01 C3`并启动连续任务，不设置180秒自动终止。
+ 3. 用编码器累计路程倒车1.70 m。前500 mm使用`Motor_MoveAngle()`保持启动IMU航向并直线倒退，舵机1保持55°、左右爪保持Retract，确保机构不碰障碍区。离开障碍区后舵机1才到85°、左右爪同时打开到左128°/右52°；剩余1.20 m使用`Motor_MoveSpin()`保持地面直线路径，同时根据IMU航向误差闭环转向约180°。主体路段请求850 mm/s，仅最后100 mm降到160 mm/s，进入10 mm容差后制动。
+ 4. 到达中心附近后不再执行Touch、单独转180°或停车等待5秒；确认并行开爪动作已经完成后立即进入`SEARCH`。原有“前进0.20 m→正反各转一圈→后退0.30 m”的打散状态和参数保留，但`APP_ENABLE_START_SCATTER=0`使其暂时不可达；恢复为1即可重新启用。
+-5. 搜索时摄像头保持120°。进入每一轮`SEARCH`时，F407记录当时最后一帧合法视觉报告的本地接收代次；必须收到代次更新的新报告后才允许X/Y触发目标锁定，进入搜索前缓存的坐标即使仍在250 ms有效期内也只用于LCD显示，不参与控制。小车以160 mm/s原地旋转一圈；没有普通物资时先用T265融合位姿（失效时退回本地编码器/IMU位姿）预测前进0.8 m后的落点。落点距离场地边界不足200 mm时先转向场地中心，再开始下一轮搜索，避免继续向场外推进。
+-6. 收到原生1280×1024目标坐标后，锁定进入接近阶段，不再返回搜索阶段。X控制底盘旋转，Y控制摄像头舵机3，默认以300 mm/s接近；如果上位机提供有效距离，则在500 mm和250 mm处分别减速到225 mm/s和125 mm/s。目标丢失且舵机3低于140°时先停车等待500 ms；仍未恢复则进入`REACQ`但不退回`SEARCH`，先沿目标最后出现的左右方向以120 mm/s原地旋转重捕获，每转满一圈反向、把摄像头抬高10°并等待500 ms，目标恢复后回到`APPROACH`。重捕获累计25秒仍失败，或摄像头在90°完成一圈仍无目标，均以`TARGET_LOST`故障停车。舵机3已经达到140°时丢失目标则直接进入抓取观察。
++5. 搜索时摄像头保持120°。进入每一轮`SEARCH`时，F407记录当时最后一帧合法视觉报告的本地接收代次；必须收到代次更新的新报告后才允许X/Y触发目标锁定。F407接受上位机选中的普通、核心、危险物资或伤员单目标；首轮必须普通物资的约束由RDK执行。目标重捕获失败时返回`SEARCH`，不把连续任务锁死为永久故障。
++6. 收到原生1280×1024目标坐标后锁定并进入接近阶段。X控制底盘旋转，Y控制摄像头舵机3，默认以300 mm/s接近；如果上位机提供有效距离，则在500 mm和250 mm处分别减速。目标丢失时先停车并旋转重捕获；累计25秒或摄像头搜索到最低角度仍失败时回到`SEARCH`选择新目标，不进入永久故障。
+ 7. 摄像头到140°后停车并持续通过`TYPE=0x17`置`CLAW_VISIBLE=1`，让上位机检查抓取画面。
+ 8. 如果上位机报告画面无物体，摄像头每次抬高10°（舵机角度140→130→…→90），每次抬高后停车观察1秒；仍没有物体就以100 mm/s慢速旋转观察。转满一圈仍没有物体则再次抬高并重复。在视觉报告超时期间保持停车。
+ 9. 上位机在F407持续上报`CLAW_VISIBLE=1`且状态帧不超过250 ms时，连续3个视觉周期确认画面仍有目标，然后以20～50 Hz重复发送`TYPE=0x18 / GRAB_CONFIRMED`。F407第一次接受时让左右爪同时合到Touch姿态，后续帧只更新`acknowledged_sequence`而不重启舵机动作；仍保留2秒机构完成窗口，之后才通过20 Hz的`TYPE=0x17`持续置`GRIPPER_CLOSED=1`。合爪后摄像头保持当前抓取观察角，不提前抬头。
+ 10. 上位机发送安全区前置点，并在`HEADING_cdeg`中给出当前位置指向前置点的实时行驶航向。F407优先使用带`USE_FINAL_HEADING`标志的该航向先原地对正，再沿车头方向直行；无该标志时才由目标点和融合位姿本地计算方位。距离目标500 mm内从800 mm/s降到250 mm/s，偏差达到7°时停车重新对正；若有效T265距离连续1.5秒没有减少至少20 mm，则按打滑、受阻或方向异常故障停车。NAV命令250 ms内按正常速度执行，250～1000 ms之间仅在融合位姿持续有效时沿已确认目标以不超过250 mm/s继续，超过1000 ms停车等待；命令恢复后自动继续。融合位姿失效时立即停车，恢复后自动继续，不使用旧位姿盲跑。
+ 11. 上位机发送`ALIGN_SAFE_ZONE`后，F407转到命令给出的最终航向。收到`ENTER_SAFE_ZONE`后左右爪同时张开，再以250 mm/s后退0.30 m；倒车结束制动并等待200 ms，再软启动加速到850 mm/s前冲0.55 m撞送物体，停车观察600 ms。打开夹爪、后退、换向等待和前冲期间均要求持续收到不超过250 ms且命令仍为`ENTER_SAFE_ZONE`的新帧，失联或命令改变立即停车；两段定距同时锁定各自动作开始时的IMU航向。
+-12. 如果上位机仍发送`ENTER_SAFE_ZONE`，说明尚未确认物体进入安全区，F407重复“后退0.30 m→前冲0.55 m→观察”。上位机连续3帧确认普通物资位于本方安全区框内后发送`TASK_COMPLETE`，F407才把摄像头抬到120°，随后后退0.45 m、根据`TYPE=0x16`当前位置计算指向场地中心`(0,0)`的航向并原地对正，最后进入`SEARCH`。
++12. 如果上位机仍发送`ENTER_SAFE_ZONE`，说明尚未确认物体进入安全区，F407重复“后退0.30 m→前冲0.55 m→观察”。收到`TASK_COMPLETE`后摄像头抬到120°并后退0.45 m，再使用50 Hz融合位姿驶入场地中心300 mm范围，最后进入`SEARCH`。
+ 
+-当前上位机在发出`TASK_COMPLETE`后会停留在`COMPLETE`且不再输出下一轮视觉报告。F407虽然会回到`SEARCH`，但要继续识别下一件物体，上位机还需要在收到STM32的`TYPE=0x17`搜索状态后复位其任务状态机。
++上位机在收到STM32的`TYPE=0x17`退出、返中或搜索状态后进入下一轮；第一次投送完成前只发普通物资，之后允许四类目标。
+ 
+-发生电机故障或收到`ABORT`时立即停车并进入故障状态。`STOP`在NAV阶段表示上位机暂时无法提供安全航向，F407停车但保留NAV状态，收到新NAV后重新对正并自动继续；其他阶段的`STOP`仍为故障停车。安全区对正和撞送仍严格要求250 ms内的新命令。NAV中的融合位姿超过150 ms、T265质量无效或更新被拒绝时立即停车并等待恢复，绝不使用旧位姿继续。自主出发和搜索不依赖任务命令，但仍受电机、IMU和180秒总超时保护。
++发生电机故障或收到`ABORT`时立即停车并进入故障状态。`STOP`在NAV阶段表示上位机暂时无法提供安全航向，F407停车但保留NAV状态，收到新NAV后重新对正并自动继续；其他阶段的`STOP`仍为故障停车。安全区对正和撞送仍严格要求250 ms内的新命令。NAV中的融合位姿超过150 ms、T265质量无效或更新被拒绝时立即停车并等待恢复，绝不使用旧位姿继续。自主出发和搜索不依赖任务命令；连续模式没有总时长终止，但仍保留通信、位姿、电机和IMU安全保护。
+ 
+ ## 公共帧
+ 
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index 92bb10b..c95185a 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -264,6 +264,8 @@
+ #define APP_RAM_VERIFY_WAIT_MS            600U
+ #define APP_SAFE_EXIT_DISTANCE_M            0.45f
+ #define APP_SAFE_EXIT_SPEED_MM_S          300.0f
++#define APP_RETURN_CENTER_HOLD_MM          300.0f
++#define APP_RETURN_CENTER_SPEED_MM_S       500.0f
+ 
+ /* This 1.8-inch 128x160 ST7735 panel exposes GRAM origin (0, 0). */
+ #define APP_LCD_WIDTH       128U
+diff --git a/Main/Src/Lcd.c b/Main/Src/Lcd.c
+index e3761a1..f54d2b9 100644
+--- a/Main/Src/Lcd.c
++++ b/Main/Src/Lcd.c
+@@ -686,6 +686,9 @@ static void draw_task(const LCDDashboard *dashboard)
+ 
+   if (dashboard->debug_mode) {
+     (void)strcpy(text, "MODE:DEBUG");
++  } else if (task.remaining_s == UINT16_MAX) {
++    (void)snprintf(text, sizeof(text), "STATE:%s T:--",
++                   task_state_name(task.state));
+   } else {
+     (void)snprintf(text, sizeof(text), "STATE:%s T:%us",
+                    task_state_name(task.state), task.remaining_s);
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 9dd3d74..e8a2d77 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -40,7 +40,6 @@ static TurnTracker turn_tracker;
+ static NavProgress nav_progress;
+ static uint32_t state_started_ms;
+ static uint32_t step_started_ms;
+-static uint32_t match_started_ms;
+ static uint32_t status_sent_ms;
+ static float camera_angle;
+ static float steering_mm_s;
+@@ -52,7 +51,6 @@ static float start_target_heading_deg;
+ static uint32_t search_entry_report_generation;
+ static bool initialized;
+ static bool initial_claw_ready;
+-static bool match_started;
+ static bool tracking_valid;
+ static bool mission_sequence_valid;
+ static bool search_advancing;
+@@ -165,18 +163,10 @@ static void task_publish_status(uint32_t now_ms)
+ 
+ static void task_update_match_time(uint32_t now_ms)
+ {
+-  if (!match_started) {
+-    task_status.remaining_s = APP_MATCH_TIME_S;
+-    return;
+-  }
+-  const uint32_t elapsed = (uint32_t)(now_ms - match_started_ms);
+-  if (elapsed >= APP_MATCH_TIME_MS) {
+-    task_status.remaining_s = 0U;
+-    task_stop(TASK_FAULT_MATCH_TIMEOUT, now_ms);
+-  } else {
+-    task_status.remaining_s =
+-        (uint16_t)((APP_MATCH_TIME_MS - elapsed + 999U) / 1000U);
+-  }
++  (void)now_ms;
++  /* Continuous rescue mode has no match-duration stop. Communication, pose,
++   * motor and mechanism watchdogs remain active as safety interlocks. */
++  task_status.remaining_s = UINT16_MAX;
+ }
+ 
+ static void task_enter(TaskState next, uint32_t now_ms)
+@@ -250,12 +240,11 @@ static void task_initialize(uint32_t now_ms)
+   Mechanism_Init();
+   Lift_SetStartPosition();
+   task_status = (TaskStatus){0};
+-  task_status.remaining_s = APP_MATCH_TIME_S;
++  task_status.remaining_s = UINT16_MAX;
+   state = TASK_WAIT_CONFIG;
+   task_status.state = state;
+   state_started_ms = now_ms;
+   step_started_ms = now_ms;
+-  match_started_ms = now_ms;
+   status_sent_ms = now_ms - APP_TASK_STATUS_PERIOD_MS;
+   camera_angle = (float)Camera_GetAngle();
+   steering_mm_s = 0.0f;
+@@ -266,7 +255,6 @@ static void task_initialize(uint32_t now_ms)
+   start_target_heading_deg = 0.0f;
+   search_entry_report_generation = 0U;
+   initial_claw_ready = false;
+-  match_started = false;
+   tracking_valid = false;
+   mission_sequence_valid = false;
+   search_advancing = false;
+@@ -280,14 +268,17 @@ static void task_initialize(uint32_t now_ms)
+   initialized = true;
+ }
+ 
+-static bool task_target_is_normal(const VisionData *vision, uint32_t now_ms)
++static bool task_target_is_single_cargo(const VisionData *vision,
++                                        uint32_t now_ms)
+ {
++  const uint8_t count =
++      VISION_COUNT_NORMAL(vision->cargo_counts) +
++      VISION_COUNT_CORE(vision->cargo_counts) +
++      VISION_COUNT_CASUALTY(vision->cargo_counts) +
++      VISION_COUNT_DANGER(vision->cargo_counts);
+   return Vision_IsFresh(vision, now_ms, APP_VISION_TIMEOUT_MS) &&
+          vision->classification_valid &&
+-         (VISION_COUNT_NORMAL(vision->cargo_counts) == 1U) &&
+-         (VISION_COUNT_CORE(vision->cargo_counts) == 0U) &&
+-         (VISION_COUNT_CASUALTY(vision->cargo_counts) == 0U) &&
+-         (VISION_COUNT_DANGER(vision->cargo_counts) == 0U);
++         (count == 1U);
+ }
+ 
+ static float task_tracking_dt(uint32_t tick_ms)
+@@ -530,7 +521,7 @@ static void task_process_search(const VisionData *vision, uint32_t now_ms)
+    * normal 250 ms timeout. They remain visible on the LCD, but cannot select
+    * a target or enter APPROACH until a new valid report is received. */
+   task_status.found = search_report_gate_open &&
+-                      task_target_is_normal(vision, now_ms);
++                      task_target_is_single_cargo(vision, now_ms);
+   if (task_status.found) {
+     task_enter(TASK_APPROACH, now_ms);
+     return;
+@@ -569,7 +560,7 @@ static void task_process_search(const VisionData *vision, uint32_t now_ms)
+ 
+ static void task_process_approach(const VisionData *vision, uint32_t now_ms)
+ {
+-  const bool found = task_target_is_normal(vision, now_ms);
++  const bool found = task_target_is_single_cargo(vision, now_ms);
+   task_status.found = found;
+   task_status.auto_approach = true;
+   if (!found) {
+@@ -632,14 +623,14 @@ static void task_process_approach_recover(const VisionData *vision,
+                                           uint32_t now_ms)
+ {
+   task_status.auto_approach = true;
+-  task_status.found = task_target_is_normal(vision, now_ms);
++  task_status.found = task_target_is_single_cargo(vision, now_ms);
+   if (task_status.found) {
+     task_enter(TASK_APPROACH, now_ms);
+     return;
+   }
+   if ((uint32_t)(now_ms - state_started_ms) >=
+       APP_APPROACH_RECOVERY_TIMEOUT_MS) {
+-    task_stop(TASK_FAULT_TARGET_LOST, now_ms);
++    task_enter(TASK_SEARCH, now_ms);
+     return;
+   }
+   if (!Vision_ReportIsFresh(vision, now_ms, APP_VISION_TIMEOUT_MS)) {
+@@ -659,7 +650,7 @@ static void task_process_approach_recover(const VisionData *vision,
+     Motor_Stop();
+     task_status.motors_active = false;
+     if (Camera_GetAngle() <= APP_GRAB_CAMERA_MIN_ANGLE) {
+-      task_stop(TASK_FAULT_TARGET_LOST, now_ms);
++      task_enter(TASK_SEARCH, now_ms);
+       return;
+     }
+     task_raise_camera();
+@@ -998,17 +989,38 @@ static void task_process_safe_exit(uint32_t now_ms)
+ static void task_process_face_center(const VisionData *vision,
+                                      uint32_t now_ms)
+ {
+-  TaskPose pose;
+-  if (!read_field_pose(vision, now_ms, &pose)) {
+-    task_stop(TASK_FAULT_POSE_TIMEOUT, now_ms);
++  if (!fused_pose_ready(&vision->fused_pose, now_ms)) {
++    Motor_Stop();
++    task_status.motors_active = false;
++    nav_ready = false;
+     return;
+   }
++  const float pose_x_mm = (float)vision->fused_pose.x_mm;
++  const float pose_y_mm = (float)vision->fused_pose.y_mm;
++  const float pose_heading_deg =
++      (float)vision->fused_pose.heading_cdeg * 0.01f;
+   const float center_bearing = bearing_to(
+-      0.0f, 0.0f, pose.x_mm, pose.y_mm);
+-  if (!turn_to(center_bearing, pose.heading_deg, now_ms)) {
++      0.0f, 0.0f, pose_x_mm, pose_y_mm);
++  const float center_distance = sqrtf(
++      pose_x_mm * pose_x_mm + pose_y_mm * pose_y_mm);
++  if (center_distance <= APP_RETURN_CENTER_HOLD_MM) {
++    task_enter(TASK_SEARCH, now_ms);
++    return;
++  }
++  const float heading_error = task_wrap_angle(
++      center_bearing - pose_heading_deg);
++  if (nav_ready &&
++      (task_abs(heading_error) >= APP_NAV_REALIGN_DEG)) {
++    Motor_Stop();
++    task_status.motors_active = false;
++    nav_ready = false;
++    return;
++  }
++  if (!nav_ready && !turn_to(center_bearing, pose_heading_deg, now_ms)) {
+     task_stop(TASK_FAULT_MOTOR, now_ms);
+   } else if (nav_ready) {
+-    task_enter(TASK_SEARCH, now_ms);
++    (void)Motor_MoveAngle(APP_RETURN_CENTER_SPEED_MM_S, 0.0f);
++    task_status.motors_active = true;
+   }
+ }
+ 
+@@ -1121,8 +1133,6 @@ void Task_Process(uint32_t now_ms)
+       if (vision.config_ready) {
+         Location_Reset((LocationStart)vision.start_zone);
+         Vision_RequestConfigAck();
+-        match_started = true;
+-        match_started_ms = now_ms;
+         task_enter(TASK_START, now_ms);
+       }
+       break;
+diff --git a/README.md b/README.md
+index c68716b..b91585e 100644
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,4 @@
+-# 当前固件：普通物资抓取与安全区投送Task
++# 当前固件：连续物资抓取与分区投送Task
+ 
+ 当前只启用完整`Task`，所有测试模式和独立`CenteringTask`均关闭。固件已对齐`danmo-teng/shijue_fangan@c09aef2`任务协议：视觉坐标为原生1280×1024、中心`(640,512)`；接收`TYPE=0x11/0x12/0x16/0x18`，发送`TYPE=0x15/0x17`。当前临时关闭开局打散；先保持机构收纳直线倒车500 mm，离开障碍区后再并行转向和打开双爪，累计1.70 m后直接搜索，抓取观察角为140°。抓取命令持续重发直到F407回报夹爪闭合，返航使用上位机实时航向并保留分层失联停车。详细状态机和协议见[MISSION_PROTOCOL.md](MISSION_PROTOCOL.md)，本轮临时修改、调试命令和恢复方法见[临时底盘修改交接记录](docs/TEMP_CHASSIS_HANDOFF.md)。
+ 
+@@ -150,7 +150,7 @@ A3 B3 01 C3
+ | bit6 | `DISTANCE_VALID` | P4/P5为有效距离；置位时距离必须为1～65535 mm |
+ | bit7 | 保留 | 必须为0 |
+ 
+-`GRABBED=0`时，P6只统计当前选中目标的抓取ROI，不得统计整张画面的所有目标；`GRABBED=1`时，P6必须统计机构内全部目标。没有目标时整个P0～P7必须为0。F407会拒绝坐标越界、bit7非0、距离有效位与距离数值矛盾以及无目标但载荷非0的报告；250 ms内没收到新的有效目标报告就停车，不会沿用旧坐标。当前上位机普通物资程序没有测距时发送`FOUND=1、CLASS_VALID=1、DISTANCE_VALID=0、distance=0`，视觉居中Task可以直接使用X/Y；完整救援Task只有在`DISTANCE_VALID=1`时才允许进入依赖距离的靠近流程。
++`GRABBED=0`时，P6只编码当前选中的一个目标类别，不得统计整张画面的所有目标。没有目标时整个P0～P7必须为0。F407会拒绝坐标越界、bit7非0、距离有效位与距离数值矛盾以及无目标但载荷非0的报告；250 ms内没收到新的有效目标报告就停车，不会沿用旧坐标。当前上位机未测距时发送`FOUND=1、CLASS_VALID=1、DISTANCE_VALID=0、distance=0`，并在P6的普通/核心/伤员/危险对应两位字段中只置一个计数。
+ 
+ 上位机当前发送的典型帧：目标位于串口坐标中心`(320,240)`、暂无有效距离、识别为1个普通物资：
+ 
+@@ -235,7 +235,7 @@ A3 B3 14 21 00 02 01 00 00 00 00 00 86 07 C3
+ 
+ 当前实车参数为`进入0.20 m、退出0.50 m、夹内检查0°`：0.20 m要保证目标越过边界但车体不压线，0.50 m要保证旋转时机构不扫到已放下目标，0°要保证夹内ROI完整进入画面。摄像头软件最小限位已同步设为0°，因此检查命令不会再被夹到10°。
+ 
+-当前F407没有激光雷达、碰撞开关或本地地图，无法独立判断返航路径上突然出现的障碍；200 ms以内的短时断帧会沿用最后一条合法方向，超过200 ms强制停车。上位机识别不确定、目标被遮挡或路线被占用时必须先发送`HOLD`。电机堵转/反向故障、30秒返航超时和180秒总超时仍是底层最后保护，但不能替代上位机避障。
++当前F407没有激光雷达、碰撞开关或本地地图，无法独立判断返航路径上突然出现的障碍；方向或融合位姿失效时会停车。连续任务不设置比赛总时长，但电机、机构、通信和定位看门狗仍是底层保护，不能替代上位机避障。
+ 
+ ## 抓取顺序与合规判断
+ 
+@@ -255,13 +255,13 @@ F407执行以下硬规则：
+ TIM6每20 ms发布一次`Task_Process(now_ms)`运行请求，由最低优先级PendSV非阻塞执行：
+ 
+ 1. `WAIT_CONFIG`：停车等待1帧合法配置并回复1次ACK。
+-2. `START`：上电后仍依次将左爪舵机4转到23°、右爪舵机2转到147°形成安全Retract姿态；收到1帧合法配置后自动启动180秒倒计时。前500 mm保持舵机1为55°、夹爪收纳，以850 mm/s进行IMU航向保持的直线倒退；离开障碍区后舵机1到85°、左右爪同时打开，并在剩余1.20 m内保持地面直线、闭环转约180°。仅最后100 mm降到160 mm/s，进入10 mm容差后制动并直接开始搜索。
++2. `START`：上电后仍依次将左爪舵机4转到23°、右爪舵机2转到147°形成安全Retract姿态；收到1帧合法配置后启动连续任务，不设置180秒倒计时。前500 mm保持舵机1为55°、夹爪收纳，以850 mm/s进行IMU航向保持的直线倒退；离开障碍区后舵机1到85°、左右爪同时打开，并在剩余1.20 m内保持地面直线、闭环转约180°。仅最后100 mm降到160 mm/s，进入10 mm容差后制动并直接开始搜索。
+ 3. `DISPERSE`：原有“前进0.20 m、正反各转一圈、后退0.30 m”代码仍保留，但当前`APP_ENABLE_START_SCATTER=0`，正常流程不会进入这些状态。
+ 4. `FIND_OBJECT`：摄像头保持120°。进入每一轮搜索时记录最后一个合法视觉报告的本地接收代次，只有收到代次更新的新报告后才允许X/Y触发目标锁定；开局倒车、入堆和撞散期间收到的坐标不会参与运动控制。等待700 ms后以160 mm/s原地搜索；累计实际航向转满360°仍未找到目标时，先预测前进0.80 m后的落点。落点距离场地边界不足200 mm就先转向场地中心，防止继续向场外推进。只接近当前阶段允许且分类明确的单个目标。
+ 5. `GRAB_OBJECT`：Task起始搜索角为120°；收到1帧合法目标报告后按X修正底盘并由舵机3根据目标Y坐标执行视觉PID。水平和摄像头PID都只在新视觉`SEQ`到达时更新，并按实际帧间隔计算I/D。舵机3低于140°时丢失目标，先停车500 ms，再沿目标最后出现的方向进入`REACQ`；每转一圈反向并抬高摄像头10°，恢复目标后继续APPROACH，不返回SEARCH，最长25秒后故障停车。达到140°后进入抓取观察；收到`GRAB_CONFIRMED`时左右爪同时合到Touch姿态，保留2秒完成窗口再上报闭合。
+ 6. `RETURN_SAFE`：夹紧目标后摄像头保持抓取观察角，等待上位机`TYPE=0x18`导航命令和`TYPE=0x16`融合位姿。F407先对准安全区前置点，再以800 mm/s直行，距离500 mm内降到250 mm/s；行驶期间持续更新目标方位，偏差达到7°时停车重新对正。NAV命令短暂中断时分级降速，超过1秒停车等待恢复；融合位姿失效也停车等待恢复。
+-7. `DELIVER`：完成安全区入口对正后，持续收到`ENTER_SAFE_ZONE`才允许左右爪同时打开、以250 mm/s后退0.30 m；制动等待200 ms后再软启动前冲0.55 m，最高850 mm/s。打开、后退、换向等待和前冲期间每20 ms检查命令新鲜度；失联立即停车。未送入就重复；收到`TASK_COMPLETE`确认送入后摄像头才抬到120°，随后后退0.45 m、转向场地中心并重新搜索。
+-8. `STOPPED`：180秒结束、上位机`STOP/ABORT`、电机/位姿/任务命令故障或目标重捕获失败后保持停车。
++7. `DELIVER`：完成安全区入口对正后，持续收到`ENTER_SAFE_ZONE`才允许左右爪同时打开、以250 mm/s后退0.30 m；制动等待200 ms后再软启动前冲0.55 m，最高850 mm/s。收到`TASK_COMPLETE`后摄像头抬到120°，随后后退0.45 m，并依靠50 Hz融合位姿驶入场地中心300 mm范围后重新搜索。
++8. `STOPPED`：上位机`STOP/ABORT`、电机、位姿或任务命令安全故障后保持停车。连续任务不设置180秒总时长终止；目标重捕获失败则返回搜索而不是永久停车。
+ 
+ 当前夹爪角度为：收缩左23°/右147°，Touch左80°/右100°，Open左128°/右52°。安装机构后必须先断开机构负载标定角度，确认不会顶死舵机。
+ 
+@@ -331,7 +331,7 @@ Power the target, connect the USB/transmitter side, and verify that Windows show
+ 5. 新PCB“串口1”USART3使用PD8/PD9和64字节循环DMA接收视觉帧；通过统一的中断发送队列发送4字节配置ACK及100 Hz三路编码器累计计数帧。
+ 6. 当前`APP_ENABLE_TASK=1`，独立视觉居中Task及所有运动测试、定位演示和舵机扫描均为0；收到配置后自动执行退出安全区、开爪直接搜索、视觉靠近、140°抓取观察、融合位姿返航和安全区投送。原打散状态保留但由`APP_ENABLE_START_SCATTER=0`暂时绕过。
+ 
+-接通电机12 V前应确认三轮与编码器方向正确，并在车后方预留至少1.8 m空间；上位机一旦发出1帧有效配置，F407就会自动开始180秒倒计时，保持IMU航向并按编码器倒车1.70 m，没有额外按键确认。
++接通电机12 V前应确认三轮与编码器方向正确，并在车后方预留至少1.8 m空间；上位机一旦发出1帧有效配置，F407就会启动连续任务，保持IMU航向并按编码器倒车1.70 m，没有额外按键确认。
+ 
+ ## 自主救援流程
+ 
+diff --git a/tools/test_vision_protocol.py b/tools/test_vision_protocol.py
+index a2b9aac..9e0bfc4 100644
+--- a/tools/test_vision_protocol.py
++++ b/tools/test_vision_protocol.py
+@@ -33,6 +33,15 @@ class VisionProtocolTests(unittest.TestCase):
+             "A3 B3 12 10 02 80 02 00 01 5E 01 49 BC 23 C3",
+         )
+ 
++    def test_each_single_cargo_class_uses_one_count_field(self) -> None:
++        for counts in (0x01, 0x04, 0x10, 0x40):
++            with self.subTest(counts=counts):
++                frame = protocol.report_frame(
++                    0x20 + counts.bit_length(), 640, 512, 0, counts,
++                    protocol.FLAG_FOUND | protocol.FLAG_CLASS_VALID,
++                )
++                self.assertEqual(protocol.parse_frame(frame)[2][6], counts)
++
+     def test_no_target_payload_is_all_zero(self) -> None:
+         frame = protocol.report_frame(0x11, 0, 0, 0, 0, 0)
+         self.assertEqual(frame[4:12], bytes(8))
+-- 
+2.34.1
+

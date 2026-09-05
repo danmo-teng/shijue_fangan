@@ -59,9 +59,13 @@ def main() -> None:
             PoseInput(True, -0.13, 1.09, 89.0),
             (-0.13, 1.08, 89.0),
             "red",
+            "green_supply",
+            1,
         )
         contact = json.loads(contact_path.read_text(encoding="utf-8"))
         assert contact["side"] == "red"
+        assert contact["cargo_class"] == "green_supply"
+        assert contact["delivery_count"] == 1
         assert contact["applied_to_localization"] is False
         assert contact["constraint_axis"] == "y"
         assert abs(contact["suggested_position_correction_m"]["x"]) < 1e-9

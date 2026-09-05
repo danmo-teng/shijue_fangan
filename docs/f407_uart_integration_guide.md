@@ -181,10 +181,12 @@ P0 COMMAND  P1 FLAGS  P2..P3 TARGET_X_mm  P4..P5 TARGET_Y_mm  P6..P7 HEADING_cde
 - X/Y是场地中心坐标系中的有符号`int16`毫米；航向为`0..35999`、0.01°。
 - `FLAGS bit0 VALID`、bit1要求直线行驶、bit2要求最终航向、bit3表示红方。
 - `COMMAND=0 STOP`；`2 GRAB_CONFIRMED`；`3 NAVIGATE_WAYPOINT`；`4 ALIGN_SAFE_ZONE`；`5 ENTER_SAFE_ZONE`；`6 TASK_COMPLETE`；`7 ABORT`。
-- 普通物资目标位于本方物资半区中心：红方`(-150,+1200)`，蓝方`(+150,-1200)`；这样避开X=0物资/伤员分隔线，按120 mm车体半径计算后距分隔线和外边缘各留约30 mm。上位机只有在地图中半径120 mm的小车圆与本方安全区矩形相交后，才从NAV切换到ALIGN/ENTER。
+- 普通/核心/危险物资对准物资半区几何中心：红方`x=-150`、蓝方`x=+150`；伤员对准另一半区中心：红方`x=+150`、蓝方`x=-150`。不再叠加额外左右偏置。上位机只有在地图中半径120 mm的小车圆与本方安全区矩形相交后，才从NAV切换到ALIGN/ENTER。
 - `GRAB_CONFIRMED`会以20～50 Hz重复发送，直到新鲜的`TYPE=0x17`持续报告`GRIPPER_CLOSED=1`；STM32必须对重复抓取命令做幂等处理：每帧更新`acknowledged_sequence`，但`grab_in_progress=1`或夹爪已经闭合时不得重复启动舵机动作。
 - `NAVIGATE_WAYPOINT`的`HEADING_cdeg`是当前位置指向前置点的实时`atan2(dy,dx)`航向，`USE_FINAL_HEADING=1`；`ALIGN_SAFE_ZONE`与`ENTER_SAFE_ZONE`的航向才是红方90°或蓝方270°。
-- 抓取开始后3秒仍未收到新鲜`GRIPPER_CLOSED=1`，RDK发送`STOP`并进入故障状态；夹爪确认闭合前绝不发送导航命令。
+- RDK持续等待新鲜`GRIPPER_CLOSED=1`且不设置抓取失败倒计时；夹爪确认闭合前绝不发送导航命令。
+- 连续任务不再设置抓取失败倒计时、最大搬运次数或180秒总时长；通信/融合位姿/电机异常看门狗继续保留。开局只允许普通物资，完成首件后允许四类单目标报告。
+- `TASK_COMPLETE`后F407张爪、后退出围栏，再依靠50 Hz的`TYPE=0x16`驶入场地中心300 mm范围并恢复`SEARCH`；RDK收到搜索状态后开始下一轮。
 - F407返航/导航优先使用新协议中的`HEADING_cdeg`；方向命令年龄0～250 ms使用正常速度，超过250 ms且不超过1000 ms时限速250 mm/s，超过1000 ms时停车但保留`navigation_active`，收到新的合法NAV后自动恢复。
 - 临时`STOP`只置暂停并保留NAV状态，后续新NAV可恢复；`ABORT`必须锁存为永久停止，除非整机任务状态显式复位。
 - 融合位姿无效时立即停车，不盲跑；位姿恢复且方向命令仍新鲜时自动继续，否则等待新NAV刷新方向。
@@ -216,6 +218,16 @@ A3 B3 18 20 03 0F FF 6A 04 B0 25 F1 01 69 C3
 ```
 
 ## 10. 电控侧交付与验收清单
+
+配套F407连续任务补丁保存在
+`docs/f407_patches/0001-Run-continuous-multi-cargo-rescue-cycles.patch`。在F407仓库根目录执行：
+
+```bash
+git am /home/sunrise/RDK_X5/shijue_fangan/docs/f407_patches/0001-Run-continuous-multi-cargo-rescue-cycles.patch
+```
+
+该补丁基于F407仓库`47d06f1`生成，应用后需重新编译并烧录下位机；只更新RDK而不更新F407时，
+下位机仍会把非普通物资报告过滤掉，也不会实际驶回中心区域。
 
 1. 示波器或逻辑分析仪确认PD8输出为115200 8N1、3.3 V TTL。
 2. F407上电后以100 Hz连续发送合法`TYPE=0x15`，静止时计数不变化、转轮时对应通道变化。
