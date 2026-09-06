@@ -62,10 +62,11 @@ rotate_tangent = (M1 + M2 + M3) / 3
 ## 镜头朝上的三维姿态投影
 
 配置项`camera_robot_forward_axis`和`camera_robot_up_axis`表示“机器人轴在T265 Pose本体坐标中的
-坐标”。当前实际安装为机器人车头`-T265 X`、右侧`+T265 Y`、上方`+T265 Z`，配置为：
+坐标”。实车验证上一版`-T265 X`会使地图轨迹与实际运动相反，因此当前校准轴为车头
+`+T265 X`、上方`+T265 Z`，左向由右手关系得到`+T265 Y`：
 
 ```ini
-camera_robot_forward_axis = -x
+camera_robot_forward_axis = +x
 camera_robot_up_axis = +z
 ```
 

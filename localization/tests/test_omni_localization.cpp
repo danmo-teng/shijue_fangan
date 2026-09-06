@@ -240,8 +240,8 @@ void test_projection_gate_and_filter()
     auto forward_origin = lens_up_pose(0.0, 1.0);
     forward_projector.project(forward_origin);
     auto forward_motion = lens_up_pose(0.0, 2.0);
-    forward_motion.translation_m[0] = -1.0;
-    forward_motion.velocity_mps[0] = -1.0;
+    forward_motion.translation_m[0] = 1.0;
+    forward_motion.velocity_mps[0] = 1.0;
     const auto forward_result = forward_projector.project(forward_motion);
     const double diagonal = std::sqrt(0.5);
     check(near(forward_result.pose.x_m, 1.20 + diagonal, 1e-8) &&
@@ -254,8 +254,8 @@ void test_projection_gate_and_filter()
     omni::T265FieldProjector left_projector(lens_up_config);
     left_projector.project(lens_up_pose(0.0, 1.0));
     auto left_motion = lens_up_pose(0.0, 2.0);
-    left_motion.translation_m[2] = 1.0;
-    left_motion.velocity_mps[2] = 1.0;
+    left_motion.translation_m[2] = -1.0;
+    left_motion.velocity_mps[2] = -1.0;
     const auto left_result = left_projector.project(left_motion);
     check(near(left_result.pose.x_m, 1.20 - diagonal, 1e-8) &&
           near(left_result.pose.y_m, 1.20 + diagonal, 1e-8),
