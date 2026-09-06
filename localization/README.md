@@ -42,7 +42,8 @@ confidence为0时进一步降低T265位置权重，避免`SLAM_ERROR Speed`期�
 T265位置是否在本帧参与校正、位置权重倍率和创新距离。输出`quality`现在同时参考tracker和
 mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`，但仍可供任务规划使用。
 
-`camera_offset_forward_m/left_m`必须按实车测量填写。它们保持0时，T265不在车体旋转中心造成的
+`camera_offset_forward_m/left_m`表示T265 tracking origin相对车体旋转中心的前向/左向距离，
+单位m，必须按实车测量填写，不能混用105 mm推板距离或130 mm轮子运动学半径。它们保持0时，T265不在车体旋转中心造成的
 原地转向圆弧仍会被误认为车体平移；程序不会根据单次日志猜测并写入机构尺寸。
 
 ## 为什么不直接发“三个轮子”给 T265
@@ -55,7 +56,26 @@ left    = (M1 + M3 - 2*M2) / 3
 rotate_tangent = (M1 + M2 + M3) / 3
 ```
 
-`wheel_center_radius_m=0` 时不使用轮子航向，航向完全由 T265 约束。实测轮子接地点到车体旋转中心的距离后，才可填写非零值并校准旋转符号。
+`wheel_center_radius_m`是车体旋转中心到全向轮滚动作用线的垂直距离，当前实测初值使用
+`0.130 m`，不是推板/前拨板距离。必须通过架空原地旋转360°的三轮编码器累计量复核。
+
+## 镜头朝上的三维姿态投影
+
+配置项`camera_robot_forward_axis`和`camera_robot_up_axis`表示“机器人轴在T265 Pose本体坐标中的
+坐标”。当前实际安装为机器人车头`-T265 X`、右侧`+T265 Y`、上方`+T265 Z`，配置为：
+
+```ini
+camera_robot_forward_axis = -x
+camera_robot_up_axis = +z
+```
+
+程序从完整`translation.xyz / velocity.xyz / quaternion.xyzw / angular_velocity.xyz`构造相机到
+世界旋转。车头世界向量按`f_W=R_WC*f_C`计算，底盘原始航向为
+`atan2(-f_W.x,-f_W.z)`；不再使用俯仰接近90°时有奇异性的绕Y欧拉角。
+
+第一帧保存三维位置、车头/左向世界向量和原始航向。后续位移分别点乘初始车头和左向量，
+相对航向通过连续四元数航向差累计，再叠加所选出发区135°/45°/225°/315°锚点。yaw rate
+使用连续帧航向差分低通滤波，不假定`angular_velocity.y`就是底盘偏航速度。
 
 ## UART 兼容性
 
@@ -166,7 +186,7 @@ python3 tools/merge_vision_pose.py \
 ## 实车标定顺序
 
 1. 填写 T265 tracking origin 相对车体旋转中心的 `camera_offset_forward_m/left_m`。
-2. 校正T265固定安装角：正值把T265平面位移逆时针旋转，负值顺时针旋转。T265重新安装后，原配置使地图方向位于实际方向顺时针90°，因此取消旧的`-90°`修正，当前使用`camera_to_robot_yaw_deg=0.0`。
+2. 按实装填写机器人前轴和上轴在T265本体坐标中的方向，禁止用固定±90°二维补偿猜测镜头朝上的姿态。
 3. 架空车轮，分别转动 M1/M2/M3，确认原始计数和 `encoder_sign` 一致。
 4. 平地前进 1 m、横移 1 m，核对轮径和 1768 counts/rev；不要用减速带路段标定轮径。
 5. 原地旋转 360°，测量 `wheel_center_radius_m`；未标定前保持 0。

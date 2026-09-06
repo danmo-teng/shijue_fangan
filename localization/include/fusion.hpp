@@ -22,12 +22,11 @@ struct Pose2d {
 };
 
 struct T265RawPose {
-    double native_x_m = 0.0;
-    double native_z_m = 0.0;
-    double native_vx_mps = 0.0;
-    double native_vz_mps = 0.0;
-    double heading_y_rad = 0.0;
-    double angular_velocity_y_radps = 0.0;
+    double translation_m[3] = {0.0, 0.0, 0.0};
+    double velocity_mps[3] = {0.0, 0.0, 0.0};
+    double rotation_xyzw[4] = {0.0, 0.0, 0.0, 1.0};
+    double angular_velocity_radps[3] = {0.0, 0.0, 0.0};
+    double timestamp_s = 0.0;
     std::uint8_t tracker_confidence = 0;
     std::uint8_t mapper_confidence = 0;
 };
@@ -37,6 +36,11 @@ struct T265FieldPose {
     double body_forward_velocity_mps = 0.0;
     double body_left_velocity_mps = 0.0;
     double travel_from_origin_m = 0.0;
+    double forward_world[3] = {0.0, 0.0, -1.0};
+    double left_world[3] = {-1.0, 0.0, 0.0};
+    double raw_chassis_yaw_rad = 0.0;
+    double relative_yaw_rad = 0.0;
+    double yaw_rate_radps = 0.0;
     std::uint8_t tracker_confidence = 0;
     std::uint8_t mapper_confidence = 0;
 };
@@ -50,9 +54,14 @@ public:
 private:
     LocalizationConfig config_;
     bool initialized_ = false;
-    double raw_forward_origin_m_ = 0.0;
-    double raw_left_origin_m_ = 0.0;
-    double raw_heading_origin_rad_ = 0.0;
+    double position_origin_m_[3] = {0.0, 0.0, 0.0};
+    double forward_world_origin_[3] = {0.0, 0.0, -1.0};
+    double left_world_origin_[3] = {-1.0, 0.0, 0.0};
+    double yaw_origin_rad_ = 0.0;
+    double previous_raw_yaw_rad_ = 0.0;
+    double previous_timestamp_s_ = 0.0;
+    double accumulated_relative_yaw_rad_ = 0.0;
+    double filtered_yaw_rate_radps_ = 0.0;
     Pose2d start_pose_{};
 };
 

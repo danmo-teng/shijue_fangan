@@ -41,6 +41,47 @@ bool inverse3(const double input[3][3], double output[3][3])
     return true;
 }
 
+struct Vec3 {
+    double x;
+    double y;
+    double z;
+};
+
+Vec3 cross(const Vec3 &a, const Vec3 &b)
+{
+    return {a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x};
+}
+
+double dot(const Vec3 &a, const Vec3 &b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+Vec3 rotate_by_quaternion(const double q_input[4], const Vec3 &v)
+{
+    const double norm = std::sqrt(
+        q_input[0] * q_input[0] + q_input[1] * q_input[1] +
+        q_input[2] * q_input[2] + q_input[3] * q_input[3]);
+    if (norm < 1e-12) return v;
+    const Vec3 q{q_input[0] / norm, q_input[1] / norm, q_input[2] / norm};
+    const double w = q_input[3] / norm;
+    const Vec3 t = cross(q, v);
+    const Vec3 twice_t{2.0 * t.x, 2.0 * t.y, 2.0 * t.z};
+    const Vec3 q_cross_t = cross(q, twice_t);
+    return {v.x + w * twice_t.x + q_cross_t.x,
+            v.y + w * twice_t.y + q_cross_t.y,
+            v.z + w * twice_t.z + q_cross_t.z};
+}
+
+Vec3 normalized_ground_xz(const Vec3 &v)
+{
+    const double norm = std::hypot(v.x, v.z);
+    if (norm < 1e-9) return {0.0, 0.0, 0.0};
+    return {v.x / norm, 0.0, v.z / norm};
+}
+
 }  // namespace
 
 double radians(double value)
@@ -67,36 +108,64 @@ T265FieldProjector::T265FieldProjector(const LocalizationConfig &config)
 
 T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
 {
-    // T265 native: +X right, +Y up, +Z backward. Robot planar axes are
-    // forward=-Z and left=-X.
-    const double raw_forward = -raw.native_z_m;
-    const double raw_left = -raw.native_x_m;
+    const Vec3 forward_camera{
+        config_.camera_robot_forward_axis[0],
+        config_.camera_robot_forward_axis[1],
+        config_.camera_robot_forward_axis[2]};
+    const Vec3 up_camera{
+        config_.camera_robot_up_axis[0],
+        config_.camera_robot_up_axis[1],
+        config_.camera_robot_up_axis[2]};
+    // Robot body axes are right-handed: forward x left = up, hence
+    // left = up x forward. Config vectors are robot axes expressed in T265.
+    const Vec3 left_camera = cross(up_camera, forward_camera);
+    const Vec3 forward_world = normalized_ground_xz(
+        rotate_by_quaternion(raw.rotation_xyzw, forward_camera));
+    const Vec3 left_world = normalized_ground_xz(
+        rotate_by_quaternion(raw.rotation_xyzw, left_camera));
+    const double raw_yaw = std::atan2(-forward_world.x, -forward_world.z);
+    const Vec3 position{
+        raw.translation_m[0], raw.translation_m[1], raw.translation_m[2]};
+
     if (!initialized_) {
-        raw_forward_origin_m_ = raw_forward;
-        raw_left_origin_m_ = raw_left;
-        raw_heading_origin_rad_ = raw.heading_y_rad;
+        for (int i = 0; i < 3; ++i) {
+            position_origin_m_[i] = raw.translation_m[i];
+        }
+        forward_world_origin_[0] = forward_world.x;
+        forward_world_origin_[1] = forward_world.y;
+        forward_world_origin_[2] = forward_world.z;
+        left_world_origin_[0] = left_world.x;
+        left_world_origin_[1] = left_world.y;
+        left_world_origin_[2] = left_world.z;
+        yaw_origin_rad_ = raw_yaw;
+        previous_raw_yaw_rad_ = raw_yaw;
+        previous_timestamp_s_ = raw.timestamp_s;
+        accumulated_relative_yaw_rad_ = 0.0;
+        filtered_yaw_rate_radps_ = 0.0;
         initialized_ = true;
+    } else {
+        const double yaw_delta = wrap_angle(raw_yaw - previous_raw_yaw_rad_);
+        accumulated_relative_yaw_rad_ += yaw_delta;
+        const double dt = raw.timestamp_s - previous_timestamp_s_;
+        if (dt > 1e-4 && dt < 0.25) {
+            const double measured_rate = yaw_delta / dt;
+            constexpr double alpha = 0.25;
+            filtered_yaw_rate_radps_ =
+                alpha * measured_rate + (1.0 - alpha) * filtered_yaw_rate_radps_;
+        }
+        previous_raw_yaw_rad_ = raw_yaw;
+        previous_timestamp_s_ = raw.timestamp_s;
     }
 
-    const double dh = wrap_angle(raw.heading_y_rad - raw_heading_origin_rad_);
-    const double c0 = std::cos(raw_heading_origin_rad_);
-    const double s0 = std::sin(raw_heading_origin_rad_);
-    const double camera_df = raw_forward - raw_forward_origin_m_;
-    const double camera_dl = raw_left - raw_left_origin_m_;
-    const double camera_initial_forward = c0 * camera_df + s0 * camera_dl;
-    const double camera_initial_left = -s0 * camera_df + c0 * camera_dl;
-
-    // Fixed planar mounting correction from the T265-derived axes into chassis
-    // axes. Positive rotates the measured vector counter-clockwise; this robot
-    // uses -90 degrees because its old map motion was 90 degrees CCW from the
-    // actual travel direction.
-    const double mount = radians(config_.camera_to_robot_yaw_deg);
-    const double cm = std::cos(mount);
-    const double sm = std::sin(mount);
-    const double mounted_initial_forward =
-        cm * camera_initial_forward - sm * camera_initial_left;
-    const double mounted_initial_left =
-        sm * camera_initial_forward + cm * camera_initial_left;
+    const Vec3 origin{position_origin_m_[0], position_origin_m_[1], position_origin_m_[2]};
+    const Vec3 delta{position.x - origin.x, position.y - origin.y, position.z - origin.z};
+    const Vec3 initial_forward{forward_world_origin_[0], forward_world_origin_[1],
+                               forward_world_origin_[2]};
+    const Vec3 initial_left{left_world_origin_[0], left_world_origin_[1],
+                            left_world_origin_[2]};
+    const double camera_initial_forward = dot(delta, initial_forward);
+    const double camera_initial_left = dot(delta, initial_left);
+    const double dh = accumulated_relative_yaw_rad_;
 
     // Convert camera-origin motion to robot-centre motion using the configured
     // planar lever arm from robot centre to T265 tracking origin.
@@ -106,8 +175,8 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double r0l = config_.camera_offset_left_m;
     const double rotated_rf = cy * r0f - sy * r0l;
     const double rotated_rl = sy * r0f + cy * r0l;
-    const double robot_initial_forward = mounted_initial_forward - (rotated_rf - r0f);
-    const double robot_initial_left = mounted_initial_left - (rotated_rl - r0l);
+    const double robot_initial_forward = camera_initial_forward - (rotated_rf - r0f);
+    const double robot_initial_left = camera_initial_left - (rotated_rl - r0l);
 
     const double cs = std::cos(start_pose_.yaw_rad);
     const double ss = std::sin(start_pose_.yaw_rad);
@@ -119,20 +188,21 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     result.pose.yaw_rad = wrap_angle(start_pose_.yaw_rad + dh);
     result.travel_from_origin_m = std::hypot(robot_initial_forward, robot_initial_left);
 
-    const double native_forward_velocity = -raw.native_vz_mps;
-    const double native_left_velocity = -raw.native_vx_mps;
-    const double camera_vf = c0 * native_forward_velocity + s0 * native_left_velocity;
-    const double camera_vl = -s0 * native_forward_velocity + c0 * native_left_velocity;
-    const double mounted_vf = cm * camera_vf - sm * camera_vl;
-    const double mounted_vl = sm * camera_vf + cm * camera_vl;
-    const double omega = raw.angular_velocity_y_radps;
-    const double lever_cross_f = -omega * rotated_rl;
-    const double lever_cross_l = omega * rotated_rf;
-    const double base_initial_vf = mounted_vf - lever_cross_f;
-    const double base_initial_vl = mounted_vl - lever_cross_l;
-    // Initial robot axes -> current robot axes.
-    result.body_forward_velocity_mps = cy * base_initial_vf + sy * base_initial_vl;
-    result.body_left_velocity_mps = -sy * base_initial_vf + cy * base_initial_vl;
+    const Vec3 velocity{raw.velocity_mps[0], raw.velocity_mps[1], raw.velocity_mps[2]};
+    const double camera_vf = dot(velocity, forward_world);
+    const double camera_vl = dot(velocity, left_world);
+    const double omega = filtered_yaw_rate_radps_;
+    result.body_forward_velocity_mps = camera_vf + omega * r0l;
+    result.body_left_velocity_mps = camera_vl - omega * r0f;
+    result.forward_world[0] = forward_world.x;
+    result.forward_world[1] = forward_world.y;
+    result.forward_world[2] = forward_world.z;
+    result.left_world[0] = left_world.x;
+    result.left_world[1] = left_world.y;
+    result.left_world[2] = left_world.z;
+    result.raw_chassis_yaw_rad = raw_yaw;
+    result.relative_yaw_rad = accumulated_relative_yaw_rad_;
+    result.yaw_rate_radps = filtered_yaw_rate_radps_;
     result.tracker_confidence = raw.tracker_confidence;
     result.mapper_confidence = raw.mapper_confidence;
     return result;

@@ -178,12 +178,6 @@ std::string device_info(const rs2::device &device, rs2_camera_info field)
     }
 }
 
-double heading_y(const rs2_quaternion &q)
-{
-    return std::atan2(2.0 * (q.w * q.y + q.x * q.z),
-                      1.0 - 2.0 * (q.y * q.y + q.x * q.x));
-}
-
 std::uint64_t monotonic_ns()
 {
     return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -502,7 +496,9 @@ int main(int argc, char **argv)
         if (!options.csv_path.empty()) {
             csv.open(options.csv_path);
             if (!csv) throw std::runtime_error("cannot open CSV: " + options.csv_path);
-            csv << "time_s,fused_x_m,fused_y_m,fused_yaw_deg,t265_x_m,t265_y_m,"
+            csv << "time_s,raw_tx_m,raw_ty_m,raw_tz_m,raw_qx,raw_qy,raw_qz,raw_qw,"
+                   "forward_world_x,forward_world_y,forward_world_z,raw_chassis_yaw_deg,"
+                   "relative_yaw_deg,fused_x_m,fused_y_m,fused_yaw_deg,t265_x_m,t265_y_m,"
                    "t265_yaw_deg,tracker_confidence,mapper_confidence,wheel_gate,"
                    "wheel_accepted,wheel_rejected,position_sigma_m,yaw_sigma_deg\n";
         }
@@ -547,12 +543,20 @@ int main(int argc, char **argv)
             if (!pose_frame) continue;
             const rs2_pose pose = pose_frame.get_pose_data();
             omni::T265RawPose raw;
-            raw.native_x_m = pose.translation.x;
-            raw.native_z_m = pose.translation.z;
-            raw.native_vx_mps = pose.velocity.x;
-            raw.native_vz_mps = pose.velocity.z;
-            raw.heading_y_rad = heading_y(pose.rotation);
-            raw.angular_velocity_y_radps = pose.angular_velocity.y;
+            raw.translation_m[0] = pose.translation.x;
+            raw.translation_m[1] = pose.translation.y;
+            raw.translation_m[2] = pose.translation.z;
+            raw.velocity_mps[0] = pose.velocity.x;
+            raw.velocity_mps[1] = pose.velocity.y;
+            raw.velocity_mps[2] = pose.velocity.z;
+            raw.rotation_xyzw[0] = pose.rotation.x;
+            raw.rotation_xyzw[1] = pose.rotation.y;
+            raw.rotation_xyzw[2] = pose.rotation.z;
+            raw.rotation_xyzw[3] = pose.rotation.w;
+            raw.angular_velocity_radps[0] = pose.angular_velocity.x;
+            raw.angular_velocity_radps[1] = pose.angular_velocity.y;
+            raw.angular_velocity_radps[2] = pose.angular_velocity.z;
+            raw.timestamp_s = pose_frame.get_timestamp() * 0.001;
             raw.tracker_confidence = pose.tracker_confidence;
             raw.mapper_confidence = pose.mapper_confidence;
             latest_t265 = projector.project(raw);
@@ -772,7 +776,15 @@ int main(int argc, char **argv)
                       << " sigma=" << std::setprecision(3) << filter.position_sigma_m() << "m\n";
             if (csv) {
                 csv << std::fixed << std::setprecision(9)
-                    << elapsed << ',' << fused.x_m << ',' << fused.y_m << ','
+                    << elapsed << ','
+                    << raw.translation_m[0] << ',' << raw.translation_m[1] << ','
+                    << raw.translation_m[2] << ',' << raw.rotation_xyzw[0] << ','
+                    << raw.rotation_xyzw[1] << ',' << raw.rotation_xyzw[2] << ','
+                    << raw.rotation_xyzw[3] << ',' << latest_t265.forward_world[0] << ','
+                    << latest_t265.forward_world[1] << ',' << latest_t265.forward_world[2] << ','
+                    << omni::degrees(latest_t265.raw_chassis_yaw_rad) << ','
+                    << omni::degrees(latest_t265.relative_yaw_rad) << ','
+                    << fused.x_m << ',' << fused.y_m << ','
                     << omni::degrees(fused.yaw_rad) << ',' << latest_t265.pose.x_m << ','
                     << latest_t265.pose.y_m << ',' << omni::degrees(latest_t265.pose.yaw_rad)
                     << ',' << static_cast<unsigned>(latest_t265.tracker_confidence)

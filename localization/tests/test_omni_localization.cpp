@@ -25,6 +25,47 @@ bool near(double a, double b, double tolerance = 1e-9)
     return std::fabs(a - b) <= tolerance;
 }
 
+struct TestQuaternion {
+    double x;
+    double y;
+    double z;
+    double w;
+};
+
+TestQuaternion multiply(const TestQuaternion &a, const TestQuaternion &b)
+{
+    return {
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
+}
+
+TestQuaternion axis_angle(double x, double y, double z, double degrees)
+{
+    const double half = omni::radians(degrees) * 0.5;
+    const double sine = std::sin(half);
+    return {x * sine, y * sine, z * sine, std::cos(half)};
+}
+
+omni::T265RawPose lens_up_pose(double yaw_deg, double timestamp_s = 0.0)
+{
+    // Rx(-90) maps installed robot up (+Z camera) to +Y world. A world-Y
+    // rotation then represents chassis yaw without an Euler singularity.
+    const TestQuaternion q = multiply(
+        axis_angle(0.0, 1.0, 0.0, yaw_deg),
+        axis_angle(1.0, 0.0, 0.0, -90.0));
+    omni::T265RawPose raw;
+    raw.rotation_xyzw[0] = q.x;
+    raw.rotation_xyzw[1] = q.y;
+    raw.rotation_xyzw[2] = q.z;
+    raw.rotation_xyzw[3] = q.w;
+    raw.timestamp_s = timestamp_s;
+    raw.tracker_confidence = 3;
+    raw.mapper_confidence = 3;
+    return raw;
+}
+
 void test_protocol()
 {
     omni::EncoderFrame expected;
@@ -166,8 +207,7 @@ void test_projection_gate_and_filter()
     for (int zone = 1; zone <= 4; ++zone) {
         config.start_zone = zone;
         omni::T265FieldProjector zone_projector(config);
-        omni::T265RawPose zone_raw;
-        zone_raw.tracker_confidence = 3;
+        omni::T265RawPose zone_raw = lens_up_pose(0.0);
         const omni::T265FieldPose zone_field = zone_projector.project(zone_raw);
         check(near(zone_field.pose.x_m, expected_x[zone]), "selected zone initial field X");
         check(near(zone_field.pose.y_m, expected_y[zone]), "selected zone initial field Y");
@@ -175,30 +215,87 @@ void test_projection_gate_and_filter()
               "selected zone outward heading");
     }
 
-    omni::LocalizationConfig mounted_config = config;
-    mounted_config.start_zone = 2;
-    mounted_config.camera_to_robot_yaw_deg = -90.0;
-    omni::T265FieldProjector mounted_projector(mounted_config);
-    omni::T265RawPose mounted_origin;
-    mounted_origin.tracker_confidence = 3;
-    mounted_projector.project(mounted_origin);
-    omni::T265RawPose mounted_motion = mounted_origin;
-    mounted_motion.native_z_m = -1.0;
-    mounted_motion.native_vz_mps = -1.0;
-    const omni::T265FieldPose corrected_motion = mounted_projector.project(mounted_motion);
+    omni::LocalizationConfig lens_up_config = config;
+    lens_up_config.start_zone = 2;
+    omni::T265FieldProjector still_projector(lens_up_config);
+    const auto still_a = still_projector.project(lens_up_pose(0.0, 1.0));
+    const auto still_b = still_projector.project(lens_up_pose(0.0, 1.01));
+    check(near(still_a.relative_yaw_rad, 0.0) &&
+          near(still_b.relative_yaw_rad, 0.0),
+          "lens-up stationary quaternion has stable yaw");
+
+    omni::T265FieldProjector ccw_projector(lens_up_config);
+    ccw_projector.project(lens_up_pose(0.0, 1.0));
+    const auto ccw = ccw_projector.project(lens_up_pose(90.0, 2.0));
+    check(near(omni::degrees(ccw.relative_yaw_rad), 90.0, 1e-8),
+          "lens-up chassis CCW 90 gives positive relative yaw");
+
+    omni::T265FieldProjector cw_projector(lens_up_config);
+    cw_projector.project(lens_up_pose(0.0, 1.0));
+    const auto cw = cw_projector.project(lens_up_pose(-90.0, 2.0));
+    check(near(omni::degrees(cw.relative_yaw_rad), -90.0, 1e-8),
+          "lens-up chassis CW 90 gives negative relative yaw");
+
+    omni::T265FieldProjector forward_projector(lens_up_config);
+    auto forward_origin = lens_up_pose(0.0, 1.0);
+    forward_projector.project(forward_origin);
+    auto forward_motion = lens_up_pose(0.0, 2.0);
+    forward_motion.translation_m[0] = -1.0;
+    forward_motion.velocity_mps[0] = -1.0;
+    const auto forward_result = forward_projector.project(forward_motion);
     const double diagonal = std::sqrt(0.5);
-    check(near(corrected_motion.pose.x_m, 1.20 + diagonal, 1e-9),
-          "-90 camera mounting correction rotates map displacement clockwise");
-    check(near(corrected_motion.pose.y_m, 1.20 - diagonal, 1e-9),
-          "mount correction fixes the orthogonal field component");
-    check(near(corrected_motion.body_forward_velocity_mps, 0.0, 1e-9) &&
-          near(corrected_motion.body_left_velocity_mps, -1.0, 1e-9),
-          "camera mounting correction also rotates T265 velocity");
+    check(near(forward_result.pose.x_m, 1.20 + diagonal, 1e-8) &&
+          near(forward_result.pose.y_m, 1.20 + diagonal, 1e-8),
+          "lens-up forward one metre follows selected start heading");
+    check(near(forward_result.body_forward_velocity_mps, 1.0, 1e-8) &&
+          near(forward_result.body_left_velocity_mps, 0.0, 1e-8),
+          "world velocity projects onto current chassis forward axis");
+
+    omni::T265FieldProjector left_projector(lens_up_config);
+    left_projector.project(lens_up_pose(0.0, 1.0));
+    auto left_motion = lens_up_pose(0.0, 2.0);
+    left_motion.translation_m[2] = 1.0;
+    left_motion.velocity_mps[2] = 1.0;
+    const auto left_result = left_projector.project(left_motion);
+    check(near(left_result.pose.x_m, 1.20 - diagonal, 1e-8) &&
+          near(left_result.pose.y_m, 1.20 + diagonal, 1e-8),
+          "lens-up left one metre follows selected field-left direction");
+    check(near(left_result.body_forward_velocity_mps, 0.0, 1e-8) &&
+          near(left_result.body_left_velocity_mps, 1.0, 1e-8),
+          "lens-up left translation projects to left one metre");
+
+    omni::T265FieldProjector continuity_projector(lens_up_config);
+    continuity_projector.project(lens_up_pose(170.0, 1.0));
+    const auto before_wrap = continuity_projector.project(lens_up_pose(179.9, 1.1));
+    auto perturbed = lens_up_pose(-179.9, 1.2);
+    const TestQuaternion noise = axis_angle(1.0, 0.0, 0.0, 0.05);
+    const TestQuaternion base{perturbed.rotation_xyzw[0], perturbed.rotation_xyzw[1],
+                              perturbed.rotation_xyzw[2], perturbed.rotation_xyzw[3]};
+    const TestQuaternion noisy = multiply(base, noise);
+    perturbed.rotation_xyzw[0] = noisy.x;
+    perturbed.rotation_xyzw[1] = noisy.y;
+    perturbed.rotation_xyzw[2] = noisy.z;
+    perturbed.rotation_xyzw[3] = noisy.w;
+    const auto after_wrap = continuity_projector.project(perturbed);
+    check(std::fabs(omni::degrees(after_wrap.relative_yaw_rad -
+                                  before_wrap.relative_yaw_rad)) < 1.0,
+          "small quaternion perturbation remains continuous across +/-180");
+
+    omni::T265FieldProjector full_turn_projector(lens_up_config);
+    double previous_relative = -1e-9;
+    for (int angle = 0; angle <= 360; angle += 10) {
+        const auto sample = full_turn_projector.project(
+            lens_up_pose(static_cast<double>(angle), 1.0 + angle * 0.01));
+        check(sample.relative_yaw_rad + 1e-9 >= previous_relative,
+              "lens-up full-turn relative yaw is monotonic");
+        previous_relative = sample.relative_yaw_rad;
+    }
+    check(near(omni::degrees(previous_relative), 360.0, 1e-7),
+          "lens-up full turn accumulates approximately 360 degrees");
 
     config.start_zone = 4;
     omni::T265FieldProjector projector(config);
-    omni::T265RawPose raw;
-    raw.tracker_confidence = 3;
+    omni::T265RawPose raw = lens_up_pose(0.0);
     omni::T265FieldPose field = projector.project(raw);
     check(near(field.pose.x_m, 1.20), "zone 4 initial field X");
     check(near(field.pose.y_m, -1.20), "zone 4 initial field Y");

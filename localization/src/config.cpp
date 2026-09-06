@@ -1,7 +1,9 @@
 #include "config.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -43,6 +45,29 @@ int integer(const std::string &text, const std::string &key)
     return result;
 }
 
+void axis_vector(const std::string &text, const std::string &key,
+                 double output[3])
+{
+    const std::map<std::string, std::array<double, 3>> axes = {
+        {"+x", {{1.0, 0.0, 0.0}}}, {"x", {{1.0, 0.0, 0.0}}},
+        {"-x", {{-1.0, 0.0, 0.0}}},
+        {"+y", {{0.0, 1.0, 0.0}}}, {"y", {{0.0, 1.0, 0.0}}},
+        {"-y", {{0.0, -1.0, 0.0}}},
+        {"+z", {{0.0, 0.0, 1.0}}}, {"z", {{0.0, 0.0, 1.0}}},
+        {"-z", {{0.0, 0.0, -1.0}}},
+    };
+    std::string normalized;
+    for (char c : text) {
+        normalized.push_back(static_cast<char>(
+            std::tolower(static_cast<unsigned char>(c))));
+    }
+    const auto found = axes.find(normalized);
+    if (found == axes.end()) {
+        throw std::runtime_error(key + " must be one of +/-x, +/-y, +/-z");
+    }
+    std::copy(found->second.begin(), found->second.end(), output);
+}
+
 }  // namespace
 
 LocalizationConfig load_config(const std::string &path)
@@ -81,7 +106,6 @@ LocalizationConfig load_config(const std::string &path)
         SET_DOUBLE(wheel_center_radius_m)
         SET_DOUBLE(camera_offset_forward_m)
         SET_DOUBLE(camera_offset_left_m)
-        SET_DOUBLE(camera_to_robot_yaw_deg)
         SET_DOUBLE(startup_wheel_disable_distance_m)
         SET_DOUBLE(corner_exclusion_inner_m)
         SET_DOUBLE(maximum_wheel_speed_mps)
@@ -108,6 +132,12 @@ LocalizationConfig load_config(const std::string &path)
         if (key == "encoder_sign_m1") { config.encoder_sign[0] = integer(value, key); continue; }
         if (key == "encoder_sign_m2") { config.encoder_sign[1] = integer(value, key); continue; }
         if (key == "encoder_sign_m3") { config.encoder_sign[2] = integer(value, key); continue; }
+        if (key == "camera_robot_forward_axis") {
+            axis_vector(value, key, config.camera_robot_forward_axis); continue;
+        }
+        if (key == "camera_robot_up_axis") {
+            axis_vector(value, key, config.camera_robot_up_axis); continue;
+        }
         if (key == "uart_stale_ms") { config.uart_stale_ms = integer(value, key); continue; }
         throw std::runtime_error("unknown config key on line " +
                                  std::to_string(line_number) + ": " + key);
@@ -145,8 +175,17 @@ void validate_config(const LocalizationConfig &c)
         c.navigation_slip_t265_speed_mps < 0.0) {
         throw std::runtime_error("invalid navigation fusion parameter");
     }
-    if (c.camera_to_robot_yaw_deg < -180.0 || c.camera_to_robot_yaw_deg > 180.0) {
-        throw std::runtime_error("camera_to_robot_yaw_deg must be in -180..180");
+    double forward_norm = 0.0;
+    double up_norm = 0.0;
+    double dot = 0.0;
+    for (int i = 0; i < 3; ++i) {
+        forward_norm += c.camera_robot_forward_axis[i] * c.camera_robot_forward_axis[i];
+        up_norm += c.camera_robot_up_axis[i] * c.camera_robot_up_axis[i];
+        dot += c.camera_robot_forward_axis[i] * c.camera_robot_up_axis[i];
+    }
+    if (std::fabs(forward_norm - 1.0) > 1e-9 ||
+        std::fabs(up_norm - 1.0) > 1e-9 || std::fabs(dot) > 1e-9) {
+        throw std::runtime_error("camera robot forward/up axes must be orthogonal unit axes");
     }
 }
 
