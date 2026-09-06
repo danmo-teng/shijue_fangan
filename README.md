@@ -109,6 +109,8 @@ ctest --test-dir build --output-on-failure
 
 `rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动对应的YOLO识别窗口；融合模式启动完整STM32任务，地图退出或重选时会一并停止识别和定位。详见[rescue_map/README.md](rescue_map/README.md)。
 
+当前T265安装方向使用`camera_to_robot_yaw_deg=0.0`；已取消旧的`-90°`投影修正。
+
 ## 7. 连续物资抓取与分区投送
 
 `mission_test/`实现连续寻找、抓取和分区投送：开局强制先完成一次普通物资，之后允许搬运其他物资或伤员；每次投送后F407张爪退出并靠近中心区域继续搜索。RDK不直接下发实时位置坐标，而是在返安全区和靠近中心期间根据融合位姿持续更新“航向+剩余距离”。详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。

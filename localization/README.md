@@ -166,7 +166,7 @@ python3 tools/merge_vision_pose.py \
 ## 实车标定顺序
 
 1. 填写 T265 tracking origin 相对车体旋转中心的 `camera_offset_forward_m/left_m`。
-2. 校正T265固定安装角：正值把T265平面位移逆时针旋转，负值顺时针旋转。本车实测地图方向比实际方向逆时针90°，因此`camera_to_robot_yaw_deg=-90.0`。
+2. 校正T265固定安装角：正值把T265平面位移逆时针旋转，负值顺时针旋转。T265重新安装后，原配置使地图方向位于实际方向顺时针90°，因此取消旧的`-90°`修正，当前使用`camera_to_robot_yaw_deg=0.0`。
 3. 架空车轮，分别转动 M1/M2/M3，确认原始计数和 `encoder_sign` 一致。
 4. 平地前进 1 m、横移 1 m，核对轮径和 1768 counts/rev；不要用减速带路段标定轮径。
 5. 原地旋转 360°，测量 `wheel_center_radius_m`；未标定前保持 0。
