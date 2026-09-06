@@ -47,9 +47,10 @@ def main() -> None:
         assert app.localization_command()[tx_index + 1] == "0.0"
         assert "run_mission_test.sh" in app.vision_command()[0]
         app.localization_mode = "t265"
-        assert "--uart" not in app.localization_command()
-        assert "--command-file" not in app.localization_command()
-        assert app.vision_command()[1].endswith("run_detector.py")
+        assert "--uart" in app.localization_command()
+        assert "--command-file" in app.localization_command()
+        assert "--ignore-encoders" in app.localization_command()
+        assert "run_mission_test.sh" in app.vision_command()[0]
         app.adjust_corner_offset(50.0)
         assert math.isclose(app.corner_offset_m, 0.15 * math.sqrt(2.0) + 0.05)
 
@@ -73,8 +74,9 @@ def main() -> None:
             app.options.launch_localization = True
             app.options.launch_vision = True
             app.start_session()
-            assert len(launched) == 2 and "--uart" not in launched[0]
-            assert launched[1][1].endswith("run_detector.py")
+            assert len(launched) == 2 and "--uart" in launched[0]
+            assert "--ignore-encoders" in launched[0]
+            assert "run_mission_test.sh" in launched[1][0]
             assert app.message == "T265定位进程已启动"
         finally:
             app.stop_session_processes()

@@ -268,8 +268,13 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     }
     previous_sequence_ = frame.sequence;
 
-    increment.forward_m = (wheel_m[2] - wheel_m[0]) / std::sqrt(3.0);
-    increment.left_m = (wheel_m[0] + wheel_m[2] - 2.0 * wheel_m[1]) / 3.0;
+    const double raw_forward = (wheel_m[2] - wheel_m[0]) / std::sqrt(3.0);
+    const double raw_left = (wheel_m[0] + wheel_m[2] - 2.0 * wheel_m[1]) / 3.0;
+    const double correction = radians(config_.encoder_to_robot_yaw_deg);
+    const double correction_cos = std::cos(correction);
+    const double correction_sin = std::sin(correction);
+    increment.forward_m = correction_cos * raw_forward - correction_sin * raw_left;
+    increment.left_m = correction_sin * raw_forward + correction_cos * raw_left;
     const double rotation_tangent_m = (wheel_m[0] + wheel_m[1] + wheel_m[2]) / 3.0;
     increment.yaw_rad = config_.wheel_center_radius_m > 0.0
         ? rotation_tangent_m / config_.wheel_center_radius_m : 0.0;

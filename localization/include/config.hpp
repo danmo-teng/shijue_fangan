@@ -13,6 +13,7 @@ struct LocalizationConfig {
     double wheel_diameter_m = 0.070;
     double counts_per_wheel_revolution = 1768.0;
     int encoder_sign[3] = {-1, -1, -1};
+    double encoder_to_robot_yaw_deg = -90.0;
     double wheel_center_radius_m = 0.130;
 
     double camera_offset_forward_m = 0.0;

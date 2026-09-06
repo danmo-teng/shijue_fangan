@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
         "--localization-mode",
         choices=("fusion", "t265"),
         default="fusion",
-        help="fusion uses T265 plus F407 encoders; t265 does not open UART",
+        help="fusion uses T265 plus encoders; t265 keeps task UART but ignores encoders",
     )
     parser.add_argument("--localization-json", type=Path)
     parser.add_argument("--launch-localization", action="store_true")
@@ -393,9 +393,7 @@ class RescueMapApp:
                 command = self.vision_command()
                 self.vision_process = subprocess.Popen(
                     command,
-                    cwd=(PROJECT_ROOT / "mission_test"
-                         if self.localization_mode == "fusion"
-                         else PROJECT_ROOT / "vision"),
+                    cwd=PROJECT_ROOT / "mission_test",
                 )
             except OSError as exc:
                 self.message = f"识别启动失败：{exc}"
@@ -409,28 +407,20 @@ class RescueMapApp:
             "--rate", "20",
             "--tx-rate", str(self.options.tx_rate),
         ]
-        if self.localization_mode != "fusion":
-            return command
         command += [
             "--command-file", str(RUNTIME / "uart_command.bin"),
             "--stm-status", str(RUNTIME / "stm32_status.json"),
         ]
+        if self.localization_mode == "t265":
+            command.append("--ignore-encoders")
         if self.options.uart.lower() not in {"", "none", "off"}:
             command += ["--uart", self.options.uart, "--baud", str(self.options.baud)]
         return command
 
     def vision_command(self) -> list[str]:
-        """Launch mission vision with UART fusion, or detection-only with T265."""
-        if self.localization_mode == "fusion":
-            return [
-                str(PROJECT_ROOT / "mission_test/run_mission_test.sh"),
-                "--window-mode", "normal",
-                "--display-fps", "15",
-            ]
+        """Launch the complete task in both localization modes."""
         return [
-            sys.executable,
-            str(PROJECT_ROOT / "vision/run_detector.py"),
-            "--device", "auto",
+            str(PROJECT_ROOT / "mission_test/run_mission_test.sh"),
             "--window-mode", "normal",
             "--display-fps", "15",
         ]

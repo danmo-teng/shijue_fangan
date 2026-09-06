@@ -164,6 +164,7 @@ void test_kinematics()
 {
     omni::LocalizationConfig config;
     config.encoder_sign[0] = config.encoder_sign[1] = config.encoder_sign[2] = 1;
+    config.encoder_to_robot_yaw_deg = 0.0;
     config.wheel_center_radius_m = 0.1;
     omni::OmniEncoderIntegrator integrator(config);
     omni::EncoderFrame baseline;
@@ -195,6 +196,22 @@ void test_kinematics()
     check(integrator.update(left, increment, reason), "left update accepted");
     check(near(increment.left_m, 20.0 * metres_per_count, 1e-12),
           "three-wheel lateral kinematics");
+
+    omni::LocalizationConfig corrected_config = config;
+    corrected_config.encoder_to_robot_yaw_deg = -90.0;
+    omni::OmniEncoderIntegrator corrected_integrator(corrected_config);
+    baseline.sequence = 20;
+    corrected_integrator.update(baseline, increment, reason);
+    omni::EncoderFrame physical_forward = baseline;
+    physical_forward.sequence = 21;
+    physical_forward.position[0] = 10;
+    physical_forward.position[1] = static_cast<std::uint16_t>(-20);
+    physical_forward.position[2] = 10;
+    check(corrected_integrator.update(physical_forward, increment, reason),
+          "corrected encoder forward sample accepted");
+    check(near(increment.forward_m, 20.0 * metres_per_count, 1e-12) &&
+          near(increment.left_m, 0.0, 1e-12),
+          "encoder -90 correction maps former left motion to robot forward");
 }
 
 void test_projection_gate_and_filter()

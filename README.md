@@ -107,7 +107,7 @@ ctest --test-dir build --output-on-failure
 
 ## 6. 四出发区救援地图
 
-`rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动对应的YOLO识别窗口；融合模式启动完整STM32任务，地图退出或重选时会一并停止识别和定位。详见[rescue_map/README.md](rescue_map/README.md)。
+`rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动完整YOLO/STM32任务；仅T265模式仍保留UART任务通信，只禁止编码器参与定位融合。详见[rescue_map/README.md](rescue_map/README.md)。
 
 板端桌面可双击“智能救援一键启动”；快捷方式可通过`rescue_map/install_desktop_launcher.sh`重新安装。
 

@@ -59,6 +59,11 @@ rotate_tangent = (M1 + M2 + M3) / 3
 `wheel_center_radius_m`是车体旋转中心到全向轮滚动作用线的垂直距离，当前实测初值使用
 `0.130 m`，不是推板/前拨板距离。必须通过架空原地旋转360°的三轮编码器累计量复核。
 
+三轮公式原始输出与镜头朝上后的车体轴相差90°：实测物理前进被解算成原始左移。配置
+`encoder_to_robot_yaw_deg=-90.0`把轮式平面向量顺时针旋转90°，即
+`corrected_forward=raw_left`、`corrected_left=-raw_forward`。该变换只作用于编码器，不修改已经
+校准正确的T265四元数坐标。
+
 ## 镜头朝上的三维姿态投影
 
 配置项`camera_robot_forward_axis`和`camera_robot_up_axis`表示“机器人轴在T265 Pose本体坐标中的
@@ -104,6 +109,16 @@ ctest --test-dir build --output-on-failure
 
 ```bash
 ./run_localization.sh --duration 10 --rate 10
+```
+
+保持UART任务通信但禁止编码器进入融合：
+
+```bash
+./run_localization.sh \
+  --uart /dev/ttyS1 \
+  --ignore-encoders \
+  --command-file ../rescue_map/runtime/uart_command.bin \
+  --stm-status ../rescue_map/runtime/stm32_status.json
 ```
 
 本机是 RDK X5 V1.0，40Pin 默认 UART1 对应 `/dev/ttyS1`，使用 3.3 V IO：

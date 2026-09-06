@@ -45,6 +45,7 @@ struct Options {
     double tx_rate_hz = 0.0;
     double duration_sec = 0.0;
     bool debug_sdk = false;
+    bool ignore_encoders = false;
 };
 
 struct TimedEncoderFrame {
@@ -121,6 +122,7 @@ void usage(const char *program)
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --rate HZ           stdout/JSON rate, default 20\n"
         << "  --tx-rate HZ        legacy fused-pose UART rate (default 0/off)\n"
+        << "  --ignore-encoders   keep UART/task active but do not fuse wheel odometry\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
         << "  -h, --help          show help\n";
@@ -162,6 +164,8 @@ Options parse_options(int argc, char **argv)
             options.duration_sec = parse_nonnegative(value("--duration"), "--duration");
         } else if (argument == "--debug-sdk") {
             options.debug_sdk = true;
+        } else if (argument == "--ignore-encoders") {
+            options.ignore_encoders = true;
         } else {
             throw std::invalid_argument("unknown option: " + argument);
         }
@@ -378,7 +382,7 @@ int main(int argc, char **argv)
                       << " Hz, mission heartbeat=100 Hz (T265-independent)\n";
             uart_thread = std::thread([&]() {
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
-                    encoder_queue.push(frame);
+                    if (!options.ignore_encoders) encoder_queue.push(frame);
                     last_uart_ns.store(static_cast<std::int64_t>(monotonic_ns()),
                                        std::memory_order_relaxed);
                 }, [&](const omni::StmStatusFrame &status) {
@@ -513,7 +517,9 @@ int main(int argc, char **argv)
         omni::OmniEncoderIntegrator encoder_integrator(config);
         omni::PlanarEkf filter;
         omni::T265FieldPose latest_t265;
-        std::string wheel_gate = options.uart_path.empty() ? "uart_disabled" : "no_baseline";
+        std::string wheel_gate = options.uart_path.empty()
+            ? "uart_disabled"
+            : (options.ignore_encoders ? "t265_only" : "no_baseline");
         std::uint64_t wheel_accepted = 0;
         std::uint64_t wheel_rejected = 0;
         bool have_first_pose = false;
