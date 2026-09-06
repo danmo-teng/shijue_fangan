@@ -63,11 +63,12 @@ rotate_tangent = (M1 + M2 + M3) / 3
 
 配置项`camera_robot_forward_axis`和`camera_robot_up_axis`表示“机器人轴在T265 Pose本体坐标中的
 坐标”。实车验证上一版`-T265 X`会使地图轨迹与实际运动相反，因此当前校准轴为车头
-`+T265 X`、上方`+T265 Z`，左向由右手关系得到`+T265 Y`：
+`+T265 Pose X`。实测“车向右而地图向左”说明横向轴反了；镜头朝上时机器人上方对应
+`-T265 Pose Z`，因此左向由`up×forward`得到`-T265 Pose Y`：
 
 ```ini
 camera_robot_forward_axis = +x
-camera_robot_up_axis = +z
+camera_robot_up_axis = -z
 ```
 
 程序从完整`translation.xyz / velocity.xyz / quaternion.xyzw / angular_velocity.xyz`构造相机到

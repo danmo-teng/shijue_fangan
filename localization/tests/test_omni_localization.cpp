@@ -50,11 +50,11 @@ TestQuaternion axis_angle(double x, double y, double z, double degrees)
 
 omni::T265RawPose lens_up_pose(double yaw_deg, double timestamp_s = 0.0)
 {
-    // Rx(-90) maps installed robot up (+Z camera) to +Y world. A world-Y
+    // Rx(+90) maps installed robot up (-Z Pose frame) to +Y world. A world-Y
     // rotation then represents chassis yaw without an Euler singularity.
     const TestQuaternion q = multiply(
         axis_angle(0.0, 1.0, 0.0, yaw_deg),
-        axis_angle(1.0, 0.0, 0.0, -90.0));
+        axis_angle(1.0, 0.0, 0.0, 90.0));
     omni::T265RawPose raw;
     raw.rotation_xyzw[0] = q.x;
     raw.rotation_xyzw[1] = q.y;
