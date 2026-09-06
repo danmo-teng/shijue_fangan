@@ -246,7 +246,7 @@ def main() -> int:
         f"置信度阈值={args.score_thres:.2f}，"
         f"预处理={'JPU NV12 + VSE' if scaler is not None else 'CPU BGR'}"
     )
-    print("任务命令由定位串口进程独立以50 Hz刷新；视觉窗口只显示状态切换")
+    print("任务命令由定位串口进程独立以100 Hz刷新；视觉窗口只显示状态切换")
     team_color = 0x11 if side == "red" else 0x12
     deadline = time.monotonic() + args.startup_timeout
     while not load_pose(args.pose).valid:

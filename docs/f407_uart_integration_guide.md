@@ -210,7 +210,7 @@ F407_MissionFillStatus(&mission_runtime, &status_payload);
 
 RDK上的定位程序是`/dev/ttyS1`唯一所有者。视觉任务程序通过原子命令文件交给定位程序转发，不允许视觉和定位两个进程同时打开串口。
 
-当前上位机保证`TYPE=0x18`由独立串口线程以50 Hz更新SEQ和CRC，不依赖T265帧或BPU日志刷新。
+当前上位机保证`TYPE=0x18`由独立串口线程以100 Hz更新SEQ和CRC，不依赖T265帧或BPU日志刷新。
 电控侧需要注意：重复`GRAB_CONFIRMED`只刷新ACK/看门狗，不得重新启动夹爪；导航/返中命令
 则要用新SEQ载荷更新当前航向和剩余距离，但不得把底盘动作从零重新启动。判断新鲜度应以
 合法新SEQ的实际接收时间为准；`TASK_COMPLETE`只有在夹爪已经张开且处于RAM阶段时才进入退出；

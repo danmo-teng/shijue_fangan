@@ -113,7 +113,7 @@ ctest --test-dir build --output-on-failure
 
 `mission_test/`实现连续寻找、抓取和分区投送：开局强制先完成一次普通物资，之后允许搬运其他物资或伤员；每次投送后F407张爪退出并靠近中心区域继续搜索。RDK不直接下发实时位置坐标，而是在返安全区和靠近中心期间根据融合位姿持续更新“航向+剩余距离”。详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
 
-`TYPE=0x18`任务命令由独立串口线程以50 Hz更新SEQ/CRC，不依赖T265取帧主循环；识别窗口会显示实际转发SEQ、帧龄、累计帧数和错误数。
+`TYPE=0x18`任务命令由独立串口线程以100 Hz更新SEQ/CRC，不依赖T265取帧主循环；识别窗口会显示实际转发SEQ、帧龄、累计帧数和错误数。
 
 ## 安全说明
 

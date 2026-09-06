@@ -354,7 +354,7 @@ int main(int argc, char **argv)
             std::cerr << "[UART] " << options.uart_path << " @ " << options.baud
                       << " 8N1, RX TYPE=0x15/0x17, TX TYPE=0x16 @ "
                       << options.tx_rate_hz
-                      << " Hz, mission heartbeat=50 Hz (T265-independent)\n";
+                      << " Hz, mission heartbeat=100 Hz (T265-independent)\n";
             uart_thread = std::thread([&]() {
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
                     encoder_queue.push(frame);
@@ -388,7 +388,7 @@ int main(int argc, char **argv)
             });
             if (!options.command_file_path.empty()) {
                 relay_thread = std::thread([&]() {
-                    constexpr auto heartbeat_period = std::chrono::milliseconds(20);
+                    constexpr auto heartbeat_period = std::chrono::milliseconds(10);
                     std::array<std::uint8_t, omni::kFrameSize> last_input{};
                     std::array<std::uint8_t, omni::kFrameSize> active_mission{};
                     bool have_last_input = false;

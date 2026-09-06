@@ -43,7 +43,7 @@ cd /home/sunrise/RDK_X5/shijue_fangan/mission_test
 ```
 
 任务程序不直接打开`/dev/ttyS1`。`localization`是唯一串口所有者：任务程序原子更新
-`rescue_map/runtime/uart_command.bin`，独立串口线程校验并转发。任务命令以50 Hz刷新SEQ和CRC，
+`rescue_map/runtime/uart_command.bin`，独立串口线程校验并转发。任务命令以100 Hz刷新SEQ和CRC，
 不再依赖T265取帧循环，并可跨越最长750 ms的YOLO单帧停顿；配置和视觉坐标仍按新检测结果发送。
 
 识别窗口中的“任务状态切换”在状态变化时打印，动态导航中最多每0.5秒打印一次，并不表示UART只发送一帧。
