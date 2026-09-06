@@ -109,6 +109,8 @@ ctest --test-dir build --output-on-failure
 
 `rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动对应的YOLO识别窗口；融合模式启动完整STM32任务，地图退出或重选时会一并停止识别和定位。详见[rescue_map/README.md](rescue_map/README.md)。
 
+板端桌面可双击“智能救援一键启动”；快捷方式可通过`rescue_map/install_desktop_launcher.sh`重新安装。
+
 T265镜头朝上安装后，姿态和位移使用完整四元数及三维轴向投影；不再使用二维
 `camera_to_robot_yaw_deg`猜测补偿。实车校准后使用机器人前向=`+T265 Pose X`、上向
 =`-T265 Pose Z`，因此左向为`-T265 Pose Y`；注意T265 Pose坐标与图中的IMU子坐标不是同一套轴。

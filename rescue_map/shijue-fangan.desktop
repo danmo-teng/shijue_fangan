@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=智能救援一键启动
+Comment=启动地图、T265融合定位、YOLO识别和STM32任务通信
+Exec=/home/sunrise/RDK_X5/shijue_fangan/rescue_map/desktop_launcher.sh
+Icon=camera-video
+Terminal=true
+StartupNotify=true
+Categories=Utility;

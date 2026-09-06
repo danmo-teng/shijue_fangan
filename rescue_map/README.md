@@ -48,6 +48,16 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 ./run_rescue_map.sh
 ```
 
+也可以直接双击桌面上的“智能救援一键启动”。首次部署或桌面图标丢失时执行：
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
+./install_desktop_launcher.sh
+```
+
+桌面入口调用`desktop_launcher.sh`，后者再调用同一个`run_rescue_map.sh`，因此命令行和双击运行
+使用完全相同的地图、定位、识别与串口参数；启动失败时终端不会立即消失。
+
 地图仍实时显示本机融合位置，但默认`--tx-rate 0`，不再向F407连续发送`TYPE=0x16`，避免串口
 持续位姿坐标流影响任务命令。F407的行驶输入改为任务程序根据本机融合位置持续计算的航向和剩余距离。
 
