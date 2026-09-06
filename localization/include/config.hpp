@@ -23,6 +23,12 @@ struct LocalizationConfig {
     double corner_exclusion_inner_m = 0.75;
     double maximum_wheel_speed_mps = 1.50;
     double maximum_velocity_residual_mps = 0.70;
+    double navigation_t265_position_sigma_multiplier = 8.0;
+    double navigation_t265_position_correction_rate_hz = 20.0;
+    double mapper_zero_position_sigma_multiplier = 12.0;
+    double navigation_near_target_m = 0.30;
+    double navigation_slip_wheel_speed_mps = 0.10;
+    double navigation_slip_t265_speed_mps = 0.05;
     int uart_stale_ms = 150;
 
     double wheel_position_sigma_floor_m = 0.002;

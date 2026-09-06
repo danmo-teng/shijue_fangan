@@ -105,7 +105,9 @@ public:
                  const LocalizationConfig &config);
     bool correct_t265(const T265FieldPose &measurement,
                       const LocalizationConfig &config,
-                      double *innovation_m = nullptr);
+                      double *innovation_m = nullptr,
+                      double position_sigma_multiplier = 1.0,
+                      bool correct_position = true);
     Pose2d pose() const;
     double position_sigma_m() const;
     double yaw_sigma_rad() const;

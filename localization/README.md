@@ -25,6 +25,26 @@ T265 6DoF pose (200 Hz)
 
 减速带的单条尺寸为 300×60×10 mm，三条间隔 50 mm。默认在起步后前 0.70 m 以及四个场地角落排除区中禁用编码器，仅使用 T265；进入平地后才融合编码器。
 
+## 返航阶段编码器补偿
+
+`NAVIGATE_WAYPOINT`和`RETURN_CENTER`有效时进入返航融合模式；SEARCH/APPROACH仍保持原融合权重。
+返航中三轮编码器以100 Hz预测平移，
+T265航向继续逐帧约束，但T265位置只按20 Hz、增大后的测量协方差进行缓慢校正。mapper
+confidence为0时进一步降低T265位置权重，避免`SLAM_ERROR Speed`期间T265少算路程后把轮式进度
+反复拉回。
+
+距离目标大于300 mm、mapper为0且仅速度残差超限时，允许物理速度仍在上限内的编码器预测继续
+参与，门控显示`navigation_encoder_override`。距离目标不超过300 mm时，如果轮速至少0.10 m/s
+而T265速度不超过0.05 m/s，则视为围栏接触/空转，冻结该轮式增量并显示
+`navigation_near_target_slip`，防止编码器把地图推过围栏。
+
+`localization_result.json`新增`navigation`段，记录当前命令、剩余距离、航向、本段轮式累计进度、
+T265位置是否在本帧参与校正、位置权重倍率和创新距离。输出`quality`现在同时参考tracker和
+mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`，但仍可供任务规划使用。
+
+`camera_offset_forward_m/left_m`必须按实车测量填写。它们保持0时，T265不在车体旋转中心造成的
+原地转向圆弧仍会被误认为车体平移；程序不会根据单次日志猜测并写入机构尺寸。
+
 ## 为什么不直接发“三个轮子”给 T265
 
 T265 wheel-odometry API 的输入是 velocimeter 三维平移速度，配置最多两个 velocimeter。三轮全向轮的单轮转速不是同一坐标系中的车体速度，所以先使用 F407 已验证的运动学解算：

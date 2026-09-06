@@ -233,6 +233,29 @@ void test_projection_gate_and_filter()
           std::hypot(predicted.x_m - field.pose.x_m,
                      predicted.y_m - field.pose.y_m),
           "T265-primary correction reduces wheel prediction error");
+
+    omni::PlanarEkf navigation_filter;
+    navigation_filter.initialize(field.pose);
+    navigation_filter.predict(wheel, config);
+    const omni::Pose2d navigation_predicted = navigation_filter.pose();
+    check(navigation_filter.correct_t265(field, config, nullptr, 8.0, false),
+          "navigation yaw-only T265 update accepted");
+    const omni::Pose2d yaw_only = navigation_filter.pose();
+    check(std::hypot(yaw_only.x_m - navigation_predicted.x_m,
+                     yaw_only.y_m - navigation_predicted.y_m) < 1e-6,
+          "yaw-only T265 update preserves encoder translation progress");
+
+    omni::PlanarEkf weak_position_filter;
+    weak_position_filter.initialize(field.pose);
+    weak_position_filter.predict(wheel, config);
+    check(weak_position_filter.correct_t265(field, config, nullptr, 8.0, true),
+          "weakened navigation position correction accepted");
+    const omni::Pose2d weak_corrected = weak_position_filter.pose();
+    check(std::hypot(weak_corrected.x_m - navigation_predicted.x_m,
+                     weak_corrected.y_m - navigation_predicted.y_m) <
+          std::hypot(corrected.x_m - navigation_predicted.x_m,
+                     corrected.y_m - navigation_predicted.y_m),
+          "navigation correction keeps more encoder progress than normal T265 correction");
 }
 
 }  // namespace

@@ -304,7 +304,9 @@ void PlanarEkf::predict(const WheelIncrement &u, const LocalizationConfig &confi
 
 bool PlanarEkf::correct_t265(const T265FieldPose &m,
                              const LocalizationConfig &config,
-                             double *innovation_m)
+                             double *innovation_m,
+                             double position_sigma_multiplier,
+                             bool correct_position)
 {
     if (!initialized_ || m.tracker_confidence == 0) return false;
     double innovation[3] = {
@@ -314,23 +316,27 @@ bool PlanarEkf::correct_t265(const T265FieldPose &m,
     };
     const double position_innovation = std::hypot(innovation[0], innovation[1]);
     if (innovation_m) *innovation_m = position_innovation;
-    if (position_innovation > config.maximum_t265_innovation_m) {
+    if (correct_position &&
+        position_innovation > config.maximum_t265_innovation_m) {
         return false;
     }
 
-    double pos_sigma;
+    double base_pos_sigma;
     double yaw_sigma;
     if (m.tracker_confidence >= 3) {
-        pos_sigma = config.t265_position_sigma_conf3_m;
+        base_pos_sigma = config.t265_position_sigma_conf3_m;
         yaw_sigma = radians(config.t265_yaw_sigma_conf3_deg);
     } else if (m.tracker_confidence == 2) {
-        pos_sigma = config.t265_position_sigma_conf2_m;
+        base_pos_sigma = config.t265_position_sigma_conf2_m;
         yaw_sigma = radians(config.t265_yaw_sigma_conf2_deg);
     } else {
-        pos_sigma = config.t265_position_sigma_conf1_m;
+        base_pos_sigma = config.t265_position_sigma_conf1_m;
         yaw_sigma = radians(config.t265_yaw_sigma_conf1_deg);
     }
 
+    const double pos_sigma = correct_position
+        ? base_pos_sigma * std::max(1.0, position_sigma_multiplier)
+        : 1.0e6;
     double s[3][3];
     std::memcpy(s, covariance_, sizeof(s));
     s[0][0] += pos_sigma * pos_sigma;
@@ -367,7 +373,7 @@ bool PlanarEkf::correct_t265(const T265FieldPose &m,
     // Consecutive T265 frames are strongly time-correlated. Without a floor,
     // treating 200 Hz frames as independent drives covariance unrealistically
     // close to zero while the camera is standing still.
-    const double pos_floor = 0.5 * pos_sigma;
+    const double pos_floor = 0.5 * base_pos_sigma;
     const double yaw_floor = 0.5 * yaw_sigma;
     updated[0][0] = std::max(updated[0][0], pos_floor * pos_floor);
     updated[1][1] = std::max(updated[1][1], pos_floor * pos_floor);

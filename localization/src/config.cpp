@@ -86,6 +86,12 @@ LocalizationConfig load_config(const std::string &path)
         SET_DOUBLE(corner_exclusion_inner_m)
         SET_DOUBLE(maximum_wheel_speed_mps)
         SET_DOUBLE(maximum_velocity_residual_mps)
+        SET_DOUBLE(navigation_t265_position_sigma_multiplier)
+        SET_DOUBLE(navigation_t265_position_correction_rate_hz)
+        SET_DOUBLE(mapper_zero_position_sigma_multiplier)
+        SET_DOUBLE(navigation_near_target_m)
+        SET_DOUBLE(navigation_slip_wheel_speed_mps)
+        SET_DOUBLE(navigation_slip_t265_speed_mps)
         SET_DOUBLE(wheel_position_sigma_floor_m)
         SET_DOUBLE(wheel_position_sigma_per_meter)
         SET_DOUBLE(wheel_yaw_sigma_floor_deg)
@@ -130,6 +136,14 @@ void validate_config(const LocalizationConfig &c)
     if (c.wheel_center_radius_m < 0.0 || c.maximum_wheel_speed_mps <= 0.0 ||
         c.maximum_velocity_residual_mps <= 0.0 || c.uart_stale_ms <= 0) {
         throw std::runtime_error("invalid wheel/gating parameter");
+    }
+    if (c.navigation_t265_position_sigma_multiplier < 1.0 ||
+        c.navigation_t265_position_correction_rate_hz <= 0.0 ||
+        c.mapper_zero_position_sigma_multiplier < 1.0 ||
+        c.navigation_near_target_m <= 0.0 ||
+        c.navigation_slip_wheel_speed_mps <= 0.0 ||
+        c.navigation_slip_t265_speed_mps < 0.0) {
+        throw std::runtime_error("invalid navigation fusion parameter");
     }
     if (c.camera_to_robot_yaw_deg < -180.0 || c.camera_to_robot_yaw_deg > 180.0) {
         throw std::runtime_error("camera_to_robot_yaw_deg must be in -180..180");

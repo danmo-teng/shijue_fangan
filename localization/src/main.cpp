@@ -5,6 +5,7 @@
 #include "fusion.hpp"
 #include "serial_port.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -189,10 +190,13 @@ std::uint64_t monotonic_ns()
         std::chrono::steady_clock::now().time_since_epoch()).count());
 }
 
-const char *quality_name(std::uint8_t confidence, bool t265_update_accepted)
+const char *quality_name(std::uint8_t tracker_confidence,
+                         std::uint8_t mapper_confidence,
+                         bool t265_update_accepted)
 {
-    if (confidence >= 2 && t265_update_accepted) return "GOOD";
-    if (confidence >= 1) return "DEGRADED";
+    if (tracker_confidence >= 2 && mapper_confidence > 0 &&
+        t265_update_accepted) return "GOOD";
+    if (tracker_confidence >= 1) return "DEGRADED";
     return "LOST";
 }
 
@@ -256,7 +260,15 @@ void write_atomic_json(const std::string &path,
                        std::uint64_t uart_crc_errors,
                        std::uint64_t uart_sequence_gaps,
                        std::uint64_t pose_tx_frames,
-                       std::uint64_t pose_tx_errors)
+                       std::uint64_t pose_tx_errors,
+                       bool navigation_active,
+                       std::uint8_t navigation_code,
+                       std::uint16_t navigation_remaining,
+                       std::uint16_t navigation_heading,
+                       double navigation_wheel_progress_m,
+                       bool t265_position_corrected,
+                       double t265_position_sigma_multiplier,
+                       double t265_innovation_m)
 {
     if (path.empty()) return;
     const std::string temporary = path + ".tmp";
@@ -284,6 +296,17 @@ void write_atomic_json(const std::string &path,
          << "\", \"uart_fresh\": " << (uart_fresh ? "true" : "false")
          << ", \"accepted\": " << wheel_accepted
          << ", \"rejected\": " << wheel_rejected << "},\n"
+         << "  \"navigation\": {\"active\": "
+         << (navigation_active ? "true" : "false")
+         << ", \"command\": " << static_cast<unsigned>(navigation_code)
+         << ", \"remaining_mm\": " << navigation_remaining
+         << ", \"heading_cdeg\": " << navigation_heading
+         << ", \"wheel_progress_m\": " << navigation_wheel_progress_m
+         << ", \"t265_position_corrected\": "
+         << (t265_position_corrected ? "true" : "false")
+         << ", \"t265_position_sigma_multiplier\": "
+         << t265_position_sigma_multiplier
+         << ", \"t265_innovation_m\": " << t265_innovation_m << "},\n"
          << "  \"uart\": {\"frames\": " << uart_frames
          << ", \"crc_errors\": " << uart_crc_errors
          << ", \"sequence_gaps\": " << uart_sequence_gaps
@@ -346,6 +369,10 @@ int main(int argc, char **argv)
         std::atomic<std::uint64_t> relay_tx_errors{0};
         std::atomic<std::uint8_t> relay_last_sequence{0};
         std::atomic<std::uint64_t> relay_last_tx_ns{0};
+        std::atomic<bool> navigation_command_active{false};
+        std::atomic<std::uint8_t> navigation_command_code{0};
+        std::atomic<std::uint16_t> navigation_remaining_mm{0};
+        std::atomic<std::uint16_t> navigation_heading_cdeg{0};
         std::mutex uart_tx_mutex;
         std::unique_ptr<omni::SerialPort> uart;
         if (!options.uart_path.empty()) {
@@ -424,15 +451,33 @@ int main(int argc, char **argv)
                                 }
                                 active_mission = input;
                                 have_active_mission = true;
+                                const std::uint8_t command = input[4];
+                                const bool distance_valid = (input[5] & 0x10u) != 0u;
+                                navigation_command_code.store(command, std::memory_order_relaxed);
+                                navigation_remaining_mm.store(
+                                    static_cast<std::uint16_t>(
+                                        (static_cast<std::uint16_t>(input[6]) << 8) |
+                                        input[7]),
+                                    std::memory_order_relaxed);
+                                navigation_heading_cdeg.store(
+                                    static_cast<std::uint16_t>(
+                                        (static_cast<std::uint16_t>(input[10]) << 8) |
+                                        input[11]),
+                                    std::memory_order_relaxed);
+                                navigation_command_active.store(
+                                    distance_valid && (command == 3u || command == 8u),
+                                    std::memory_order_relaxed);
                                 next_heartbeat = now;
                             } else {
                                 have_active_mission = false;
+                                navigation_command_active.store(false, std::memory_order_relaxed);
                                 transmit(input);
                             }
                         }
                         if (have_active_mission &&
                             now - last_input_change > heartbeat_bridge_limit) {
                             have_active_mission = false;
+                            navigation_command_active.store(false, std::memory_order_relaxed);
                         }
                         if (have_active_mission && now >= next_heartbeat) {
                             auto heartbeat = active_mission;
@@ -490,6 +535,11 @@ int main(int argc, char **argv)
         std::uint8_t pose_tx_sequence = 0;
         std::uint64_t pose_tx_frames = 0;
         std::uint64_t pose_tx_errors = 0;
+        bool previous_navigation_active = false;
+        double navigation_wheel_progress_m = 0.0;
+        bool t265_position_corrected = true;
+        double active_t265_position_multiplier = 1.0;
+        auto next_navigation_position_correction = first_pose_time;
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
             const rs2::frameset frames = pipeline.wait_for_frames(1000);
@@ -517,6 +567,21 @@ int main(int argc, char **argv)
             }
             if (!filter.initialized()) continue;
 
+            const auto now = std::chrono::steady_clock::now();
+            const bool navigation_active =
+                navigation_command_active.load(std::memory_order_relaxed);
+            const std::uint8_t active_navigation_code =
+                navigation_command_code.load(std::memory_order_relaxed);
+            const std::uint16_t active_navigation_remaining_mm =
+                navigation_remaining_mm.load(std::memory_order_relaxed);
+            const std::uint16_t active_navigation_heading_cdeg =
+                navigation_heading_cdeg.load(std::memory_order_relaxed);
+            if (navigation_active && !previous_navigation_active) {
+                navigation_wheel_progress_m = 0.0;
+                next_navigation_position_correction = now;
+            }
+            previous_navigation_active = navigation_active;
+
             for (const TimedEncoderFrame &timed : encoder_queue.drain()) {
                 omni::WheelIncrement increment;
                 std::string integration_reason;
@@ -527,7 +592,46 @@ int main(int argc, char **argv)
                 const omni::WheelGateReason gate =
                     omni::evaluate_wheel_gate(config, latest_t265, increment);
                 wheel_gate = omni::wheel_gate_reason_name(gate);
-                if (gate == omni::WheelGateReason::Accepted) {
+                const double wheel_speed = std::hypot(
+                    increment.forward_velocity_mps,
+                    increment.left_velocity_mps);
+                const double t265_speed = std::hypot(
+                    latest_t265.body_forward_velocity_mps,
+                    latest_t265.body_left_velocity_mps);
+                const bool near_navigation_target = navigation_active &&
+                    active_navigation_remaining_mm <=
+                        static_cast<std::uint16_t>(
+                            std::lround(config.navigation_near_target_m * 1000.0));
+                const bool near_target_slip = near_navigation_target &&
+                    wheel_speed >= config.navigation_slip_wheel_speed_mps &&
+                    t265_speed <= config.navigation_slip_t265_speed_mps;
+                const bool navigation_encoder_override = navigation_active &&
+                    !near_navigation_target &&
+                    latest_t265.mapper_confidence == 0 &&
+                    gate == omni::WheelGateReason::VelocityMismatch;
+                if (near_target_slip) {
+                    wheel_gate = "navigation_near_target_slip";
+                    ++wheel_rejected;
+                } else if (gate == omni::WheelGateReason::Accepted ||
+                           navigation_encoder_override) {
+                    if (navigation_encoder_override) {
+                        wheel_gate = "navigation_encoder_override";
+                    }
+                    const omni::Pose2d before_predict = filter.pose();
+                    const double c = std::cos(before_predict.yaw_rad);
+                    const double s = std::sin(before_predict.yaw_rad);
+                    const double field_dx =
+                        c * increment.forward_m - s * increment.left_m;
+                    const double field_dy =
+                        s * increment.forward_m + c * increment.left_m;
+                    if (navigation_active) {
+                        const double command_heading = omni::radians(
+                            static_cast<double>(active_navigation_heading_cdeg) * 0.01);
+                        const double progress =
+                            field_dx * std::cos(command_heading) +
+                            field_dy * std::sin(command_heading);
+                        navigation_wheel_progress_m += progress;
+                    }
                     filter.predict(increment, config);
                     ++wheel_accepted;
                 } else {
@@ -536,8 +640,26 @@ int main(int argc, char **argv)
             }
 
             double innovation_m = 0.0;
-            if (previous_tracker_confidence == 0 && latest_t265.tracker_confidence > 0 &&
-                have_first_pose) {
+            active_t265_position_multiplier = 1.0;
+            t265_position_corrected = true;
+            if (navigation_active) {
+                active_t265_position_multiplier =
+                    latest_t265.mapper_confidence == 0
+                        ? std::max(
+                            config.navigation_t265_position_sigma_multiplier,
+                            config.mapper_zero_position_sigma_multiplier)
+                        : config.navigation_t265_position_sigma_multiplier;
+                t265_position_corrected =
+                    now >= next_navigation_position_correction;
+                if (t265_position_corrected) {
+                    const auto period = std::chrono::duration<double>(
+                        1.0 / config.navigation_t265_position_correction_rate_hz);
+                    next_navigation_position_correction = now +
+                        std::chrono::duration_cast<std::chrono::steady_clock::duration>(period);
+                }
+            }
+            if (!navigation_active && previous_tracker_confidence == 0 &&
+                latest_t265.tracker_confidence > 0 && have_first_pose) {
                 // After a complete visual tracking outage, T265 is the primary
                 // absolute source. Re-anchor instead of permanently rejecting a
                 // legitimate reacquisition farther than the normal jump gate.
@@ -545,14 +667,16 @@ int main(int argc, char **argv)
                 t265_update_accepted = true;
                 wheel_gate = "t265_reacquired";
             } else {
-                t265_update_accepted = filter.correct_t265(latest_t265, config, &innovation_m);
+                t265_update_accepted = filter.correct_t265(
+                    latest_t265, config, &innovation_m,
+                    active_t265_position_multiplier,
+                    t265_position_corrected);
             }
             previous_tracker_confidence = latest_t265.tracker_confidence;
             if (!t265_update_accepted && innovation_m > config.maximum_t265_innovation_m) {
                 wheel_gate = "t265_jump_rejected";
             }
 
-            const auto now = std::chrono::steady_clock::now();
             const double elapsed = std::chrono::duration<double>(now - first_pose_time).count();
             if (have_first_pose && options.duration_sec > 0.0 && elapsed >= options.duration_sec) {
                 break;
@@ -611,15 +735,24 @@ int main(int argc, char **argv)
                 next_output = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(output_period);
             }
 
-            const char *quality = quality_name(latest_t265.tracker_confidence,
-                                               t265_update_accepted);
+            const char *quality = quality_name(
+                latest_t265.tracker_confidence,
+                latest_t265.mapper_confidence,
+                t265_update_accepted);
             const std::uint64_t uart_frames = live_uart_frames.load(std::memory_order_relaxed);
             const std::uint64_t crc_errors = live_crc_errors.load(std::memory_order_relaxed);
             const std::uint64_t sequence_gaps = live_sequence_gaps.load(std::memory_order_relaxed);
             write_atomic_json(options.output_path, fused, latest_t265, filter, quality,
                               wheel_gate, uart_fresh, wheel_accepted, wheel_rejected,
                               uart_frames, crc_errors, sequence_gaps,
-                              pose_tx_frames, pose_tx_errors);
+                              pose_tx_frames, pose_tx_errors,
+                              navigation_active, active_navigation_code,
+                              active_navigation_remaining_mm,
+                              active_navigation_heading_cdeg,
+                              navigation_wheel_progress_m,
+                              t265_position_corrected,
+                              active_t265_position_multiplier,
+                              innovation_m);
 
             std::cout << std::fixed << std::setprecision(3)
                       << "POSE t=" << elapsed
@@ -630,6 +763,12 @@ int main(int argc, char **argv)
                       << " wheel=" << wheel_gate
                       << " uart=" << (uart_fresh ? "fresh" : "stale")
                       << " tx=" << pose_tx_frames << '/' << pose_tx_errors
+                      << " nav=" << (navigation_active ? "wheel_primary" : "normal")
+                      << " wprog=" << std::setprecision(3)
+                      << navigation_wheel_progress_m << "m"
+                      << " t265pos=" << (t265_position_corrected ? "correct" : "yaw_only")
+                      << " x" << std::setprecision(1)
+                      << active_t265_position_multiplier
                       << " sigma=" << std::setprecision(3) << filter.position_sigma_m() << "m\n";
             if (csv) {
                 csv << std::fixed << std::setprecision(9)
