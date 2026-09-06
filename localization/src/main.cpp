@@ -397,7 +397,7 @@ int main(int argc, char **argv)
                     auto next_heartbeat = std::chrono::steady_clock::now();
                     auto last_input_change = next_heartbeat;
                     constexpr auto heartbeat_bridge_limit =
-                        std::chrono::milliseconds(750);
+                        std::chrono::milliseconds(250);
 
                     auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
                         std::lock_guard<std::mutex> lock(uart_tx_mutex);

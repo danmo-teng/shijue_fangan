@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from field_model import (
+    DEFAULT_CORNER_OFFSET_M,
     Pose,
     Trajectory,
     initial_pose,
@@ -27,10 +28,10 @@ def near(a, b, tolerance=1e-9):
 
 def main():
     expected = {
-        1: (-1.5 + 0.30 / math.sqrt(2.0), 1.5 - 0.30 / math.sqrt(2.0), 135.0),
-        2: (1.5 - 0.30 / math.sqrt(2.0), 1.5 - 0.30 / math.sqrt(2.0), 45.0),
-        3: (-1.5 + 0.30 / math.sqrt(2.0), -1.5 + 0.30 / math.sqrt(2.0), 225.0),
-        4: (1.5 - 0.30 / math.sqrt(2.0), -1.5 + 0.30 / math.sqrt(2.0), 315.0),
+        1: (-1.35, 1.35, 135.0),
+        2: (1.35, 1.35, 45.0),
+        3: (-1.35, -1.35, 225.0),
+        4: (1.35, -1.35, 315.0),
     }
     for zone, values in expected.items():
         pose = initial_pose(zone)
@@ -84,9 +85,9 @@ def main():
         assert load_localization_pose(snapshot) is None
 
         session = root / "session.json"
-        write_session(session, 3, "blue", 0.30, "t265")
+        write_session(session, 3, "blue", DEFAULT_CORNER_OFFSET_M, "t265")
         saved = json.loads(session.read_text(encoding="utf-8"))
-        expected_coordinate = -1.5 + 0.30 / math.sqrt(2.0)
+        expected_coordinate = -1.35
         assert near(saved["initial_pose"]["x_m"], expected_coordinate)
         assert near(saved["initial_pose"]["y_m"], expected_coordinate)
         assert saved["initial_pose"]["yaw_deg"] == 225.0
@@ -105,9 +106,9 @@ def main():
         template = root / "template.conf"
         output = root / "runtime.conf"
         template.write_text("start_zone = 4\nstart_center_m = 1.35\n", encoding="utf-8")
-        write_localization_config(template, output, 2, 0.30)
+        write_localization_config(template, output, 2, DEFAULT_CORNER_OFFSET_M)
         text = output.read_text(encoding="utf-8")
-        expected_center = 1.5 - 0.30 / math.sqrt(2.0)
+        expected_center = 1.35
         assert "start_zone = 2" in text and f"start_center_m = {expected_center:.6f}" in text
 
     print("rescue_map field model PASS")

@@ -28,6 +28,7 @@ from rescue_vision.mission_protocol import (
     CMD_TASK_COMPLETE,
     CMD_USE_FINAL_HEADING,
     STM_CLAW_VISIBLE,
+    STM_DISTANCE_DONE,
     STM_GRIPPER_CLOSED,
     Stm32Status,
 )
@@ -100,7 +101,7 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert output.state == MissionState.NAVIGATE
     assert output.command.command == CMD_NAVIGATE_WAYPOINT
     target_x = -0.15 if side == "red" else 0.15
-    target_y = 1.08 if side == "red" else -1.08
+    target_y = 1.0275 if side == "red" else -1.0275
     expected_distance = math.hypot(target_x - pose.x_m, target_y - pose.y_m)
     assert output.command.target_x_mm == round(expected_distance * 1000)
     assert output.command.target_y_mm == 0
@@ -126,51 +127,67 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert updated.command.heading_cdeg == round(updated_bearing * 100) % 36000
     assert updated.command.target_x_mm != output.command.target_x_mm
 
-    output = mission.step(VisionInput(), PoseInput(True, 0.0, desired_y / 1000, 0), closed)
+    # A fresh NAV distance-done status must release the strict map-contact
+    # gate even with a 40 mm localization bias outside the tangent boundary.
+    arrival_y = 0.9875 if side == "red" else -0.9875
+    arrival_x = target_x
+    biased_arrival = PoseInput(True, arrival_x, arrival_y, desired_heading)
+    assert not robot_intersects_safe_zone(biased_arrival, mission.settings)
+    nav_done = Stm32Status(
+        flags=STM_GRIPPER_CLOSED | STM_DISTANCE_DONE,
+        mode=10,
+        age_ms=5,
+    )
+    output = mission.step(VisionInput(), biased_arrival, nav_done)
     assert output.state == MissionState.ALIGN
+    assert mission.delivery_arrival_confirmed
     assert output.command.command == CMD_ALIGN_SAFE_ZONE
     assert output.command.flags & CMD_USE_FINAL_HEADING
     assert output.command.heading_cdeg == desired_heading * 100
-    output = mission.step(VisionInput(), PoseInput(True, 0.0, desired_y / 1000, desired_heading - 20), closed)
+    output = mission.step(VisionInput(), biased_arrival, nav_done)
+    assert output.state == MissionState.ALIGN
     assert output.command.command == CMD_ALIGN_SAFE_ZONE
-    output = mission.step(VisionInput(), PoseInput(True, 0.0, desired_y / 1000, desired_heading), closed)
+    align_status = Stm32Status(flags=STM_GRIPPER_CLOSED, mode=11, age_ms=5)
+    output = mission.step(
+        VisionInput(),
+        PoseInput(True, arrival_x, arrival_y, desired_heading - 5),
+        align_status,
+    )
+    assert output.command.command == CMD_ALIGN_SAFE_ZONE
+    assert output.state == MissionState.ALIGN
+    aligned_pose = PoseInput(True, arrival_x, arrival_y, desired_heading)
+    output = mission.step(VisionInput(), aligned_pose, align_status)
+    assert output.state == MissionState.ALIGN
+    clock.advance(0.05)
+    output = mission.step(VisionInput(), aligned_pose, align_status)
+    assert output.state == MissionState.ALIGN
+    clock.advance(0.06)
+    output = mission.step(VisionInput(), aligned_pose, align_status)
     assert output.state == MissionState.ENTER_SAFE_ZONE
     assert output.command.command == CMD_ENTER_SAFE_ZONE
     assert output.command.flags & CMD_USE_FINAL_HEADING
     assert output.command.heading_cdeg == desired_heading * 100
 
-    # Target visibility no longer decides delivery. Map contact and stationary
-    # fused position are the only completion inputs.
-    separated_y = 0.95 if side == "red" else -0.95
-    for _ in range(4):
-        output = mission.step(
-            VisionInput(), PoseInput(True, 0.0, separated_y, desired_heading),
-            Stm32Status(mode=14, age_ms=5),
-        )
-        assert output.state == MissionState.ENTER_SAFE_ZONE
-    contact_y = 1.08 if side == "red" else -1.08
-    assert robot_intersects_safe_zone(
-        PoseInput(True, 0.0, contact_y, desired_heading), mission.settings
-    )
-    contact = PoseInput(True, 0.0, contact_y, desired_heading)
-    # Being stationary while the claw is only opening cannot prematurely
-    # complete delivery; the F407 must have reached RAM_FORWARD/RAM_VERIFY.
-    output = mission.step(VisionInput(), contact, Stm32Status(mode=12, age_ms=5))
-    clock.advance(2.0)
-    output = mission.step(VisionInput(), contact, Stm32Status(mode=12, age_ms=5))
+    # Mode 14 is no longer a completion input, even after a long stationary
+    # period. Only fresh mode 15 (CHECK/RAM_VERIFY) may confirm placement.
+    contact_y = 1.035 if side == "red" else -1.035
+    biased_check = PoseInput(True, arrival_x, arrival_y, desired_heading)
+    output = mission.step(VisionInput(), biased_check, Stm32Status(mode=14, age_ms=5))
+    clock.advance(0.49)
+    output = mission.step(VisionInput(), biased_check, Stm32Status(mode=14, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
-    output = mission.step(VisionInput(), contact, Stm32Status(mode=14, age_ms=5))
+    output = mission.step(VisionInput(), biased_check, Stm32Status(mode=15, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
     clock.advance(0.70)
-    moved = PoseInput(True, 0.016, contact_y, desired_heading)
-    output = mission.step(VisionInput(), moved, Stm32Status(mode=14, age_ms=5))
+    moved = PoseInput(True, arrival_x + 0.026, arrival_y, desired_heading)
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=15, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
     clock.advance(0.79)
-    output = mission.step(VisionInput(), moved, Stm32Status(mode=14, age_ms=5))
+    output = mission.step(VisionInput(), moved, Stm32Status(mode=15, age_ms=5))
     assert output.state == MissionState.ENTER_SAFE_ZONE
     clock.advance(0.02)
     output = mission.step(
-        VisionInput(), moved, Stm32Status(mode=14, age_ms=5)
+        VisionInput(), moved, Stm32Status(mode=15, age_ms=5)
     )
     assert output.state == MissionState.COMPLETE
     assert output.command.command == CMD_TASK_COMPLETE
@@ -209,6 +226,9 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     output = mission.step(VisionInput(), moved, Stm32Status(mode=3, age_ms=5))
     assert output.state == MissionState.SEARCH
     assert mission.selected_class is None
+    assert not mission.delivery_arrival_confirmed
+    assert mission.delivery_stationary_started_s is None
+    assert mission.delivery_stationary_anchor is None
     assert set(mission.allowed_classes) == {
         "green_supply", "core_black", "danger_cyan", "injured_orange"
     }
@@ -242,16 +262,70 @@ def test_grab_wait_has_no_timeout():
 def test_safe_zone_circle_geometry():
     red = MissionSettings(side="red")
     blue = MissionSettings(side="blue")
+    assert red.robot_body_radius_m == 0.130
+    assert red.push_plate_offset_m == 0.105
+    assert red.front_pusher_offset_m == 0.150
+    assert red.zone_center_x_abs_m == 0.150
+    red_mission = RescueMission(red)
+    red_mission.selected_class = "green_supply"
+    assert math.isclose(red_mission.fence_contact_center[0], -0.15)
+    assert math.isclose(red_mission.fence_contact_center[1], 1.035)
+    assert math.isclose(red_mission.fence_stop_point[0], -0.15)
+    assert math.isclose(red_mission.fence_stop_point[1], 1.0275)
+    assert red_mission._at_fence_stop(PoseInput(True, -0.15, 1.0275, 90))
+    assert not red_mission._at_fence_stop(PoseInput(True, -0.15, 1.0275, 55))
     assert not robot_intersects_safe_zone(PoseInput(), red)
     # Regression for the recorded premature stop: this blue-side position is
     # still about 326 mm away from first circle/zone contact.
     assert not robot_intersects_safe_zone(PoseInput(True, 0.043, -0.754, 267.4), blue)
-    assert not robot_intersects_safe_zone(PoseInput(True, 0.0, 1.079, 90), red)
-    assert robot_intersects_safe_zone(PoseInput(True, 0.0, 1.08, 90), red)
-    assert robot_intersects_safe_zone(PoseInput(True, 0.0, -1.08, 270), blue)
-    assert not robot_intersects_safe_zone(PoseInput(True, 0.0, -1.079, 270), blue)
-    assert not robot_intersects_safe_zone(PoseInput(True, 0.421, 1.20, 90), red)
-    assert robot_intersects_safe_zone(PoseInput(True, 0.42, 1.20, 90), red)
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.0, 1.069, 90), red)
+    assert robot_intersects_safe_zone(PoseInput(True, 0.0, 1.07, 90), red)
+    assert robot_intersects_safe_zone(PoseInput(True, 0.0, -1.07, 270), blue)
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.0, -1.069, 270), blue)
+    assert not robot_intersects_safe_zone(PoseInput(True, 0.431, 1.20, 90), red)
+    assert robot_intersects_safe_zone(PoseInput(True, 0.43, 1.20, 90), red)
+
+
+def test_distance_done_requires_fresh_nav_status():
+    mission = RescueMission(MissionSettings(side="red"))
+    mission.state = MissionState.NAVIGATE
+    mission.selected_class = "green_supply"
+    pose = PoseInput(True, -0.15, 0.99, 90)
+    assert not robot_intersects_safe_zone(pose, mission.settings)
+    stale = Stm32Status(
+        flags=STM_GRIPPER_CLOSED | STM_DISTANCE_DONE,
+        mode=10,
+        age_ms=251,
+    )
+    assert mission.step(VisionInput(), pose, stale).state == MissionState.NAVIGATE
+    wrong_mode = Stm32Status(
+        flags=STM_GRIPPER_CLOSED | STM_DISTANCE_DONE,
+        mode=9,
+        age_ms=5,
+    )
+    assert mission.step(VisionInput(), pose, wrong_mode).state == MissionState.NAVIGATE
+    fresh = Stm32Status(
+        flags=STM_GRIPPER_CLOSED | STM_DISTANCE_DONE,
+        mode=10,
+        age_ms=5,
+    )
+    assert mission.step(VisionInput(), pose, fresh).state == MissionState.ALIGN
+
+
+def test_unexpected_forward_stall_faults():
+    clock = FakeClock()
+    mission = RescueMission(MissionSettings(side="red"), clock=clock)
+    mission.state = MissionState.ENTER_SAFE_ZONE
+    mission.selected_class = "green_supply"
+    mission.delivery_arrival_confirmed = True
+    pose = PoseInput(True, -0.15, 1.02, 90)
+    status = Stm32Status(mode=14, age_ms=5)
+    assert mission.step(VisionInput(), pose, status).state == MissionState.ENTER_SAFE_ZONE
+    clock.advance(0.51)
+    output = mission.step(VisionInput(), pose, status)
+    assert output.state == MissionState.FAULT
+    assert output.command.command == 0
+    assert "堵转" in output.message
 
 
 def main():
@@ -259,6 +333,8 @@ def main():
     run_side("blue", -1200, 270)
     test_grab_wait_has_no_timeout()
     test_safe_zone_circle_geometry()
+    test_distance_done_requires_fresh_nav_status()
+    test_unexpected_forward_stall_faults()
     print("mission state machine PASS")
 
 

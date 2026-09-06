@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from field_model import (
+    DEFAULT_CORNER_OFFSET_M,
     FIELD_HALF_M,
     Pose,
     Trajectory,
@@ -43,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RDK X5 rescue-field selector and pose map")
     parser.add_argument("--zone", type=int, choices=range(1, 5), help="skip zone selection")
     parser.add_argument("--side", choices=("red", "blue"), help="skip side selection")
-    parser.add_argument("--corner-offset-mm", type=float, default=300.0)
+    parser.add_argument("--corner-offset-mm", type=float, default=DEFAULT_CORNER_OFFSET_M * 1000.0)
     parser.add_argument(
         "--localization-mode",
         choices=("fusion", "t265"),
@@ -225,7 +226,7 @@ class RescueMapApp:
         }.get(pose.quality, (150, 150, 150))
         if abs(pose.x_m) > FIELD_HALF_M or abs(pose.y_m) > FIELD_HALF_M:
             color = (40, 40, 230)
-        radius = max(10, int(round(0.12 / 3.0 * self.map_size)))
+        radius = max(10, int(round(0.130 / 3.0 * self.map_size)))
         cv2.circle(canvas, center, radius, (25, 25, 25), -1, cv2.LINE_AA)
         cv2.circle(canvas, center, radius, color, 3, cv2.LINE_AA)
         cv2.arrowedLine(canvas, center, tip, color, 5, cv2.LINE_AA, tipLength=0.30)
@@ -373,6 +374,7 @@ class RescueMapApp:
             self.corner_offset_m,
         )
         (RUNTIME / "delivery_contact_pose.json").unlink(missing_ok=True)
+        (RUNTIME / "mission_diagnostics.json").unlink(missing_ok=True)
         self.selecting = False
         self.started_monotonic = time.monotonic()
         self.message = "等待T265和编码器融合数据" if self.localization_mode == "fusion" else "等待T265定位数据"

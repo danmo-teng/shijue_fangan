@@ -19,7 +19,7 @@ def options(snapshot: Path) -> argparse.Namespace:
     return argparse.Namespace(
         zone=2,
         side="blue",
-        corner_offset_mm=300.0,
+        corner_offset_mm=150.0 * math.sqrt(2.0),
         localization_mode="fusion",
         localization_json=snapshot,
         launch_localization=False,
@@ -40,7 +40,7 @@ def main() -> None:
         snapshot = root / "pose.json"
         app = map_app.RescueMapApp(options(snapshot))
         app.start_session()
-        expected_coordinate = 1.5 - 0.30 / math.sqrt(2.0)
+        expected_coordinate = 1.35
         assert app.trajectory.points == [(expected_coordinate, expected_coordinate)]
         assert "--uart" in app.localization_command()
         tx_index = app.localization_command().index("--tx-rate")
@@ -51,7 +51,7 @@ def main() -> None:
         assert "--command-file" not in app.localization_command()
         assert app.vision_command()[1].endswith("run_detector.py")
         app.adjust_corner_offset(50.0)
-        assert math.isclose(app.corner_offset_m, 0.35)
+        assert math.isclose(app.corner_offset_m, 0.15 * math.sqrt(2.0) + 0.05)
 
         launched: list[list[str]] = []
 

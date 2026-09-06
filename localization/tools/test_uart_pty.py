@@ -140,8 +140,8 @@ def main() -> int:
         assert len(pose_frames) >= result["uart"]["pose_tx_frames"], (
             result, len(pose_frames)
         )
-        # The unchanged mission input is bridged for 750 ms at 100 Hz.
-        assert len(mission_frames) >= 50, len(mission_frames)
+        # The unchanged mission input is bridged for 250 ms at 100 Hz.
+        assert len(mission_frames) >= 15, len(mission_frames)
         assert len({item[3] for item in mission_frames}) == len(mission_frames)
         assert all(item[4:12] == mission_frames[0][4:12]
                    for item in mission_frames)

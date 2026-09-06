@@ -27,6 +27,7 @@ STM_CLAW_VISIBLE = 1 << 0
 STM_GRIPPER_CLOSED = 1 << 1
 STM_MOTORS_ACTIVE = 1 << 2
 STM_AUTO_APPROACH = 1 << 3
+STM_DISTANCE_DONE = 1 << 5
 STM_FAULT = 1 << 7
 
 
@@ -86,6 +87,14 @@ class Stm32Status:
     @property
     def gripper_closed(self) -> bool:
         return bool(self.flags & STM_GRIPPER_CLOSED)
+
+    @property
+    def distance_done(self) -> bool:
+        return bool(self.flags & STM_DISTANCE_DONE)
+
+    @property
+    def motors_active(self) -> bool:
+        return bool(self.flags & STM_MOTORS_ACTIVE)
 
     @property
     def fault(self) -> bool:

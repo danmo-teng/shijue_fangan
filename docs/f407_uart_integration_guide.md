@@ -157,12 +157,15 @@ STM32每50 ms发送一次，和`TYPE=0x15`编码器帧共用同一个TX队列。
 
 | 载荷 | 内容 |
 |---|---|
-| `P0` | 状态位：bit0爪子已进入视野、bit1夹爪闭合、bit2电机运动、bit3自动靠近、bit7故障 |
+| `P0` | 状态位：bit0爪子已进入视野、bit1夹爪闭合、bit2电机运动、bit3自动靠近、bit5定距完成、bit7故障 |
 | `P1` | STM32任务状态编号 |
 | `P2 P3` | 摄像头俯仰角，0.01°，大端 |
 | `P4` | 最近执行的RDK任务命令SEQ |
 | `P5` | 故障码，0为无故障 |
 | `P6 P7` | 保留，填0 |
+
+`P0 bit5 DISTANCE_DONE`用于报告当前NAV定距已经完成。上位机只在状态不超过250 ms、`mode=10`
+且夹爪闭合时接受该位，并将安全区到达状态锁存到本轮任务结束。
 
 摄像头下降到抓取视角后，STM32必须持续置`P0 bit0 CLAW_VISIBLE`，不能只发送一次脉冲。RDK仅在状态帧新鲜度不超过250 ms时累计画面内物资确认；物资可位于画面任意位置，不再限制底部区域。
 
@@ -181,7 +184,7 @@ P0 COMMAND  P1 FLAGS  P2..P3 DISTANCE_mm  P4..P5 0  P6..P7 HEADING_cdeg
 - `DISTANCE`是非负`int16`毫米；航向为`0..35999`、0.01°。
 - `FLAGS bit0 VALID`、bit1直行、bit2使用航向、bit3红方、bit4 `DISTANCE_VALID`。
 - `COMMAND=0 STOP`；`2 GRAB_CONFIRMED`；`3 NAVIGATE_WAYPOINT`；`4 ALIGN_SAFE_ZONE`；`5 ENTER_SAFE_ZONE`；`6 TASK_COMPLETE`；`7 ABORT`；`8 RETURN_CENTER`。
-- 普通/核心/危险物资对准物资半区几何中心：红方`x=-150`、蓝方`x=+150`；伤员对准另一半区中心：红方`x=+150`、蓝方`x=-150`。不再叠加额外左右偏置。上位机只有在地图中半径120 mm的小车圆与本方安全区矩形相交后，才从NAV切换到ALIGN/ENTER。
+- 普通/核心/危险物资对准物资半区几何中心：红方`x=-150`、蓝方`x=+150`；伤员对准另一半区中心：红方`x=+150`、蓝方`x=-150`。高围栏场地侧表面为`|y|=1140`，推板偏置105 mm，理论贴栏车中心为`|y|=1035`；默认NAV停车点带7.5 mm余量，取`|y|=1027.5`。上位机到停车容差或收到合法`DISTANCE_DONE`后锁存到达并切换ALIGN。
 - `GRAB_CONFIRMED`会以20～50 Hz重复发送，直到新鲜的`TYPE=0x17`持续报告`GRIPPER_CLOSED=1`；STM32必须对重复抓取命令做幂等处理：每帧更新`acknowledged_sequence`，但`grab_in_progress=1`或夹爪已经闭合时不得重复启动舵机动作。
 - `NAVIGATE_WAYPOINT`在未到安全区时持续携带当前位置到相切点的最新航向和剩余距离；`RETURN_CENTER`同样持续更新到距中心600 mm圆周的航向和剩余距离。F407不接收X/Y实时位置坐标。
 - RDK持续等待新鲜`GRIPPER_CLOSED=1`且不设置抓取失败倒计时；夹爪确认闭合前绝不发送导航命令。
@@ -215,6 +218,11 @@ RDK上的定位程序是`/dev/ttyS1`唯一所有者。视觉任务程序通过�
 则要用新SEQ载荷更新当前航向和剩余距离，但不得把底盘动作从零重新启动。判断新鲜度应以
 合法新SEQ的实际接收时间为准；`TASK_COMPLETE`只有在夹爪已经张开且处于RAM阶段时才进入退出；
 若进入`TASK_STOPPED/fault_code=6`，应记录最后命令类型、ACK和状态编号，以区分命令失联与机构故障。
+
+ALIGN握手要求F407状态新鲜且`mode=11`，同时上位机航向误差不超过2°并保持至少100 ms/2帧；
+在此之前上位机只发送ALIGN，不发送直行或ENTER。投送完成只认可`mode=15`，其他模式即使位置
+稳定也不会发送`TASK_COMPLETE`。电控若能提供`ALIGN_READY/PUSH_DONE/CLAW_OPENED`状态位，后续
+可替换当前mode握手，但本次上位机没有更改命令值和载荷格式。
 
 已知帧：红方抓取完成后，沿`128.21°`定距行驶1374 mm，`DISTANCE_VALID=1`、`SEQ=0x20`：
 

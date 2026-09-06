@@ -14,6 +14,8 @@ from pathlib import Path
 FIELD_SIZE_M = 3.0
 FIELD_HALF_M = FIELD_SIZE_M / 2.0
 START_ZONE_SIZE_M = 0.3
+START_CENTER_M = 1.35
+DEFAULT_CORNER_OFFSET_M = 0.15 * math.sqrt(2.0)
 
 # Heading is counter-clockwise from field +X.  The robot front points toward
 # the outside corner so that reverse motion takes it into the field.
@@ -45,7 +47,7 @@ def start_center_coordinate(corner_offset_m: float) -> float:
     return FIELD_HALF_M - corner_offset_m / math.sqrt(2.0)
 
 
-def initial_pose(zone: int, corner_offset_m: float = 0.30) -> Pose:
+def initial_pose(zone: int, corner_offset_m: float = DEFAULT_CORNER_OFFSET_M) -> Pose:
     if zone not in ZONE_SIGNS:
         raise ValueError("zone must be 1..4")
     if not 0.0 < corner_offset_m < FIELD_HALF_M:
