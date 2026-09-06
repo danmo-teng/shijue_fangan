@@ -180,6 +180,7 @@ def draw(image, vision: VisionInput, output, pose: PoseInput, stm: Stm32Status):
         f"state={output.state.value}  {output.message}",
         f"target={vision.class_name or '-'} ({vision.target_x},{vision.target_y}) found={int(vision.target_found)} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
         f"pose=({pose.x_m:+.2f},{pose.y_m:+.2f}) yaw={pose.yaw_deg:.1f} valid={int(pose.valid)}",
+        f"relay seq={stm.relay_last_sequence} age={stm.relay_last_tx_age_ms:.0f}ms tx={stm.relay_tx_frames} err={stm.relay_tx_errors}",
         "camera-down + target anywhere x confirm-frames = grab; F fullscreen; Q/Esc quit",
     ]
     for index, line in enumerate(lines):
@@ -245,6 +246,7 @@ def main() -> int:
         f"置信度阈值={args.score_thres:.2f}，"
         f"预处理={'JPU NV12 + VSE' if scaler is not None else 'CPU BGR'}"
     )
+    print("任务命令由定位串口进程独立以50 Hz刷新；视觉窗口只显示状态切换")
     team_color = 0x11 if side == "red" else 0x12
     deadline = time.monotonic() + args.startup_timeout
     while not load_pose(args.pose).valid:
@@ -337,14 +339,13 @@ def main() -> int:
                     )
                     if command_signature != last_command_signature:
                         print(
-                            "任务命令："
+                            "任务状态切换："
                             f"state={latest_output.state.value} "
                             f"cmd={latest_output.command.command} "
                             f"flags=0x{latest_output.command.flags:02X} "
                             f"target=({latest_output.command.target_x_mm},"
                             f"{latest_output.command.target_y_mm}) "
-                            f"heading={latest_output.command.heading_cdeg / 100.0:.2f}° "
-                            f"seq={mission_sequence}"
+                            f"heading={latest_output.command.heading_cdeg / 100.0:.2f}°"
                         )
                         last_command_signature = command_signature
                     mission_sequence = (mission_sequence + 1) & 0xFF

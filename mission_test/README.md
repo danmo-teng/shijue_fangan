@@ -42,7 +42,13 @@ cd /home/sunrise/RDK_X5/shijue_fangan/mission_test
 ./run_mission_test.sh --detector traditional --vision-fps 30
 ```
 
-任务程序不直接打开`/dev/ttyS1`。`localization`是唯一串口所有者：任务程序原子更新`rescue_map/runtime/uart_command.bin`，定位程序校验帧头、TYPE、CRC和长度后转发，因而不会和编码器/T265进程争抢串口。
+任务程序不直接打开`/dev/ttyS1`。`localization`是唯一串口所有者：任务程序原子更新
+`rescue_map/runtime/uart_command.bin`，独立串口线程校验并转发。任务命令以50 Hz刷新SEQ和CRC，
+不再依赖T265取帧循环，并可跨越最长750 ms的YOLO单帧停顿；配置和视觉坐标仍按新检测结果发送。
+
+识别窗口中的“任务状态切换”只打印命令内容发生变化的时刻，并不表示UART只发送一帧。
+窗口的`relay seq/age/tx/err`才是实际串口转发状态；正常运行时`age`应远小于250 ms且`tx`
+持续增加。
 
 ## 首轮普通物资门控与抓取确认
 

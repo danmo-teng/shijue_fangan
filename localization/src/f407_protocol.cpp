@@ -133,6 +133,21 @@ bool validate_relay_frame(const std::uint8_t *data, std::size_t size)
     return expected == received;
 }
 
+bool refresh_mission_frame_sequence(
+    std::array<std::uint8_t, kFrameSize> &frame,
+    std::uint8_t sequence)
+{
+    if (!validate_relay_frame(frame.data(), frame.size()) ||
+        frame[2] != kMissionCommandMessageType) {
+        return false;
+    }
+    frame[3] = sequence;
+    const std::uint16_t crc = modbus_crc16(&frame[2], 10);
+    frame[12] = static_cast<std::uint8_t>(crc & 0xffu);
+    frame[13] = static_cast<std::uint8_t>((crc >> 8) & 0xffu);
+    return true;
+}
+
 F407FrameParser::F407FrameParser(Callback callback, StatusCallback status_callback)
     : callback_(std::move(callback)), status_callback_(std::move(status_callback))
 {

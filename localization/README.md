@@ -80,7 +80,13 @@ ctest --test-dir build --output-on-failure
 
 `--tx-rate 0`是默认设置：T265/编码器融合和地图显示继续运行，但不向F407发送实时位置。仅在旧协议调试时才显式设置非零值。
 
-任务测试时，定位程序仍是 `/dev/ttyS1` 唯一所有者。`--command-file` 只转发新出现且通过长度、TYPE和CRC校验的 `0x11/0x12/0x18` 帧；`--stm-status` 把F407的 `0x17` 状态帧原子写成JSON，供 `mission_test` 读取。不要再让视觉Python进程直接打开同一串口。
+任务测试时，定位程序仍是`/dev/ttyS1`唯一所有者。串口接收、任务命令转发和T265取帧现在是
+相互独立的执行线程：T265短暂停帧不会再阻断任务命令。`TYPE=0x11/0x12`只在命令文件更新时
+转发；`TYPE=0x18`任务命令由串口线程以50 Hz重新生成SEQ和CRC后持续发送。视觉命令文件停止
+更新750 ms后停止代发，让F407自身看门狗安全停车，避免视觉进程退出后无限维持旧命令。
+
+`--stm-status`生成的JSON增加`relay.tx_frames/tx_errors/last_sequence/last_tx_age_ms`，可直接确认
+真实串口发送是否持续；这些值不是视觉窗口的去重日志。
 
 `run_localization.sh` 在 T265 为 `03e7:2150` 时会先调用长超时引导器，进入 `8087:0b37` 后再启动定位。
 

@@ -50,10 +50,19 @@ def main() -> None:
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "flags": 3,
             "mode": 4,
+            "relay": {
+                "tx_frames": 123,
+                "tx_errors": 0,
+                "last_sequence": 77,
+                "last_tx_age_ms": 4.5,
+            },
         }), encoding="utf-8")
         status = load_stm_status(status_path)
         assert status.claw_visible and status.gripper_closed
         assert status.mode == 4 and status.age_ms < 250.0
+        assert status.relay_tx_frames == 123
+        assert status.relay_last_sequence == 77
+        assert status.relay_last_tx_age_ms == 4.5
 
         contact_path = root / "delivery_contact_pose.json"
         write_contact_pose(

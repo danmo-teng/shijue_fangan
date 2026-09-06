@@ -73,6 +73,9 @@ std::array<std::uint8_t, kFrameSize> build_stm_status_frame(const StmStatusFrame
 bool decode_fused_pose_frame(const std::uint8_t *data, std::size_t size,
                              FusedPoseFrame &frame);
 bool validate_relay_frame(const std::uint8_t *data, std::size_t size);
+bool refresh_mission_frame_sequence(
+    std::array<std::uint8_t, kFrameSize> &frame,
+    std::uint8_t sequence);
 
 class F407FrameParser {
 public:

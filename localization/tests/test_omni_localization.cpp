@@ -2,6 +2,7 @@
 #include "f407_protocol.hpp"
 #include "fusion.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -104,6 +105,15 @@ void test_protocol()
     relay[14] = omni::kFrameTail;
     check(omni::validate_relay_frame(relay.data(), relay.size()),
           "valid TYPE 0x18 application frame accepted by relay");
+    const auto original_payload = relay;
+    check(omni::refresh_mission_frame_sequence(relay, 9),
+          "mission heartbeat refreshes sequence and CRC");
+    check(relay[3] == 9 &&
+          std::equal(relay.begin() + 4, relay.begin() + 12,
+                     original_payload.begin() + 4),
+          "mission heartbeat preserves command payload");
+    check(omni::validate_relay_frame(relay.data(), relay.size()),
+          "refreshed mission heartbeat remains valid");
     relay[2] = omni::kFusedPoseMessageType;
     check(!omni::validate_relay_frame(relay.data(), relay.size()),
           "relay rejects TYPE 0x16 generated internally by localization");

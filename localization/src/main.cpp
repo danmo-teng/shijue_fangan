@@ -196,9 +196,17 @@ const char *quality_name(std::uint8_t confidence, bool t265_update_accepted)
     return "LOST";
 }
 
-bool write_stm_status_json(const std::string &path, const omni::StmStatusFrame &status)
+bool write_stm_status_json(const std::string &path,
+                           const omni::StmStatusFrame &status,
+                           std::uint64_t relay_frames,
+                           std::uint64_t relay_errors,
+                           std::uint8_t relay_sequence,
+                           std::uint64_t relay_last_tx_ns)
 {
     if (path.empty()) return true;
+    const std::uint64_t now_ns = monotonic_ns();
+    const double relay_age_ms = relay_last_tx_ns == 0 ? -1.0 :
+        static_cast<double>(now_ns - relay_last_tx_ns) / 1000000.0;
     const std::string temporary = path + ".tmp";
     std::ofstream file(temporary, std::ios::trunc);
     if (!file) return false;
@@ -211,7 +219,12 @@ bool write_stm_status_json(const std::string &path, const omni::StmStatusFrame &
          << "  \"camera_pitch_cdeg\": " << status.camera_pitch_cdeg << ",\n"
          << "  \"acknowledged_sequence\": "
          << static_cast<unsigned>(status.acknowledged_sequence) << ",\n"
-         << "  \"fault_code\": " << static_cast<unsigned>(status.fault_code) << "\n"
+         << "  \"fault_code\": " << static_cast<unsigned>(status.fault_code) << ",\n"
+         << "  \"relay\": {\"tx_frames\": " << relay_frames
+         << ", \"tx_errors\": " << relay_errors
+         << ", \"last_sequence\": " << static_cast<unsigned>(relay_sequence)
+         << ", \"last_tx_age_ms\": " << std::fixed << std::setprecision(3)
+         << relay_age_ms << "}\n"
          << "}\n";
     file.close();
     return file && std::rename(temporary.c_str(), path.c_str()) == 0;
@@ -290,6 +303,7 @@ int main(int argc, char **argv)
 {
     std::atomic<bool> running{true};
     std::thread uart_thread;
+    std::thread relay_thread;
     try {
         const Options options = parse_options(argc, argv);
         const omni::LocalizationConfig config = omni::load_config(options.config_path);
@@ -328,20 +342,31 @@ int main(int argc, char **argv)
         std::atomic<std::uint64_t> live_sequence_gaps{0};
         std::atomic<std::uint64_t> status_write_errors{0};
         std::atomic<std::int64_t> last_uart_ns{0};
+        std::atomic<std::uint64_t> relay_tx_frames{0};
+        std::atomic<std::uint64_t> relay_tx_errors{0};
+        std::atomic<std::uint8_t> relay_last_sequence{0};
+        std::atomic<std::uint64_t> relay_last_tx_ns{0};
+        std::mutex uart_tx_mutex;
         std::unique_ptr<omni::SerialPort> uart;
         if (!options.uart_path.empty()) {
             uart.reset(new omni::SerialPort(options.uart_path, options.baud));
             uart->open_port();
             std::cerr << "[UART] " << options.uart_path << " @ " << options.baud
                       << " 8N1, RX TYPE=0x15/0x17, TX TYPE=0x16 @ "
-                      << options.tx_rate_hz << " Hz\n";
+                      << options.tx_rate_hz
+                      << " Hz, mission heartbeat=50 Hz (T265-independent)\n";
             uart_thread = std::thread([&]() {
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
                     encoder_queue.push(frame);
                     last_uart_ns.store(static_cast<std::int64_t>(monotonic_ns()),
                                        std::memory_order_relaxed);
                 }, [&](const omni::StmStatusFrame &status) {
-                    if (!write_stm_status_json(options.stm_status_output_path, status)) {
+                    if (!write_stm_status_json(
+                            options.stm_status_output_path, status,
+                            relay_tx_frames.load(std::memory_order_relaxed),
+                            relay_tx_errors.load(std::memory_order_relaxed),
+                            relay_last_sequence.load(std::memory_order_relaxed),
+                            relay_last_tx_ns.load(std::memory_order_relaxed))) {
                         status_write_errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -361,6 +386,69 @@ int main(int argc, char **argv)
                 }
                 final_parser_stats = parser.stats();
             });
+            if (!options.command_file_path.empty()) {
+                relay_thread = std::thread([&]() {
+                    constexpr auto heartbeat_period = std::chrono::milliseconds(20);
+                    std::array<std::uint8_t, omni::kFrameSize> last_input{};
+                    std::array<std::uint8_t, omni::kFrameSize> active_mission{};
+                    bool have_last_input = false;
+                    bool have_active_mission = false;
+                    std::uint8_t mission_sequence = 0;
+                    auto next_heartbeat = std::chrono::steady_clock::now();
+                    auto last_input_change = next_heartbeat;
+                    constexpr auto heartbeat_bridge_limit =
+                        std::chrono::milliseconds(750);
+
+                    auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
+                        std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        if (uart->write_all(frame.data(), frame.size(), 50)) {
+                            relay_tx_frames.fetch_add(1, std::memory_order_relaxed);
+                            relay_last_sequence.store(frame[3], std::memory_order_relaxed);
+                            relay_last_tx_ns.store(monotonic_ns(), std::memory_order_relaxed);
+                        } else {
+                            relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
+                        }
+                    };
+
+                    while (running.load(std::memory_order_relaxed) && !g_stop) {
+                        std::array<std::uint8_t, omni::kFrameSize> input{};
+                        const auto now = std::chrono::steady_clock::now();
+                        if (read_relay_frame(options.command_file_path, input) &&
+                            (!have_last_input || input != last_input)) {
+                            last_input = input;
+                            have_last_input = true;
+                            last_input_change = now;
+                            if (input[2] == omni::kMissionCommandMessageType) {
+                                if (!have_active_mission) {
+                                    mission_sequence = input[3];
+                                }
+                                active_mission = input;
+                                have_active_mission = true;
+                                next_heartbeat = now;
+                            } else {
+                                have_active_mission = false;
+                                transmit(input);
+                            }
+                        }
+                        if (have_active_mission &&
+                            now - last_input_change > heartbeat_bridge_limit) {
+                            have_active_mission = false;
+                        }
+                        if (have_active_mission && now >= next_heartbeat) {
+                            auto heartbeat = active_mission;
+                            if (omni::refresh_mission_frame_sequence(
+                                    heartbeat, mission_sequence++)) {
+                                transmit(heartbeat);
+                            } else {
+                                relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
+                                have_active_mission = false;
+                            }
+                            next_heartbeat = now + heartbeat_period;
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    }
+                });
+            }
         } else {
             std::cerr << "[UART] disabled; output is T265-only\n";
         }
@@ -402,11 +490,6 @@ int main(int argc, char **argv)
         std::uint8_t pose_tx_sequence = 0;
         std::uint64_t pose_tx_frames = 0;
         std::uint64_t pose_tx_errors = 0;
-        std::uint64_t relay_tx_frames = 0;
-        std::uint64_t relay_tx_errors = 0;
-        std::array<std::uint8_t, omni::kFrameSize> last_relay_frame{};
-        bool have_last_relay_frame = false;
-
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
             const rs2::frameset frames = pipeline.wait_for_frames(1000);
@@ -480,20 +563,6 @@ int main(int argc, char **argv)
                 static_cast<std::int64_t>(monotonic_ns()) - last_ns <=
                     static_cast<std::int64_t>(config.uart_stale_ms) * 1000000LL;
 
-            if (uart && !options.command_file_path.empty()) {
-                std::array<std::uint8_t, omni::kFrameSize> relay_frame{};
-                if (read_relay_frame(options.command_file_path, relay_frame) &&
-                    (!have_last_relay_frame || relay_frame != last_relay_frame)) {
-                    if (uart->write_all(relay_frame.data(), relay_frame.size(), 50)) {
-                        ++relay_tx_frames;
-                        last_relay_frame = relay_frame;
-                        have_last_relay_frame = true;
-                    } else {
-                        ++relay_tx_errors;
-                    }
-                }
-            }
-
             if (uart && options.tx_rate_hz > 0.0 && now >= next_pose_tx) {
                 next_pose_tx = now +
                     std::chrono::duration_cast<std::chrono::steady_clock::duration>(pose_tx_period);
@@ -530,6 +599,7 @@ int main(int argc, char **argv)
                     ((static_cast<unsigned>(latest_t265.mapper_confidence) & 0x03u) << 2) |
                     (static_cast<unsigned>(latest_t265.tracker_confidence) & 0x03u));
                 const auto bytes = omni::build_fused_pose_frame(tx);
+                std::lock_guard<std::mutex> lock(uart_tx_mutex);
                 if (uart->write_all(bytes.data(), bytes.size(), 50)) {
                     ++pose_tx_frames;
                 } else {
@@ -577,6 +647,7 @@ int main(int argc, char **argv)
         pipeline.stop();
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
+        if (relay_thread.joinable()) relay_thread.join();
         std::cerr << "[SUMMARY] wheel accepted=" << wheel_accepted
                   << " rejected=" << wheel_rejected
                   << " UART frames=" << final_parser_stats.frames_ok
@@ -584,8 +655,8 @@ int main(int argc, char **argv)
                   << " sequence_gaps=" << final_parser_stats.sequence_gaps
                   << " pose_tx=" << pose_tx_frames
                   << " pose_tx_errors=" << pose_tx_errors
-                  << " relay_tx=" << relay_tx_frames
-                  << " relay_tx_errors=" << relay_tx_errors
+                  << " relay_tx=" << relay_tx_frames.load(std::memory_order_relaxed)
+                  << " relay_tx_errors=" << relay_tx_errors.load(std::memory_order_relaxed)
                   << " status_frames=" << final_parser_stats.status_frames
                   << " status_write_errors="
                   << status_write_errors.load(std::memory_order_relaxed)
@@ -594,12 +665,14 @@ int main(int argc, char **argv)
     } catch (const rs2::error &error) {
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
+        if (relay_thread.joinable()) relay_thread.join();
         std::cerr << "[RS2 ERROR] " << error.what() << " ("
                   << error.get_failed_function() << ' ' << error.get_failed_args() << ")\n";
         return 3;
     } catch (const std::exception &error) {
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
+        if (relay_thread.joinable()) relay_thread.join();
         std::cerr << "[ERROR] " << error.what() << '\n';
         return 1;
     }

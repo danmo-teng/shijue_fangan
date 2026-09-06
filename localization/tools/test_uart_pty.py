@@ -29,6 +29,12 @@ def frame(sequence: int, positions: tuple[int, int, int]) -> bytes:
     return b"\xA3\xB3" + body + struct.pack("<H", crc16(body)) + b"\xC3"
 
 
+def mission_frame(sequence: int = 7) -> bytes:
+    payload = bytes.fromhex("03 17 04 34 00 00 66 CE")
+    body = bytes((0x18, sequence & 0xFF)) + payload
+    return b"\xA3\xB3" + body + struct.pack("<H", crc16(body)) + b"\xC3"
+
+
 def main() -> int:
     root = pathlib.Path(__file__).resolve().parents[1]
     source_config = (root / "config/localization.example.conf").read_text(encoding="utf-8")
@@ -60,14 +66,18 @@ def main() -> int:
         temporary_path = pathlib.Path(temporary)
         config_path = temporary_path / "test.conf"
         output_path = temporary_path / "pose.json"
+        command_path = temporary_path / "uart_command.bin"
         config_path.write_text(source_config, encoding="utf-8")
+        command_path.write_bytes(mission_frame())
         command = [
             str(root / "build/t265_omni_localizer"),
             "--config", str(config_path),
             "--uart", slave_path,
             "--duration", "2",
             "--rate", "5",
+            "--tx-rate", "20",
             "--output", str(output_path),
+            "--command-file", str(command_path),
         ]
         process = subprocess.Popen(
             command,
@@ -102,6 +112,7 @@ def main() -> int:
         assert result["uart"]["crc_errors"] == 0, result
         assert result["wheel"]["accepted"] > 0, result
         pose_frames = []
+        mission_frames = []
         index = 0
         while index + 15 <= len(received):
             if received[index:index + 2] != b"\xA3\xB3":
@@ -112,6 +123,10 @@ def main() -> int:
             if candidate[2] == 0x16 and candidate[14] == 0xC3 and \
                     struct.unpack("<H", candidate[12:14])[0] == crc16(body):
                 pose_frames.append(candidate)
+                index += 15
+            elif candidate[2] == 0x18 and candidate[14] == 0xC3 and \
+                    struct.unpack("<H", candidate[12:14])[0] == crc16(body):
+                mission_frames.append(candidate)
                 index += 15
             else:
                 index += 1
@@ -125,6 +140,10 @@ def main() -> int:
         assert len(pose_frames) >= result["uart"]["pose_tx_frames"], (
             result, len(pose_frames)
         )
+        assert len(mission_frames) >= 20, len(mission_frames)
+        assert len({item[3] for item in mission_frames}) == len(mission_frames)
+        assert all(item[4:12] == mission_frames[0][4:12]
+                   for item in mission_frames)
         print("PTY UART full-duplex test passed:", result["uart"],
               "received_pose_frames=", len(pose_frames))
     return 0

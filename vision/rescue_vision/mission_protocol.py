@@ -74,6 +74,10 @@ class Stm32Status:
     acknowledged_sequence: int = 0
     fault_code: int = 0
     age_ms: float = float("inf")
+    relay_tx_frames: int = 0
+    relay_tx_errors: int = 0
+    relay_last_sequence: int = 0
+    relay_last_tx_age_ms: float = float("inf")
 
     @property
     def claw_visible(self) -> bool:
@@ -89,6 +93,7 @@ class Stm32Status:
 
     @classmethod
     def from_json(cls, data: dict) -> "Stm32Status":
+        relay = data.get("relay", {})
         return cls(
             flags=int(data.get("flags", 0)),
             mode=int(data.get("mode", 0)),
@@ -96,6 +101,10 @@ class Stm32Status:
             acknowledged_sequence=int(data.get("acknowledged_sequence", 0)),
             fault_code=int(data.get("fault_code", 0)),
             age_ms=float(data.get("age_ms", float("inf"))),
+            relay_tx_frames=int(relay.get("tx_frames", 0)),
+            relay_tx_errors=int(relay.get("tx_errors", 0)),
+            relay_last_sequence=int(relay.get("last_sequence", 0)),
+            relay_last_tx_age_ms=float(relay.get("last_tx_age_ms", float("inf"))),
         )
 
 
