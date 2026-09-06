@@ -112,6 +112,20 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     )) % 360
     assert output.command.heading_cdeg == round(expected_bearing * 100) % 36000
 
+    # Navigation is closed-loop on the RDK: every fresh pose produces a new
+    # heading and remaining distance instead of replaying the initial route.
+    updated_pose = PoseInput(True, 0.45, -0.20 if side == "blue" else 0.20, 0)
+    updated = mission.step(VisionInput(), updated_pose, closed)
+    updated_distance = math.hypot(
+        target_x - updated_pose.x_m, target_y - updated_pose.y_m
+    )
+    updated_bearing = math.degrees(math.atan2(
+        target_y - updated_pose.y_m, target_x - updated_pose.x_m,
+    )) % 360
+    assert updated.command.target_x_mm == round(updated_distance * 1000)
+    assert updated.command.heading_cdeg == round(updated_bearing * 100) % 36000
+    assert updated.command.target_x_mm != output.command.target_x_mm
+
     output = mission.step(VisionInput(), PoseInput(True, 0.0, desired_y / 1000, 0), closed)
     assert output.state == MissionState.ALIGN
     assert output.command.command == CMD_ALIGN_SAFE_ZONE
@@ -176,6 +190,22 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert output.command.target_y_mm == 0
     expected_return_heading = math.degrees(math.atan2(-moved.y_m, -moved.x_m)) % 360
     assert output.command.heading_cdeg == round(expected_return_heading * 100) % 36000
+    closer = PoseInput(
+        True,
+        moved.x_m * 0.7,
+        moved.y_m * 0.7,
+        desired_heading,
+    )
+    updated_return = mission.step(
+        VisionInput(), closer, Stm32Status(mode=17, age_ms=5)
+    )
+    updated_return_distance = max(0.0, math.hypot(closer.x_m, closer.y_m) - 0.60)
+    updated_return_heading = math.degrees(
+        math.atan2(-closer.y_m, -closer.x_m)
+    ) % 360
+    assert updated_return.command.target_x_mm == round(updated_return_distance * 1000)
+    assert updated_return.command.heading_cdeg == round(updated_return_heading * 100) % 36000
+    assert updated_return.command.target_x_mm < output.command.target_x_mm
     output = mission.step(VisionInput(), moved, Stm32Status(mode=3, age_ms=5))
     assert output.state == MissionState.SEARCH
     assert mission.selected_class is None

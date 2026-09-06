@@ -183,11 +183,11 @@ P0 COMMAND  P1 FLAGS  P2..P3 DISTANCE_mm  P4..P5 0  P6..P7 HEADING_cdeg
 - `COMMAND=0 STOP`；`2 GRAB_CONFIRMED`；`3 NAVIGATE_WAYPOINT`；`4 ALIGN_SAFE_ZONE`；`5 ENTER_SAFE_ZONE`；`6 TASK_COMPLETE`；`7 ABORT`；`8 RETURN_CENTER`。
 - 普通/核心/危险物资对准物资半区几何中心：红方`x=-150`、蓝方`x=+150`；伤员对准另一半区中心：红方`x=+150`、蓝方`x=-150`。不再叠加额外左右偏置。上位机只有在地图中半径120 mm的小车圆与本方安全区矩形相交后，才从NAV切换到ALIGN/ENTER。
 - `GRAB_CONFIRMED`会以20～50 Hz重复发送，直到新鲜的`TYPE=0x17`持续报告`GRIPPER_CLOSED=1`；STM32必须对重复抓取命令做幂等处理：每帧更新`acknowledged_sequence`，但`grab_in_progress=1`或夹爪已经闭合时不得重复启动舵机动作。
-- `NAVIGATE_WAYPOINT`携带抓取完成时锁存的航向和到安全区相切点的距离；F407用IMU对向、编码器定距，不再接收实时位置流。
+- `NAVIGATE_WAYPOINT`在未到安全区时持续携带当前位置到相切点的最新航向和剩余距离；`RETURN_CENTER`同样持续更新到距中心600 mm圆周的航向和剩余距离。F407不接收X/Y实时位置坐标。
 - RDK持续等待新鲜`GRIPPER_CLOSED=1`且不设置抓取失败倒计时；夹爪确认闭合前绝不发送导航命令。
 - 连续任务不再设置抓取失败倒计时、最大搬运次数或180秒总时长；任务命令和电机异常看门狗继续保留。开局只允许普通物资，完成首件后允许四类单目标报告。
 - `TASK_COMPLETE`后F407张爪并后退出围栏；RDK随后发送`RETURN_CENTER`航向和定距，使小车在距中心600 mm处恢复`SEARCH`。
-- F407优先使用`HEADING_cdeg`对向，再调用编码器定距运动。行驶途中命令失联必须停车；由于原定距已部分执行但没有实时位置可重算，不能自动从完整原距离重新开始，以免超程。
+- 电控侧应把每个新SEQ中的距离理解为“从当前时刻起的剩余距离”，允许更新运行中的航向/距离；不能忽略后续值，也不能每帧清零编码器并重新启动完整动作。命令失联仍应停车。
 - `ABORT`必须锁存为永久停止，除非整机任务状态显式复位。
 - `localization/firmware/f407_mission_protocol.[ch]`提供`TYPE=0x17`打包和`TYPE=0x18`载荷解码。
 
@@ -211,7 +211,8 @@ F407_MissionFillStatus(&mission_runtime, &status_payload);
 RDK上的定位程序是`/dev/ttyS1`唯一所有者。视觉任务程序通过原子命令文件交给定位程序转发，不允许视觉和定位两个进程同时打开串口。
 
 当前上位机保证`TYPE=0x18`由独立串口线程以50 Hz更新SEQ和CRC，不依赖T265帧或BPU日志刷新。
-电控侧需要注意：重复命令只刷新ACK/看门狗，不得重新启动夹爪或编码器定距；判断新鲜度应以
+电控侧需要注意：重复`GRAB_CONFIRMED`只刷新ACK/看门狗，不得重新启动夹爪；导航/返中命令
+则要用新SEQ载荷更新当前航向和剩余距离，但不得把底盘动作从零重新启动。判断新鲜度应以
 合法新SEQ的实际接收时间为准；`TASK_COMPLETE`只有在夹爪已经张开且处于RAM阶段时才进入退出；
 若进入`TASK_STOPPED/fault_code=6`，应记录最后命令类型、ACK和状态编号，以区分命令失联与机构故障。
 

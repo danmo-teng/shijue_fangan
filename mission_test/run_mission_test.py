@@ -262,7 +262,8 @@ def main() -> int:
         time.sleep(0.04)
     report_sequence = 0
     mission_sequence = 0
-    last_command_signature = None
+    last_command_kind = None
+    last_command_log_s = 0.0
     contact_pose_written_for = 0
 
     running = True
@@ -329,15 +330,11 @@ def main() -> int:
                     print(f"安全区接触校正参考已保存：{args.contact_output}")
                 if latest_output.command is not None:
                     packet_out = latest_output.command.to_frame(mission_sequence)
-                    command_signature = (
+                    command_kind = (
                         latest_output.state.value,
                         latest_output.command.command,
-                        latest_output.command.flags,
-                        latest_output.command.target_x_mm,
-                        latest_output.command.target_y_mm,
-                        latest_output.command.heading_cdeg,
                     )
-                    if command_signature != last_command_signature:
+                    if command_kind != last_command_kind or now - last_command_log_s >= 0.5:
                         print(
                             "任务状态切换："
                             f"state={latest_output.state.value} "
@@ -347,7 +344,8 @@ def main() -> int:
                             f"{latest_output.command.target_y_mm}) "
                             f"heading={latest_output.command.heading_cdeg / 100.0:.2f}°"
                         )
-                        last_command_signature = command_signature
+                        last_command_kind = command_kind
+                        last_command_log_s = now
                     mission_sequence = (mission_sequence + 1) & 0xFF
                 elif latest_output.report is not None:
                     packet_out = latest_output.report.to_frame(report_sequence)

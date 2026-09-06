@@ -144,8 +144,6 @@ class RescueMission:
         self.delivered_common = False
         self.delivery_count = 0
         self.approach_acknowledged = False
-        self.delivery_route: tuple[float, float] | None = None
-        self.return_route: tuple[float, float] | None = None
 
     @property
     def allowed_classes(self) -> tuple[str, ...]:
@@ -253,15 +251,15 @@ class RescueMission:
         return math.degrees(math.atan2(dy, dx)) % 360.0, math.hypot(dx, dy)
 
     def _navigate(self, pose: PoseInput) -> MissionOutput:
-        if self.delivery_route is None:
-            if not pose.valid:
-                return MissionOutput(
-                    self.state, None, None,
-                    "等待有效位姿计算一次性航向和距离",
-                )
-            self.delivery_route = self._route_to(pose, self.delivery_contact_point)
-        travel_heading_deg, distance = self.delivery_route
-        if pose.valid and robot_intersects_safe_zone(pose, self.settings):
+        if not pose.valid:
+            return MissionOutput(
+                self.state, None, None,
+                "融合位姿暂时无效，暂停更新返航航向和剩余距离",
+            )
+        travel_heading_deg, distance = self._route_to(
+            pose, self.delivery_contact_point
+        )
+        if robot_intersects_safe_zone(pose, self.settings):
             self.state = MissionState.ALIGN
             command = self._waypoint_command(
                 CMD_ALIGN_SAFE_ZONE, self.approach_point, heading=True
@@ -275,7 +273,7 @@ class RescueMission:
         )
         return MissionOutput(
             self.state, None, command,
-            f"定距驶向对应分区中心，航向{travel_heading_deg:.1f}°，距离{distance:.2f}m",
+            f"持续修正返安全区航向{travel_heading_deg:.1f}°，剩余{distance:.2f}m",
         )
 
     def step(self, vision: VisionInput, pose: PoseInput, stm: Stm32Status) -> MissionOutput:
@@ -343,7 +341,6 @@ class RescueMission:
             status_fresh = stm.age_ms <= 250.0
             if status_fresh and stm.gripper_closed:
                 self.state = MissionState.NAVIGATE
-                self.delivery_route = None
                 return self._navigate(pose)
             return MissionOutput(
                 self.state, None,
@@ -422,32 +419,27 @@ class RescueMission:
                 self.approach_acknowledged = False
                 self.delivery_stationary_started_s = None
                 self.delivery_stationary_anchor = None
-                self.delivery_route = None
-                self.return_route = None
                 return MissionOutput(
                     self.state, NormalSupplyReport(), None,
                     f"已回到中心搜索流程，累计投送{self.delivery_count}件",
                 )
             if stm.age_ms <= 250.0 and stm.mode == STM_MODE_FACE_FIELD_CENTER:
-                if self.return_route is None:
-                    if not pose.valid:
-                        return MissionOutput(
-                            self.state, None, None,
-                            "等待有效位姿计算返中航向和距离",
-                        )
-                    center_distance = math.hypot(pose.x_m, pose.y_m)
-                    travel_distance = max(
-                        0.0, center_distance - self.settings.center_stop_radius_m
+                if not pose.valid:
+                    return MissionOutput(
+                        self.state, None, None,
+                        "融合位姿暂时无效，暂停更新返中航向和剩余距离",
                     )
-                    heading = math.degrees(
-                        math.atan2(-pose.y_m, -pose.x_m)
-                    ) % 360.0
-                    self.return_route = heading, travel_distance
-                heading, distance = self.return_route
+                center_distance = math.hypot(pose.x_m, pose.y_m)
+                distance = max(
+                    0.0, center_distance - self.settings.center_stop_radius_m
+                )
+                heading = math.degrees(
+                    math.atan2(-pose.y_m, -pose.x_m)
+                ) % 360.0
                 return MissionOutput(
                     self.state, None,
                     self._distance_command(CMD_RETURN_CENTER, heading, distance),
-                    f"返中心区域：航向{heading:.1f}°，距离{distance:.2f}m，"
+                    f"持续修正返中航向{heading:.1f}°，剩余{distance:.2f}m，"
                     f"距中心{self.settings.center_stop_radius_m:.2f}m停车",
                 )
             return MissionOutput(

@@ -42,7 +42,7 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 ```
 
 地图仍实时显示本机融合位置，但默认`--tx-rate 0`，不再向F407连续发送`TYPE=0x16`，避免串口
-持续位姿流影响任务命令。F407的行驶输入改为任务程序计算的航向和定距。
+持续位姿坐标流影响任务命令。F407的行驶输入改为任务程序根据本机融合位置持续计算的航向和剩余距离。
 
 运行依赖 Python 3、OpenCV、NumPy、Pillow，以及已经编译好的 `localization/build/t265_omni_localizer`。启动脚本会先检查这些依赖和 UART 权限。
 
