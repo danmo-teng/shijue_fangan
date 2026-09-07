@@ -19,7 +19,6 @@ from state_machine import (
     robot_intersects_safe_zone,
 )
 from rescue_vision.mission_protocol import (
-    CMD_ALIGN_SAFE_ZONE,
     CMD_DISTANCE_VALID,
     CMD_ENTER_SAFE_ZONE,
     CMD_GRAB_CONFIRMED,
@@ -139,37 +138,13 @@ def run_side(side: str, desired_y: int, desired_heading: int):
         age_ms=5,
     )
     output = mission.step(VisionInput(), biased_arrival, nav_done)
-    assert output.state == MissionState.ALIGN
-    assert mission.delivery_arrival_confirmed
-    assert output.command.command == CMD_ALIGN_SAFE_ZONE
-    assert output.command.flags & CMD_USE_FINAL_HEADING
-    assert output.command.heading_cdeg == desired_heading * 100
-    output = mission.step(VisionInput(), biased_arrival, nav_done)
-    assert output.state == MissionState.ALIGN
-    assert output.command.command == CMD_ALIGN_SAFE_ZONE
-    align_status = Stm32Status(flags=STM_GRIPPER_CLOSED, mode=11, age_ms=5)
-    output = mission.step(
-        VisionInput(),
-        PoseInput(True, arrival_x, arrival_y, desired_heading - 5),
-        align_status,
-    )
-    assert output.command.command == CMD_ALIGN_SAFE_ZONE
-    assert output.state == MissionState.ALIGN
-    aligned_pose = PoseInput(True, arrival_x, arrival_y, desired_heading)
-    output = mission.step(VisionInput(), aligned_pose, align_status)
-    assert output.state == MissionState.ALIGN
-    clock.advance(0.05)
-    output = mission.step(VisionInput(), aligned_pose, align_status)
-    assert output.state == MissionState.ALIGN
-    clock.advance(0.06)
-    output = mission.step(VisionInput(), aligned_pose, align_status)
     assert output.state == MissionState.ENTER_SAFE_ZONE
+    assert mission.delivery_arrival_confirmed
     assert output.command.command == CMD_ENTER_SAFE_ZONE
     assert output.command.flags & CMD_USE_FINAL_HEADING
     assert output.command.heading_cdeg == desired_heading * 100
 
-    # Mode 14 is no longer a completion input, even after a long stationary
-    # period. Only fresh mode 15 (CHECK/RAM_VERIFY) may confirm placement.
+    # Only fresh mode 15 (CHECK/RAM_VERIFY) may confirm placement.
     contact_y = 1.035 if side == "red" else -1.035
     biased_check = PoseInput(True, arrival_x, arrival_y, desired_heading)
     output = mission.step(VisionInput(), biased_check, Stm32Status(mode=14, age_ms=5))
@@ -309,23 +284,9 @@ def test_distance_done_requires_fresh_nav_status():
         mode=10,
         age_ms=5,
     )
-    assert mission.step(VisionInput(), pose, fresh).state == MissionState.ALIGN
-
-
-def test_unexpected_forward_stall_faults():
-    clock = FakeClock()
-    mission = RescueMission(MissionSettings(side="red"), clock=clock)
-    mission.state = MissionState.ENTER_SAFE_ZONE
-    mission.selected_class = "green_supply"
-    mission.delivery_arrival_confirmed = True
-    pose = PoseInput(True, -0.15, 1.02, 90)
-    status = Stm32Status(mode=14, age_ms=5)
-    assert mission.step(VisionInput(), pose, status).state == MissionState.ENTER_SAFE_ZONE
-    clock.advance(0.51)
-    output = mission.step(VisionInput(), pose, status)
-    assert output.state == MissionState.FAULT
-    assert output.command.command == 0
-    assert "堵转" in output.message
+    output = mission.step(VisionInput(), pose, fresh)
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    assert output.command.command == CMD_ENTER_SAFE_ZONE
 
 
 def main():
@@ -334,7 +295,6 @@ def main():
     test_grab_wait_has_no_timeout()
     test_safe_zone_circle_geometry()
     test_distance_done_requires_fresh_nav_status()
-    test_unexpected_forward_stall_faults()
     print("mission state machine PASS")
 
 

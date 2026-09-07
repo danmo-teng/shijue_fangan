@@ -9,7 +9,6 @@ from enum import Enum
 from typing import Callable
 
 from rescue_vision.mission_protocol import (
-    CMD_ALIGN_SAFE_ZONE,
     CMD_DISTANCE_VALID,
     CMD_DRIVE_STRAIGHT,
     CMD_ENTER_SAFE_ZONE,
@@ -32,7 +31,6 @@ class MissionState(str, Enum):
     GRAB_CHECK = "GRAB_CHECK"
     GRABBING = "GRABBING"
     NAVIGATE = "NAVIGATE"
-    ALIGN = "ALIGN"
     ENTER_SAFE_ZONE = "ENTER_SAFE_ZONE"
     COMPLETE = "COMPLETE"
     RETURN_CENTER = "RETURN_CENTER"
@@ -44,8 +42,6 @@ MATERIAL_CLASSES = frozenset(("green_supply", "core_black", "danger_cyan"))
 STM_MODE_SEARCH = 3
 STM_MODE_APPROACH = 4
 STM_MODE_NAVIGATE = 10
-STM_MODE_ALIGN = 11
-STM_MODE_RAM_FORWARD = 14  # Legacy/unexpected: monitored only as a stall fault.
 STM_MODE_RAM_VERIFY = 15
 STM_MODE_EXIT_SAFE_ZONE = 16
 STM_MODE_FACE_FIELD_CENTER = 17
@@ -102,10 +98,6 @@ class MissionSettings:
     nav_fence_heading_tolerance_deg: float = 30.0
     delivery_stationary_s: float = 0.8
     delivery_stationary_tolerance_m: float = 0.025
-    align_tolerance_deg: float = 2.0
-    align_confirmation_frames: int = 2
-    align_hold_s: float = 0.10
-    unexpected_forward_stall_s: float = 0.50
     center_stop_radius_m: float = 0.60
 
     def __post_init__(self) -> None:
@@ -125,11 +117,8 @@ class MissionSettings:
             raise ValueError("center stop radius must be positive")
         if not 0 < self.push_plate_offset_m < self.safe_fence_field_face_abs_m:
             raise ValueError("push plate offset must be a positive body-frame distance")
-        if (self.front_pusher_offset_m <= 0
-                or self.align_confirmation_frames < 2
-                or self.align_hold_s <= 0
-                or self.unexpected_forward_stall_s <= 0):
-            raise ValueError("mechanism and alignment confirmation parameters are invalid")
+        if self.front_pusher_offset_m <= 0:
+            raise ValueError("mechanism and safety parameters are invalid")
 
 
 def angle_error_deg(target: float, current: float) -> float:
@@ -169,10 +158,6 @@ class RescueMission:
         self.delivery_count = 0
         self.approach_acknowledged = False
         self.delivery_arrival_confirmed = False
-        self.align_hits = 0
-        self.align_started_s: float | None = None
-        self.forward_stationary_started_s: float | None = None
-        self.forward_stationary_anchor: tuple[float, float] | None = None
 
     @property
     def allowed_classes(self) -> tuple[str, ...]:
@@ -267,27 +252,6 @@ class RescueMission:
         elapsed = max(0.0, now - started)
         return elapsed >= self.settings.delivery_stationary_s, elapsed
 
-    def _unexpected_forward_stalled(self, pose: PoseInput) -> bool:
-        if not pose.valid:
-            self.forward_stationary_started_s = None
-            self.forward_stationary_anchor = None
-            return False
-        now = self.clock()
-        if self.forward_stationary_anchor is None:
-            self.forward_stationary_anchor = (pose.x_m, pose.y_m)
-            self.forward_stationary_started_s = now
-            return False
-        moved = math.hypot(
-            pose.x_m - self.forward_stationary_anchor[0],
-            pose.y_m - self.forward_stationary_anchor[1],
-        )
-        if moved > self.settings.delivery_stationary_tolerance_m:
-            self.forward_stationary_anchor = (pose.x_m, pose.y_m)
-            self.forward_stationary_started_s = now
-            return False
-        started = self.forward_stationary_started_s
-        return started is not None and now - started >= self.settings.unexpected_forward_stall_s
-
     def _flags(self, *, straight=False, heading=False) -> int:
         result = CMD_VALID | (CMD_RED_SIDE if self.settings.side == "red" else 0)
         if straight:
@@ -337,16 +301,16 @@ class RescueMission:
         )
         if fence_stop_reached or stm_distance_done:
             self.delivery_arrival_confirmed = True
-            self.state = MissionState.ALIGN
-            self.align_hits = 0
-            self.align_started_s = None
+            self.state = MissionState.ENTER_SAFE_ZONE
+            self.delivery_stationary_started_s = None
+            self.delivery_stationary_anchor = None
             command = self._waypoint_command(
-                CMD_ALIGN_SAFE_ZONE, self.approach_point, heading=True
+                CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True
             )
             return MissionOutput(
                 self.state, None, command,
                 ("高围栏前停车点" if fence_stop_reached else "STM32定距完成")
-                + f"，锁存到达并开始对正{self.desired_heading_deg:.1f}°",
+                + "，锁存到达并直接进入安全区投送",
             )
         if not pose.valid:
             return MissionOutput(
@@ -440,54 +404,7 @@ class RescueMission:
         if self.state == MissionState.NAVIGATE:
             return self._navigate(pose, stm)
 
-        if self.state == MissionState.ALIGN:
-            target = self.approach_point
-            yaw_error = abs(angle_error_deg(self.desired_heading_deg, pose.yaw_deg)) if pose.valid else math.inf
-            command = self._waypoint_command(CMD_ALIGN_SAFE_ZONE, target, heading=True)
-            align_confirmed = (
-                pose.valid
-                and stm.age_ms <= 250.0
-                and stm.mode == STM_MODE_ALIGN
-                and yaw_error <= self.settings.align_tolerance_deg
-            )
-            if align_confirmed:
-                if self.align_started_s is None:
-                    self.align_started_s = self.clock()
-                    self.align_hits = 1
-                else:
-                    self.align_hits += 1
-            else:
-                self.align_started_s = None
-                self.align_hits = 0
-            aligned_for_s = (
-                0.0 if self.align_started_s is None
-                else self.clock() - self.align_started_s
-            )
-            if (self.align_hits >= self.settings.align_confirmation_frames
-                    and aligned_for_s >= self.settings.align_hold_s):
-                self.state = MissionState.ENTER_SAFE_ZONE
-                self.delivery_stationary_started_s = None
-                self.delivery_stationary_anchor = None
-                command = self._waypoint_command(
-                    CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True
-                )
-            return MissionOutput(
-                self.state, None, command,
-                f"只对正不前进：stm_mode={stm.mode} 角差={yaw_error:.1f}° "
-                f"稳定={aligned_for_s:.2f}s/{self.align_hits}帧",
-            )
-
         if self.state == MissionState.ENTER_SAFE_ZONE:
-            if stm.age_ms <= 250.0 and stm.mode == STM_MODE_RAM_FORWARD:
-                if self._unexpected_forward_stalled(pose):
-                    self.state = MissionState.FAULT
-                    return MissionOutput(
-                        self.state, None, MissionCommand(0),
-                        "检测到mode=14高围栏前稳定堵转，停止且禁止继续前冲",
-                    )
-            else:
-                self.forward_stationary_started_s = None
-                self.forward_stationary_anchor = None
             delivery_verify_active = (
                 stm.age_ms <= 250.0
                 and stm.mode == STM_MODE_RAM_VERIFY
@@ -543,10 +460,6 @@ class RescueMission:
                 self.delivery_stationary_started_s = None
                 self.delivery_stationary_anchor = None
                 self.delivery_arrival_confirmed = False
-                self.align_hits = 0
-                self.align_started_s = None
-                self.forward_stationary_started_s = None
-                self.forward_stationary_anchor = None
                 return MissionOutput(
                     self.state, NormalSupplyReport(), None,
                     f"已回到中心搜索流程，累计投送{self.delivery_count}件",

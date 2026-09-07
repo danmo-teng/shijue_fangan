@@ -194,7 +194,6 @@ class MissionPlanner:
     CONTINUOUS_STATES = {
         MissionState.GRABBING,
         MissionState.NAVIGATE,
-        MissionState.ALIGN,
         MissionState.ENTER_SAFE_ZONE,
         MissionState.COMPLETE,
         MissionState.RETURN_CENTER,

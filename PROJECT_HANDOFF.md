@@ -333,29 +333,20 @@ zone_center_x_abs_m = 0.150
 蓝方 y=-1027.5 mm
 ```
 
-NAV到ALIGN：
+NAV到ENTER：
 
 - 轴向误差≤30 mm；
 - 横向误差≤50 mm；
-- 航向必须朝向围栏；
 - 或收到新鲜的`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`并满足合理横向/朝向条件；
-- 达到后锁存`delivery_arrival_confirmed`。
-
-ALIGN到ENTER：
-
-- F407状态新鲜；
-- `mode=11`；
-- 上位机yaw误差≤2°；
-- 连续至少2帧且保持100 ms；
-- ALIGN阶段只发送对正，不允许前进。
+- 达到后锁存`delivery_arrival_confirmed`并直接发送新鲜的`ENTER_SAFE_ZONE`；
+- 下位机已删除安全区车头对正，不能再发送`ALIGN_SAFE_ZONE`等待`mode=11`。
 
 完成投送：
 
 - 必须已锁存到达；
 - 只接受新鲜`mode=15`；
 - 位姿在25 mm范围内稳定0.8秒；
-- `mode=14`不能完成；
-- mode 14稳定堵转超过0.5秒时发送STOP并进入FAULT。
+- 下位机新版本在`ENTER_SAFE_ZONE`后直接进入张爪/CHECK流程。
 
 ## 12. UART协议与线程
 

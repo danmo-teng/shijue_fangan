@@ -99,7 +99,7 @@ bearing = atan2(target_y - pose_y, target_x - pose_x)
 distance = hypot(target_x - pose_x, target_y - pose_y)
 ```
 
-`NAVIGATE_WAYPOINT`持续发送最新`bearing + remaining_distance`，但不下发X/Y位置坐标。里程计存在累计误差时，下一帧会根据T265+编码器融合位置修正航向和剩余距离；到达后由RDK地图判断切换`ALIGN_SAFE_ZONE`和`ENTER_SAFE_ZONE`。
+`NAVIGATE_WAYPOINT`持续发送最新`bearing + remaining_distance`，但不下发X/Y位置坐标。里程计存在累计误差时，下一帧会根据T265+编码器融合位置修正航向和剩余距离；到达后由RDK地图锁存到达并直接发送`ENTER_SAFE_ZONE`。下位机新版本已删除`ALIGN_SAFE_ZONE`执行步骤，RDK不再等待`mode=11`。
 
 返航期间定位采用编码器平移进度为主、T265低频位置纠偏；接近围栏后检测“轮子在转但T265
 基本不动”的空转并冻结轮式增量。地图日志中的`navigation.wheel_progress_m`可直接核对编码器
@@ -114,10 +114,9 @@ RDK持续计算指向原点的航向以及`当前位置到中心距离-0.60 m`�
 期间航向和剩余距离随融合位姿更新，到距中心600 mm的位置即恢复`SEARCH`。
 
 NAV阶段只要地图车体圆与安全区相交，或收到新鲜的`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`，
-就锁存本次已经到达。随后CHECK阶段不再逐帧重新要求地图相交，避免固定定位偏差把流程卡死。
-发送`TASK_COMPLETE`必须满足：到达已锁存、融合位姿有效、新鲜`mode=15`，并且融合位置在
-半径25 mm范围内持续稳定0.8秒。`mode=14`绝不触发投送完成；若兼容旧状态时观察到mode 14
-位置稳定超过0.5秒，上位机发送STOP并进入FAULT，禁止在高围栏前继续前冲。
+就锁存本次已经到达并直接发送`ENTER_SAFE_ZONE`。下位机新版本不再执行ALIGN，对齐命令只保留
+协议兼容解析；随后进入张爪/CHECK流程。发送`TASK_COMPLETE`必须满足：到达已锁存、融合位姿
+有效、新鲜`mode=15`，并且融合位置在半径25 mm范围内持续稳定0.8秒。
 
 ## 围栏接触参考与现场调参
 
