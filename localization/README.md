@@ -143,8 +143,8 @@ python3 localization/tools/t265_f407_debug.py \
   --uart /dev/ttyS1 --label rotate_90_180_360 --trial rotate
 ```
 
-程序默认使用`--ignore-encoders`启动已有定位器：编码器原始帧、三轮轮式轨迹和T265数据仍全部
-记录，但编码器不会反过来影响T265主定位。每次运行自动创建独立目录：
+程序会生成一份临时定位配置，把`encoder_fusion_weight`设为0，同时保留编码器原始帧和三轮轮式
+轨迹记录；编码器不会反过来影响T265主定位。每次运行自动创建独立目录：
 `rescue_map/runtime/history/t265_f407_debug/<时间>_<标签>/`，保存：
 
 - `localization_debug.csv`：每帧T265、F407累计计数、三轮原始/融合增量、raw tracking-origin、修正后的robot-center、轮式轨迹和差值；
@@ -165,6 +165,24 @@ robot-center的初始物理偏置；`rotation_check`比较90/180/270/360°理论
 `wheel_to_t265_fit`给出`T265车体增量 = A × F407轮式增量`，对角线偏离1主要表示尺度误差，
 非对角线较大表示轮序、符号或平面轴混用；`interface_observation`检查F407帧是否连续、有效和
 状态位是否正常。原始数据仍以CSV为准，自动结论不能替代实际原地旋转和直线标定。
+
+如果需要像原地图程序一样观察轨迹并主动发送合法F407调试命令，运行：
+
+```bash
+python3 localization/tools/t265_f407_debug_map.py
+```
+
+窗口提供`STOP`、`ABORT`、`GRAB_CONFIRMED`、`NAVIGATE_WAYPOINT`、`RETURN_CENTER`、
+`ENTER_SAFE_ZONE`和`TASK_COMPLETE`按钮；导航距离/航向可在窗口中调整。`发送配置`会向F407
+发送3帧`TYPE=0x11`，可能启动下位机任务流程，默认不会自动发送。所有任务命令通过定位器的
+`--command-file`桥接并以100 Hz刷新，关闭窗口前会释放命令文件。该调试地图同时显示T265修正
+中心、raw tracking origin和轮式中心三条轨迹，运行日志保存在独立目录。
+
+安装桌面启动图标：
+
+```bash
+bash localization/tools/install_desktop_launcher.sh
+```
 
 ## UART 兼容性
 

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=T265-F407调试地图
+Comment=查看T265、三轮里程计并主动发送F407调试命令
+Exec=/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh
+Icon=applications-engineering
+Terminal=true
+StartupNotify=true
+Categories=Utility;Development;

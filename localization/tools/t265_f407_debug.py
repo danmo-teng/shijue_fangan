@@ -2,7 +2,7 @@
 """Capture and analyze T265 versus the F407 three-wheel odometry interface.
 
 The live mode deliberately does not send TYPE=0x11/0x12/0x18 frames.  It
-starts the already-tested upper-computer localizer in T265-only fusion mode,
+starts the already-tested upper-computer localizer with zero encoder fusion,
 while still listening to F407 TYPE=0x15 odometry and TYPE=0x17 status frames.
 The localizer's full-rate CSV is retained for every run and can be analyzed
 again without hardware.
@@ -84,6 +84,35 @@ def find_csv(path: Path) -> tuple[Path, Path | None]:
     if not csv_path.exists():
         raise FileNotFoundError(f"未找到定位CSV：{path}")
     return csv_path, path
+
+
+def write_debug_config(source: Path, target: Path) -> None:
+    """Keep wheel samples enabled while making their EKF weight exactly zero."""
+    lines = source.read_text(encoding="utf-8").splitlines()
+    replacements = {
+        "encoder_fusion_weight": "encoder_fusion_weight = 0.0",
+        "navigation_distance_compensation_enabled":
+            "navigation_distance_compensation_enabled = false",
+        "startup_wheel_disable_distance_m": "startup_wheel_disable_distance_m = 0.0",
+        "corner_exclusion_inner_m": "corner_exclusion_inner_m = 2.0",
+    }
+    seen: set[str] = set()
+    output: list[str] = []
+    for line in lines:
+        stripped = line.lstrip()
+        replaced = False
+        for key, replacement in replacements.items():
+            if stripped.startswith(f"{key} ") or stripped.startswith(f"{key}="):
+                output.append(replacement)
+                seen.add(key)
+                replaced = True
+                break
+        if not replaced:
+            output.append(line)
+    for key, replacement in replacements.items():
+        if key not in seen:
+            output.append(replacement)
+    target.write_text("\n".join(output) + "\n", encoding="utf-8")
 
 
 def initial_reference(
@@ -353,6 +382,7 @@ def run_capture(args: argparse.Namespace) -> int:
         run_dir = args.output_root / f"{base_name}_{suffix:02d}"
         suffix += 1
     run_dir.mkdir(parents=True, exist_ok=False)
+    config_path = run_dir / "localization.conf"
     csv_path = run_dir / "localization_debug.csv"
     json_path = run_dir / "localization_result.json"
     status_path = run_dir / "stm32_status.json"
@@ -360,12 +390,11 @@ def run_capture(args: argparse.Namespace) -> int:
     analysis_path = run_dir / "analysis.json"
     command = [
         str(args.localizer),
-        "--config", str(args.config),
+        "--config", str(config_path),
         "--output", str(json_path),
         "--csv", str(csv_path),
         "--rate", str(args.rate),
         "--tx-rate", "0",
-        "--ignore-encoders",
         "--stm-status", str(status_path),
     ]
     if not args.no_uart:
@@ -374,6 +403,7 @@ def run_capture(args: argparse.Namespace) -> int:
         command += ["--serial", args.serial]
     if args.duration > 0.0:
         command += ["--duration", str(args.duration)]
+    write_debug_config(args.config, config_path)
     metadata = {
         "schema_version": 1,
         "created_local": datetime.now().isoformat(timespec="seconds"),
@@ -385,6 +415,7 @@ def run_capture(args: argparse.Namespace) -> int:
         "upper_repository": "danmo-teng/shijue_fangan",
         "lower_repository": "gandizm/F407-Rescue-Robot@68a0802",
         "files": {
+            "localization_config": config_path.name,
             "csv": csv_path.name,
             "localization_json": json_path.name,
             "stm_status_json": status_path.name,
@@ -397,7 +428,7 @@ def run_capture(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
     print(f"日志目录：{run_dir}")
-    print("监听模式：不发送 TYPE=0x11/0x12/0x18，不启动 F407 任务")
+    print("监听模式：不发送 TYPE=0x11/0x12/0x18，不启动 F407 任务；轮式样本保留但融合权重为0")
     print("执行：" + " ".join(command))
     with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(
