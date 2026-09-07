@@ -44,6 +44,10 @@ def main() -> None:
         app.start_session()
         expected_coordinate = 1.35
         assert app.trajectory.points == [(expected_coordinate, expected_coordinate)]
+        app.localization_log.write_text("old diagnostic log\n", encoding="utf-8")
+        app.archive_previous_runtime()
+        archived_logs = list((map_app.RUNTIME / "history").glob("*/localization_debug.csv"))
+        assert archived_logs and archived_logs[-1].read_text(encoding="utf-8") == "old diagnostic log\n"
         assert "--uart" in app.localization_command()
         assert "--csv" in app.localization_command()
         csv_index = app.localization_command().index("--csv")

@@ -97,6 +97,7 @@ class MissionSettings:
     safe_zone_outer_edge_abs_m: float = 1.50
     safe_fence_field_face_abs_m: float = 1.140
     fence_stop_safety_margin_m: float = 0.0075
+    t265_delivery_extra_m: float = 0.0
     nav_axial_tolerance_m: float = 0.030
     nav_lateral_tolerance_m: float = 0.050
     nav_fence_heading_tolerance_deg: float = 30.0
@@ -121,7 +122,7 @@ class MissionSettings:
             raise ValueError("center stop radius must be positive")
         if not 0 < self.push_plate_offset_m < self.safe_fence_field_face_abs_m:
             raise ValueError("push plate offset must be a positive body-frame distance")
-        if self.front_pusher_offset_m <= 0:
+        if self.front_pusher_offset_m <= 0 or self.t265_delivery_extra_m < 0:
             raise ValueError("mechanism and safety parameters are invalid")
 
 
@@ -208,7 +209,12 @@ class RescueMission:
     def fence_stop_point(self) -> tuple[float, float]:
         x_m, contact_y_m = self.fence_contact_center
         sign = 1.0 if self.settings.side == "red" else -1.0
-        return x_m, contact_y_m - sign * self.settings.fence_stop_safety_margin_m
+        return (
+            x_m,
+            contact_y_m
+            - sign * self.settings.fence_stop_safety_margin_m
+            + sign * self.settings.t265_delivery_extra_m,
+        )
 
     def contact_pose(self, observed: PoseInput) -> tuple[float, float, float]:
         """Apply only the boundary-normal constraint justified by fence contact."""
@@ -304,6 +310,8 @@ class RescueMission:
             and stm.gripper_closed
             and stm.distance_done
             and abs(pose.x_m - self.fence_stop_point[0]) <= 0.080
+            and abs(pose.y_m - self.fence_stop_point[1]) <=
+                self.settings.nav_axial_tolerance_m
             and self._facing_fence(pose.yaw_deg)
         )
         if fence_stop_reached or stm_distance_done:

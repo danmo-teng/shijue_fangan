@@ -392,6 +392,7 @@ P6/P7   最新绝对航向，0.01°
 - `localization.conf`：本次自动生成的定位配置；
 - `localization_result.json`：融合位置、T265、轮式门控、NAV融合诊断；
 - `localization_debug.csv`：每个T265位姿帧一行的全速率调试日志，包含T265原始/投影结果、轮式运动学增量、轮式累计位姿和融合位姿；
+- `history/YYYYMMDD_HHMMSS/`：启动新会话前自动归档上一轮运行文件，便于连续保留多次实车日志；
 - `uart_command.bin`：视觉任务写入的最新15字节帧；
 - `stm32_status.json`：F407状态及实际UART转发统计；
 - `mission_diagnostics.json`：50 Hz任务规划详细状态；

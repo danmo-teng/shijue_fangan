@@ -7,6 +7,7 @@ import argparse
 import math
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -445,6 +446,7 @@ class RescueMapApp:
         self.last_live_read_monotonic = None
         RUNTIME.mkdir(parents=True, exist_ok=True)
         self.localization_log.parent.mkdir(parents=True, exist_ok=True)
+        self.archive_previous_runtime()
         write_session(
             RUNTIME / "session.json",
             self.zone,
@@ -485,6 +487,35 @@ class RescueMapApp:
                 )
             except OSError as exc:
                 self.message = f"识别启动失败：{exc}"
+
+    def archive_previous_runtime(self) -> None:
+        """Copy the previous session files before starting a new run."""
+        candidates = (
+            self.localization_json,
+            self.localization_log,
+            RUNTIME / "session.json",
+            RUNTIME / "localization.conf",
+            RUNTIME / "stm32_status.json",
+            RUNTIME / "mission_diagnostics.json",
+            RUNTIME / "delivery_contact_pose.json",
+            RUNTIME / "uart_command.bin",
+        )
+        existing = [path for path in candidates if path.is_file()]
+        if not existing:
+            return
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        archive_dir = RUNTIME / "history" / stamp
+        suffix = 1
+        while archive_dir.exists():
+            suffix += 1
+            archive_dir = RUNTIME / "history" / f"{stamp}_{suffix:02d}"
+        archive_dir.mkdir(parents=True, exist_ok=False)
+        for path in existing:
+            try:
+                shutil.copy2(path, archive_dir / path.name)
+            except OSError:
+                # A diagnostic archive must never prevent a new safety session.
+                continue
 
     def localization_command(self) -> list[str]:
         """Build the localizer invocation for the selected hardware mode."""

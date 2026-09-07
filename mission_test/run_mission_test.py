@@ -17,6 +17,7 @@ import cv2
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
+T265_DELIVERY_EXTRA_M = 0.030
 sys.path.insert(0, str(PROJECT_ROOT / "vision"))
 
 from state_machine import (
@@ -354,6 +355,11 @@ class MissionPlanner:
             "gripper_closed": stm.gripper_closed,
             "distance_done": stm.distance_done,
             "delivery_arrival_confirmed": self.mission.delivery_arrival_confirmed,
+            "fence_stop_x_mm": round(self.mission.fence_stop_point[0] * 1000.0),
+            "fence_stop_y_mm": round(self.mission.fence_stop_point[1] * 1000.0),
+            "t265_delivery_extra_mm": round(
+                self.mission.settings.t265_delivery_extra_m * 1000.0
+            ),
             "warning": self.warning,
         }
         self.diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
@@ -505,6 +511,10 @@ def main() -> int:
         delivery_stationary_s=args.delivery_stationary_seconds,
         delivery_stationary_tolerance_m=args.delivery_stationary_tolerance_mm / 1000.0,
         center_stop_radius_m=args.center_stop_radius_mm / 1000.0,
+        t265_delivery_extra_m=(
+            T265_DELIVERY_EXTRA_M
+            if session.get("localization_mode") == "t265" else 0.0
+        ),
     )
     mission = RescueMission(settings)
     config = load_config(args.config)

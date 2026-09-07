@@ -127,6 +127,7 @@ STM32；区别仅在于编码器是否进入融合计算。
 - `runtime/localization.conf`：传给融合定位程序的配置；
 - `runtime/localization_result.json`：T265+编码器融合实时输出。
 - `runtime/localization_debug.csv`：本次运行的全速率定位调试日志，每个 T265 位姿帧一行，包含 T265 原始/投影结果、三轮编码器帧、运动学增量、轮式里程计累计位姿、融合位姿和门控状态，可用表格或绘图工具查看两条轨迹的误差。
+- `runtime/history/YYYYMMDD_HHMMSS/`：启动下一次会话前自动归档上一轮运行文件，包含上一轮 CSV、定位快照、任务诊断和会话配置；历史日志不会再被新会话覆盖。
 - `runtime/uart_command.bin`：任务程序交给定位进程转发的15字节UART帧；
 - `runtime/stm32_status.json`：STM32爪子、摄像头和任务状态。
 - `runtime/delivery_contact_pose.json`：投送完成时的观测位姿、围栏相切参考位姿及建议位置偏差；仅供标定分析，不会自动重置融合定位。

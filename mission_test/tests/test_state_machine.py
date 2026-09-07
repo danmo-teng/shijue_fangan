@@ -134,9 +134,8 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert updated.command.heading_cdeg == round(updated_bearing * 100) % 36000
     assert updated.command.target_x_mm != output.command.target_x_mm
 
-    # A fresh NAV distance-done status must release the strict map-contact
-    # gate even with a 40 mm localization bias outside the tangent boundary.
-    arrival_y = 0.9875 if side == "red" else -0.9875
+    # A fresh NAV distance-done status must still satisfy the map axial gate.
+    arrival_y = 0.9975 if side == "red" else -0.9975
     arrival_x = target_x
     biased_arrival = PoseInput(True, arrival_x, arrival_y, desired_heading)
     assert not robot_intersects_safe_zone(biased_arrival, mission.settings)
@@ -267,13 +266,15 @@ def test_safe_zone_circle_geometry():
     assert not robot_intersects_safe_zone(PoseInput(True, 0.0, -1.069, 270), blue)
     assert not robot_intersects_safe_zone(PoseInput(True, 0.431, 1.20, 90), red)
     assert robot_intersects_safe_zone(PoseInput(True, 0.43, 1.20, 90), red)
+    t265_blue = MissionSettings(side="blue", t265_delivery_extra_m=0.030)
+    assert math.isclose(RescueMission(t265_blue).fence_stop_point[1], -1.0575)
 
 
 def test_distance_done_requires_fresh_nav_status():
     mission = RescueMission(MissionSettings(side="red"))
     mission.state = MissionState.NAVIGATE
     mission.selected_class = "green_supply"
-    pose = PoseInput(True, -0.15, 0.99, 90)
+    pose = PoseInput(True, -0.15, 0.98, 90)
     assert not robot_intersects_safe_zone(pose, mission.settings)
     stale = Stm32Status(
         flags=STM_GRIPPER_CLOSED | STM_DISTANCE_DONE,
@@ -293,6 +294,10 @@ def test_distance_done_requires_fresh_nav_status():
         age_ms=5,
     )
     output = mission.step(VisionInput(), pose, fresh)
+    assert output.state == MissionState.NAVIGATE
+
+    aligned_pose = PoseInput(True, -0.15, 0.9975, 90)
+    output = mission.step(VisionInput(), aligned_pose, fresh)
     assert output.state == MissionState.ENTER_SAFE_ZONE
     assert output.command.command == CMD_ENTER_SAFE_ZONE
 
