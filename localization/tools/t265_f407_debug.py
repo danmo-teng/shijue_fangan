@@ -73,6 +73,21 @@ def read_rows(csv_path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(stream))
 
 
+def read_events(csv_path: Path) -> list[dict[str, Any]]:
+    events_path = csv_path.parent / "events.jsonl"
+    if not events_path.exists():
+        return []
+    events: list[dict[str, Any]] = []
+    for line in events_path.read_text(encoding="utf-8").splitlines():
+        try:
+            value = json.loads(line)
+        except (ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(value, dict):
+            events.append(value)
+    return events
+
+
 def find_csv(path: Path) -> tuple[Path, Path | None]:
     if path.is_file():
         return path, path.parent if path.name.endswith(".csv") else None
@@ -353,6 +368,7 @@ def analyze(csv_path: Path, output_path: Path | None, trial: str,
             "last_wheel_status": integer(last, "wheel_status"),
             "last_wheel_sequence": integer(last, "wheel_frame_sequence"),
         },
+        "events": read_events(csv_path),
     }
     if output_path is not None:
         output_path.write_text(

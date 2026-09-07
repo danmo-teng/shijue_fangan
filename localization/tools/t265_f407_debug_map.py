@@ -127,7 +127,9 @@ class DebugMapApp:
         self.localization_json: Path | None = None
         self.status_json: Path | None = None
         self.command_path: Path | None = None
+        self.events_path: Path | None = None
         self.active_command: MissionCommand | None = None
+        self.active_experiment: str | None = None
         self.command_sequence = 0
         self.config_sequence = 0
         self.last_command_write = 0.0
@@ -328,12 +330,19 @@ class DebugMapApp:
         self.button(canvas, text, "nav", "NAV", (x0, 675, x0 + 155, 715), False, (50, 120, 80))
         self.button(canvas, text, "return", "RETURN", (x0 + 165, 675, x0 + 330, 715), False, (50, 100, 130))
         self.button(canvas, text, "complete", "TASK_COMPLETE", (x0, 730, x0 + 330, 770), False, (120, 70, 50))
+        self.button(canvas, text, "rotate90", "原地90°", (x0, 785, x0 + 103, 818), False, (75, 75, 105))
+        self.button(canvas, text, "rotate180", "原地180°", (x0 + 113, 785, x0 + 226, 818), False, (75, 75, 105))
+        self.button(canvas, text, "rotate360", "原地360°", (x0 + 236, 785, x0 + 330, 818), False, (75, 75, 105))
+        self.button(canvas, text, "forward1m", "直行1m", (x0, 825, x0 + 103, 858), False, (55, 110, 80))
+        self.button(canvas, text, "lateral1m", "横移1m", (x0 + 113, 825, x0 + 226, 858), False, (55, 110, 80))
+        self.button(canvas, text, "returntest", "转向返航", (x0 + 236, 825, x0 + 330, 858), False, (55, 100, 135))
         command_name = "无持续命令" if self.active_command is None else f"0x{self.active_command.command:02X} seq={self.command_sequence:03d}"
-        text.add(f"当前命令：{command_name}", (x0, 800), 16, (245, 215, 150), True)
-        text.add("键盘：C配置 S停止 A终止 G抓取 N导航 Y返中 E入区 T完成 X释放", (x0, 832), 13, (175, 175, 180))
-        text.add("1-4/R/B配置  U/I距离±100  H/J方向±10  Z清轨迹  F全屏  Q退出", (x0, 854), 13, (175, 175, 180))
-        text.add(f"日志：{self.run_dir.name if self.run_dir else '未启动'}", (x0, 900), 14, (175, 175, 180))
-        text.add(self.message, (x0, 960), 15, (0, 215, 255))
+        text.add(f"当前命令：{command_name}", (x0, 884), 15, (245, 215, 150), True)
+        text.add(f"实验：{self.active_experiment or '未标记'}（再次点击结束并写入events.jsonl）", (x0, 906), 13, (0, 215, 255))
+        text.add("旋转实验需人工推动/转动车体；横移命令会先转向再直行", (x0, 928), 12, (175, 175, 180))
+        text.add("C配置 S停止 A终止 G抓取 N导航 Y返中 E入区 T完成 X释放", (x0, 948), 12, (175, 175, 180))
+        text.add(f"日志：{self.run_dir.name if self.run_dir else '未启动'}", (x0, 970), 13, (175, 175, 180))
+        text.add(self.message, (x0, 997), 14, (0, 215, 255))
 
     def render(self) -> np.ndarray:
         canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
@@ -448,6 +457,82 @@ class DebugMapApp:
             self.command_path.unlink(missing_ok=True)
         self.message = "已释放命令文件，等待F407命令超时停车"
 
+    def record_event(self, name: str) -> None:
+        if self.events_path is None:
+            return
+        pose = self.localization.get("pose", {})
+        t265 = self.localization.get("t265", {})
+        odom = self.localization.get("wheel_odom", {})
+        event = {
+            "timestamp_monotonic_ns": time.monotonic_ns(),
+            "wall_time": datetime.now().isoformat(timespec="milliseconds"),
+            "event": name,
+            "pose": pose,
+            "t265": {
+                "tracking_origin": t265.get("tracking_origin"),
+                "robot_center_delta_forward_m": t265.get("robot_center_delta_forward_m"),
+                "robot_center_delta_left_m": t265.get("robot_center_delta_left_m"),
+            },
+            "wheel_odom": {
+                "x_m": odom.get("x_m"),
+                "y_m": odom.get("y_m"),
+                "yaw_deg": odom.get("yaw_deg"),
+                "travel_m": odom.get("travel_m"),
+            },
+            "status": self.status,
+            "active_command": None if self.active_command is None else {
+                "command": self.active_command.command,
+                "flags": self.active_command.flags,
+                "target_x_mm": self.active_command.target_x_mm,
+                "heading_cdeg": self.active_command.heading_cdeg,
+            },
+        }
+        with self.events_path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def toggle_experiment(self, name: str, action=None) -> None:
+        if self.active_experiment == name:
+            self.record_event(f"{name}_end")
+            self.active_experiment = None
+            if action is not None:
+                self.send_simple(CMD_STOP)
+            self.message = f"实验{name}已结束，结果保留在events.jsonl"
+            return
+        if self.active_experiment is not None:
+            self.record_event(f"{self.active_experiment}_end_aborted")
+        self.active_experiment = name
+        self.record_event(f"{name}_start")
+        if action is not None:
+            action()
+        else:
+            # Rotation markers are manual experiments; hold the lower machine
+            # instead of allowing a previous navigation command to continue.
+            self.send_simple(CMD_STOP)
+        self.message = f"实验{name}开始；完成后再次点击同一按钮结束"
+
+    def start_forward_experiment(self) -> None:
+        pose = self.current_pose()
+        self.distance_mm = 1000
+        self.heading_deg = pose[2] if pose is not None else start_pose(self.zone)[2]
+        self.send_navigation(CMD_NAVIGATE_WAYPOINT)
+
+    def start_lateral_experiment(self) -> None:
+        pose = self.current_pose()
+        self.distance_mm = 1000
+        base_heading = pose[2] if pose is not None else start_pose(self.zone)[2]
+        self.heading_deg = (base_heading + 90.0) % 360.0
+        self.send_navigation(CMD_NAVIGATE_WAYPOINT)
+
+    def start_return_experiment(self) -> None:
+        pose = self.current_pose()
+        if pose is None:
+            self.distance_mm = 1000
+            self.heading_deg = 0.0
+        else:
+            self.distance_mm = min(5000, max(0, int(round(math.hypot(pose[0], pose[1]) * 1000.0))))
+            self.heading_deg = math.degrees(math.atan2(-pose[1], -pose[0])) % 360.0
+        self.send_navigation(CMD_RETURN_CENTER)
+
     def unique_run_dir(self) -> Path:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base = self.options.output_root / f"{stamp}_interactive"
@@ -468,6 +553,7 @@ class DebugMapApp:
         self.localization_json = self.run_dir / "localization_result.json"
         self.status_json = self.run_dir / "stm32_status.json"
         self.command_path = self.run_dir / "uart_command.bin"
+        self.events_path = self.run_dir / "events.jsonl"
         log_path = self.run_dir / "localizer.log"
         metadata = {
             "schema_version": 1,
@@ -483,6 +569,7 @@ class DebugMapApp:
                 "localization_csv": "localization_debug.csv",
                 "stm_status": self.status_json.name,
                 "command_file": self.command_path.name,
+                "events": self.events_path.name,
                 "localizer_log": log_path.name,
             },
         }
@@ -528,6 +615,9 @@ class DebugMapApp:
                 process.kill()
 
     def stop_session(self) -> None:
+        if self.active_experiment is not None:
+            self.record_event(f"{self.active_experiment}_end_aborted")
+            self.active_experiment = None
         self.clear_command()
         self.stop_process(self.process)
         self.process = None
@@ -562,6 +652,18 @@ class DebugMapApp:
                     self.send_navigation(CMD_RETURN_CENTER)
                 elif name == "complete":
                     self.send_simple(CMD_TASK_COMPLETE)
+                elif name == "rotate90":
+                    self.toggle_experiment("rotate_90deg")
+                elif name == "rotate180":
+                    self.toggle_experiment("rotate_180deg")
+                elif name == "rotate360":
+                    self.toggle_experiment("rotate_360deg")
+                elif name == "forward1m":
+                    self.toggle_experiment("forward_1m", self.start_forward_experiment)
+                elif name == "lateral1m":
+                    self.toggle_experiment("lateral_1m_turn_then_drive", self.start_lateral_experiment)
+                elif name == "returntest":
+                    self.toggle_experiment("turn_and_return", self.start_return_experiment)
                 elif name == "dminus":
                     self.distance_mm = max(0, self.distance_mm - 100)
                 elif name == "dplus":
@@ -604,6 +706,16 @@ class DebugMapApp:
             self.send_navigation(CMD_RETURN_CENTER)
         elif key in (ord("t"), ord("T")):
             self.send_simple(CMD_TASK_COMPLETE)
+        elif key in (ord("o"), ord("O")):
+            self.toggle_experiment("rotate_90deg")
+        elif key in (ord("p"), ord("P")):
+            self.toggle_experiment("rotate_180deg")
+        elif key == ord("0"):
+            self.toggle_experiment("rotate_360deg")
+        elif key in (ord("v"), ord("V")):
+            self.toggle_experiment("forward_1m", self.start_forward_experiment)
+        elif key in (ord("l"), ord("L")):
+            self.toggle_experiment("lateral_1m_turn_then_drive", self.start_lateral_experiment)
         elif key in (ord("x"), ord("X")):
             self.clear_command()
         elif key in (ord("u"), ord("U")):
