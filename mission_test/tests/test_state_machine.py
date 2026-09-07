@@ -17,6 +17,7 @@ from state_machine import (
     RescueMission,
     VisionInput,
     robot_intersects_safe_zone,
+    target_inside_safe_zone,
 )
 from rescue_vision.mission_protocol import (
     CMD_DISTANCE_VALID,
@@ -268,6 +269,50 @@ def test_safe_zone_circle_geometry():
     assert robot_intersects_safe_zone(PoseInput(True, 0.43, 1.20, 90), red)
     t265_blue = MissionSettings(side="blue", t265_delivery_extra_m=0.030)
     assert math.isclose(RescueMission(t265_blue).fence_stop_point[1], -1.0575)
+
+
+def test_visual_safe_zone_filters_target_report():
+    safe_bbox = (500, 400, 300, 300)
+    inside = target(
+        x=640,
+        y=550,
+        bbox=(600, 520, 80, 80),
+    )
+    inside = VisionInput(
+        target_found=inside.target_found,
+        target_x=inside.target_x,
+        target_y=inside.target_y,
+        target_bbox=inside.target_bbox,
+        class_name=inside.class_name,
+        safe_found=True,
+        safe_bbox=safe_bbox,
+    )
+    assert target_inside_safe_zone(inside)
+    mission = RescueMission(MissionSettings(side="red"))
+    output = mission.step(inside, PoseInput(), Stm32Status())
+    assert output.state == MissionState.SEARCH
+    assert output.report is not None and not output.report.found
+    assert output.report.payload() == bytes(8)
+
+    outside = VisionInput(
+        target_found=True,
+        target_x=140,
+        target_y=140,
+        target_bbox=(100, 100, 80, 80),
+        class_name="green_supply",
+        safe_found=True,
+        safe_bbox=safe_bbox,
+    )
+    assert not target_inside_safe_zone(outside)
+    output = mission.step(outside, PoseInput(), Stm32Status())
+    assert output.state == MissionState.APPROACH
+    assert output.report is not None and output.report.found
+
+    # If the zone detector appears after a target was selected, immediately
+    # abandon the approach and overwrite the previous target report.
+    output = mission.step(inside, PoseInput(), Stm32Status())
+    assert output.state == MissionState.SEARCH
+    assert output.report is not None and not output.report.found
 
 
 def test_distance_done_requires_fresh_nav_status():

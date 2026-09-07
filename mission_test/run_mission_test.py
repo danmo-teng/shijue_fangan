@@ -27,12 +27,14 @@ from state_machine import (
     PoseInput,
     RescueMission,
     VisionInput,
+    target_inside_safe_zone,
 )
 from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
 from rescue_vision.config import load_config
 from rescue_vision.detector import TraditionalDetector
 from rescue_vision.localizer import GroundLocalizer
 from rescue_vision.mission_protocol import Stm32Status, write_command_frame
+from rescue_vision.safe_zone import bbox_center_in_safe_zone
 from rescue_vision.vision_protocol import IMAGE_HEIGHT, IMAGE_WIDTH, config_frame
 from rescue_vision.vse import VseScaler
 from run_yolo_x5 import DEFAULT_LABELS, DEFAULT_MODEL, X5YoloV8, load_labels
@@ -190,15 +192,40 @@ def write_contact_pose(path: Path, observed: PoseInput,
     temporary.replace(path)
 
 
-def observation(detections, allowed_classes: tuple[str, ...]) -> VisionInput:
+def observation(
+    detections,
+    allowed_classes: tuple[str, ...],
+    safe_class: str,
+) -> VisionInput:
     matches = [item for item in detections if item.class_name in allowed_classes]
+    safe_matches = [item for item in detections if item.class_name == safe_class]
+    safe = max(
+        safe_matches,
+        key=lambda item: item.bbox[2] * item.bbox[3],
+        default=None,
+    )
+    safe_bbox = None if safe is None else safe.bbox
     target = max(
         matches,
         key=lambda item: item.bbox[2] * item.bbox[3],
         default=None,
     )
+    if target is not None and safe_bbox is not None:
+        outside = [
+            item for item in matches
+            if not bbox_center_in_safe_zone(item.bbox, safe_bbox)
+        ]
+        # Prefer a real candidate outside the safe zone when both an already
+        # delivered object and a new object are visible. If every candidate is
+        # inside, retain the largest one for the UI and let the state machine
+        # produce an empty report.
+        target = max(
+            outside,
+            key=lambda item: item.bbox[2] * item.bbox[3],
+            default=target,
+        )
     if target is None:
-        return VisionInput()
+        return VisionInput(safe_found=safe is not None, safe_bbox=safe_bbox)
     x, y, width, height = target.bbox
     return VisionInput(
         target_found=True,
@@ -206,6 +233,8 @@ def observation(detections, allowed_classes: tuple[str, ...]) -> VisionInput:
         target_y=max(0, min(IMAGE_HEIGHT - 1, y + height // 2)),
         target_bbox=target.bbox,
         class_name=target.class_name,
+        safe_found=safe is not None,
+        safe_bbox=safe_bbox,
     )
 
 
@@ -324,7 +353,8 @@ class MissionPlanner:
             self.report_sequence = (self.report_sequence + 1) & 0xFF
 
     def _write_diagnostics(self, output: MissionOutput, pose: PoseInput,
-                           stm: Stm32Status, now: float) -> None:
+                           stm: Stm32Status, vision: VisionInput,
+                           now: float) -> None:
         command_age_ms = (
             None if self.command_generated_s is None
             else max(0.0, (now - self.command_generated_s) * 1000.0)
@@ -354,6 +384,12 @@ class MissionPlanner:
             "motors_active": stm.motors_active,
             "gripper_closed": stm.gripper_closed,
             "distance_done": stm.distance_done,
+            "vision_target_found": vision.target_found,
+            "vision_target_class": vision.class_name or None,
+            "vision_target_in_safe_zone": target_inside_safe_zone(vision),
+            "vision_safe_zone_found": vision.safe_found,
+            "vision_target_bbox": None if vision.target_bbox is None else list(vision.target_bbox),
+            "vision_safe_bbox": None if vision.safe_bbox is None else list(vision.safe_bbox),
             "delivery_arrival_confirmed": self.mission.delivery_arrival_confirmed,
             "fence_stop_x_mm": round(self.mission.fence_stop_point[0] * 1000.0),
             "fence_stop_y_mm": round(self.mission.fence_stop_point[1] * 1000.0),
@@ -406,7 +442,7 @@ class MissionPlanner:
             self._publish(output)
             now = time.monotonic()
             self._update_progress_warning(output, stm, now)
-            self._write_diagnostics(output, pose, stm, now)
+            self._write_diagnostics(output, pose, stm, vision, now)
             command_kind = (
                 None if output.command is None
                 else (output.state.value, output.command.command)
@@ -474,12 +510,17 @@ def draw(image, vision: VisionInput, output, pose: PoseInput, stm: Stm32Status,
     cv2.line(view, (0, 512), (1279, 512), (110, 110, 110), 1)
     if vision.target_bbox:
         x, y, w, h = vision.target_bbox
-        cv2.rectangle(view, (x, y), (x + w, y + h), (0, 255, 0), 3)
-        cv2.circle(view, (vision.target_x, vision.target_y), 8, (0, 255, 0), 2)
+        target_blocked = target_inside_safe_zone(vision)
+        target_color = (0, 165, 255) if target_blocked else (0, 255, 0)
+        cv2.rectangle(view, (x, y), (x + w, y + h), target_color, 3)
+        cv2.circle(view, (vision.target_x, vision.target_y), 8, target_color, 2)
+    if vision.safe_bbox:
+        x, y, w, h = vision.safe_bbox
+        cv2.rectangle(view, (x, y), (x + w, y + h), (255, 0, 255), 3)
     lines = [
         f"state={output.state.value}  {output.message}",
         f"stm mode={stm.mode} fault={stm.fault_code} ack={stm.acknowledged_sequence} motors={int(stm.motors_active)} gripper={int(stm.gripper_closed)} done={int(stm.distance_done)}",
-        f"target={vision.class_name or '-'} ({vision.target_x},{vision.target_y}) found={int(vision.target_found)} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
+        f"target={vision.class_name or '-'} ({vision.target_x},{vision.target_y}) found={int(vision.target_found)} safe={int(vision.safe_found)} blocked={int(target_inside_safe_zone(vision))} claw={int(stm.claw_visible)} age={stm.age_ms:.0f}ms",
         f"pose=({pose.x_m:+.2f},{pose.y_m:+.2f}) yaw={pose.yaw_deg:.1f} valid={int(pose.valid)}",
         f"planner pose_age={planner_metrics['pose_age_ms']:.0f}ms valid={int(planner_metrics['pose_valid'])} command_age={planner_metrics['command_age_ms']:.0f}ms",
         f"command last={planner_metrics['last_command']} seq={planner_metrics['last_command_sequence']} heading={planner_metrics['heading_deg']}deg remaining={planner_metrics['remaining_mm']}mm",
@@ -504,6 +545,7 @@ def main() -> int:
     if not session or session.get("side") not in {"red", "blue"}:
         raise RuntimeError(f"请先在rescue_map选择出发区和红蓝方：{args.session}")
     side = str(session["side"])
+    safe_class = "safe_red" if side == "red" else "safe_blue"
     settings = MissionSettings(
         side=side,
         confirmation_frames=args.confirm_frames,
@@ -661,10 +703,13 @@ def main() -> int:
                         detections, _ = yolo_detector.infer(packet.image)
                 else:
                     assert traditional_detector is not None
+                    detection_classes = list(allowed_classes)
+                    if safe_class not in detection_classes:
+                        detection_classes.append(safe_class)
                     detections, _ = traditional_detector.detect(
-                        packet.image, list(allowed_classes)
+                        packet.image, detection_classes
                     )
-                latest_vision = observation(detections, allowed_classes)
+                latest_vision = observation(detections, allowed_classes, safe_class)
                 planner.set_vision(latest_vision)
                 latest_image = packet.image
                 latest_pixel_format = packet.pixel_format

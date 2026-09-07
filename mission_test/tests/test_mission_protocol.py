@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT / "mission_test"))
 from run_mission_test import (
     MissionPlanner,
     load_stm_status,
+    observation,
     validate_start_pose,
     write_contact_pose,
 )
@@ -30,6 +31,7 @@ from rescue_vision.mission_protocol import (
     MissionCommand,
     write_command_frame,
 )
+from types import SimpleNamespace
 
 
 def main() -> None:
@@ -105,8 +107,25 @@ def main() -> None:
     repeated_b = MissionCommand(CMD_GRAB_CONFIRMED).to_frame(0x31)
     assert repeated_a[4] == repeated_b[4] == CMD_GRAB_CONFIRMED
     assert repeated_a != repeated_b and repeated_a[3] + 1 == repeated_b[3]
+    test_observation_prefers_targets_outside_safe_zone()
     test_independent_planner_updates()
     print("mission protocol PASS")
+
+
+def test_observation_prefers_targets_outside_safe_zone() -> None:
+    safe = SimpleNamespace(class_name="safe_red", bbox=(500, 400, 300, 300))
+    inside = SimpleNamespace(class_name="green_supply", bbox=(600, 520, 80, 80))
+    outside = SimpleNamespace(class_name="green_supply", bbox=(100, 100, 80, 80))
+
+    selected = observation(
+        [safe, inside, outside], ("green_supply",), "safe_red"
+    )
+    assert selected.target_bbox == outside.bbox
+    assert selected.safe_found and selected.safe_bbox == safe.bbox
+
+    blocked = observation([safe, inside], ("green_supply",), "safe_red")
+    assert blocked.target_bbox == inside.bbox
+    assert blocked.safe_found and blocked.safe_bbox == safe.bbox
 
 
 def test_independent_planner_updates() -> None:
@@ -180,6 +199,7 @@ def test_independent_planner_updates() -> None:
             "gripper_closed", "planner_pose_age_ms",
             "planner_command_age_ms", "command_heading_deg",
             "command_remaining_mm", "relay_tx_age_ms",
+            "vision_target_in_safe_zone", "vision_safe_zone_found",
         ):
             assert key in diagnostics
 

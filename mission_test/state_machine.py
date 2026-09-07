@@ -22,6 +22,7 @@ from rescue_vision.mission_protocol import (
     MissionCommand,
     Stm32Status,
 )
+from rescue_vision.safe_zone import bbox_center_in_safe_zone
 from rescue_vision.vision_protocol import NormalSupplyReport
 
 
@@ -67,6 +68,8 @@ class VisionInput:
     target_y: int = 0
     target_bbox: tuple[int, int, int, int] | None = None
     class_name: str = ""
+    safe_found: bool = False
+    safe_bbox: tuple[int, int, int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,13 @@ class MissionSettings:
 
 def angle_error_deg(target: float, current: float) -> float:
     return (target - current + 180.0) % 360.0 - 180.0
+
+
+def target_inside_safe_zone(vision: VisionInput) -> bool:
+    """Return whether the selected visual target is already in the safe zone."""
+    if not vision.target_found or not vision.safe_found:
+        return False
+    return bbox_center_in_safe_zone(vision.target_bbox, vision.safe_bbox)
 
 
 def robot_intersects_safe_zone(pose: PoseInput, settings: MissionSettings) -> bool:
@@ -372,10 +382,12 @@ class RescueMission:
             self.state = MissionState.FAULT
             return MissionOutput(self.state, None, MissionCommand(0), "STM32报告故障，停止任务")
 
+        target_in_safe_zone = target_inside_safe_zone(vision)
         target_allowed = (
             vision.target_found
             and vision.class_name in self.allowed_classes
             and (self.selected_class is None or vision.class_name == self.selected_class)
+            and not target_in_safe_zone
         )
         report = NormalSupplyReport(
             x_px=vision.target_x if target_allowed else 0,
@@ -383,6 +395,24 @@ class RescueMission:
             found=target_allowed,
             cargo_class=vision.class_name if target_allowed else "green_supply",
         )
+
+        # If a target was selected before the zone detector became visible,
+        # abandon that approach immediately and overwrite the old UART report
+        # with an empty report. Never let an already delivered target continue
+        # into APPROACH or GRAB_CHECK just because its previous frame was valid.
+        if target_in_safe_zone and self.state in {
+            MissionState.SEARCH, MissionState.APPROACH, MissionState.GRAB_CHECK,
+        }:
+            self.state = MissionState.SEARCH
+            self.selected_class = None
+            self.grab_hits = 0
+            self.approach_acknowledged = False
+            return MissionOutput(
+                self.state,
+                report,
+                None,
+                "检测到物资位于本方安全区，忽略目标并停止发送抓取坐标",
+            )
 
         status_fresh = stm.age_ms <= 250.0
         if (self.state in {MissionState.APPROACH, MissionState.GRAB_CHECK}

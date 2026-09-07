@@ -22,6 +22,7 @@ from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
 from rescue_vision.config import load_config
 from rescue_vision.detector import TraditionalDetector
 from rescue_vision.localizer import GroundLocalizer
+from rescue_vision.safe_zone import bbox_center_in_safe_zone
 from rescue_vision.tracker import MultiFrameTracker
 from rescue_vision.vision_protocol import (
     IMAGE_HEIGHT,
@@ -54,11 +55,19 @@ def arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def select_target(tracker: MultiFrameTracker, image_width: int):
+def select_target(
+    tracker: MultiFrameTracker,
+    image_width: int,
+    safe_bbox: tuple[int, int, int, int] | None = None,
+):
     """Choose the largest confirmed ordinary item, then prefer image centre."""
     choices = []
     for track in tracker.confirmed():
         if track.class_name != "green_supply":
+            continue
+        if safe_bbox is not None and bbox_center_in_safe_zone(
+            track.last_detection.bbox, safe_bbox
+        ):
             continue
         x, y, width, height = track.last_detection.bbox
         centre_error = abs((x + width * 0.5) - image_width * 0.5)
@@ -66,7 +75,13 @@ def select_target(tracker: MultiFrameTracker, image_width: int):
     return min(choices, default=(0, 0, 0, None))[3]
 
 
-def draw_overlay(image, track, report: NormalSupplyReport | None, vision_ms: float):
+def draw_overlay(
+    image,
+    track,
+    safe_bbox: tuple[int, int, int, int] | None,
+    report: NormalSupplyReport | None,
+    vision_ms: float,
+):
     view = image.copy()
     image_height, image_width = view.shape[:2]
     cv2.line(view, (image_width // 2, 0), (image_width // 2, image_height - 1), (120, 120, 120), 1, cv2.LINE_AA)
@@ -83,6 +98,11 @@ def draw_overlay(image, track, report: NormalSupplyReport | None, vision_ms: flo
         color = (0, 255, 0)
         if report is not None:
             title += " image-position UART"
+    if safe_bbox is not None:
+        x, y, width, height = safe_bbox
+        cv2.rectangle(view, (x, y), (x + width, y + height), (255, 0, 255), 3)
+        cv2.putText(view, "safe zone: target filtering active", (12, 58),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 0, 255), 2, cv2.LINE_AA)
     cv2.putText(view, title, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.52, color, 2, cv2.LINE_AA)
     cv2.putText(view, f"vision={vision_ms:.1f}ms  UART=TYPE 0x12 @30Hz  F fullscreen  Q/Esc quit",
                 (12, image_height - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 255, 255), 1, cv2.LINE_AA)
@@ -144,6 +164,8 @@ def main() -> int:
     localizer = GroundLocalizer.load(args.homography, (args.width, args.height))
     detector = TraditionalDetector(config, localizer)
     tracker = MultiFrameTracker(config)
+    safe_class = "safe_red" if args.team_color == "red" else "safe_blue"
+    safe_tracker = MultiFrameTracker(config)
     camera = LatestFrameCamera(args.device, args.width, args.height, args.camera_fps,
                                decoder=args.decoder, decode_fps=args.decode_fps)
     color = 0x11 if args.team_color == "red" else 0x12
@@ -159,6 +181,7 @@ def main() -> int:
     sequence = 0
     last_frame_id = 0
     last_track = None
+    last_safe_bbox = None
     last_image = None
     vision_ms = 0.0
     next_vision = next_uart = time.perf_counter()
@@ -188,7 +211,7 @@ def main() -> int:
         print(f"UART coordinates use native {IMAGE_WIDTH}x{IMAGE_HEIGHT} pixels; no scaling")
         print("distance calibration is optional; current UART reports image position only")
         print(f"display: complete-image fit into {display_width}x{display_height}; no cropping")
-        print(f"UART {args.uart} {args.baud} 8N1; only green_supply is enabled")
+        print(f"UART {args.uart} {args.baud} 8N1; green_supply outside {safe_class} only")
         try:
             while running:
                 error = camera.check_error()
@@ -202,9 +225,25 @@ def main() -> int:
                 if now >= next_vision and packet.frame_id != last_frame_id:
                     next_vision = now + vision_period
                     started = time.perf_counter()
-                    detections, _debug = detector.detect(packet.image, ["green_supply"])
-                    tracker.update(detections)
-                    last_track = select_target(tracker, args.width)
+                    detections, _debug = detector.detect(
+                        packet.image, ["green_supply", safe_class]
+                    )
+                    tracker.update([
+                        item for item in detections if item.class_name == "green_supply"
+                    ])
+                    safe_tracker.update([
+                        item for item in detections if item.class_name == safe_class
+                    ])
+                    safe_tracks = safe_tracker.confirmed()
+                    safe_track = max(
+                        safe_tracks,
+                        key=lambda item: item.last_detection.bbox[2] * item.last_detection.bbox[3],
+                        default=None,
+                    )
+                    last_safe_bbox = (
+                        None if safe_track is None else safe_track.last_detection.bbox
+                    )
+                    last_track = select_target(tracker, args.width, last_safe_bbox)
                     last_image = packet.image
                     last_frame_id = packet.frame_id
                     vision_ms = (time.perf_counter() - started) * 1000.0
@@ -230,7 +269,9 @@ def main() -> int:
                     sequence = (sequence + 1) & 0xFF
 
                 if last_image is not None:
-                    annotated = draw_overlay(last_image, last_track, report, vision_ms)
+                    annotated = draw_overlay(
+                        last_image, last_track, last_safe_bbox, report, vision_ms
+                    )
                     if fullscreen:
                         displayed = fit_complete_image(annotated, display_width, display_height)
                     else:
