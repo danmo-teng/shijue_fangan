@@ -67,7 +67,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zone", type=int, choices=range(1, 5), default=4)
     parser.add_argument("--side", choices=("red", "blue"), default="red")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_RUN_ROOT)
-    parser.add_argument("--fullscreen", action="store_true")
+    parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
+    parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     parser.add_argument("--no-start", action="store_true", help="只显示界面，不启动定位进程")
     return parser.parse_args()
 
@@ -87,12 +88,14 @@ def start_pose(zone: int) -> tuple[float, float, float]:
 
 
 class TextPainter:
-    def __init__(self) -> None:
+    def __init__(self, font_scale: float = 1.0) -> None:
         self.items: list[tuple[str, tuple[int, int], int, tuple[int, int, int], bool, str]] = []
         self.fonts: dict[tuple[int, bool], ImageFont.FreeTypeFont] = {}
+        self.font_scale = max(1.0, float(font_scale))
 
     def add(self, value, xy, size=18, color=(230, 230, 230), bold=False, anchor="la") -> None:
-        self.items.append((str(value), tuple(map(int, xy)), size, color, bold, anchor))
+        scaled_size = max(12, int(round(size * self.font_scale)))
+        self.items.append((str(value), tuple(map(int, xy)), scaled_size, color, bold, anchor))
 
     def paint(self, canvas: np.ndarray) -> np.ndarray:
         image = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
@@ -115,6 +118,16 @@ class DebugMapApp:
     def __init__(self, options: argparse.Namespace) -> None:
         self.options = options
         self.width, self.height = 1280, 1024
+        self.screen_width, self.screen_height = self.detect_screen_size()
+        self.render_scale = min(
+            1.0,
+            self.screen_width / self.width,
+            self.screen_height / self.height,
+        )
+        self.content_width = max(1, int(round(self.width * self.render_scale)))
+        self.content_height = max(1, int(round(self.height * self.render_scale)))
+        self.content_offset_x = max(0, (self.screen_width - self.content_width) // 2)
+        self.content_offset_y = max(0, (self.screen_height - self.content_height) // 2)
         self.map_left, self.map_top, self.map_size = 30, 60, 850
         self.zone = options.zone
         self.side = options.side
@@ -144,6 +157,20 @@ class DebugMapApp:
         self.current_command_text = "无持续命令"
         self.last_status_read = 0.0
         self.message_time = time.monotonic()
+
+    @staticmethod
+    def detect_screen_size() -> tuple[int, int]:
+        try:
+            output = subprocess.check_output(
+                ["xrandr", "--current"], text=True, stderr=subprocess.DEVNULL
+            )
+            import re
+            match = re.search(r"current\s+(\d+)\s+x\s+(\d+)", output)
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
+        return 1280, 1024
 
     @property
     def config_color(self) -> int:
@@ -275,8 +302,9 @@ class DebugMapApp:
         x0 = 920
         cv2.rectangle(canvas, (900, 0), (self.width, self.height), (26, 27, 30), -1)
         text.add("T265 / F407 调试地图", (x0, 35), 27, (245, 245, 245), True)
-        process_text = "定位进程运行中" if self.process is not None and self.process.poll() is None else "定位进程未运行"
-        text.add(process_text, (x0, 68), 16, (50, 220, 65) if "运行" in process_text else (50, 80, 230), True)
+        process_running = self.process is not None and self.process.poll() is None
+        process_text = "定位进程运行中" if process_running else "定位进程未运行"
+        text.add(process_text, (x0, 68), 16, (50, 220, 65) if process_running else (50, 80, 230), True)
         text.add(f"配置：{self.zone}号 / {'红方' if self.side == 'red' else '蓝方'}", (x0, 94), 16, (220, 220, 220))
         for index in range(4):
             self.button(canvas, text, f"zone{index + 1}", str(index + 1),
@@ -291,8 +319,11 @@ class DebugMapApp:
             text.add(f"T265中心 X/Y：{pose[0]:+.3f} / {pose[1]:+.3f} m", (x0, 215), 17, (20, 170, 245), True)
             text.add(f"T265方向：{pose[2]:06.2f}°", (x0, 242), 17, (20, 170, 245), True)
         odom = self.localization.get("wheel_odom", {})
-        text.add(f"轮式中心：{float(odom.get('x_m', 0.0)):+.3f} / {float(odom.get('y_m', 0.0)):+.3f} m",
-                 (x0, 275), 16, (220, 80, 220), True)
+        if odom.get("available", False):
+            text.add(f"轮式中心：{float(odom.get('x_m', 0.0)):+.3f} / {float(odom.get('y_m', 0.0)):+.3f} m",
+                     (x0, 275), 16, (220, 80, 220), True)
+        else:
+            text.add("轮式中心：等待F407编码器", (x0, 275), 16, (180, 130, 180), True)
         comparison = self.localization.get("comparison", {})
         text.add(f"T265-轮式：{float(comparison.get('t265_vs_wheel_odom_distance_m', -1.0)):.3f} m",
                  (x0, 301), 16, (0, 205, 220))
@@ -346,12 +377,26 @@ class DebugMapApp:
 
     def render(self) -> np.ndarray:
         canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        text = TextPainter()
+        text = TextPainter(font_scale=1.0 / self.render_scale)
         self.draw_field(canvas, text)
         self.draw_trajectories(canvas)
         self.draw_robots(canvas)
         self.draw_panel(canvas, text)
         return text.paint(canvas)
+
+    def render_screen(self) -> np.ndarray:
+        logical = self.render()
+        resized = cv2.resize(
+            logical,
+            (self.content_width, self.content_height),
+            interpolation=cv2.INTER_AREA if self.render_scale < 1.0 else cv2.INTER_LINEAR,
+        )
+        screen = np.zeros((self.screen_height, self.screen_width, 3), dtype=np.uint8)
+        screen[
+            self.content_offset_y:self.content_offset_y + self.content_height,
+            self.content_offset_x:self.content_offset_x + self.content_width,
+        ] = resized
+        return screen
 
     def age_ms(self, document: dict | None) -> float:
         if not document:
@@ -676,7 +721,9 @@ class DebugMapApp:
 
     def mouse_callback(self, event, x, y, _flags, _parameter) -> None:
         if event == cv2.EVENT_LBUTTONUP:
-            self.select_at(x, y)
+            logical_x = int(round((x - self.content_offset_x) / self.render_scale))
+            logical_y = int(round((y - self.content_offset_y) / self.render_scale))
+            self.select_at(logical_x, logical_y)
 
     def handle_key(self, key: int) -> bool:
         key &= 0xFF
@@ -740,8 +787,8 @@ class DebugMapApp:
     def run(self) -> int:
         self.start_session()
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-        cv2.resizeWindow(WINDOW_NAME, self.width, self.height)
-        cv2.imshow(WINDOW_NAME, self.render())
+        cv2.resizeWindow(WINDOW_NAME, self.screen_width, self.screen_height)
+        cv2.imshow(WINDOW_NAME, self.render_screen())
         cv2.waitKey(1)
         cv2.setMouseCallback(WINDOW_NAME, self.mouse_callback)
         if self.fullscreen:
@@ -750,7 +797,7 @@ class DebugMapApp:
             while True:
                 self.update_data()
                 self.refresh_command()
-                cv2.imshow(WINDOW_NAME, self.render())
+                cv2.imshow(WINDOW_NAME, self.render_screen())
                 if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                     break
                 if not self.handle_key(cv2.waitKey(20)):
