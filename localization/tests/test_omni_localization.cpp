@@ -48,7 +48,8 @@ TestQuaternion axis_angle(double x, double y, double z, double degrees)
     return {x * sine, y * sine, z * sine, std::cos(half)};
 }
 
-omni::T265RawPose lens_up_pose(double yaw_deg, double timestamp_s = 0.0)
+omni::T265RawPose lens_up_pose(double yaw_deg, double timestamp_s = 0.0,
+                               double gyro_yaw_rate_degps = 0.0)
 {
     // Rx(+90) maps installed robot up (-Z Pose frame) to +Y world. A world-Y
     // rotation then represents chassis yaw without an Euler singularity.
@@ -61,6 +62,7 @@ omni::T265RawPose lens_up_pose(double yaw_deg, double timestamp_s = 0.0)
     raw.rotation_xyzw[2] = q.z;
     raw.rotation_xyzw[3] = q.w;
     raw.timestamp_s = timestamp_s;
+    raw.angular_velocity_radps[1] = omni::radians(gyro_yaw_rate_degps);
     raw.tracker_confidence = 3;
     raw.mapper_confidence = 3;
     return raw;
@@ -240,6 +242,14 @@ void test_projection_gate_and_filter()
     check(near(still_a.relative_yaw_rad, 0.0) &&
           near(still_b.relative_yaw_rad, 0.0),
           "lens-up stationary quaternion has stable yaw");
+
+    omni::T265FieldProjector gyro_projector(lens_up_config);
+    gyro_projector.project(lens_up_pose(0.0, 1.0, 12.0));
+    const auto gyro_sample = gyro_projector.project(lens_up_pose(1.2, 1.1, 12.0));
+    check(gyro_sample.gyro_yaw_rate_valid &&
+          near(omni::degrees(gyro_sample.gyro_yaw_rate_radps), 12.0, 1e-8) &&
+          near(omni::degrees(gyro_sample.gyro_relative_yaw_rad), 1.2, 1e-8),
+          "lens-up T265 gyro projects onto robot yaw axis");
 
     omni::T265FieldProjector ccw_projector(lens_up_config);
     ccw_projector.project(lens_up_pose(0.0, 1.0));

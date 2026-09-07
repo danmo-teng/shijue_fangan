@@ -111,6 +111,7 @@ def main() -> None:
                         "forward_velocity_mps": 0.10,
                         "left_velocity_mps": 0.01,
                         "yaw_rate_radps": 0.0,
+                        "yaw_source": "t265_gyro",
                         "updates": 18,
                         "last_update_age_ms": 6.0,
                     },
@@ -122,6 +123,7 @@ def main() -> None:
         assert app.pose.quality == "GOOD"
         assert app.pose.uart_fresh
         assert app.pose.odom_available and math.isclose(app.pose.odom_x_m, 1.18)
+        assert app.pose.odom_yaw_source == "t265_gyro"
         assert app.trajectory.distance_m > 0.01
         assert app.odometry_trajectory.points[-1] == (1.18, 1.20)
         frame = app.render()

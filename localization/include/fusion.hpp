@@ -41,6 +41,11 @@ struct T265FieldPose {
     double raw_chassis_yaw_rad = 0.0;
     double relative_yaw_rad = 0.0;
     double yaw_rate_radps = 0.0;
+    // Quaternion-difference yaw rate remains available for diagnostics. The
+    // gyro rate is the high-rate yaw input used by wheel odometry prediction.
+    double gyro_relative_yaw_rad = 0.0;
+    double gyro_yaw_rate_radps = 0.0;
+    bool gyro_yaw_rate_valid = false;
     std::uint8_t tracker_confidence = 0;
     std::uint8_t mapper_confidence = 0;
 };
@@ -62,6 +67,8 @@ private:
     double previous_timestamp_s_ = 0.0;
     double accumulated_relative_yaw_rad_ = 0.0;
     double filtered_yaw_rate_radps_ = 0.0;
+    double accumulated_gyro_yaw_rad_ = 0.0;
+    double filtered_gyro_yaw_rate_radps_ = 0.0;
     Pose2d start_pose_{};
 };
 

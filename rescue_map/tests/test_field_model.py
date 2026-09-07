@@ -76,6 +76,7 @@ def main():
                         "forward_velocity_mps": 0.12,
                         "left_velocity_mps": -0.03,
                         "yaw_rate_radps": 0.05,
+                        "yaw_source": "t265_gyro",
                         "updates": 24,
                         "last_update_age_ms": 8.0,
                     },
@@ -89,6 +90,7 @@ def main():
         assert loaded.odom_available
         assert near(loaded.odom_x_m, 0.21) and near(loaded.odom_y_m, -0.39)
         assert near(loaded.odom_yaw_deg, 92.0)
+        assert loaded.odom_yaw_source == "t265_gyro"
         assert near(loaded.odom_travel_m, 0.24) and loaded.odom_updates == 24
 
         # yaw_deg must work without yaw_rad; non-finite coordinates are rejected.

@@ -123,6 +123,16 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
         rotate_by_quaternion(raw.rotation_xyzw, forward_camera));
     const Vec3 left_world = normalized_ground_xz(
         rotate_by_quaternion(raw.rotation_xyzw, left_camera));
+    const Vec3 up_world = rotate_by_quaternion(raw.rotation_xyzw, up_camera);
+    const Vec3 angular_velocity{raw.angular_velocity_radps[0],
+                                raw.angular_velocity_radps[1],
+                                raw.angular_velocity_radps[2]};
+    // librealsense exposes pose angular velocity in the T265 pose/world axes.
+    // Project it onto the installed robot's world-up vector instead of
+    // hard-coding one raw component; for the current lens-up calibration this
+    // is the observed raw Y axis.
+    const double measured_gyro_yaw_rate = dot(angular_velocity, up_world);
+    const bool gyro_rate_valid = std::isfinite(measured_gyro_yaw_rate);
     const double raw_yaw = std::atan2(-forward_world.x, -forward_world.z);
     const Vec3 position{
         raw.translation_m[0], raw.translation_m[1], raw.translation_m[2]};
@@ -142,6 +152,8 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
         previous_timestamp_s_ = raw.timestamp_s;
         accumulated_relative_yaw_rad_ = 0.0;
         filtered_yaw_rate_radps_ = 0.0;
+        accumulated_gyro_yaw_rad_ = 0.0;
+        filtered_gyro_yaw_rate_radps_ = gyro_rate_valid ? measured_gyro_yaw_rate : 0.0;
         initialized_ = true;
     } else {
         const double yaw_delta = wrap_angle(raw_yaw - previous_raw_yaw_rad_);
@@ -152,6 +164,15 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
             constexpr double alpha = 0.25;
             filtered_yaw_rate_radps_ =
                 alpha * measured_rate + (1.0 - alpha) * filtered_yaw_rate_radps_;
+            if (gyro_rate_valid) {
+                constexpr double gyro_alpha = 0.35;
+                const double previous_gyro_rate = filtered_gyro_yaw_rate_radps_;
+                filtered_gyro_yaw_rate_radps_ =
+                    gyro_alpha * measured_gyro_yaw_rate +
+                    (1.0 - gyro_alpha) * previous_gyro_rate;
+                accumulated_gyro_yaw_rad_ += 0.5 *
+                    (previous_gyro_rate + filtered_gyro_yaw_rate_radps_) * dt;
+            }
         }
         previous_raw_yaw_rad_ = raw_yaw;
         previous_timestamp_s_ = raw.timestamp_s;
@@ -191,7 +212,8 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const Vec3 velocity{raw.velocity_mps[0], raw.velocity_mps[1], raw.velocity_mps[2]};
     const double camera_vf = dot(velocity, forward_world);
     const double camera_vl = dot(velocity, left_world);
-    const double omega = filtered_yaw_rate_radps_;
+    const double omega = gyro_rate_valid
+        ? filtered_gyro_yaw_rate_radps_ : filtered_yaw_rate_radps_;
     result.body_forward_velocity_mps = camera_vf + omega * r0l;
     result.body_left_velocity_mps = camera_vl - omega * r0f;
     result.forward_world[0] = forward_world.x;
@@ -203,6 +225,9 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     result.raw_chassis_yaw_rad = raw_yaw;
     result.relative_yaw_rad = accumulated_relative_yaw_rad_;
     result.yaw_rate_radps = filtered_yaw_rate_radps_;
+    result.gyro_relative_yaw_rad = accumulated_gyro_yaw_rad_;
+    result.gyro_yaw_rate_radps = filtered_gyro_yaw_rate_radps_;
+    result.gyro_yaw_rate_valid = gyro_rate_valid;
     result.tracker_confidence = raw.tracker_confidence;
     result.mapper_confidence = raw.mapper_confidence;
     return result;

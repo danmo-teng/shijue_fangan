@@ -65,6 +65,9 @@ struct WheelDebugState {
     bool have_latest_increment = false;
     bool latest_increment_accepted = false;
     omni::WheelIncrement latest_increment{};
+    double latest_wheel_kinematic_yaw_rad = 0.0;
+    double latest_gyro_yaw_delta_rad = 0.0;
+    bool latest_increment_uses_gyro = false;
     std::uint64_t odom_updates = 0;
 };
 
@@ -331,6 +334,10 @@ void write_atomic_json(const std::string &path,
          << ", \"body_left_velocity_mps\": "
          << t265.body_left_velocity_mps
          << ", \"yaw_rate_radps\": " << t265.yaw_rate_radps
+         << ", \"gyro_yaw_rate_radps\": " << t265.gyro_yaw_rate_radps
+         << ", \"gyro_relative_yaw_rad\": " << t265.gyro_relative_yaw_rad
+         << ", \"gyro_yaw_rate_valid\": "
+         << (t265.gyro_yaw_rate_valid ? "true" : "false")
          << ", \"tracker_confidence\": " << static_cast<unsigned>(t265.tracker_confidence)
          << ", \"mapper_confidence\": " << static_cast<unsigned>(t265.mapper_confidence)
          << ", \"travel_from_start_m\": " << t265.travel_from_origin_m
@@ -360,6 +367,12 @@ void write_atomic_json(const std::string &path,
          << ", \"yaw_rate_radps\": "
          << ((wheel_debug.have_latest_increment && increment.dt_s > 0.0)
                  ? increment.yaw_rad / increment.dt_s : 0.0)
+         << ", \"yaw_source\": \""
+         << (wheel_debug.have_latest_increment
+                 ? (wheel_debug.latest_increment_uses_gyro
+                         ? "t265_gyro" : "wheel_kinematics")
+                 : "none")
+         << "\""
          << ", \"increment\": {\"forward_m\": "
          << (wheel_debug.have_latest_increment ? increment.forward_m : 0.0)
          << ", \"left_m\": "
@@ -370,7 +383,11 @@ void write_atomic_json(const std::string &path,
          << (wheel_debug.have_latest_increment ? increment.dt_s : 0.0)
          << ", \"sequence_step\": "
          << (wheel_debug.have_latest_increment
-                 ? static_cast<unsigned>(increment.sequence_step) : 0u) << "}"
+                 ? static_cast<unsigned>(increment.sequence_step) : 0u)
+         << ", \"wheel_kinematic_yaw_rad\": "
+         << wheel_debug.latest_wheel_kinematic_yaw_rad
+         << ", \"gyro_yaw_delta_rad\": "
+         << wheel_debug.latest_gyro_yaw_delta_rad << "}"
          << ", \"updates\": " << wheel_debug.odom_updates
          << ", \"last_update_age_ms\": "
          << age_ms(now_ns, wheel_debug.latest_update_ns)
@@ -618,11 +635,13 @@ int main(int argc, char **argv)
                    "left_world_x,left_world_y,left_world_z,raw_chassis_yaw_deg,"
                    "relative_yaw_deg,t265_x_m,t265_y_m,t265_yaw_deg,"
                    "t265_forward_velocity_mps,t265_left_velocity_mps,t265_yaw_rate_degps,"
+                   "gyro_yaw_rate_degps,gyro_relative_yaw_deg,gyro_yaw_rate_valid,"
                    "t265_travel_m,fused_x_m,fused_y_m,fused_yaw_deg,odom_x_m,odom_y_m,"
                    "odom_yaw_deg,odom_travel_m,odom_forward_velocity_mps,"
                    "odom_left_velocity_mps,odom_yaw_rate_degps,fused_odom_delta_m,"
                    "fused_odom_yaw_delta_deg,odom_increment_forward_m,"
-                   "odom_increment_left_m,odom_increment_yaw_deg,odom_increment_dt_s,"
+                   "odom_increment_left_m,wheel_kinematic_yaw_deg,gyro_yaw_delta_deg,"
+                   "odom_increment_yaw_deg,odom_increment_dt_s,"
                    "odom_increment_sequence_step,wheel_frame_sequence,wheel_m1_count,"
                    "wheel_m2_count,wheel_m3_count,wheel_sample_period_ms,wheel_status,"
                    "wheel_update_this_pose,wheel_update_accepted,wheel_update_rejected,"
@@ -742,8 +761,22 @@ int main(int argc, char **argv)
                 const omni::WheelGateReason gate =
                     omni::evaluate_wheel_gate(config, latest_t265, increment);
                 wheel_gate = omni::wheel_gate_reason_name(gate);
+                const double wheel_kinematic_yaw_rad = increment.yaw_rad;
+                const bool use_gyro_yaw = latest_t265.gyro_yaw_rate_valid &&
+                    std::isfinite(latest_t265.gyro_yaw_rate_radps);
+                const double gyro_yaw_delta_rad = use_gyro_yaw
+                    ? latest_t265.gyro_yaw_rate_radps * increment.dt_s : 0.0;
+                if (use_gyro_yaw) {
+                    // Wheel translation is still retained, but its heading
+                    // increment comes from the T265 gyro. The T265 pose
+                    // correction below removes the gyro's long-term bias.
+                    increment.yaw_rad = gyro_yaw_delta_rad;
+                }
                 wheel_debug.have_latest_increment = true;
                 wheel_debug.latest_increment = increment;
+                wheel_debug.latest_wheel_kinematic_yaw_rad = wheel_kinematic_yaw_rad;
+                wheel_debug.latest_gyro_yaw_delta_rad = gyro_yaw_delta_rad;
+                wheel_debug.latest_increment_uses_gyro = use_gyro_yaw;
                 wheel_debug.latest_update_ns = wheel_debug.latest_frame_ns;
                 wheel_debug.updated_this_pose = true;
                 // Keep this raw encoder-only trajectory even when the same
@@ -938,6 +971,9 @@ int main(int argc, char **argv)
                     << latest_t265.body_forward_velocity_mps << ','
                     << latest_t265.body_left_velocity_mps << ','
                     << omni::degrees(latest_t265.yaw_rate_radps) << ','
+                    << omni::degrees(latest_t265.gyro_yaw_rate_radps) << ','
+                    << omni::degrees(latest_t265.gyro_relative_yaw_rad) << ','
+                    << (latest_t265.gyro_yaw_rate_valid ? 1 : 0) << ','
                     << latest_t265.travel_from_origin_m << ','
                     << fused.x_m << ',' << fused.y_m << ','
                     << omni::degrees(fused.yaw_rad) << ','
@@ -952,6 +988,10 @@ int main(int argc, char **argv)
                     << fused_odom_delta_m << ',' << fused_odom_yaw_delta_deg << ','
                     << (have_increment ? wheel_debug.latest_increment.forward_m : 0.0)
                     << ',' << (have_increment ? wheel_debug.latest_increment.left_m : 0.0)
+                    << ',' << (have_increment
+                            ? omni::degrees(wheel_debug.latest_wheel_kinematic_yaw_rad) : 0.0)
+                    << ',' << (have_increment
+                            ? omni::degrees(wheel_debug.latest_gyro_yaw_delta_rad) : 0.0)
                     << ',' << (have_increment
                             ? omni::degrees(wheel_debug.latest_increment.yaw_rad) : 0.0)
                     << ',' << (have_increment ? wheel_debug.latest_increment.dt_s : 0.0)

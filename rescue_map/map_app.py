@@ -322,7 +322,10 @@ class RescueMapApp:
             if pose.odom_available:
                 text.add(f"里程计 X/Y：{pose.odom_x_m:+.3f} / {pose.odom_y_m:+.3f} m", (x0, 405), 18, (220, 80, 220), True)
                 text.add(f"里程计方向：{pose.odom_yaw_deg:06.2f}°  轨迹：{pose.odom_travel_m:.3f} m", (x0, 440), 17, (220, 80, 220), True)
-                text.add(f"轮速 F/L：{pose.odom_forward_velocity_mps:+.2f} / {pose.odom_left_velocity_mps:+.2f} m/s", (x0, 475), 16, (200, 150, 200))
+                yaw_source = {"t265_gyro": "T265陀螺仪", "wheel_kinematics": "轮式运动学"}.get(
+                    pose.odom_yaw_source, pose.odom_yaw_source
+                )
+                text.add(f"轮速 F/L：{pose.odom_forward_velocity_mps:+.2f} / {pose.odom_left_velocity_mps:+.2f} m/s  航向源：{yaw_source}", (x0, 475), 15, (200, 150, 200))
                 text.add(f"融合-里程计差异：{pose.fused_odom_delta_m:.3f} m / {pose.fused_odom_yaw_delta_deg:+.2f}°", (x0, 510), 16, (0, 195, 220))
                 text.add(f"里程计更新：{pose.odom_updates}  帧龄：{pose.odom_update_age_ms:.0f} ms", (x0, 540), 16, (200, 150, 200))
             else:
@@ -530,6 +533,7 @@ class RescueMapApp:
                 odom_travel_m=distance,
                 odom_forward_velocity_mps=0.18,
                 odom_left_velocity_mps=0.0,
+                odom_yaw_source="t265_gyro",
                 odom_updates=max(1, int(distance / 0.003)),
                 odom_update_age_ms=5.0,
                 fused_odom_delta_m=0.0,
