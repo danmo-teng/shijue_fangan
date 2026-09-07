@@ -33,6 +33,13 @@ struct T265RawPose {
 
 struct T265FieldPose {
     Pose2d pose;
+    Pose2d tracking_origin_pose;
+    double camera_offset_forward_m = 0.0;
+    double camera_offset_left_m = 0.0;
+    double tracking_origin_delta_forward_m = 0.0;
+    double tracking_origin_delta_left_m = 0.0;
+    double robot_center_delta_forward_m = 0.0;
+    double robot_center_delta_left_m = 0.0;
     double body_forward_velocity_mps = 0.0;
     double body_left_velocity_mps = 0.0;
     double travel_from_origin_m = 0.0;

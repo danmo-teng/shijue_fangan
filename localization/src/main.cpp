@@ -295,6 +295,7 @@ void write_atomic_json(const std::string &path,
                        bool navigation_active,
                        bool navigation_wheel_primary,
                        bool navigation_distance_valid,
+                       bool navigation_distance_compensation_enabled,
                        std::uint8_t navigation_code,
                        std::uint16_t navigation_remaining,
                        std::uint16_t navigation_heading,
@@ -318,6 +319,23 @@ void write_atomic_json(const std::string &path,
     const double fused_odom_yaw_delta_deg = odom_available
         ? omni::degrees(omni::wrap_angle(fused.yaw_rad - odom_pose.yaw_rad))
         : 0.0;
+    const double t265_odom_dx_m = odom_available
+        ? t265.pose.x_m - odom_pose.x_m : 0.0;
+    const double t265_odom_dy_m = odom_available
+        ? t265.pose.y_m - odom_pose.y_m : 0.0;
+    const double t265_odom_delta_m = odom_available
+        ? std::hypot(t265_odom_dx_m, t265_odom_dy_m) : -1.0;
+    const double t265_odom_yaw_delta_deg = odom_available
+        ? omni::degrees(omni::wrap_angle(t265.pose.yaw_rad - odom_pose.yaw_rad))
+        : 0.0;
+    const bool have_increment = wheel_debug.have_latest_increment;
+    const double raw_increment_forward_m = have_increment
+        ? increment.forward_m : 0.0;
+    const double raw_increment_left_m = have_increment
+        ? increment.left_m : 0.0;
+    const double fused_increment_forward_m = raw_increment_forward_m * encoder_fusion_weight;
+    const double fused_increment_left_m = raw_increment_left_m * encoder_fusion_weight;
+    const double fused_increment_yaw_rad = have_increment ? increment.yaw_rad : 0.0;
     file << std::fixed << std::setprecision(9)
          << "{\n"
          << "  \"schema_version\": 3,\n"
@@ -338,6 +356,22 @@ void write_atomic_json(const std::string &path,
          << ", \"body_left_velocity_mps\": "
          << t265.body_left_velocity_mps
          << ", \"yaw_rate_radps\": " << t265.yaw_rate_radps
+         << ", \"camera_offset_forward_m\": "
+         << t265.camera_offset_forward_m
+         << ", \"camera_offset_left_m\": "
+         << t265.camera_offset_left_m
+         << ", \"tracking_origin\": {\"x_m\": "
+         << t265.tracking_origin_pose.x_m
+         << ", \"y_m\": " << t265.tracking_origin_pose.y_m
+         << ", \"yaw_rad\": " << t265.tracking_origin_pose.yaw_rad << "}"
+         << ", \"tracking_origin_delta_forward_m\": "
+         << t265.tracking_origin_delta_forward_m
+         << ", \"tracking_origin_delta_left_m\": "
+         << t265.tracking_origin_delta_left_m
+         << ", \"robot_center_delta_forward_m\": "
+         << t265.robot_center_delta_forward_m
+         << ", \"robot_center_delta_left_m\": "
+         << t265.robot_center_delta_left_m
          << ", \"gyro_yaw_rate_radps\": " << t265.gyro_yaw_rate_radps
          << ", \"gyro_relative_yaw_rad\": " << t265.gyro_relative_yaw_rad
          << ", \"gyro_yaw_rate_valid\": "
@@ -379,11 +413,11 @@ void write_atomic_json(const std::string &path,
                  : "none")
          << "\""
          << ", \"increment\": {\"forward_m\": "
-         << (wheel_debug.have_latest_increment ? increment.forward_m : 0.0)
+         << raw_increment_forward_m
          << ", \"left_m\": "
-         << (wheel_debug.have_latest_increment ? increment.left_m : 0.0)
+         << raw_increment_left_m
          << ", \"yaw_rad\": "
-         << (wheel_debug.have_latest_increment ? increment.yaw_rad : 0.0)
+         << fused_increment_yaw_rad
          << ", \"dt_s\": "
          << (wheel_debug.have_latest_increment ? increment.dt_s : 0.0)
          << ", \"sequence_step\": "
@@ -392,7 +426,16 @@ void write_atomic_json(const std::string &path,
          << ", \"wheel_kinematic_yaw_rad\": "
          << wheel_debug.latest_wheel_kinematic_yaw_rad
          << ", \"gyro_yaw_delta_rad\": "
-         << wheel_debug.latest_gyro_yaw_delta_rad << "}"
+         << wheel_debug.latest_gyro_yaw_delta_rad
+         << "}, \"raw_encoder_increment\": {\"forward_m\": "
+         << raw_increment_forward_m
+         << ", \"left_m\": " << raw_increment_left_m
+         << ", \"wheel_kinematic_yaw_rad\": "
+         << (have_increment ? wheel_debug.latest_wheel_kinematic_yaw_rad : 0.0)
+         << "}, \"fused_increment\": {\"forward_m\": "
+         << fused_increment_forward_m
+         << ", \"left_m\": " << fused_increment_left_m
+         << ", \"yaw_rad\": " << fused_increment_yaw_rad << "}"
          << ", \"updates\": " << wheel_debug.odom_updates
          << ", \"last_update_age_ms\": "
          << age_ms(now_ns, wheel_debug.latest_update_ns)
@@ -425,7 +468,12 @@ void write_atomic_json(const std::string &path,
          << "  \"comparison\": {\"fused_vs_wheel_odom_distance_m\": "
          << fused_odom_delta_m
          << ", \"fused_vs_wheel_odom_yaw_deg\": "
-         << fused_odom_yaw_delta_deg << "},\n"
+         << fused_odom_yaw_delta_deg
+         << ", \"t265_vs_wheel_odom_dx_m\": " << t265_odom_dx_m
+         << ", \"t265_vs_wheel_odom_dy_m\": " << t265_odom_dy_m
+         << ", \"t265_vs_wheel_odom_distance_m\": " << t265_odom_delta_m
+         << ", \"t265_vs_wheel_odom_yaw_deg\": "
+         << t265_odom_yaw_delta_deg << "},\n"
          << "  \"navigation\": {\"active\": "
          << (navigation_active ? "true" : "false")
          << ", \"wheel_primary\": "
@@ -437,6 +485,8 @@ void write_atomic_json(const std::string &path,
          << ", \"heading_cdeg\": " << navigation_heading
          << ", \"wheel_progress_m\": " << navigation_wheel_progress_m
          << ", \"distance_compensation_m\": " << navigation_wheel_progress_m
+         << ", \"distance_compensation_enabled\": "
+         << (navigation_distance_compensation_enabled ? "true" : "false")
          << ", \"distance_compensation_source\": "
          << "\"encoder_projection_t265_heading\""
          << ", \"t265_position_corrected\": "
@@ -646,12 +696,18 @@ int main(int argc, char **argv)
                    "raw_ang_vz_radps,forward_world_x,forward_world_y,forward_world_z,"
                    "left_world_x,left_world_y,left_world_z,raw_chassis_yaw_deg,"
                    "relative_yaw_deg,t265_x_m,t265_y_m,t265_yaw_deg,"
+                   "tracking_origin_x_m,tracking_origin_y_m,"
+                   "tracking_origin_delta_forward_m,tracking_origin_delta_left_m,"
+                   "robot_center_delta_forward_m,robot_center_delta_left_m,"
+                   "camera_offset_forward_m,camera_offset_left_m,"
                    "t265_forward_velocity_mps,t265_left_velocity_mps,t265_yaw_rate_degps,"
                    "gyro_yaw_rate_degps,gyro_relative_yaw_deg,gyro_yaw_rate_valid,"
                    "t265_travel_m,fused_x_m,fused_y_m,fused_yaw_deg,odom_x_m,odom_y_m,"
                    "odom_yaw_deg,odom_travel_m,odom_forward_velocity_mps,"
                    "odom_left_velocity_mps,odom_yaw_rate_degps,fused_odom_delta_m,"
-                   "fused_odom_yaw_delta_deg,odom_increment_forward_m,"
+                   "fused_odom_yaw_delta_deg,t265_vs_wheel_odom_dx_m,"
+                   "t265_vs_wheel_odom_dy_m,t265_vs_wheel_odom_distance_m,"
+                   "t265_vs_wheel_odom_yaw_deg,odom_increment_forward_m,"
                    "odom_increment_left_m,encoder_fusion_weight,"
                    "fusion_increment_forward_m,fusion_increment_left_m,"
                    "wheel_kinematic_yaw_deg,gyro_yaw_delta_deg,"
@@ -666,6 +722,7 @@ int main(int argc, char **argv)
                    "t265_position_sigma_multiplier,t265_innovation_m,position_sigma_m,"
                    "yaw_sigma_deg,quality,navigation_active,navigation_wheel_primary,"
                    "navigation_distance_compensation_valid,"
+                   "navigation_distance_compensation_enabled,"
                    "navigation_command,"
                    "navigation_remaining_mm,navigation_heading_cdeg,"
                    "navigation_wheel_progress_m,navigation_distance_compensation_m\n";
@@ -838,7 +895,9 @@ int main(int argc, char **argv)
                         c * fusion_increment.forward_m - s * fusion_increment.left_m;
                     const double field_dy =
                         s * fusion_increment.forward_m + c * fusion_increment.left_m;
-                    if (navigation_active && !options.ignore_encoders) {
+                    if (navigation_active &&
+                        config.navigation_distance_compensation_enabled &&
+                        !options.ignore_encoders) {
                         // Distance compensation deliberately uses the T265
                         // heading and the raw three-wheel translation. It does
                         // not depend on the EKF's weighted 2D pose.
@@ -877,6 +936,7 @@ int main(int argc, char **argv)
                     navigation_active, !options.ignore_encoders,
                     accepted_wheel_fresh, config.encoder_fusion_weight);
             const bool navigation_distance_valid = navigation_active &&
+                config.navigation_distance_compensation_enabled &&
                 !options.ignore_encoders && accepted_wheel_fresh;
             if (navigation_wheel_primary && !previous_navigation_wheel_primary) {
                 next_navigation_position_correction = now;
@@ -1035,6 +1095,14 @@ int main(int argc, char **argv)
                     << omni::degrees(latest_t265.relative_yaw_rad) << ','
                     << latest_t265.pose.x_m << ',' << latest_t265.pose.y_m << ','
                     << omni::degrees(latest_t265.pose.yaw_rad) << ','
+                    << latest_t265.tracking_origin_pose.x_m << ','
+                    << latest_t265.tracking_origin_pose.y_m << ','
+                    << latest_t265.tracking_origin_delta_forward_m << ','
+                    << latest_t265.tracking_origin_delta_left_m << ','
+                    << latest_t265.robot_center_delta_forward_m << ','
+                    << latest_t265.robot_center_delta_left_m << ','
+                    << latest_t265.camera_offset_forward_m << ','
+                    << latest_t265.camera_offset_left_m << ','
                     << latest_t265.body_forward_velocity_mps << ','
                     << latest_t265.body_left_velocity_mps << ','
                     << omni::degrees(latest_t265.yaw_rate_radps) << ','
@@ -1053,6 +1121,14 @@ int main(int argc, char **argv)
                             ? wheel_debug.latest_increment.left_velocity_mps : 0.0)
                     << ',' << omni::degrees(odom_yaw_rate_radps) << ','
                     << fused_odom_delta_m << ',' << fused_odom_yaw_delta_deg << ','
+                    << (odom_available ? latest_t265.pose.x_m - odom.x_m : 0.0) << ','
+                    << (odom_available ? latest_t265.pose.y_m - odom.y_m : 0.0) << ','
+                    << (odom_available
+                            ? std::hypot(latest_t265.pose.x_m - odom.x_m,
+                                         latest_t265.pose.y_m - odom.y_m) : -1.0) << ','
+                    << (odom_available
+                            ? omni::degrees(omni::wrap_angle(
+                                latest_t265.pose.yaw_rad - odom.yaw_rad)) : 0.0) << ','
                     << (have_increment ? wheel_debug.latest_increment.forward_m : 0.0)
                     << ',' << (have_increment ? wheel_debug.latest_increment.left_m : 0.0)
                     << ',' << config.encoder_fusion_weight
@@ -1100,6 +1176,7 @@ int main(int argc, char **argv)
                     << (navigation_active ? 1 : 0) << ','
                     << (navigation_wheel_primary ? 1 : 0) << ','
                     << (navigation_distance_valid ? 1 : 0) << ','
+                    << (config.navigation_distance_compensation_enabled ? 1 : 0) << ','
                     << static_cast<unsigned>(active_navigation_code) << ','
                     << active_navigation_remaining_mm << ','
                     << active_navigation_heading_cdeg << ','
@@ -1122,6 +1199,7 @@ int main(int argc, char **argv)
                               pose_tx_frames, pose_tx_errors,
                               navigation_active, navigation_wheel_primary,
                               navigation_distance_valid,
+                              config.navigation_distance_compensation_enabled,
                               active_navigation_code,
                               active_navigation_remaining_mm,
                               active_navigation_heading_cdeg,

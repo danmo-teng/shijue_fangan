@@ -45,6 +45,23 @@ int integer(const std::string &text, const std::string &key)
     return result;
 }
 
+bool boolean(const std::string &text, const std::string &key)
+{
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (char c : text) {
+        normalized.push_back(static_cast<char>(
+            std::tolower(static_cast<unsigned char>(c))));
+    }
+    if (normalized == "1" || normalized == "true" || normalized == "yes") {
+        return true;
+    }
+    if (normalized == "0" || normalized == "false" || normalized == "no") {
+        return false;
+    }
+    throw std::runtime_error("invalid boolean value for " + key + ": " + text);
+}
+
 void axis_vector(const std::string &text, const std::string &key,
                  double output[3])
 {
@@ -130,6 +147,9 @@ LocalizationConfig load_config(const std::string &path)
         SET_DOUBLE(t265_yaw_sigma_conf1_deg)
         SET_DOUBLE(maximum_t265_innovation_m)
 #undef SET_DOUBLE
+#define SET_BOOL(name) if (key == #name) { config.name = boolean(value, key); continue; }
+        SET_BOOL(navigation_distance_compensation_enabled)
+#undef SET_BOOL
         if (key == "start_zone") { config.start_zone = integer(value, key); continue; }
         if (key == "encoder_sign_m1") { config.encoder_sign[0] = integer(value, key); continue; }
         if (key == "encoder_sign_m2") { config.encoder_sign[1] = integer(value, key); continue; }

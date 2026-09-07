@@ -276,6 +276,11 @@ void test_projection_gate_and_filter()
 
     omni::LocalizationConfig lens_up_config = config;
     lens_up_config.start_zone = 2;
+    check(near(lens_up_config.camera_offset_forward_m, -0.0296) &&
+          near(lens_up_config.camera_offset_left_m, -0.0301),
+          "default T265 lever-arm calibration uses measured stereo-centre offsets");
+    check(!lens_up_config.navigation_distance_compensation_enabled,
+          "raw navigation distance compensation is disabled by default");
     omni::T265FieldProjector still_projector(lens_up_config);
     const auto still_a = still_projector.project(lens_up_pose(0.0, 1.0));
     const auto still_b = still_projector.project(lens_up_pose(0.0, 1.01));
@@ -290,6 +295,87 @@ void test_projection_gate_and_filter()
           near(omni::degrees(gyro_sample.gyro_yaw_rate_radps), 12.0, 1e-8) &&
           near(omni::degrees(gyro_sample.gyro_relative_yaw_rad), 1.2, 1e-8),
           "lens-up T265 gyro projects onto robot yaw axis");
+
+    auto camera_rotation_pose = [&](double yaw_deg, double timestamp_s) {
+        auto raw = lens_up_pose(yaw_deg, timestamp_s);
+        const double yaw = omni::radians(yaw_deg);
+        const double r0f = lens_up_config.camera_offset_forward_m;
+        const double r0l = lens_up_config.camera_offset_left_m;
+        const double current_forward = std::cos(yaw) * r0f -
+                                        std::sin(yaw) * r0l;
+        const double current_left = std::sin(yaw) * r0f +
+                                    std::cos(yaw) * r0l;
+        // With the calibrated lens-up pose axes, raw T265 X is initial
+        // forward and raw T265 -Z is initial left.
+        raw.translation_m[0] = current_forward - r0f;
+        raw.translation_m[2] = -(current_left - r0l);
+        return raw;
+    };
+
+    omni::T265FieldProjector lever_projector(lens_up_config);
+    const auto lever_initial = lever_projector.project(camera_rotation_pose(0.0, 1.0));
+    const double start_cs = std::cos(omni::radians(45.0));
+    const double start_ss = std::sin(omni::radians(45.0));
+    check(near(lever_initial.tracking_origin_pose.x_m,
+               1.20 + start_cs * lens_up_config.camera_offset_forward_m -
+                   start_ss * lens_up_config.camera_offset_left_m) &&
+          near(lever_initial.tracking_origin_pose.y_m,
+               1.20 + start_ss * lens_up_config.camera_offset_forward_m +
+                   start_cs * lens_up_config.camera_offset_left_m),
+          "raw tracking-origin pose includes the physical initial lever arm");
+    const auto lever_90 = lever_projector.project(camera_rotation_pose(90.0, 2.0));
+    check(near(lever_90.tracking_origin_delta_forward_m, 0.0597, 1e-8) &&
+          near(lever_90.tracking_origin_delta_left_m, 0.0005, 1e-8),
+          "measured T265 lever arm produces expected raw tracking-origin arc");
+    check(std::hypot(lever_90.robot_center_delta_forward_m,
+                     lever_90.robot_center_delta_left_m) < 1e-8,
+          "90-degree lever-arm correction keeps robot centre stationary");
+
+    const double combined_yaw = omni::radians(45.0);
+    const double expected_forward = 0.50;
+    const double expected_left = 0.15;
+    auto combined_motion = lens_up_pose(45.0, 2.5);
+    const double combined_rf = std::cos(combined_yaw) *
+                                   lens_up_config.camera_offset_forward_m -
+                               std::sin(combined_yaw) *
+                                   lens_up_config.camera_offset_left_m;
+    const double combined_rl = std::sin(combined_yaw) *
+                                   lens_up_config.camera_offset_forward_m +
+                               std::cos(combined_yaw) *
+                                   lens_up_config.camera_offset_left_m;
+    combined_motion.translation_m[0] = expected_forward +
+                                      combined_rf - lens_up_config.camera_offset_forward_m;
+    combined_motion.translation_m[2] = -(expected_left + combined_rl -
+                                         lens_up_config.camera_offset_left_m);
+    omni::T265FieldProjector combined_projector(lens_up_config);
+    combined_projector.project(lens_up_pose(0.0, 1.5));
+    const auto combined_result = combined_projector.project(combined_motion);
+    check(near(combined_result.robot_center_delta_forward_m, expected_forward, 1e-8) &&
+          near(combined_result.robot_center_delta_left_m, expected_left, 1e-8),
+          "simultaneous translation and rotation removes only the lever-arm arc");
+
+    omni::T265FieldProjector full_turn_lever_projector(lens_up_config);
+    full_turn_lever_projector.project(camera_rotation_pose(0.0, 1.0));
+    omni::T265FieldPose full_turn_lever;
+    for (int angle = 90; angle <= 360; angle += 90) {
+        full_turn_lever = full_turn_lever_projector.project(
+            camera_rotation_pose(static_cast<double>(angle),
+                                 1.0 + angle * 0.01));
+        check(std::hypot(full_turn_lever.robot_center_delta_forward_m,
+                         full_turn_lever.robot_center_delta_left_m) < 1e-7,
+              "lever-arm correction keeps robot centre stationary through rotation");
+    }
+
+    const double omega = omni::radians(90.0);
+    auto stationary_rotation = lens_up_pose(0.0, 1.0, 90.0);
+    stationary_rotation.velocity_mps[0] = -omega * lens_up_config.camera_offset_left_m;
+    stationary_rotation.velocity_mps[2] = -omega * lens_up_config.camera_offset_forward_m;
+    omni::T265FieldProjector velocity_lever_projector(lens_up_config);
+    const auto stationary_rotation_result =
+        velocity_lever_projector.project(stationary_rotation);
+    check(std::fabs(stationary_rotation_result.body_forward_velocity_mps) < 1e-8 &&
+          std::fabs(stationary_rotation_result.body_left_velocity_mps) < 1e-8,
+          "velocity lever-arm correction removes stationary camera rotation velocity");
 
     omni::T265FieldProjector ccw_projector(lens_up_config);
     ccw_projector.project(lens_up_pose(0.0, 1.0));

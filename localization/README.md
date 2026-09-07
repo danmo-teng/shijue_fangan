@@ -47,9 +47,15 @@ T265 6DoF pose (200 Hz)
 编码器距离补偿、T265位置是否在本帧参与校正、位置权重倍率和创新距离。输出`quality`现在同时参考tracker和
 mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`，但仍可供任务规划使用。
 
-`camera_offset_forward_m/left_m`表示T265 tracking origin相对车体旋转中心的前向/左向距离，
-单位m，必须按实车测量填写，不能混用105 mm推板距离或130 mm轮子运动学半径。它们保持0时，T265不在车体旋转中心造成的
-原地转向圆弧仍会被误认为车体平移；程序不会根据单次日志猜测并写入机构尺寸。
+`camera_offset_forward_m/left_m`表示T265双目成像器中心 tracking origin 相对三轮运动学旋转中心的
+前向/左向距离，单位m；当前实测为后方29.6 mm、右侧30.1 mm，因此配置为
+`camera_offset_forward_m=-0.0296`、`camera_offset_left_m=-0.0301`。正方向是车头forward和车体left，
+不能混用T265外壳中心、105 mm推板距离、150 mm前拨板距离或130 mm轮子运动学半径。位置和速度
+lever-arm只补偿一次，轮式中心里程计不再叠加该偏置。
+
+原地逆时针90°时，tracking origin的理论假位移约为(+59.7,+0.5) mm，修正后的robot-center
+位移应接近0；CSV和JSON会同时记录raw tracking-origin位置、修正后的机器人中心位移、偏置参数，
+以及T265 robot-center与wheel odometry的逐帧位置差。JSON还分别记录原始编码器增量和加权后的融合增量。
 
 ## 定位调试日志
 
@@ -57,7 +63,9 @@ mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`�
 编码器帧、三轮运动学解算增量、T265 陀螺航向速率/累计航向、使用陀螺航向积分的轮式里程计
 累计位姿、T265 场地投影位姿和 EKF 融合位姿。这样可以直接对比 `t265_*_m`、`odom_*_m` 与
 `fused_*_m`，分析方向、里程和定位漂移；日志还记录 `wheel_gate`、T265 置信度、创新距离
-及导航阶段。
+及导航阶段。原始编码器导航距离补偿由独立的
+`navigation_distance_compensation_enabled` 控制，默认关闭；它不受
+`encoder_fusion_weight` 的数值暗中启用或关闭。
 
 `odom_increment_yaw_deg` 是实际用于轮式里程计/EKF预测的 T265 陀螺航向增量，
 `wheel_kinematic_yaw_deg` 是三轮公式原本给出的角度，`gyro_yaw_delta_deg` 是陀螺替换值。

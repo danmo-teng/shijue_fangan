@@ -243,16 +243,18 @@ mapper_zero_position_sigma_multiplier = 12.0
 navigation_near_target_m = 0.30
 navigation_slip_wheel_speed_mps = 0.10
 navigation_slip_t265_speed_mps = 0.05
+navigation_distance_compensation_enabled = false
 ```
 
-相机tracking origin相对底盘旋转中心的偏置尚未实测，目前是：
+相机tracking origin（双目成像器中心）相对三轮运动学旋转中心的偏置已实测为：
 
 ```ini
-camera_offset_forward_m = 0.0
-camera_offset_left_m = 0.0
+camera_offset_forward_m = -0.0296
+camera_offset_left_m = -0.0301
 ```
 
-不要把机构的105/130/150 mm参数填入这两个字段。
+单位为米，正方向是车头forward/车体left；不要把T265外壳中心或机构的105/130/150 mm参数填入
+这两个字段。位置和速度lever-arm只补偿一次，轮式中心里程计不加相机偏置。
 
 ## 9. 视觉识别
 
@@ -438,7 +440,7 @@ T265姿态校正的轮式累计位姿，`t265_*`是T265场地投影结果，`fus
    增量提供。
 6. 原地360°同时对比轮式运动学旋转与T265陀螺航向，`wheel_center_radius_m=0.130`现在主要
    用于诊断原始轮式旋转结果。
-7. 测量T265 tracking origin相对底盘旋转中心的前向/左向偏置。
+7. 用原地90°/180°/360°日志验证已配置的T265双目中心偏置使robot-center位移接近0。
 8. 返航接近围栏时确认`navigation_near_target_slip`能冻结空转增量。
 
 ## 15. 测试命令

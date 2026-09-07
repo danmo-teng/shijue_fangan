@@ -17,8 +17,11 @@ struct LocalizationConfig {
     double encoder_fusion_weight = 0.25;
     double wheel_center_radius_m = 0.130;
 
-    double camera_offset_forward_m = 0.0;
-    double camera_offset_left_m = 0.0;
+    // Metres. +forward is the robot nose and +left is the robot's left side.
+    // This is the T265 stereo-imager tracking origin relative to the
+    // three-wheel kinematic rotation centre.
+    double camera_offset_forward_m = -0.0296;
+    double camera_offset_left_m = -0.0301;
     double camera_robot_forward_axis[3] = {1.0, 0.0, 0.0};
     double camera_robot_up_axis[3] = {0.0, 0.0, -1.0};
 
@@ -29,6 +32,7 @@ struct LocalizationConfig {
     double navigation_t265_position_sigma_multiplier = 8.0;
     double navigation_t265_position_correction_rate_hz = 20.0;
     double mapper_zero_position_sigma_multiplier = 12.0;
+    bool navigation_distance_compensation_enabled = false;
     double navigation_near_target_m = 0.30;
     double navigation_slip_wheel_speed_mps = 0.10;
     double navigation_slip_t265_speed_mps = 0.05;

@@ -202,6 +202,19 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double cs = std::cos(start_pose_.yaw_rad);
     const double ss = std::sin(start_pose_.yaw_rad);
     T265FieldPose result;
+    result.camera_offset_forward_m = r0f;
+    result.camera_offset_left_m = r0l;
+    result.tracking_origin_pose.x_m = start_pose_.x_m +
+        cs * (r0f + camera_initial_forward) -
+        ss * (r0l + camera_initial_left);
+    result.tracking_origin_pose.y_m = start_pose_.y_m +
+        ss * (r0f + camera_initial_forward) +
+        cs * (r0l + camera_initial_left);
+    result.tracking_origin_pose.yaw_rad = wrap_angle(start_pose_.yaw_rad + dh);
+    result.tracking_origin_delta_forward_m = camera_initial_forward;
+    result.tracking_origin_delta_left_m = camera_initial_left;
+    result.robot_center_delta_forward_m = robot_initial_forward;
+    result.robot_center_delta_left_m = robot_initial_left;
     result.pose.x_m = start_pose_.x_m +
         cs * robot_initial_forward - ss * robot_initial_left;
     result.pose.y_m = start_pose_.y_m +
