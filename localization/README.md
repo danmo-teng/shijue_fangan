@@ -124,15 +124,58 @@ camera_robot_up_axis = -z
 保留四元数差分yaw rate和把Pose角速度投影到机器人世界上方向得到的gyro yaw rate；轮式
 预测采用后者的高频增量，四元数姿态负责绝对校正。
 
-## UART 兼容性
+## F407/T265 专用对照调试
 
-GitHub 中的 F407 仓库当前定义了 115200 8N1、`A3 B3 ... C3` 固定 15 字节帧和 Modbus CRC，但仓库中 F407 TX 只有 4 字节配置 ACK，还没有编码器上报类型。本工程在不改外层协议的前提下分配 `TYPE=0x15`：
+F407 最新 `main` 已按固定15字节帧通过USART3发送编码器累计位置：`TYPE=0x15`为100 Hz左右的
+三路累计编码器位置，`M1=右轮、M2=左轮、M3=后轮`，三个编码器符号均为`-1`；`TYPE=0x17`
+为任务状态。接口定义以[F407仓库的MISSION_PROTOCOL.md](https://github.com/gandizm/F407-Rescue-Robot/blob/68a0802/MISSION_PROTOCOL.md)
+和`Main/Src/Location.c`为准。本调试程序不发送配置、视觉或任务命令，不会主动启动F407任务：
 
 ```text
 A3 B3 15 SEQ M1_H M1_L M2_H M2_L M3_H M3_L DT STATUS CRC_LO CRC_HI C3
 ```
 
-详见 [docs/uart_protocol.md](docs/uart_protocol.md)。F407 参考打包代码在 `firmware/f407_odom_protocol.[ch]`。如果实车下位机的 `P0..P7` 已使用另一种定义，必须先同步字段表，不能只凭帧头相同就开始融合。
+运行前必须关闭`rescue_map`/任务程序，避免占用同一串口：
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan
+python3 localization/tools/t265_f407_debug.py \
+  --uart /dev/ttyS1 --label rotate_90_180_360 --trial rotate
+```
+
+程序默认使用`--ignore-encoders`启动已有定位器：编码器原始帧、三轮轮式轨迹和T265数据仍全部
+记录，但编码器不会反过来影响T265主定位。每次运行自动创建独立目录：
+`rescue_map/runtime/history/t265_f407_debug/<时间>_<标签>/`，保存：
+
+- `localization_debug.csv`：每帧T265、F407累计计数、三轮原始/融合增量、raw tracking-origin、修正后的robot-center、轮式轨迹和差值；
+- `localization_result.json`、`stm32_status.json`、`localizer.log`：实时快照、状态帧和运行输出；
+- `metadata.json`、`analysis.json`：接口版本、命令行和自动对照结果。
+
+建议按以下顺序分别采集并用不同`--label`保存：静止5秒；以三轮旋转中心原地逆时针90°、180°、
+360°；车体forward直行1 m；车体left横移1 m；最后做一次平移同时旋转。既有日志可单独分析：
+
+```bash
+python3 localization/tools/t265_f407_debug.py \
+  --analyze rescue_map/runtime/history/t265_f407_debug/<一次运行目录> \
+  --trial rotate
+```
+
+`analysis.json`的判定重点：`initial_reference_check`检查T265 raw tracking origin和修正后
+robot-center的初始物理偏置；`rotation_check`比较90/180/270/360°理论圆周位移与修正残差；
+`wheel_to_t265_fit`给出`T265车体增量 = A × F407轮式增量`，对角线偏离1主要表示尺度误差，
+非对角线较大表示轮序、符号或平面轴混用；`interface_observation`检查F407帧是否连续、有效和
+状态位是否正常。原始数据仍以CSV为准，自动结论不能替代实际原地旋转和直线标定。
+
+## UART 兼容性
+
+F407和上位机均使用115200 8N1、`A3 B3 ... C3`固定15字节帧和CRC-16/Modbus：
+
+```text
+A3 B3 15 SEQ M1_H M1_L M2_H M2_L M3_H M3_L DT STATUS CRC_LO CRC_HI C3
+```
+
+上位机现有接收代码和测试仍保留在`localization/src/f407_protocol.*`；调试程序只调用定位器监听
+链路，不向F407写入任何任务命令。
 
 ## 编译与测试
 
