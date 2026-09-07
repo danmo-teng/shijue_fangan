@@ -43,8 +43,8 @@ T265 6DoF pose (200 Hz)
 而T265速度不超过0.05 m/s，则视为围栏接触/空转，冻结该轮式增量并显示
 `navigation_near_target_slip`，防止编码器把地图推过围栏。
 
-`localization_result.json`新增`navigation`段，记录当前命令、剩余距离、航向、本段轮式累计进度、
-T265位置是否在本帧参与校正、位置权重倍率和创新距离。输出`quality`现在同时参考tracker和
+`localization_result.json`新增`navigation`段，记录当前命令、剩余距离、航向、本段沿目标方向的
+编码器距离补偿、T265位置是否在本帧参与校正、位置权重倍率和创新距离。输出`quality`现在同时参考tracker和
 mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`，但仍可供任务规划使用。
 
 `camera_offset_forward_m/left_m`表示T265 tracking origin相对车体旋转中心的前向/左向距离，

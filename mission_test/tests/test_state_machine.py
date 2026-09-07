@@ -95,7 +95,7 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert output.state == MissionState.GRABBING
 
     closed = Stm32Status(flags=STM_CLAW_VISIBLE | STM_GRIPPER_CLOSED, age_ms=5)
-    pose = PoseInput(True, 0.7, 0.0, 0)
+    pose = PoseInput(True, 0.7, 0.0, 0, 0.0, 0.0, True, True, 0.25)
     output = mission.step(VisionInput(), pose, closed)
     assert output.state == MissionState.NAVIGATE
     assert output.command.command == CMD_NAVIGATE_WAYPOINT
@@ -111,6 +111,14 @@ def run_side(side: str, desired_y: int, desired_heading: int):
         target_x - pose.x_m,
     )) % 360
     assert output.command.heading_cdeg == round(expected_bearing * 100) % 36000
+
+    compensated = mission.step(
+        VisionInput(),
+        PoseInput(True, 0.7, 0.0, 0, 0.0, 0.30, True, True, 0.25),
+        closed,
+    )
+    assert compensated.command.target_x_mm == round((expected_distance - 0.30) * 1000)
+    assert compensated.command.heading_cdeg == output.command.heading_cdeg
 
     # Navigation is closed-loop on the RDK: every fresh pose produces a new
     # heading and remaining distance instead of replaying the initial route.

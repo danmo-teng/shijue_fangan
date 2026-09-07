@@ -88,10 +88,30 @@ def load_pose(path: Path) -> PoseInput:
     try:
         age_ms = (time.monotonic_ns() - int(data["timestamp_monotonic_ns"])) / 1_000_000.0
         pose = data["pose"]
+        wheel = data.get("wheel", {})
+        navigation = data.get("navigation", {})
         valid = data.get("quality") in {"GOOD", "DEGRADED"} and 0 <= age_ms <= 250
+        navigation_distance_m = float(
+            navigation.get(
+                "distance_compensation_m",
+                navigation.get("wheel_progress_m", 0.0),
+            )
+        )
+        navigation_distance_valid = (
+            bool(navigation.get(
+                "distance_compensation_valid",
+                navigation.get("wheel_primary", False),
+            ))
+            and math.isfinite(navigation_distance_m)
+            and float(wheel.get("last_update_age_ms", float("inf"))) <= 150.0
+        )
         return PoseInput(
             valid, float(pose["x_m"]), float(pose["y_m"]),
             float(pose["yaw_deg"]), max(0.0, age_ms),
+            navigation_distance_m,
+            navigation_distance_valid,
+            bool(navigation.get("wheel_primary", False)),
+            float(wheel.get("fusion_weight", 0.0)),
         )
     except (KeyError, TypeError, ValueError):
         return PoseInput()

@@ -54,6 +54,10 @@ class PoseInput:
     y_m: float = 0.0
     yaw_deg: float = 0.0
     age_ms: float = float("inf")
+    navigation_distance_m: float = 0.0
+    navigation_distance_valid: bool = False
+    navigation_wheel_primary: bool = False
+    encoder_fusion_weight: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -158,6 +162,9 @@ class RescueMission:
         self.delivery_count = 0
         self.approach_acknowledged = False
         self.delivery_arrival_confirmed = False
+        self.navigation_start_distance_m: float | None = None
+        self.navigation_encoder_anchor_m: float | None = None
+        self.navigation_encoder_last_progress_m: float | None = None
 
     @property
     def allowed_classes(self) -> tuple[str, ...]:
@@ -317,9 +324,33 @@ class RescueMission:
                 self.state, None, None,
                 "融合位姿暂时无效，暂停更新返航航向和剩余距离",
             )
-        travel_heading_deg, distance = self._route_to(
+        travel_heading_deg, t265_distance = self._route_to(
             pose, self.fence_stop_point
         )
+        if self.navigation_start_distance_m is None:
+            self.navigation_start_distance_m = t265_distance
+        if (pose.navigation_distance_valid and
+                self.navigation_encoder_last_progress_m is not None and
+                pose.navigation_distance_m + 0.05 <
+                self.navigation_encoder_last_progress_m):
+            # The localization relay restarted the NAV segment. Re-anchor the
+            # scalar distance to the current T265 position instead of replaying
+            # the old segment length.
+            self.navigation_start_distance_m = t265_distance
+            self.navigation_encoder_anchor_m = pose.navigation_distance_m
+        if (self.navigation_encoder_anchor_m is None and
+                pose.navigation_distance_valid):
+            self.navigation_encoder_anchor_m = pose.navigation_distance_m
+        if pose.navigation_distance_valid:
+            self.navigation_encoder_last_progress_m = pose.navigation_distance_m
+        distance = t265_distance
+        if (pose.navigation_distance_valid and
+                self.navigation_encoder_anchor_m is not None):
+            encoder_progress = max(
+                0.0,
+                pose.navigation_distance_m - self.navigation_encoder_anchor_m,
+            )
+            distance = max(0.0, self.navigation_start_distance_m - encoder_progress)
         command = self._distance_command(
             CMD_NAVIGATE_WAYPOINT, travel_heading_deg, distance
         )
@@ -394,6 +425,9 @@ class RescueMission:
             if status_fresh and stm.gripper_closed:
                 self.state = MissionState.NAVIGATE
                 self.delivery_arrival_confirmed = False
+                self.navigation_start_distance_m = None
+                self.navigation_encoder_anchor_m = None
+                self.navigation_encoder_last_progress_m = None
                 return self._navigate(pose, stm)
             return MissionOutput(
                 self.state, None,
@@ -460,6 +494,9 @@ class RescueMission:
                 self.delivery_stationary_started_s = None
                 self.delivery_stationary_anchor = None
                 self.delivery_arrival_confirmed = False
+                self.navigation_start_distance_m = None
+                self.navigation_encoder_anchor_m = None
+                self.navigation_encoder_last_progress_m = None
                 return MissionOutput(
                     self.state, NormalSupplyReport(), None,
                     f"已回到中心搜索流程，累计投送{self.delivery_count}件",

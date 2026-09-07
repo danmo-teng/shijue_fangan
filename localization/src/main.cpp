@@ -294,6 +294,7 @@ void write_atomic_json(const std::string &path,
                        std::uint64_t pose_tx_errors,
                        bool navigation_active,
                        bool navigation_wheel_primary,
+                       bool navigation_distance_valid,
                        std::uint8_t navigation_code,
                        std::uint16_t navigation_remaining,
                        std::uint16_t navigation_heading,
@@ -429,10 +430,15 @@ void write_atomic_json(const std::string &path,
          << (navigation_active ? "true" : "false")
          << ", \"wheel_primary\": "
          << (navigation_wheel_primary ? "true" : "false")
+         << ", \"distance_compensation_valid\": "
+         << (navigation_distance_valid ? "true" : "false")
          << ", \"command\": " << static_cast<unsigned>(navigation_code)
          << ", \"remaining_mm\": " << navigation_remaining
          << ", \"heading_cdeg\": " << navigation_heading
          << ", \"wheel_progress_m\": " << navigation_wheel_progress_m
+         << ", \"distance_compensation_m\": " << navigation_wheel_progress_m
+         << ", \"distance_compensation_source\": "
+         << "\"encoder_projection_t265_heading\""
          << ", \"t265_position_corrected\": "
          << (t265_position_corrected ? "true" : "false")
          << ", \"t265_position_sigma_multiplier\": "
@@ -659,9 +665,10 @@ int main(int argc, char **argv)
                    "mapper_confidence,t265_update_accepted,t265_position_corrected,"
                    "t265_position_sigma_multiplier,t265_innovation_m,position_sigma_m,"
                    "yaw_sigma_deg,quality,navigation_active,navigation_wheel_primary,"
+                   "navigation_distance_compensation_valid,"
                    "navigation_command,"
                    "navigation_remaining_mm,navigation_heading_cdeg,"
-                   "navigation_wheel_progress_m\n";
+                   "navigation_wheel_progress_m,navigation_distance_compensation_m\n";
         }
 
         rs2::pipeline pipeline(context);
@@ -831,13 +838,21 @@ int main(int argc, char **argv)
                         c * fusion_increment.forward_m - s * fusion_increment.left_m;
                     const double field_dy =
                         s * fusion_increment.forward_m + c * fusion_increment.left_m;
-                    if (navigation_active && !options.ignore_encoders &&
-                        config.encoder_fusion_weight > 0.0) {
+                    if (navigation_active && !options.ignore_encoders) {
+                        // Distance compensation deliberately uses the T265
+                        // heading and the raw three-wheel translation. It does
+                        // not depend on the EKF's weighted 2D pose.
+                        const double t265_c = std::cos(latest_t265.pose.yaw_rad);
+                        const double t265_s = std::sin(latest_t265.pose.yaw_rad);
+                        const double t265_field_dx =
+                            t265_c * increment.forward_m - t265_s * increment.left_m;
+                        const double t265_field_dy =
+                            t265_s * increment.forward_m + t265_c * increment.left_m;
                         const double command_heading = omni::radians(
                             static_cast<double>(active_navigation_heading_cdeg) * 0.01);
                         const double progress =
-                            field_dx * std::cos(command_heading) +
-                            field_dy * std::sin(command_heading);
+                            t265_field_dx * std::cos(command_heading) +
+                            t265_field_dy * std::sin(command_heading);
                         navigation_wheel_progress_m += progress;
                     }
                     filter.predict(fusion_increment, config);
@@ -861,6 +876,8 @@ int main(int argc, char **argv)
                 omni::navigation_wheel_primary_enabled(
                     navigation_active, !options.ignore_encoders,
                     accepted_wheel_fresh, config.encoder_fusion_weight);
+            const bool navigation_distance_valid = navigation_active &&
+                !options.ignore_encoders && accepted_wheel_fresh;
             if (navigation_wheel_primary && !previous_navigation_wheel_primary) {
                 next_navigation_position_correction = now;
             }
@@ -1082,9 +1099,11 @@ int main(int argc, char **argv)
                     << omni::degrees(filter.yaw_sigma_rad()) << ',' << quality << ','
                     << (navigation_active ? 1 : 0) << ','
                     << (navigation_wheel_primary ? 1 : 0) << ','
+                    << (navigation_distance_valid ? 1 : 0) << ','
                     << static_cast<unsigned>(active_navigation_code) << ','
                     << active_navigation_remaining_mm << ','
                     << active_navigation_heading_cdeg << ','
+                    << navigation_wheel_progress_m << ','
                     << navigation_wheel_progress_m << '\n';
                 if ((++csv_rows % 20u) == 0u) csv.flush();
             }
@@ -1102,6 +1121,7 @@ int main(int argc, char **argv)
                               uart_frames, crc_errors, sequence_gaps,
                               pose_tx_frames, pose_tx_errors,
                               navigation_active, navigation_wheel_primary,
+                              navigation_distance_valid,
                               active_navigation_code,
                               active_navigation_remaining_mm,
                               active_navigation_heading_cdeg,

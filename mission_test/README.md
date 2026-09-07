@@ -101,9 +101,10 @@ distance = hypot(target_x - pose_x, target_y - pose_y)
 
 `NAVIGATE_WAYPOINT`持续发送最新`bearing + remaining_distance`，但不下发X/Y位置坐标。里程计存在累计误差时，下一帧会根据T265+编码器融合位置修正航向和剩余距离；到达后由RDK地图锁存到达并直接发送`ENTER_SAFE_ZONE`。下位机新版本已删除`ALIGN_SAFE_ZONE`执行步骤，RDK不再等待`mode=11`。
 
-返航期间定位采用编码器平移进度为主、T265低频位置纠偏；接近围栏后检测“轮子在转但T265
-基本不动”的空转并冻结轮式增量。地图日志中的`navigation.wheel_progress_m`可直接核对编码器
-本段累计距离，`navigation.t265_innovation_m`用于判断T265与轮式预测的分歧。
+返航期间方向和目标bearing始终来自T265位姿/航向；编码器只把三轮平移投影到当前目标方向，
+作为本段剩余距离补偿，不再用错误的完整二维轮式位姿拉动地图。地图日志中的
+`navigation.distance_compensation_m`可直接核对本段编码器累计距离，`navigation.t265_innovation_m`
+用于判断T265与加权轮式预测的分歧；仅T265模式不启用该补偿。
 
 航向和距离命令在运动期间持续更新；50 Hz规划生成最新值，100 Hz串口心跳发送最近一次有效规划。
 如果运动中任务命令失联，下位机应停车；恢复后只能采用上位机新算出的航向和剩余距离，不能
