@@ -180,11 +180,11 @@ void test_kinematics()
                                     config.counts_per_wheel_revolution;
     omni::EncoderFrame forward = baseline;
     forward.sequence = 1;
-    forward.position[0] = static_cast<std::uint16_t>(-10);
-    forward.position[2] = 10;
+    forward.position[0] = 10;
+    forward.position[1] = static_cast<std::uint16_t>(-10);
     check(integrator.update(forward, increment, reason), "forward update accepted");
     check(near(increment.forward_m, 20.0 * metres_per_count / std::sqrt(3.0), 1e-12),
-          "three-wheel forward kinematics");
+          "F407 M1/M2 forward kinematics");
     check(near(increment.left_m, 0.0, 1e-12), "forward has no lateral displacement");
 
     integrator.reset();
@@ -193,27 +193,67 @@ void test_kinematics()
     omni::EncoderFrame left = baseline;
     left.sequence = 11;
     left.position[0] = 10;
-    left.position[1] = static_cast<std::uint16_t>(-20);
-    left.position[2] = 10;
+    left.position[1] = 10;
+    left.position[2] = static_cast<std::uint16_t>(-20);
     check(integrator.update(left, increment, reason), "left update accepted");
     check(near(increment.left_m, 20.0 * metres_per_count, 1e-12),
-          "three-wheel lateral kinematics");
+          "F407 M1/M2/M3 lateral kinematics");
+    check(near(increment.forward_m, 0.0, 1e-12),
+          "left has no forward displacement");
 
     omni::LocalizationConfig corrected_config = config;
-    corrected_config.encoder_to_robot_yaw_deg = -90.0;
+    corrected_config.encoder_to_robot_yaw_deg = 90.0;
     omni::OmniEncoderIntegrator corrected_integrator(corrected_config);
     baseline.sequence = 20;
     corrected_integrator.update(baseline, increment, reason);
     omni::EncoderFrame physical_forward = baseline;
     physical_forward.sequence = 21;
     physical_forward.position[0] = 10;
-    physical_forward.position[1] = static_cast<std::uint16_t>(-20);
-    physical_forward.position[2] = 10;
+    physical_forward.position[1] = static_cast<std::uint16_t>(-10);
     check(corrected_integrator.update(physical_forward, increment, reason),
           "corrected encoder forward sample accepted");
-    check(near(increment.forward_m, 20.0 * metres_per_count, 1e-12) &&
-          near(increment.left_m, 0.0, 1e-12),
-          "encoder -90 correction maps former left motion to robot forward");
+    check(near(increment.forward_m, 0.0, 1e-12) &&
+          near(increment.left_m, 20.0 * metres_per_count / std::sqrt(3.0), 1e-12),
+          "optional encoder correction rotates the F407 body vector");
+
+    integrator.reset();
+    baseline.sequence = 30;
+    integrator.update(baseline, increment, reason);
+    omni::EncoderFrame rotation = baseline;
+    rotation.sequence = 31;
+    rotation.position[0] = rotation.position[1] = rotation.position[2] = 10;
+    check(integrator.update(rotation, increment, reason), "rotation update accepted");
+    check(near(increment.forward_m, 0.0, 1e-12) &&
+          near(increment.left_m, 0.0, 1e-12) &&
+          increment.yaw_rad > 0.0,
+          "common three-wheel rotation cancels from translation");
+
+    omni::WheelIncrement sample;
+    sample.forward_m = 0.40;
+    sample.left_m = -0.20;
+    sample.yaw_rad = 0.10;
+    sample.forward_velocity_mps = 0.80;
+    sample.left_velocity_mps = -0.40;
+    const omni::WheelIncrement weighted =
+        omni::apply_encoder_fusion_weight(sample, 0.25);
+    check(near(weighted.forward_m, 0.10) && near(weighted.left_m, -0.05) &&
+          near(weighted.forward_velocity_mps, 0.20) &&
+          near(weighted.left_velocity_mps, -0.10) &&
+          near(weighted.yaw_rad, sample.yaw_rad),
+          "encoder fusion weight scales translation without weakening gyro yaw");
+
+    check(!omni::navigation_wheel_primary_enabled(true, false, true, 1.0),
+          "T265-only navigation never enables wheel-primary fusion");
+    check(!omni::navigation_wheel_primary_enabled(true, true, true, 0.0),
+          "zero encoder weight keeps navigation T265-primary");
+    check(!omni::navigation_wheel_primary_enabled(true, true, false, 1.0),
+          "stale accepted wheel data keeps navigation T265-primary");
+    check(omni::navigation_wheel_primary_enabled(true, true, true, 0.25),
+          "fresh enabled wheel data can enter weighted wheel-primary fusion");
+    check(near(omni::weighted_t265_sigma_multiplier(12.0, 0.0), 1.0) &&
+          near(omni::weighted_t265_sigma_multiplier(12.0, 0.25), 1.6875) &&
+          near(omni::weighted_t265_sigma_multiplier(12.0, 1.0), 12.0),
+          "encoder weight continuously controls navigation T265 weakening");
 }
 
 void test_projection_gate_and_filter()

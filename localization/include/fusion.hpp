@@ -82,6 +82,15 @@ struct WheelIncrement {
     std::uint8_t sequence_step = 0;
 };
 
+WheelIncrement apply_encoder_fusion_weight(const WheelIncrement &increment,
+                                            double weight);
+bool navigation_wheel_primary_enabled(bool navigation_active,
+                                      bool encoders_enabled,
+                                      bool accepted_wheel_fresh,
+                                      double encoder_fusion_weight);
+double weighted_t265_sigma_multiplier(double configured_multiplier,
+                                      double encoder_fusion_weight);
+
 class OmniEncoderIntegrator {
 public:
     explicit OmniEncoderIntegrator(const LocalizationConfig &config);

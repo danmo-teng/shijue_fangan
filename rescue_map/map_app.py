@@ -19,6 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from field_model import (
     DEFAULT_CORNER_OFFSET_M,
+    DEFAULT_ENCODER_FUSION_WEIGHT,
     FIELD_HALF_M,
     Pose,
     Trajectory,
@@ -45,6 +46,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zone", type=int, choices=range(1, 5), help="skip zone selection")
     parser.add_argument("--side", choices=("red", "blue"), help="skip side selection")
     parser.add_argument("--corner-offset-mm", type=float, default=DEFAULT_CORNER_OFFSET_M * 1000.0)
+    parser.add_argument(
+        "--encoder-weight",
+        type=float,
+        default=DEFAULT_ENCODER_FUSION_WEIGHT,
+        help="encoder translation weight entering the EKF, from 0 to 1",
+    )
     parser.add_argument(
         "--localization-mode",
         choices=("fusion", "t265"),
@@ -110,6 +117,9 @@ class RescueMapApp:
         self.side = options.side or "red"
         self.selecting = not (options.zone and options.side)
         self.corner_offset_m = options.corner_offset_mm / 1000.0
+        self.encoder_weight = float(options.encoder_weight)
+        if not 0.0 <= self.encoder_weight <= 1.0:
+            raise ValueError("encoder weight must be in 0..1")
         self.localization_mode = options.localization_mode
         initial_pose(self.zone, self.corner_offset_m)  # validates parameters
         self.localization_json = options.localization_json or (RUNTIME / "localization_result.json")
@@ -293,19 +303,26 @@ class RescueMapApp:
             text.add("定位方式", (x0, 420), 22, (230, 230, 230), True)
             self.button(canvas, text, "fusion", "T265+编码器", (x0, 450, x0 + 150, 502), self.localization_mode == "fusion", (55, 125, 80))
             self.button(canvas, text, "t265", "仅T265", (x0 + 175, 450, x0 + 325, 502), self.localization_mode == "t265", (75, 100, 165))
-            text.add("距角落顶点（直线距离）", (x0, 545), 20, (230, 230, 230), True)
-            text.add(f"{self.corner_offset_m * 1000:.0f} mm", (x0 + 162, 578), 25, (245, 245, 245), True, "mm")
-            self.button(canvas, text, "offset_minus_50", "−50", (x0, 600, x0 + 75, 648))
-            self.button(canvas, text, "offset_minus_10", "−10", (x0 + 83, 600, x0 + 158, 648))
-            self.button(canvas, text, "offset_plus_10", "+10", (x0 + 167, 600, x0 + 242, 648))
-            self.button(canvas, text, "offset_plus_50", "+50", (x0 + 250, 600, x0 + 325, 648))
-            self.button(canvas, text, "start", "确认并开始", (x0, 685, x0 + 325, 747), True, (35, 135, 70))
-            text.add("快捷键：1–4、R/B、E切模式、Enter开始", (x0, 780), 14, (170, 170, 175))
-            text.add("−/+调10 mm，[/]调50 mm", (x0, 803), 14, (170, 170, 175))
+            text.add("编码器融合权重", (x0, 535), 20, (230, 230, 230), True)
+            text.add(f"{self.encoder_weight * 100:.0f}%", (x0 + 255, 535), 23, (220, 80, 220), True, "mm")
+            self.button(canvas, text, "weight_minus_10", "−10%", (x0, 555, x0 + 75, 598))
+            self.button(canvas, text, "weight_minus_5", "−5%", (x0 + 83, 555, x0 + 158, 598))
+            self.button(canvas, text, "weight_plus_5", "+5%", (x0 + 167, 555, x0 + 242, 598))
+            self.button(canvas, text, "weight_plus_10", "+10%", (x0 + 250, 555, x0 + 325, 598))
+            text.add("仅影响进入EKF的编码器平移", (x0, 618), 14, (165, 165, 170))
+            text.add("距角落顶点（直线距离）", (x0, 650), 20, (230, 230, 230), True)
+            text.add(f"{self.corner_offset_m * 1000:.0f} mm", (x0 + 162, 680), 23, (245, 245, 245), True, "mm")
+            self.button(canvas, text, "offset_minus_50", "−50", (x0, 700, x0 + 75, 743))
+            self.button(canvas, text, "offset_minus_10", "−10", (x0 + 83, 700, x0 + 158, 743))
+            self.button(canvas, text, "offset_plus_10", "+10", (x0 + 167, 700, x0 + 242, 743))
+            self.button(canvas, text, "offset_plus_50", "+50", (x0 + 250, 700, x0 + 325, 743))
+            self.button(canvas, text, "start", "确认并开始", (x0, 770, x0 + 325, 832), True, (35, 135, 70))
+            text.add("快捷键：1–4、R/B、E切模式、Enter开始", (x0, 855), 14, (170, 170, 175))
+            text.add("K/L调权重，−/+调10 mm，[/]调50 mm", (x0, 878), 14, (170, 170, 175))
             pose = initial_pose(self.zone, self.corner_offset_m)
-            text.add(f"初始 X={pose.x_m:+.3f} m  Y={pose.y_m:+.3f} m", (x0, 835), 17, (220, 220, 220))
-            text.add(f"车头={pose.yaw_deg:.0f}°（倒车驶入场内）", (x0, 862), 17, (220, 220, 220))
-            text.add(self.message, (x0, 910), 16, (0, 215, 255))
+            text.add(f"初始 X={pose.x_m:+.3f} m  Y={pose.y_m:+.3f} m", (x0, 915), 17, (220, 220, 220))
+            text.add(f"车头={pose.yaw_deg:.0f}°（倒车驶入场内）", (x0, 942), 17, (220, 220, 220))
+            text.add(self.message, (x0, 985), 16, (0, 215, 255))
         else:
             pose = self.pose
             quality_color = {
@@ -332,10 +349,15 @@ class RescueMapApp:
                 text.add("轮式里程计：等待有效编码器解算", (x0, 420), 18, (180, 150, 180))
             text.add(f"T265起点位移：{pose.t265_travel_m:.3f} m", (x0, 580), 18, (200, 200, 205))
             text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 615), 18, (200, 200, 205))
-            text.add(f"定位方式：{'T265+编码器融合' if self.localization_mode == 'fusion' else '仅T265'}", (x0, 650), 18, (200, 200, 205))
+            mode_text = (
+                f"T265+编码器（权重{pose.encoder_fusion_weight * 100:.0f}%）"
+                if self.localization_mode == "fusion" else "仅T265（位置权重100%）"
+            )
+            text.add(f"定位方式：{mode_text}", (x0, 650), 18, (200, 200, 205))
             if self.localization_mode == "fusion":
                 text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 685), 18, (200, 200, 205))
-                text.add(f"轮速门控：{pose.wheel_gate}", (x0, 720), 17, (175, 175, 180))
+                primary = "轮式" if pose.navigation_wheel_primary else "T265"
+                text.add(f"轮速门控：{pose.wheel_gate}  当前主导：{primary}", (x0, 720), 16, (175, 175, 180))
             else:
                 text.add("编码器融合：已关闭（仍保留UART通信）", (x0, 685), 18, (200, 200, 205))
             age_text = "--" if math.isinf(pose.age_ms) else f"{pose.age_ms:.0f} ms"
@@ -376,6 +398,14 @@ class RescueMapApp:
                     self.side = name
                 elif name in {"fusion", "t265"}:
                     self.localization_mode = name
+                elif name.startswith("weight_"):
+                    weight_deltas = {
+                        "weight_minus_10": -0.10,
+                        "weight_minus_5": -0.05,
+                        "weight_plus_5": 0.05,
+                        "weight_plus_10": 0.10,
+                    }
+                    self.adjust_encoder_weight(weight_deltas[name])
                 elif name.startswith("offset_"):
                     offsets_mm = {
                         "offset_minus_50": -50.0,
@@ -398,6 +428,9 @@ class RescueMapApp:
         self.corner_offset_m = candidate
         self.pose = initial_pose(self.zone, self.corner_offset_m)
 
+    def adjust_encoder_weight(self, delta: float) -> None:
+        self.encoder_weight = min(1.0, max(0.0, round(self.encoder_weight + delta, 2)))
+
     def mouse_callback(self, event, x, y, _flags, _parameter) -> None:
         if event == cv2.EVENT_LBUTTONUP:
             self.select_at(x, y)
@@ -418,12 +451,14 @@ class RescueMapApp:
             self.side,
             self.corner_offset_m,
             self.localization_mode,
+            self.encoder_weight,
         )
         write_localization_config(
             PROJECT_ROOT / "localization/config/localization.example.conf",
             RUNTIME / "localization.conf",
             self.zone,
             self.corner_offset_m,
+            self.encoder_weight,
         )
         (RUNTIME / "delivery_contact_pose.json").unlink(missing_ok=True)
         (RUNTIME / "mission_diagnostics.json").unlink(missing_ok=True)
@@ -526,6 +561,8 @@ class RescueMapApp:
                 t265_travel_m=distance,
                 uart_fresh=True,
                 wheel_gate="accepted" if distance > 0.7 else "startup_obstacle",
+                encoder_fusion_weight=self.encoder_weight,
+                navigation_wheel_primary=False,
                 odom_available=True,
                 odom_x_m=start.x_m + distance * math.cos(reverse_heading),
                 odom_y_m=start.y_m + distance * math.sin(reverse_heading),
@@ -590,6 +627,10 @@ class RescueMapApp:
                 self.side = "blue"
             elif key in (ord("e"), ord("E")):
                 self.localization_mode = "t265" if self.localization_mode == "fusion" else "fusion"
+            elif key in (ord("k"), ord("K")):
+                self.adjust_encoder_weight(-0.05)
+            elif key in (ord("l"), ord("L")):
+                self.adjust_encoder_weight(0.05)
             elif key in (ord("-"), ord("_")):
                 self.adjust_corner_offset(-10.0)
             elif key in (ord("+"), ord("=")):

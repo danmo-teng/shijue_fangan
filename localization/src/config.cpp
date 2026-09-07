@@ -104,6 +104,7 @@ LocalizationConfig load_config(const std::string &path)
         SET_DOUBLE(wheel_diameter_m)
         SET_DOUBLE(counts_per_wheel_revolution)
         SET_DOUBLE(encoder_to_robot_yaw_deg)
+        SET_DOUBLE(encoder_fusion_weight)
         SET_DOUBLE(wheel_center_radius_m)
         SET_DOUBLE(camera_offset_forward_m)
         SET_DOUBLE(camera_offset_left_m)
@@ -167,6 +168,9 @@ void validate_config(const LocalizationConfig &c)
     if (c.encoder_to_robot_yaw_deg < -180.0 ||
         c.encoder_to_robot_yaw_deg > 180.0) {
         throw std::runtime_error("encoder_to_robot_yaw_deg must be in -180..180");
+    }
+    if (c.encoder_fusion_weight < 0.0 || c.encoder_fusion_weight > 1.0) {
+        throw std::runtime_error("encoder_fusion_weight must be in 0..1");
     }
     if (c.wheel_center_radius_m < 0.0 || c.maximum_wheel_speed_mps <= 0.0 ||
         c.maximum_velocity_residual_mps <= 0.0 || c.uart_stale_ms <= 0) {

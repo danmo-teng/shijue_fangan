@@ -16,6 +16,7 @@ FIELD_HALF_M = FIELD_SIZE_M / 2.0
 START_ZONE_SIZE_M = 0.3
 START_CENTER_M = 1.35
 DEFAULT_CORNER_OFFSET_M = 0.15 * math.sqrt(2.0)
+DEFAULT_ENCODER_FUSION_WEIGHT = 0.25
 
 # Heading is counter-clockwise from field +X.  The robot front points toward
 # the outside corner so that reverse motion takes it into the field.
@@ -35,6 +36,8 @@ class Pose:
     t265_travel_m: float = 0.0
     uart_fresh: bool = False
     wheel_gate: str = "waiting"
+    encoder_fusion_weight: float = DEFAULT_ENCODER_FUSION_WEIGHT
+    navigation_wheel_primary: bool = False
     odom_available: bool = False
     odom_x_m: float = 0.0
     odom_y_m: float = 0.0
@@ -82,6 +85,7 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
         pose = data["pose"]
         t265 = data.get("t265", {})
         wheel = data.get("wheel", {})
+        navigation = data.get("navigation", {})
         now_ns = time.monotonic_ns()
         if timestamp > now_ns + 1_000_000_000:
             return None
@@ -98,6 +102,11 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
         else:
             yaw_deg = math.degrees(float(pose["yaw_rad"]))
         if not all(math.isfinite(value) for value in (x_m, y_m, yaw_deg)):
+            return None
+        encoder_fusion_weight = float(
+            wheel.get("fusion_weight", DEFAULT_ENCODER_FUSION_WEIGHT)
+        )
+        if not math.isfinite(encoder_fusion_weight) or not 0.0 <= encoder_fusion_weight <= 1.0:
             return None
         odom = data.get("wheel_odom", {})
         odom_available = bool(odom.get("available", False))
@@ -153,6 +162,8 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             t265_travel_m=float(t265.get("travel_from_start_m", 0.0)),
             uart_fresh=bool(wheel.get("uart_fresh", False)),
             wheel_gate=str(wheel.get("gate", "unknown")),
+            encoder_fusion_weight=encoder_fusion_weight,
+            navigation_wheel_primary=bool(navigation.get("wheel_primary", False)),
             odom_available=odom_available,
             odom_x_m=odom_x_m,
             odom_y_m=odom_y_m,
@@ -224,18 +235,22 @@ def write_session(
     side: str,
     corner_offset_m: float,
     localization_mode: str = "fusion",
+    encoder_fusion_weight: float = DEFAULT_ENCODER_FUSION_WEIGHT,
 ) -> None:
     if side not in {"red", "blue"}:
         raise ValueError("side must be red or blue")
     if localization_mode not in {"fusion", "t265"}:
         raise ValueError("localization mode must be fusion or t265")
+    if not 0.0 <= encoder_fusion_weight <= 1.0:
+        raise ValueError("encoder fusion weight must be in 0..1")
     pose = initial_pose(zone, corner_offset_m)
     data = {
-        "schema_version": 1,
+        "schema_version": 2,
         "start_zone": zone,
         "side": side,
         "corner_offset_m": corner_offset_m,
         "localization_mode": localization_mode,
+        "encoder_fusion_weight": encoder_fusion_weight,
         "initial_pose": {"x_m": pose.x_m, "y_m": pose.y_m, "yaw_deg": pose.yaw_deg},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -249,10 +264,15 @@ def write_localization_config(
     output_path: Path,
     zone: int,
     corner_offset_m: float,
+    encoder_fusion_weight: float | None = None,
 ) -> None:
     """Generate the localization config matching the selected start pose."""
     start_center_m = start_center_coordinate(corner_offset_m)
     replacements = {"start_zone": str(zone), "start_center_m": f"{start_center_m:.6f}"}
+    if encoder_fusion_weight is not None:
+        if not 0.0 <= encoder_fusion_weight <= 1.0:
+            raise ValueError("encoder fusion weight must be in 0..1")
+        replacements["encoder_fusion_weight"] = f"{encoder_fusion_weight:.3f}"
     found: set[str] = set()
     lines: list[str] = []
     for original in template_path.read_text(encoding="utf-8").splitlines():

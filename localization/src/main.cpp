@@ -59,6 +59,7 @@ struct WheelDebugState {
     omni::EncoderFrame latest_frame{};
     std::uint64_t latest_frame_ns = 0;
     std::uint64_t latest_update_ns = 0;
+    std::uint64_t latest_accepted_update_ns = 0;
     bool updated_this_pose = false;
     bool accepted_this_pose = false;
     bool rejected_this_pose = false;
@@ -292,13 +293,15 @@ void write_atomic_json(const std::string &path,
                        std::uint64_t pose_tx_frames,
                        std::uint64_t pose_tx_errors,
                        bool navigation_active,
+                       bool navigation_wheel_primary,
                        std::uint8_t navigation_code,
                        std::uint16_t navigation_remaining,
                        std::uint16_t navigation_heading,
                        double navigation_wheel_progress_m,
                        bool t265_position_corrected,
                        double t265_position_sigma_multiplier,
-                       double t265_innovation_m)
+                       double t265_innovation_m,
+                       double encoder_fusion_weight)
 {
     if (path.empty()) return;
     const std::string temporary = path + ".tmp";
@@ -316,7 +319,7 @@ void write_atomic_json(const std::string &path,
         : 0.0;
     file << std::fixed << std::setprecision(9)
          << "{\n"
-         << "  \"schema_version\": 2,\n"
+         << "  \"schema_version\": 3,\n"
          << "  \"timestamp_monotonic_ns\": " << now_ns << ",\n"
          << "  \"frame\": \"field\",\n"
          << "  \"quality\": \"" << quality << "\",\n"
@@ -347,6 +350,7 @@ void write_atomic_json(const std::string &path,
          << t265.left_world[1] << ", " << t265.left_world[2] << "]},\n"
          << "  \"wheel\": {\"gate\": \"" << wheel_gate
          << "\", \"uart_fresh\": " << (uart_fresh ? "true" : "false")
+         << ", \"fusion_weight\": " << encoder_fusion_weight
          << ", \"accepted\": " << wheel_accepted
          << ", \"rejected\": " << wheel_rejected
          << ", \"last_frame_age_ms\": "
@@ -423,6 +427,8 @@ void write_atomic_json(const std::string &path,
          << fused_odom_yaw_delta_deg << "},\n"
          << "  \"navigation\": {\"active\": "
          << (navigation_active ? "true" : "false")
+         << ", \"wheel_primary\": "
+         << (navigation_wheel_primary ? "true" : "false")
          << ", \"command\": " << static_cast<unsigned>(navigation_code)
          << ", \"remaining_mm\": " << navigation_remaining
          << ", \"heading_cdeg\": " << navigation_heading
@@ -640,7 +646,9 @@ int main(int argc, char **argv)
                    "odom_yaw_deg,odom_travel_m,odom_forward_velocity_mps,"
                    "odom_left_velocity_mps,odom_yaw_rate_degps,fused_odom_delta_m,"
                    "fused_odom_yaw_delta_deg,odom_increment_forward_m,"
-                   "odom_increment_left_m,wheel_kinematic_yaw_deg,gyro_yaw_delta_deg,"
+                   "odom_increment_left_m,encoder_fusion_weight,"
+                   "fusion_increment_forward_m,fusion_increment_left_m,"
+                   "wheel_kinematic_yaw_deg,gyro_yaw_delta_deg,"
                    "odom_increment_yaw_deg,odom_increment_dt_s,"
                    "odom_increment_sequence_step,wheel_frame_sequence,wheel_m1_count,"
                    "wheel_m2_count,wheel_m3_count,wheel_sample_period_ms,wheel_status,"
@@ -650,7 +658,8 @@ int main(int argc, char **argv)
                    "wheel_last_frame_age_ms,wheel_last_update_age_ms,tracker_confidence,"
                    "mapper_confidence,t265_update_accepted,t265_position_corrected,"
                    "t265_position_sigma_multiplier,t265_innovation_m,position_sigma_m,"
-                   "yaw_sigma_deg,quality,navigation_active,navigation_command,"
+                   "yaw_sigma_deg,quality,navigation_active,navigation_wheel_primary,"
+                   "navigation_command,"
                    "navigation_remaining_mm,navigation_heading_cdeg,"
                    "navigation_wheel_progress_m\n";
         }
@@ -687,7 +696,8 @@ int main(int argc, char **argv)
         std::uint8_t pose_tx_sequence = 0;
         std::uint64_t pose_tx_frames = 0;
         std::uint64_t pose_tx_errors = 0;
-        bool previous_navigation_active = false;
+        bool previous_navigation_command_active = false;
+        bool previous_navigation_wheel_primary = false;
         double navigation_wheel_progress_m = 0.0;
         bool t265_position_corrected = true;
         double active_t265_position_multiplier = 1.0;
@@ -737,11 +747,10 @@ int main(int argc, char **argv)
                 navigation_remaining_mm.load(std::memory_order_relaxed);
             const std::uint16_t active_navigation_heading_cdeg =
                 navigation_heading_cdeg.load(std::memory_order_relaxed);
-            if (navigation_active && !previous_navigation_active) {
+            if (navigation_active && !previous_navigation_command_active) {
                 navigation_wheel_progress_m = 0.0;
-                next_navigation_position_correction = now;
             }
-            previous_navigation_active = navigation_active;
+            previous_navigation_command_active = navigation_active;
 
             wheel_debug.updated_this_pose = false;
             wheel_debug.accepted_this_pose = false;
@@ -772,6 +781,9 @@ int main(int argc, char **argv)
                     // correction below removes the gyro's long-term bias.
                     increment.yaw_rad = gyro_yaw_delta_rad;
                 }
+                const omni::WheelIncrement fusion_increment =
+                    omni::apply_encoder_fusion_weight(
+                        increment, config.encoder_fusion_weight);
                 wheel_debug.have_latest_increment = true;
                 wheel_debug.latest_increment = increment;
                 wheel_debug.latest_wheel_kinematic_yaw_rad = wheel_kinematic_yaw_rad;
@@ -816,10 +828,11 @@ int main(int argc, char **argv)
                     const double c = std::cos(before_predict.yaw_rad);
                     const double s = std::sin(before_predict.yaw_rad);
                     const double field_dx =
-                        c * increment.forward_m - s * increment.left_m;
+                        c * fusion_increment.forward_m - s * fusion_increment.left_m;
                     const double field_dy =
-                        s * increment.forward_m + c * increment.left_m;
-                    if (navigation_active) {
+                        s * fusion_increment.forward_m + c * fusion_increment.left_m;
+                    if (navigation_active && !options.ignore_encoders &&
+                        config.encoder_fusion_weight > 0.0) {
                         const double command_heading = omni::radians(
                             static_cast<double>(active_navigation_heading_cdeg) * 0.01);
                         const double progress =
@@ -827,9 +840,10 @@ int main(int argc, char **argv)
                             field_dy * std::sin(command_heading);
                         navigation_wheel_progress_m += progress;
                     }
-                    filter.predict(increment, config);
+                    filter.predict(fusion_increment, config);
                     wheel_debug.accepted_this_pose = true;
                     wheel_debug.latest_increment_accepted = true;
+                    wheel_debug.latest_accepted_update_ns = wheel_debug.latest_frame_ns;
                     ++wheel_accepted;
                 } else {
                     wheel_debug.rejected_this_pose = true;
@@ -838,17 +852,37 @@ int main(int argc, char **argv)
                 }
             }
 
+            const std::uint64_t fusion_now_ns = monotonic_ns();
+            const bool accepted_wheel_fresh =
+                wheel_debug.latest_accepted_update_ns > 0 &&
+                age_ms(fusion_now_ns, wheel_debug.latest_accepted_update_ns) <=
+                    static_cast<double>(config.uart_stale_ms);
+            const bool navigation_wheel_primary =
+                omni::navigation_wheel_primary_enabled(
+                    navigation_active, !options.ignore_encoders,
+                    accepted_wheel_fresh, config.encoder_fusion_weight);
+            if (navigation_wheel_primary && !previous_navigation_wheel_primary) {
+                next_navigation_position_correction = now;
+            }
+            previous_navigation_wheel_primary = navigation_wheel_primary;
+
             double innovation_m = 0.0;
             active_t265_position_multiplier = 1.0;
             t265_position_corrected = true;
-            if (navigation_active) {
-                active_t265_position_multiplier =
+            if (navigation_wheel_primary) {
+                const double configured_multiplier =
                     latest_t265.mapper_confidence == 0
                         ? std::max(
                             config.navigation_t265_position_sigma_multiplier,
                             config.mapper_zero_position_sigma_multiplier)
                         : config.navigation_t265_position_sigma_multiplier;
-                t265_position_corrected =
+                active_t265_position_multiplier =
+                    omni::weighted_t265_sigma_multiplier(
+                        configured_multiplier, config.encoder_fusion_weight);
+                // Full wheel weight preserves the original downsampled
+                // wheel-primary behaviour. Any reduced encoder weight keeps
+                // T265 position correction at every pose frame.
+                t265_position_corrected = config.encoder_fusion_weight < 0.999 ||
                     now >= next_navigation_position_correction;
                 if (t265_position_corrected) {
                     const auto period = std::chrono::duration<double>(
@@ -857,7 +891,22 @@ int main(int argc, char **argv)
                         std::chrono::duration_cast<std::chrono::steady_clock::duration>(period);
                 }
             }
-            if (!navigation_active && previous_tracker_confidence == 0 &&
+            if (options.ignore_encoders) {
+                const omni::Pose2d before_t265 = filter.pose();
+                innovation_m = std::hypot(
+                    latest_t265.pose.x_m - before_t265.x_m,
+                    latest_t265.pose.y_m - before_t265.y_m);
+                if (latest_t265.tracker_confidence > 0) {
+                    // T265-only means exactly that: no EKF blending or NAV
+                    // downweighting. Follow every valid projected pose 1:1.
+                    filter.initialize(latest_t265.pose);
+                    t265_update_accepted = true;
+                    wheel_gate = "t265_only_100pct";
+                } else {
+                    t265_update_accepted = false;
+                    wheel_gate = "t265_lost";
+                }
+            } else if (!navigation_wheel_primary && previous_tracker_confidence == 0 &&
                 latest_t265.tracker_confidence > 0 && have_first_pose) {
                 // After a complete visual tracking outage, T265 is the primary
                 // absolute source. Re-anchor instead of permanently rejecting a
@@ -921,7 +970,8 @@ int main(int argc, char **argv)
                                           std::fabs(fused.y_m) <= config.field_half_m;
                 if (latest_t265.tracker_confidence > 0) tx.status |= omni::kPoseValid;
                 if (latest_t265.tracker_confidence >= 2) tx.status |= omni::kPoseT265Good;
-                if (uart_fresh && wheel_gate == "accepted") tx.status |= omni::kPoseWheelActive;
+                if (uart_fresh && config.encoder_fusion_weight > 0.0 &&
+                    wheel_gate == "accepted") tx.status |= omni::kPoseWheelActive;
                 if (obstacle_gate) tx.status |= omni::kPoseObstacleGate;
                 if (uart_fresh) tx.status |= omni::kPoseOdomFresh;
                 if (inside_field) tx.status |= omni::kPoseInsideField;
@@ -988,6 +1038,13 @@ int main(int argc, char **argv)
                     << fused_odom_delta_m << ',' << fused_odom_yaw_delta_deg << ','
                     << (have_increment ? wheel_debug.latest_increment.forward_m : 0.0)
                     << ',' << (have_increment ? wheel_debug.latest_increment.left_m : 0.0)
+                    << ',' << config.encoder_fusion_weight
+                    << ',' << (have_increment
+                            ? wheel_debug.latest_increment.forward_m *
+                                config.encoder_fusion_weight : 0.0)
+                    << ',' << (have_increment
+                            ? wheel_debug.latest_increment.left_m *
+                                config.encoder_fusion_weight : 0.0)
                     << ',' << (have_increment
                             ? omni::degrees(wheel_debug.latest_wheel_kinematic_yaw_rad) : 0.0)
                     << ',' << (have_increment
@@ -1024,6 +1081,7 @@ int main(int argc, char **argv)
                     << filter.position_sigma_m() << ','
                     << omni::degrees(filter.yaw_sigma_rad()) << ',' << quality << ','
                     << (navigation_active ? 1 : 0) << ','
+                    << (navigation_wheel_primary ? 1 : 0) << ','
                     << static_cast<unsigned>(active_navigation_code) << ','
                     << active_navigation_remaining_mm << ','
                     << active_navigation_heading_cdeg << ','
@@ -1043,13 +1101,15 @@ int main(int argc, char **argv)
                               wheel_gate, uart_fresh, wheel_accepted, wheel_rejected,
                               uart_frames, crc_errors, sequence_gaps,
                               pose_tx_frames, pose_tx_errors,
-                              navigation_active, active_navigation_code,
+                              navigation_active, navigation_wheel_primary,
+                              active_navigation_code,
                               active_navigation_remaining_mm,
                               active_navigation_heading_cdeg,
                               navigation_wheel_progress_m,
                               t265_position_corrected,
                               active_t265_position_multiplier,
-                              innovation_m);
+                              innovation_m,
+                              config.encoder_fusion_weight);
 
             std::cout << std::fixed << std::setprecision(3)
                       << "POSE t=" << elapsed
@@ -1060,7 +1120,11 @@ int main(int argc, char **argv)
                       << " wheel=" << wheel_gate
                       << " uart=" << (uart_fresh ? "fresh" : "stale")
                       << " tx=" << pose_tx_frames << '/' << pose_tx_errors
-                      << " nav=" << (navigation_active ? "wheel_primary" : "normal")
+                      << " nav=" << (navigation_active
+                              ? (navigation_wheel_primary ? "wheel_primary" : "t265_primary")
+                              : "normal")
+                      << " ew=" << std::setprecision(2)
+                      << config.encoder_fusion_weight
                       << " wprog=" << std::setprecision(3)
                       << navigation_wheel_progress_m << "m"
                       << " t265pos=" << (t265_position_corrected ? "correct" : "yaw_only")

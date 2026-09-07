@@ -20,6 +20,7 @@ def options(snapshot: Path) -> argparse.Namespace:
         zone=2,
         side="blue",
         corner_offset_mm=150.0 * math.sqrt(2.0),
+        encoder_weight=0.25,
         localization_mode="fusion",
         localization_json=snapshot,
         localization_log=None,
@@ -50,6 +51,9 @@ def main() -> None:
         tx_index = app.localization_command().index("--tx-rate")
         assert app.localization_command()[tx_index + 1] == "0.0"
         assert "run_mission_test.sh" in app.vision_command()[0]
+        assert math.isclose(app.encoder_weight, 0.25)
+        app.adjust_encoder_weight(0.10)
+        assert math.isclose(app.encoder_weight, 0.35)
         app.localization_mode = "t265"
         assert "--uart" in app.localization_command()
         assert "--command-file" in app.localization_command()
@@ -101,7 +105,12 @@ def main() -> None:
                         "mapper_confidence": 3,
                         "travel_from_start_m": 0.014,
                     },
-                    "wheel": {"uart_fresh": True, "gate": "startup_obstacle"},
+                    "wheel": {
+                        "uart_fresh": True,
+                        "gate": "startup_obstacle",
+                        "fusion_weight": 0.35,
+                    },
+                    "navigation": {"wheel_primary": False},
                     "wheel_odom": {
                         "available": True,
                         "x_m": 1.18,
@@ -124,6 +133,8 @@ def main() -> None:
         assert app.pose.uart_fresh
         assert app.pose.odom_available and math.isclose(app.pose.odom_x_m, 1.18)
         assert app.pose.odom_yaw_source == "t265_gyro"
+        assert math.isclose(app.pose.encoder_fusion_weight, 0.35)
+        assert not app.pose.navigation_wheel_primary
         assert app.trajectory.distance_m > 0.01
         assert app.odometry_trajectory.points[-1] == (1.18, 1.20)
         frame = app.render()

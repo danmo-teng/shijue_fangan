@@ -66,7 +66,12 @@ def main():
                     "quality": "GOOD",
                     "pose": {"x_m": 0.2, "y_m": -0.4, "yaw_rad": math.pi / 2},
                     "t265": {"tracker_confidence": 3, "mapper_confidence": 2},
-                    "wheel": {"uart_fresh": True, "gate": "accepted"},
+                    "wheel": {
+                        "uart_fresh": True,
+                        "gate": "accepted",
+                        "fusion_weight": 0.25,
+                    },
+                    "navigation": {"wheel_primary": True},
                     "wheel_odom": {
                         "available": True,
                         "x_m": 0.21,
@@ -87,6 +92,8 @@ def main():
         loaded = load_localization_pose(snapshot)
         assert loaded is not None and near(loaded.yaw_deg, 90.0)
         assert loaded.uart_fresh and loaded.wheel_gate == "accepted"
+        assert near(loaded.encoder_fusion_weight, 0.25)
+        assert loaded.navigation_wheel_primary
         assert loaded.odom_available
         assert near(loaded.odom_x_m, 0.21) and near(loaded.odom_y_m, -0.39)
         assert near(loaded.odom_yaw_deg, 92.0)
@@ -103,13 +110,14 @@ def main():
         assert load_localization_pose(snapshot) is None
 
         session = root / "session.json"
-        write_session(session, 3, "blue", DEFAULT_CORNER_OFFSET_M, "t265")
+        write_session(session, 3, "blue", DEFAULT_CORNER_OFFSET_M, "t265", 0.35)
         saved = json.loads(session.read_text(encoding="utf-8"))
         expected_coordinate = -1.35
         assert near(saved["initial_pose"]["x_m"], expected_coordinate)
         assert near(saved["initial_pose"]["y_m"], expected_coordinate)
         assert saved["initial_pose"]["yaw_deg"] == 225.0
         assert saved["localization_mode"] == "t265"
+        assert near(saved["encoder_fusion_weight"], 0.35)
         try:
             write_session(session, 1, "green", 0.30)
             raise AssertionError("invalid side accepted")
@@ -120,14 +128,23 @@ def main():
             raise AssertionError("invalid localization mode accepted")
         except ValueError:
             pass
+        try:
+            write_session(session, 1, "red", 0.30, "fusion", 1.1)
+            raise AssertionError("invalid encoder weight accepted")
+        except ValueError:
+            pass
 
         template = root / "template.conf"
         output = root / "runtime.conf"
-        template.write_text("start_zone = 4\nstart_center_m = 1.35\n", encoding="utf-8")
-        write_localization_config(template, output, 2, DEFAULT_CORNER_OFFSET_M)
+        template.write_text(
+            "start_zone = 4\nstart_center_m = 1.35\nencoder_fusion_weight = 1.0\n",
+            encoding="utf-8",
+        )
+        write_localization_config(template, output, 2, DEFAULT_CORNER_OFFSET_M, 0.4)
         text = output.read_text(encoding="utf-8")
         expected_center = 1.35
         assert "start_zone = 2" in text and f"start_center_m = {expected_center:.6f}" in text
+        assert "encoder_fusion_weight = 0.400" in text
 
     print("rescue_map field model PASS")
 

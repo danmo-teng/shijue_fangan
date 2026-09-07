@@ -293,8 +293,12 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     }
     previous_sequence_ = frame.sequence;
 
-    const double raw_forward = (wheel_m[2] - wheel_m[0]) / std::sqrt(3.0);
-    const double raw_left = (wheel_m[0] + wheel_m[2] - 2.0 * wheel_m[1]) / 3.0;
+    // Match the F407 Location.c wheel order exactly: M1 is the right wheel,
+    // M2 is the left wheel and M3 is the rear wheel. This is the full
+    // three-wheel omni forward kinematics; common wheel rotation cancels from
+    // both translation equations.
+    const double raw_forward = (wheel_m[0] - wheel_m[1]) / std::sqrt(3.0);
+    const double raw_left = (wheel_m[0] + wheel_m[1] - 2.0 * wheel_m[2]) / 3.0;
     const double correction = radians(config_.encoder_to_robot_yaw_deg);
     const double correction_cos = std::cos(correction);
     const double correction_sin = std::sin(correction);
@@ -309,6 +313,38 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     increment.sequence_step = sequence_step;
     reason = "ok";
     return true;
+}
+
+WheelIncrement apply_encoder_fusion_weight(const WheelIncrement &increment,
+                                            double weight)
+{
+    WheelIncrement result = increment;
+    result.forward_m *= weight;
+    result.left_m *= weight;
+    result.forward_velocity_mps *= weight;
+    result.left_velocity_mps *= weight;
+    // Yaw is supplied by the T265 gyro and must not be attenuated with wheel
+    // translation confidence.
+    return result;
+}
+
+bool navigation_wheel_primary_enabled(bool navigation_active,
+                                      bool encoders_enabled,
+                                      bool accepted_wheel_fresh,
+                                      double encoder_fusion_weight)
+{
+    return navigation_active && encoders_enabled && accepted_wheel_fresh &&
+           encoder_fusion_weight > 0.0;
+}
+
+double weighted_t265_sigma_multiplier(double configured_multiplier,
+                                      double encoder_fusion_weight)
+{
+    const double weight = std::max(0.0, std::min(1.0, encoder_fusion_weight));
+    // Measurement sigma is squared inside the EKF, so interpolate its variance
+    // contribution with weight^2. A low encoder weight therefore keeps T265
+    // genuinely dominant instead of retaining the old NAV x8/x12 weakening.
+    return 1.0 + weight * weight * (std::max(1.0, configured_multiplier) - 1.0);
 }
 
 void PlanarOdometry::initialize(const Pose2d &pose)
