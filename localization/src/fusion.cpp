@@ -286,6 +286,31 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     return true;
 }
 
+void PlanarOdometry::initialize(const Pose2d &pose)
+{
+    pose_ = pose;
+    pose_.yaw_rad = wrap_angle(pose_.yaw_rad);
+    travel_m_ = 0.0;
+    initialized_ = true;
+}
+
+void PlanarOdometry::integrate(const WheelIncrement &increment)
+{
+    if (!initialized_) return;
+    const double middle_yaw = pose_.yaw_rad + 0.5 * increment.yaw_rad;
+    const double c = std::cos(middle_yaw);
+    const double s = std::sin(middle_yaw);
+    pose_.x_m += c * increment.forward_m - s * increment.left_m;
+    pose_.y_m += s * increment.forward_m + c * increment.left_m;
+    pose_.yaw_rad = wrap_angle(pose_.yaw_rad + increment.yaw_rad);
+    travel_m_ += std::hypot(increment.forward_m, increment.left_m);
+}
+
+Pose2d PlanarOdometry::pose() const
+{
+    return pose_;
+}
+
 const char *wheel_gate_reason_name(WheelGateReason reason)
 {
     switch (reason) {

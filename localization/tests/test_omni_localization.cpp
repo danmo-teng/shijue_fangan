@@ -340,6 +340,17 @@ void test_projection_gate_and_filter()
     check(std::hypot(predicted.x_m - field.pose.x_m,
                      predicted.y_m - field.pose.y_m) > 0.09,
           "wheel prediction advances pose");
+
+    omni::PlanarOdometry odometry;
+    odometry.initialize(field.pose);
+    odometry.integrate(wheel);
+    const omni::Pose2d odometry_pose = odometry.pose();
+    check(near(odometry_pose.x_m, predicted.x_m) &&
+          near(odometry_pose.y_m, predicted.y_m) &&
+          near(odometry_pose.yaw_rad, predicted.yaw_rad),
+          "wheel-only diagnostic odometry uses EKF motion convention");
+    check(near(odometry.travel_m(), 0.1),
+          "wheel-only diagnostic odometry accumulates planar travel");
     check(filter.correct_t265(field, config), "T265 correction accepted");
     const omni::Pose2d corrected = filter.pose();
     check(std::hypot(corrected.x_m - field.pose.x_m,

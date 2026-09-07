@@ -5,6 +5,7 @@
 
 - 小车实时位置和车头方向；
 - 融合轨迹和累计行驶距离；
+- 轮式里程计轨迹、当前 X/Y/方向、轮速、累计里程及与融合结果的差异（紫色）；
 - T265 tracker/mapper 置信度；
 - 编码器 UART 新鲜度和轮速门控状态；
 - 本方安全区、四个出发区和减速带。
@@ -120,12 +121,16 @@ STM32；区别仅在于编码器是否进入融合计算。
 - `runtime/session.json`：本次出发区、红蓝方和初始位姿；
 - `runtime/localization.conf`：传给融合定位程序的配置；
 - `runtime/localization_result.json`：T265+编码器融合实时输出。
+- `runtime/localization_debug.csv`：本次运行的全速率定位调试日志，每个 T265 位姿帧一行，包含 T265 原始/投影结果、三轮编码器帧、运动学增量、轮式里程计累计位姿、融合位姿和门控状态，可用表格或绘图工具查看两条轨迹的误差。
 - `runtime/uart_command.bin`：任务程序交给定位进程转发的15字节UART帧；
 - `runtime/stm32_status.json`：STM32爪子、摄像头和任务状态。
 - `runtime/delivery_contact_pose.json`：投送完成时的观测位姿、围栏相切参考位姿及建议位置偏差；仅供标定分析，不会自动重置融合定位。
 - `runtime/mission_diagnostics.json`：50 Hz任务状态、STM32模式/故障/ACK、最后命令、规划位姿、航向、剩余距离和串口帧龄。
 
 地图程序不会直接解释原始编码器帧，而是复用 `localization` 中已经测试过的 UART 协议、三轮全向运动学、减速带门控和 EKF。这能保证屏幕显示位置与回传给 F407 的融合位置使用同一套坐标。
+
+定位器的 `--csv FILE` 选项也可单独启用同样的全速率日志；地图启动定位时会自动传入
+`--csv runtime/localization_debug.csv`，每次新建会话时清除上一份同名运行日志。
 
 融合 JSON 超过 250 ms 没有更新时，界面会显示 `STALE`；文件缺失或无法解析时显示 `NO_DATA`，并停止累加轨迹。定位点发生大于 350 mm 的单帧跳变时不会计入距离，避免 T265 丢失后的跳点污染路线。
 

@@ -22,6 +22,7 @@ def options(snapshot: Path) -> argparse.Namespace:
         corner_offset_mm=150.0 * math.sqrt(2.0),
         localization_mode="fusion",
         localization_json=snapshot,
+        localization_log=None,
         launch_localization=False,
         launch_vision=False,
         uart="/dev/ttyS1",
@@ -43,6 +44,9 @@ def main() -> None:
         expected_coordinate = 1.35
         assert app.trajectory.points == [(expected_coordinate, expected_coordinate)]
         assert "--uart" in app.localization_command()
+        assert "--csv" in app.localization_command()
+        csv_index = app.localization_command().index("--csv")
+        assert app.localization_command()[csv_index + 1].endswith("localization_debug.csv")
         tx_index = app.localization_command().index("--tx-rate")
         assert app.localization_command()[tx_index + 1] == "0.0"
         assert "run_mission_test.sh" in app.vision_command()[0]
@@ -98,6 +102,18 @@ def main() -> None:
                         "travel_from_start_m": 0.014,
                     },
                     "wheel": {"uart_fresh": True, "gate": "startup_obstacle"},
+                    "wheel_odom": {
+                        "available": True,
+                        "x_m": 1.18,
+                        "y_m": 1.20,
+                        "yaw_deg": 44.5,
+                        "travel_m": 0.18,
+                        "forward_velocity_mps": 0.10,
+                        "left_velocity_mps": 0.01,
+                        "yaw_rate_radps": 0.0,
+                        "updates": 18,
+                        "last_update_age_ms": 6.0,
+                    },
                 }
             ),
             encoding="utf-8",
@@ -105,7 +121,9 @@ def main() -> None:
         app.update_pose()
         assert app.pose.quality == "GOOD"
         assert app.pose.uart_fresh
+        assert app.pose.odom_available and math.isclose(app.pose.odom_x_m, 1.18)
         assert app.trajectory.distance_m > 0.01
+        assert app.odometry_trajectory.points[-1] == (1.18, 1.20)
         frame = app.render()
         assert frame.shape == (1024, 1280, 3)
 

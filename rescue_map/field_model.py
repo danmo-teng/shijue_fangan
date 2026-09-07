@@ -35,6 +35,18 @@ class Pose:
     t265_travel_m: float = 0.0
     uart_fresh: bool = False
     wheel_gate: str = "waiting"
+    odom_available: bool = False
+    odom_x_m: float = 0.0
+    odom_y_m: float = 0.0
+    odom_yaw_deg: float = 0.0
+    odom_travel_m: float = 0.0
+    odom_forward_velocity_mps: float = 0.0
+    odom_left_velocity_mps: float = 0.0
+    odom_yaw_rate_degps: float = 0.0
+    odom_updates: int = 0
+    odom_update_age_ms: float = math.inf
+    fused_odom_delta_m: float = -1.0
+    fused_odom_yaw_delta_deg: float = 0.0
 
 
 def start_center_coordinate(corner_offset_m: float) -> float:
@@ -86,6 +98,47 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             yaw_deg = math.degrees(float(pose["yaw_rad"]))
         if not all(math.isfinite(value) for value in (x_m, y_m, yaw_deg)):
             return None
+        odom = data.get("wheel_odom", {})
+        odom_available = bool(odom.get("available", False))
+        odom_x_m = float(odom.get("x_m", 0.0))
+        odom_y_m = float(odom.get("y_m", 0.0))
+        if "yaw_deg" in odom:
+            odom_yaw_deg = float(odom["yaw_deg"])
+        else:
+            odom_yaw_deg = math.degrees(float(odom.get("yaw_rad", 0.0)))
+        odom_travel_m = float(odom.get("travel_m", 0.0))
+        odom_forward_velocity_mps = float(odom.get("forward_velocity_mps", 0.0))
+        odom_left_velocity_mps = float(odom.get("left_velocity_mps", 0.0))
+        odom_yaw_rate_degps = math.degrees(float(odom.get("yaw_rate_radps", 0.0)))
+        odom_updates = int(odom.get("updates", 0))
+        odom_update_age_ms = float(odom.get("last_update_age_ms", math.inf))
+        odom_values = (
+            odom_x_m,
+            odom_y_m,
+            odom_yaw_deg,
+            odom_travel_m,
+            odom_forward_velocity_mps,
+            odom_left_velocity_mps,
+            odom_yaw_rate_degps,
+            odom_update_age_ms,
+        )
+        if not all(math.isfinite(value) for value in odom_values):
+            odom_available = False
+            odom_x_m = odom_y_m = odom_yaw_deg = 0.0
+            odom_travel_m = 0.0
+            odom_forward_velocity_mps = odom_left_velocity_mps = 0.0
+            odom_yaw_rate_degps = 0.0
+            odom_updates = 0
+            odom_update_age_ms = math.inf
+        comparison = data.get("comparison", {})
+        fused_odom_delta_m = float(comparison.get("fused_vs_wheel_odom_distance_m", -1.0))
+        fused_odom_yaw_delta_deg = float(comparison.get("fused_vs_wheel_odom_yaw_deg", 0.0))
+        if not all(math.isfinite(value) for value in (fused_odom_delta_m, fused_odom_yaw_delta_deg)):
+            fused_odom_delta_m = -1.0
+            fused_odom_yaw_delta_deg = 0.0
+        if odom_available and fused_odom_delta_m < 0.0:
+            fused_odom_delta_m = math.hypot(x_m - odom_x_m, y_m - odom_y_m)
+            fused_odom_yaw_delta_deg = (yaw_deg - odom_yaw_deg + 180.0) % 360.0 - 180.0
         return Pose(
             x_m=x_m,
             y_m=y_m,
@@ -97,6 +150,18 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             t265_travel_m=float(t265.get("travel_from_start_m", 0.0)),
             uart_fresh=bool(wheel.get("uart_fresh", False)),
             wheel_gate=str(wheel.get("gate", "unknown")),
+            odom_available=odom_available,
+            odom_x_m=odom_x_m,
+            odom_y_m=odom_y_m,
+            odom_yaw_deg=normalize_heading(odom_yaw_deg),
+            odom_travel_m=odom_travel_m,
+            odom_forward_velocity_mps=odom_forward_velocity_mps,
+            odom_left_velocity_mps=odom_left_velocity_mps,
+            odom_yaw_rate_degps=odom_yaw_rate_degps,
+            odom_updates=odom_updates,
+            odom_update_age_ms=odom_update_age_ms,
+            fused_odom_delta_m=fused_odom_delta_m,
+            fused_odom_yaw_delta_deg=fused_odom_yaw_delta_deg,
         )
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
         return None

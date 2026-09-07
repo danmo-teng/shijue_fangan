@@ -390,6 +390,7 @@ P6/P7   最新绝对航向，0.01°
 - `session.json`：出发区、红蓝方、定位模式、初始位姿；
 - `localization.conf`：本次自动生成的定位配置；
 - `localization_result.json`：融合位置、T265、轮式门控、NAV融合诊断；
+- `localization_debug.csv`：每个T265位姿帧一行的全速率调试日志，包含T265原始/投影结果、轮式运动学增量、轮式累计位姿和融合位姿；
 - `uart_command.bin`：视觉任务写入的最新15字节帧；
 - `stm32_status.json`：F407状态及实际UART转发统计；
 - `mission_diagnostics.json`：50 Hz任务规划详细状态；
@@ -417,6 +418,11 @@ t265pos=correct/yaw_only
 ```
 
 如果车辆运动但剩余距离500 ms基本不变化，任务窗口会输出警告。
+
+地图运行时会在`runtime/localization_debug.csv`保存本次定位对照数据，并在场地上用紫色轨迹显示
+轮式里程计；融合轨迹仍使用橙色。CSV中的`odom_*`是未经过T265校正的轮式累计位姿，
+`t265_*`是T265场地投影结果，`fused_*`是EKF输出；地图和CSV中的融合-里程计差异是传感器一致性
+指标，不等同于带真值的绝对误差。
 
 ## 14. 当前最需要实车验证的事项
 

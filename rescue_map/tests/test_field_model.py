@@ -67,6 +67,18 @@ def main():
                     "pose": {"x_m": 0.2, "y_m": -0.4, "yaw_rad": math.pi / 2},
                     "t265": {"tracker_confidence": 3, "mapper_confidence": 2},
                     "wheel": {"uart_fresh": True, "gate": "accepted"},
+                    "wheel_odom": {
+                        "available": True,
+                        "x_m": 0.21,
+                        "y_m": -0.39,
+                        "yaw_deg": 92.0,
+                        "travel_m": 0.24,
+                        "forward_velocity_mps": 0.12,
+                        "left_velocity_mps": -0.03,
+                        "yaw_rate_radps": 0.05,
+                        "updates": 24,
+                        "last_update_age_ms": 8.0,
+                    },
                 }
             ),
             encoding="utf-8",
@@ -74,6 +86,10 @@ def main():
         loaded = load_localization_pose(snapshot)
         assert loaded is not None and near(loaded.yaw_deg, 90.0)
         assert loaded.uart_fresh and loaded.wheel_gate == "accepted"
+        assert loaded.odom_available
+        assert near(loaded.odom_x_m, 0.21) and near(loaded.odom_y_m, -0.39)
+        assert near(loaded.odom_yaw_deg, 92.0)
+        assert near(loaded.odom_travel_m, 0.24) and loaded.odom_updates == 24
 
         # yaw_deg must work without yaw_rad; non-finite coordinates are rejected.
         data = json.loads(snapshot.read_text(encoding="utf-8"))

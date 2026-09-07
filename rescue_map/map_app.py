@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         help="fusion uses T265 plus encoders; t265 keeps task UART but ignores encoders",
     )
     parser.add_argument("--localization-json", type=Path)
+    parser.add_argument(
+        "--localization-log",
+        type=Path,
+        help="persistent full-rate T265/odometry CSV log (default: runtime/localization_debug.csv)",
+    )
     parser.add_argument("--launch-localization", action="store_true")
     parser.add_argument("--launch-vision", action="store_true")
     parser.add_argument("--uart", default="/dev/ttyS1")
@@ -108,7 +113,11 @@ class RescueMapApp:
         self.localization_mode = options.localization_mode
         initial_pose(self.zone, self.corner_offset_m)  # validates parameters
         self.localization_json = options.localization_json or (RUNTIME / "localization_result.json")
+        self.localization_log = Path(
+            getattr(options, "localization_log", None) or (RUNTIME / "localization_debug.csv")
+        )
         self.trajectory = Trajectory()
+        self.odometry_trajectory = Trajectory()
         self.pose = initial_pose(self.zone, self.corner_offset_m)
         self.localization_process: subprocess.Popen | None = None
         self.vision_process: subprocess.Popen | None = None
@@ -187,6 +196,13 @@ class RescueMapApp:
         text.add("+Y", (ml + 8, mt + 8), 16, (70, 70, 70))
         text.add("+X", (ml + size - 8, mt + size - 8), 16, (70, 70, 70), False, "ra")
 
+        legend_x = ml + 20
+        legend_y = mt + 28
+        cv2.line(canvas, (legend_x, legend_y), (legend_x + 30, legend_y), (20, 150, 245), 3)
+        text.add("融合", (legend_x + 38, legend_y), 14, (20, 150, 245), True, "lm")
+        cv2.line(canvas, (legend_x + 105, legend_y), (legend_x + 135, legend_y), (220, 80, 220), 3)
+        text.add("轮式里程计", (legend_x + 143, legend_y), 14, (220, 80, 220), True, "lm")
+
     def draw_speed_bumps(self, canvas: np.ndarray) -> None:
         color = (235, 235, 235)
         outline = (105, 105, 105)
@@ -211,6 +227,26 @@ class RescueMapApp:
         points = [self.world_to_pixel(x, y) for x, y in self.trajectory.points]
         if len(points) >= 2:
             cv2.polylines(canvas, [np.asarray(points, dtype=np.int32)], False, (20, 150, 245), 3, cv2.LINE_AA)
+
+    def draw_odometry_trajectory(self, canvas: np.ndarray) -> None:
+        points = [self.world_to_pixel(x, y) for x, y in self.odometry_trajectory.points]
+        if len(points) >= 2:
+            cv2.polylines(canvas, [np.asarray(points, dtype=np.int32)], False, (220, 80, 220), 2, cv2.LINE_AA)
+
+    def draw_odometry(self, canvas: np.ndarray) -> None:
+        if not self.pose.odom_available:
+            return
+        odom_center = self.world_to_pixel(self.pose.odom_x_m, self.pose.odom_y_m)
+        angle = math.radians(self.pose.odom_yaw_deg)
+        odom_tip = self.world_to_pixel(
+            self.pose.odom_x_m + 0.20 * math.cos(angle),
+            self.pose.odom_y_m + 0.20 * math.sin(angle),
+        )
+        fused_center = self.world_to_pixel(self.pose.x_m, self.pose.y_m)
+        cv2.line(canvas, fused_center, odom_center, (115, 115, 115), 1, cv2.LINE_AA)
+        cv2.circle(canvas, odom_center, 9, (25, 25, 25), -1, cv2.LINE_AA)
+        cv2.circle(canvas, odom_center, 7, (220, 80, 220), 2, cv2.LINE_AA)
+        cv2.arrowedLine(canvas, odom_center, odom_tip, (220, 80, 220), 3, cv2.LINE_AA, tipLength=0.30)
 
     def draw_robot(self, canvas: np.ndarray) -> None:
         pose = self.pose
@@ -282,28 +318,36 @@ class RescueMapApp:
             text.add(f"X：{pose.x_m:+.3f} m", (x0, 235), 25, (245, 245, 245), True)
             text.add(f"Y：{pose.y_m:+.3f} m", (x0, 275), 25, (245, 245, 245), True)
             text.add(f"方向：{pose.yaw_deg:06.2f}°", (x0, 315), 25, (245, 245, 245), True)
-            text.add(f"融合轨迹：{self.trajectory.distance_m:.3f} m", (x0, 385), 23, (20, 170, 245), True)
-            text.add(f"T265起点位移：{pose.t265_travel_m:.3f} m", (x0, 425), 18, (200, 200, 205))
-            text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 475), 18, (200, 200, 205))
-            text.add(f"定位方式：{'T265+编码器融合' if self.localization_mode == 'fusion' else '仅T265'}", (x0, 510), 18, (200, 200, 205))
-            if self.localization_mode == "fusion":
-                text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 545), 18, (200, 200, 205))
-                text.add(f"轮速门控：{pose.wheel_gate}", (x0, 580), 17, (175, 175, 180))
+            text.add(f"融合轨迹：{self.trajectory.distance_m:.3f} m", (x0, 365), 21, (20, 170, 245), True)
+            if pose.odom_available:
+                text.add(f"里程计 X/Y：{pose.odom_x_m:+.3f} / {pose.odom_y_m:+.3f} m", (x0, 405), 18, (220, 80, 220), True)
+                text.add(f"里程计方向：{pose.odom_yaw_deg:06.2f}°  轨迹：{pose.odom_travel_m:.3f} m", (x0, 440), 17, (220, 80, 220), True)
+                text.add(f"轮速 F/L：{pose.odom_forward_velocity_mps:+.2f} / {pose.odom_left_velocity_mps:+.2f} m/s", (x0, 475), 16, (200, 150, 200))
+                text.add(f"融合-里程计差异：{pose.fused_odom_delta_m:.3f} m / {pose.fused_odom_yaw_delta_deg:+.2f}°", (x0, 510), 16, (0, 195, 220))
+                text.add(f"里程计更新：{pose.odom_updates}  帧龄：{pose.odom_update_age_ms:.0f} ms", (x0, 540), 16, (200, 150, 200))
             else:
-                text.add("编码器融合：已关闭（UART未打开）", (x0, 545), 18, (200, 200, 205))
+                text.add("轮式里程计：等待有效编码器解算", (x0, 420), 18, (180, 150, 180))
+            text.add(f"T265起点位移：{pose.t265_travel_m:.3f} m", (x0, 580), 18, (200, 200, 205))
+            text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 615), 18, (200, 200, 205))
+            text.add(f"定位方式：{'T265+编码器融合' if self.localization_mode == 'fusion' else '仅T265'}", (x0, 650), 18, (200, 200, 205))
+            if self.localization_mode == "fusion":
+                text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 685), 18, (200, 200, 205))
+                text.add(f"轮速门控：{pose.wheel_gate}", (x0, 720), 17, (175, 175, 180))
+            else:
+                text.add("编码器融合：已关闭（仍保留UART通信）", (x0, 685), 18, (200, 200, 205))
             age_text = "--" if math.isinf(pose.age_ms) else f"{pose.age_ms:.0f} ms"
-            text.add(f"数据年龄：{age_text}", (x0, 615), 17, (175, 175, 180))
+            text.add(f"数据年龄：{age_text}", (x0, 755), 17, (175, 175, 180))
             if abs(pose.x_m) > FIELD_HALF_M or abs(pose.y_m) > FIELD_HALF_M:
-                text.add("警告：融合坐标已越出场地边界", (x0, 650), 17, (40, 70, 235), True)
-            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 700), 17, (180, 180, 185))
+                text.add("警告：融合坐标已越出场地边界", (x0, 790), 17, (40, 70, 235), True)
+            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 830), 17, (180, 180, 185))
             if self.localization_process and self.localization_process.poll() is not None:
-                text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 735), 17, (50, 80, 235), True)
+                text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 865), 17, (50, 80, 235), True)
             elif self.message:
-                text.add(self.message, (x0, 735), 16, (0, 190, 255))
+                text.add(self.message, (x0, 865), 16, (0, 190, 255))
             if self.vision_process and self.vision_process.poll() is not None:
-                text.add(f"识别进程已退出：{self.vision_process.returncode}", (x0, 770), 17, (50, 80, 235), True)
+                text.add(f"识别进程已退出：{self.vision_process.returncode}", (x0, 900), 17, (50, 80, 235), True)
             elif self.vision_process:
-                text.add("YOLO识别：运行中", (x0, 770), 17, (50, 210, 80), True)
+                text.add("YOLO识别：运行中", (x0, 900), 17, (50, 210, 80), True)
 
     def render(self) -> np.ndarray:
         canvas = np.full((self.height, self.width, 3), (18, 19, 21), dtype=np.uint8)
@@ -311,6 +355,8 @@ class RescueMapApp:
         self.hitboxes.clear()
         self.draw_field(canvas, text)
         self.draw_trajectory(canvas)
+        self.draw_odometry_trajectory(canvas)
+        self.draw_odometry(canvas)
         self.draw_robot(canvas)
         self.draw_panel(canvas, text)
         return text.paint(canvas)
@@ -356,10 +402,13 @@ class RescueMapApp:
     def start_session(self) -> None:
         self.stop_session_processes()
         self.trajectory.reset()
+        self.odometry_trajectory.reset()
         self.pose = initial_pose(self.zone, self.corner_offset_m)
         self.trajectory.seed(self.pose.x_m, self.pose.y_m)
+        self.odometry_trajectory.seed(self.pose.x_m, self.pose.y_m)
         self.last_live_read_monotonic = None
         RUNTIME.mkdir(parents=True, exist_ok=True)
+        self.localization_log.parent.mkdir(parents=True, exist_ok=True)
         write_session(
             RUNTIME / "session.json",
             self.zone,
@@ -382,6 +431,7 @@ class RescueMapApp:
             command = self.localization_command()
             try:
                 self.localization_json.unlink(missing_ok=True)
+                self.localization_log.unlink(missing_ok=True)
                 (RUNTIME / "uart_command.bin").unlink(missing_ok=True)
                 (RUNTIME / "stm32_status.json").unlink(missing_ok=True)
                 self.localization_process = subprocess.Popen(command, cwd=PROJECT_ROOT / "localization")
@@ -404,6 +454,7 @@ class RescueMapApp:
             str(PROJECT_ROOT / "localization/run_localization.sh"),
             "--config", str(RUNTIME / "localization.conf"),
             "--output", str(self.localization_json),
+            "--csv", str(self.localization_log),
             "--rate", "20",
             "--tx-rate", str(self.options.tx_rate),
         ]
@@ -472,6 +523,17 @@ class RescueMapApp:
                 t265_travel_m=distance,
                 uart_fresh=True,
                 wheel_gate="accepted" if distance > 0.7 else "startup_obstacle",
+                odom_available=True,
+                odom_x_m=start.x_m + distance * math.cos(reverse_heading),
+                odom_y_m=start.y_m + distance * math.sin(reverse_heading),
+                odom_yaw_deg=start.yaw_deg,
+                odom_travel_m=distance,
+                odom_forward_velocity_mps=0.18,
+                odom_left_velocity_mps=0.0,
+                odom_updates=max(1, int(distance / 0.003)),
+                odom_update_age_ms=5.0,
+                fused_odom_delta_m=0.0,
+                fused_odom_yaw_delta_deg=0.0,
             )
             self.message = "演示模式（未读取真实硬件）"
         else:
@@ -485,8 +547,30 @@ class RescueMapApp:
                 reference = self.last_live_read_monotonic or self.started_monotonic
                 missing_ms = (now - reference) * 1000.0
                 quality = "WAITING" if missing_ms <= 250.0 else "NO_DATA"
-                self.pose = replace(self.pose, quality=quality, age_ms=missing_ms, uart_fresh=False)
+                self.pose = replace(
+                    self.pose,
+                    quality=quality,
+                    age_ms=missing_ms,
+                    uart_fresh=False,
+                    odom_available=False,
+                )
         self.trajectory.update(self.pose)
+        self.update_odometry_trajectory()
+
+    def update_odometry_trajectory(self) -> None:
+        if not self.pose.odom_available or self.pose.quality not in {"GOOD", "DEGRADED", "LOST"}:
+            return
+        # A fresh wheel solution remains useful while T265 is LOST; display it
+        # as degraded, but never add a stale/absent snapshot to the trail.
+        odom_quality = "DEGRADED" if self.pose.quality == "LOST" else self.pose.quality
+        self.odometry_trajectory.update(
+            Pose(
+                self.pose.odom_x_m,
+                self.pose.odom_y_m,
+                self.pose.odom_yaw_deg,
+                quality=odom_quality,
+            )
+        )
 
     def handle_key(self, key: int) -> bool:
         key &= 0xFF
@@ -519,6 +603,10 @@ class RescueMapApp:
                 self.message = "重新选择后需再次确认开始"
             elif key in (ord("r"), ord("R")):
                 self.trajectory.seed(self.pose.x_m, self.pose.y_m)
+                if self.pose.odom_available:
+                    self.odometry_trajectory.seed(self.pose.odom_x_m, self.pose.odom_y_m)
+                else:
+                    self.odometry_trajectory.seed(self.pose.x_m, self.pose.y_m)
             elif key in (ord("f"), ord("F")):
                 self.fullscreen = not self.fullscreen
                 cv2.setWindowProperty(

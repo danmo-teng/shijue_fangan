@@ -6,6 +6,7 @@
 #include "serial_port.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -51,6 +52,20 @@ struct Options {
 struct TimedEncoderFrame {
     omni::EncoderFrame frame;
     std::chrono::steady_clock::time_point received;
+};
+
+struct WheelDebugState {
+    bool have_latest_frame = false;
+    omni::EncoderFrame latest_frame{};
+    std::uint64_t latest_frame_ns = 0;
+    std::uint64_t latest_update_ns = 0;
+    bool updated_this_pose = false;
+    bool accepted_this_pose = false;
+    bool rejected_this_pose = false;
+    bool have_latest_increment = false;
+    bool latest_increment_accepted = false;
+    omni::WheelIncrement latest_increment{};
+    std::uint64_t odom_updates = 0;
 };
 
 class EncoderQueue {
@@ -117,7 +132,7 @@ void usage(const char *program)
         << "  --baud BAUD         UART baud, default 115200\n"
         << "  --serial SERIAL     select T265 serial\n"
         << "  --output FILE       atomic JSON output\n"
-        << "  --csv FILE          diagnostic CSV log\n"
+        << "  --csv FILE          full-rate T265/odometry diagnostic CSV log\n"
         << "  --command-file FILE relay new valid TYPE 0x11/0x12/0x18 frames\n"
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --rate HZ           stdout/JSON rate, default 20\n"
@@ -188,6 +203,18 @@ std::uint64_t monotonic_ns()
         std::chrono::steady_clock::now().time_since_epoch()).count());
 }
 
+std::uint64_t steady_time_ns(std::chrono::steady_clock::time_point time)
+{
+    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        time.time_since_epoch()).count());
+}
+
+double age_ms(std::uint64_t now_ns, std::uint64_t event_ns)
+{
+    if (event_ns == 0 || now_ns < event_ns) return -1.0;
+    return static_cast<double>(now_ns - event_ns) / 1000000.0;
+}
+
 const char *quality_name(std::uint8_t tracker_confidence,
                          std::uint8_t mapper_confidence,
                          bool t265_update_accepted)
@@ -249,6 +276,8 @@ void write_atomic_json(const std::string &path,
                        const omni::Pose2d &fused,
                        const omni::T265FieldPose &t265,
                        const omni::PlanarEkf &filter,
+                       const omni::PlanarOdometry &odometry,
+                       const WheelDebugState &wheel_debug,
                        const char *quality,
                        const std::string &wheel_gate,
                        bool uart_fresh,
@@ -272,10 +301,20 @@ void write_atomic_json(const std::string &path,
     const std::string temporary = path + ".tmp";
     std::ofstream file(temporary, std::ios::trunc);
     if (!file) throw std::runtime_error("cannot write JSON: " + temporary);
+    const std::uint64_t now_ns = monotonic_ns();
+    const omni::Pose2d odom_pose = odometry.pose();
+    const omni::WheelIncrement &increment = wheel_debug.latest_increment;
+    const bool odom_available = wheel_debug.odom_updates > 0;
+    const double fused_odom_delta_m = odom_available
+        ? std::hypot(fused.x_m - odom_pose.x_m, fused.y_m - odom_pose.y_m)
+        : -1.0;
+    const double fused_odom_yaw_delta_deg = odom_available
+        ? omni::degrees(omni::wrap_angle(fused.yaw_rad - odom_pose.yaw_rad))
+        : 0.0;
     file << std::fixed << std::setprecision(9)
          << "{\n"
-         << "  \"schema_version\": 1,\n"
-         << "  \"timestamp_monotonic_ns\": " << monotonic_ns() << ",\n"
+         << "  \"schema_version\": 2,\n"
+         << "  \"timestamp_monotonic_ns\": " << now_ns << ",\n"
          << "  \"frame\": \"field\",\n"
          << "  \"quality\": \"" << quality << "\",\n"
          << "  \"pose\": {\"x_m\": " << fused.x_m
@@ -287,13 +326,84 @@ void write_atomic_json(const std::string &path,
          << "  \"t265\": {\"x_m\": " << t265.pose.x_m
          << ", \"y_m\": " << t265.pose.y_m
          << ", \"yaw_rad\": " << t265.pose.yaw_rad
+         << ", \"body_forward_velocity_mps\": "
+         << t265.body_forward_velocity_mps
+         << ", \"body_left_velocity_mps\": "
+         << t265.body_left_velocity_mps
+         << ", \"yaw_rate_radps\": " << t265.yaw_rate_radps
          << ", \"tracker_confidence\": " << static_cast<unsigned>(t265.tracker_confidence)
          << ", \"mapper_confidence\": " << static_cast<unsigned>(t265.mapper_confidence)
-         << ", \"travel_from_start_m\": " << t265.travel_from_origin_m << "},\n"
+         << ", \"travel_from_start_m\": " << t265.travel_from_origin_m
+         << ", \"forward_world\": [" << t265.forward_world[0] << ", "
+         << t265.forward_world[1] << ", " << t265.forward_world[2] << "]"
+         << ", \"left_world\": [" << t265.left_world[0] << ", "
+         << t265.left_world[1] << ", " << t265.left_world[2] << "]},\n"
          << "  \"wheel\": {\"gate\": \"" << wheel_gate
          << "\", \"uart_fresh\": " << (uart_fresh ? "true" : "false")
          << ", \"accepted\": " << wheel_accepted
-         << ", \"rejected\": " << wheel_rejected << "},\n"
+         << ", \"rejected\": " << wheel_rejected
+         << ", \"last_frame_age_ms\": "
+         << age_ms(now_ns, wheel_debug.latest_frame_ns)
+         << ", \"last_update_age_ms\": "
+         << age_ms(now_ns, wheel_debug.latest_update_ns) << "},\n"
+         << "  \"wheel_odom\": {\"available\": "
+         << (odom_available ? "true" : "false")
+         << ", \"x_m\": " << odom_pose.x_m
+         << ", \"y_m\": " << odom_pose.y_m
+         << ", \"yaw_rad\": " << odom_pose.yaw_rad
+         << ", \"yaw_deg\": " << omni::degrees(odom_pose.yaw_rad)
+         << ", \"travel_m\": " << odometry.travel_m()
+         << ", \"forward_velocity_mps\": "
+         << (wheel_debug.have_latest_increment ? increment.forward_velocity_mps : 0.0)
+         << ", \"left_velocity_mps\": "
+         << (wheel_debug.have_latest_increment ? increment.left_velocity_mps : 0.0)
+         << ", \"yaw_rate_radps\": "
+         << ((wheel_debug.have_latest_increment && increment.dt_s > 0.0)
+                 ? increment.yaw_rad / increment.dt_s : 0.0)
+         << ", \"increment\": {\"forward_m\": "
+         << (wheel_debug.have_latest_increment ? increment.forward_m : 0.0)
+         << ", \"left_m\": "
+         << (wheel_debug.have_latest_increment ? increment.left_m : 0.0)
+         << ", \"yaw_rad\": "
+         << (wheel_debug.have_latest_increment ? increment.yaw_rad : 0.0)
+         << ", \"dt_s\": "
+         << (wheel_debug.have_latest_increment ? increment.dt_s : 0.0)
+         << ", \"sequence_step\": "
+         << (wheel_debug.have_latest_increment
+                 ? static_cast<unsigned>(increment.sequence_step) : 0u) << "}"
+         << ", \"updates\": " << wheel_debug.odom_updates
+         << ", \"last_update_age_ms\": "
+         << age_ms(now_ns, wheel_debug.latest_update_ns)
+         << ", \"updated_this_pose\": "
+         << (wheel_debug.updated_this_pose ? "true" : "false")
+         << ", \"accepted_this_pose\": "
+         << (wheel_debug.accepted_this_pose ? "true" : "false")
+         << ", \"rejected_this_pose\": "
+         << (wheel_debug.rejected_this_pose ? "true" : "false")
+         << ", \"last_increment_accepted\": "
+         << (wheel_debug.latest_increment_accepted ? "true" : "false")
+         << ", \"last_frame\": {\"available\": "
+         << (wheel_debug.have_latest_frame ? "true" : "false")
+         << ", \"sequence\": "
+         << (wheel_debug.have_latest_frame
+                 ? static_cast<unsigned>(wheel_debug.latest_frame.sequence) : 0u)
+         << ", \"m1\": "
+         << (wheel_debug.have_latest_frame ? wheel_debug.latest_frame.position[0] : 0u)
+         << ", \"m2\": "
+         << (wheel_debug.have_latest_frame ? wheel_debug.latest_frame.position[1] : 0u)
+         << ", \"m3\": "
+         << (wheel_debug.have_latest_frame ? wheel_debug.latest_frame.position[2] : 0u)
+         << ", \"sample_period_ms\": "
+         << (wheel_debug.have_latest_frame
+                 ? static_cast<unsigned>(wheel_debug.latest_frame.sample_period_ms) : 0u)
+         << ", \"status\": "
+         << (wheel_debug.have_latest_frame
+                 ? static_cast<unsigned>(wheel_debug.latest_frame.status) : 0u)
+         << "}},\n"
+         << "  \"comparison\": {\"fused_vs_wheel_odom_distance_m\": "
+         << fused_odom_delta_m
+         << ", \"fused_vs_wheel_odom_yaw_deg\": "
+         << fused_odom_yaw_delta_deg << "},\n"
          << "  \"navigation\": {\"active\": "
          << (navigation_active ? "true" : "false")
          << ", \"command\": " << static_cast<unsigned>(navigation_code)
@@ -497,14 +607,33 @@ int main(int argc, char **argv)
         }
 
         std::ofstream csv;
+        std::uint64_t csv_rows = 0;
         if (!options.csv_path.empty()) {
             csv.open(options.csv_path);
             if (!csv) throw std::runtime_error("cannot open CSV: " + options.csv_path);
-            csv << "time_s,raw_tx_m,raw_ty_m,raw_tz_m,raw_qx,raw_qy,raw_qz,raw_qw,"
-                   "forward_world_x,forward_world_y,forward_world_z,raw_chassis_yaw_deg,"
-                   "relative_yaw_deg,fused_x_m,fused_y_m,fused_yaw_deg,t265_x_m,t265_y_m,"
-                   "t265_yaw_deg,tracker_confidence,mapper_confidence,wheel_gate,"
-                   "wheel_accepted,wheel_rejected,position_sigma_m,yaw_sigma_deg\n";
+            csv << "timestamp_monotonic_ns,elapsed_s,t265_timestamp_s,"
+                   "raw_tx_m,raw_ty_m,raw_tz_m,raw_vx_mps,raw_vy_mps,raw_vz_mps,"
+                   "raw_qx,raw_qy,raw_qz,raw_qw,raw_ang_vx_radps,raw_ang_vy_radps,"
+                   "raw_ang_vz_radps,forward_world_x,forward_world_y,forward_world_z,"
+                   "left_world_x,left_world_y,left_world_z,raw_chassis_yaw_deg,"
+                   "relative_yaw_deg,t265_x_m,t265_y_m,t265_yaw_deg,"
+                   "t265_forward_velocity_mps,t265_left_velocity_mps,t265_yaw_rate_degps,"
+                   "t265_travel_m,fused_x_m,fused_y_m,fused_yaw_deg,odom_x_m,odom_y_m,"
+                   "odom_yaw_deg,odom_travel_m,odom_forward_velocity_mps,"
+                   "odom_left_velocity_mps,odom_yaw_rate_degps,fused_odom_delta_m,"
+                   "fused_odom_yaw_delta_deg,odom_increment_forward_m,"
+                   "odom_increment_left_m,odom_increment_yaw_deg,odom_increment_dt_s,"
+                   "odom_increment_sequence_step,wheel_frame_sequence,wheel_m1_count,"
+                   "wheel_m2_count,wheel_m3_count,wheel_sample_period_ms,wheel_status,"
+                   "wheel_update_this_pose,wheel_update_accepted,wheel_update_rejected,"
+                   "last_increment_accepted,wheel_gate,"
+                   "wheel_accepted_count,wheel_rejected_count,wheel_odom_updates,"
+                   "wheel_last_frame_age_ms,wheel_last_update_age_ms,tracker_confidence,"
+                   "mapper_confidence,t265_update_accepted,t265_position_corrected,"
+                   "t265_position_sigma_multiplier,t265_innovation_m,position_sigma_m,"
+                   "yaw_sigma_deg,quality,navigation_active,navigation_command,"
+                   "navigation_remaining_mm,navigation_heading_cdeg,"
+                   "navigation_wheel_progress_m\n";
         }
 
         rs2::pipeline pipeline(context);
@@ -516,6 +645,8 @@ int main(int argc, char **argv)
         omni::T265FieldProjector projector(config);
         omni::OmniEncoderIntegrator encoder_integrator(config);
         omni::PlanarEkf filter;
+        omni::PlanarOdometry odometry;
+        WheelDebugState wheel_debug;
         omni::T265FieldPose latest_t265;
         std::string wheel_gate = options.uart_path.empty()
             ? "uart_disabled"
@@ -569,6 +700,7 @@ int main(int argc, char **argv)
 
             if (!filter.initialized() && latest_t265.tracker_confidence > 0) {
                 filter.initialize(latest_t265.pose);
+                odometry.initialize(latest_t265.pose);
                 first_pose_time = std::chrono::steady_clock::now();
                 next_output = first_pose_time;
                 next_pose_tx = first_pose_time;
@@ -592,16 +724,34 @@ int main(int argc, char **argv)
             }
             previous_navigation_active = navigation_active;
 
+            wheel_debug.updated_this_pose = false;
+            wheel_debug.accepted_this_pose = false;
+            wheel_debug.rejected_this_pose = false;
+
             for (const TimedEncoderFrame &timed : encoder_queue.drain()) {
+                wheel_debug.have_latest_frame = true;
+                wheel_debug.latest_frame = timed.frame;
+                wheel_debug.latest_frame_ns = steady_time_ns(timed.received);
                 omni::WheelIncrement increment;
                 std::string integration_reason;
                 if (!encoder_integrator.update(timed.frame, increment, integration_reason)) {
                     wheel_gate = integration_reason;
+                    wheel_debug.rejected_this_pose = true;
                     continue;
                 }
                 const omni::WheelGateReason gate =
                     omni::evaluate_wheel_gate(config, latest_t265, increment);
                 wheel_gate = omni::wheel_gate_reason_name(gate);
+                wheel_debug.have_latest_increment = true;
+                wheel_debug.latest_increment = increment;
+                wheel_debug.latest_update_ns = wheel_debug.latest_frame_ns;
+                wheel_debug.updated_this_pose = true;
+                // Keep this raw encoder-only trajectory even when the same
+                // increment is rejected by the EKF safety gate. The rejected
+                // status is logged separately so drift and gating can be
+                // diagnosed from one run.
+                odometry.integrate(increment);
+                ++wheel_debug.odom_updates;
                 const double wheel_speed = std::hypot(
                     increment.forward_velocity_mps,
                     increment.left_velocity_mps);
@@ -621,6 +771,8 @@ int main(int argc, char **argv)
                     gate == omni::WheelGateReason::VelocityMismatch;
                 if (near_target_slip) {
                     wheel_gate = "navigation_near_target_slip";
+                    wheel_debug.rejected_this_pose = true;
+                    wheel_debug.latest_increment_accepted = false;
                     ++wheel_rejected;
                 } else if (gate == omni::WheelGateReason::Accepted ||
                            navigation_encoder_override) {
@@ -643,8 +795,12 @@ int main(int argc, char **argv)
                         navigation_wheel_progress_m += progress;
                     }
                     filter.predict(increment, config);
+                    wheel_debug.accepted_this_pose = true;
+                    wheel_debug.latest_increment_accepted = true;
                     ++wheel_accepted;
                 } else {
+                    wheel_debug.rejected_this_pose = true;
+                    wheel_debug.latest_increment_accepted = false;
                     ++wheel_rejected;
                 }
             }
@@ -692,9 +848,20 @@ int main(int argc, char **argv)
                 break;
             }
             const omni::Pose2d fused = filter.pose();
+            const omni::Pose2d odom = odometry.pose();
+            const bool odom_available = wheel_debug.odom_updates > 0;
+            const double fused_odom_delta_m = odom_available
+                ? std::hypot(fused.x_m - odom.x_m, fused.y_m - odom.y_m) : -1.0;
+            const double fused_odom_yaw_delta_deg = odom_available
+                ? omni::degrees(omni::wrap_angle(fused.yaw_rad - odom.yaw_rad)) : 0.0;
+            const char *quality = quality_name(
+                latest_t265.tracker_confidence,
+                latest_t265.mapper_confidence,
+                t265_update_accepted);
             const std::int64_t last_ns = last_uart_ns.load(std::memory_order_relaxed);
+            const std::uint64_t sample_ns = monotonic_ns();
             const bool uart_fresh = !options.uart_path.empty() && last_ns > 0 &&
-                static_cast<std::int64_t>(monotonic_ns()) - last_ns <=
+                static_cast<std::int64_t>(sample_ns) - last_ns <=
                     static_cast<std::int64_t>(config.uart_stale_ms) * 1000000LL;
 
             if (uart && options.tx_rate_hz > 0.0 && now >= next_pose_tx) {
@@ -740,19 +907,99 @@ int main(int argc, char **argv)
                     ++pose_tx_errors;
                 }
             }
+
+            if (csv) {
+                const bool have_increment = wheel_debug.have_latest_increment;
+                const bool have_frame = wheel_debug.have_latest_frame;
+                const double odom_yaw_rate_radps = have_increment &&
+                    wheel_debug.latest_increment.dt_s > 0.0
+                    ? wheel_debug.latest_increment.yaw_rad /
+                        wheel_debug.latest_increment.dt_s : 0.0;
+                csv << std::fixed << std::setprecision(9)
+                    << sample_ns << ',' << elapsed << ',' << raw.timestamp_s << ','
+                    << raw.translation_m[0] << ',' << raw.translation_m[1] << ','
+                    << raw.translation_m[2] << ',' << raw.velocity_mps[0] << ','
+                    << raw.velocity_mps[1] << ',' << raw.velocity_mps[2] << ','
+                    << raw.rotation_xyzw[0] << ',' << raw.rotation_xyzw[1] << ','
+                    << raw.rotation_xyzw[2] << ',' << raw.rotation_xyzw[3] << ','
+                    << raw.angular_velocity_radps[0] << ','
+                    << raw.angular_velocity_radps[1] << ','
+                    << raw.angular_velocity_radps[2] << ','
+                    << latest_t265.forward_world[0] << ','
+                    << latest_t265.forward_world[1] << ','
+                    << latest_t265.forward_world[2] << ','
+                    << latest_t265.left_world[0] << ','
+                    << latest_t265.left_world[1] << ','
+                    << latest_t265.left_world[2] << ','
+                    << omni::degrees(latest_t265.raw_chassis_yaw_rad) << ','
+                    << omni::degrees(latest_t265.relative_yaw_rad) << ','
+                    << latest_t265.pose.x_m << ',' << latest_t265.pose.y_m << ','
+                    << omni::degrees(latest_t265.pose.yaw_rad) << ','
+                    << latest_t265.body_forward_velocity_mps << ','
+                    << latest_t265.body_left_velocity_mps << ','
+                    << omni::degrees(latest_t265.yaw_rate_radps) << ','
+                    << latest_t265.travel_from_origin_m << ','
+                    << fused.x_m << ',' << fused.y_m << ','
+                    << omni::degrees(fused.yaw_rad) << ','
+                    << odom.x_m << ',' << odom.y_m << ','
+                    << omni::degrees(odom.yaw_rad) << ',' << odometry.travel_m() << ','
+                    << (have_increment
+                            ? wheel_debug.latest_increment.forward_velocity_mps : 0.0)
+                    << ','
+                    << (have_increment
+                            ? wheel_debug.latest_increment.left_velocity_mps : 0.0)
+                    << ',' << omni::degrees(odom_yaw_rate_radps) << ','
+                    << fused_odom_delta_m << ',' << fused_odom_yaw_delta_deg << ','
+                    << (have_increment ? wheel_debug.latest_increment.forward_m : 0.0)
+                    << ',' << (have_increment ? wheel_debug.latest_increment.left_m : 0.0)
+                    << ',' << (have_increment
+                            ? omni::degrees(wheel_debug.latest_increment.yaw_rad) : 0.0)
+                    << ',' << (have_increment ? wheel_debug.latest_increment.dt_s : 0.0)
+                    << ',' << (have_increment
+                            ? static_cast<unsigned>(wheel_debug.latest_increment.sequence_step)
+                            : 0u)
+                    << ',' << (have_frame
+                            ? static_cast<unsigned>(wheel_debug.latest_frame.sequence) : 0u)
+                    << ',' << (have_frame ? wheel_debug.latest_frame.position[0] : 0u)
+                    << ',' << (have_frame ? wheel_debug.latest_frame.position[1] : 0u)
+                    << ',' << (have_frame ? wheel_debug.latest_frame.position[2] : 0u)
+                    << ',' << (have_frame
+                            ? static_cast<unsigned>(wheel_debug.latest_frame.sample_period_ms)
+                            : 0u)
+                    << ',' << (have_frame
+                            ? static_cast<unsigned>(wheel_debug.latest_frame.status) : 0u)
+                    << ',' << (wheel_debug.updated_this_pose ? 1 : 0)
+                    << ',' << (wheel_debug.accepted_this_pose ? 1 : 0)
+                    << ',' << (wheel_debug.rejected_this_pose ? 1 : 0)
+                    << ',' << (wheel_debug.latest_increment_accepted ? 1 : 0)
+                    << ',' << wheel_gate << ',' << wheel_accepted << ',' << wheel_rejected
+                    << ',' << wheel_debug.odom_updates << ','
+                    << age_ms(sample_ns, wheel_debug.latest_frame_ns) << ','
+                    << age_ms(sample_ns, wheel_debug.latest_update_ns) << ','
+                    << static_cast<unsigned>(latest_t265.tracker_confidence) << ','
+                    << static_cast<unsigned>(latest_t265.mapper_confidence) << ','
+                    << (t265_update_accepted ? 1 : 0) << ','
+                    << (t265_position_corrected ? 1 : 0) << ','
+                    << active_t265_position_multiplier << ',' << innovation_m << ','
+                    << filter.position_sigma_m() << ','
+                    << omni::degrees(filter.yaw_sigma_rad()) << ',' << quality << ','
+                    << (navigation_active ? 1 : 0) << ','
+                    << static_cast<unsigned>(active_navigation_code) << ','
+                    << active_navigation_remaining_mm << ','
+                    << active_navigation_heading_cdeg << ','
+                    << navigation_wheel_progress_m << '\n';
+                if ((++csv_rows % 20u) == 0u) csv.flush();
+            }
             if (options.output_rate_hz > 0.0 && now < next_output) continue;
             if (options.output_rate_hz > 0.0) {
                 next_output = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(output_period);
             }
 
-            const char *quality = quality_name(
-                latest_t265.tracker_confidence,
-                latest_t265.mapper_confidence,
-                t265_update_accepted);
             const std::uint64_t uart_frames = live_uart_frames.load(std::memory_order_relaxed);
             const std::uint64_t crc_errors = live_crc_errors.load(std::memory_order_relaxed);
             const std::uint64_t sequence_gaps = live_sequence_gaps.load(std::memory_order_relaxed);
-            write_atomic_json(options.output_path, fused, latest_t265, filter, quality,
+            write_atomic_json(options.output_path, fused, latest_t265, filter, odometry,
+                              wheel_debug, quality,
                               wheel_gate, uart_fresh, wheel_accepted, wheel_rejected,
                               uart_frames, crc_errors, sequence_gaps,
                               pose_tx_frames, pose_tx_errors,
@@ -780,25 +1027,6 @@ int main(int argc, char **argv)
                       << " x" << std::setprecision(1)
                       << active_t265_position_multiplier
                       << " sigma=" << std::setprecision(3) << filter.position_sigma_m() << "m\n";
-            if (csv) {
-                csv << std::fixed << std::setprecision(9)
-                    << elapsed << ','
-                    << raw.translation_m[0] << ',' << raw.translation_m[1] << ','
-                    << raw.translation_m[2] << ',' << raw.rotation_xyzw[0] << ','
-                    << raw.rotation_xyzw[1] << ',' << raw.rotation_xyzw[2] << ','
-                    << raw.rotation_xyzw[3] << ',' << latest_t265.forward_world[0] << ','
-                    << latest_t265.forward_world[1] << ',' << latest_t265.forward_world[2] << ','
-                    << omni::degrees(latest_t265.raw_chassis_yaw_rad) << ','
-                    << omni::degrees(latest_t265.relative_yaw_rad) << ','
-                    << fused.x_m << ',' << fused.y_m << ','
-                    << omni::degrees(fused.yaw_rad) << ',' << latest_t265.pose.x_m << ','
-                    << latest_t265.pose.y_m << ',' << omni::degrees(latest_t265.pose.yaw_rad)
-                    << ',' << static_cast<unsigned>(latest_t265.tracker_confidence)
-                    << ',' << static_cast<unsigned>(latest_t265.mapper_confidence)
-                    << ',' << wheel_gate << ',' << wheel_accepted << ',' << wheel_rejected
-                    << ',' << filter.position_sigma_m() << ','
-                    << omni::degrees(filter.yaw_sigma_rad()) << '\n';
-            }
         }
 
         pipeline.stop();

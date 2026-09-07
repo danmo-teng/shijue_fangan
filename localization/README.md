@@ -16,6 +16,7 @@ T265 6DoF pose (200 Hz)
   -> 按 tracker confidence 选择测量协方差
   -> EKF 校正（T265为主定位）
   -> localization_result.json供地图和任务程序读取
+  -> 可选全速率 localization_debug.csv，保存T265与轮式里程计对照数据
   -> 默认不向F407连续回传TYPE=0x16
 ```
 
@@ -45,6 +46,23 @@ mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`�
 `camera_offset_forward_m/left_m`表示T265 tracking origin相对车体旋转中心的前向/左向距离，
 单位m，必须按实车测量填写，不能混用105 mm推板距离或130 mm轮子运动学半径。它们保持0时，T265不在车体旋转中心造成的
 原地转向圆弧仍会被误认为车体平移；程序不会根据单次日志猜测并写入机构尺寸。
+
+## 定位调试日志
+
+使用 `--csv FILE` 可保存全速率 CSV。日志每行对应一个 T265 Pose 帧，同时带有最近的 F407
+编码器帧、三轮运动学解算增量、未经过 T265 校正的轮式里程计累计位姿、T265 场地投影位姿和
+EKF 融合位姿。这样可以直接对比 `t265_*_m`、`odom_*_m` 与 `fused_*_m`，分析方向、里程和
+定位漂移；日志还记录 `wheel_gate`、T265 置信度、创新距离及导航阶段。
+
+例如：
+
+```bash
+./run_localization.sh --csv /tmp/localization_debug.csv --duration 10 --rate 10
+```
+
+`rescue_map/run_rescue_map.sh` 会自动把日志写入
+`rescue_map/runtime/localization_debug.csv`，地图同时显示融合轨迹和轮式里程计轨迹，并显示两者的
+位置/航向差异（这是传感器间的一致性指标，不等同于带真值的绝对误差）。
 
 ## 为什么不直接发“三个轮子”给 T265
 

@@ -89,6 +89,23 @@ private:
     std::uint8_t previous_sequence_ = 0;
 };
 
+// Dead-reckon valid wheel increments in the same field frame as the EKF.  This
+// is intentionally kept separate from PlanarEkf so the runtime diagnostic can
+// show encoder-only drift alongside the T265 and fused poses.
+class PlanarOdometry {
+public:
+    void initialize(const Pose2d &pose);
+    bool initialized() const noexcept { return initialized_; }
+    void integrate(const WheelIncrement &increment);
+    Pose2d pose() const;
+    double travel_m() const noexcept { return travel_m_; }
+
+private:
+    bool initialized_ = false;
+    Pose2d pose_{};
+    double travel_m_ = 0.0;
+};
+
 enum class WheelGateReason {
     Accepted,
     NoBaseline,
