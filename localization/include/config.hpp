@@ -49,6 +49,9 @@ struct LocalizationConfig {
     double t265_yaw_sigma_conf3_deg = 1.0;
     double t265_yaw_sigma_conf2_deg = 3.0;
     double t265_yaw_sigma_conf1_deg = 15.0;
+    // Re-anchor the T265 gyro-integrated yaw to the pose quaternion at this
+    // T265-device-time interval. This is not tied to the F407 ODOM period.
+    double t265_gyro_pose_resync_period_s = 0.25;
     double maximum_t265_innovation_m = 0.60;
 };
 

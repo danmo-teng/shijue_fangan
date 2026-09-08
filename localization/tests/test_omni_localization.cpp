@@ -519,6 +519,75 @@ void test_projection_gate_and_filter()
           "navigation correction keeps more encoder progress than normal T265 correction");
 }
 
+void test_t265_yaw_time_sync()
+{
+    omni::LocalizationConfig config;
+    config.start_zone = 2;
+    config.t265_gyro_pose_resync_period_s = 0.25;
+    omni::T265FieldProjector projector(config);
+
+    const auto first = projector.project(lens_up_pose(0.0, 1.0, 90.0));
+    const auto second = projector.project(lens_up_pose(9.0, 1.1, 90.0));
+    const auto third = projector.project(lens_up_pose(27.0, 1.3, 90.0));
+    check(near(omni::degrees(second.gyro_relative_yaw_rad), 9.0, 1e-8) &&
+          near(omni::degrees(third.gyro_relative_yaw_rad), 27.0, 1e-8),
+          "T265 gyro yaw integrates with the T265 timestamp intervals");
+
+    omni::T265YawSynchronizer synchronizer;
+    check(synchronizer.update(10.0, first) &&
+          synchronizer.update(10.1, second) &&
+          synchronizer.update(10.2, third),
+          "T265 yaw timeline accepts monotonic host samples");
+    double yaw_at_encoder = 0.0;
+    check(synchronizer.yaw_at(10.05, yaw_at_encoder) &&
+          near(omni::degrees(yaw_at_encoder - first.pose.yaw_rad), 4.5, 1e-8),
+          "encoder timestamp uses interpolated T265 yaw instead of latest yaw");
+    check(synchronizer.yaw_at(10.15, yaw_at_encoder) &&
+          near(omni::degrees(yaw_at_encoder - first.pose.yaw_rad), 18.0, 1e-8),
+          "queued encoder timestamp remains aligned between T265 samples");
+
+    omni::LocalizationConfig resync_config = config;
+    resync_config.t265_gyro_pose_resync_period_s = 0.20;
+    omni::T265FieldProjector resync_projector(resync_config);
+    resync_projector.project(lens_up_pose(0.0, 1.0, 0.0));
+    const auto drifted = resync_projector.project(lens_up_pose(20.0, 1.1, 0.0));
+    const auto resynchronized = resync_projector.project(lens_up_pose(30.0, 1.3, 0.0));
+    check(std::fabs(omni::degrees(drifted.gyro_pose_sync_error_rad)) > 19.0,
+          "gyro/pose yaw drift is visible before the resynchronization period");
+    check(std::fabs(omni::degrees(resynchronized.gyro_pose_sync_error_rad)) < 1e-8 &&
+          near(omni::degrees(resynchronized.gyro_relative_yaw_rad), 30.0, 1e-8),
+          "T265 attitude yaw periodically re-synchronizes the gyro timeline");
+
+    omni::T265FieldProjector full_turn_resync_projector(resync_config);
+    omni::T265FieldPose full_turn_resync;
+    for (int angle = 0; angle <= 360; angle += 10) {
+        full_turn_resync = full_turn_resync_projector.project(
+            lens_up_pose(static_cast<double>(angle),
+                         2.0 + angle * 0.01, 0.0));
+    }
+    check(near(omni::degrees(full_turn_resync.gyro_relative_yaw_rad), 360.0, 1e-8),
+          "unwrapped pose resynchronization preserves a full turn count");
+
+    omni::PlanarOdometry odometry;
+    odometry.initialize({0.0, 0.0, 0.0});
+    omni::WheelIncrement increment;
+    increment.forward_m = 1.0;
+    increment.field_yaw_rad = omni::radians(90.0);
+    increment.field_yaw_valid = true;
+    odometry.integrate(increment);
+    check(std::fabs(odometry.pose().x_m) < 1e-8 &&
+          near(odometry.pose().y_m, 1.0, 1e-8),
+          "wheel translation uses the T265 heading at the increment midpoint");
+
+    omni::PlanarEkf filter;
+    omni::LocalizationConfig filter_config;
+    filter.initialize({0.0, 0.0, 0.0});
+    filter.predict(increment, filter_config);
+    check(std::fabs(filter.pose().x_m) < 1e-8 &&
+          near(filter.pose().y_m, 1.0, 1e-8),
+          "EKF wheel prediction uses the timestamp-aligned field heading");
+}
+
 }  // namespace
 
 int main()
@@ -526,6 +595,7 @@ int main()
     test_protocol();
     test_kinematics();
     test_projection_gate_and_filter();
+    test_t265_yaw_time_sync();
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;

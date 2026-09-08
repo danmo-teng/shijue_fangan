@@ -60,16 +60,21 @@ lever-arm只补偿一次，轮式中心里程计不再叠加该偏置。
 ## 定位调试日志
 
 使用 `--csv FILE` 可保存全速率 CSV。日志每行对应一个 T265 Pose 帧，同时带有最近的 F407
-编码器帧、三轮运动学解算增量、T265 陀螺航向速率/累计航向、使用陀螺航向积分的轮式里程计
-累计位姿、T265 场地投影位姿和 EKF 融合位姿。这样可以直接对比 `t265_*_m`、`odom_*_m` 与
+编码器帧、三轮运动学解算增量、T265 陀螺航向速率/累计航向、使用时间同步航向的轮式里程计
+累计位姿、T265 场地投影位姿和 EKF 融合位姿。T265 陀螺航向使用 T265 自己的时间戳积分，
+并按 `t265_gyro_pose_resync_period_s` 定期用姿态 yaw 重同步；每个 F407 ODOM 增量按其
+主机接收时间从 T265 航向时间线插值得到中点场地航向。这样可以直接对比 `t265_*_m`、`odom_*_m` 与
 `fused_*_m`，分析方向、里程和定位漂移；日志还记录 `wheel_gate`、T265 置信度、创新距离
 及导航阶段。原始编码器导航距离补偿由独立的
 `navigation_distance_compensation_enabled` 控制，默认关闭；它不受
 `encoder_fusion_weight` 的数值暗中启用或关闭。
 
-`odom_increment_yaw_deg` 是实际用于轮式里程计/EKF预测的 T265 陀螺航向增量，
-`wheel_kinematic_yaw_deg` 是三轮公式原本给出的角度，`gyro_yaw_delta_deg` 是陀螺替换值。
-T265姿态仍负责绝对航向校正，因此该组合是“陀螺高频增量 + T265姿态校正”；日志中的
+`odom_increment_yaw_deg` 是实际用于轮式里程计/EKF预测的时间同步 T265 航向增量，
+`wheel_kinematic_yaw_deg` 是三轮公式原本给出的角度，`gyro_yaw_delta_deg` 是同一增量的
+同步航向变化，`t265_yaw_at_increment_deg` 是用于平移旋转的增量中点场地航向。
+`increment_field_yaw_valid=1` 表示该增量确实使用了 T265 时间线；`gyro_pose_sync_error_deg`
+记录最近一次重同步以来姿态 yaw 与陀螺累计 yaw 的差异。该组合是“按 T265 时间戳积分的
+陀螺高频增量 + 周期 T265 姿态重同步”；日志中的
 `fused_vs_wheel_odom_*` 只是两种传感器的一致性差异，不是带真值的绝对误差。
 
 例如：
@@ -98,7 +103,7 @@ rotate_tangent = (M1 + M2 + M3) / 3
 当前上位机按F407 `Location.c`的实际轮序解算：M1为右轮、M2为左轮、M3为后轮，因此默认
 `encoder_to_robot_yaw_deg=0`。该参数仅保留给实测安装角微调，不能再用固定90°旋转掩盖轮序
 错误。轮式旋转增量保留到日志作为对照，实际轮式里程计和EKF预测的航向增量由T265陀螺仪
-提供，T265四元数姿态继续负责绝对航向校正。
+按T265自身时间戳积分并定期由T265四元数姿态重同步，不能用最新速率乘F407 ODOM间隔。
 
 `encoder_fusion_weight`范围0～1，默认0.25：0表示编码器平移不进入EKF，1表示完整使用编码器
 平移。原始紫色轮式里程计不缩放，便于和T265对照。地图启动页可按5%或10%调节该值。
@@ -319,6 +324,6 @@ python3 tools/merge_vision_pose.py \
 3. 架空车轮，分别转动 M1/M2/M3，确认原始计数和 `encoder_sign` 一致。
 4. 平地前进 1 m、横移 1 m，核对轮径和 1768 counts/rev；不要用减速带路段标定轮径。
 5. 原地旋转 360°，对比轮式运动学角度与T265陀螺角度并测量 `wheel_center_radius_m`；该参数
-   当前主要用于日志诊断，未标定前可保持 0。
+   当前主要用于日志诊断，未标定前可保持 0；同时检查 `gyro_pose_sync_error_deg` 是否周期归零。
 6. 从四个出发区分别越过/绕过减速带，确认 JSON 中 `wheel.gate` 显示 `startup_obstacle` 或 `corner_obstacle`。
 7. 在平地复测闭合路线，用 CSV 比较 T265、轮式预测和融合输出，再调整协方差和速度残差门限。

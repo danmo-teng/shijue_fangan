@@ -145,6 +145,7 @@ LocalizationConfig load_config(const std::string &path)
         SET_DOUBLE(t265_yaw_sigma_conf3_deg)
         SET_DOUBLE(t265_yaw_sigma_conf2_deg)
         SET_DOUBLE(t265_yaw_sigma_conf1_deg)
+        SET_DOUBLE(t265_gyro_pose_resync_period_s)
         SET_DOUBLE(maximum_t265_innovation_m)
 #undef SET_DOUBLE
 #define SET_BOOL(name) if (key == #name) { config.name = boolean(value, key); continue; }
@@ -199,6 +200,7 @@ void validate_config(const LocalizationConfig &c)
     if (c.navigation_t265_position_sigma_multiplier < 1.0 ||
         c.navigation_t265_position_correction_rate_hz <= 0.0 ||
         c.mapper_zero_position_sigma_multiplier < 1.0 ||
+        c.t265_gyro_pose_resync_period_s <= 0.0 ||
         c.navigation_near_target_m <= 0.0 ||
         c.navigation_slip_wheel_speed_mps <= 0.0 ||
         c.navigation_slip_t265_speed_mps < 0.0) {

@@ -154,6 +154,8 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
         filtered_yaw_rate_radps_ = 0.0;
         accumulated_gyro_yaw_rad_ = 0.0;
         filtered_gyro_yaw_rate_radps_ = gyro_rate_valid ? measured_gyro_yaw_rate : 0.0;
+        have_gyro_pose_resync_timestamp_ = true;
+        last_gyro_pose_resync_timestamp_s_ = raw.timestamp_s;
         initialized_ = true;
     } else {
         const double yaw_delta = wrap_angle(raw_yaw - previous_raw_yaw_rad_);
@@ -173,6 +175,20 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
                 accumulated_gyro_yaw_rad_ += 0.5 *
                     (previous_gyro_rate + filtered_gyro_yaw_rate_radps_) * dt;
             }
+        }
+        if (raw.timestamp_s > previous_timestamp_s_ &&
+            (!have_gyro_pose_resync_timestamp_ ||
+             raw.timestamp_s - last_gyro_pose_resync_timestamp_s_ >=
+                 config_.t265_gyro_pose_resync_period_s - 1.0e-9)) {
+            // Keep the high-rate gyro integration on the T265 device clock,
+            // but periodically remove its accumulated bias using the T265
+            // attitude yaw. Use the unwrapped accumulated yaw directly: a
+            // full 360-degree turn must not collapse to a zero correction
+            // merely because wrap_angle() cannot represent turn count.
+            accumulated_gyro_yaw_rad_ += accumulated_relative_yaw_rad_ -
+                accumulated_gyro_yaw_rad_;
+            last_gyro_pose_resync_timestamp_s_ = raw.timestamp_s;
+            have_gyro_pose_resync_timestamp_ = true;
         }
         previous_raw_yaw_rad_ = raw_yaw;
         previous_timestamp_s_ = raw.timestamp_s;
@@ -241,9 +257,116 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     result.gyro_relative_yaw_rad = accumulated_gyro_yaw_rad_;
     result.gyro_yaw_rate_radps = filtered_gyro_yaw_rate_radps_;
     result.gyro_yaw_rate_valid = gyro_rate_valid;
+    result.gyro_pose_sync_error_rad = accumulated_relative_yaw_rad_ -
+        accumulated_gyro_yaw_rad_;
     result.tracker_confidence = raw.tracker_confidence;
     result.mapper_confidence = raw.mapper_confidence;
     return result;
+}
+
+void T265YawSynchronizer::reset()
+{
+    samples_.clear();
+    pose_yaw_initialized_ = false;
+    gyro_reference_initialized_ = false;
+    previous_pose_yaw_rad_ = 0.0;
+    pose_yaw_unwrapped_rad_ = 0.0;
+    gyro_yaw_anchor_rad_ = 0.0;
+}
+
+bool T265YawSynchronizer::update(double host_time_s,
+                                 const T265FieldPose &pose)
+{
+    if (!std::isfinite(host_time_s) || !std::isfinite(pose.pose.yaw_rad)) {
+        return false;
+    }
+    if (!samples_.empty() && host_time_s <= samples_.back().host_time_s) {
+        return false;
+    }
+
+    if (!pose_yaw_initialized_) {
+        previous_pose_yaw_rad_ = pose.pose.yaw_rad;
+        pose_yaw_unwrapped_rad_ = pose.pose.yaw_rad;
+        pose_yaw_initialized_ = true;
+    } else {
+        pose_yaw_unwrapped_rad_ += wrap_angle(
+            pose.pose.yaw_rad - previous_pose_yaw_rad_);
+        previous_pose_yaw_rad_ = pose.pose.yaw_rad;
+    }
+
+    const bool gyro_yaw_valid = pose.gyro_yaw_rate_valid &&
+        std::isfinite(pose.gyro_relative_yaw_rad);
+    if (gyro_yaw_valid && !gyro_reference_initialized_) {
+        // Projector gyro yaw is relative to the same first T265 pose. Keep
+        // the absolute field heading from that pose while using the gyro
+        // timeline for all subsequent interpolation/extrapolation.
+        gyro_yaw_anchor_rad_ = pose_yaw_unwrapped_rad_ -
+                               pose.gyro_relative_yaw_rad;
+        gyro_reference_initialized_ = true;
+    }
+    const double yaw_rad = gyro_reference_initialized_ && gyro_yaw_valid
+        ? gyro_yaw_anchor_rad_ + pose.gyro_relative_yaw_rad
+        : pose_yaw_unwrapped_rad_;
+    const double yaw_rate_radps = pose.gyro_yaw_rate_valid &&
+        std::isfinite(pose.gyro_yaw_rate_radps)
+        ? pose.gyro_yaw_rate_radps : 0.0;
+    samples_.push_back({host_time_s, yaw_rad, yaw_rate_radps});
+    constexpr std::size_t kMaximumSamples = 512;
+    while (samples_.size() > kMaximumSamples) samples_.pop_front();
+    return true;
+}
+
+bool T265YawSynchronizer::yaw_at(double host_time_s, double &yaw_rad) const
+{
+    if (samples_.empty() || !std::isfinite(host_time_s)) return false;
+    constexpr double kMaximumExtrapolationS = 0.25;
+    if (samples_.size() == 1) {
+        const Sample &sample = samples_.front();
+        if (std::fabs(host_time_s - sample.host_time_s) > kMaximumExtrapolationS) {
+            return false;
+        }
+        yaw_rad = sample.yaw_rad + sample.yaw_rate_radps *
+            (host_time_s - sample.host_time_s);
+        return true;
+    }
+
+    const Sample &first = samples_.front();
+    if (host_time_s <= first.host_time_s) {
+        if (first.host_time_s - host_time_s > kMaximumExtrapolationS) {
+            return false;
+        }
+        yaw_rad = first.yaw_rad + first.yaw_rate_radps *
+            (host_time_s - first.host_time_s);
+        return true;
+    }
+    const Sample &last = samples_.back();
+    if (host_time_s >= last.host_time_s) {
+        if (host_time_s - last.host_time_s > kMaximumExtrapolationS) {
+            return false;
+        }
+        yaw_rad = last.yaw_rad + last.yaw_rate_radps *
+            (host_time_s - last.host_time_s);
+        return true;
+    }
+
+    for (std::size_t index = 1; index < samples_.size(); ++index) {
+        const Sample &before = samples_[index - 1];
+        const Sample &after = samples_[index];
+        if (host_time_s <= after.host_time_s) {
+            const double span = after.host_time_s - before.host_time_s;
+            const double fraction = span > 0.0
+                ? (host_time_s - before.host_time_s) / span : 0.0;
+            yaw_rad = before.yaw_rad + fraction *
+                (after.yaw_rad - before.yaw_rad);
+            return true;
+        }
+    }
+    return false;
+}
+
+double T265YawSynchronizer::latest_yaw_rad() const noexcept
+{
+    return samples_.empty() ? 0.0 : samples_.back().yaw_rad;
 }
 
 OmniEncoderIntegrator::OmniEncoderIntegrator(const LocalizationConfig &config)
@@ -317,6 +440,8 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     const double correction_sin = std::sin(correction);
     increment.forward_m = correction_cos * raw_forward - correction_sin * raw_left;
     increment.left_m = correction_sin * raw_forward + correction_cos * raw_left;
+    increment.field_yaw_rad = 0.0;
+    increment.field_yaw_valid = false;
     const double rotation_tangent_m = (wheel_m[0] + wheel_m[1] + wheel_m[2]) / 3.0;
     increment.yaw_rad = config_.wheel_center_radius_m > 0.0
         ? rotation_tangent_m / config_.wheel_center_radius_m : 0.0;
@@ -371,7 +496,9 @@ void PlanarOdometry::initialize(const Pose2d &pose)
 void PlanarOdometry::integrate(const WheelIncrement &increment)
 {
     if (!initialized_) return;
-    const double middle_yaw = pose_.yaw_rad + 0.5 * increment.yaw_rad;
+    const double middle_yaw = increment.field_yaw_valid
+        ? increment.field_yaw_rad
+        : pose_.yaw_rad + 0.5 * increment.yaw_rad;
     const double c = std::cos(middle_yaw);
     const double s = std::sin(middle_yaw);
     pose_.x_m += c * increment.forward_m - s * increment.left_m;
@@ -442,7 +569,8 @@ void PlanarEkf::initialize(const Pose2d &pose)
 void PlanarEkf::predict(const WheelIncrement &u, const LocalizationConfig &config)
 {
     if (!initialized_) return;
-    const double middle_yaw = state_[2] + 0.5 * u.yaw_rad;
+    const double middle_yaw = u.field_yaw_valid
+        ? u.field_yaw_rad : state_[2] + 0.5 * u.yaw_rad;
     const double c = std::cos(middle_yaw);
     const double s = std::sin(middle_yaw);
     state_[0] += c * u.forward_m - s * u.left_m;

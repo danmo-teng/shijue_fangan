@@ -5,6 +5,7 @@
 #include "f407_protocol.hpp"
 
 #include <cstdint>
+#include <deque>
 #include <string>
 
 namespace omni {
@@ -53,6 +54,9 @@ struct T265FieldPose {
     double gyro_relative_yaw_rad = 0.0;
     double gyro_yaw_rate_radps = 0.0;
     bool gyro_yaw_rate_valid = false;
+    // Signed difference between the unwrapped quaternion-yaw timeline and the
+    // gyro timeline since the most recent periodic pose re-synchronization.
+    double gyro_pose_sync_error_rad = 0.0;
     std::uint8_t tracker_confidence = 0;
     std::uint8_t mapper_confidence = 0;
 };
@@ -76,13 +80,47 @@ private:
     double filtered_yaw_rate_radps_ = 0.0;
     double accumulated_gyro_yaw_rad_ = 0.0;
     double filtered_gyro_yaw_rate_radps_ = 0.0;
+    bool have_gyro_pose_resync_timestamp_ = false;
+    double last_gyro_pose_resync_timestamp_s_ = 0.0;
     Pose2d start_pose_{};
+};
+
+// Host-time view of the T265 gyro-integrated yaw. T265 pose samples arrive
+// asynchronously to F407 ODOM frames, so the latter must query this timeline
+// at the encoder frame's receive time instead of using the newest gyro rate
+// multiplied by an F407 sample interval.
+class T265YawSynchronizer {
+public:
+    void reset();
+    bool update(double host_time_s, const T265FieldPose &pose);
+    bool yaw_at(double host_time_s, double &yaw_rad) const;
+    bool initialized() const noexcept { return !samples_.empty(); }
+    double latest_yaw_rad() const noexcept;
+
+private:
+    struct Sample {
+        double host_time_s = 0.0;
+        double yaw_rad = 0.0;
+        double yaw_rate_radps = 0.0;
+    };
+
+    std::deque<Sample> samples_;
+    bool pose_yaw_initialized_ = false;
+    bool gyro_reference_initialized_ = false;
+    double previous_pose_yaw_rad_ = 0.0;
+    double pose_yaw_unwrapped_rad_ = 0.0;
+    double gyro_yaw_anchor_rad_ = 0.0;
 };
 
 struct WheelIncrement {
     double forward_m = 0.0;
     double left_m = 0.0;
     double yaw_rad = 0.0;
+    // Optional field yaw at the midpoint of this increment. It is populated
+    // by the runtime from the T265 timeline and lets both wheel odometry and
+    // EKF transform F407 body translation at the matching heading.
+    double field_yaw_rad = 0.0;
+    bool field_yaw_valid = false;
     double dt_s = 0.0;
     double forward_velocity_mps = 0.0;
     double left_velocity_mps = 0.0;

@@ -68,6 +68,8 @@ struct WheelDebugState {
     omni::WheelIncrement latest_increment{};
     double latest_wheel_kinematic_yaw_rad = 0.0;
     double latest_gyro_yaw_delta_rad = 0.0;
+    double latest_t265_yaw_at_increment_rad = 0.0;
+    bool latest_increment_yaw_synchronized = false;
     bool latest_increment_uses_gyro = false;
     std::uint64_t odom_updates = 0;
 };
@@ -211,6 +213,11 @@ std::uint64_t steady_time_ns(std::chrono::steady_clock::time_point time)
 {
     return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
         time.time_since_epoch()).count());
+}
+
+double steady_time_s(std::chrono::steady_clock::time_point time)
+{
+    return std::chrono::duration<double>(time.time_since_epoch()).count();
 }
 
 double age_ms(std::uint64_t now_ns, std::uint64_t event_ns)
@@ -374,6 +381,8 @@ void write_atomic_json(const std::string &path,
          << t265.robot_center_delta_left_m
          << ", \"gyro_yaw_rate_radps\": " << t265.gyro_yaw_rate_radps
          << ", \"gyro_relative_yaw_rad\": " << t265.gyro_relative_yaw_rad
+         << ", \"gyro_pose_sync_error_rad\": "
+         << t265.gyro_pose_sync_error_rad
          << ", \"gyro_yaw_rate_valid\": "
          << (t265.gyro_yaw_rate_valid ? "true" : "false")
          << ", \"tracker_confidence\": " << static_cast<unsigned>(t265.tracker_confidence)
@@ -427,6 +436,10 @@ void write_atomic_json(const std::string &path,
          << wheel_debug.latest_wheel_kinematic_yaw_rad
          << ", \"gyro_yaw_delta_rad\": "
          << wheel_debug.latest_gyro_yaw_delta_rad
+         << ", \"t265_yaw_at_increment_rad\": "
+         << wheel_debug.latest_t265_yaw_at_increment_rad
+         << ", \"field_yaw_valid\": "
+         << (wheel_debug.latest_increment_yaw_synchronized ? "true" : "false")
          << "}, \"raw_encoder_increment\": {\"forward_m\": "
          << raw_increment_forward_m
          << ", \"left_m\": " << raw_increment_left_m
@@ -702,6 +715,7 @@ int main(int argc, char **argv)
                    "camera_offset_forward_m,camera_offset_left_m,"
                    "t265_forward_velocity_mps,t265_left_velocity_mps,t265_yaw_rate_degps,"
                    "gyro_yaw_rate_degps,gyro_relative_yaw_deg,gyro_yaw_rate_valid,"
+                   "gyro_pose_sync_error_deg,"
                    "t265_travel_m,fused_x_m,fused_y_m,fused_yaw_deg,odom_x_m,odom_y_m,"
                    "odom_yaw_deg,odom_travel_m,odom_forward_velocity_mps,"
                    "odom_left_velocity_mps,odom_yaw_rate_degps,fused_odom_delta_m,"
@@ -711,6 +725,7 @@ int main(int argc, char **argv)
                    "odom_increment_left_m,encoder_fusion_weight,"
                    "fusion_increment_forward_m,fusion_increment_left_m,"
                    "wheel_kinematic_yaw_deg,gyro_yaw_delta_deg,"
+                   "t265_yaw_at_increment_deg,increment_field_yaw_valid,"
                    "odom_increment_yaw_deg,odom_increment_dt_s,"
                    "odom_increment_sequence_step,wheel_frame_sequence,wheel_m1_count,"
                    "wheel_m2_count,wheel_m3_count,wheel_sample_period_ms,wheel_status,"
@@ -735,6 +750,7 @@ int main(int argc, char **argv)
         pipeline.start(rs_config);
 
         omni::T265FieldProjector projector(config);
+        omni::T265YawSynchronizer yaw_synchronizer;
         omni::OmniEncoderIntegrator encoder_integrator(config);
         omni::PlanarEkf filter;
         omni::PlanarOdometry odometry;
@@ -746,6 +762,8 @@ int main(int argc, char **argv)
         std::uint64_t wheel_accepted = 0;
         std::uint64_t wheel_rejected = 0;
         bool have_first_pose = false;
+        bool encoder_yaw_initialized = false;
+        double previous_encoder_field_yaw_rad = 0.0;
         bool t265_update_accepted = false;
         std::uint8_t previous_tracker_confidence = 0;
         auto first_pose_time = std::chrono::steady_clock::now();
@@ -772,6 +790,7 @@ int main(int argc, char **argv)
             const rs2::pose_frame pose_frame = frames.get_pose_frame();
             if (!pose_frame) continue;
             const rs2_pose pose = pose_frame.get_pose_data();
+            const auto t265_received = std::chrono::steady_clock::now();
             omni::T265RawPose raw;
             raw.translation_m[0] = pose.translation.x;
             raw.translation_m[1] = pose.translation.y;
@@ -790,6 +809,7 @@ int main(int argc, char **argv)
             raw.tracker_confidence = pose.tracker_confidence;
             raw.mapper_confidence = pose.mapper_confidence;
             latest_t265 = projector.project(raw);
+            yaw_synchronizer.update(steady_time_s(t265_received), latest_t265);
 
             if (!filter.initialized() && latest_t265.tracker_confidence > 0) {
                 filter.initialize(latest_t265.pose);
@@ -827,6 +847,26 @@ int main(int argc, char **argv)
                 omni::WheelIncrement increment;
                 std::string integration_reason;
                 if (!encoder_integrator.update(timed.frame, increment, integration_reason)) {
+                    if (integration_reason == "baseline") {
+                        double baseline_yaw_rad = 0.0;
+                        if (yaw_synchronizer.yaw_at(
+                                steady_time_s(timed.received), baseline_yaw_rad)) {
+                            // Anchor the heading at the same timestamp as the
+                            // encoder baseline so the first accepted interval
+                            // does not lose its T265 yaw delta.
+                            previous_encoder_field_yaw_rad = baseline_yaw_rad;
+                            encoder_yaw_initialized = true;
+                        } else {
+                            encoder_yaw_initialized = false;
+                        }
+                    } else if (integration_reason == "counter_reset" ||
+                               integration_reason == "invalid_encoder" ||
+                               integration_reason == "invalid_dt") {
+                        // The next valid ODOM frame starts a new translation
+                        // interval, so do not bridge its heading from an old
+                        // encoder timestamp.
+                        encoder_yaw_initialized = false;
+                    }
                     wheel_gate = integration_reason;
                     wheel_debug.rejected_this_pose = true;
                     continue;
@@ -835,15 +875,34 @@ int main(int argc, char **argv)
                     omni::evaluate_wheel_gate(config, latest_t265, increment);
                 wheel_gate = omni::wheel_gate_reason_name(gate);
                 const double wheel_kinematic_yaw_rad = increment.yaw_rad;
-                const bool use_gyro_yaw = latest_t265.gyro_yaw_rate_valid &&
-                    std::isfinite(latest_t265.gyro_yaw_rate_radps);
-                const double gyro_yaw_delta_rad = use_gyro_yaw
-                    ? latest_t265.gyro_yaw_rate_radps * increment.dt_s : 0.0;
-                if (use_gyro_yaw) {
-                    // Wheel translation is still retained, but its heading
-                    // increment comes from the T265 gyro. The T265 pose
-                    // correction below removes the gyro's long-term bias.
+                const double encoder_time_s = steady_time_s(timed.received);
+                double t265_yaw_at_increment_rad = 0.0;
+                const bool use_synchronized_t265_yaw = yaw_synchronizer.yaw_at(
+                    encoder_time_s, t265_yaw_at_increment_rad);
+                double gyro_yaw_delta_rad = 0.0;
+                if (use_synchronized_t265_yaw) {
+                    if (!encoder_yaw_initialized) {
+                        previous_encoder_field_yaw_rad = t265_yaw_at_increment_rad;
+                        encoder_yaw_initialized = true;
+                    }
+                    // This is the difference between T265-timeline headings
+                    // at two consecutive F407 ODOM receive times. It replaces
+                    // the old latest-rate * F407-dt calculation.
+                    gyro_yaw_delta_rad = omni::wrap_angle(
+                        t265_yaw_at_increment_rad -
+                        previous_encoder_field_yaw_rad);
+                    increment.field_yaw_rad = previous_encoder_field_yaw_rad +
+                        0.5 * gyro_yaw_delta_rad;
+                    increment.field_yaw_valid = true;
                     increment.yaw_rad = gyro_yaw_delta_rad;
+                    previous_encoder_field_yaw_rad += gyro_yaw_delta_rad;
+                } else {
+                    // If the T265 timeline is unavailable, retain the raw
+                    // F407 kinematic yaw for this diagnostic increment rather
+                    // than inventing a heading from an unrelated timebase.
+                    encoder_yaw_initialized = false;
+                    increment.field_yaw_rad = 0.0;
+                    increment.field_yaw_valid = false;
                 }
                 const omni::WheelIncrement fusion_increment =
                     omni::apply_encoder_fusion_weight(
@@ -852,7 +911,12 @@ int main(int argc, char **argv)
                 wheel_debug.latest_increment = increment;
                 wheel_debug.latest_wheel_kinematic_yaw_rad = wheel_kinematic_yaw_rad;
                 wheel_debug.latest_gyro_yaw_delta_rad = gyro_yaw_delta_rad;
-                wheel_debug.latest_increment_uses_gyro = use_gyro_yaw;
+                wheel_debug.latest_t265_yaw_at_increment_rad =
+                    use_synchronized_t265_yaw ? increment.field_yaw_rad : 0.0;
+                wheel_debug.latest_increment_yaw_synchronized =
+                    use_synchronized_t265_yaw;
+                wheel_debug.latest_increment_uses_gyro =
+                    use_synchronized_t265_yaw;
                 wheel_debug.latest_update_ns = wheel_debug.latest_frame_ns;
                 wheel_debug.updated_this_pose = true;
                 // Keep this raw encoder-only trajectory even when the same
@@ -888,21 +952,17 @@ int main(int argc, char **argv)
                     if (navigation_encoder_override) {
                         wheel_gate = "navigation_encoder_override";
                     }
-                    const omni::Pose2d before_predict = filter.pose();
-                    const double c = std::cos(before_predict.yaw_rad);
-                    const double s = std::sin(before_predict.yaw_rad);
-                    const double field_dx =
-                        c * fusion_increment.forward_m - s * fusion_increment.left_m;
-                    const double field_dy =
-                        s * fusion_increment.forward_m + c * fusion_increment.left_m;
                     if (navigation_active &&
                         config.navigation_distance_compensation_enabled &&
                         !options.ignore_encoders) {
-                        // Distance compensation deliberately uses the T265
-                        // heading and the raw three-wheel translation. It does
-                        // not depend on the EKF's weighted 2D pose.
-                        const double t265_c = std::cos(latest_t265.pose.yaw_rad);
-                        const double t265_s = std::sin(latest_t265.pose.yaw_rad);
+                        // Distance compensation uses the T265 heading at the
+                        // middle of this encoder interval and the raw
+                        // three-wheel translation. It does not depend on the
+                        // EKF's weighted 2D pose or on the latest loop pose.
+                        const double t265_yaw = increment.field_yaw_valid
+                            ? increment.field_yaw_rad : latest_t265.pose.yaw_rad;
+                        const double t265_c = std::cos(t265_yaw);
+                        const double t265_s = std::sin(t265_yaw);
                         const double t265_field_dx =
                             t265_c * increment.forward_m - t265_s * increment.left_m;
                         const double t265_field_dy =
@@ -1109,6 +1169,7 @@ int main(int argc, char **argv)
                     << omni::degrees(latest_t265.gyro_yaw_rate_radps) << ','
                     << omni::degrees(latest_t265.gyro_relative_yaw_rad) << ','
                     << (latest_t265.gyro_yaw_rate_valid ? 1 : 0) << ','
+                    << omni::degrees(latest_t265.gyro_pose_sync_error_rad) << ','
                     << latest_t265.travel_from_origin_m << ','
                     << fused.x_m << ',' << fused.y_m << ','
                     << omni::degrees(fused.yaw_rad) << ','
@@ -1142,6 +1203,11 @@ int main(int argc, char **argv)
                             ? omni::degrees(wheel_debug.latest_wheel_kinematic_yaw_rad) : 0.0)
                     << ',' << (have_increment
                             ? omni::degrees(wheel_debug.latest_gyro_yaw_delta_rad) : 0.0)
+                    << ',' << (have_increment &&
+                                      wheel_debug.latest_increment_yaw_synchronized
+                            ? omni::degrees(wheel_debug.latest_t265_yaw_at_increment_rad) : 0.0)
+                    << ',' << (have_increment &&
+                                      wheel_debug.latest_increment_yaw_synchronized ? 1 : 0)
                     << ',' << (have_increment
                             ? omni::degrees(wheel_debug.latest_increment.yaw_rad) : 0.0)
                     << ',' << (have_increment ? wheel_debug.latest_increment.dt_s : 0.0)
