@@ -36,6 +36,8 @@
 #include <vector>
 
 #include <sys/stat.h>
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
 
 namespace {
 
@@ -840,16 +842,66 @@ int normalize_key(int key)
     switch (key) {
         case 81:
         case 0x250000:
+        case 0x01000012:
         case 65361:
             return kActionTurnLeft10;
         case 83:
         case 0x270000:
+        case 0x01000014:
         case 65363:
             return kActionTurnRight10;
         default:
             return key & 0xFF;
     }
 }
+
+class GlobalArrowInput {
+public:
+    GlobalArrowInput()
+    {
+        display_ = XOpenDisplay(nullptr);
+        if (display_ == nullptr) return;
+        left_keycode_ = XKeysymToKeycode(display_, XK_Left);
+        right_keycode_ = XKeysymToKeycode(display_, XK_Right);
+    }
+
+    ~GlobalArrowInput()
+    {
+        if (display_ != nullptr) XCloseDisplay(display_);
+    }
+
+    int poll_pressed_edge()
+    {
+        if (display_ == nullptr || left_keycode_ == 0 || right_keycode_ == 0) return 0;
+        char keymap[32]{};
+        XQueryKeymap(display_, keymap);
+        const bool left_pressed = key_is_down(keymap, left_keycode_);
+        const bool right_pressed = key_is_down(keymap, right_keycode_);
+        int action = 0;
+        if (left_pressed && !left_was_pressed_) {
+            action = kActionTurnLeft10;
+        } else if (right_pressed && !right_was_pressed_) {
+            action = kActionTurnRight10;
+        }
+        left_was_pressed_ = left_pressed;
+        right_was_pressed_ = right_pressed;
+        return action;
+    }
+
+private:
+    static bool key_is_down(const char keymap[32], KeyCode keycode)
+    {
+        const unsigned int index = static_cast<unsigned int>(keycode) / 8u;
+        const unsigned int bit = static_cast<unsigned int>(keycode) % 8u;
+        return index < 32u && (static_cast<unsigned char>(keymap[index]) & (1u << bit)) != 0u;
+    }
+
+    Display *display_ = nullptr;
+    KeyCode left_keycode_ = 0;
+    KeyCode right_keycode_ = 0;
+    bool left_was_pressed_ = false;
+    bool right_was_pressed_ = false;
+};
 
 int text_baseline(const cv::Mat &canvas, int line)
 {
@@ -1557,6 +1609,7 @@ int main(int argc, char **argv)
         std::string clicked;
         MouseContext mouse_context{&buttons, &clicked};
         cv::setMouseCallback(kWindowName, on_mouse, &mouse_context);
+        GlobalArrowInput global_arrows;
 
         std::unique_ptr<omni::T265FieldProjector> projector;
         omni::T265FieldPose latest_pose{};
@@ -1654,7 +1707,17 @@ int main(int argc, char **argv)
                            uart_connected, motion_link ? motion_link->error() : uart_error,
                            left_fisheye, right_fisheye, buttons);
             cv::imshow(kWindowName, canvas);
-            int key = normalize_key(cv::waitKeyEx(1));
+            const int raw_key = cv::waitKeyEx(1);
+            int key = normalize_key(raw_key);
+            const int global_arrow_action = global_arrows.poll_pressed_edge();
+            if (global_arrow_action != 0) key = global_arrow_action;
+            if (raw_key >= 0 || global_arrow_action != 0) {
+                std::ostringstream key_data;
+                key_data << "{\"raw_key\":" << raw_key
+                         << ",\"normalized_key\":" << key
+                         << ",\"x11_arrow_action\":" << global_arrow_action << "}";
+                events.write("ui_key", key_data.str());
+            }
             if (!clicked.empty()) {
                 const std::string action = clicked;
                 clicked.clear();

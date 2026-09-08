@@ -23,6 +23,7 @@ if(NOT EXISTS "${REALSENSE_LIBRARY}")
 endif()
 
 find_package(OpenCV 4 REQUIRED COMPONENTS core highgui imgproc)
+find_package(X11 REQUIRED)
 
 set(LOCALIZATION_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../localization")
 add_library(t265_map_localization_core STATIC
@@ -39,11 +40,13 @@ add_executable(t265_map_builder
 target_include_directories(t265_map_builder PRIVATE
     include
     "${LOCALIZATION_ROOT}/include"
-    "${REALSENSE_INCLUDE_DIR}")
+    "${REALSENSE_INCLUDE_DIR}"
+    ${X11_INCLUDE_DIR})
 target_link_libraries(t265_map_builder PRIVATE
     t265_map_localization_core
     "${REALSENSE_LIBRARY}"
     pthread
+    ${X11_LIBRARIES}
     ${OpenCV_LIBS})
 target_compile_definitions(t265_map_builder PRIVATE
     T265_MAP_DEFAULT_CONFIG="${LOCALIZATION_ROOT}/config/localization.example.conf"
