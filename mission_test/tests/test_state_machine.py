@@ -347,12 +347,43 @@ def test_distance_done_requires_fresh_nav_status():
     assert output.command.command == CMD_ENTER_SAFE_ZONE
 
 
+def test_near_fence_heading_is_stable_and_gate_is_tight():
+    mission = RescueMission(MissionSettings(side="red"))
+    mission.state = MissionState.NAVIGATE
+    mission.selected_class = "green_supply"
+
+    # A few centimetres of X/Y noise around the stop point must not turn the
+    # heading command into a diagonal angle such as 45 degrees.
+    right_of_target = PoseInput(True, -0.118, 0.999, 0.0)
+    output = mission.step(VisionInput(), right_of_target, Stm32Status())
+    assert output.state == MissionState.NAVIGATE
+    assert output.command.heading_cdeg == 10000
+
+    left_of_target = PoseInput(True, -0.182, 0.999, 0.0)
+    output = mission.step(VisionInput(), left_of_target, Stm32Status())
+    assert output.state == MissionState.NAVIGATE
+    assert output.command.heading_cdeg == 8000
+
+    # Position is at the stop point, but a 15-degree body heading error must
+    # not unlock ENTER_SAFE_ZONE under the tightened 12-degree gate.
+    not_aligned = PoseInput(True, -0.15, 1.0275, 75.0)
+    output = mission.step(VisionInput(), not_aligned, Stm32Status())
+    assert output.state == MissionState.NAVIGATE
+    assert output.command.heading_cdeg == 8000
+
+    aligned = PoseInput(True, -0.15, 1.0275, 80.0)
+    output = mission.step(VisionInput(), aligned, Stm32Status())
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    assert output.command.command == CMD_ENTER_SAFE_ZONE
+
+
 def main():
     run_side("red", 1200, 90)
     run_side("blue", -1200, 270)
     test_grab_wait_has_no_timeout()
     test_safe_zone_circle_geometry()
     test_distance_done_requires_fresh_nav_status()
+    test_near_fence_heading_is_stable_and_gate_is_tight()
     print("mission state machine PASS")
 
 

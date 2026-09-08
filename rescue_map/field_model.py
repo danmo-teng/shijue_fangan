@@ -34,6 +34,8 @@ class Pose:
     tracker_confidence: int = 0
     mapper_confidence: int = 0
     t265_travel_m: float = 0.0
+    t265_translation_scale: float = 1.0
+    t265_translation_scale_enabled: bool = False
     uart_fresh: bool = False
     wheel_gate: str = "waiting"
     encoder_fusion_weight: float = DEFAULT_ENCODER_FUSION_WEIGHT
@@ -103,6 +105,9 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             yaw_deg = math.degrees(float(pose["yaw_rad"]))
         if not all(math.isfinite(value) for value in (x_m, y_m, yaw_deg)):
             return None
+        t265_translation_scale = float(t265.get("translation_scale", 1.0))
+        if not math.isfinite(t265_translation_scale) or t265_translation_scale <= 0.0:
+            return None
         encoder_fusion_weight = float(
             wheel.get("fusion_weight", DEFAULT_ENCODER_FUSION_WEIGHT)
         )
@@ -160,6 +165,10 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             tracker_confidence=int(t265.get("tracker_confidence", 0)),
             mapper_confidence=int(t265.get("mapper_confidence", 0)),
             t265_travel_m=float(t265.get("travel_from_start_m", 0.0)),
+            t265_translation_scale=t265_translation_scale,
+            t265_translation_scale_enabled=bool(
+                t265.get("translation_scale_enabled", False)
+            ),
             uart_fresh=bool(wheel.get("uart_fresh", False)),
             wheel_gate=str(wheel.get("gate", "unknown")),
             encoder_fusion_weight=encoder_fusion_weight,

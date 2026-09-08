@@ -22,6 +22,10 @@ struct LocalizationConfig {
     // three-wheel kinematic rotation centre.
     double camera_offset_forward_m = -0.0296;
     double camera_offset_left_m = -0.0301;
+    // Optional empirical scale for corrected robot-centre translation. Keep
+    // disabled during normal operation; the value is for A/B calibration.
+    bool t265_translation_scale_enabled = false;
+    double t265_translation_scale = 1.0;
     double camera_robot_forward_axis[3] = {1.0, 0.0, 0.0};
     double camera_robot_up_axis[3] = {0.0, 0.0, -1.0};
 

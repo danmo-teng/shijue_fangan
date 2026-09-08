@@ -375,10 +375,17 @@ void write_atomic_json(const std::string &path,
          << t265.tracking_origin_delta_forward_m
          << ", \"tracking_origin_delta_left_m\": "
          << t265.tracking_origin_delta_left_m
+         << ", \"unscaled_robot_center_delta_forward_m\": "
+         << t265.unscaled_robot_center_delta_forward_m
+         << ", \"unscaled_robot_center_delta_left_m\": "
+         << t265.unscaled_robot_center_delta_left_m
          << ", \"robot_center_delta_forward_m\": "
          << t265.robot_center_delta_forward_m
          << ", \"robot_center_delta_left_m\": "
          << t265.robot_center_delta_left_m
+         << ", \"translation_scale\": " << t265.translation_scale
+         << ", \"translation_scale_enabled\": "
+         << (t265.translation_scale_enabled ? "true" : "false")
          << ", \"gyro_yaw_rate_radps\": " << t265.gyro_yaw_rate_radps
          << ", \"gyro_relative_yaw_rad\": " << t265.gyro_relative_yaw_rad
          << ", \"gyro_pose_sync_error_rad\": "
@@ -537,7 +544,12 @@ int main(int argc, char **argv)
         std::cerr << "[CONFIG] start_zone=" << config.start_zone
                   << " wheel=" << config.wheel_diameter_m * 1000.0 << " mm"
                   << " counts/rev=" << config.counts_per_wheel_revolution
-                  << " startup_gate=" << config.startup_wheel_disable_distance_m << " m\n";
+                  << " startup_gate=" << config.startup_wheel_disable_distance_m << " m"
+                  << " t265_translation_scale="
+                  << (config.t265_translation_scale_enabled
+                          ? config.t265_translation_scale : 1.0)
+                  << (config.t265_translation_scale_enabled ? " (enabled)" : " (disabled)")
+                  << '\n';
 
         rs2::context context;
         rs2::device selected;
@@ -711,7 +723,10 @@ int main(int argc, char **argv)
                    "relative_yaw_deg,t265_x_m,t265_y_m,t265_yaw_deg,"
                    "tracking_origin_x_m,tracking_origin_y_m,"
                    "tracking_origin_delta_forward_m,tracking_origin_delta_left_m,"
+                   "unscaled_robot_center_delta_forward_m,"
+                   "unscaled_robot_center_delta_left_m,"
                    "robot_center_delta_forward_m,robot_center_delta_left_m,"
+                   "t265_translation_scale,t265_translation_scale_enabled,"
                    "camera_offset_forward_m,camera_offset_left_m,"
                    "t265_forward_velocity_mps,t265_left_velocity_mps,t265_yaw_rate_degps,"
                    "gyro_yaw_rate_degps,gyro_relative_yaw_deg,gyro_yaw_rate_valid,"
@@ -1159,8 +1174,12 @@ int main(int argc, char **argv)
                     << latest_t265.tracking_origin_pose.y_m << ','
                     << latest_t265.tracking_origin_delta_forward_m << ','
                     << latest_t265.tracking_origin_delta_left_m << ','
+                    << latest_t265.unscaled_robot_center_delta_forward_m << ','
+                    << latest_t265.unscaled_robot_center_delta_left_m << ','
                     << latest_t265.robot_center_delta_forward_m << ','
                     << latest_t265.robot_center_delta_left_m << ','
+                    << latest_t265.translation_scale << ','
+                    << (latest_t265.translation_scale_enabled ? 1 : 0) << ','
                     << latest_t265.camera_offset_forward_m << ','
                     << latest_t265.camera_offset_left_m << ','
                     << latest_t265.body_forward_velocity_mps << ','

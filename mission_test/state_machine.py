@@ -103,7 +103,9 @@ class MissionSettings:
     t265_delivery_extra_m: float = 0.0
     nav_axial_tolerance_m: float = 0.030
     nav_lateral_tolerance_m: float = 0.050
-    nav_fence_heading_tolerance_deg: float = 30.0
+    nav_fence_heading_tolerance_deg: float = 12.0
+    nav_near_fence_distance_m: float = 0.30
+    nav_near_fence_heading_limit_deg: float = 10.0
     delivery_stationary_s: float = 0.8
     delivery_stationary_tolerance_m: float = 0.025
     center_stop_radius_m: float = 0.60
@@ -125,7 +127,11 @@ class MissionSettings:
             raise ValueError("center stop radius must be positive")
         if not 0 < self.push_plate_offset_m < self.safe_fence_field_face_abs_m:
             raise ValueError("push plate offset must be a positive body-frame distance")
-        if self.front_pusher_offset_m <= 0 or self.t265_delivery_extra_m < 0:
+        if (self.front_pusher_offset_m <= 0 or self.t265_delivery_extra_m < 0 or
+                self.nav_fence_heading_tolerance_deg <= 0 or
+                self.nav_fence_heading_tolerance_deg > 90 or
+                self.nav_near_fence_distance_m <= 0 or
+                self.nav_near_fence_heading_limit_deg <= 0):
             raise ValueError("mechanism and safety parameters are invalid")
 
 
@@ -311,6 +317,25 @@ class RescueMission:
         dy = target[1] - pose.y_m
         return math.degrees(math.atan2(dy, dx)) % 360.0, math.hypot(dx, dy)
 
+    def _fence_navigation_heading(self, route_heading_deg: float,
+                                   distance_m: float) -> float:
+        """Avoid an unstable bearing when only a few centimetres remain.
+
+        The single heading field is used by F407 for both straight travel and
+        final heading. Near the fence, the exact target bearing becomes very
+        sensitive to a few millimetres of pose noise, so keep it close to the
+        known fence-facing heading until the arrival gate is satisfied.
+        """
+        if distance_m > self.settings.nav_near_fence_distance_m:
+            return route_heading_deg
+        error = angle_error_deg(route_heading_deg, self.desired_heading_deg)
+        limit = min(
+            self.settings.nav_near_fence_heading_limit_deg,
+            self.settings.nav_fence_heading_tolerance_deg,
+        )
+        limited_error = max(-limit, min(limit, error))
+        return (self.desired_heading_deg + limited_error) % 360.0
+
     def _navigate(self, pose: PoseInput, stm: Stm32Status) -> MissionOutput:
         fence_stop_reached = self._at_fence_stop(pose)
         stm_distance_done = (
@@ -342,7 +367,7 @@ class RescueMission:
                 self.state, None, None,
                 "融合位姿暂时无效，暂停更新返航航向和剩余距离",
             )
-        travel_heading_deg, t265_distance = self._route_to(
+        route_heading_deg, t265_distance = self._route_to(
             pose, self.fence_stop_point
         )
         if self.navigation_start_distance_m is None:
@@ -369,6 +394,9 @@ class RescueMission:
                 pose.navigation_distance_m - self.navigation_encoder_anchor_m,
             )
             distance = max(0.0, self.navigation_start_distance_m - encoder_progress)
+        travel_heading_deg = self._fence_navigation_heading(
+            route_heading_deg, distance
+        )
         command = self._distance_command(
             CMD_NAVIGATE_WAYPOINT, travel_heading_deg, distance
         )

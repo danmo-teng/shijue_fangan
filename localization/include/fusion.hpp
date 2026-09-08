@@ -39,8 +39,12 @@ struct T265FieldPose {
     double camera_offset_left_m = 0.0;
     double tracking_origin_delta_forward_m = 0.0;
     double tracking_origin_delta_left_m = 0.0;
+    double unscaled_robot_center_delta_forward_m = 0.0;
+    double unscaled_robot_center_delta_left_m = 0.0;
     double robot_center_delta_forward_m = 0.0;
     double robot_center_delta_left_m = 0.0;
+    double translation_scale = 1.0;
+    bool translation_scale_enabled = false;
     double body_forward_velocity_mps = 0.0;
     double body_left_velocity_mps = 0.0;
     double travel_from_origin_m = 0.0;

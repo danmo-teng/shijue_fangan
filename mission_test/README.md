@@ -103,7 +103,7 @@ bearing = atan2(target_y - pose_y, target_x - pose_x)
 distance = hypot(target_x - pose_x, target_y - pose_y)
 ```
 
-`NAVIGATE_WAYPOINT`持续发送最新`bearing + remaining_distance`，但不下发X/Y位置坐标。里程计存在累计误差时，下一帧会根据T265+编码器融合位置修正航向和剩余距离；到达后由RDK地图锁存到达并直接发送`ENTER_SAFE_ZONE`。下位机新版本已删除`ALIGN_SAFE_ZONE`执行步骤，RDK不再等待`mode=11`。
+`NAVIGATE_WAYPOINT`持续发送最新`bearing + remaining_distance`，但不下发X/Y位置坐标。里程计存在累计误差时，下一帧会根据T265+编码器融合位置修正航向和剩余距离；接近围栏最后300 mm时，bearing限制在目标围栏航向±10°内，避免几厘米位置噪声把航向退化成45°等不稳定值。到达后由RDK地图锁存到达并直接发送`ENTER_SAFE_ZONE`。下位机新版本已删除`ALIGN_SAFE_ZONE`执行步骤，RDK不再等待`mode=11`。
 
 返航期间方向和目标bearing始终来自T265位姿/航向；编码器只把三轮平移投影到当前目标方向，
 作为本段剩余距离补偿，不再用错误的完整二维轮式位姿拉动地图。地图日志中的
@@ -116,7 +116,7 @@ distance = hypot(target_x - pose_x, target_y - pose_y)
 
 投送完成后，RDK重复发送`TASK_COMPLETE`，直到F407张爪并后退离开围栏。F407进入返中状态后，
 RDK持续计算指向原点的航向以及`当前位置到中心距离-0.60 m`，发送`RETURN_CENTER`。小车运动
-期间航向和剩余距离随融合位姿更新，到距中心600 mm的位置即恢复`SEARCH`。
+期间航向和剩余距离随融合位姿更新，到距中心600 mm的位置即恢复`SEARCH`。进入`ENTER_SAFE_ZONE`前，车体航向必须在目标围栏航向±12°内；这只是RDK到达门限，不增加下位机ALIGN步骤。
 
 NAV阶段只要地图车体圆与安全区相交，或收到新鲜的`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`，
 就锁存本次已经到达并直接发送`ENTER_SAFE_ZONE`。下位机新版本不再执行ALIGN，对齐命令只保留

@@ -61,6 +61,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--delivery-stationary-seconds", type=float, default=0.8)
     parser.add_argument("--delivery-stationary-tolerance-mm", type=float, default=25.0)
     parser.add_argument("--center-stop-radius-mm", type=float, default=600.0)
+    parser.add_argument("--nav-fence-heading-tolerance-deg", type=float, default=12.0)
+    parser.add_argument("--nav-near-fence-distance-m", type=float, default=0.30)
+    parser.add_argument("--nav-near-fence-heading-limit-deg", type=float, default=10.0)
     parser.add_argument("--startup-timeout", type=float, default=30.0)
     parser.add_argument("--start-pose-tolerance-mm", type=float, default=20.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
@@ -393,6 +396,15 @@ class MissionPlanner:
             "delivery_arrival_confirmed": self.mission.delivery_arrival_confirmed,
             "fence_stop_x_mm": round(self.mission.fence_stop_point[0] * 1000.0),
             "fence_stop_y_mm": round(self.mission.fence_stop_point[1] * 1000.0),
+            "nav_fence_heading_tolerance_deg": (
+                self.mission.settings.nav_fence_heading_tolerance_deg
+            ),
+            "nav_near_fence_distance_mm": round(
+                self.mission.settings.nav_near_fence_distance_m * 1000.0
+            ),
+            "nav_near_fence_heading_limit_deg": (
+                self.mission.settings.nav_near_fence_heading_limit_deg
+            ),
             "t265_delivery_extra_mm": round(
                 self.mission.settings.t265_delivery_extra_m * 1000.0
             ),
@@ -553,6 +565,9 @@ def main() -> int:
         delivery_stationary_s=args.delivery_stationary_seconds,
         delivery_stationary_tolerance_m=args.delivery_stationary_tolerance_mm / 1000.0,
         center_stop_radius_m=args.center_stop_radius_mm / 1000.0,
+        nav_fence_heading_tolerance_deg=args.nav_fence_heading_tolerance_deg,
+        nav_near_fence_distance_m=args.nav_near_fence_distance_m,
+        nav_near_fence_heading_limit_deg=args.nav_near_fence_heading_limit_deg,
         t265_delivery_extra_m=(
             T265_DELIVERY_EXTRA_M
             if session.get("localization_mode") == "t265" else 0.0

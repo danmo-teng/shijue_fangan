@@ -69,6 +69,11 @@ lever-arm只补偿一次，轮式中心里程计不再叠加该偏置。
 `navigation_distance_compensation_enabled` 控制，默认关闭；它不受
 `encoder_fusion_weight` 的数值暗中启用或关闭。
 
+T265平移比例调试由 `t265_translation_scale_enabled` 和
+`t265_translation_scale` 控制，示例文件保留关闭状态并给出 `1.040` 的A/B试验值。
+启用后只缩放lever-arm修正后的机器人中心平移和速度，raw tracking-origin、相机偏置、yaw
+和轮式里程计不变；因此可以随时关闭并保留原始/缩放后数据对照。
+
 `odom_increment_yaw_deg` 是实际用于轮式里程计/EKF预测的时间同步 T265 航向增量，
 `wheel_kinematic_yaw_deg` 是三轮公式原本给出的角度，`gyro_yaw_delta_deg` 是同一增量的
 同步航向变化，`t265_yaw_at_increment_deg` 是用于平移旋转的增量中点场地航向。

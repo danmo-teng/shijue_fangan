@@ -65,7 +65,12 @@ def main():
                     "frame": "field",
                     "quality": "GOOD",
                     "pose": {"x_m": 0.2, "y_m": -0.4, "yaw_rad": math.pi / 2},
-                    "t265": {"tracker_confidence": 3, "mapper_confidence": 2},
+                    "t265": {
+                        "tracker_confidence": 3,
+                        "mapper_confidence": 2,
+                        "translation_scale": 1.04,
+                        "translation_scale_enabled": True,
+                    },
                     "wheel": {
                         "uart_fresh": True,
                         "gate": "accepted",
@@ -94,6 +99,8 @@ def main():
         assert loaded.uart_fresh and loaded.wheel_gate == "accepted"
         assert near(loaded.encoder_fusion_weight, 0.25)
         assert loaded.navigation_wheel_primary
+        assert loaded.t265_translation_scale_enabled
+        assert near(loaded.t265_translation_scale, 1.04)
         assert loaded.odom_available
         assert near(loaded.odom_x_m, 0.21) and near(loaded.odom_y_m, -0.39)
         assert near(loaded.odom_yaw_deg, 92.0)

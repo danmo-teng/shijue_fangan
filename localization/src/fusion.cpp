@@ -212,8 +212,16 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double r0l = config_.camera_offset_left_m;
     const double rotated_rf = cy * r0f - sy * r0l;
     const double rotated_rl = sy * r0f + cy * r0l;
-    const double robot_initial_forward = camera_initial_forward - (rotated_rf - r0f);
-    const double robot_initial_left = camera_initial_left - (rotated_rl - r0l);
+    const double unscaled_robot_initial_forward =
+        camera_initial_forward - (rotated_rf - r0f);
+    const double unscaled_robot_initial_left =
+        camera_initial_left - (rotated_rl - r0l);
+    const double translation_scale = config_.t265_translation_scale_enabled
+        ? config_.t265_translation_scale : 1.0;
+    const double robot_initial_forward = translation_scale *
+        unscaled_robot_initial_forward;
+    const double robot_initial_left = translation_scale *
+        unscaled_robot_initial_left;
 
     const double cs = std::cos(start_pose_.yaw_rad);
     const double ss = std::sin(start_pose_.yaw_rad);
@@ -229,8 +237,12 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     result.tracking_origin_pose.yaw_rad = wrap_angle(start_pose_.yaw_rad + dh);
     result.tracking_origin_delta_forward_m = camera_initial_forward;
     result.tracking_origin_delta_left_m = camera_initial_left;
+    result.unscaled_robot_center_delta_forward_m = unscaled_robot_initial_forward;
+    result.unscaled_robot_center_delta_left_m = unscaled_robot_initial_left;
     result.robot_center_delta_forward_m = robot_initial_forward;
     result.robot_center_delta_left_m = robot_initial_left;
+    result.translation_scale = translation_scale;
+    result.translation_scale_enabled = config_.t265_translation_scale_enabled;
     result.pose.x_m = start_pose_.x_m +
         cs * robot_initial_forward - ss * robot_initial_left;
     result.pose.y_m = start_pose_.y_m +
@@ -243,8 +255,12 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double camera_vl = dot(velocity, left_world);
     const double omega = gyro_rate_valid
         ? filtered_gyro_yaw_rate_radps_ : filtered_yaw_rate_radps_;
-    result.body_forward_velocity_mps = camera_vf + omega * r0l;
-    result.body_left_velocity_mps = camera_vl - omega * r0f;
+    const double unscaled_body_forward_velocity = camera_vf + omega * r0l;
+    const double unscaled_body_left_velocity = camera_vl - omega * r0f;
+    result.body_forward_velocity_mps = translation_scale *
+        unscaled_body_forward_velocity;
+    result.body_left_velocity_mps = translation_scale *
+        unscaled_body_left_velocity;
     result.forward_world[0] = forward_world.x;
     result.forward_world[1] = forward_world.y;
     result.forward_world[2] = forward_world.z;

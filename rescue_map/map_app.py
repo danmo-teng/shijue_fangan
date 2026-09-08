@@ -349,31 +349,33 @@ class RescueMapApp:
             else:
                 text.add("轮式里程计：等待有效编码器解算", (x0, 420), 18, (180, 150, 180))
             text.add(f"T265起点位移：{pose.t265_travel_m:.3f} m", (x0, 580), 18, (200, 200, 205))
-            text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 615), 18, (200, 200, 205))
+            scale_state = "启用" if pose.t265_translation_scale_enabled else "关闭"
+            text.add(f"T265平移比例：{pose.t265_translation_scale:.3f}×（{scale_state}）", (x0, 615), 18, (200, 200, 205))
+            text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 650), 18, (200, 200, 205))
             mode_text = (
                 f"T265+编码器（权重{pose.encoder_fusion_weight * 100:.0f}%）"
                 if self.localization_mode == "fusion" else "仅T265（位置权重100%）"
             )
-            text.add(f"定位方式：{mode_text}", (x0, 650), 18, (200, 200, 205))
+            text.add(f"定位方式：{mode_text}", (x0, 685), 18, (200, 200, 205))
             if self.localization_mode == "fusion":
-                text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 685), 18, (200, 200, 205))
+                text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 720), 18, (200, 200, 205))
                 primary = "轮式" if pose.navigation_wheel_primary else "T265"
-                text.add(f"轮速门控：{pose.wheel_gate}  当前主导：{primary}", (x0, 720), 16, (175, 175, 180))
+                text.add(f"轮速门控：{pose.wheel_gate}  当前主导：{primary}", (x0, 755), 16, (175, 175, 180))
             else:
-                text.add("编码器融合：已关闭（仍保留UART通信）", (x0, 685), 18, (200, 200, 205))
+                text.add("编码器融合：已关闭（仍保留UART通信）", (x0, 720), 18, (200, 200, 205))
             age_text = "--" if math.isinf(pose.age_ms) else f"{pose.age_ms:.0f} ms"
-            text.add(f"数据年龄：{age_text}", (x0, 755), 17, (175, 175, 180))
+            text.add(f"数据年龄：{age_text}", (x0, 790), 17, (175, 175, 180))
             if abs(pose.x_m) > FIELD_HALF_M or abs(pose.y_m) > FIELD_HALF_M:
-                text.add("警告：融合坐标已越出场地边界", (x0, 790), 17, (40, 70, 235), True)
-            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 830), 17, (180, 180, 185))
+                text.add("警告：融合坐标已越出场地边界", (x0, 825), 17, (40, 70, 235), True)
+            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 865), 17, (180, 180, 185))
             if self.localization_process and self.localization_process.poll() is not None:
-                text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 865), 17, (50, 80, 235), True)
+                text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 900), 17, (50, 80, 235), True)
             elif self.message:
-                text.add(self.message, (x0, 865), 16, (0, 190, 255))
+                text.add(self.message, (x0, 900), 16, (0, 190, 255))
             if self.vision_process and self.vision_process.poll() is not None:
-                text.add(f"识别进程已退出：{self.vision_process.returncode}", (x0, 900), 17, (50, 80, 235), True)
+                text.add(f"识别进程已退出：{self.vision_process.returncode}", (x0, 935), 17, (50, 80, 235), True)
             elif self.vision_process:
-                text.add("YOLO识别：运行中", (x0, 900), 17, (50, 210, 80), True)
+                text.add("YOLO识别：运行中", (x0, 935), 17, (50, 210, 80), True)
 
     def render(self) -> np.ndarray:
         canvas = np.full((self.height, self.width, 3), (18, 19, 21), dtype=np.uint8)

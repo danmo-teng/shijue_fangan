@@ -404,6 +404,31 @@ void test_projection_gate_and_filter()
           near(forward_result.body_left_velocity_mps, 0.0, 1e-8),
           "world velocity projects onto current chassis forward axis");
 
+    omni::LocalizationConfig scaled_t265_config = lens_up_config;
+    scaled_t265_config.t265_translation_scale_enabled = true;
+    scaled_t265_config.t265_translation_scale = 1.04;
+    omni::T265FieldProjector scaled_t265_projector(scaled_t265_config);
+    scaled_t265_projector.project(lens_up_pose(0.0, 1.0));
+    auto scaled_forward_motion = lens_up_pose(0.0, 2.0);
+    scaled_forward_motion.translation_m[0] = 1.0;
+    scaled_forward_motion.velocity_mps[0] = 1.0;
+    const auto scaled_forward_result =
+        scaled_t265_projector.project(scaled_forward_motion);
+    check(scaled_forward_result.translation_scale_enabled &&
+          near(scaled_forward_result.translation_scale, 1.04, 1e-12) &&
+          near(scaled_forward_result.unscaled_robot_center_delta_forward_m, 1.0, 1e-8) &&
+          near(scaled_forward_result.robot_center_delta_forward_m, 1.04, 1e-8) &&
+          near(scaled_forward_result.body_forward_velocity_mps, 1.04, 1e-8),
+          "optional T265 translation scale affects centre translation and velocity");
+
+    auto scaled_rotation_pose = camera_rotation_pose(90.0, 3.0);
+    omni::T265FieldProjector scaled_rotation_projector(scaled_t265_config);
+    scaled_rotation_projector.project(camera_rotation_pose(0.0, 2.0));
+    const auto scaled_rotation = scaled_rotation_projector.project(scaled_rotation_pose);
+    check(std::hypot(scaled_rotation.robot_center_delta_forward_m,
+                     scaled_rotation.robot_center_delta_left_m) < 1e-8,
+          "T265 translation scale preserves zero robot-centre motion during rotation");
+
     omni::T265FieldProjector left_projector(lens_up_config);
     left_projector.project(lens_up_pose(0.0, 1.0));
     auto left_motion = lens_up_pose(0.0, 2.0);

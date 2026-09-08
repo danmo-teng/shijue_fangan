@@ -125,6 +125,7 @@ LocalizationConfig load_config(const std::string &path)
         SET_DOUBLE(wheel_center_radius_m)
         SET_DOUBLE(camera_offset_forward_m)
         SET_DOUBLE(camera_offset_left_m)
+        SET_DOUBLE(t265_translation_scale)
         SET_DOUBLE(startup_wheel_disable_distance_m)
         SET_DOUBLE(corner_exclusion_inner_m)
         SET_DOUBLE(maximum_wheel_speed_mps)
@@ -150,6 +151,7 @@ LocalizationConfig load_config(const std::string &path)
 #undef SET_DOUBLE
 #define SET_BOOL(name) if (key == #name) { config.name = boolean(value, key); continue; }
         SET_BOOL(navigation_distance_compensation_enabled)
+        SET_BOOL(t265_translation_scale_enabled)
 #undef SET_BOOL
         if (key == "start_zone") { config.start_zone = integer(value, key); continue; }
         if (key == "encoder_sign_m1") { config.encoder_sign[0] = integer(value, key); continue; }
@@ -196,6 +198,10 @@ void validate_config(const LocalizationConfig &c)
     if (c.wheel_center_radius_m < 0.0 || c.maximum_wheel_speed_mps <= 0.0 ||
         c.maximum_velocity_residual_mps <= 0.0 || c.uart_stale_ms <= 0) {
         throw std::runtime_error("invalid wheel/gating parameter");
+    }
+    if (!std::isfinite(c.t265_translation_scale) ||
+        c.t265_translation_scale <= 0.0 || c.t265_translation_scale > 2.0) {
+        throw std::runtime_error("t265_translation_scale must be in (0,2]");
     }
     if (c.navigation_t265_position_sigma_multiplier < 1.0 ||
         c.navigation_t265_position_correction_rate_hz <= 0.0 ||
