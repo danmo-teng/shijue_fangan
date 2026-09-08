@@ -45,6 +45,18 @@ constexpr char kWindowName[] = "T265 MAP SCANNER";
 constexpr char kMetadataSerial[] = "944222110255";
 constexpr char kKnownFirmware[] = "0.2.0.951";
 constexpr char kKnownLibrealsense[] = "2.50.0";
+constexpr int kActionTurn90 = 1001;
+constexpr int kActionTurn180 = 1002;
+constexpr int kActionTurn360 = 1003;
+constexpr int kActionMoveForward1M = 1004;
+constexpr int kActionMoveLeft1M = 1005;
+constexpr int kActionReturn = 1006;
+constexpr int kActionResetOdom = 1007;
+constexpr int kActionStop = 1008;
+constexpr int kActionExport = 1009;
+constexpr int kActionResetView = 1010;
+constexpr int kActionTurnLeft10 = 1011;
+constexpr int kActionTurnRight10 = 1012;
 
 void signal_handler(int)
 {
@@ -118,8 +130,9 @@ void usage(const char *program)
         << "  --fullscreen              start fullscreen at the detected screen size\n"
         << "  --width PX --height PX   window size when not fullscreen\n"
         << "  -h, --help               show this help\n\n"
-        << "Keys: 1..4 save static anchor, E export, R reset view, F fullscreen,\n"
-        << "      +/- zoom, Q or Esc quit. Motion buttons require --enable-motion.\n";
+        << "Keys: W/S move forward/back 0.5 m, A/D move left/right 0.5 m,\n"
+        << "      Left/Right turn 10 deg, X/Space STOP, 1..4 anchors, E export,\n"
+        << "      R reset view, F fullscreen, +/- zoom, q or Esc quit.\n";
 }
 
 Options parse_options(int argc, char **argv)
@@ -819,6 +832,25 @@ std::pair<int, int> detect_screen_size()
     return result;
 }
 
+int normalize_key(int key)
+{
+    // OpenCV/X11 reports arrow keys differently depending on the backend:
+    // waitKeyEx commonly returns 0x250000/0x270000, while some backends
+    // return 81/83 or the X11 keysyms 65361/65363.
+    switch (key) {
+        case 81:
+        case 0x250000:
+        case 65361:
+            return kActionTurnLeft10;
+        case 83:
+        case 0x270000:
+        case 65363:
+            return kActionTurnRight10;
+        default:
+            return key & 0xFF;
+    }
+}
+
 int text_baseline(const cv::Mat &canvas, int line)
 {
     return std::min(canvas.rows - 8, 30 + line * 22);
@@ -1042,13 +1074,16 @@ void draw_interface(cv::Mat &canvas, const Options &options, const std::string &
                    x, y, button_width, button_height, enabled);
         draw_button(canvas, buttons.back());
     }
-    put_text(canvas, "Keys 1..4: set T265 static node", panel_x,
-             buttons_top + 5 * (button_height + button_gap) + 20, 0.44, cv::Scalar(185, 185, 185));
-    put_text(canvas, "E export  R reset view  F fullscreen  +/- zoom  Q quit",
-             panel_x, buttons_top + 5 * (button_height + button_gap) + 43, 0.40, cv::Scalar(185, 185, 185));
+    const int control_help_top = buttons_top + 5 * (button_height + button_gap) + 20;
+    put_text(canvas, "W/S: F/B 0.5M   A/D: L/R 0.5M", panel_x,
+             control_help_top, 0.40, cv::Scalar(185, 185, 185));
+    put_text(canvas, "<-/->: TURN 10 DEG   X/SPACE: STOP", panel_x,
+             control_help_top + 21, 0.38, cv::Scalar(185, 185, 185));
+    put_text(canvas, "1..4 anchors  E export  R view  F full  +/- zoom  q quit",
+             panel_x, control_help_top + 42, 0.36, cv::Scalar(185, 185, 185));
     put_text(canvas, ui.message, panel_x, canvas.rows - 20, 0.47, cv::Scalar(80, 220, 255), 1);
 
-    const int preview_top = std::min(canvas.rows - 155, buttons_top + 5 * (button_height + button_gap) + 58);
+    const int preview_top = std::min(canvas.rows - 155, control_help_top + 58);
     const int preview_height = std::max(70, canvas.rows - preview_top - 28);
     const int preview_width = (panel_right - panel_x - 8) / 2;
     auto draw_preview = [&](const cv::Mat &image, int x, const std::string &label) {
@@ -1619,23 +1654,22 @@ int main(int argc, char **argv)
                            uart_connected, motion_link ? motion_link->error() : uart_error,
                            left_fisheye, right_fisheye, buttons);
             cv::imshow(kWindowName, canvas);
-            int key = cv::waitKey(1) & 0xFF;
+            int key = normalize_key(cv::waitKeyEx(1));
             if (!clicked.empty()) {
-                key = 0;
                 const std::string action = clicked;
                 clicked.clear();
-                if (action == "turn90") key = 'a';
-                else if (action == "turn180") key = 'b';
-                else if (action == "turn360") key = 'c';
-                else if (action == "move_forward") key = 'd';
-                else if (action == "move_left") key = 'l';
-                else if (action == "return") key = 'v';
-                else if (action == "reset_odom") key = 'o';
-                else if (action == "stop") key = 's';
-                else if (action == "export") key = 'e';
-                else if (action == "reset_view") key = 'r';
+                if (action == "turn90") key = kActionTurn90;
+                else if (action == "turn180") key = kActionTurn180;
+                else if (action == "turn360") key = kActionTurn360;
+                else if (action == "move_forward") key = kActionMoveForward1M;
+                else if (action == "move_left") key = kActionMoveLeft1M;
+                else if (action == "return") key = kActionReturn;
+                else if (action == "reset_odom") key = kActionResetOdom;
+                else if (action == "stop") key = kActionStop;
+                else if (action == "export") key = kActionExport;
+                else if (action == "reset_view") key = kActionResetView;
             }
-            if (key == 27 || key == 'q' || key == 'Q') break;
+            if (key == 27 || key == 'q') break;
             if (key == 'f' || key == 'F') {
                 ui.fullscreen = !ui.fullscreen;
                 cv::setWindowProperty(kWindowName, cv::WND_PROP_FULLSCREEN,
@@ -1644,10 +1678,10 @@ int main(int argc, char **argv)
                 ui.scale = std::min(1200.0, ui.scale * 1.25);
             } else if (key == '-' || key == '_') {
                 ui.scale = std::max(20.0, ui.scale / 1.25);
-            } else if (key == 'e' || key == 'E') {
+            } else if (key == 'e' || key == 'E' || key == kActionExport) {
                 export_requested = true;
                 ui.message = "export requested";
-            } else if (key == 'r' || key == 'R') {
+            } else if (key == 'r' || key == 'R' || key == kActionResetView) {
                 projector.reset();
                 have_pose = false;
                 ui.raw_path.clear();
@@ -1665,7 +1699,7 @@ int main(int argc, char **argv)
                 set_anchor(anchor, pose_sensor, latest_raw, have_raw,
                            have_pose ? &latest_pose : nullptr, have_pose,
                            metadata, events, ui);
-            } else if (key == 's' || key == 'S') {
+            } else if (key == 'x' || key == 'X' || key == ' ' || key == kActionStop) {
                 motion_plan.steps.clear();
                 if (motion_link) {
                     if (motion_link->send_stop()) ui.message = "STOP sent";
@@ -1673,33 +1707,61 @@ int main(int argc, char **argv)
                 } else {
                     ui.message = "motion is disabled";
                 }
-            } else if (key == 'a') {
+            } else if (key == 'w' || key == 'W') {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{move_body(500, 0), "MOVE FWD 0.5M"}},
+                                   "move_forward_half", motion_plan, ui, now_s);
+            } else if (key == 's' || key == 'S') {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{move_body(-500, 0), "MOVE BACK 0.5M"}},
+                                   "move_backward_half", motion_plan, ui, now_s);
+            } else if (key == 'a' || key == 'A') {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{move_body(0, 500), "MOVE LEFT 0.5M"}},
+                                   "move_left_half", motion_plan, ui, now_s);
+            } else if (key == 'd' || key == 'D') {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{move_body(0, -500), "MOVE RIGHT 0.5M"}},
+                                   "move_right_half", motion_plan, ui, now_s);
+            } else if (key == kActionTurnLeft10) {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{turn_relative(10.0), "TURN LEFT 10"}},
+                                   "turn_left_10", motion_plan, ui, now_s);
+            } else if (key == kActionTurnRight10) {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{turn_relative(-10.0), "TURN RIGHT 10"}},
+                                   "turn_right_10", motion_plan, ui, now_s);
+            } else if (key == kActionTurn90) {
                 start_motion_plan(motion_link.get(), options.enable_motion,
                                    {PlanStep{turn_relative(90.0), "TURN +90"}},
                                    "turn90", motion_plan, ui, now_s);
-            } else if (key == 'b') {
+            } else if (key == 'b' || key == 'B') {
                 start_motion_plan(motion_link.get(), options.enable_motion,
                                    {PlanStep{turn_relative(180.0), "TURN +180"}},
                                    "turn180", motion_plan, ui, now_s);
-            } else if (key == 'c') {
+            } else if (key == 'c' || key == 'C') {
                 start_motion_plan(motion_link.get(), options.enable_motion,
                                    {PlanStep{turn_relative(360.0), "TURN +360"}},
                                    "turn360", motion_plan, ui, now_s);
-            } else if (key == 'd') {
+            } else if (key == kActionMoveForward1M) {
                 start_motion_plan(motion_link.get(), options.enable_motion,
                                    {PlanStep{move_body(1000, 0), "MOVE FWD 1M"}},
                                    "move_forward", motion_plan, ui, now_s);
+            } else if (key == kActionMoveLeft1M) {
+                start_motion_plan(motion_link.get(), options.enable_motion,
+                                   {PlanStep{move_body(0, 1000), "MOVE LEFT 1M"}},
+                                   "move_left", motion_plan, ui, now_s);
             } else if (key == 'l' || key == 'L') {
                 start_motion_plan(motion_link.get(), options.enable_motion,
                                    {PlanStep{move_body(0, 1000), "MOVE LEFT 1M"}},
                                    "move_left", motion_plan, ui, now_s);
-            } else if (key == 'v' || key == 'V') {
+            } else if (key == 'v' || key == 'V' || key == kActionReturn) {
                 start_motion_plan(motion_link.get(), options.enable_motion, {
                                        PlanStep{move_body(1000, 0), "OUT 1M"},
                                        PlanStep{turn_relative(180.0), "TURN 180"},
                                        PlanStep{move_body(1000, 0), "BACK 1M"},
-                }, "out_turn_back", motion_plan, ui, now_s);
-            } else if (key == 'o' || key == 'O') {
+                               }, "out_turn_back", motion_plan, ui, now_s);
+            } else if (key == 'o' || key == 'O' || key == kActionResetOdom) {
                 t265_map::protocol::MotionCommandPayload reset;
                 reset.command = t265_map::protocol::kMotionResetOdom;
                 reset.flags = t265_map::protocol::kFlagValid |
