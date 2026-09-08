@@ -71,6 +71,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--stm-status", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/stm32_status.json")
     parser.add_argument("--command-file", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/uart_command.bin")
     parser.add_argument("--contact-output", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/delivery_contact_pose.json")
+    parser.add_argument(
+        "--delivery-observation-log",
+        type=Path,
+        default=PROJECT_ROOT / "rescue_map/runtime/delivery_observation.jsonl",
+    )
     parser.add_argument("--diagnostics", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/mission_diagnostics.json")
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "vision/config/rescue_vision.json")
     parser.add_argument("--homography", type=Path, default=PROJECT_ROOT / "vision/config/homography.txt")
@@ -199,6 +204,7 @@ def observation(
     detections,
     allowed_classes: tuple[str, ...],
     safe_class: str,
+    frame_sequence: int = 0,
 ) -> VisionInput:
     matches = [item for item in detections if item.class_name in allowed_classes]
     safe_matches = [item for item in detections if item.class_name == safe_class]
@@ -228,7 +234,11 @@ def observation(
             default=target,
         )
     if target is None:
-        return VisionInput(safe_found=safe is not None, safe_bbox=safe_bbox)
+        return VisionInput(
+            safe_found=safe is not None,
+            safe_bbox=safe_bbox,
+            frame_sequence=frame_sequence,
+        )
     x, y, width, height = target.bbox
     return VisionInput(
         target_found=True,
@@ -238,6 +248,12 @@ def observation(
         class_name=target.class_name,
         safe_found=safe is not None,
         safe_bbox=safe_bbox,
+        frame_sequence=frame_sequence,
+        delivery_target_found=True,
+        delivery_target_inside_safe_zone=(
+            safe_bbox is not None and
+            bbox_center_in_safe_zone(target.bbox, safe_bbox)
+        ),
     )
 
 
@@ -255,12 +271,17 @@ class MissionPlanner:
 
     def __init__(self, mission: RescueMission, pose_path: Path,
                  stm_path: Path, command_path: Path, diagnostics_path: Path,
-                 rate_hz: float) -> None:
+                 rate_hz: float,
+                 delivery_observation_log_path: Path | None = None) -> None:
         self.mission = mission
         self.pose_path = pose_path
         self.stm_path = stm_path
         self.command_path = command_path
         self.diagnostics_path = diagnostics_path
+        self.delivery_observation_log_path = (
+            delivery_observation_log_path or
+            PROJECT_ROOT / "rescue_map/runtime/delivery_observation.jsonl"
+        )
         self.period_s = 1.0 / rate_hz
         self.lock = threading.Lock()
         self.latest_vision = VisionInput()
@@ -390,6 +411,20 @@ class MissionPlanner:
             "vision_target_found": vision.target_found,
             "vision_target_class": vision.class_name or None,
             "vision_target_in_safe_zone": target_inside_safe_zone(vision),
+            "vision_frame_sequence": vision.frame_sequence,
+            "delivery_target_found": vision.delivery_target_found,
+            "delivery_target_inside_safe_zone": (
+                vision.delivery_target_inside_safe_zone
+            ),
+            "delivery_outside_seen": self.mission.delivery_outside_seen,
+            "delivery_last_outside_frame_sequence": (
+                self.mission.delivery_last_outside_frame_sequence
+            ),
+            "delivery_inside_hits": self.mission.delivery_inside_hits,
+            "delivery_visual_confirmed": self.mission.delivery_visual_confirmed,
+            "delivery_last_inside_frame_sequence": (
+                self.mission.delivery_last_inside_frame_sequence
+            ),
             "vision_safe_zone_found": vision.safe_found,
             "vision_target_bbox": None if vision.target_bbox is None else list(vision.target_bbox),
             "vision_safe_bbox": None if vision.safe_bbox is None else list(vision.safe_bbox),
@@ -419,6 +454,53 @@ class MissionPlanner:
             encoding="utf-8",
         )
         temporary.replace(self.diagnostics_path)
+
+    def _write_delivery_observation(self, output: MissionOutput,
+                                    pose: PoseInput, stm: Stm32Status,
+                                    now: float) -> None:
+        confirmation = output.delivery_confirmation
+        if confirmation is None:
+            return
+        document = {
+            "schema_version": 1,
+            "timestamp_monotonic_ns": time.monotonic_ns(),
+            "source": "visual_safe_zone_transition",
+            "side": self.mission.settings.side,
+            "cargo_class": confirmation.cargo_class,
+            "outside_seen": confirmation.outside_seen,
+            "outside_frame_sequence": confirmation.outside_frame_sequence,
+            "outside_target_bbox": (
+                None if confirmation.outside_target_bbox is None
+                else list(confirmation.outside_target_bbox)
+            ),
+            "outside_safe_bbox": (
+                None if confirmation.outside_safe_bbox is None
+                else list(confirmation.outside_safe_bbox)
+            ),
+            "inside_hits": confirmation.inside_hits,
+            "inside_frame_sequence": confirmation.frame_sequence,
+            "target_bbox": (
+                None if confirmation.target_bbox is None
+                else list(confirmation.target_bbox)
+            ),
+            "safe_bbox": (
+                None if confirmation.safe_bbox is None
+                else list(confirmation.safe_bbox)
+            ),
+            "pose": {
+                "x_m": pose.x_m,
+                "y_m": pose.y_m,
+                "yaw_deg": pose.yaw_deg,
+            },
+            "stm_mode": stm.mode,
+            "stm_gripper_closed": stm.gripper_closed,
+            "planner_time_s": now,
+        }
+        self.delivery_observation_log_path.parent.mkdir(
+            parents=True, exist_ok=True
+        )
+        with self.delivery_observation_log_path.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(document, ensure_ascii=False) + "\n")
 
     def _update_progress_warning(self, output: MissionOutput,
                                  stm: Stm32Status, now: float) -> None:
@@ -455,6 +537,7 @@ class MissionPlanner:
             now = time.monotonic()
             self._update_progress_warning(output, stm, now)
             self._write_diagnostics(output, pose, stm, vision, now)
+            self._write_delivery_observation(output, pose, stm, now)
             command_kind = (
                 None if output.command is None
                 else (output.state.value, output.command.command)
@@ -658,7 +741,7 @@ def main() -> int:
     planner = MissionPlanner(
         mission, args.pose, args.stm_status, args.command_file,
         args.diagnostics,
-        args.planner_fps,
+        args.planner_fps, args.delivery_observation_log,
     )
 
     running = True
@@ -724,7 +807,9 @@ def main() -> int:
                     detections, _ = traditional_detector.detect(
                         packet.image, detection_classes
                     )
-                latest_vision = observation(detections, allowed_classes, safe_class)
+                latest_vision = observation(
+                    detections, allowed_classes, safe_class, packet.frame_id
+                )
                 planner.set_vision(latest_vision)
                 latest_image = packet.image
                 latest_pixel_format = packet.pixel_format

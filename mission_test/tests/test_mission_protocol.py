@@ -18,7 +18,14 @@ from run_mission_test import (
     validate_start_pose,
     write_contact_pose,
 )
-from state_machine import MissionSettings, MissionState, PoseInput, RescueMission
+from state_machine import (
+    DeliveryConfirmation,
+    MissionOutput,
+    MissionSettings,
+    MissionState,
+    PoseInput,
+    RescueMission,
+)
 
 from rescue_vision.mission_protocol import (
     CMD_DRIVE_STRAIGHT,
@@ -29,6 +36,7 @@ from rescue_vision.mission_protocol import (
     CMD_USE_FINAL_HEADING,
     CMD_VALID,
     MissionCommand,
+    Stm32Status,
     write_command_frame,
 )
 from types import SimpleNamespace
@@ -109,6 +117,7 @@ def main() -> None:
     assert repeated_a != repeated_b and repeated_a[3] + 1 == repeated_b[3]
     test_observation_prefers_targets_outside_safe_zone()
     test_independent_planner_updates()
+    test_delivery_observation_log()
     print("mission protocol PASS")
 
 
@@ -122,10 +131,14 @@ def test_observation_prefers_targets_outside_safe_zone() -> None:
     )
     assert selected.target_bbox == outside.bbox
     assert selected.safe_found and selected.safe_bbox == safe.bbox
+    assert selected.delivery_target_found
+    assert not selected.delivery_target_inside_safe_zone
 
     blocked = observation([safe, inside], ("green_supply",), "safe_red")
     assert blocked.target_bbox == inside.bbox
     assert blocked.safe_found and blocked.safe_bbox == safe.bbox
+    assert blocked.delivery_target_found
+    assert blocked.delivery_target_inside_safe_zone
 
 
 def test_independent_planner_updates() -> None:
@@ -200,8 +213,54 @@ def test_independent_planner_updates() -> None:
             "planner_command_age_ms", "command_heading_deg",
             "command_remaining_mm", "relay_tx_age_ms",
             "vision_target_in_safe_zone", "vision_safe_zone_found",
+            "vision_frame_sequence", "delivery_target_found",
+            "delivery_target_inside_safe_zone", "delivery_outside_seen",
+            "delivery_inside_hits", "delivery_visual_confirmed",
         ):
             assert key in diagnostics
+
+
+def test_delivery_observation_log() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        observation_log = root / "delivery_observation.jsonl"
+        planner = MissionPlanner(
+            RescueMission(MissionSettings(side="red")),
+            root / "pose.json",
+            root / "status.json",
+            root / "command.bin",
+            root / "diagnostics.json",
+            rate_hz=50.0,
+            delivery_observation_log_path=observation_log,
+        )
+        confirmation = DeliveryConfirmation(
+            cargo_class="green_supply",
+            outside_seen=True,
+            outside_frame_sequence=11,
+            outside_target_bbox=(100, 100, 40, 40),
+            outside_safe_bbox=None,
+            inside_hits=5,
+            frame_sequence=16,
+            target_bbox=(600, 500, 40, 40),
+            safe_bbox=(500, 400, 300, 300),
+        )
+        planner._write_delivery_observation(
+            MissionOutput(
+                MissionState.COMPLETE,
+                None,
+                None,
+                "visual confirmation",
+                delivery_confirmation=confirmation,
+            ),
+            PoseInput(True, -0.15, 1.03, 90.0),
+            Stm32Status(mode=15, age_ms=5.0),
+            time.monotonic(),
+        )
+        saved = json.loads(observation_log.read_text(encoding="utf-8"))
+        assert saved["source"] == "visual_safe_zone_transition"
+        assert saved["outside_seen"] and saved["outside_frame_sequence"] == 11
+        assert saved["inside_hits"] == 5 and saved["inside_frame_sequence"] == 16
+        assert saved["target_bbox"] == [600, 500, 40, 40]
 
 
 if __name__ == "__main__":

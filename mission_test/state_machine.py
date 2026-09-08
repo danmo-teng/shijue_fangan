@@ -70,6 +70,25 @@ class VisionInput:
     class_name: str = ""
     safe_found: bool = False
     safe_bbox: tuple[int, int, int, int] | None = None
+    # These fields are independent of the search/report target selection. The
+    # mission uses them to follow the currently grabbed cargo through an
+    # outside -> inside-safe-zone transition.
+    frame_sequence: int = 0
+    delivery_target_found: bool = False
+    delivery_target_inside_safe_zone: bool = False
+
+
+@dataclass(frozen=True)
+class DeliveryConfirmation:
+    cargo_class: str
+    outside_seen: bool
+    outside_frame_sequence: int
+    outside_target_bbox: tuple[int, int, int, int] | None
+    outside_safe_bbox: tuple[int, int, int, int] | None
+    inside_hits: int
+    frame_sequence: int
+    target_bbox: tuple[int, int, int, int] | None
+    safe_bbox: tuple[int, int, int, int] | None
 
 
 @dataclass(frozen=True)
@@ -79,6 +98,7 @@ class MissionOutput:
     command: MissionCommand | None
     message: str
     contact_pose: tuple[float, float, float] | None = None
+    delivery_confirmation: DeliveryConfirmation | None = None
 
 
 @dataclass
@@ -108,6 +128,7 @@ class MissionSettings:
     nav_near_fence_heading_limit_deg: float = 10.0
     delivery_stationary_s: float = 0.8
     delivery_stationary_tolerance_m: float = 0.025
+    delivery_visual_confirmation_frames: int = 5
     center_stop_radius_m: float = 0.60
 
     def __post_init__(self) -> None:
@@ -121,7 +142,9 @@ class MissionSettings:
             raise ValueError("safe-zone width and robot radius must be positive")
         if not 0 < self.zone_center_x_abs_m <= self.safe_zone_half_width_m:
             raise ValueError("zone center must keep the robot circle inside its half-zone")
-        if self.delivery_stationary_s <= 0 or self.delivery_stationary_tolerance_m <= 0:
+        if (self.delivery_stationary_s <= 0 or
+                self.delivery_stationary_tolerance_m <= 0 or
+                self.delivery_visual_confirmation_frames <= 0):
             raise ValueError("material target and stationary thresholds must be positive")
         if self.center_stop_radius_m <= 0:
             raise ValueError("center stop radius must be positive")
@@ -174,6 +197,16 @@ class RescueMission:
         self.grab_hits = 0
         self.delivery_stationary_started_s: float | None = None
         self.delivery_stationary_anchor: tuple[float, float] | None = None
+        self.delivery_outside_seen = False
+        self.delivery_inside_hits = 0
+        self.delivery_visual_confirmed = False
+        self.delivery_last_frame_sequence: int | None = None
+        self.delivery_last_outside_frame_sequence = 0
+        self.delivery_last_outside_target_bbox: tuple[int, int, int, int] | None = None
+        self.delivery_last_outside_safe_bbox: tuple[int, int, int, int] | None = None
+        self.delivery_last_inside_frame_sequence = 0
+        self.delivery_last_inside_target_bbox: tuple[int, int, int, int] | None = None
+        self.delivery_last_inside_safe_bbox: tuple[int, int, int, int] | None = None
         self.selected_class: str | None = None
         self.delivered_common = False
         self.delivery_count = 0
@@ -281,6 +314,76 @@ class RescueMission:
         elapsed = max(0.0, now - started)
         return elapsed >= self.settings.delivery_stationary_s, elapsed
 
+    def _reset_delivery_observation(self) -> None:
+        self.delivery_outside_seen = False
+        self.delivery_inside_hits = 0
+        self.delivery_visual_confirmed = False
+        self.delivery_last_frame_sequence = None
+        self.delivery_last_outside_frame_sequence = 0
+        self.delivery_last_outside_target_bbox = None
+        self.delivery_last_outside_safe_bbox = None
+        self.delivery_last_inside_frame_sequence = 0
+        self.delivery_last_inside_target_bbox = None
+        self.delivery_last_inside_safe_bbox = None
+
+    def _is_new_delivery_frame(self, vision: VisionInput) -> bool:
+        # A zero sequence is used by direct unit-test inputs that have no
+        # camera packet identity; live camera observations always carry the
+        # packet frame id.
+        if vision.frame_sequence <= 0:
+            return True
+        if vision.frame_sequence == self.delivery_last_frame_sequence:
+            return False
+        self.delivery_last_frame_sequence = vision.frame_sequence
+        return True
+
+    def _update_delivery_observation(self, vision: VisionInput) -> None:
+        if self.selected_class is None or self.state not in {
+            MissionState.GRABBING,
+            MissionState.NAVIGATE,
+            MissionState.ENTER_SAFE_ZONE,
+        }:
+            return
+        if not self._is_new_delivery_frame(vision) or self.delivery_visual_confirmed:
+            return
+        if not vision.delivery_target_found:
+            self.delivery_inside_hits = 0
+            return
+        if vision.delivery_target_inside_safe_zone:
+            if not self.delivery_outside_seen:
+                return
+            self.delivery_inside_hits += 1
+            self.delivery_last_inside_frame_sequence = vision.frame_sequence
+            self.delivery_last_inside_target_bbox = vision.target_bbox
+            self.delivery_last_inside_safe_bbox = vision.safe_bbox
+            if self.delivery_inside_hits >= self.settings.delivery_visual_confirmation_frames:
+                self.delivery_visual_confirmed = True
+            return
+        # Before the safe-zone stage, the camera remains on the grabbed cargo;
+        # a visible cargo that is not inside is the required outside baseline.
+        # After arrival, a missing safe-zone detection is unknown rather than
+        # a new outside observation, so detector dropouts cannot manufacture a
+        # second transition.
+        if vision.safe_found or not self.delivery_arrival_confirmed:
+            self.delivery_outside_seen = True
+            self.delivery_last_outside_frame_sequence = vision.frame_sequence
+            self.delivery_last_outside_target_bbox = vision.target_bbox
+            self.delivery_last_outside_safe_bbox = vision.safe_bbox
+        self.delivery_inside_hits = 0
+
+    def _delivery_confirmation(self) -> DeliveryConfirmation:
+        return DeliveryConfirmation(
+            cargo_class=self.selected_class or "",
+            outside_seen=self.delivery_outside_seen,
+            outside_frame_sequence=self.delivery_last_outside_frame_sequence,
+            outside_target_bbox=self.delivery_last_outside_target_bbox,
+            outside_safe_bbox=self.delivery_last_outside_safe_bbox,
+            inside_hits=self.delivery_inside_hits,
+            frame_sequence=self.delivery_last_inside_frame_sequence,
+            target_bbox=self.delivery_last_inside_target_bbox,
+            safe_bbox=self.delivery_last_inside_safe_bbox,
+        )
+
     def _flags(self, *, straight=False, heading=False) -> int:
         result = CMD_VALID | (CMD_RED_SIDE if self.settings.side == "red" else 0)
         if straight:
@@ -349,7 +452,7 @@ class RescueMission:
                 self.settings.nav_axial_tolerance_m
             and self._facing_fence(pose.yaw_deg)
         )
-        if fence_stop_reached or stm_distance_done:
+        if fence_stop_reached or stm_distance_done or self.delivery_visual_confirmed:
             self.delivery_arrival_confirmed = True
             self.state = MissionState.ENTER_SAFE_ZONE
             self.delivery_stationary_started_s = None
@@ -357,10 +460,15 @@ class RescueMission:
             command = self._waypoint_command(
                 CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True
             )
+            if self.delivery_visual_confirmed:
+                arrival_reason = "视觉确认物资已从区外进入安全区"
+            elif fence_stop_reached:
+                arrival_reason = "高围栏前停车点"
+            else:
+                arrival_reason = "STM32定距完成"
             return MissionOutput(
                 self.state, None, command,
-                ("高围栏前停车点" if fence_stop_reached else "STM32定距完成")
-                + "，锁存到达并直接进入安全区投送",
+                arrival_reason + "，锁存到达并进入安全区视觉确认",
             )
         if not pose.valid:
             return MissionOutput(
@@ -423,6 +531,7 @@ class RescueMission:
             found=target_allowed,
             cargo_class=vision.class_name if target_allowed else "green_supply",
         )
+        self._update_delivery_observation(vision)
 
         # If a target was selected before the zone detector became visible,
         # abandon that approach immediately and overwrite the old UART report
@@ -477,6 +586,7 @@ class RescueMission:
             target_visible = camera_ready and target_allowed
             self.grab_hits = self.grab_hits + 1 if target_visible else 0
             if self.grab_hits >= self.settings.confirmation_frames:
+                self._reset_delivery_observation()
                 self.state = MissionState.GRABBING
                 return MissionOutput(
                     self.state,
@@ -509,13 +619,8 @@ class RescueMission:
                 stm.age_ms <= 250.0
                 and stm.mode == STM_MODE_RAM_VERIFY
             )
-            if delivery_verify_active and self.delivery_arrival_confirmed:
-                stationary, stationary_s = self._stationary_pose(pose)
-            else:
-                self.delivery_stationary_started_s = None
-                self.delivery_stationary_anchor = None
-                stationary, stationary_s = False, 0.0
-            if stationary:
+            if (delivery_verify_active and self.delivery_arrival_confirmed and
+                    self.delivery_visual_confirmed):
                 self.state = MissionState.COMPLETE
                 self.delivery_count += 1
                 if self.selected_class == "green_supply":
@@ -524,14 +629,14 @@ class RescueMission:
                     self.state,
                     None,
                     MissionCommand(CMD_TASK_COMPLETE, self._flags()),
-                    f"第{self.delivery_count}件已放入对应分区，通知STM32张爪退出",
-                    self.contact_pose(pose),
+                    f"第{self.delivery_count}件经视觉确认已进入安全区，通知STM32张爪退出",
+                    delivery_confirmation=self._delivery_confirmation(),
                 )
             return MissionOutput(
                 self.state,
                 report,
                 self._waypoint_command(CMD_ENTER_SAFE_ZONE, self.safe_center, straight=True, heading=True),
-                f"等待CHECK阶段到达锁存且定位稳定{self.settings.delivery_stationary_s:.1f}s（当前{stationary_s:.2f}s）",
+                "等待摄像头确认抓取物资已从区外进入安全区",
             )
 
         if self.state == MissionState.COMPLETE:
@@ -560,6 +665,7 @@ class RescueMission:
                 self.delivery_stationary_started_s = None
                 self.delivery_stationary_anchor = None
                 self.delivery_arrival_confirmed = False
+                self._reset_delivery_observation()
                 self.navigation_start_distance_m = None
                 self.navigation_encoder_anchor_m = None
                 self.navigation_encoder_last_progress_m = None

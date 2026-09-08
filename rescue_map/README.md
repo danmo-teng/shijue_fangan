@@ -127,10 +127,11 @@ STM32；区别仅在于编码器是否进入融合计算。
 - `runtime/localization.conf`：传给融合定位程序的配置；
 - `runtime/localization_result.json`：T265+编码器融合实时输出。
 - `runtime/localization_debug.csv`：本次运行的全速率定位调试日志，每个 T265 位姿帧一行，包含 T265 原始/投影结果、三轮编码器帧、运动学增量、轮式里程计累计位姿、融合位姿和门控状态，可用表格或绘图工具查看两条轨迹的误差。
+- `runtime/delivery_observation.jsonl`：每件物资通过摄像头确认“区外→区内”后的独立记录，包含物资/安全区框、帧号、连续确认次数、STM32模式和确认时位姿。
 - `runtime/history/YYYYMMDD_HHMMSS/`：启动下一次会话前自动归档上一轮运行文件，包含上一轮 CSV、定位快照、任务诊断和会话配置；历史日志不会再被新会话覆盖。
 - `runtime/uart_command.bin`：任务程序交给定位进程转发的15字节UART帧；
 - `runtime/stm32_status.json`：STM32爪子、摄像头和任务状态。
-- `runtime/delivery_contact_pose.json`：投送完成时的观测位姿、围栏相切参考位姿及建议位置偏差；仅供标定分析，不会自动重置融合定位。
+- `runtime/delivery_contact_pose.json`：旧式围栏接触几何记录（如有）；视觉确认投送不会伪造该文件或自动重置融合定位。
 - `runtime/mission_diagnostics.json`：50 Hz任务状态、STM32模式/故障/ACK、最后命令、规划位姿、航向、剩余距离和串口帧龄。
 
 地图程序不会直接解释原始编码器帧，而是复用 `localization` 中已经测试过的 UART 协议、三轮全向运动学、减速带门控和 EKF。这能保证屏幕显示位置与回传给 F407 的融合位置使用同一套坐标。

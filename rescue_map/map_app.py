@@ -465,6 +465,7 @@ class RescueMapApp:
             self.encoder_weight,
         )
         (RUNTIME / "delivery_contact_pose.json").unlink(missing_ok=True)
+        (RUNTIME / "delivery_observation.jsonl").unlink(missing_ok=True)
         (RUNTIME / "mission_diagnostics.json").unlink(missing_ok=True)
         self.selecting = False
         self.started_monotonic = time.monotonic()
@@ -500,6 +501,7 @@ class RescueMapApp:
             RUNTIME / "stm32_status.json",
             RUNTIME / "mission_diagnostics.json",
             RUNTIME / "delivery_contact_pose.json",
+            RUNTIME / "delivery_observation.jsonl",
             RUNTIME / "uart_command.bin",
         )
         existing = [path for path in candidates if path.is_file()]

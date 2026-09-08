@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +101,14 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     output = mission.step(VisionInput(), pose, closed)
     assert output.state == MissionState.NAVIGATE
     assert output.command.command == CMD_NAVIGATE_WAYPOINT
+    outside_delivery = VisionInput(
+        frame_sequence=100,
+        delivery_target_found=True,
+        delivery_target_inside_safe_zone=False,
+    )
+    output = mission.step(outside_delivery, pose, closed)
+    assert output.state == MissionState.NAVIGATE
+    assert mission.delivery_outside_seen
     target_x = -0.15 if side == "red" else 0.15
     target_y = 1.0275 if side == "red" else -1.0275
     expected_distance = math.hypot(target_x - pose.x_m, target_y - pose.y_m)
@@ -152,29 +161,56 @@ def run_side(side: str, desired_y: int, desired_heading: int):
     assert output.command.flags & CMD_USE_FINAL_HEADING
     assert output.command.heading_cdeg == desired_heading * 100
 
-    # Only fresh mode 15 (CHECK/RAM_VERIFY) may confirm placement.
-    contact_y = 1.035 if side == "red" else -1.035
+    # Only a new camera-frame outside -> inside transition plus fresh mode 15
+    # may confirm placement; stationary pose alone is not sufficient.
     biased_check = PoseInput(True, arrival_x, arrival_y, desired_heading)
-    output = mission.step(VisionInput(), biased_check, Stm32Status(mode=14, age_ms=5))
-    clock.advance(0.49)
-    output = mission.step(VisionInput(), biased_check, Stm32Status(mode=14, age_ms=5))
-    assert output.state == MissionState.ENTER_SAFE_ZONE
-    output = mission.step(VisionInput(), biased_check, Stm32Status(mode=15, age_ms=5))
-    assert output.state == MissionState.ENTER_SAFE_ZONE
-    clock.advance(0.70)
-    moved = PoseInput(True, arrival_x + 0.026, arrival_y, desired_heading)
-    output = mission.step(VisionInput(), moved, Stm32Status(mode=15, age_ms=5))
-    assert output.state == MissionState.ENTER_SAFE_ZONE
-    clock.advance(0.79)
-    output = mission.step(VisionInput(), moved, Stm32Status(mode=15, age_ms=5))
-    assert output.state == MissionState.ENTER_SAFE_ZONE
-    clock.advance(0.02)
+    inside_delivery = VisionInput(
+        target_found=True,
+        target_x=640,
+        target_y=512,
+        target_bbox=(620, 492, 40, 40),
+        class_name="green_supply",
+        safe_found=True,
+        safe_bbox=(500, 400, 300, 300),
+        delivery_target_found=True,
+        delivery_target_inside_safe_zone=True,
+    )
     output = mission.step(
-        VisionInput(), moved, Stm32Status(mode=15, age_ms=5)
+        inside_delivery, biased_check, Stm32Status(mode=14, age_ms=5)
+    )
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    for sequence in range(1, mission.settings.delivery_visual_confirmation_frames - 1):
+        output = mission.step(
+            replace(inside_delivery, frame_sequence=sequence),
+            biased_check,
+            Stm32Status(mode=15, age_ms=5),
+        )
+        assert output.state == MissionState.ENTER_SAFE_ZONE
+        if sequence == 1:
+            # Planner ticks may read the same camera frame more than once;
+            # repeated frame ids must not fake extra confirmation hits.
+            duplicate = mission.step(
+                replace(inside_delivery, frame_sequence=sequence),
+                biased_check,
+                Stm32Status(mode=15, age_ms=5),
+            )
+            assert duplicate.state == MissionState.ENTER_SAFE_ZONE
+            assert mission.delivery_inside_hits == 2
+    moved = PoseInput(True, arrival_x + 0.026, arrival_y, desired_heading)
+    output = mission.step(
+        replace(
+            inside_delivery,
+            frame_sequence=mission.settings.delivery_visual_confirmation_frames - 1,
+        ),
+        moved,
+        Stm32Status(mode=15, age_ms=5),
     )
     assert output.state == MissionState.COMPLETE
     assert output.command.command == CMD_TASK_COMPLETE
-    assert output.contact_pose == (moved.x_m, contact_y, float(desired_heading))
+    assert output.contact_pose is None
+    assert output.delivery_confirmation is not None
+    assert output.delivery_confirmation.outside_seen
+    assert output.delivery_confirmation.inside_hits == mission.settings.delivery_visual_confirmation_frames
     assert mission.delivered_common and mission.delivery_count == 1
 
     # F407 opens the claw, backs out, faces the field centre and then reports
@@ -377,6 +413,39 @@ def test_near_fence_heading_is_stable_and_gate_is_tight():
     assert output.command.command == CMD_ENTER_SAFE_ZONE
 
 
+def test_visual_delivery_transition_can_start_safe_zone_stage():
+    mission = RescueMission(MissionSettings(side="red"))
+    mission.state = MissionState.NAVIGATE
+    mission.selected_class = "green_supply"
+    pose_far_from_stop = PoseInput(True, 0.0, 0.0, 0.0)
+    outside = VisionInput(
+        frame_sequence=1,
+        delivery_target_found=True,
+        delivery_target_inside_safe_zone=False,
+    )
+    output = mission.step(outside, pose_far_from_stop, Stm32Status())
+    assert output.state == MissionState.NAVIGATE
+    inside = VisionInput(
+        target_found=True,
+        target_bbox=(620, 492, 40, 40),
+        class_name="green_supply",
+        safe_found=True,
+        safe_bbox=(500, 400, 300, 300),
+        delivery_target_found=True,
+        delivery_target_inside_safe_zone=True,
+    )
+    for sequence in range(2, mission.settings.delivery_visual_confirmation_frames + 2):
+        output = mission.step(
+            replace(inside, frame_sequence=sequence),
+            pose_far_from_stop,
+            Stm32Status(),
+        )
+    assert output.state == MissionState.ENTER_SAFE_ZONE
+    assert mission.delivery_arrival_confirmed
+    assert mission.delivery_visual_confirmed
+    assert output.command.command == CMD_ENTER_SAFE_ZONE
+
+
 def main():
     run_side("red", 1200, 90)
     run_side("blue", -1200, 270)
@@ -384,6 +453,7 @@ def main():
     test_safe_zone_circle_geometry()
     test_distance_done_requires_fresh_nav_status()
     test_near_fence_heading_is_stable_and_gate_is_tight()
+    test_visual_delivery_transition_can_start_safe_zone_stage()
     print("mission state machine PASS")
 
 
