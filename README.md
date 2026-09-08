@@ -14,6 +14,7 @@
 ```text
 vision/             Web调参、识别、JPU和UART视觉闭环
 t265_trajectory/    T265单机诊断及二维轨迹窗口
+t265_map/           T265环境扫描、localization map导入导出和F407运动调试
 localization/       T265 + F407三轮编码器融合定位
 docs/               给电控端的UART接入说明
 ```
@@ -105,7 +106,20 @@ ctest --test-dir build --output-on-failure
 - `localization/docs/uart_protocol.md`
 - `localization/firmware/`
 
-## 6. 四出发区救援地图
+## 6. T265环境扫描与地图复用
+
+`t265_map/`是独立的T265建图和验证程序。它使用T265内部mapping/relocalization，导出
+`t265_localization.raw`，并在导入前完成`pose_sensor.import_localization_map()`；每次运行会在
+`rescue_map/runtime/history/t265_map_builder/`下保留`metadata.json`、T265原始/修正轨迹、
+编码器轨迹、F407状态和事件日志。桌面入口由
+`t265_map/install_desktop_launcher.sh`安装为“T265-环境扫描建图”。
+
+程序默认只观测，不发运动命令。待F407实现`t265_map/README.md`中定义的`TYPE=0x19`
+扫描运动命令和`TYPE=0x1A`状态后，显式使用`./run_t265_map.sh --enable-motion`，即可通过
+界面执行原地90°/180°/360°、直行1m、横移1m和“一次转向直线返航”测试。新接口与当前任务
+`0x17/0x18`含义分离，不改动现有任务通信。
+
+## 7. 四出发区救援地图
 
 `rescue_map/`提供四个出发区、红/蓝方及融合/仅T265选择，并在桌面窗口显示赛题场地、小车位置、方向、轨迹和行驶距离。点击开始会同时启动完整YOLO/STM32任务；仅T265模式仍保留UART任务通信，只禁止编码器参与定位融合。详见[rescue_map/README.md](rescue_map/README.md)。
 
@@ -115,7 +129,7 @@ T265镜头朝上安装后，姿态和位移使用完整四元数及三维轴向�
 `camera_to_robot_yaw_deg`猜测补偿。实车校准后使用机器人前向=`+T265 Pose X`、上向
 =`-T265 Pose Z`，因此左向为`-T265 Pose Y`；注意T265 Pose坐标与图中的IMU子坐标不是同一套轴。
 
-## 7. 连续物资抓取与分区投送
+## 8. 连续物资抓取与分区投送
 
 `mission_test/`实现连续寻找、抓取和分区投送：开局强制先完成一次普通物资，之后允许搬运其他物资或伤员；每次投送后F407张爪退出并靠近中心区域继续搜索。RDK不直接下发实时位置坐标，而是在返安全区和靠近中心期间根据融合位姿持续更新“航向+剩余距离”。详见[mission_test/README.md](mission_test/README.md)和[电控UART联调说明](docs/f407_uart_integration_guide.md)。
 
