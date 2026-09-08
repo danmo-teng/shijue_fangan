@@ -126,10 +126,11 @@ camera_robot_up_axis = -z
 
 ## F407/T265 专用对照调试
 
-F407 最新 `main` 已按固定15字节帧通过USART3发送编码器累计位置：`TYPE=0x15`为100 Hz左右的
-三路累计编码器位置，`M1=右轮、M2=左轮、M3=后轮`，三个编码器符号均为`-1`；`TYPE=0x17`
-为任务状态。接口定义以[F407仓库的MISSION_PROTOCOL.md](https://github.com/gandizm/F407-Rescue-Robot/blob/68a0802/MISSION_PROTOCOL.md)
-和`Main/Src/Location.c`为准。本调试程序不发送配置、视觉或任务命令，不会主动启动F407任务：
+F407 `feat/uart-motion-debug` 分支（当前 `9774dac`）已按固定15字节帧通过USART3发送编码器累计
+位置：`TYPE=0x15`为100 Hz左右的三路累计编码器位置，`M1=右轮、M2=左轮、M3=后轮`，三个
+编码器符号均为`-1`；`TYPE=0x17`为上位机运动命令，`TYPE=0x18`为F407运动状态。接口定义以
+[F407运动调试交接](https://github.com/gandizm/F407-Rescue-Robot/blob/9774dac/docs/f407_motion_debug_handoff.md)
+和`Main/Src/DebugMotion.c`为准。本调试采集程序不发送运动命令，不会主动启动F407任务：
 
 ```text
 A3 B3 15 SEQ M1_H M1_L M2_H M2_L M3_H M3_L DT STATUS CRC_LO CRC_HI C3
@@ -166,26 +167,27 @@ robot-center的初始物理偏置；`rotation_check`比较90/180/270/360°理论
 非对角线较大表示轮序、符号或平面轴混用；`interface_observation`检查F407帧是否连续、有效和
 状态位是否正常。原始数据仍以CSV为准，自动结论不能替代实际原地旋转和直线标定。
 
-如果需要像原地图程序一样观察轨迹并主动发送合法F407调试命令，运行：
+如果需要像原地图程序一样观察轨迹并主动发送`feat/uart-motion-debug`分支的F407运动命令，运行：
 
 ```bash
-python3 localization/tools/t265_f407_debug_map.py
+python3 localization/tools/t265_f407_motion_map.py
 ```
 
-窗口提供`STOP`、`ABORT`、`GRAB_CONFIRMED`、`NAVIGATE_WAYPOINT`、`RETURN_CENTER`、
-`ENTER_SAFE_ZONE`和`TASK_COMPLETE`按钮；导航距离/航向可在窗口中调整。`发送配置`会向F407
-发送3帧`TYPE=0x11`，可能启动下位机任务流程，默认不会自动发送。所有任务命令通过定位器的
-`--command-file`桥接并以100 Hz刷新，关闭窗口前会释放命令文件。该调试地图同时显示T265修正
-中心、raw tracking origin和轮式中心三条轨迹，运行日志保存在独立目录。
+窗口只提供该分支的`TURN_REL`、`MOVE_DISTANCE`和`STOP`，对应原地旋转、forward/left定距和
+安全停车；不发送旧救援任务协议的`TYPE=0x11/0x12/0x18`命令。F407运动命令直接通过USART3发送一次，
+F407用本地IMU/三轮里程计闭环完成，返回的`TYPE=0x18`状态会显示进度/剩余/健康位。地图同时显示
+T265修正中心、raw tracking origin和轮式中心三条轨迹，运行日志保存在独立目录。
 
 四项定位实验的实际操作：
 
-1. 点击`原地90°/180°/360°`开始标记，人工让小车绕三轮旋转中心旋转，完成后再次点击同一按钮结束；这三个按钮只写实验起止标记，不驱动车辆。
-2. 点击`直行1m`时，程序取当前T265航向发送1000 mm `NAVIGATE_WAYPOINT`；完成后再次点击结束。F407必须已经处于允许NAV的`TASK_WAIT_NAVIGATION`状态。
-3. 点击`横移1m`时，程序发送“当前航向+90°、1000 mm”的NAV命令。按照F407当前接口，这不是保持车头不变的纯横移，而是先转向90°再直行1 m；纯横移只能人工移动并使用实验标记记录。
-4. 点击`转向返航`时，程序按当前T265位置计算指向场地中心的航向和剩余距离，发送`RETURN_CENTER`；F407必须处于`TASK_FACE_FIELD_CENTER`状态。
+1. 点击`原地90°/180°/360°`，程序分别发送`TURN_REL`，F407自动使用陀螺仪闭环旋转，状态变为`DONE`后实验自动结束。
+2. 点击`直行1m`，程序发送相对车体forward方向的`MOVE_DISTANCE(0°,1000 mm)`，F407用本地三轮里程计定距。
+3. 点击`横移1m`，程序发送相对车体physical-left方向的`MOVE_DISTANCE(90°,1000 mm)`，这是当前分支支持的真正横移测试。
+4. 点击`转向返航`，程序先按T265当前位置计算指向场地中心的相对转角，收到转角`DONE`后自动发送forward方向定距移动，形成一次转向加直线返航。
 
-每次实验的起止状态会追加写入运行目录的`events.jsonl`，分析报告会把这些标记与CSV对照。F407当前正式协议没有“纯原地旋转”或“任意底盘速度”命令，不能通过上位机伪造这两类控制；必须保留人工旋转/横移实验的标记方式，避免误把NAV命令当成纯横移或纯旋转。
+每次实验的发送、`RUNNING`、`DONE`、`FAULT`和`STOPPED`状态会追加写入运行目录的`events.jsonl`和
+`f407_motion_status.jsonl`，分析报告会把这些状态与CSV对照。F407分支接口定义见
+`f407_motion_protocol.py`；程序退出时会自动发送STOP。
 
 安装桌面启动图标：
 
@@ -201,8 +203,8 @@ F407和上位机均使用115200 8N1、`A3 B3 ... C3`固定15字节帧和CRC-16/M
 A3 B3 15 SEQ M1_H M1_L M2_H M2_L M3_H M3_L DT STATUS CRC_LO CRC_HI C3
 ```
 
-上位机现有接收代码和测试仍保留在`localization/src/f407_protocol.*`；调试程序只调用定位器监听
-链路，不向F407写入任何任务命令。
+上位机救援任务仍使用`localization/src/f407_protocol.*`中的旧任务协议；本运动调试地图使用独立
+的`localization/tools/f407_motion_protocol.py`，不能把旧任务的`TYPE=0x18`命令当作本分支的运动命令。
 
 ## 编译与测试
 

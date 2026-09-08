@@ -3,7 +3,7 @@
 
 The live mode deliberately does not send TYPE=0x11/0x12/0x18 frames.  It
 starts the already-tested upper-computer localizer with zero encoder fusion,
-while still listening to F407 TYPE=0x15 odometry and TYPE=0x17 status frames.
+while still listening to F407 TYPE=0x15 odometry and TYPE=0x18 motion-status frames.
 The localizer's full-rate CSV is retained for every run and can be analyzed
 again without hardware.
 """
@@ -37,7 +37,8 @@ PROTOCOL = {
     "frame_tail": "C3",
     "crc": "CRC-16/Modbus over TYPE..P7, little-endian CRC",
     "odom_type": "0x15",
-    "status_type": "0x17",
+    "motion_command_type": "0x17",
+    "motion_status_type": "0x18",
     "m1": "right wheel",
     "m2": "left wheel",
     "m3": "rear wheel",
@@ -101,7 +102,7 @@ def find_csv(path: Path) -> tuple[Path, Path | None]:
     return csv_path, path
 
 
-def write_debug_config(source: Path, target: Path) -> None:
+def write_debug_config(source: Path, target: Path, start_zone: int | None = None) -> None:
     """Keep wheel samples enabled while making their EKF weight exactly zero."""
     lines = source.read_text(encoding="utf-8").splitlines()
     replacements = {
@@ -111,6 +112,10 @@ def write_debug_config(source: Path, target: Path) -> None:
         "startup_wheel_disable_distance_m": "startup_wheel_disable_distance_m = 0.0",
         "corner_exclusion_inner_m": "corner_exclusion_inner_m = 2.0",
     }
+    if start_zone is not None:
+        if start_zone not in (1, 2, 3, 4):
+            raise ValueError("start_zone must be in 1..4")
+        replacements["start_zone"] = f"start_zone = {start_zone}"
     seen: set[str] = set()
     output: list[str] = []
     for line in lines:
@@ -429,7 +434,7 @@ def run_capture(args: argparse.Namespace) -> int:
         "listen_only": True,
         "f407_interface": PROTOCOL,
         "upper_repository": "danmo-teng/shijue_fangan",
-        "lower_repository": "gandizm/F407-Rescue-Robot@68a0802",
+        "lower_repository": "gandizm/F407-Rescue-Robot@9774dac (feat/uart-motion-debug)",
         "files": {
             "localization_config": config_path.name,
             "csv": csv_path.name,
