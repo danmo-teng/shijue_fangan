@@ -42,7 +42,7 @@ namespace {
 volatile std::sig_atomic_t g_stop = 0;
 constexpr double kPi = 3.14159265358979323846;
 constexpr char kWindowName[] = "T265 MAP SCANNER";
-constexpr char kKnownSerial[] = "944222110255";
+constexpr char kMetadataSerial[] = "944222110255";
 constexpr char kKnownFirmware[] = "0.2.0.951";
 constexpr char kKnownLibrealsense[] = "2.50.0";
 
@@ -52,7 +52,6 @@ void signal_handler(int)
 }
 
 struct Options {
-    std::string serial = kKnownSerial;
     std::string config_path = T265_MAP_DEFAULT_CONFIG;
     std::string session_dir = T265_MAP_DEFAULT_SESSION_ROOT;
     std::string load_map;
@@ -65,7 +64,6 @@ struct Options {
     int width = 0;
     int height = 0;
     bool fullscreen = false;
-    bool any_serial = false;
     bool use_uart = true;
     bool enable_motion = false;
     bool allow_pose_jumping = false;
@@ -106,8 +104,7 @@ void usage(const char *program)
         << "  --load-map FILE          import a T265 localization map before start\n"
         << "  --save-map FILE          export the current map here on save/exit\n"
         << "  --session-dir DIR        directory for metadata and diagnostic logs\n"
-        << "  --serial SERIAL          select T265 (default: " << kKnownSerial << ")\n"
-        << "  --any-serial             accept the first T265 found\n"
+        << "  (device selection)       use the first running T265; no serial filter\n"
         << "  --config FILE            localization config for the calibrated lever arm\n"
         << "  --uart DEVICE            listen to F407 ODOM/status (default: /dev/ttyS1)\n"
         << "  --no-uart                do not open the F407 UART\n"
@@ -145,11 +142,6 @@ Options parse_options(int argc, char **argv)
             options.save_map = value("--save-map");
         } else if (argument == "--session-dir") {
             options.session_dir = value("--session-dir");
-        } else if (argument == "--serial") {
-            options.serial = value("--serial");
-        } else if (argument == "--any-serial") {
-            options.any_serial = true;
-            options.serial.clear();
         } else if (argument == "--config") {
             options.config_path = value("--config");
         } else if (argument == "--uart") {
@@ -371,7 +363,7 @@ void write_metadata(const std::string &path, const Options &options,
         << "  \"map_exported\": " << json_bool(state.map_exported) << ",\n"
         << "  \"map_size_bytes\": " << state.map_size_bytes << ",\n"
         << "  \"map_export_error\": \"" << json_escape(state.map_error) << "\",\n"
-        << "  \"t265_serial\": \"" << json_escape(actual_serial.empty() ? options.serial : actual_serial) << "\",\n"
+        << "  \"t265_serial\": \"" << json_escape(actual_serial.empty() ? kMetadataSerial : actual_serial) << "\",\n"
         << "  \"t265_firmware\": \"" << json_escape(actual_firmware.empty() ? kKnownFirmware : actual_firmware) << "\",\n"
         << "  \"librealsense_version\": \"" << kKnownLibrealsense << "\",\n"
         << "  \"camera_offset_units\": \"metres\",\n"
@@ -1080,18 +1072,13 @@ std::string make_data_number(double value)
     return output.str();
 }
 
-int device_index(const rs2::device_list &devices, const std::string &serial)
+int device_index(const rs2::device_list &devices)
 {
-    for (std::size_t index = 0; index < devices.size(); ++index) {
-        try {
-            if (devices[index].supports(RS2_CAMERA_INFO_SERIAL_NUMBER) &&
-                (serial.empty() || devices[index].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == serial)) {
-                return static_cast<int>(index);
-            }
-        } catch (const rs2::error &) {
-        }
-    }
-    return -1;
+    // query_devices(RS2_PRODUCT_LINE_T200) is already restricted to T265
+    // products. Do not query or compare a serial number to decide whether a
+    // usable device exists; some runtime/USB combinations expose the device
+    // before camera-info strings are available.
+    return devices.size() == 0 ? -1 : 0;
 }
 
 std::string device_info(const rs2::device &device, rs2_camera_info field)
@@ -1392,7 +1379,7 @@ int main(int argc, char **argv)
         localization_config.camera_robot_up_axis[2] = -1.0;
 
         write_metadata(options.session_dir + "/metadata.json", options, localization_config,
-                       options.serial, kKnownFirmware, metadata, false);
+                       kMetadataSerial, kKnownFirmware, metadata, false);
         events.write("program_start", "{\"mode\":\"" +
                      std::string(options.load_map.empty() ? "scan" : "verify") +
                      "\",\"session_dir\":\"" + json_escape(options.session_dir) + "\"}");
@@ -1432,33 +1419,46 @@ int main(int argc, char **argv)
 
         rs2::log_to_console(RS2_LOG_SEVERITY_WARN);
         rs2::context context;
+        rs2::pipeline pipeline(context);
+        rs2::config pipeline_config;
+        pipeline_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
+        bool fisheye_active = false;
+        if (options.enable_fisheye) {
+            pipeline_config.enable_stream(RS2_STREAM_FISHEYE, 1);
+            pipeline_config.enable_stream(RS2_STREAM_FISHEYE, 2);
+        }
         rs2::device selected;
         const auto device_wait_start = std::chrono::steady_clock::now();
         while (!g_stop) {
             const rs2::device_list devices = context.query_devices(RS2_PRODUCT_LINE_T200);
-            const int index = device_index(devices, options.serial);
+            const int index = device_index(devices);
             if (index >= 0) {
                 selected = devices[static_cast<std::size_t>(index)];
                 break;
             }
             if (elapsed_seconds(device_wait_start) >= options.wait_sec) {
-                throw std::runtime_error("no matching running T265 before --wait timeout");
+                throw std::runtime_error("no running T265 before --wait timeout");
             }
-            std::cerr << "[WAIT] T265 " << (options.serial.empty() ? "any" : options.serial)
-                      << " not found; retrying...\n";
+            std::cerr << "[WAIT] no running T265 found; retrying...\n";
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         if (g_stop) return 130;
 
-        const std::string serial = device_info(selected, RS2_CAMERA_INFO_SERIAL_NUMBER);
-        const std::string firmware = device_info(selected, RS2_CAMERA_INFO_FIRMWARE_VERSION);
+        // Resolve the same device through the pipeline before obtaining the
+        // pose sensor. This is the official T265 map sample's sequence and
+        // avoids opening a second USB device handle from a separate query.
+        selected = rs2::device();
+        const rs2::pipeline_profile resolved_profile = pipeline_config.resolve(pipeline);
+        const rs2::device resolved_device = resolved_profile.get_device();
+        const std::string serial = device_info(resolved_device, RS2_CAMERA_INFO_SERIAL_NUMBER);
+        const std::string firmware = device_info(resolved_device, RS2_CAMERA_INFO_FIRMWARE_VERSION);
         std::cerr << "[READY] T265 serial=" << serial << " firmware=" << firmware
                   << " librealsense=" << kKnownLibrealsense << '\n';
         events.write("t265_connected", "{\"serial\":\"" + json_escape(serial) +
                      "\",\"firmware\":\"" + json_escape(firmware) + "\",\"librealsense\":\"" +
                      kKnownLibrealsense + "\"}");
 
-        rs2::pose_sensor pose_sensor = selected.first<rs2::pose_sensor>();
+        rs2::pose_sensor pose_sensor = resolved_device.first<rs2::pose_sensor>();
         if (!pose_sensor) throw std::runtime_error("T265 pose sensor is unavailable");
         auto set_t265_option = [&](rs2_option option, float value, const char *name, bool required) {
             if (!pose_sensor.supports(option)) {
@@ -1503,30 +1503,8 @@ int main(int argc, char **argv)
             }
         });
 
-        selected = rs2::device();
-        rs2::pipeline pipeline(context);
-        rs2::config pipeline_config;
-        pipeline_config.enable_device(serial);
-        pipeline_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
-        bool fisheye_active = false;
-        if (options.enable_fisheye) {
-            pipeline_config.enable_stream(RS2_STREAM_FISHEYE, 1);
-            pipeline_config.enable_stream(RS2_STREAM_FISHEYE, 2);
-        }
-        try {
-            pipeline.start(pipeline_config);
-            fisheye_active = options.enable_fisheye;
-        } catch (const rs2::error &error) {
-            if (!options.enable_fisheye) throw;
-            events.write("fisheye_stream_failed", "{\"error\":\"" + json_escape(error.what()) +
-                         "\",\"fallback\":\"pose_only\"}");
-            try { pipeline.stop(); } catch (const rs2::error &) {}
-            rs2::config pose_only;
-            pose_only.enable_device(serial);
-            pose_only.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
-            pipeline.start(pose_only);
-            fisheye_active = false;
-        }
+        pipeline.start(pipeline_config);
+        fisheye_active = options.enable_fisheye;
         events.write("pipeline_started", "{\"fisheye_active\":" + json_bool(fisheye_active) + "}");
         write_metadata(options.session_dir + "/metadata.json", options, localization_config,
                        serial, firmware, metadata, fisheye_active);
