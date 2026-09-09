@@ -141,7 +141,13 @@ class EvdevGamepad:
                 continue
             try:
                 device = InputDevice(candidate_path)
-                absolute = set(device.capabilities().get(ecodes.EV_ABS, []))
+                # python-evdev returns (code, AbsInfo) pairs for EV_ABS by
+                # default. Normalize those pairs to integer event codes before
+                # comparing them with ABS_X/ABS_Y/ABS_RX/ABS_RY.
+                absolute = {
+                    item[0] if isinstance(item, tuple) else item
+                    for item in device.capabilities().get(ecodes.EV_ABS, [])
+                }
                 keys = set(device.capabilities().get(ecodes.EV_KEY, []))
                 face_keys = {
                     getattr(ecodes, "BTN_SOUTH", -1),
@@ -187,10 +193,13 @@ class EvdevGamepad:
             "select": self._codes("BTN_SELECT"),
             "m1": self._codes("BTN_TRIGGER_HAPPY1"),
             "m2": self._codes("BTN_TRIGGER_HAPPY2"),
-            "a": self._codes("BTN_SOUTH", "BTN_A"),
-            "b": self._codes("BTN_EAST", "BTN_B"),
-            "x": self._codes("BTN_WEST", "BTN_X"),
-            "y": self._codes("BTN_NORTH", "BTN_Y"),
+            # Use the Xbox letter codes explicitly. BTN_NORTH/BTN_WEST are
+            # historical Linux aliases whose physical meaning is reversed on
+            # this controller, and combining aliases makes X and Y overlap.
+            "a": self._codes("BTN_A"),
+            "b": self._codes("BTN_B"),
+            "x": self._codes("BTN_X"),
+            "y": self._codes("BTN_Y"),
         }
         self._initialize_state()
 
@@ -244,30 +253,32 @@ class EvdevGamepad:
     def poll(self) -> set[str]:
         actions: set[str] = set()
         try:
-            events = self.device.read()
+            # EventIO.read() returns a generator; with a nonblocking fd the
+            # EAGAIN/BlockingIOError is raised while iterating that generator,
+            # not when read() itself is called.
+            for event in self.device.read():
+                if event.type == self.ecodes.EV_ABS:
+                    mapping = {
+                        self.ecodes.ABS_X: "left_x",
+                        self.ecodes.ABS_Y: "left_y",
+                        self.ecodes.ABS_RX: "right_x",
+                        self.ecodes.ABS_RY: "right_y",
+                    }
+                    if event.code in mapping:
+                        setattr(self.state, mapping[event.code], self._normal_axis(event.code, event.value))
+                    elif event.code == self.ecodes.ABS_HAT0X:
+                        self.state.hat_x = int(event.value)
+                    elif event.code == self.ecodes.ABS_HAT0Y:
+                        self.state.hat_y = int(event.value)
+                elif event.type == self.ecodes.EV_KEY:
+                    if event.value == 1:
+                        if event.code in self._key_sets["x"]:
+                            actions.add("map_start")
+                        if event.code in self._key_sets["y"]:
+                            actions.add("map_stop")
+                    self._update_keys(set(self.device.active_keys()))
         except BlockingIOError:
-            return actions
-        for event in events:
-            if event.type == self.ecodes.EV_ABS:
-                mapping = {
-                    self.ecodes.ABS_X: "left_x",
-                    self.ecodes.ABS_Y: "left_y",
-                    self.ecodes.ABS_RX: "right_x",
-                    self.ecodes.ABS_RY: "right_y",
-                }
-                if event.code in mapping:
-                    setattr(self.state, mapping[event.code], self._normal_axis(event.code, event.value))
-                elif event.code == self.ecodes.ABS_HAT0X:
-                    self.state.hat_x = int(event.value)
-                elif event.code == self.ecodes.ABS_HAT0Y:
-                    self.state.hat_y = int(event.value)
-            elif event.type == self.ecodes.EV_KEY:
-                if event.value == 1:
-                    if event.code in self._key_sets["x"]:
-                        actions.add("map_start")
-                    if event.code in self._key_sets["y"]:
-                        actions.add("map_stop")
-                self._update_keys(set(self.device.active_keys()))
+            pass
         return actions
 
     def close(self) -> None:
