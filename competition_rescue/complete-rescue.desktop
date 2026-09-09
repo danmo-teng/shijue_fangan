@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=智能救援完整比赛流程
+Comment=RDK X5 complete rescue competition flow
+Exec=/home/sunrise/RDK_X5/shijue_fangan/competition_rescue/desktop_launcher.sh
+Terminal=true
+Categories=Utility;
