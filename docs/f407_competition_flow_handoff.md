@@ -52,6 +52,23 @@ F407应在执行层再次拒绝下列情况：
 
 下位机只负责实时执行和硬联锁，不需要保存全场目标列表。上位机已经在`competition_detections.jsonl`保存所有识别结果，并通过稳定的track ID决定当前批次。
 
+上位机的`DISPERSE_PILE`不是F407到达中心后的固定动作，而是首件搜索阶段在新鲜视觉帧中确认“看到绿色但无法单独取得”后才发出的请求。普通无目标、视觉超时、夹内复审等待和夹爪闭合时，上位机不得新发该命令；F407也必须按空爪、无复审等待再次拦截。
+
+非法审核的推荐状态握手为：
+
+```text
+CAPTURE_AUDIT
+  → RELEASE_LEFT/RIGHT（释放异常侧）或 RELEASE_BOTH
+  → 新鲜mode=32/33/34
+  → YIELD_BACKOFF(-250 mm)
+  → 新鲜mode=30
+  → 单侧释放：保留selected_batch，重新CAPTURE_AUDIT
+  → 复审合法：GRAB_CONFIRMED，等待GRIPPER_CLOSED=1
+  → 复审非法：RELEASE_BOTH，mode=34后再次YIELD_BACKOFF，清空批次回SEARCH
+```
+
+`RELEASE_LEFT/RELEASE_RIGHT`表示打开并把对应侧物资留在原地；不能理解为“保留左/右侧”。`mode=32/33/34`和`mode=30`必须新鲜，上位机不能用本地超时猜测动作已经完成。
+
 ## 停滞退让与脱困
 
 当上位机在`APPROACH/NAVIGATE/RETURN_CENTER`等应当移动的阶段检测到T265位姿在约1.5秒内位移小于40mm时：
@@ -81,3 +98,5 @@ F407应在执行层再次拒绝下列情况：
 3. 单物资验证左右爪释放；
 4. 普通+核心两件、伤员单件、危险混入四种审核组合验证硬联锁；
 5. 最后再做中心拥挤物资、对手避让和完整比赛流程。
+
+返中验收必须确认上位机在距离约600 mm时仍发送`RETURN_CENTER`，随后发送`D=0`并持续保持，直到F407真正上报`SEARCH`；不能用`HOLD`提前切换搜索。

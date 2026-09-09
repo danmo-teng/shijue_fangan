@@ -211,7 +211,9 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
     return tuple(result)
 
 
-def audit_from_cargo(items: tuple[TrackedCargo, ...]) -> CargoAudit | None:
+def audit_from_cargo(
+    items: tuple[TrackedCargo, ...], selected_ids: set[int] | None = None
+) -> CargoAudit | None:
     visible = [item for item in items if item.visible]
     if not visible:
         return None
@@ -229,14 +231,15 @@ def audit_from_cargo(items: tuple[TrackedCargo, ...]) -> CargoAudit | None:
     all_names = {item.class_name for item in visible}
     has_danger = "danger_cyan" in all_names
     has_injury = "injured_orange" in all_names
-    has_material = bool(all_names & {"green_supply", "core_black"})
-    injury_mixed = has_injury and has_material
+    # Match F407's hard rule: any injury count other than exactly one is not
+    # a legal single-cargo audit, even during the temporary initial stash.
+    injury_mixed = has_injury and len(visible) != 1
     left_name, right_name = side_class(left), side_class(right)
-    left_invalid = any(item.class_name == "danger_cyan" for item in left) or (
+    left_invalid = left_name in {"danger_cyan", "unknown"} or (
         any(item.class_name == "injured_orange" for item in left) and
         any(item.class_name in {"green_supply", "core_black"} for item in left)
     )
-    right_invalid = any(item.class_name == "danger_cyan" for item in right) or (
+    right_invalid = right_name in {"danger_cyan", "unknown"} or (
         any(item.class_name == "injured_orange" for item in right) and
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
@@ -251,6 +254,12 @@ def audit_from_cargo(items: tuple[TrackedCargo, ...]) -> CargoAudit | None:
         injury_mixed=injury_mixed,
         left_invalid=left_invalid,
         right_invalid=right_invalid,
+        left_selected_count=sum(
+            item.track_id in (selected_ids or set()) for item in left
+        ),
+        right_selected_count=sum(
+            item.track_id in (selected_ids or set()) for item in right
+        ),
     )
 
 
@@ -282,10 +291,10 @@ def make_vision_snapshot(
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     capture = tuple(item for item in cargo if item.visible and item.center_px[1] >= IMAGE_HEIGHT * 0.25)
-    audit = audit_from_cargo(capture) if stm.claw_visible else None
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
     selected_classes = set(selected.classes) if selected is not None else set()
+    audit = audit_from_cargo(capture, selected_ids) if stm.claw_visible else None
     delivery_items = [
         item for item in cargo
         if item.visible and (item.track_id in selected_ids or item.class_name in selected_classes)
@@ -295,6 +304,7 @@ def make_vision_snapshot(
     danger, side = danger_ahead(detections)
     return VisionSnapshot(
         frame_sequence=frame_sequence,
+        observed_monotonic_s=time.monotonic(),
         cargo=cargo,
         capture_cargo=capture,
         safe_bbox=safe_bbox,
@@ -457,6 +467,12 @@ class CompetitionPlanner:
             "stm": stm_dict(stm),
             "vision": {
                 "frame_sequence": vision.frame_sequence,
+                "observed_monotonic_s": vision.observed_monotonic_s,
+                "age_ms": (
+                    None
+                    if vision.observed_monotonic_s is None
+                    else max(0.0, (time.monotonic() - vision.observed_monotonic_s) * 1000.0)
+                ),
                 "cargo_count": len(vision.cargo),
                 "danger_ahead": vision.danger_ahead,
                 "danger_side": vision.danger_side,
@@ -467,6 +483,10 @@ class CompetitionPlanner:
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
             "delivery_count": self.mission.delivery_count,
+            "disperse_attempts": self.mission.disperse_attempts,
+            "cargo_recheck_pending": self.mission.cargo_recheck_pending,
+            "invalid_release_side": self.mission.invalid_release_side,
+            "invalid_release_final": self.mission.invalid_release_final,
             "batch": batch,
             "audit": audit,
             "command": command,
