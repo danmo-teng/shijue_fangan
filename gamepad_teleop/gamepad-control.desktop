@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=F407 手柄控制模式
+Comment=手柄遥控三万向轮小车，并可通过PTY启动T265建图界面
+Exec=/home/sunrise/RDK_X5/shijue_fangan/gamepad_teleop/desktop_launcher.sh
+Icon=input-gaming
+Terminal=false
+StartupNotify=true
+Categories=Utility;Game;
