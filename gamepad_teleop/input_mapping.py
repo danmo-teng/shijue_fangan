@@ -15,8 +15,6 @@ try:
         BUTTON_CLAW_OPEN,
         BUTTON_LIFT_DOWN,
         BUTTON_LIFT_UP,
-        BUTTON_X,
-        BUTTON_Y,
     )
 except ImportError:  # Running directly from gamepad_control.py.
     from protocol import (
@@ -26,8 +24,6 @@ except ImportError:  # Running directly from gamepad_control.py.
         BUTTON_CLAW_OPEN,
         BUTTON_LIFT_DOWN,
         BUTTON_LIFT_UP,
-        BUTTON_X,
-        BUTTON_Y,
     )
 
 
@@ -99,10 +95,8 @@ def command_from_pad(
         buttons |= BUTTON_A
     if state.b:
         buttons |= BUTTON_B
-    if state.x:
-        buttons |= BUTTON_X
-    if state.y:
-        buttons |= BUTTON_Y
+    # X/Y are reserved for entering/leaving the T265 window. Do not also put
+    # them in the F407 button bitmap, so one physical press has one meaning.
     speed_percent = precision_percent if state.lb else 100
     return forward, left, yaw, camera, buttons, speed_percent, state.rb
 
@@ -269,9 +263,9 @@ class EvdevGamepad:
                     self.state.hat_y = int(event.value)
             elif event.type == self.ecodes.EV_KEY:
                 if event.value == 1:
-                    if event.code in self._key_sets["start"] | self._key_sets["m1"]:
+                    if event.code in self._key_sets["x"]:
                         actions.add("map_start")
-                    if event.code in self._key_sets["select"] | self._key_sets["m2"]:
+                    if event.code in self._key_sets["y"]:
                         actions.add("map_stop")
                 self._update_keys(set(self.device.active_keys()))
         return actions

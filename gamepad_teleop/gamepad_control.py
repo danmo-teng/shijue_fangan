@@ -381,10 +381,10 @@ class GamepadWindow:
 
         buttons = ttk.Frame(top)
         buttons.pack(anchor="w", pady=(6, 0))
-        ttk.Button(buttons, text="进入 T265 建图（START/M1）", command=self.start_map).pack(
+        ttk.Button(buttons, text="进入 T265 建图（X）", command=self.start_map).pack(
             side="left", padx=(0, 6)
         )
-        ttk.Button(buttons, text="退出 T265 建图（SELECT/M2）", command=self.stop_map).pack(side="left")
+        ttk.Button(buttons, text="退出 T265 建图（Y）", command=self.stop_map).pack(side="left")
         ttk.Label(buttons, textvariable=self.map_var, padding=(12, 0, 0, 0)).pack(side="left")
 
         canvas_frame = ttk.Frame(self.root, padding=(12, 4, 12, 0))
@@ -398,7 +398,7 @@ class GamepadWindow:
 
         footer = ttk.Label(
             self.root,
-            text="START/M1 启动建图；SELECT/M2 退出建图。建图程序通过PTY接收里程计，运动指令仍由手柄控制。",
+            text="X 启动建图；Y 退出建图。建图程序通过PTY接收里程计，运动指令仍由手柄控制。",
             padding=(12, 6),
         )
         footer.pack(fill="x")
@@ -555,9 +555,10 @@ class GamepadWindow:
             ("十字键 ↑ / ↓", "大舵机抬起 / 放下"),
             ("RB（按住）", "运动与舵机总使能；松开立即停车"),
             ("LB（按住）", "精细速度，最高35%"),
-            ("START 或 M1", "进入 T265 建图界面"),
-            ("SELECT 或 M2", "退出 T265 建图界面"),
-            ("A / B / X / Y", "预留扩展按键"),
+            ("X", "进入 T265 建图界面"),
+            ("Y", "退出 T265 建图界面"),
+            ("A / B", "预留扩展按键"),
+            ("START / SELECT / M1 / M2", "未分配，避免误触发"),
         ]
         row = y + 35
         for key, description in lines:
