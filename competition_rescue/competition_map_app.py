@@ -57,9 +57,21 @@ class CompetitionMapApp(RescueMapApp):
             "--diagnostics", str(RUNTIME / "competition_diagnostics.json"),
             "--detections-log", str(RUNTIME / "competition_detections.jsonl"),
             "--events-log", str(RUNTIME / "competition_events.jsonl"),
-            "--window-mode", "fullscreen",
+            "--window-mode", "normal",
             "--startup-timeout", f"{max(60.0, self.relocalization_timeout_s + 20.0):.3f}",
         ]
+
+    def update_pose(self) -> None:
+        super().update_pose()
+        if (
+            not self.selecting and
+            self.vision_process is not None and
+            self.vision_process.poll() is not None
+        ):
+            self.message = (
+                f"完整识别进程已退出：{self.vision_process.returncode}；"
+                "请查看competition_events.jsonl"
+            )
 
 
 def main() -> int:
