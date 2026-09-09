@@ -51,6 +51,7 @@ struct Options {
     double tx_rate_hz = 0.0;
     double duration_sec = 0.0;
     double relocalization_timeout_sec = 30.0;
+    double frame_timeout_sec = 5.0;
     bool debug_sdk = false;
     bool ignore_encoders = false;
 };
@@ -149,6 +150,7 @@ void usage(const char *program)
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --t265-map FILE     import a T265 localization map before start\n"
         << "  --relocalization-timeout SEC  map startup timeout (default 30)\n"
+        << "  --t265-frame-timeout SEC  first Pose-frame timeout in map mode (default 5)\n"
         << "  --events FILE       append localization and relocalization events\n"
         << "  --rate HZ           stdout/JSON rate, default 20\n"
         << "  --tx-rate HZ        legacy fused-pose UART rate (default 0/off)\n"
@@ -199,6 +201,9 @@ Options parse_options(int argc, char **argv)
         } else if (argument == "--relocalization-timeout") {
             options.relocalization_timeout_sec = parse_nonnegative(
                 value("--relocalization-timeout"), "--relocalization-timeout");
+        } else if (argument == "--t265-frame-timeout") {
+            options.frame_timeout_sec = parse_nonnegative(
+                value("--t265-frame-timeout"), "--t265-frame-timeout");
         } else if (argument == "--debug-sdk") {
             options.debug_sdk = true;
         } else if (argument == "--ignore-encoders") {
@@ -280,8 +285,12 @@ struct T265MapStatus {
     bool relocalized = false;
     bool startup_ready = false;
     bool timeout = false;
+    bool frame_timeout = false;
     std::uint64_t event_count = 0;
+    std::uint64_t pose_frame_count = 0;
     double relocalization_wait_ms = -1.0;
+    double first_pose_wait_ms = -1.0;
+    double last_pose_age_ms = -1.0;
     std::string path;
     std::string error;
 };
@@ -336,8 +345,12 @@ void write_map_status_json(const std::string &path,
          << ", \"relocalized\": " << (map.relocalized ? "true" : "false")
          << ", \"startup_ready\": " << (map.startup_ready ? "true" : "false")
          << ", \"timeout\": " << (map.timeout ? "true" : "false")
+         << ", \"frame_timeout\": " << (map.frame_timeout ? "true" : "false")
          << ", \"event_count\": " << map.event_count
+         << ", \"pose_frame_count\": " << map.pose_frame_count
          << ", \"relocalization_wait_ms\": " << map.relocalization_wait_ms
+         << ", \"first_pose_wait_ms\": " << map.first_pose_wait_ms
+         << ", \"last_pose_age_ms\": " << map.last_pose_age_ms
          << ", \"error\": \"" << json_escape(map.error) << "\"}\n"
          << "}\n";
     file.close();
@@ -506,8 +519,12 @@ void write_atomic_json(const std::string &path,
          << ", \"relocalized\": " << (t265_map.relocalized ? "true" : "false")
          << ", \"startup_ready\": " << (t265_map.startup_ready ? "true" : "false")
          << ", \"timeout\": " << (t265_map.timeout ? "true" : "false")
+         << ", \"frame_timeout\": " << (t265_map.frame_timeout ? "true" : "false")
          << ", \"event_count\": " << t265_map.event_count
+         << ", \"pose_frame_count\": " << t265_map.pose_frame_count
          << ", \"relocalization_wait_ms\": " << t265_map.relocalization_wait_ms
+         << ", \"first_pose_wait_ms\": " << t265_map.first_pose_wait_ms
+         << ", \"last_pose_age_ms\": " << t265_map.last_pose_age_ms
          << ", \"error\": \"" << json_escape(t265_map.error)
          << "\"},\n"
          << "  \"quality\": \"" << quality << "\",\n"
@@ -914,7 +931,9 @@ int main(int argc, char **argv)
                    "t265_position_sigma_multiplier,t265_innovation_m,position_sigma_m,"
                    "yaw_sigma_deg,quality,t265_map_enabled,t265_map_imported,"
                    "t265_map_relocalized,t265_map_startup_ready,t265_map_event_count,"
-                   "t265_map_relocalization_wait_ms,t265_map_timeout,"
+                   "t265_map_relocalization_wait_ms,t265_map_first_pose_wait_ms,"
+                   "t265_map_last_pose_age_ms,t265_map_pose_frame_count,"
+                   "t265_map_timeout,t265_map_frame_timeout,"
                    "navigation_active,navigation_wheel_primary,"
                    "navigation_distance_compensation_valid,"
                    "navigation_distance_compensation_enabled,"
@@ -1052,16 +1071,103 @@ int main(int argc, char **argv)
         const auto map_wait_start = std::chrono::steady_clock::now();
         bool map_confidence_stable = false;
         auto map_confidence_stable_start = map_wait_start;
+        auto last_pose_frame_time = map_wait_start;
+        auto fail_map_startup = [&](bool frame_timeout, double wait_ms,
+                                    std::uint8_t tracker_confidence,
+                                    std::uint8_t mapper_confidence,
+                                    const std::string &reason) {
+            t265_map.event_count = relocalization_event_count.load(
+                std::memory_order_relaxed);
+            t265_map.relocalized = relocalized.load(
+                std::memory_order_relaxed);
+            map_startup_failed = true;
+            t265_map.timeout = !frame_timeout;
+            t265_map.frame_timeout = frame_timeout;
+            t265_map.error = reason;
+            const std::string event_name = frame_timeout
+                ? "t265_map_pose_frame_timeout"
+                : "t265_map_relocalization_timeout";
+            event_log.write(
+                event_name,
+                "{\"wait_ms\":" + std::to_string(wait_ms) +
+                ",\"reason\":\"" + json_escape(reason) + "\"}");
+            write_map_status_json(
+                options.output_path, t265_map, config,
+                tracker_confidence, mapper_confidence);
+            std::cerr << "[T265 MAP] " << reason << " after "
+                      << wait_ms / 1000.0 << " s\n";
+        };
         if (t265_map.enabled) {
             write_map_status_json(options.output_path, t265_map, config);
         }
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
-            const rs2::frameset frames = pipeline.wait_for_frames(1000);
+            rs2::frameset frames;
+            bool have_frames = false;
+            try {
+                have_frames = pipeline.poll_for_frames(&frames);
+            } catch (const rs2::error &error) {
+                event_log.write(
+                    "t265_frame_poll_failed",
+                    "{\"error\":\"" + json_escape(error.what()) + "\"}");
+                if (t265_map.enabled && !map_startup_ready) {
+                    const double wait_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - map_wait_start).count();
+                    fail_map_startup(
+                        true, wait_ms, 0, 0,
+                        std::string("T265 frame polling failed: ") + error.what());
+                }
+                throw;
+            }
+            if (!have_frames) {
+                if (t265_map.enabled && !map_startup_ready) {
+                    const double wait_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - map_wait_start).count();
+                    const double pose_age_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - last_pose_frame_time).count();
+                    t265_map.last_pose_age_ms = pose_age_ms;
+                    if (pose_age_ms >= options.frame_timeout_sec * 1000.0) {
+                        fail_map_startup(
+                            true, wait_ms, 0, 0,
+                            "no T265 Pose frame received during map startup");
+                        break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
             const rs2::pose_frame pose_frame = frames.get_pose_frame();
-            if (!pose_frame) continue;
+            if (!pose_frame) {
+                if (t265_map.enabled && !map_startup_ready) {
+                    const double wait_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - map_wait_start).count();
+                    const double pose_age_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - last_pose_frame_time).count();
+                    t265_map.last_pose_age_ms = pose_age_ms;
+                    if (pose_age_ms >= options.frame_timeout_sec * 1000.0) {
+                        fail_map_startup(
+                            true, wait_ms, 0, 0,
+                            "T265 frames contain no Pose stream during map startup");
+                        break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
             const rs2_pose pose = pose_frame.get_pose_data();
             const auto t265_received = std::chrono::steady_clock::now();
+            last_pose_frame_time = t265_received;
+            t265_map.last_pose_age_ms = 0.0;
+            ++t265_map.pose_frame_count;
+            if (t265_map.pose_frame_count == 1) {
+                t265_map.first_pose_wait_ms =
+                    std::chrono::duration<double, std::milli>(
+                        t265_received - map_wait_start).count();
+                event_log.write(
+                    "t265_first_pose_frame",
+                    "{\"wait_ms\":" +
+                    std::to_string(t265_map.first_pose_wait_ms) + "}");
+            }
             omni::T265RawPose raw;
             raw.translation_m[0] = pose.translation.x;
             raw.translation_m[1] = pose.translation.y;
@@ -1110,19 +1216,10 @@ int main(int argc, char **argv)
                         "{\"relocalization_wait_ms\":" +
                         std::to_string(wait_ms) + "}");
                 } else if (wait_ms >= options.relocalization_timeout_sec * 1000.0) {
-                    map_startup_failed = true;
-                    t265_map.timeout = true;
-                    t265_map.error =
-                        "POSE_RELOCALIZATION was not received before timeout";
-                    event_log.write(
-                        "t265_map_relocalization_timeout",
-                        "{\"timeout_sec\":" +
-                        std::to_string(options.relocalization_timeout_sec) + "}");
-                    write_map_status_json(
-                        options.output_path, t265_map, config, raw.tracker_confidence,
-                        raw.mapper_confidence);
-                    std::cerr << "[T265 MAP] relocalization timeout after "
-                              << wait_ms / 1000.0 << " s\n";
+                    fail_map_startup(
+                        false, wait_ms, raw.tracker_confidence,
+                        raw.mapper_confidence,
+                        "POSE_RELOCALIZATION was not received before timeout");
                     break;
                 } else {
                     // Do not initialize the production field origin or EKF
@@ -1571,7 +1668,11 @@ int main(int argc, char **argv)
                     << (t265_map.startup_ready ? 1 : 0) << ','
                     << t265_map.event_count << ','
                     << t265_map.relocalization_wait_ms << ','
+                    << t265_map.first_pose_wait_ms << ','
+                    << t265_map.last_pose_age_ms << ','
+                    << t265_map.pose_frame_count << ','
                     << (t265_map.timeout ? 1 : 0) << ','
+                    << (t265_map.frame_timeout ? 1 : 0) << ','
                     << (navigation_active ? 1 : 0) << ','
                     << (navigation_wheel_primary ? 1 : 0) << ','
                     << (navigation_distance_valid ? 1 : 0) << ','

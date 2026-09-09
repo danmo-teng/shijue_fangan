@@ -74,6 +74,10 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 - `导入T265预建地图`：启动时导入最近一次有效扫描地图，并等待T265发出`POSE_RELOCALIZATION`且tracker confidence稳定后，才向任务提供有效定位；关闭时保持原有启动流程。
 - `T265平移比例`：默认关闭，默认试验值为`1.040`；开启后只缩放杠杆臂修正后的T265平移和速度，不改变原始T265、编码器或航向。启动页可用`±0.01`调节，范围`0.80..1.20`。
 
+地图模式的运行状态会区分“等待重定位”“已重定位”“无Pose帧超时”和“重定位超时”。后两者对应的
+`localization_events.jsonl`、`localization_result.json`、`localization_debug.csv`会随本次运行保存，便于判断
+是T265没有输出Pose帧，还是已经输出Pose但没有完成地图重定位；失败时不会自动退回普通未导入地图定位。
+
 命令行也可以直接指定同样的选项：
 
 ```bash

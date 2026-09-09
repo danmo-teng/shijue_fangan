@@ -138,6 +138,10 @@ def main() -> None:
                         "startup_ready": True,
                         "event_count": 1,
                         "relocalization_wait_ms": 1250.0,
+                        "first_pose_wait_ms": 35.0,
+                        "last_pose_age_ms": 0.0,
+                        "pose_frame_count": 240,
+                        "frame_timeout": False,
                     },
                     "wheel_odom": {
                         "available": True,
@@ -165,6 +169,9 @@ def main() -> None:
         assert app.pose.t265_map_enabled and app.pose.t265_map_relocalized
         assert app.pose.t265_map_event_count == 1
         assert math.isclose(app.pose.t265_map_wait_ms, 1250.0)
+        assert math.isclose(app.pose.t265_map_first_pose_wait_ms, 35.0)
+        assert app.pose.t265_map_pose_frame_count == 240
+        assert not app.pose.t265_map_frame_timeout
         assert not app.pose.navigation_wheel_primary
         assert app.trajectory.distance_m > 0.01
         assert app.odometry_trajectory.points[-1] == (1.18, 1.20)

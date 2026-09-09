@@ -45,6 +45,10 @@ class Pose:
     t265_map_event_count: int = 0
     t265_map_wait_ms: float = -1.0
     t265_map_timeout: bool = False
+    t265_map_frame_timeout: bool = False
+    t265_map_pose_frame_count: int = 0
+    t265_map_first_pose_wait_ms: float = -1.0
+    t265_map_last_pose_age_ms: float = -1.0
     uart_fresh: bool = False
     wheel_gate: str = "waiting"
     encoder_fusion_weight: float = DEFAULT_ENCODER_FUSION_WEIGHT
@@ -168,6 +172,16 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
         t265_map_wait_ms = float(t265_map.get("relocalization_wait_ms", -1.0))
         if not math.isfinite(t265_map_wait_ms):
             t265_map_wait_ms = -1.0
+        t265_map_first_pose_wait_ms = float(
+            t265_map.get("first_pose_wait_ms", -1.0)
+        )
+        if not math.isfinite(t265_map_first_pose_wait_ms):
+            t265_map_first_pose_wait_ms = -1.0
+        t265_map_last_pose_age_ms = float(
+            t265_map.get("last_pose_age_ms", -1.0)
+        )
+        if not math.isfinite(t265_map_last_pose_age_ms):
+            t265_map_last_pose_age_ms = -1.0
         if odom_available and fused_odom_delta_m < 0.0:
             fused_odom_delta_m = math.hypot(x_m - odom_x_m, y_m - odom_y_m)
             fused_odom_yaw_delta_deg = (yaw_deg - odom_yaw_deg + 180.0) % 360.0 - 180.0
@@ -191,6 +205,10 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             t265_map_event_count=int(t265_map.get("event_count", 0)),
             t265_map_wait_ms=t265_map_wait_ms,
             t265_map_timeout=bool(t265_map.get("timeout", False)),
+            t265_map_frame_timeout=bool(t265_map.get("frame_timeout", False)),
+            t265_map_pose_frame_count=int(t265_map.get("pose_frame_count", 0)),
+            t265_map_first_pose_wait_ms=t265_map_first_pose_wait_ms,
+            t265_map_last_pose_age_ms=t265_map_last_pose_age_ms,
             uart_fresh=bool(wheel.get("uart_fresh", False)),
             wheel_gate=str(wheel.get("gate", "unknown")),
             encoder_fusion_weight=encoder_fusion_weight,

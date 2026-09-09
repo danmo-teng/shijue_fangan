@@ -71,6 +71,18 @@ def main():
                         "translation_scale": 1.04,
                         "translation_scale_enabled": True,
                     },
+                    "t265_map": {
+                        "enabled": True,
+                        "imported": True,
+                        "relocalized": True,
+                        "startup_ready": True,
+                        "event_count": 1,
+                        "relocalization_wait_ms": 1250.0,
+                        "first_pose_wait_ms": 35.0,
+                        "last_pose_age_ms": 0.0,
+                        "pose_frame_count": 240,
+                        "frame_timeout": False,
+                    },
                     "wheel": {
                         "uart_fresh": True,
                         "gate": "accepted",
@@ -101,6 +113,13 @@ def main():
         assert loaded.navigation_wheel_primary
         assert loaded.t265_translation_scale_enabled
         assert near(loaded.t265_translation_scale, 1.04)
+        assert loaded.t265_map_enabled and loaded.t265_map_relocalized
+        assert loaded.t265_map_event_count == 1
+        assert near(loaded.t265_map_wait_ms, 1250.0)
+        assert near(loaded.t265_map_first_pose_wait_ms, 35.0)
+        assert near(loaded.t265_map_last_pose_age_ms, 0.0)
+        assert loaded.t265_map_pose_frame_count == 240
+        assert not loaded.t265_map_frame_timeout
         assert loaded.odom_available
         assert near(loaded.odom_x_m, 0.21) and near(loaded.odom_y_m, -0.39)
         assert near(loaded.odom_yaw_deg, 92.0)

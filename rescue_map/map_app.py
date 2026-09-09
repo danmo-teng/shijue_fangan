@@ -426,13 +426,18 @@ class RescueMapApp:
             text.add(f"T265平移比例：{pose.t265_translation_scale:.3f}×（{scale_state}）", (x0, 615), 18, (200, 200, 205))
             text.add(f"T265置信度：{pose.tracker_confidence}/{pose.mapper_confidence}", (x0, 650), 18, (200, 200, 205))
             if pose.t265_map_enabled:
-                if pose.t265_map_timeout:
+                if pose.t265_map_frame_timeout:
+                    map_state = "无Pose帧超时"
+                elif pose.t265_map_timeout:
                     map_state = "重定位超时"
                 elif pose.t265_map_startup_ready and pose.t265_map_relocalized:
                     map_state = f"已重定位（事件{pose.t265_map_event_count}）"
                 else:
                     map_state = "等待重定位"
-                text.add(f"T265预建地图：{map_state}", (x0, 685), 17, (0, 205, 255) if map_state == "等待重定位" else (50, 220, 80), True)
+                map_color = (0, 205, 255) if map_state == "等待重定位" else (
+                    (50, 220, 80) if map_state.startswith("已重定位") else (40, 70, 235)
+                )
+                text.add(f"T265预建地图：{map_state}", (x0, 685), 17, map_color, True)
             else:
                 text.add("T265预建地图：未使用", (x0, 685), 17, (180, 180, 185))
             mode_text = (

@@ -81,6 +81,13 @@ mapping/relocalization、关闭pose jumping。导入地图后，在收到`POSE_R
 confidence连续稳定约500 ms之前，不会初始化场地投影、EKF或输出有效任务位姿；超过
 `--relocalization-timeout`仍未重定位则退出并记录失败事件，不会静默退回无地图定位。
 
+地图启动阶段使用非阻塞Pose帧轮询，并有独立的首个Pose帧看门狗（默认5 s，可用
+`--t265-frame-timeout`调整）。因此“没有Pose帧”和“有Pose帧但没有重定位事件”会分别记录为
+`t265_map_pose_frame_timeout`和`t265_map_relocalization_timeout`，不会因为底层取帧等待而无限挂起。
+`localization_result.json`和CSV还会记录首帧等待时间、Pose帧计数、最近Pose帧年龄、重定位等待时间及
+超时类型；地图界面会明确显示“无Pose帧超时”或“重定位超时”。失败时定位器返回非零状态，任务保持无效
+定位，不会偷偷切换成未导入地图的模式。
+
 ```bash
 ./run_localization.sh \
   --config /path/to/localization.conf \
