@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = ROOT / "models" / "best_bayese_320x320_nv12.bin"
 DEFAULT_LABELS = ROOT / "config" / "yolo_labels.txt"
 DEFAULT_OUTPUT = ROOT / "runtime_result.json"
+DEFAULT_YOLO_SCORE_THRESHOLD = 0.30
 LABEL_ALIASES = {
     "conmon": "green_supply",  # Preserve the class spelling stored in the checkpoint.
     "common": "green_supply",
@@ -65,7 +66,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--decoder", choices=("jpu", "software"), default="jpu")
     parser.add_argument("--decode-fps", type=float, default=60.0)
     parser.add_argument("--preprocess", choices=("auto", "vse", "cpu"), default="auto")
-    parser.add_argument("--score-thres", type=float, default=0.50)
+    parser.add_argument("--score-thres", type=float, default=DEFAULT_YOLO_SCORE_THRESHOLD)
     parser.add_argument("--nms-thres", type=float, default=0.45)
     parser.add_argument("--priority", type=int, default=0)
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
@@ -327,6 +328,8 @@ class X5YoloV8:
             scores = class_scores[np.arange(len(class_scores)), class_ids]
             if scores.min(initial=0.0) < 0.0 or scores.max(initial=1.0) > 1.0:
                 scores = sigmoid(scores)
+            # The confidence gate is inclusive: detections at 0.30 and above
+            # are retained (subject only to class-wise NMS below).
             selected = np.flatnonzero(scores >= self.score_threshold)
             if selected.size:
                 xywh = prediction[selected, :4]

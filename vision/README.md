@@ -217,7 +217,7 @@ python3 calibrate_ground.py --device /dev/video0
 python3 run_detector.py --device /dev/video0
 ```
 
-该入口默认使用320x320 X5 BPU YOLO模型、JPU NV12与VSE预处理，只接受置信度不低于0.50的
+该入口默认使用320x320 X5 BPU YOLO模型、JPU NV12与VSE预处理，只接受置信度不低于0.30的
 检测。需要临时回退到原传统视觉时：
 
 ```bash
@@ -303,7 +303,7 @@ bash native/build_vse.sh
 ```
 
 当前安全版本仍会在JPU、VSE和Python之间各复制一次NV12缓冲区，尚未跨硬件节点共享物理
-缓冲区。置信度阈值0.50时空场景实测约53～55 FPS，有多个目标时约43～48 FPS；同帧校准
+缓冲区。置信度阈值0.30时空场景实测约53～55 FPS，有多个目标时约43～48 FPS；同帧校准
 对比中高置信度目标类别保持一致。
 
 ## 6. 性能判定

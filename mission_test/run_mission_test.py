@@ -37,7 +37,13 @@ from rescue_vision.mission_protocol import Stm32Status, write_command_frame
 from rescue_vision.safe_zone import bbox_center_in_safe_zone
 from rescue_vision.vision_protocol import IMAGE_HEIGHT, IMAGE_WIDTH, config_frame
 from rescue_vision.vse import VseScaler
-from run_yolo_x5 import DEFAULT_LABELS, DEFAULT_MODEL, X5YoloV8, load_labels
+from run_yolo_x5 import (
+    DEFAULT_LABELS,
+    DEFAULT_MODEL,
+    DEFAULT_YOLO_SCORE_THRESHOLD,
+    X5YoloV8,
+    load_labels,
+)
 
 
 def arguments() -> argparse.Namespace:
@@ -52,7 +58,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--preprocess", choices=("auto", "vse", "cpu"), default="auto")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--labels", type=Path, default=DEFAULT_LABELS)
-    parser.add_argument("--score-thres", type=float, default=0.50)
+    parser.add_argument("--score-thres", type=float, default=DEFAULT_YOLO_SCORE_THRESHOLD)
     parser.add_argument("--nms-thres", type=float, default=0.45)
     parser.add_argument("--priority", type=int, default=0)
     parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
