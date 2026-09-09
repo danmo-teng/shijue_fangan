@@ -17,6 +17,8 @@ START_ZONE_SIZE_M = 0.3
 START_CENTER_M = 1.35
 DEFAULT_CORNER_OFFSET_M = 0.15 * math.sqrt(2.0)
 DEFAULT_ENCODER_FUSION_WEIGHT = 0.25
+DEFAULT_T265_TRANSLATION_SCALE = 1.04
+DEFAULT_T265_MAP_TIMEOUT_S = 30.0
 
 # Heading is counter-clockwise from field +X.  The robot front points toward
 # the outside corner so that reverse motion takes it into the field.
@@ -36,6 +38,13 @@ class Pose:
     t265_travel_m: float = 0.0
     t265_translation_scale: float = 1.0
     t265_translation_scale_enabled: bool = False
+    t265_map_enabled: bool = False
+    t265_map_imported: bool = False
+    t265_map_relocalized: bool = False
+    t265_map_startup_ready: bool = True
+    t265_map_event_count: int = 0
+    t265_map_wait_ms: float = -1.0
+    t265_map_timeout: bool = False
     uart_fresh: bool = False
     wheel_gate: str = "waiting"
     encoder_fusion_weight: float = DEFAULT_ENCODER_FUSION_WEIGHT
@@ -153,6 +162,12 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
         if not all(math.isfinite(value) for value in (fused_odom_delta_m, fused_odom_yaw_delta_deg)):
             fused_odom_delta_m = -1.0
             fused_odom_yaw_delta_deg = 0.0
+        t265_map = data.get("t265_map", {})
+        if not isinstance(t265_map, dict):
+            t265_map = {}
+        t265_map_wait_ms = float(t265_map.get("relocalization_wait_ms", -1.0))
+        if not math.isfinite(t265_map_wait_ms):
+            t265_map_wait_ms = -1.0
         if odom_available and fused_odom_delta_m < 0.0:
             fused_odom_delta_m = math.hypot(x_m - odom_x_m, y_m - odom_y_m)
             fused_odom_yaw_delta_deg = (yaw_deg - odom_yaw_deg + 180.0) % 360.0 - 180.0
@@ -169,6 +184,13 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
             t265_translation_scale_enabled=bool(
                 t265.get("translation_scale_enabled", False)
             ),
+            t265_map_enabled=bool(t265_map.get("enabled", False)),
+            t265_map_imported=bool(t265_map.get("imported", False)),
+            t265_map_relocalized=bool(t265_map.get("relocalized", False)),
+            t265_map_startup_ready=bool(t265_map.get("startup_ready", True)),
+            t265_map_event_count=int(t265_map.get("event_count", 0)),
+            t265_map_wait_ms=t265_map_wait_ms,
+            t265_map_timeout=bool(t265_map.get("timeout", False)),
             uart_fresh=bool(wheel.get("uart_fresh", False)),
             wheel_gate=str(wheel.get("gate", "unknown")),
             encoder_fusion_weight=encoder_fusion_weight,
@@ -245,6 +267,10 @@ def write_session(
     corner_offset_m: float,
     localization_mode: str = "fusion",
     encoder_fusion_weight: float = DEFAULT_ENCODER_FUSION_WEIGHT,
+    t265_map_enabled: bool = False,
+    t265_map_path: Path | None = None,
+    t265_translation_scale_enabled: bool = False,
+    t265_translation_scale: float = DEFAULT_T265_TRANSLATION_SCALE,
 ) -> None:
     if side not in {"red", "blue"}:
         raise ValueError("side must be red or blue")
@@ -252,14 +278,20 @@ def write_session(
         raise ValueError("localization mode must be fusion or t265")
     if not 0.0 <= encoder_fusion_weight <= 1.0:
         raise ValueError("encoder fusion weight must be in 0..1")
+    if not math.isfinite(t265_translation_scale) or not 0.0 < t265_translation_scale <= 2.0:
+        raise ValueError("T265 translation scale must be in (0,2]")
     pose = initial_pose(zone, corner_offset_m)
     data = {
-        "schema_version": 2,
+        "schema_version": 3,
         "start_zone": zone,
         "side": side,
         "corner_offset_m": corner_offset_m,
         "localization_mode": localization_mode,
         "encoder_fusion_weight": encoder_fusion_weight,
+        "t265_map_enabled": bool(t265_map_enabled),
+        "t265_map_path": str(t265_map_path) if t265_map_path is not None else "",
+        "t265_translation_scale_enabled": bool(t265_translation_scale_enabled),
+        "t265_translation_scale": t265_translation_scale,
         "initial_pose": {"x_m": pose.x_m, "y_m": pose.y_m, "yaw_deg": pose.yaw_deg},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -274,6 +306,8 @@ def write_localization_config(
     zone: int,
     corner_offset_m: float,
     encoder_fusion_weight: float | None = None,
+    t265_translation_scale_enabled: bool | None = None,
+    t265_translation_scale: float | None = None,
 ) -> None:
     """Generate the localization config matching the selected start pose."""
     start_center_m = start_center_coordinate(corner_offset_m)
@@ -282,6 +316,14 @@ def write_localization_config(
         if not 0.0 <= encoder_fusion_weight <= 1.0:
             raise ValueError("encoder fusion weight must be in 0..1")
         replacements["encoder_fusion_weight"] = f"{encoder_fusion_weight:.3f}"
+    if t265_translation_scale_enabled is not None:
+        replacements["t265_translation_scale_enabled"] = (
+            "true" if t265_translation_scale_enabled else "false"
+        )
+    if t265_translation_scale is not None:
+        if not math.isfinite(t265_translation_scale) or not 0.0 < t265_translation_scale <= 2.0:
+            raise ValueError("T265 translation scale must be in (0,2]")
+        replacements["t265_translation_scale"] = f"{t265_translation_scale:.3f}"
     found: set[str] = set()
     lines: list[str] = []
     for original in template_path.read_text(encoding="utf-8").splitlines():

@@ -56,6 +56,11 @@ def main() -> None:
         assert app.localization_command()[tx_index + 1] == "0.0"
         assert "run_mission_test.sh" in app.vision_command()[0]
         assert math.isclose(app.encoder_weight, 0.25)
+        assert not app.t265_map_enabled
+        assert math.isclose(app.t265_translation_scale, 1.04)
+        runtime_config = (map_app.RUNTIME / "localization.conf").read_text(encoding="utf-8")
+        assert "t265_translation_scale_enabled = false" in runtime_config
+        assert "t265_translation_scale = 1.040" in runtime_config
         app.adjust_encoder_weight(0.10)
         assert math.isclose(app.encoder_weight, 0.35)
         app.localization_mode = "t265"
@@ -63,6 +68,17 @@ def main() -> None:
         assert "--command-file" in app.localization_command()
         assert "--ignore-encoders" in app.localization_command()
         assert "run_mission_test.sh" in app.vision_command()[0]
+        map_file = root / "t265_localization.raw"
+        map_file.write_bytes(b"test-map")
+        app.t265_map_path = map_file
+        app.t265_map_enabled = True
+        map_command = app.localization_command()
+        assert "--t265-map" in map_command
+        assert str(map_file) in map_command
+        assert "--relocalization-timeout" in map_command
+        app.t265_translation_scale_enabled = True
+        app.adjust_t265_translation_scale(0.01)
+        assert math.isclose(app.t265_translation_scale, 1.05)
         app.adjust_corner_offset(50.0)
         assert math.isclose(app.corner_offset_m, 0.15 * math.sqrt(2.0) + 0.05)
 
@@ -115,6 +131,14 @@ def main() -> None:
                         "fusion_weight": 0.35,
                     },
                     "navigation": {"wheel_primary": False},
+                    "t265_map": {
+                        "enabled": True,
+                        "imported": True,
+                        "relocalized": True,
+                        "startup_ready": True,
+                        "event_count": 1,
+                        "relocalization_wait_ms": 1250.0,
+                    },
                     "wheel_odom": {
                         "available": True,
                         "x_m": 1.18,
@@ -138,6 +162,9 @@ def main() -> None:
         assert app.pose.odom_available and math.isclose(app.pose.odom_x_m, 1.18)
         assert app.pose.odom_yaw_source == "t265_gyro"
         assert math.isclose(app.pose.encoder_fusion_weight, 0.35)
+        assert app.pose.t265_map_enabled and app.pose.t265_map_relocalized
+        assert app.pose.t265_map_event_count == 1
+        assert math.isclose(app.pose.t265_map_wait_ms, 1250.0)
         assert not app.pose.navigation_wheel_primary
         assert app.trajectory.distance_m > 0.01
         assert app.odometry_trajectory.points[-1] == (1.18, 1.20)

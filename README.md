@@ -114,6 +114,10 @@ ctest --test-dir build --output-on-failure
 编码器轨迹、F407状态和事件日志。桌面入口由
 `t265_map/install_desktop_launcher.sh`安装为“T265-环境扫描建图”。
 
+完整抓取程序的启动页也可以选择是否导入最近一次有效T265地图；开启后会等待
+`POSE_RELOCALIZATION`和稳定tracker confidence，再向任务提供有效位姿。地图导入状态和事件会写入
+`localization_events.jsonl`及定位JSON/CSV。
+
 命令行入口默认只观测；桌面快捷方式会自动带上`--enable-motion`以启用运动测试按钮，但启动
 本身不会让车移动。待F407实现`t265_map/README.md`中定义的`TYPE=0x19`扫描运动命令和
 `TYPE=0x1A`状态后，即可通过界面执行原地90°/180°/360°、直行1m、横移1m和“一次转向直线

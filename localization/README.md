@@ -74,6 +74,26 @@ T265平移比例调试由 `t265_translation_scale_enabled` 和
 启用后只缩放lever-arm修正后的机器人中心平移和速度，raw tracking-origin、相机偏置、yaw
 和轮式里程计不变；因此可以随时关闭并保留原始/缩放后数据对照。
 
+## T265预建地图导入和重定位
+
+定位器通过`--t265-map FILE`在`pipeline.start()`之前导入T265 localization map，并显式开启
+mapping/relocalization、关闭pose jumping。导入地图后，在收到`POSE_RELOCALIZATION`通知且tracker
+confidence连续稳定约500 ms之前，不会初始化场地投影、EKF或输出有效任务位姿；超过
+`--relocalization-timeout`仍未重定位则退出并记录失败事件，不会静默退回无地图定位。
+
+```bash
+./run_localization.sh \
+  --config /path/to/localization.conf \
+  --t265-map /path/to/t265_localization.raw \
+  --relocalization-timeout 30 \
+  --events /path/to/localization_events.jsonl
+```
+
+不传`--t265-map`时保持原有定位流程。带地图运行时，`localization_result.json`增加`t265_map`段，
+CSV增加地图导入、重定位事件数、启动就绪和等待时间；`--events`会保存T265通知及
+`t265_relocalized`、超时事件。地图模式下仍使用用户选择的出发区作为比赛场地坐标锚点；raw地图
+本身不是比赛场地CAD或绝对坐标文件。
+
 `odom_increment_yaw_deg` 是实际用于轮式里程计/EKF预测的时间同步 T265 航向增量，
 `wheel_kinematic_yaw_deg` 是三轮公式原本给出的角度，`gyro_yaw_delta_deg` 是同一增量的
 同步航向变化，`t265_yaw_at_increment_deg` 是用于平移旋转的增量中点场地航向。
