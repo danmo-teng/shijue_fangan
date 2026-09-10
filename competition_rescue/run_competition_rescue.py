@@ -46,7 +46,7 @@ from run_yolo_x5 import (  # noqa: E402
     load_labels,
 )
 
-from protocol import CMD_HOLD  # noqa: E402
+from protocol import CMD_ABORT, CMD_HOLD  # noqa: E402
 from state_machine import (  # noqa: E402
     CARGO_CLASSES,
     CargoAudit,
@@ -448,7 +448,7 @@ class CompetitionPlanner:
         self.paused = False
         self.diagnostics_period_s = 0.1
         self.last_diagnostics_s = -math.inf
-        self.command_tx_suppression_logged = False
+        self.command_tx_suppression_reasons_logged: set[str] = set()
         self.thread = threading.Thread(target=self._run, name="competition-planner", daemon=True)
 
     def set_vision(self, vision: VisionSnapshot) -> None:
@@ -493,16 +493,43 @@ class CompetitionPlanner:
         self.sequence = (self.sequence + 1) & 0xFF
 
     def _log_command_tx_suppression(self, output: CompetitionOutput) -> None:
-        if not output.suppress_command_tx or self.command_tx_suppression_logged:
+        if not output.suppress_command_tx:
+            return
+        reason = output.suppression_reason or "unspecified"
+        if reason in self.command_tx_suppression_reasons_logged:
             return
         self.events_log.write("command_tx_suppressed", {
             "state": output.state.value,
-            "reason": output.suppression_reason,
+            "reason": reason,
+            "tx_policy": output.tx_policy or "autonomous_recovery",
             "message": output.message,
         })
-        self.command_tx_suppression_logged = True
+        self.command_tx_suppression_reasons_logged.add(reason)
 
-    def _diagnostics(self, output: CompetitionOutput, pose: PoseSnapshot, stm: StmSnapshot, vision: VisionSnapshot) -> None:
+    @staticmethod
+    def _tx_policy(output: CompetitionOutput) -> str:
+        if output.tx_policy:
+            return output.tx_policy
+        if output.suppress_command_tx:
+            return "autonomous_recovery"
+        if output.command is None:
+            return "no_command"
+        if output.command.opcode == CMD_HOLD:
+            return "hold"
+        if output.command.opcode == CMD_ABORT:
+            return "fault_abort"
+        return "normal_command"
+
+    def _diagnostics(
+        self,
+        output: CompetitionOutput,
+        pose: PoseSnapshot,
+        stm: StmSnapshot,
+        vision: VisionSnapshot,
+        *,
+        now: float | None = None,
+    ) -> None:
+        diagnostic_now = time.monotonic() if now is None else now
         batch = None
         if output.batch is not None:
             batch = {
@@ -530,6 +557,17 @@ class CompetitionPlanner:
             "stuck_phase": output.stuck_phase,
             "command_tx_suppressed": output.suppress_command_tx,
             "suppression_reason": output.suppression_reason,
+            "upper_state": output.state.value,
+            "stm_mode": stm.mode,
+            "stm_age_ms": stm.age_ms if math.isfinite(stm.age_ms) else None,
+            "command_opcode": None if output.command is None else output.command.opcode,
+            "tx_policy": self._tx_policy(output),
+            "reason": output.reason or output.suppression_reason or output.message,
+            "selected_track_ids": list(self.mission.diagnostic_selected_track_ids()),
+            "target_last_seen_age_ms": self.mission.target_last_seen_age_ms(diagnostic_now),
+            "expected_stm_mode": list(
+                output.expected_stm_modes or self.mission.expected_stm_modes()
+            ),
             "pose": pose_dict(pose),
             "stm": stm_dict(stm),
             "vision": {
@@ -538,7 +576,7 @@ class CompetitionPlanner:
                 "age_ms": (
                     None
                     if vision.observed_monotonic_s is None
-                    else max(0.0, (time.monotonic() - vision.observed_monotonic_s) * 1000.0)
+                    else max(0.0, (diagnostic_now - vision.observed_monotonic_s) * 1000.0)
                 ),
                 "cargo_count": len(vision.cargo),
                 "danger_ahead": vision.danger_ahead,
@@ -549,6 +587,7 @@ class CompetitionPlanner:
             },
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
+            "first_fault_code": self.mission.first_fault_code,
             "delivery_count": self.mission.delivery_count,
             "disperse_attempts": self.mission.disperse_attempts,
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
@@ -573,6 +612,8 @@ class CompetitionPlanner:
                         self.mission.state,
                         CommandRequest(CMD_HOLD),
                         "摄像头恢复中，保持车辆停车",
+                        tx_policy="camera_pause_hold",
+                        reason="camera_recovery",
                     )
                     if paused else self.mission.step(vision, pose, stm, started)
                 )
@@ -597,7 +638,7 @@ class CompetitionPlanner:
                     output.event or
                     diagnostics_now - self.last_diagnostics_s >= self.diagnostics_period_s
                 ):
-                    self._diagnostics(output, pose, stm, vision)
+                    self._diagnostics(output, pose, stm, vision, now=started)
                     self.last_diagnostics_s = diagnostics_now
                 with self.lock:
                     self.latest_output = output
@@ -1129,7 +1170,9 @@ def main() -> int:
             "state": mission.state.value,
             "delivery_count": mission.delivery_count,
             "first_common_delivered": mission.first_common_delivered,
+            "first_fault_code": mission.first_fault_code,
             "exit_reason": exit_reason,
+            "tx_policy": "termination_hold",
             "inference_frames": inference_frames,
             "inference_total": inference_total,
             "camera_decoder": camera_decoder,

@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 from protocol import (  # noqa: E402
     CMD_APPROACH_TARGET,
+    CMD_ABORT,
     CMD_CARGO_AUDIT,
     CMD_ESCAPE_MANEUVER,
     CMD_DISPERSE_PILE,
@@ -39,8 +40,8 @@ def pose(x=-1.0, y=1.0) -> PoseSnapshot:
     return PoseSnapshot(True, x, y, 135.0, 5.0)
 
 
-def stm(mode=3, flags=0) -> StmSnapshot:
-    return StmSnapshot(mode, flags, 5.0, 0, 0)
+def stm(mode=3, flags=0, age_ms=5.0, acknowledged_sequence=0) -> StmSnapshot:
+    return StmSnapshot(mode, flags, age_ms, 0, acknowledged_sequence)
 
 
 def cargo(track_id, name, x, y, hits=3, relative=None):
@@ -110,13 +111,69 @@ def test_first_green_and_stuck_recovery() -> None:
 
     # The first progress sample establishes the motion baseline; the next
     # stalled sample triggers lower-level yield before any spin escape.
-    mission.step(vision, pose(), stm(mode=10, flags=4), 0.6)
-    output = mission.step(vision, pose(), stm(mode=10, flags=4), 2.2)
+    mission.step(vision, pose(), stm(mode=10, flags=4, acknowledged_sequence=10), 0.6)
+    output = mission.step(vision, pose(), stm(mode=10, flags=4, acknowledged_sequence=11), 2.2)
     assert output.state == CompetitionState.STUCK_YIELD
     assert output.command and output.command.opcode == CMD_YIELD_BACKOFF
-    output = mission.step(vision, pose(), stm(mode=30, flags=0), 4.1)
+    # A moving but still-running remote action must not resume the original
+    # NAVIGATE command before F407 reports this YIELD_DONE.
+    output = mission.step(
+        vision,
+        PoseSnapshot(True, -0.95, 1.0, 135.0, 5.0),
+        stm(mode=25, flags=4, acknowledged_sequence=12),
+        4.0,
+    )
+    assert output.state == CompetitionState.STUCK_YIELD
+    assert output.command and output.command.opcode == CMD_YIELD_BACKOFF
+    # A stale completion with the right mode is not enough either.
+    output = mission.step(
+        vision,
+        PoseSnapshot(True, -0.95, 1.0, 135.0, 300.0),
+        stm(mode=30, age_ms=300.0, acknowledged_sequence=12),
+        4.1,
+    )
+    assert output.state == CompetitionState.STUCK_YIELD
+    output = mission.step(
+        vision,
+        PoseSnapshot(True, -0.95, 1.0, 135.0, 5.0),
+        stm(mode=30, acknowledged_sequence=12),
+        4.2,
+    )
+    assert output.state == CompetitionState.NAVIGATE
+    assert output.command and output.command.opcode == CMD_NAVIGATE_WAYPOINT
+
+    # No progress after a fresh YIELD_DONE permits ESCAPE_MANEUVER, but the
+    # escape action itself must also finish freshly before resuming.
+    mission._set_state(CompetitionState.NAVIGATE, 5.0)
+    mission.step(vision, pose(), stm(mode=10, flags=4, acknowledged_sequence=20), 5.0)
+    output = mission.step(vision, pose(), stm(mode=10, flags=4, acknowledged_sequence=21), 6.6)
+    assert output.state == CompetitionState.STUCK_YIELD
+    output = mission.step(vision, pose(), stm(mode=30, acknowledged_sequence=22), 6.7)
     assert output.state == CompetitionState.STUCK_ESCAPE
     assert output.command and output.command.opcode == CMD_ESCAPE_MANEUVER
+    output = mission.step(
+        vision,
+        PoseSnapshot(True, -0.95, 1.0, 135.0, 5.0),
+        stm(mode=25, flags=4, acknowledged_sequence=23),
+        11.0,
+    )
+    assert output.state == CompetitionState.STUCK_ESCAPE
+    assert output.command and output.command.opcode == CMD_ESCAPE_MANEUVER
+    output = mission.step(
+        vision,
+        PoseSnapshot(True, -0.95, 1.0, 135.0, 5.0),
+        stm(mode=31, age_ms=300.0, acknowledged_sequence=23),
+        11.1,
+    )
+    assert output.state == CompetitionState.STUCK_ESCAPE
+    output = mission.step(
+        vision,
+        PoseSnapshot(True, -0.95, 1.0, 135.0, 5.0),
+        stm(mode=31, acknowledged_sequence=23),
+        11.2,
+    )
+    assert output.state == CompetitionState.NAVIGATE
+    assert output.command and output.command.opcode == CMD_NAVIGATE_WAYPOINT
 
     no_observation = CompetitionMission(
         CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)
@@ -129,6 +186,184 @@ def test_first_green_and_stuck_recovery() -> None:
         output = no_observation.step(VisionSnapshot(), pose(), stm(flags=1), now)
     assert output.state == CompetitionState.CAPTURE_AUDIT
     assert output.command and output.command.opcode == CMD_CARGO_AUDIT
+
+
+def test_search_recovery_handshake_and_safety_gates() -> None:
+    mission = CompetitionMission(
+        CompetitionSettings(
+            side="red",
+            start_zone=1,
+            initial_stash_enabled=False,
+            stuck_timeout_s=10.0,
+            search_recovery_timeout_s=2.0,
+        )
+    )
+    start_search(mission)
+    target = cargo(7, "green_supply", 600, 520, relative=(0.2, 0.7))
+    visible = VisionSnapshot(
+        frame_sequence=1,
+        observed_monotonic_s=0.0,
+        cargo=(target,),
+    )
+    output = mission.step(visible, pose(), stm(mode=3, acknowledged_sequence=1), 0.0)
+    assert output.state == CompetitionState.APPROACH
+
+    missing = VisionSnapshot(frame_sequence=2, observed_monotonic_s=0.1)
+    output = mission.step(
+        missing,
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=2),
+        0.1,
+    )
+    assert output.state == CompetitionState.APPROACH
+    assert output.command and output.command.opcode == CMD_HOLD
+
+    output = mission.step(
+        replace(visible, frame_sequence=3, observed_monotonic_s=0.2),
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=3),
+        0.2,
+    )
+    assert output.state == CompetitionState.APPROACH
+    assert output.command and output.command.opcode == CMD_APPROACH_TARGET
+    assert mission.target_lost_started_s is None
+
+    output = mission.step(
+        replace(missing, frame_sequence=4, observed_monotonic_s=0.3),
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=4),
+        0.3,
+    )
+    assert output.state == CompetitionState.APPROACH
+    output = mission.step(
+        replace(missing, frame_sequence=5, observed_monotonic_s=1.6),
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=5),
+        1.6,
+    )
+    assert output.state == CompetitionState.WAIT_SEARCH_RECOVERY
+    assert output.command is None
+    assert output.suppress_command_tx
+    assert output.suppression_reason == "f407_search_recovery"
+    assert output.event == "search_recovery_start"
+
+    output = mission.step(
+        replace(missing, frame_sequence=6, observed_monotonic_s=1.7),
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=6),
+        1.7,
+    )
+    assert output.state == CompetitionState.WAIT_SEARCH_RECOVERY
+    assert output.suppress_command_tx
+
+    # An unrelated remote action is not an allowed recovery state.
+    output = mission.step(
+        replace(missing, frame_sequence=7, observed_monotonic_s=1.8),
+        pose(),
+        stm(mode=25, flags=4, acknowledged_sequence=7),
+        1.8,
+    )
+    assert output.state == CompetitionState.WAIT_SEARCH_RECOVERY
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert not output.suppress_command_tx
+
+    output = mission.step(
+        replace(missing, frame_sequence=8, observed_monotonic_s=1.9),
+        pose(),
+        stm(mode=24, flags=4, acknowledged_sequence=8),
+        1.9,
+    )
+    assert output.state == CompetitionState.WAIT_SEARCH_RECOVERY
+    assert output.suppress_command_tx
+
+    output = mission.step(
+        replace(missing, frame_sequence=9, observed_monotonic_s=2.0),
+        pose(),
+        stm(mode=3, acknowledged_sequence=9),
+        2.0,
+    )
+    assert output.state == CompetitionState.SEARCH
+    assert output.event == "search_recovery_complete"
+    assert output.command and output.command.opcode == CMD_HOLD
+
+    def recovery_mission() -> CompetitionMission:
+        result = CompetitionMission(
+            CompetitionSettings(
+                side="red",
+                start_zone=1,
+                initial_stash_enabled=False,
+                search_recovery_timeout_s=2.0,
+            )
+        )
+        result._begin_search_recovery(CompetitionState.SEARCH, 0.0)
+        return result
+
+    stale_vision = recovery_mission()
+    output = stale_vision.step(
+        VisionSnapshot(observed_monotonic_s=0.0),
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=1),
+        0.4,
+    )
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert not output.suppress_command_tx
+    assert output.reason == "vision_stale"
+
+    stale_stm = recovery_mission()
+    output = stale_stm.step(
+        VisionSnapshot(observed_monotonic_s=0.5),
+        pose(),
+        stm(mode=20, flags=4, age_ms=300.0, acknowledged_sequence=1),
+        0.5,
+    )
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert output.reason == "stm_stale"
+
+    closed = recovery_mission()
+    output = closed.step(
+        VisionSnapshot(observed_monotonic_s=0.5),
+        pose(),
+        stm(mode=20, flags=2, acknowledged_sequence=1),
+        0.5,
+    )
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert output.reason == "gripper_closed"
+
+    pending_audit = recovery_mission()
+    pending_audit.cargo_recheck_pending = True
+    output = pending_audit.step(
+        VisionSnapshot(observed_monotonic_s=0.5),
+        pose(),
+        stm(mode=20, flags=4, acknowledged_sequence=1),
+        0.5,
+    )
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert output.reason == "cargo_recheck_pending"
+
+    timed_out = recovery_mission()
+    output = timed_out.step(
+        VisionSnapshot(observed_monotonic_s=2.1),
+        pose(),
+        stm(mode=25, flags=4, acknowledged_sequence=1),
+        2.1,
+    )
+    assert output.state == CompetitionState.FAULT
+    assert output.command and output.command.opcode == CMD_ABORT
+    assert output.event == "search_recovery_timeout"
+
+    faulted = CompetitionMission(
+        CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)
+    )
+    output = faulted.step(
+        VisionSnapshot(),
+        pose(),
+        StmSnapshot(mode=20, age_ms=5.0, fault_code=6),
+        0.1,
+    )
+    assert output.state == CompetitionState.FAULT
+    assert faulted.first_fault_code == 6
+    faulted.step(VisionSnapshot(), pose(), stm(mode=20), 0.2)
+    assert faulted.first_fault_code == 6
 
 
 def test_initial_stash_and_invalid_release() -> None:
@@ -365,10 +600,10 @@ def test_single_release_recheck_and_final_both_release() -> None:
     output = _run_invalid_audit(mission, invalid.capture_audit)
     assert output.command and output.command.opcode == CMD_RELEASE_LEFT
 
-    output = mission.step(invalid, pose(), StmSnapshot(32, 0, 5.0, 0, 0), 0.4)
+    output = mission.step(invalid, pose(), StmSnapshot(32, 0, 5.0, 0, 10), 0.4)
     assert output.state == CompetitionState.INVALID_BACKOFF
     assert output.command and output.command.opcode == CMD_YIELD_BACKOFF
-    output = mission.step(invalid, pose(), StmSnapshot(30, 0, 5.0, 0, 0), 0.5)
+    output = mission.step(invalid, pose(), StmSnapshot(30, 0, 5.0, 0, 11), 0.5)
     assert output.state == CompetitionState.CAPTURE_AUDIT
     assert output.command and output.command.opcode == CMD_HOLD
     assert mission.cargo_recheck_pending and mission.selected_batch is not None
@@ -389,8 +624,8 @@ def test_single_release_recheck_and_final_both_release() -> None:
 
     final = _audit_mission()
     _run_invalid_audit(final, invalid.capture_audit)
-    final.step(invalid, pose(), StmSnapshot(32, 0, 5.0, 0, 0), 0.4)
-    final.step(invalid, pose(), StmSnapshot(30, 0, 5.0, 0, 0), 0.5)
+    final.step(invalid, pose(), StmSnapshot(32, 0, 5.0, 0, 20), 0.4)
+    final.step(invalid, pose(), StmSnapshot(30, 0, 5.0, 0, 21), 0.5)
     for sequence in (2, 3, 4):
         output = final.step(
             VisionSnapshot(frame_sequence=sequence, capture_audit=invalid.capture_audit),
@@ -398,9 +633,9 @@ def test_single_release_recheck_and_final_both_release() -> None:
         )
     assert output.state == CompetitionState.INVALID_RELEASE
     assert output.command and output.command.opcode == CMD_RELEASE_BOTH
-    output = final.step(invalid, pose(), StmSnapshot(34, 0, 5.0, 0, 0), 1.2)
+    output = final.step(invalid, pose(), StmSnapshot(34, 0, 5.0, 0, 30), 1.2)
     assert output.state == CompetitionState.INVALID_BACKOFF
-    output = final.step(invalid, pose(), StmSnapshot(30, 0, 5.0, 0, 0), 1.3)
+    output = final.step(invalid, pose(), StmSnapshot(30, 0, 5.0, 0, 31), 1.3)
     assert output.state == CompetitionState.SEARCH
     assert final.selected_batch is None
 
@@ -473,6 +708,7 @@ def test_boundary_guard_points_back_into_field() -> None:
 def main() -> None:
     test_start_handshake_suppresses_task_frames_until_start_clear()
     test_first_green_and_stuck_recovery()
+    test_search_recovery_handshake_and_safety_gates()
     test_initial_stash_and_invalid_release()
     test_material_priority_excludes_danger()
     test_disperse_requires_fresh_green_and_respects_limit()

@@ -102,8 +102,76 @@ def test_suppressed_publish_preserves_command_file_and_sequence() -> None:
                 "靠近目标",
             )
         )
-        assert command_path.read_bytes()[4] == CMD_APPROACH_TARGET
+        approach_bytes = command_path.read_bytes()
+        approach_mtime_ns = command_path.stat().st_mtime_ns
+        assert approach_bytes[4] == CMD_APPROACH_TARGET
         assert planner.sequence == 2
+
+        recovery = CompetitionOutput(
+            CompetitionState.WAIT_SEARCH_RECOVERY,
+            None,
+            "释放HOLD，等待F407自主完成目标丢失恢复",
+            suppress_command_tx=True,
+            suppression_reason="f407_search_recovery",
+            tx_policy="autonomous_recovery",
+            reason="f407_approach_recovery",
+            expected_stm_modes=(20, 24, 3),
+        )
+        for _ in range(3):
+            planner._log_command_tx_suppression(recovery)
+            planner._publish(recovery)
+        assert command_path.read_bytes() == approach_bytes
+        assert command_path.stat().st_mtime_ns == approach_mtime_ns
+        assert planner.sequence == 2
+
+        # The real relay can bridge the unchanged mission frame for at most
+        # 250 ms; after that the STM32 receives no refreshed APPROACH frame.
+        last_input_change_s = 100.0
+        assert 100.249 - last_input_change_s <= 0.25
+        assert 100.251 - last_input_change_s > 0.25
+
+        planner.mission.last_selected_track_ids = (7,)
+        planner.mission.target_last_seen_s = 99.5
+        planner.mission.first_fault_code = 6
+        planner.mission._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, 100.0)
+        planner._diagnostics(
+            recovery,
+            PoseSnapshot(True, -1.0, 1.0, 135.0, 5.0),
+            StmSnapshot(mode=20, flags=4, age_ms=5.0, acknowledged_sequence=8),
+            VisionSnapshot(observed_monotonic_s=100.0),
+            now=100.0,
+        )
+        diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+        assert diagnostics["upper_state"] == "WAIT_SEARCH_RECOVERY"
+        assert diagnostics["stm_mode"] == 20
+        assert diagnostics["stm_age_ms"] == 5.0
+        assert diagnostics["command_opcode"] is None
+        assert diagnostics["tx_policy"] == "autonomous_recovery"
+        assert diagnostics["reason"] == "f407_approach_recovery"
+        assert diagnostics["selected_track_ids"] == [7]
+        assert diagnostics["target_last_seen_age_ms"] == 500.0
+        assert diagnostics["expected_stm_mode"] == [20, 24, 3]
+        assert diagnostics["first_fault_code"] == 6
+
+        # Camera pause is an explicit HOLD policy and must override recovery
+        # suppression while the camera is unavailable.
+        planner._publish(
+            CompetitionOutput(
+                CompetitionState.WAIT_SEARCH_RECOVERY,
+                CommandRequest(CMD_HOLD),
+                "摄像头恢复中，保持车辆停车",
+                tx_policy="camera_pause_hold",
+                reason="camera_recovery",
+            )
+        )
+        assert command_path.read_bytes()[4] == CMD_HOLD
+        assert planner.sequence == 3
+
+        events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+        assert [item["reason"] for item in events] == [
+            "f407_autonomous_start",
+            "f407_search_recovery",
+        ]
 
 
 def test_detection_logging() -> None:
