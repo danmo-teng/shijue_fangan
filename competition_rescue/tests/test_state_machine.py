@@ -52,6 +52,31 @@ def start_search(mission: CompetitionMission) -> None:
     assert output.state == CompetitionState.SEARCH
 
 
+def test_start_handshake_suppresses_task_frames_until_start_clear() -> None:
+    mission = CompetitionMission(
+        CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)
+    )
+    start_pose = PoseSnapshot(True, -1.35, 1.35, 135.0, 5.0)
+
+    for now, mode in ((0.0, 1), (0.1, 2)):
+        output = mission.step(VisionSnapshot(), start_pose, stm(mode=mode), now)
+        assert output.state == CompetitionState.WAIT_START
+        assert output.command is None
+        assert output.suppress_command_tx
+        assert output.suppression_reason == "f407_autonomous_start"
+
+    output = mission.step(
+        VisionSnapshot(),
+        PoseSnapshot(True, -1.10, 1.35, 135.0, 5.0),
+        stm(mode=3),
+        0.2,
+    )
+    assert output.state == CompetitionState.SEARCH
+    assert output.event == "start_clear"
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert not output.suppress_command_tx
+
+
 def test_first_green_and_stuck_recovery() -> None:
     mission = CompetitionMission(CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False))
     start_search(mission)
@@ -446,6 +471,7 @@ def test_boundary_guard_points_back_into_field() -> None:
 
 
 def main() -> None:
+    test_start_handshake_suppresses_task_frames_until_start_clear()
     test_first_green_and_stuck_recovery()
     test_initial_stash_and_invalid_release()
     test_material_priority_excludes_danger()

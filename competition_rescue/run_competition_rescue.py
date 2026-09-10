@@ -448,6 +448,7 @@ class CompetitionPlanner:
         self.paused = False
         self.diagnostics_period_s = 0.1
         self.last_diagnostics_s = -math.inf
+        self.command_tx_suppression_logged = False
         self.thread = threading.Thread(target=self._run, name="competition-planner", daemon=True)
 
     def set_vision(self, vision: VisionSnapshot) -> None:
@@ -482,12 +483,24 @@ class CompetitionPlanner:
         return mission_frame(self.sequence, CMD_HOLD)
 
     def _publish(self, output: CompetitionOutput) -> None:
+        if output.suppress_command_tx:
+            return
         command = output.command
         if command is None:
             write_command_frame(self.command_path, self._hold_frame())
         else:
             write_command_frame(self.command_path, command.to_frame(self.sequence))
         self.sequence = (self.sequence + 1) & 0xFF
+
+    def _log_command_tx_suppression(self, output: CompetitionOutput) -> None:
+        if not output.suppress_command_tx or self.command_tx_suppression_logged:
+            return
+        self.events_log.write("command_tx_suppressed", {
+            "state": output.state.value,
+            "reason": output.suppression_reason,
+            "message": output.message,
+        })
+        self.command_tx_suppression_logged = True
 
     def _diagnostics(self, output: CompetitionOutput, pose: PoseSnapshot, stm: StmSnapshot, vision: VisionSnapshot) -> None:
         batch = None
@@ -515,6 +528,8 @@ class CompetitionPlanner:
             "event": output.event,
             "motion_expected": output.motion_expected,
             "stuck_phase": output.stuck_phase,
+            "command_tx_suppressed": output.suppress_command_tx,
+            "suppression_reason": output.suppression_reason,
             "pose": pose_dict(pose),
             "stm": stm_dict(stm),
             "vision": {
@@ -561,6 +576,7 @@ class CompetitionPlanner:
                     )
                     if paused else self.mission.step(vision, pose, stm, started)
                 )
+                self._log_command_tx_suppression(output)
                 self._publish(output)
                 state_changed = output.state != self.last_state
                 if state_changed:

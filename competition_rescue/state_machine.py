@@ -272,6 +272,8 @@ class CompetitionOutput:
     event: str = ""
     motion_expected: bool = False
     stuck_phase: str = ""
+    suppress_command_tx: bool = False
+    suppression_reason: str = ""
 
 
 class CompetitionState(str, Enum):
@@ -1233,7 +1235,13 @@ class CompetitionMission:
             if self._start_ready(pose, stm):
                 self._set_state(CompetitionState.INITIAL_OBSERVE if not self.initial_stash_done else CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), "已离开出发区，开始中心观察", event="start_clear")
-            return CompetitionOutput(self.state, self._hold(), "等待下位机完成出发并离开出发区")
+            return CompetitionOutput(
+                self.state,
+                None,
+                "等待下位机完成出发并离开出发区",
+                suppress_command_tx=True,
+                suppression_reason="f407_autonomous_start",
+            )
 
         if self.state == CompetitionState.INITIAL_OBSERVE:
             pile = self._pile_batch(vision)
