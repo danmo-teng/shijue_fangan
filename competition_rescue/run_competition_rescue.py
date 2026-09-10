@@ -88,7 +88,13 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--detections-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_detections.jsonl")
     parser.add_argument("--events-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_events.jsonl")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="normal")
-    parser.add_argument("--display-fps", type=float, default=15.0)
+    parser.add_argument("--display-fps", type=float, default=10.0)
+    parser.add_argument(
+        "--detection-log-fps",
+        type=float,
+        default=10.0,
+        help="识别日志采样频率；识别仍按vision-fps运行",
+    )
     parser.add_argument("--no-display", action="store_true")
     parser.add_argument("--duration", type=float, default=0.0, help="seconds; 0 runs until stopped")
     parser.add_argument(
@@ -164,6 +170,12 @@ def make_detection(item, localizer: GroundLocalizer) -> Detection:
         size_mm=None,
         contour=np.empty((0, 1, 2), dtype=np.int32),
     )
+
+
+def bbox_center_px(bbox: tuple[int, int, int, int]) -> tuple[int, int]:
+    """Return the image-space centre without depending on detector wrappers."""
+    x, y, width, height = bbox
+    return x + width // 2, y + height // 2
 
 
 def safe_bbox_from_detections(detections, safe_class: str):
@@ -317,6 +329,44 @@ def make_vision_snapshot(
     )
 
 
+def detection_log_record(
+    frame_sequence: int,
+    timing: dict[str, float],
+    detections: list[Detection],
+    tracks: tuple[TrackedCargo, ...],
+) -> dict:
+    """Build a JSON-safe sampled frame record for the offline analysis logs."""
+    return {
+        "frame_sequence": frame_sequence,
+        "timing_ms": timing,
+        "detections": [
+            {
+                "class": item.class_name,
+                "confidence": round(float(item.confidence), 4),
+                "bbox": list(item.bbox),
+                "center": list(bbox_center_px(item.bbox)),
+                "ground_xy_mm": (
+                    None if item.ground_xy_mm is None else list(item.ground_xy_mm)
+                ),
+            }
+            for item in detections
+        ],
+        "tracks": [
+            {
+                "id": item.track_id,
+                "class": item.class_name,
+                "confidence": item.confidence,
+                "bbox": list(item.bbox),
+                "relative_xy_m": item.relative_xy_m,
+                "hits": item.hits,
+                "misses": item.misses,
+                "visible": item.visible,
+            }
+            for item in tracks
+        ],
+    }
+
+
 class JsonlLog:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -396,6 +446,8 @@ class CompetitionPlanner:
         self.error: Exception | None = None
         self.last_state = mission.state
         self.paused = False
+        self.diagnostics_period_s = 0.1
+        self.last_diagnostics_s = -math.inf
         self.thread = threading.Thread(target=self._run, name="competition-planner", daemon=True)
 
     def set_vision(self, vision: VisionSnapshot) -> None:
@@ -510,7 +562,8 @@ class CompetitionPlanner:
                     if paused else self.mission.step(vision, pose, stm, started)
                 )
                 self._publish(output)
-                if output.state != self.last_state:
+                state_changed = output.state != self.last_state
+                if state_changed:
                     self.events_log.write("state_changed", {
                         "from": self.last_state.value,
                         "to": output.state.value,
@@ -522,7 +575,14 @@ class CompetitionPlanner:
                         "state": output.state.value,
                         "message": output.message,
                     })
-                self._diagnostics(output, pose, stm, vision)
+                diagnostics_now = time.monotonic()
+                if (
+                    state_changed or
+                    output.event or
+                    diagnostics_now - self.last_diagnostics_s >= self.diagnostics_period_s
+                ):
+                    self._diagnostics(output, pose, stm, vision)
+                    self.last_diagnostics_s = diagnostics_now
                 with self.lock:
                     self.latest_output = output
                     self.latest_pose = pose
@@ -582,6 +642,7 @@ def draw_overlay(
     fps: float,
     output_size: tuple[int, int],
 ) -> np.ndarray:
+    """Render a low-cost preview; task/debug details stay in JSONL logs."""
     output_width, output_height = output_size
     view = cv2.resize(image, (output_width, output_height), interpolation=cv2.INTER_AREA)
     scale_x = output_width / float(IMAGE_WIDTH)
@@ -600,16 +661,6 @@ def draw_overlay(
         x1 = round((x + box_width) * scale_x)
         y1 = round((y + box_height) * scale_y)
         cv2.rectangle(view, (x0, y0), (x1, y1), color, 2)
-        cv2.putText(
-            view,
-            f"{item.class_name}#{item.track_id} {item.confidence:.2f}",
-            (x0, max(16, y0 - 4)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.34,
-            color,
-            1,
-            cv2.LINE_AA,
-        )
     if vision.safe_bbox is not None:
         x, y, box_width, box_height = vision.safe_bbox
         cv2.rectangle(
@@ -619,25 +670,6 @@ def draw_overlay(
             (255, 0, 255),
             2,
         )
-    lines = [
-        f"COMPETITION {fps:.1f} FPS  state={output.state.value}",
-        output.message,
-        f"pose=({pose.x_m:+.2f},{pose.y_m:+.2f}) yaw={pose.yaw_deg:.1f} valid={int(pose.valid)} age={pose.age_ms:.0f}ms",
-        f"stm mode={stm.mode} flags=0x{stm.flags:02X} motors={int(stm.motors_active)} claw={int(stm.claw_visible)} closed={int(stm.gripper_closed)} fault={stm.fault_code}",
-        f"cargo={len(vision.cargo)} danger_ahead={int(vision.danger_ahead)} side={vision.danger_side} selected={sorted(selected_ids)}",
-        "Q退出识别任务  Esc取消全屏/保持运行  F切换显示大小",
-    ]
-    for index, line in enumerate(lines):
-        cv2.putText(
-            view,
-            line,
-            (7, 21 + index * 27),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.39,
-            (255, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
     return view
 
 
@@ -645,7 +677,12 @@ def validate_args(args: argparse.Namespace) -> None:
     require_native_resolution(IMAGE_WIDTH, IMAGE_HEIGHT)
     if not 0.0 < args.score_thres < 1.0 or not 0.0 < args.nms_thres < 1.0:
         raise ValueError("score-thres和nms-thres必须在0..1之间")
-    if args.vision_fps <= 0 or args.planner_fps <= 0 or args.display_fps <= 0:
+    if (
+        args.vision_fps <= 0 or
+        args.planner_fps <= 0 or
+        args.display_fps <= 0 or
+        args.detection_log_fps <= 0
+    ):
         raise ValueError("FPS必须为正数")
     if args.startup_timeout <= 0 or args.stuck_timeout <= 0:
         raise ValueError("startup/stuck timeout必须为正数")
@@ -669,6 +706,9 @@ def main() -> int:
         "side": side,
         "start_zone": start_zone,
         "window_mode": args.window_mode,
+        "display_fps": args.display_fps,
+        "detection_log_fps": args.detection_log_fps,
+        "vision_fps": args.vision_fps,
     })
     try:
         pose_deadline = time.monotonic() + args.startup_timeout
@@ -750,6 +790,9 @@ def main() -> int:
         "start_zone": start_zone,
         "initial_stash_enabled": not args.disable_initial_stash,
         "score_threshold": args.score_thres,
+        "display_fps": args.display_fps,
+        "detection_log_fps": args.detection_log_fps,
+        "vision_fps": args.vision_fps,
         "startup_pose": pose_dict(startup_pose),
     })
 
@@ -766,6 +809,7 @@ def main() -> int:
     started = time.monotonic()
     camera_recovery_pending = False
     next_camera_retry = started + 1.0
+    next_detection_log = started
 
     def stop(received_signal, _frame):
         nonlocal running, exit_reason
@@ -961,35 +1005,18 @@ def main() -> int:
                         detections, tracks, localizer, safe_bbox, stm, mission, packet.frame_id
                     )
                     planner.set_vision(latest_vision)
-                    detection_log.write("frame", {
-                        "frame_sequence": packet.frame_id,
-                        "timing_ms": timing,
-                        "detections": [
-                            {
-                                "class": item.class_name,
-                                "confidence": round(float(item.confidence), 4),
-                                "bbox": list(item.bbox),
-                                "center": list(item.center),
-                                "ground_xy_mm": (
-                                    None if item.ground_xy_mm is None else list(item.ground_xy_mm)
-                                ),
-                            }
-                            for item in detection_objects
-                        ],
-                        "tracks": [
-                            {
-                                "id": item.track_id,
-                                "class": item.class_name,
-                                "confidence": item.confidence,
-                                "bbox": list(item.bbox),
-                                "relative_xy_m": item.relative_xy_m,
-                                "hits": item.hits,
-                                "misses": item.misses,
-                                "visible": item.visible,
-                            }
-                            for item in latest_vision.cargo
-                        ],
-                    })
+                    log_now = time.monotonic()
+                    if log_now >= next_detection_log:
+                        detection_log.write(
+                            "frame",
+                            detection_log_record(
+                                packet.frame_id,
+                                timing,
+                                detection_objects,
+                                latest_vision.cargo,
+                            ),
+                        )
+                        next_detection_log = log_now + 1.0 / args.detection_log_fps
                     inference_frames += 1
                     inference_total += 1
             if now - fps_started >= 1.0:

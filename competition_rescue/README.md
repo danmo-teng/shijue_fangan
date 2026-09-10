@@ -39,14 +39,14 @@ cd /home/sunrise/RDK_X5/shijue_fangan/competition_rescue
 
 新程序在`rescue_map/runtime/`保存：
 
-- `competition_detections.jsonl`：每帧全部YOLO检测、track ID、置信度、框和地面坐标；
+- `competition_detections.jsonl`：按`--detection-log-fps`采样保存YOLO检测、track ID、置信度、框和地面坐标；默认10 Hz，不改变识别频率；
 - `competition_events.jsonl`：状态切换、批次锁定、危险换道、退让和脱困事件；
 - `competition_diagnostics.json`：当前状态、位姿、F407状态、批次、左右爪审核和命令；
 - 启动新会话时，上述文件会归档到`runtime/history/`的`*_competition`目录。
 
 YOLO阈值默认沿用当前`0.30`；低阈值只负责保留候选，不等于单帧即可抓取。任务状态机仍要求track稳定、夹内审核连续稳定，并对危险/未知组合采取保守停车策略。
 
-识别窗口默认使用`420×336`的小窗口，保持5:4比例并移动到屏幕右下角，不覆盖主地图。`F`可在运行时切换全屏/小窗口；`Esc`只取消全屏或记录为忽略，不会结束任务；`Q`才退出识别任务。关闭窗口后识别和任务线程仍继续运行，但会停止显示。
+识别窗口默认使用`420×336`的小窗口，保持5:4比例并移动到屏幕右下角，不覆盖主地图；窗口只绘制必要的目标框，不再叠加状态、位姿、类别文字或调试面板。`F`可在运行时切换全屏/小窗口；`Esc`只取消全屏或记录为忽略，不会结束任务；`Q`才退出识别任务。关闭窗口后识别和任务线程仍继续运行，但会停止显示。
 
 识别循环实际按`--vision-fps`限频，显示与推理解耦。JPU/GStreamer错误会先记录并让规划线程发送可恢复`HOLD`，默认切换到软件JPEG解码重启一次；若仍失败，程序保持运行并持续安全停车、周期性重试。所有摄像头错误、重启、GUI异常和最终退出原因会记录到`competition_events.jsonl`，包括异常堆栈。
 
