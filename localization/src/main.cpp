@@ -389,6 +389,15 @@ double age_ms(std::uint64_t now_ns, std::uint64_t event_ns)
     return static_cast<double>(now_ns - event_ns) / 1000000.0;
 }
 
+struct RelayMissionSnapshot {
+    std::uint64_t tx_frames = 0;
+    bool have_last = false;
+    std::uint8_t last_command = 0;
+    std::uint8_t last_sequence = 0;
+    std::array<std::uint8_t, 8> last_payload{};
+    std::uint64_t last_tx_ns = 0;
+};
+
 const char *quality_name(std::uint8_t tracker_confidence,
                          std::uint8_t mapper_confidence,
                          bool t265_update_accepted)
@@ -404,12 +413,15 @@ bool write_stm_status_json(const std::string &path,
                            std::uint64_t relay_frames,
                            std::uint64_t relay_errors,
                            std::uint8_t relay_sequence,
-                           std::uint64_t relay_last_tx_ns)
+                           std::uint64_t relay_last_tx_ns,
+                           const RelayMissionSnapshot &mission)
 {
     if (path.empty()) return true;
     const std::uint64_t now_ns = monotonic_ns();
     const double relay_age_ms = relay_last_tx_ns == 0 ? -1.0 :
         static_cast<double>(now_ns - relay_last_tx_ns) / 1000000.0;
+    const double mission_age_ms = mission.last_tx_ns == 0 ? -1.0 :
+        static_cast<double>(now_ns - mission.last_tx_ns) / 1000000.0;
     const std::string temporary = path + ".tmp";
     std::ofstream file(temporary, std::ios::trunc);
     if (!file) return false;
@@ -427,7 +439,28 @@ bool write_stm_status_json(const std::string &path,
          << ", \"tx_errors\": " << relay_errors
          << ", \"last_sequence\": " << static_cast<unsigned>(relay_sequence)
          << ", \"last_tx_age_ms\": " << std::fixed << std::setprecision(3)
-         << relay_age_ms << "}\n"
+         << relay_age_ms
+         << ", \"mission_tx_frames\": " << mission.tx_frames
+         << ", \"last_mission_command\": ";
+    if (mission.have_last) {
+        file << static_cast<unsigned>(mission.last_command);
+    } else {
+        file << "null";
+    }
+    file << ", \"last_mission_sequence\": ";
+    if (mission.have_last) {
+        file << static_cast<unsigned>(mission.last_sequence);
+    } else {
+        file << "null";
+    }
+    file << ", \"last_mission_payload\": [";
+    for (std::size_t i = 0; i < mission.last_payload.size(); ++i) {
+        if (i != 0) file << ',';
+        file << static_cast<unsigned>(mission.last_payload[i]);
+    }
+    file << "]"
+         << ", \"last_mission_tx_monotonic_ns\": " << mission.last_tx_ns
+         << ", \"last_mission_tx_age_ms\": " << mission_age_ms << "}\n"
          << "}\n";
     file.close();
     return file && std::rename(temporary.c_str(), path.c_str()) == 0;
@@ -760,6 +793,8 @@ int main(int argc, char **argv)
         std::atomic<std::uint64_t> relay_tx_errors{0};
         std::atomic<std::uint8_t> relay_last_sequence{0};
         std::atomic<std::uint64_t> relay_last_tx_ns{0};
+        RelayMissionSnapshot relay_mission_snapshot;
+        std::mutex relay_mission_mutex;
         std::atomic<bool> navigation_command_active{false};
         std::atomic<std::uint8_t> navigation_command_code{0};
         std::atomic<std::uint16_t> navigation_remaining_mm{0};
@@ -779,12 +814,18 @@ int main(int argc, char **argv)
                     last_uart_ns.store(static_cast<std::int64_t>(monotonic_ns()),
                                        std::memory_order_relaxed);
                 }, [&](const omni::StmStatusFrame &status) {
+                    RelayMissionSnapshot mission_snapshot;
+                    {
+                        std::lock_guard<std::mutex> lock(relay_mission_mutex);
+                        mission_snapshot = relay_mission_snapshot;
+                    }
                     if (!write_stm_status_json(
                             options.stm_status_output_path, status,
                             relay_tx_frames.load(std::memory_order_relaxed),
                             relay_tx_errors.load(std::memory_order_relaxed),
                             relay_last_sequence.load(std::memory_order_relaxed),
-                            relay_last_tx_ns.load(std::memory_order_relaxed))) {
+                            relay_last_tx_ns.load(std::memory_order_relaxed),
+                            mission_snapshot)) {
                         status_write_errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
@@ -823,6 +864,16 @@ int main(int argc, char **argv)
                             relay_tx_frames.fetch_add(1, std::memory_order_relaxed);
                             relay_last_sequence.store(frame[3], std::memory_order_relaxed);
                             relay_last_tx_ns.store(monotonic_ns(), std::memory_order_relaxed);
+                            if (frame[2] == omni::kMissionCommandMessageType) {
+                                std::lock_guard<std::mutex> lock(relay_mission_mutex);
+                                relay_mission_snapshot.tx_frames += 1;
+                                relay_mission_snapshot.have_last = true;
+                                relay_mission_snapshot.last_command = frame[4];
+                                relay_mission_snapshot.last_sequence = frame[3];
+                                std::copy(frame.begin() + 4, frame.begin() + 12,
+                                          relay_mission_snapshot.last_payload.begin());
+                                relay_mission_snapshot.last_tx_ns = monotonic_ns();
+                            }
                         } else {
                             relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
                         }

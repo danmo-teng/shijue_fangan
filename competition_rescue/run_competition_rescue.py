@@ -54,11 +54,15 @@ from state_machine import (  # noqa: E402
     CompetitionMission,
     CompetitionOutput,
     CompetitionSettings,
+    CompetitionState,
     PoseSnapshot,
     StmSnapshot,
     TrackedCargo,
     VisionSnapshot,
 )
+
+
+TERMINATION_ABORT_TIMEOUT_S = 1.0
 
 
 def arguments() -> argparse.Namespace:
@@ -144,6 +148,9 @@ def load_stm(path: Path) -> StmSnapshot:
     if not data:
         return StmSnapshot()
     try:
+        relay = data.get("relay", {})
+        if not isinstance(relay, dict):
+            relay = {}
         timestamp = int(data["timestamp_monotonic_ns"])
         age_ms = max(0.0, (time.monotonic_ns() - timestamp) / 1_000_000.0)
         return StmSnapshot(
@@ -152,6 +159,38 @@ def load_stm(path: Path) -> StmSnapshot:
             age_ms=age_ms,
             fault_code=int(data.get("fault_code", 0)),
             acknowledged_sequence=int(data.get("acknowledged_sequence", 0)),
+            relay_mission_tx_frames=int(
+                relay.get("mission_tx_frames", relay.get("tx_frames", 0))
+            ),
+            relay_last_mission_command=(
+                None
+                if relay.get("last_mission_command") is None
+                else int(relay["last_mission_command"])
+            ),
+            relay_last_mission_sequence=(
+                None
+                if relay.get("last_mission_sequence") is None
+                else int(relay["last_mission_sequence"])
+            ),
+            relay_last_mission_payload=tuple(
+                int(value) for value in relay.get("last_mission_payload", [])
+            ),
+            relay_last_mission_tx_monotonic_ns=int(
+                relay.get("last_mission_tx_monotonic_ns", 0)
+            ),
+            relay_last_mission_tx_age_ms=float(
+                relay.get("last_mission_tx_age_ms", float("inf"))
+            ),
+            relay_tx_frames=int(relay.get("tx_frames", 0)),
+            relay_tx_errors=int(relay.get("tx_errors", 0)),
+            relay_last_sequence=(
+                None
+                if relay.get("last_sequence") is None
+                else int(relay["last_sequence"])
+            ),
+            relay_last_tx_age_ms=float(
+                relay.get("last_tx_age_ms", float("inf"))
+            ),
         )
     except (KeyError, TypeError, ValueError):
         return StmSnapshot()
@@ -311,8 +350,14 @@ def make_vision_snapshot(
         item for item in cargo
         if item.visible and (item.track_id in selected_ids or item.class_name in selected_classes)
     ]
-    delivery_inside = any(item.inside_safe_zone for item in delivery_items)
-    delivery_outside = any(not item.inside_safe_zone for item in delivery_items)
+    delivery_inside_ids = tuple(
+        item.track_id for item in delivery_items if item.inside_safe_zone
+    )
+    delivery_outside_ids = tuple(
+        item.track_id for item in delivery_items if not item.inside_safe_zone
+    )
+    delivery_inside = bool(delivery_inside_ids)
+    delivery_outside = bool(delivery_outside_ids)
     danger, side = danger_ahead(detections)
     return VisionSnapshot(
         frame_sequence=frame_sequence,
@@ -326,6 +371,8 @@ def make_vision_snapshot(
         delivery_target_found=bool(delivery_items),
         delivery_target_inside_safe_zone=delivery_inside,
         delivery_target_outside_safe_zone=delivery_outside,
+        delivery_target_inside_track_ids=delivery_inside_ids,
+        delivery_target_outside_track_ids=delivery_outside_ids,
     )
 
 
@@ -413,6 +460,22 @@ def stm_dict(stm: StmSnapshot) -> dict:
         "gripper_closed": stm.gripper_closed,
         "motors_active": stm.motors_active,
         "distance_done": stm.distance_done,
+        "relay_tx_frames": stm.relay_tx_frames,
+        "relay_tx_errors": stm.relay_tx_errors,
+        "relay_last_sequence": stm.relay_last_sequence,
+        "relay_last_tx_age_ms": (
+            stm.relay_last_tx_age_ms
+            if math.isfinite(stm.relay_last_tx_age_ms) else None
+        ),
+        "relay_mission_tx_frames": stm.relay_mission_tx_frames,
+        "relay_last_mission_command": stm.relay_last_mission_command,
+        "relay_last_mission_sequence": stm.relay_last_mission_sequence,
+        "relay_last_mission_payload": list(stm.relay_last_mission_payload),
+        "relay_last_mission_tx_monotonic_ns": stm.relay_last_mission_tx_monotonic_ns,
+        "relay_last_mission_tx_age_ms": (
+            stm.relay_last_mission_tx_age_ms
+            if math.isfinite(stm.relay_last_mission_tx_age_ms) else None
+        ),
     }
 
 
@@ -449,6 +512,17 @@ class CompetitionPlanner:
         self.diagnostics_period_s = 0.1
         self.last_diagnostics_s = -math.inf
         self.command_tx_suppression_reasons_logged: set[str] = set()
+        self.termination_attempted = False
+        self.termination_result: dict = {
+            "attempted": False,
+            "reason": "",
+            "command_file_written": False,
+            "transmitted": False,
+            "confirmed": False,
+            "confirmation_status": "unconfirmed",
+            "timeout": False,
+            "sequence": None,
+        }
         self.thread = threading.Thread(target=self._run, name="competition-planner", daemon=True)
 
     def set_vision(self, vision: VisionSnapshot) -> None:
@@ -467,16 +541,67 @@ class CompetitionPlanner:
         self.running = True
         self.thread.start()
 
-    def stop(self) -> None:
+    def stop(self, reason: str = "runner_exit") -> None:
+        if self.termination_attempted:
+            return
+        self.termination_attempted = True
         self.running = False
         if self.thread.is_alive():
             self.thread.join(timeout=2.0)
+        abort_command = CommandRequest(CMD_ABORT, self.mission._side_flags())
+        abort_sequence = self.sequence
+        abort_frame = abort_command.to_frame(abort_sequence)
+        before = load_stm(self.stm_path)
+        result = {
+            "attempted": True,
+            "reason": reason,
+            "command_file_written": False,
+            "transmitted": False,
+            "confirmed": False,
+            "timeout": False,
+            "sequence": abort_sequence,
+            "relay_baseline_mission_tx_frames": before.relay_mission_tx_frames,
+            "last_mission_command": None,
+            "last_mission_sequence": None,
+            "last_mission_tx_monotonic_ns": 0,
+            "stm_mode": before.mode,
+            "stm_age_ms": before.age_ms if math.isfinite(before.age_ms) else None,
+        }
         try:
-            # Never leave a motion or release command as the last relay frame
-            # when the vision window exits.
-            write_command_frame(self.command_path, self._hold_frame())
-        except OSError:
-            pass
+            write_command_frame(self.command_path, abort_frame)
+            self.sequence = (self.sequence + 1) & 0xFF
+            result["command_file_written"] = True
+        except OSError as error:
+            result["write_error"] = str(error)
+        if result["command_file_written"]:
+            deadline = time.monotonic() + TERMINATION_ABORT_TIMEOUT_S
+            while time.monotonic() < deadline:
+                current = load_stm(self.stm_path)
+                if (
+                    current.relay_mission_tx_frames > before.relay_mission_tx_frames and
+                    current.relay_last_mission_command == CMD_ABORT and
+                    current.relay_last_mission_payload == tuple(abort_frame[4:12])
+                ):
+                    result["transmitted"] = True
+                    result["last_mission_command"] = current.relay_last_mission_command
+                    result["last_mission_sequence"] = current.relay_last_mission_sequence
+                    result["last_mission_tx_monotonic_ns"] = current.relay_last_mission_tx_monotonic_ns
+                    result["stm_mode"] = current.mode
+                    result["stm_age_ms"] = current.age_ms if math.isfinite(current.age_ms) else None
+                    if (
+                        current.fresh and
+                        current.relay_last_mission_sequence is not None and
+                        current.acknowledged_sequence == current.relay_last_mission_sequence
+                    ):
+                        result["confirmed"] = True
+                        break
+                time.sleep(0.02)
+            if not result["confirmed"]:
+                result["timeout"] = True
+        if result["confirmed"]:
+            result["confirmation_status"] = "confirmed"
+        self.termination_result = result
+        self.events_log.write("termination_abort_result", result)
 
     def _hold_frame(self) -> bytes:
         from protocol import mission_frame
@@ -491,6 +616,30 @@ class CompetitionPlanner:
         else:
             write_command_frame(self.command_path, command.to_frame(self.sequence))
         self.sequence = (self.sequence + 1) & 0xFF
+
+    def _output_for_cycle(
+        self,
+        vision: VisionSnapshot,
+        pose: PoseSnapshot,
+        stm: StmSnapshot,
+        paused: bool,
+        now: float,
+    ) -> CompetitionOutput:
+        if paused and self.mission.state in {
+            CompetitionState.DISPERSE,
+            CompetitionState.FAULT,
+            CompetitionState.FINISHED,
+        }:
+            return self.mission.step(vision, pose, stm, now)
+        if paused:
+            return CompetitionOutput(
+                self.mission.state,
+                CommandRequest(CMD_HOLD),
+                "摄像头恢复中，保持车辆停车",
+                tx_policy="camera_pause_hold",
+                reason="camera_recovery",
+            )
+        return self.mission.step(vision, pose, stm, now)
 
     def _log_command_tx_suppression(self, output: CompetitionOutput) -> None:
         if not output.suppress_command_tx:
@@ -568,6 +717,23 @@ class CompetitionPlanner:
             "expected_stm_mode": list(
                 output.expected_stm_modes or self.mission.expected_stm_modes()
             ),
+            "stash_has_cargo": self.mission.stash_has_cargo,
+            "stash_checked": self.mission.stash_checked,
+            "delivery_outside_seen": self.mission.delivery_outside_seen,
+            "delivery_inside_hits": self.mission.delivery_inside_hits,
+            "delivery_window_frames": len(self.mission.delivery_window),
+            "delivery_window_misses": self.mission._delivery_window_misses(),
+            "delivery_window_started_s": self.mission.delivery_window_started_s,
+            "delivery_observation_attempt": self.mission.delivery_observation_attempt,
+            "delivery_observation_elapsed_s": self.mission._delivery_observation_elapsed(diagnostic_now),
+            "delivery_visual_frame_age_ms": self.mission.delivery_last_frame_age_ms,
+            "delivery_visual_confirmed": self.mission.delivery_visual_confirmed,
+            "delivery_timeout_reason": self.mission.delivery_timeout_reason,
+            "delivery_conflict_frames": self.mission.delivery_conflict_frames,
+            "pending_audit_stable": (
+                None if self.mission.pending_audit is None else self.mission.pending_audit.stable
+            ),
+            "pending_audit_tx_baseline": self.mission.pending_audit_tx_baseline,
             "pose": pose_dict(pose),
             "stm": stm_dict(stm),
             "vision": {
@@ -607,16 +773,7 @@ class CompetitionPlanner:
                 with self.lock:
                     vision = self.latest_vision
                     paused = self.paused
-                output = (
-                    CompetitionOutput(
-                        self.mission.state,
-                        CommandRequest(CMD_HOLD),
-                        "摄像头恢复中，保持车辆停车",
-                        tx_policy="camera_pause_hold",
-                        reason="camera_recovery",
-                    )
-                    if paused else self.mission.step(vision, pose, stm, started)
-                )
+                output = self._output_for_cycle(vision, pose, stm, paused, started)
                 self._log_command_tx_suppression(output)
                 self._publish(output)
                 state_changed = output.state != self.last_state
@@ -839,21 +996,29 @@ def main() -> int:
     # Configuration still goes through the existing atomic relay. The new
     # task runner never opens /dev/ttyS1 itself.
     red_side = side == "red"
-    for sequence in range(3):
-        write_command_frame(args.command_file, config_frame(sequence, 0x11 if red_side else 0x12, start_zone))
-        time.sleep(0.04)
-    events.write("competition_started", {
-        "side": side,
-        "start_zone": start_zone,
-        "initial_stash_enabled": not args.disable_initial_stash,
-        "score_threshold": args.score_thres,
-        "display_fps": args.display_fps,
-        "detection_log_fps": args.detection_log_fps,
-        "vision_fps": args.vision_fps,
-        "startup_pose": pose_dict(startup_pose),
-    })
-
-    camera_device = resolve_camera_device(args.device)
+    try:
+        for sequence in range(3):
+            write_command_frame(args.command_file, config_frame(sequence, 0x11 if red_side else 0x12, start_zone))
+            time.sleep(0.04)
+        events.write("competition_started", {
+            "side": side,
+            "start_zone": start_zone,
+            "initial_stash_enabled": not args.disable_initial_stash,
+            "score_threshold": args.score_thres,
+            "display_fps": args.display_fps,
+            "detection_log_fps": args.detection_log_fps,
+            "vision_fps": args.vision_fps,
+            "startup_pose": pose_dict(startup_pose),
+        })
+        camera_device = resolve_camera_device(args.device)
+    except Exception as error:
+        events.write("fatal_exception", {
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "traceback": traceback.format_exc(),
+        })
+        planner.stop("setup_exception")
+        raise
     camera_decoder = args.decoder
     camera_output_format = "nv12" if scaler is not None else "bgr"
     camera: LatestFrameCamera | None = None
@@ -1156,7 +1321,7 @@ def main() -> int:
         })
         raise
     finally:
-        planner.stop()
+        planner.stop(exit_reason)
         if camera is not None:
             camera.stop()
         if scaler is not None:
@@ -1172,7 +1337,8 @@ def main() -> int:
             "first_common_delivered": mission.first_common_delivered,
             "first_fault_code": mission.first_fault_code,
             "exit_reason": exit_reason,
-            "tx_policy": "termination_hold",
+            "tx_policy": "termination_abort",
+            "termination_abort": planner.termination_result,
             "inference_frames": inference_frames,
             "inference_total": inference_total,
             "camera_decoder": camera_decoder,
