@@ -130,12 +130,17 @@ def load_pose(path: Path) -> PoseSnapshot:
             yaw = float(pose["yaw_deg"])
         else:
             yaw = math.degrees(float(pose["yaw_rad"]))
+        navigation = data.get("navigation", {})
+        wheel_progress = navigation.get("wheel_progress_m")
         return PoseSnapshot(
             valid=data.get("quality") in {"GOOD", "DEGRADED"} and age_ms <= 250.0,
             x_m=float(pose["x_m"]),
             y_m=float(pose["y_m"]),
             yaw_deg=yaw % 360.0,
             age_ms=age_ms,
+            wheel_progress_m=(
+                None if wheel_progress is None else float(wheel_progress)
+            ),
         )
     except (KeyError, TypeError, ValueError):
         return PoseSnapshot()
@@ -240,10 +245,17 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
         if safe_bbox is not None:
             tx, ty, tw, th = detection.bbox
             sx, sy, sw, sh = safe_bbox
-            inside = (
+            center_inside = (
                 sx <= tx + tw * 0.5 <= sx + sw and
                 sy <= ty + th * 0.5 <= sy + sh
             )
+            overlap_width = max(0, min(tx + tw, sx + sw) - max(tx, sx))
+            overlap_height = max(0, min(ty + th, sy + sh) - max(ty, sy))
+            overlap_ratio = (
+                overlap_width * overlap_height / max(1, tw * th)
+            )
+            overlaps = overlap_ratio >= 0.25
+            inside = center_inside or overlaps
         result.append(
             TrackedCargo(
                 track_id=track.track_id,
@@ -312,16 +324,27 @@ def audit_from_cargo(
     )
 
 
-def danger_ahead(detections) -> tuple[bool, str]:
-    candidates = [item for item in detections if item.class_name == "danger_cyan"]
+def danger_ahead(
+    cargo: tuple[TrackedCargo, ...],
+    target: TrackedCargo | None,
+) -> tuple[bool, str]:
+    candidates = [
+        item for item in cargo
+        if item.class_name == "danger_cyan" and item.visible and item.hits >= 2
+    ]
     if not candidates:
         return False, "unknown"
     ahead = []
+    target_cx = IMAGE_WIDTH * 0.5 if target is None else target.center_px[0]
+    target_width = 0 if target is None else target.bbox[2]
     for item in candidates:
         x, y, width, height = item.bbox
         cx = x + width * 0.5
         cy = y + height * 0.5
-        if cy >= IMAGE_HEIGHT * 0.42 and abs(cx - IMAGE_WIDTH * 0.5) <= IMAGE_WIDTH * 0.38:
+        corridor_padding = max(width, target_width) * 0.5
+        corridor_min = min(IMAGE_WIDTH * 0.5, target_cx) - corridor_padding
+        corridor_max = max(IMAGE_WIDTH * 0.5, target_cx) + corridor_padding
+        if cy >= IMAGE_HEIGHT * 0.42 and corridor_min <= cx <= corridor_max:
             ahead.append((cx, cy))
     if not ahead:
         return False, "unknown"
@@ -337,6 +360,7 @@ def make_vision_snapshot(
     stm: StmSnapshot,
     mission: CompetitionMission,
     frame_sequence: int,
+    safe_zone_filter_blocked: bool = False,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     capture = tuple(item for item in cargo if item.visible and item.center_px[1] >= IMAGE_HEIGHT * 0.25)
@@ -344,10 +368,27 @@ def make_vision_snapshot(
     selected_ids = set(selected.track_ids) if selected is not None else set()
     selected_classes = set(selected.classes) if selected is not None else set()
     audit = audit_from_cargo(capture, selected_ids) if stm.claw_visible else None
-    delivery_items = [
+    target_candidates = [
         item for item in cargo
-        if item.visible and (item.track_id in selected_ids or item.class_name in selected_classes)
+        if item.visible and (
+            item.track_id == mission.locked_target_track_id or
+            item.track_id in selected_ids
+        )
     ]
+    approach_target = max(target_candidates, key=lambda item: item.area_px, default=None)
+    exact_delivery_items = [
+        item for item in cargo
+        if item.visible and item.track_id in selected_ids
+    ]
+    same_class_items = [
+        item for item in cargo
+        if item.visible and item.class_name in selected_classes
+    ]
+    delivery_items = (
+        exact_delivery_items
+        if exact_delivery_items else
+        same_class_items if len(same_class_items) == 1 else []
+    )
     delivery_inside_ids = tuple(
         item.track_id for item in delivery_items if item.inside_safe_zone
     )
@@ -356,7 +397,7 @@ def make_vision_snapshot(
     )
     delivery_inside = bool(delivery_inside_ids)
     delivery_outside = bool(delivery_outside_ids)
-    danger, side = danger_ahead(detections)
+    danger, side = danger_ahead(cargo, approach_target)
     return VisionSnapshot(
         frame_sequence=frame_sequence,
         observed_monotonic_s=time.monotonic(),
@@ -371,6 +412,7 @@ def make_vision_snapshot(
         delivery_target_outside_safe_zone=delivery_outside,
         delivery_target_inside_track_ids=delivery_inside_ids,
         delivery_target_outside_track_ids=delivery_outside_ids,
+        safe_zone_filter_blocked=safe_zone_filter_blocked,
     )
 
 
@@ -444,6 +486,7 @@ def pose_dict(pose: PoseSnapshot) -> dict:
         "y_m": pose.y_m,
         "yaw_deg": pose.yaw_deg,
         "age_ms": pose.age_ms if math.isfinite(pose.age_ms) else None,
+        "wheel_progress_m": pose.wheel_progress_m,
     }
 
 
@@ -627,6 +670,13 @@ class CompetitionPlanner:
             CompetitionState.DISPERSE,
             CompetitionState.FAULT,
             CompetitionState.FINISHED,
+            CompetitionState.DETOUR,
+            CompetitionState.INITIAL_RELEASE,
+            CompetitionState.INVALID_RELEASE,
+            CompetitionState.INVALID_BACKOFF,
+            CompetitionState.FIELD_STUCK_YIELD,
+            CompetitionState.FIELD_STUCK_ESCAPE,
+            CompetitionState.SAFE_ZONE_ESCAPE,
         }:
             return self.mission.step(vision, pose, stm, now)
         if paused:
@@ -717,6 +767,10 @@ class CompetitionPlanner:
             ),
             "stash_has_cargo": self.mission.stash_has_cargo,
             "stash_checked": self.mission.stash_checked,
+            "danger_event_latched": self.mission.danger_event_latched,
+            "detour_execution_seen": self.mission.detour_execution_seen,
+            "safe_zone_exit_pending": self.mission.safe_zone_exit_pending,
+            "stm_fault_waiting": self.mission.stm_fault_waiting,
             "delivery_outside_seen": self.mission.delivery_outside_seen,
             "delivery_inside_hits": self.mission.delivery_inside_hits,
             "delivery_window_frames": len(self.mission.delivery_window),
@@ -748,6 +802,7 @@ class CompetitionPlanner:
                 "delivery_target_found": vision.delivery_target_found,
                 "delivery_target_inside_safe_zone": vision.delivery_target_inside_safe_zone,
                 "delivery_target_outside_safe_zone": vision.delivery_target_outside_safe_zone,
+                "safe_zone_filter_blocked": vision.safe_zone_filter_blocked,
             },
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
@@ -1048,6 +1103,8 @@ def main() -> int:
     display_next = started
     next_vision = started
     camera_restarts = 0
+    recent_safe_bbox: tuple[int, int, int, int] | None = None
+    safe_zone_missing_frames = 0
 
     def create_camera() -> LatestFrameCamera:
         return LatestFrameCamera(
@@ -1218,9 +1275,30 @@ def main() -> int:
                     tracks = tracker.update(detection_objects)
                     stm = load_stm(args.stm_status)
                     safe_class = "safe_red" if side == "red" else "safe_blue"
-                    safe_bbox = safe_bbox_from_detections(detections, safe_class)
+                    detected_safe_bbox = safe_bbox_from_detections(detections, safe_class)
+                    if detected_safe_bbox is not None:
+                        recent_safe_bbox = detected_safe_bbox
+                        safe_zone_missing_frames = 0
+                        safe_bbox = detected_safe_bbox
+                        safe_zone_filter_blocked = False
+                    elif recent_safe_bbox is not None and safe_zone_missing_frames < 2:
+                        safe_zone_missing_frames += 1
+                        safe_bbox = None
+                        safe_zone_filter_blocked = True
+                    else:
+                        recent_safe_bbox = None
+                        safe_zone_missing_frames = 3
+                        safe_bbox = None
+                        safe_zone_filter_blocked = False
                     latest_vision = make_vision_snapshot(
-                        detections, tracks, localizer, safe_bbox, stm, mission, packet.frame_id
+                        detections,
+                        tracks,
+                        localizer,
+                        safe_bbox,
+                        stm,
+                        mission,
+                        packet.frame_id,
+                        safe_zone_filter_blocked,
                     )
                     planner.set_vision(latest_vision)
                     log_now = time.monotonic()
