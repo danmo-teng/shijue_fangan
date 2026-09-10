@@ -21,7 +21,6 @@ from protocol import (
     CMD_CARGO_AUDIT,
     CMD_CHANGE_LANE,
     CMD_DISPERSE_PILE,
-    CMD_ESCAPE_MANEUVER,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
@@ -33,7 +32,6 @@ from protocol import (
     CMD_ENTER_SAFE_ZONE,
     CMD_YIELD_BACKOFF,
     CMD_VALID,
-    escape_maneuver_frame,
     mission_frame,
 )
 
@@ -317,8 +315,6 @@ class CompetitionState(str, Enum):
     DETOUR = "DETOUR"
     INVALID_RELEASE = "INVALID_RELEASE"
     INVALID_BACKOFF = "INVALID_BACKOFF"
-    STUCK_YIELD = "STUCK_YIELD"
-    STUCK_ESCAPE = "STUCK_ESCAPE"
     FINISHED = "FINISHED"
     FAULT = "FAULT"
 
@@ -329,7 +325,6 @@ class CompetitionSettings:
     start_zone: int = 1
     initial_stash_enabled: bool = True
     initial_observe_s: float = 0.8
-    target_loss_s: float = 1.2
     audit_stable_frames: int = 3
     delivery_visual_frames: int = 5
     batch_radius_m: float = 0.55
@@ -340,19 +335,10 @@ class CompetitionSettings:
     return_zero_tolerance_m: float = 0.025
     vision_stale_s: float = 0.30
     search_empty_hold_s: float = 2.0
-    search_recovery_timeout_s: float = 3.0
-    disperse_timeout_s: float = 16.0
     disperse_limit: int = 2
-    stuck_timeout_s: float = 1.5
-    stuck_progress_m: float = 0.04
     yield_distance_m: float = 0.25
-    yield_timeout_s: float = 1.8
-    escape_spin_deg: int = 90
-    escape_lateral_m: float = 0.16
-    escape_timeout_s: float = 4.0
-    max_escape_attempts: int = 2
     detour_lateral_m: float = 0.25
-    detour_timeout_s: float = 3.0
+    stm_loss_abort_s: float = 2.0
     boundary_margin_m: float = 0.08
     fence_axial_tolerance_m: float = 0.035
     fence_lateral_tolerance_m: float = 0.060
@@ -377,16 +363,12 @@ class CompetitionSettings:
             raise ValueError("competition batch maximum must remain 3")
         if self.audit_stable_frames <= 0 or self.delivery_visual_frames <= 0:
             raise ValueError("audit frame counts must be positive")
-        if self.stuck_timeout_s <= 0 or self.stuck_progress_m <= 0:
-            raise ValueError("stuck thresholds must be positive")
         if self.center_stop_radius_m < 0 or self.return_zero_tolerance_m <= 0:
             raise ValueError("return distance thresholds are invalid")
         if self.vision_stale_s <= 0:
             raise ValueError("vision stale threshold must be positive")
-        if self.search_recovery_timeout_s <= 0:
-            raise ValueError("search recovery timeout must be positive")
-        if self.disperse_timeout_s <= 0:
-            raise ValueError("disperse timeout must be positive")
+        if self.stm_loss_abort_s <= 0:
+            raise ValueError("STM loss timeout must be positive")
         if self.near_material_max_distance_m <= 0:
             raise ValueError("near material distance must be positive")
         if self.boundary_margin_m < 0:
@@ -447,19 +429,6 @@ class CompetitionSettings:
 class CompetitionMission:
     """Upper-level competition strategy with lower-level safety handshakes."""
 
-    MOTION_STATES = frozenset(
-        {
-            CompetitionState.INITIAL_APPROACH,
-            CompetitionState.INITIAL_STASH_NAV,
-            CompetitionState.APPROACH,
-            CompetitionState.NAVIGATE,
-            CompetitionState.RETURN_CENTER,
-            CompetitionState.RETURN_STASH,
-            CompetitionState.BOUNDARY_RECOVERY,
-            CompetitionState.DETOUR,
-        }
-    )
-
     def __init__(self, settings: CompetitionSettings) -> None:
         self.settings = settings
         self.state = CompetitionState.WAIT_START
@@ -491,9 +460,7 @@ class CompetitionMission:
         self.invalid_release_side = "both"
         self.invalid_release_final = False
         self.initial_release_initial_ack: int | None = None
-        self.initial_release_started_s: float | None = None
         self.invalid_release_initial_ack: int | None = None
-        self.invalid_release_started_s: float | None = None
         self.cargo_recheck_pending = False
         self.delivery_outside_seen = False
         self.delivery_inside_hits = 0
@@ -503,25 +470,22 @@ class CompetitionMission:
         self.stash_checked = False
         self.disperse_attempts = 0
         self.disperse_command: CommandRequest | None = None
-        self.disperse_started_s: float | None = None
         self.disperse_initial_ack: int | None = None
-        self.target_lost_started_s: float | None = None
         self.target_last_seen_s: float | None = None
+        self.target_last_center_px: tuple[int, int] | None = None
+        self.target_last_area_px: int | None = None
+        self.target_last_class: str | None = None
+        self.target_missing_frames = 0
+        self.target_missing_frame_sequence: int | None = None
+        self.locked_target_track_id: int | None = None
+        self.approach_f407_active_seen = False
         self.last_selected_track_ids: tuple[int, ...] = ()
-        self.search_recovery_started_s: float | None = None
         self.search_recovery_resume_state: CompetitionState | None = None
         self.resume_state: CompetitionState | None = None
-        self.detour_started_s = 0.0
-        self.detour_attempts = 0
         self.detour_lateral_m = settings.detour_lateral_m
         self.detour_initial_ack: int | None = None
-        self.stuck_attempts = 0
-        self.motion_anchor: tuple[float, float] | None = None
-        self.motion_anchor_started_s = 0.0
-        self.stuck_started_s = 0.0
-        self.stuck_action_started_s: float | None = None
-        self.stuck_action_initial_ack: int | None = None
         self.invalid_backoff_initial_ack: int | None = None
+        self.stm_stale_started_s: float | None = None
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
         self.delivery_window_started_s: float | None = None
         self.delivery_last_new_frame_s: float | None = None
@@ -535,32 +499,22 @@ class CompetitionMission:
         if self.state != state:
             self.state = state
             self.state_started_s = now
-            self.motion_anchor = None
-            self.motion_anchor_started_s = now
-            self.target_lost_started_s = None
             self.audit_last_signature = None
             self.audit_last_frame_sequence = None
             self.audit_hits = 0
             if state != CompetitionState.WAIT_SEARCH_RECOVERY:
-                self.search_recovery_started_s = None
                 self.search_recovery_resume_state = None
-            if state not in {CompetitionState.STUCK_YIELD, CompetitionState.STUCK_ESCAPE}:
-                self.stuck_action_started_s = None
-                self.stuck_action_initial_ack = None
             if state != CompetitionState.INVALID_BACKOFF:
                 self.invalid_backoff_initial_ack = None
             if state != CompetitionState.DISPERSE:
                 self.disperse_command = None
-                self.disperse_started_s = None
                 self.disperse_initial_ack = None
             if state != CompetitionState.DETOUR:
                 self.detour_initial_ack = None
             if state != CompetitionState.INITIAL_RELEASE:
                 self.initial_release_initial_ack = None
-                self.initial_release_started_s = None
             if state != CompetitionState.INVALID_RELEASE:
                 self.invalid_release_initial_ack = None
-                self.invalid_release_started_s = None
             if state != CompetitionState.WAIT_STASH_SEARCH_HANDOFF:
                 self.stash_handoff_hold_tx_baseline = None
 
@@ -615,10 +569,6 @@ class CompetitionMission:
             return (STM_MODE_RELEASE_BOTH_DONE,)
         if self.state == CompetitionState.DETOUR:
             return (STM_MODE_LANE_DONE,)
-        if self.state == CompetitionState.STUCK_YIELD:
-            return (STM_MODE_YIELD_DONE,)
-        if self.state == CompetitionState.STUCK_ESCAPE:
-            return (STM_MODE_ESCAPE_DONE,)
         if self.state == CompetitionState.INVALID_BACKOFF:
             return (STM_MODE_YIELD_DONE,)
         if self.state == CompetitionState.RETURN_STASH:
@@ -640,44 +590,56 @@ class CompetitionMission:
         return max(0.0, (now - self.target_last_seen_s) * 1000.0)
 
     def _mark_target_seen(self, candidate: TrackedCargo, now: float) -> None:
-        self.target_lost_started_s = None
         self.target_last_seen_s = now
+        self.target_last_center_px = candidate.center_px
+        self.target_last_area_px = candidate.area_px
+        self.target_last_class = candidate.class_name
+        self.target_missing_frames = 0
+        self.target_missing_frame_sequence = None
+        previous_track_id = self.locked_target_track_id
+        self.locked_target_track_id = candidate.track_id
+        if (
+            self.selected_batch is not None and
+            previous_track_id is not None and
+            previous_track_id != candidate.track_id and
+            previous_track_id in self.selected_batch.track_ids
+        ):
+            track_ids = list(self.selected_batch.track_ids)
+            track_ids[track_ids.index(previous_track_id)] = candidate.track_id
+            self.selected_batch = replace(self.selected_batch, track_ids=tuple(track_ids))
         if self.selected_batch is not None:
             self.last_selected_track_ids = self.selected_batch.track_ids
         else:
             self.last_selected_track_ids = (candidate.track_id,)
+
+    def _select_batch(self, batch: CargoBatch) -> None:
+        self.selected_batch = batch
+        self.locked_target_track_id = None
+        self.target_last_center_px = None
+        self.target_last_area_px = None
+        self.target_last_class = None
+        self.target_missing_frames = 0
+        self.target_missing_frame_sequence = None
+        self.approach_f407_active_seen = False
+
+    def _clear_selected_batch(self) -> None:
+        self.selected_batch = None
+        self.locked_target_track_id = None
+        self.target_missing_frames = 0
+        self.target_missing_frame_sequence = None
+        self.approach_f407_active_seen = False
 
     def _begin_search_recovery(
         self, resume_state: CompetitionState, now: float
     ) -> None:
         if self.selected_batch is not None:
             self.last_selected_track_ids = self.selected_batch.track_ids
-        self.selected_batch = None
         self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
-        self.search_recovery_started_s = now
         self.search_recovery_resume_state = resume_state
-
-    def _recovery_base_ready(
-        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
-    ) -> tuple[bool, str]:
-        if not self._pose_fresh(pose):
-            return False, "pose_stale"
-        if vision.observed_monotonic_s is None or not self._vision_fresh(vision, now):
-            return False, "vision_stale"
-        if not stm.fresh:
-            return False, "stm_stale"
-        if stm.fault:
-            return False, "stm_fault"
-        if stm.gripper_closed:
-            return False, "gripper_closed"
-        if self.cargo_recheck_pending:
-            return False, "cargo_recheck_pending"
-        return True, ""
 
     def _search_recovery_output(
         self,
         vision: VisionSnapshot,
-        pose: PoseSnapshot,
         stm: StmSnapshot,
         now: float,
         *,
@@ -688,9 +650,9 @@ class CompetitionMission:
             STM_MODE_APPROACH_RECOVER,
             STM_MODE_SEARCH,
         )
-        ready, reason = self._recovery_base_ready(vision, pose, stm, now)
-        if ready and stm.mode == STM_MODE_SEARCH:
+        if stm.fresh and stm.mode == STM_MODE_SEARCH:
             resume = self.search_recovery_resume_state or CompetitionState.SEARCH
+            self._clear_selected_batch()
             self._set_state(resume, now)
             return CompetitionOutput(
                 self.state,
@@ -701,9 +663,34 @@ class CompetitionMission:
                 reason="f407_search_recovery_complete",
                 expected_stm_modes=expected,
             )
-        if ready and stm.mode in {
-            STM_MODE_APPROACH_TARGET,
-            STM_MODE_APPROACH_RECOVER,
+        candidate = (
+            self._target_for_batch(vision)
+            if self._vision_fresh(vision, now) and self.selected_batch is not None
+            else None
+        )
+        if candidate is not None and stm.fresh and stm.mode in {
+            STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER
+        }:
+            approach_state = (
+                CompetitionState.INITIAL_APPROACH
+                if self.search_recovery_resume_state == CompetitionState.INITIAL_OBSERVE
+                else CompetitionState.APPROACH
+            )
+            self._mark_target_seen(candidate, now)
+            self._set_state(approach_state, now)
+            return CompetitionOutput(
+                self.state,
+                self._approach_command(candidate),
+                "锁定目标重新出现，继续下位机靠近流程",
+                self.selected_batch,
+                event="approach_target_reassociated",
+                motion_expected=True,
+                tx_policy="normal_command",
+                reason="approach_target_reappeared",
+                expected_stm_modes=(STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER),
+            )
+        if stm.fresh and stm.mode in {
+            STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER
         }:
             return CompetitionOutput(
                 self.state,
@@ -716,30 +703,87 @@ class CompetitionMission:
                 reason="f407_approach_recovery",
                 expected_stm_modes=expected,
             )
-        elapsed = (
-            math.inf
-            if self.search_recovery_started_s is None
-            else now - self.search_recovery_started_s
+        return CompetitionOutput(
+            self.state,
+            None,
+            f"等待F407目标丢失恢复状态，当前mode={stm.mode}",
+            event=event,
+            suppress_command_tx=True,
+            suppression_reason="f407_search_recovery",
+            tx_policy="autonomous_recovery",
+            reason="f407_search_recovery_wait",
+            expected_stm_modes=expected,
         )
-        if elapsed >= self.settings.search_recovery_timeout_s:
-            self._set_state(CompetitionState.FAULT, now)
+
+    def _approach_output(
+        self,
+        vision: VisionSnapshot,
+        stm: StmSnapshot,
+        now: float,
+        *,
+        search_state: CompetitionState,
+        message: str,
+    ) -> CompetitionOutput:
+        vision_fresh = self._vision_fresh(vision, now)
+        candidate = self._target_for_batch(vision) if vision_fresh else None
+        if stm.mode in {STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER}:
+            self.approach_f407_active_seen = True
+        if candidate is not None:
+            self._mark_target_seen(candidate, now)
+            if stm.claw_visible:
+                self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+                return self._audit_output(vision, stm, now)
+            if stm.mode in {
+                STM_MODE_SEARCH,
+                STM_MODE_APPROACH_TARGET,
+                STM_MODE_APPROACH_RECOVER,
+            }:
+                return CompetitionOutput(
+                    self.state,
+                    self._approach_command(candidate),
+                    message,
+                    self.selected_batch,
+                    motion_expected=True,
+                    tx_policy="normal_command",
+                    reason="approach_target_fresh",
+                    expected_stm_modes=(STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER),
+                )
+        elif vision_fresh:
+            self._note_target_missing_frame(vision)
+
+        if stm.mode == STM_MODE_SEARCH and (
+            self.approach_f407_active_seen or self.target_missing_frames > 2
+        ):
+            self._clear_selected_batch()
+            self._set_state(search_state, now)
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_ABORT, self._side_flags()),
-                "F407目标丢失恢复超时，安全停车",
-                event="search_recovery_timeout",
-                tx_policy="fault_abort",
-                reason=reason or "search_recovery_timeout",
-                expected_stm_modes=expected,
+                self._hold(),
+                "F407已回到SEARCH，重新选择目标",
+                event="search_recovery_complete",
+                tx_policy="recovery_hold",
+                reason="f407_search_recovery_complete",
+                expected_stm_modes=(STM_MODE_SEARCH,),
+            )
+        if stm.mode == STM_MODE_APPROACH_RECOVER:
+            self._begin_search_recovery(search_state, now)
+            return self._search_recovery_output(
+                vision, stm, now, event="search_recovery_start"
             )
         return CompetitionOutput(
             self.state,
-            CommandRequest(CMD_HOLD, self._side_flags()),
-            f"等待目标丢失恢复条件（{reason or 'stm_mode_wait'}）",
-            event=event,
-            tx_policy="recovery_hold",
-            reason=reason or "search_recovery_wait",
-            expected_stm_modes=expected,
+            None,
+            "目标暂时不可见，停止更新APPROACH并等待F407处理",
+            self.selected_batch,
+            suppress_command_tx=True,
+            suppression_reason="f407_approach_frame_age",
+            tx_policy="autonomous_recovery",
+            reason="approach_target_temporarily_missing",
+            expected_stm_modes=(
+                STM_MODE_APPROACH_TARGET,
+                STM_MODE_APPROACH_RECOVER,
+                STM_MODE_SEARCH,
+            ),
         )
 
     def _fault_output(
@@ -767,20 +811,16 @@ class CompetitionMission:
 
     def _arm_disperse(self, stm: StmSnapshot, now: float) -> None:
         self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, self._side_flags())
-        self.disperse_started_s = now
         self.disperse_initial_ack = stm.acknowledged_sequence if stm.fresh else None
 
     def _arm_detour(self, stm: StmSnapshot, now: float) -> None:
-        self.detour_started_s = now
         self.detour_initial_ack = stm.acknowledged_sequence if stm.fresh else None
 
     def _arm_initial_release(self, stm: StmSnapshot, now: float) -> None:
-        self.initial_release_started_s = now
         self.initial_release_initial_ack = stm.acknowledged_sequence if stm.fresh else None
 
     def _arm_invalid_release(self, stm: StmSnapshot, now: float) -> None:
         if self.invalid_release_initial_ack is None:
-            self.invalid_release_started_s = now
             self.invalid_release_initial_ack = (
                 stm.acknowledged_sequence if stm.fresh else None
             )
@@ -908,20 +948,53 @@ class CompetitionMission:
     def _target_for_batch(self, vision: VisionSnapshot) -> TrackedCargo | None:
         if self.selected_batch is None:
             return None
-        candidates = [
-            item for item in self._visible_cargo(vision)
-            if item.track_id in self.selected_batch.track_ids
+        visible = self._visible_cargo(vision)
+        if self.locked_target_track_id is not None:
+            locked = next(
+                (item for item in visible if item.track_id == self.locked_target_track_id),
+                None,
+            )
+            if locked is not None:
+                return locked
+        selected = [
+            item for item in visible if item.track_id in self.selected_batch.track_ids
         ]
-        if not candidates:
-            fallback = [
-                item for item in self._visible_cargo(vision)
-                if item.class_name in self.selected_batch.classes
-            ]
-            # Never switch to an arbitrary same-class object while approaching
-            # a locked batch. Reacquire only when exactly one fallback exists;
-            # otherwise hold and let the loss timeout return to SEARCH.
-            candidates = fallback if len(fallback) == 1 else []
-        return max(candidates, key=lambda item: item.area_px, default=None)
+        if selected:
+            return max(selected, key=lambda item: item.area_px)
+        target_class = self.target_last_class
+        fallback = [
+            item for item in visible
+            if item.class_name == target_class or (
+                target_class is None and item.class_name in self.selected_batch.classes
+            )
+        ]
+        if len(fallback) == 1:
+            return fallback[0]
+        if not fallback or self.target_last_center_px is None:
+            return None
+
+        last_area = max(1, self.target_last_area_px or 1)
+        last_x, last_y = self.target_last_center_px
+
+        def continuity_score(item: TrackedCargo) -> float:
+            cx, cy = item.center_px
+            centre_distance = math.hypot(cx - last_x, cy - last_y)
+            size_scale = max(16.0, math.sqrt(last_area), math.sqrt(max(1, item.area_px)))
+            area_ratio = max(1, item.area_px) / last_area
+            return centre_distance / size_scale + abs(math.log(area_ratio))
+
+        ranked = sorted(fallback, key=lambda item: (continuity_score(item), -item.area_px))
+        if continuity_score(ranked[1]) - continuity_score(ranked[0]) < 0.35:
+            return None
+        return ranked[0]
+
+    def _note_target_missing_frame(self, vision: VisionSnapshot) -> None:
+        if vision.frame_sequence <= 0:
+            return
+        if vision.frame_sequence == self.target_missing_frame_sequence:
+            return
+        self.target_missing_frame_sequence = vision.frame_sequence
+        self.target_missing_frames += 1
 
     def _is_isolated(self, target: TrackedCargo, cargo: Iterable[TrackedCargo]) -> bool:
         neighbours = [item for item in cargo if item.track_id != target.track_id]
@@ -1393,13 +1466,20 @@ class CompetitionMission:
                 tx_policy="normal_command",
                 reason="delivery_reobserve",
             )
-        self.delivery_timeout_reason = "second_observation_timeout"
-        return self._fault_output(
-            now,
-            "投送视觉确认两次观察均超时，安全停车",
-            event="delivery_verify_timeout",
+        first_warning = self.delivery_timeout_reason != "observation_wait_extended"
+        self.delivery_timeout_reason = "observation_wait_extended"
+        return CompetitionOutput(
+            self.state,
+            CommandRequest(
+                CMD_ENTER_SAFE_ZONE,
+                self._side_flags() | (1 << 1) | (1 << 2),
+                aux=round(self.settings.safe_heading_deg * 100.0) % 36000,
+            ),
+            "投送视觉仍未确认，保持mode=15原地等待，不伪造完成",
+            self.selected_batch,
+            event="delivery_verify_wait_extended" if first_warning else "",
+            tx_policy="normal_command",
             reason=self.delivery_timeout_reason,
-            stm=stm,
         )
 
     def _target_point(self) -> tuple[float, float]:
@@ -1622,7 +1702,6 @@ class CompetitionMission:
         self.resume_state = self.state
         self._set_state(CompetitionState.DETOUR, now)
         self._arm_detour(stm, now)
-        self.detour_attempts += 1
         lateral = self.settings.detour_lateral_m
         if vision.danger_side == "right":
             lateral = abs(lateral)
@@ -1658,22 +1737,6 @@ class CompetitionMission:
     def _disperse_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
-        if not stm.fresh:
-            return self._fault_output(
-                now,
-                "打散执行期间STM状态过期，安全终止",
-                event="disperse_stm_stale",
-                reason="disperse_stm_stale",
-                stm=stm,
-            )
-        if stm.gripper_closed:
-            return self._fault_output(
-                now,
-                "打散执行期间夹爪闭合，安全终止",
-                event="disperse_gripper_fault",
-                reason="disperse_gripper_closed",
-                stm=stm,
-            )
         if self._fresh_mode_after(
             stm, STM_MODE_DISPERSE_DONE, self.disperse_initial_ack
         ):
@@ -1686,19 +1749,6 @@ class CompetitionMission:
                 tx_policy="hold",
                 reason="disperse_done_acknowledged",
             )
-        elapsed = (
-            math.inf
-            if self.disperse_started_s is None
-            else now - self.disperse_started_s
-        )
-        if elapsed >= self.settings.disperse_timeout_s:
-            return self._fault_output(
-                now,
-                "打散超过16秒保护时间，安全终止",
-                event="disperse_timeout",
-                reason="disperse_timeout_16s",
-                stm=stm,
-            )
         assert self.disperse_command is not None
         return CompetitionOutput(
             self.state,
@@ -1708,15 +1758,6 @@ class CompetitionMission:
             tx_policy="disperse_command",
             reason="disperse_visual_not_required_during_action",
             expected_stm_modes=(STM_MODE_DISPERSE_DONE,),
-        )
-
-    def _motion_progress(self, pose: PoseSnapshot, now: float) -> tuple[float, float]:
-        if self.motion_anchor is None:
-            self.motion_anchor = (pose.x_m, pose.y_m)
-            self.motion_anchor_started_s = now
-            return 0.0, 0.0
-        return _distance(self.motion_anchor, (pose.x_m, pose.y_m)), max(
-            0.0, now - self.motion_anchor_started_s
         )
 
     @staticmethod
@@ -1730,164 +1771,13 @@ class CompetitionMission:
             stm.acknowledged_sequence != initial_ack
         )
 
-    def _arm_stuck_action(self, stm: StmSnapshot, now: float) -> None:
-        self.stuck_action_started_s = now
-        self.stuck_action_initial_ack = (
-            stm.acknowledged_sequence if stm.fresh else None
-        )
-
-    def _stuck_yield_command(self) -> CommandRequest:
-        return CommandRequest(
-            CMD_YIELD_BACKOFF,
-            CMD_VALID,
-            -round(self.settings.yield_distance_m * 1000.0),
-            0,
-        )
-
-    def _stuck_escape_command(self) -> CommandRequest:
-        return CommandRequest(
-            CMD_ESCAPE_MANEUVER,
-            CMD_VALID,
-            self.settings.escape_spin_deg * (-1 if self.stuck_attempts % 2 else 1),
-            round(self.settings.escape_lateral_m * 1000.0),
-        )
-
-    def _stuck_override(
-        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
-    ) -> CompetitionOutput | None:
-        if self.state == CompetitionState.STUCK_YIELD:
-            moved = self._motion_progress(pose, now)[0] if self._pose_fresh(pose) else 0.0
-            if self._pose_fresh(pose) and self._fresh_mode_after(
-                stm, STM_MODE_YIELD_DONE, self.stuck_action_initial_ack
-            ):
-                if moved >= self.settings.stuck_progress_m:
-                    resume = self.resume_state or CompetitionState.SEARCH
-                    self._set_state(resume, now)
-                    return None
-                self._set_state(CompetitionState.STUCK_ESCAPE, now)
-                self.stuck_started_s = now
-                self.motion_anchor = (pose.x_m, pose.y_m) if self._pose_fresh(pose) else None
-                self._arm_stuck_action(stm, now)
-                return CompetitionOutput(
-                    self.state,
-                    self._stuck_escape_command(),
-                    "退让后仍无位移，执行旋转+横移脱困",
-                    self.selected_batch,
-                    event="stuck_escape",
-                    motion_expected=True,
-                    stuck_phase="escape",
-                )
-            if (
-                self.stuck_action_started_s is not None and
-                now - self.stuck_action_started_s >= self.settings.yield_timeout_s
-            ):
-                return self._fault_output(
-                    now,
-                    "退让动作未收到本次新鲜完成状态，安全终止",
-                    event="stuck_yield_timeout",
-                    reason="yield_completion_timeout",
-                    stm=stm,
-                )
-            return CompetitionOutput(
-                self.state,
-                self._stuck_yield_command(),
-                "等待本次退让完成；未收到新鲜且已确认的mode=30",
-                self.selected_batch,
-                motion_expected=True,
-                stuck_phase="yield",
-            )
-        if self.state == CompetitionState.STUCK_ESCAPE:
-            moved = self._motion_progress(pose, now)[0] if self._pose_fresh(pose) else 0.0
-            if self._pose_fresh(pose) and self._fresh_mode_after(
-                stm, STM_MODE_ESCAPE_DONE, self.stuck_action_initial_ack
-            ):
-                if moved >= self.settings.stuck_progress_m:
-                    resume = self.resume_state or CompetitionState.SEARCH
-                    self._set_state(resume, now)
-                    return None
-                self.stuck_attempts += 1
-                if self.stuck_attempts >= self.settings.max_escape_attempts:
-                    self._set_state(CompetitionState.FAULT, now)
-                    return CompetitionOutput(
-                        self.state,
-                        CommandRequest(CMD_ABORT, self._side_flags()),
-                        "脱困尝试后仍无位移，进入安全停车",
-                        self.selected_batch,
-                        event="stuck_fault",
-                        stuck_phase="fault",
-                    )
-                self._set_state(CompetitionState.STUCK_YIELD, now)
-                self.stuck_started_s = now
-                self.motion_anchor = (pose.x_m, pose.y_m) if self._pose_fresh(pose) else None
-                self._arm_stuck_action(stm, now)
-                return CompetitionOutput(
-                    self.state,
-                    self._stuck_yield_command(),
-                    "第一次脱困后仍未脱离，重新退让",
-                    self.selected_batch,
-                    event="stuck_retry_yield",
-                    motion_expected=True,
-                    stuck_phase="yield",
-                )
-            if (
-                self.stuck_action_started_s is not None and
-                now - self.stuck_action_started_s >= self.settings.escape_timeout_s
-            ):
-                return self._fault_output(
-                    now,
-                    "脱困动作未收到本次新鲜完成状态，安全终止",
-                    event="stuck_escape_timeout",
-                    reason="escape_completion_timeout",
-                    stm=stm,
-                )
-            return CompetitionOutput(
-                self.state,
-                self._stuck_escape_command(),
-                "等待本次脱困完成；未收到新鲜且已确认的mode=31",
-                self.selected_batch,
-                motion_expected=True,
-                stuck_phase="escape",
-            )
-        if (
-            self.state == CompetitionState.RETURN_STASH and
-            self._pose_fresh(pose) and
-            _distance((pose.x_m, pose.y_m), self.settings.stash_point)
-            <= self.settings.return_zero_tolerance_m
-        ):
-            return None
-        if (
-            self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH}
-            and (
-                self.target_lost_started_s is not None or
-                self._target_for_batch(vision) is None
-            )
-        ):
-            return None
-        if self.state not in self.MOTION_STATES or not self._pose_fresh(pose):
-            return None
-        moved, elapsed = self._motion_progress(pose, now)
-        command_active = stm.fresh and (stm.motors_active or stm.mode in {
-            STM_MODE_APPROACH_TARGET,
-            STM_MODE_NAVIGATE,
-        })
-        if command_active and elapsed >= self.settings.stuck_timeout_s and moved < self.settings.stuck_progress_m:
-            self.resume_state = self.state
-            self._set_state(CompetitionState.STUCK_YIELD, now)
-            self.stuck_started_s = now
-            self.motion_anchor = (pose.x_m, pose.y_m)
-            self._arm_stuck_action(stm, now)
-            return CompetitionOutput(
-                self.state,
-                self._stuck_yield_command(),
-                "超过设定时间定位不动，疑似碰撞或物资卡住，先退让",
-                self.selected_batch,
-                event="stuck_detected",
-                motion_expected=True,
-                stuck_phase="yield",
-            )
-        return None
-
-    def _navigate(self, pose: PoseSnapshot, stm: StmSnapshot, now: float) -> CompetitionOutput:
+    def _navigate(
+        self,
+        vision: VisionSnapshot,
+        pose: PoseSnapshot,
+        stm: StmSnapshot,
+        now: float,
+    ) -> CompetitionOutput:
         if self.selected_batch is None:
             self._set_state(CompetitionState.SEARCH, now)
             return CompetitionOutput(self.state, self._hold(), "没有锁定批次，返回搜索")
@@ -1926,6 +1816,16 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_NAVIGATE,),
                 )
             if reached:
+                if not self._vision_fresh(vision, now):
+                    return CompetitionOutput(
+                        self.state,
+                        CommandRequest(CMD_HOLD, self._side_flags()),
+                        "到达藏点但视觉暂时过期，等待新鲜帧后再释放",
+                        self.selected_batch,
+                        tx_policy="hold",
+                        reason="initial_stash_release_vision_stale",
+                        expected_stm_modes=(STM_MODE_NAVIGATE,),
+                    )
                 self._set_state(CompetitionState.INITIAL_RELEASE, now)
                 self._arm_initial_release(stm, now)
                 return CompetitionOutput(self.state, CommandRequest(CMD_RELEASE_BOTH, self._side_flags()), "到达临时藏物资点，释放整批物资", self.selected_batch, event="stash_arrived")
@@ -1950,11 +1850,17 @@ class CompetitionMission:
         now: float,
     ) -> CompetitionOutput:
         if not self._vision_fresh(vision, now):
-            return CompetitionOutput(self.state, self._hold(), "视觉结果已超时，保持停车观察")
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "视觉结果暂时过期，暂停新目标决策并维持SEARCH心跳",
+                tx_policy="hold",
+                reason="search_vision_stale",
+            )
         if not self.first_common_delivered:
             candidate = self._choose_initial_green(vision)
             if candidate is not None:
-                self.selected_batch = CargoBatch((candidate.track_id,), ("green_supply",), "material")
+                self._select_batch(CargoBatch((candidate.track_id,), ("green_supply",), "material"))
                 self._reset_delivery_evidence()
                 self._mark_target_seen(candidate, now)
                 self._set_state(CompetitionState.APPROACH, now)
@@ -1984,7 +1890,7 @@ class CompetitionMission:
             batch = self._choose_next_batch(vision)
             if batch is not None:
                 self.stash_checked = False
-                self.selected_batch = batch
+                self._select_batch(batch)
                 self._reset_delivery_evidence()
                 self.last_selected_track_ids = batch.track_ids
                 self._set_state(CompetitionState.APPROACH, now)
@@ -2040,16 +1946,52 @@ class CompetitionMission:
         if self.state_started_s == 0.0:
             self.state_started_s = now
         self._update_delivery_observation(vision, now)
+        if self.state == CompetitionState.FAULT:
+            return CompetitionOutput(
+                self.state,
+                CommandRequest(CMD_ABORT, self._side_flags()),
+                "任务故障，发送ABORT安全停车",
+                tx_policy="fault_abort",
+                reason="mission_fault_abort",
+            )
+        if self.state == CompetitionState.FINISHED:
+            return CompetitionOutput(
+                self.state,
+                CommandRequest(CMD_ABORT, self._side_flags()),
+                "任务终止，发送ABORT安全停车",
+                tx_policy="fault_abort",
+                reason="mission_finished_abort",
+            )
+        if stm.fresh:
+            self.stm_stale_started_s = None
+        else:
+            if self.stm_stale_started_s is None:
+                self.stm_stale_started_s = now
+            if now - self.stm_stale_started_s >= self.settings.stm_loss_abort_s:
+                return self._fault_output(
+                    now,
+                    "STM持续失联，发送ABORT安全停车",
+                    event="stm_communication_lost",
+                    reason="stm_communication_lost",
+                    stm=stm,
+                )
+            return CompetitionOutput(
+                self.state,
+                None,
+                "STM状态暂时过期，停止发布新任务命令",
+                self.selected_batch,
+                suppress_command_tx=True,
+                suppression_reason="stm_temporarily_stale",
+                tx_policy="communication_wait",
+                reason="stm_temporarily_stale",
+                expected_stm_modes=self.expected_stm_modes(),
+            )
         if stm.fault:
             if self.first_fault_code is None:
                 self.first_fault_code = stm.fault_code
             if self.state != CompetitionState.FAULT:
                 self._set_state(CompetitionState.FAULT, now)
                 return CompetitionOutput(self.state, CommandRequest(CMD_ABORT, self._side_flags()), "F407报告故障，安全停车", event="stm_fault")
-
-        stuck = self._stuck_override(vision, pose, stm, now)
-        if stuck is not None:
-            return stuck
 
         if self.state == CompetitionState.WAIT_START:
             if self._start_ready(pose, stm):
@@ -2067,9 +2009,9 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.INITIAL_OBSERVE:
-            pile = self._pile_batch(vision)
+            pile = self._pile_batch(vision) if self._vision_fresh(vision, now) else None
             if pile is not None:
-                self.selected_batch = pile
+                self._select_batch(pile)
                 self._reset_delivery_evidence()
                 self.last_selected_track_ids = pile.track_ids
                 self._set_state(CompetitionState.INITIAL_APPROACH, now)
@@ -2082,60 +2024,34 @@ class CompetitionMission:
             return CompetitionOutput(self.state, self._hold(), "观察中心物资堆")
 
         if self.state == CompetitionState.INITIAL_APPROACH:
-            candidate = self._target_for_batch(vision)
-            if candidate is None:
-                if self.target_lost_started_s is None:
-                    self.target_lost_started_s = now
-                if now - self.target_lost_started_s > self.settings.target_loss_s:
-                    self._begin_search_recovery(CompetitionState.INITIAL_OBSERVE, now)
-                    return self._search_recovery_output(
-                        vision, pose, stm, now, event="search_recovery_start"
-                    )
-            else:
-                self._mark_target_seen(candidate, now)
-                if stm.claw_visible:
-                    self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-                    return self._audit_output(vision, stm, now)
-            return CompetitionOutput(self.state, self._approach_command(candidate), "靠近中心物资堆", self.selected_batch, motion_expected=True)
+            return self._approach_output(
+                vision,
+                stm,
+                now,
+                search_state=CompetitionState.INITIAL_OBSERVE,
+                message="靠近中心物资堆",
+            )
 
         if self.state == CompetitionState.SEARCH:
             self.search_empty_started_s = None if self._visible_cargo(vision) else self.search_empty_started_s
             return self._handle_search(vision, pose, stm, now)
 
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
-            return self._search_recovery_output(vision, pose, stm, now)
+            return self._search_recovery_output(vision, stm, now)
 
         if self.state == CompetitionState.DISPERSE:
             return self._disperse_output(vision, stm, now)
 
         if self.state == CompetitionState.APPROACH:
-            if vision.danger_ahead:
-                if not stm.fresh:
-                    return CompetitionOutput(
-                        self.state,
-                        CommandRequest(CMD_HOLD, self._side_flags()),
-                        "危险换道等待新鲜STM状态",
-                        self.selected_batch,
-                        tx_policy="hold",
-                        reason="detour_start_stm_stale",
-                        expected_stm_modes=(STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER),
-                    )
+            if self._vision_fresh(vision, now) and vision.danger_ahead:
                 return self._start_detour(vision, stm, now)
-            candidate = self._target_for_batch(vision)
-            if candidate is None:
-                if self.target_lost_started_s is None:
-                    self.target_lost_started_s = now
-                if now - self.target_lost_started_s > self.settings.target_loss_s:
-                    self._begin_search_recovery(CompetitionState.SEARCH, now)
-                    return self._search_recovery_output(
-                        vision, pose, stm, now, event="search_recovery_start"
-                    )
-            else:
-                self._mark_target_seen(candidate, now)
-                if stm.claw_visible:
-                    self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-                    return self._audit_output(vision, stm, now)
-            return CompetitionOutput(self.state, self._approach_command(candidate), "靠近锁定批次", self.selected_batch, motion_expected=True)
+            return self._approach_output(
+                vision,
+                stm,
+                now,
+                search_state=CompetitionState.SEARCH,
+                message="靠近锁定批次",
+            )
 
         if self.state == CompetitionState.CAPTURE_AUDIT:
             return self._audit_output(vision, stm, now)
@@ -2148,7 +2064,7 @@ class CompetitionMission:
                 self.cargo_recheck_pending = False
                 self._set_state(CompetitionState.INITIAL_STASH_NAV if self.selected_batch and self.selected_batch.initial_stash else CompetitionState.NAVIGATE, now)
                 self._reset_delivery_evidence()
-                return self._navigate(pose, stm, now)
+                return self._navigate(vision, pose, stm, now)
             return CompetitionOutput(self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()), "等待下位机完成合爪", self.selected_batch)
 
         if self.state == CompetitionState.INVALID_RELEASE:
@@ -2185,7 +2101,7 @@ class CompetitionMission:
                 stm, STM_MODE_YIELD_DONE, self.invalid_backoff_initial_ack
             ):
                 if self.invalid_release_final:
-                    self.selected_batch = None
+                    self._clear_selected_batch()
                     self.cargo_recheck_pending = False
                     self._set_state(CompetitionState.SEARCH, now)
                     return CompetitionOutput(self.state, self._hold(), "复审仍非法，双爪物资已释放并后退，退回搜索")
@@ -2206,22 +2122,13 @@ class CompetitionMission:
             if pose.valid and abs(pose.x_m) <= limit and abs(pose.y_m) <= limit:
                 self._set_state(self.resume_state or CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), "已回到场地安全区域，恢复原任务")
-            if now - self.state_started_s >= 3.0:
+            if self._outside_field(pose):
                 self._set_state(CompetitionState.FAULT, now)
-                return CompetitionOutput(self.state, CommandRequest(CMD_ABORT, self._side_flags()), "场地边缘恢复失败，安全停车", self.selected_batch, event="boundary_recovery_fault")
+                return CompetitionOutput(self.state, CommandRequest(CMD_ABORT, self._side_flags()), "确认车辆越界，安全停车", self.selected_batch, event="boundary_fault")
             return self._boundary_recovery_output(pose, now)
 
         if self.state == CompetitionState.RETURN_STASH:
-            if vision.danger_ahead:
-                if not stm.fresh:
-                    return CompetitionOutput(
-                        self.state,
-                        CommandRequest(CMD_HOLD, self._side_flags()),
-                        "藏点换道等待新鲜STM状态",
-                        tx_policy="hold",
-                        reason="detour_start_stm_stale",
-                        expected_stm_modes=(STM_MODE_NAVIGATE,),
-                    )
+            if self._vision_fresh(vision, now) and vision.danger_ahead:
                 return self._start_detour(vision, stm, now)
             return self._return_stash_output(pose, stm, now)
 
@@ -2229,19 +2136,13 @@ class CompetitionMission:
             return self._stash_search_handoff_output(stm, now)
 
         if self.state in {CompetitionState.INITIAL_STASH_NAV, CompetitionState.NAVIGATE}:
-            if vision.danger_ahead and not (self.selected_batch and self.selected_batch.initial_stash):
-                if not stm.fresh:
-                    return CompetitionOutput(
-                        self.state,
-                        CommandRequest(CMD_HOLD, self._side_flags()),
-                        "危险换道等待新鲜STM状态",
-                        self.selected_batch,
-                        tx_policy="hold",
-                        reason="detour_start_stm_stale",
-                        expected_stm_modes=(STM_MODE_NAVIGATE,),
-                    )
+            if (
+                self._vision_fresh(vision, now) and
+                vision.danger_ahead and
+                not (self.selected_batch and self.selected_batch.initial_stash)
+            ):
                 return self._start_detour(vision, stm, now)
-            return self._navigate(pose, stm, now)
+            return self._navigate(vision, pose, stm, now)
 
         if self.state == CompetitionState.INITIAL_RELEASE:
             if self._fresh_mode_after(
@@ -2249,7 +2150,7 @@ class CompetitionMission:
             ):
                 self.initial_stash_done = True
                 self.stash_has_cargo = True
-                self.selected_batch = None
+                self._clear_selected_batch()
                 self._set_state(CompetitionState.RETURN_CENTER, now)
                 return self._return_center_output(pose, now, "临时物资已放下，返回中心寻找首件绿色")
             return CompetitionOutput(
@@ -2268,14 +2169,6 @@ class CompetitionMission:
             ):
                 self._set_state(self.resume_state or CompetitionState.NAVIGATE, now)
                 return CompetitionOutput(self.state, self._hold(), "换道完成，恢复原任务路线", self.selected_batch, event="detour_done")
-            if now - self.detour_started_s >= self.settings.detour_timeout_s:
-                return self._fault_output(
-                    now,
-                    "换道动作未收到本次新鲜完成状态，安全终止",
-                    event="detour_timeout",
-                    reason="detour_completion_timeout",
-                    stm=stm,
-                )
             return CompetitionOutput(
                 self.state,
                 CommandRequest(CMD_CHANGE_LANE, CMD_VALID, round(self.detour_lateral_m * 1000.0), 0),
@@ -2337,11 +2230,11 @@ class CompetitionMission:
 
         if self.state == CompetitionState.TASK_COMPLETE:
             if stm.fresh and stm.mode in {STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER}:
-                self.selected_batch = None
+                self._clear_selected_batch()
                 self._set_state(CompetitionState.RETURN_CENTER, now)
                 return self._return_center_output(pose, now, "下位机已完成投送，返回中心区域")
             if stm.fresh and stm.mode == STM_MODE_SEARCH:
-                self.selected_batch = None
+                self._clear_selected_batch()
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), "下位机已完成投送并进入SEARCH")
             return CompetitionOutput(self.state, CommandRequest(CMD_TASK_COMPLETE, self._side_flags()), "等待下位机张爪并退出安全区")
@@ -2351,23 +2244,5 @@ class CompetitionMission:
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), f"回到中心搜索区，已完成{self.delivery_count}件")
             return self._return_center_output(pose, now, "持续返回中心")
-
-        if self.state == CompetitionState.FINISHED:
-            return CompetitionOutput(
-                self.state,
-                CommandRequest(CMD_ABORT, self._side_flags()),
-                "任务终止，发送ABORT安全停车",
-                tx_policy="fault_abort",
-                reason="mission_finished_abort",
-            )
-
-        if self.state == CompetitionState.FAULT:
-            return CompetitionOutput(
-                self.state,
-                CommandRequest(CMD_ABORT, self._side_flags()),
-                "任务故障，发送ABORT安全停车",
-                tx_policy="fault_abort",
-                reason="mission_fault_abort",
-            )
 
         return CompetitionOutput(self.state, self._hold(), "未处理状态，保持停车")

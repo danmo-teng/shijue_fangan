@@ -106,9 +106,7 @@ def arguments() -> argparse.Namespace:
         action="store_true",
         help="debug only: skip the configured opening temporary-relocation strategy",
     )
-    parser.add_argument("--stuck-timeout", type=float, default=1.5)
     parser.add_argument("--yield-distance-mm", type=float, default=250.0)
-    parser.add_argument("--escape-attempts", type=int, default=2)
     parser.add_argument("--camera-retries", type=int, default=1)
     return parser.parse_args()
 
@@ -898,10 +896,10 @@ def validate_args(args: argparse.Namespace) -> None:
         args.detection_log_fps <= 0
     ):
         raise ValueError("FPS必须为正数")
-    if args.startup_timeout <= 0 or args.stuck_timeout <= 0:
-        raise ValueError("startup/stuck timeout必须为正数")
-    if args.yield_distance_mm <= 0 or args.escape_attempts <= 0:
-        raise ValueError("退让距离和脱困次数必须为正数")
+    if args.startup_timeout <= 0:
+        raise ValueError("startup timeout必须为正数")
+    if args.yield_distance_mm <= 0:
+        raise ValueError("退让距离必须为正数")
     if args.camera_retries < 0:
         raise ValueError("camera-retries不能为负数")
 
@@ -979,9 +977,7 @@ def main() -> int:
         side=side,
         start_zone=start_zone,
         initial_stash_enabled=not args.disable_initial_stash,
-        stuck_timeout_s=args.stuck_timeout,
         yield_distance_m=args.yield_distance_mm / 1000.0,
-        max_escape_attempts=args.escape_attempts,
     ))
     planner = CompetitionPlanner(
         mission,
