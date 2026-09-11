@@ -292,8 +292,8 @@ def audit_from_cargo(
     all_names = {item.class_name for item in visible}
     has_danger = "danger_cyan" in all_names
     has_injury = "injured_orange" in all_names
-    # Match F407's hard rule: any injury count other than exactly one is not
-    # a legal single-cargo audit, even during the temporary initial stash.
+    # Keep injury mixing in the audit for formal-flow validation. The
+    # initial-stash path intentionally ignores category/count legality.
     injury_mixed = has_injury and len(visible) != 1
     left_name, right_name = side_class(left), side_class(right)
     left_invalid = left_name in {"danger_cyan", "unknown"} or (
@@ -380,15 +380,31 @@ def make_vision_snapshot(
         item for item in cargo
         if item.visible and item.track_id in selected_ids
     ]
+    delivery_classes = set(selected_classes)
+    delivery_classes.update(mission.carried_delivery_classes())
     same_class_items = [
         item for item in cargo
-        if item.visible and item.class_name in selected_classes
+        if item.visible and item.class_name in delivery_classes
     ]
-    delivery_items = (
-        exact_delivery_items
-        if exact_delivery_items else
-        same_class_items if len(same_class_items) == 1 else []
-    )
+    expected_delivery_count = mission.carried_delivery_count()
+    if len(exact_delivery_items) >= expected_delivery_count:
+        delivery_items = exact_delivery_items
+    else:
+        delivery_candidates = {
+            item.track_id: item for item in exact_delivery_items
+        }
+        delivery_candidates.update(
+            {item.track_id: item for item in same_class_items}
+        )
+        delivery_items = sorted(
+            delivery_candidates.values(),
+            key=lambda item: (
+                item.bbox[1] + item.bbox[3],
+                item.area_px,
+                -item.track_id,
+            ),
+            reverse=True,
+        )[:expected_delivery_count]
     delivery_inside_ids = tuple(
         item.track_id for item in delivery_items if item.inside_safe_zone
     )
@@ -780,8 +796,23 @@ class CompetitionPlanner:
             "delivery_observation_elapsed_s": self.mission._delivery_observation_elapsed(diagnostic_now),
             "delivery_visual_frame_age_ms": self.mission.delivery_last_frame_age_ms,
             "delivery_visual_confirmed": self.mission.delivery_visual_confirmed,
+            "delivery_lateral_aligned": self.mission._delivery_lateral_aligned(pose),
+            "delivery_target_point": (
+                None
+                if self.mission.selected_batch is None
+                else list(self.mission._target_point())
+            ),
+            "delivery_completion_basis": self.mission.delivery_completion_basis,
             "delivery_timeout_reason": self.mission.delivery_timeout_reason,
             "delivery_conflict_frames": self.mission.delivery_conflict_frames,
+            "carried_manifest": list(self.mission.carried_manifest),
+            "carried_total_count": self.mission.carried_total_count,
+            "carried_has_green": self.mission.carried_has_green,
+            "carried_has_core": self.mission.carried_has_core,
+            "carried_green_core_mixed": self.mission.carried_green_core_mixed,
+            "search_yaw_accum_deg": self.mission.search_yaw_accum_deg,
+            "search_candidate_hits": self.mission.search_candidate_hits,
+            "search_min_turn_deg": self.mission.settings.search_min_turn_deg,
             "pending_audit_stable": (
                 None if self.mission.pending_audit is None else self.mission.pending_audit.stable
             ),
