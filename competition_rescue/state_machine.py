@@ -1321,14 +1321,16 @@ class CompetitionMission:
         return material
 
     def _pile_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
-        cargo = self._visible_cargo(vision)
-        clustered = [item for item in cargo if not self._is_isolated(item, cargo)]
-        if len(clustered) < 2:
+        cargo = [
+            item for item in self._visible_cargo(vision)
+            if item.hits >= 2
+        ]
+        if not cargo:
             return None
-        clustered.sort(key=lambda item: (-item.area_px, item.distance_m, item.track_id))
+        cargo.sort(key=lambda item: (-item.area_px, item.distance_m, item.track_id))
         return CargoBatch(
-            tuple(item.track_id for item in clustered),
-            tuple(item.class_name for item in clustered),
+            tuple(item.track_id for item in cargo),
+            tuple(item.class_name for item in cargo),
             "stash",
             initial_stash=True,
         )
@@ -2707,26 +2709,6 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.INITIAL_OBSERVE:
-            candidate = (
-                self._choose_initial_green(vision)
-                if self._vision_fresh(vision, now) else None
-            )
-            if candidate is not None:
-                self.initial_stash_done = True
-                self._select_batch(
-                    CargoBatch((candidate.track_id,), ("green_supply",), "material")
-                )
-                self._reset_delivery_evidence()
-                self._mark_target_seen(candidate, now)
-                self._set_state(CompetitionState.APPROACH, now)
-                self._arm_approach(stm)
-                return CompetitionOutput(
-                    self.state,
-                    self._approach_command(candidate),
-                    "开局发现单独绿色物资，跳过藏堆直接正式搬运",
-                    self.selected_batch,
-                    event="initial_green_direct",
-                )
             pile = self._pile_batch(vision) if self._vision_fresh(vision, now) else None
             if pile is not None:
                 self._select_batch(pile)
@@ -2737,7 +2719,7 @@ class CompetitionMission:
                 candidate = self._target_for_batch(vision)
                 if candidate is not None:
                     self._mark_target_seen(candidate, now)
-                return CompetitionOutput(self.state, self._approach_command(candidate), "锁定中心物资堆，准备临时转移", pile, event="initial_pile_locked")
+                return CompetitionOutput(self.state, self._approach_command(candidate), "锁定开局物资，统一执行临时藏物资", pile, event="initial_stash_locked")
             if now - self.state_started_s >= self.settings.initial_observe_s:
                 self.initial_stash_done = True
                 self._set_state(CompetitionState.SEARCH, now)

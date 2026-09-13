@@ -13,15 +13,17 @@
 
 ## 当前上位机流程与F407最小配合要求
 
-### 1. 开局分流
+### 1. 开局统一藏物资
 
-上位机在F407进入`mode=3 SEARCH`后先判断是否有稳定且可单独取得的绿色物资：
+上位机在F407进入`mode=3 SEARCH`后，只要识别到稳定物资，就统一建立`initial_stash=True`批次：
 
 ```text
-单独绿色物资 → 直接APPROACH/GRAB/NAV，不进入临时藏堆
-无单独绿色且存在聚集物资堆 → initial_stash临时搬堆
+单独绿色、其它单件或聚集物资 → 全部执行initial_stash临时搬堆
 无可靠目标 → 继续SEARCH
 ```
+
+开局阶段不再存在“单独绿色直接正式投送”分支。F407按`initial_stash`标志完成抓取、藏点NAV和
+双开释放，之后等待上位机`RETURN_CENTER`；开局藏物资不使用正式搜索阶段的mode37打散握手。
 
 上位机只在`initial_stash=True`的夹内审核中放宽类别和数量限制。F407需要同步调整
 `task_validate_audit()`：

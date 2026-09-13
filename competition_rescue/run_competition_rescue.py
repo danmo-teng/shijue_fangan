@@ -63,6 +63,7 @@ from state_machine import (  # noqa: E402
 
 
 TERMINATION_ABORT_TIMEOUT_S = 1.0
+GREEN_SUPPLY_SCORE_THRESHOLD = 0.50
 
 
 def arguments() -> argparse.Namespace:
@@ -1019,6 +1020,8 @@ def main() -> int:
         "display_fps": args.display_fps,
         "detection_log_fps": args.detection_log_fps,
         "vision_fps": args.vision_fps,
+        "score_threshold": args.score_thres,
+        "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
     })
     try:
         pose_deadline = time.monotonic() + args.startup_timeout
@@ -1099,6 +1102,7 @@ def main() -> int:
             "start_zone": start_zone,
             "initial_stash_enabled": not args.disable_initial_stash,
             "score_threshold": args.score_thres,
+            "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "display_fps": args.display_fps,
             "detection_log_fps": args.detection_log_fps,
             "vision_fps": args.vision_fps,
@@ -1314,6 +1318,11 @@ def main() -> int:
                         )
                     else:
                         detections, timing = detector.infer(packet.image)
+                    detections = [
+                        item for item in detections
+                        if item.class_name != "green_supply" or
+                        float(item.confidence) >= GREEN_SUPPLY_SCORE_THRESHOLD
+                    ]
                     detection_objects = [make_detection(item, localizer) for item in detections]
                     tracks = tracker.update(detection_objects)
                     stm = load_stm(args.stm_status)
