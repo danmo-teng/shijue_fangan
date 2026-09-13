@@ -856,6 +856,7 @@ class CompetitionPlanner:
             "invalid_release_side": self.mission.invalid_release_side,
             "invalid_release_final": self.mission.invalid_release_final,
             "invalid_release_context": self.mission.invalid_release_context,
+            "separation_search_pending": self.mission.separation_search_pending,
             "batch": batch,
             "audit": audit,
             "command": command,

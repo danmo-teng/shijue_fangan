@@ -485,6 +485,7 @@ class CompetitionMission:
         self.invalid_release_side = "both"
         self.invalid_release_final = False
         self.invalid_release_context = "none"
+        self.separation_search_pending = False
         self.initial_release_initial_ack: int | None = None
         self.invalid_release_initial_ack: int | None = None
         self.grab_initial_ack: int | None = None
@@ -636,6 +637,8 @@ class CompetitionMission:
         return pose.valid and pose.age_ms <= 250.0
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.SEARCH and self.separation_search_pending:
+            return (STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH)
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
         if self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH}:
@@ -1558,7 +1561,7 @@ class CompetitionMission:
                 release_context = "final_release"
                 final_release = True
             elif release_side == "both":
-                release_context = "separate_then_reaudit"
+                release_context = "separate_then_search"
                 final_release = False
             else:
                 release_context = "single_side_then_reaudit"
@@ -1595,8 +1598,8 @@ class CompetitionMission:
             "right": CMD_RELEASE_RIGHT,
             "both": CMD_RELEASE_BOTH,
         }[side]
-        if self.invalid_release_context == "separate_then_reaudit":
-            message = "首次无法判断左右归属，双开并等待F407内部撞分后复审"
+        if self.invalid_release_context == "separate_then_search":
+            message = "首次无法判断左右归属，双开并等待F407内部撞分后回SEARCH"
         elif self.invalid_release_context == "final_release":
             message = "复审仍非法，执行最终双开"
         else:
@@ -2463,6 +2466,31 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
+        if self.separation_search_pending:
+            if stm.fresh and stm.mode == STM_MODE_SEARCH:
+                self.separation_search_pending = False
+                self.search_epoch_frame_floor = (
+                    vision.frame_sequence if vision.frame_sequence > 0 else None
+                )
+                self.search_candidate_key = None
+                self.search_candidate_hits = 0
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    "F407已进入新鲜mode=3，下一新帧开始重新选择撞散后的目标",
+                    event="separation_search_handoff_complete",
+                    tx_policy="hold",
+                    reason="separation_search_ready",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
+                )
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "撞分完成后持续发送HOLD，等待F407新鲜上报mode=3",
+                tx_policy="hold",
+                reason="separation_search_handoff_pending",
+                expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
+            )
         self._update_search_scan_progress(pose)
         if not self._vision_fresh(vision, now):
             return CompetitionOutput(
@@ -2659,6 +2687,15 @@ class CompetitionMission:
                 reason="mission_finished_pause",
             )
         if not stm.fresh:
+            if self.state == CompetitionState.SEARCH and self.separation_search_pending:
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    "撞分完成后持续发送HOLD，等待F407恢复新鲜状态并上报mode=3",
+                    tx_policy="hold",
+                    reason="separation_search_stm_wait",
+                    expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
+                )
             return CompetitionOutput(
                 self.state,
                 None,
@@ -2791,23 +2828,28 @@ class CompetitionMission:
             if self._fresh_mode_after(
                 stm, expected_mode, self.invalid_release_initial_ack
             ):
-                if self.invalid_release_context == "separate_then_reaudit":
-                    self.cargo_recheck_pending = True
-                    self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-                    self.audit_recheck_frame_floor = (
-                        vision.frame_sequence if vision.frame_sequence > 0 else None
-                    )
-                    self.audit_recheck_started_s = now
+                if self.invalid_release_context == "separate_then_search":
+                    self._clear_selected_batch()
+                    self.cargo_recheck_pending = False
+                    self.audit_hits = 0
+                    self.audit_last_signature = None
+                    self.audit_last_frame_sequence = None
+                    self.audit_recheck_frame_floor = None
+                    self.audit_recheck_started_s = None
+                    self._clear_pending_audit()
+                    self.separation_search_pending = True
+                    self.invalid_release_context = "none"
+                    self.invalid_release_final = False
+                    self._set_state(CompetitionState.SEARCH, now)
                     return CompetitionOutput(
                         self.state,
-                        self._pause(),
-                        "F407已完成不明侧撞分并上报mode=34，等待动作后的新图复审",
-                        self.selected_batch,
+                        self._hold(),
+                        "F407已完成不明侧撞分并上报mode=34，清空旧批次并等待mode=3",
                         audit=audit,
-                        event="separate_then_reaudit_ready",
-                        tx_policy="pause",
-                        reason="separation_wait_new_audit_frame",
-                        expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE,),
+                        event="separate_then_search_start",
+                        tx_policy="hold",
+                        reason="separation_search_handoff_pending",
+                        expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
                     )
                 if self.invalid_release_context == "final_release":
                     self._clear_selected_batch()

@@ -67,20 +67,25 @@ SEARCH
 聚集区域中心Y。F407只有接受该命令并完成聚集靠近后才上报mode37；mode37之前收到DISPERSE必须
 拒绝。打散过程中不要因为视觉暂时漏帧而停止已经接受的动作；F407继续执行自身15秒动作保护。
 
-正式夹内审核第一次无法判断物资左右归属时，`RELEASE_BOTH`不是最终放弃：
+正式夹内审核第一次无法判断物资左右归属时，使用`separate_then_search`：
 
 ```text
 第一次不明侧审核
-→ RELEASE_BOTH(separate_then_reaudit)
-→ F407内部完成双开、后退、闭爪撞分、退回和相机140°复审准备
+→ RELEASE_BOTH(separate_then_search)
+→ F407内部完成双开、后退0.40m、Touch闭爪、700mm/s前撞0.40m、450mm/s后退0.40m
+→ 双爪重新完全打开并清除下位机复审标志
 → 新鲜mode=34且ACK已变化
-→ 上位机保持selected_batch，不发YIELD、不回SEARCH/APP
-→ 等待动作完成后的新视觉帧
-→ 重新发送CARGO_AUDIT
+→ 上位机清除selected_batch、cargo_recheck_pending和全部旧审核累计
+→ 上位机进入SEARCH并持续发送HOLD，不发YIELD/CARGO_AUDIT/GRAB/APPROACH
+→ 等待F407新鲜mode=3
+→ mode=3后从新的视觉帧重新选择撞散目标
 ```
 
-只有复审仍非法时的第二次`RELEASE_BOTH`才是`final_release`。明确可判断单侧异常的
-`RELEASE_LEFT/RIGHT`仍保留原YIELD后复审流程；临时藏堆到点后的双开仍是最终释放。
+明确可判断单侧异常的`RELEASE_LEFT/RIGHT`仍保留原YIELD后夹内复审流程；临时藏堆到点后的
+`RELEASE_BOTH`仍使用藏堆释放和返中流程，不属于撞分。
+
+撞分分支在mode34后不会进入`CAPTURE_AUDIT`，因此空爪时`capture_audit=None`不能再触发清零并
+永久停留WATCH；`CAPTURE_AUDIT`中的无观测等待只保留给真实夹内审核和单侧释放后的复审。
 
 ### 4. 正式安全区投送
 
@@ -255,10 +260,9 @@ F407应在执行层再次拒绝下列情况：
 ```text
 CAPTURE_AUDIT
   → 能判断异常侧：RELEASE_LEFT/RIGHT → mode=32/33 → YIELD_BACKOFF → mode=30 → 复审
-  → 第一次不能判断左右：RELEASE_BOTH(separate_then_reaudit) → mode=34 → 直接获取新图复审
-  → 两条复审路径都保留selected_batch
-  → 复审合法：GRAB_CONFIRMED，等待GRIPPER_CLOSED=1
-  → 复审仍非法：第二次RELEASE_BOTH(final_release) → mode=34 → 清空批次回SEARCH
+  → 第一次不能判断左右：RELEASE_BOTH(separate_then_search) → mode=34
+  → 清空selected_batch和审核状态 → HOLD等待mode=3 → 重新搜索撞散后的目标
+  → 该路径禁止YIELD、CARGO_AUDIT、GRAB_CONFIRMED和提前APPROACH_TARGET
 ```
 
 `RELEASE_LEFT/RELEASE_RIGHT`表示打开并把对应侧物资留在原地；不能理解为“保留左/右侧”。所有完成
