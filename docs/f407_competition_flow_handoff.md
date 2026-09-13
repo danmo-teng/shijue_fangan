@@ -4,7 +4,7 @@
 
 上位机仍通过定位进程的原子`uart_command.bin`发送固定15字节`TYPE=0x18`帧：
 
-> **当前配合版本说明（2026-09-11，以上位机`codex/gamepad-teleop`最新提交为准）**
+> **当前配合版本说明（2026-09-13，以上位机`codex/gamepad-teleop`最新提交为准）**
 >
 > 本节是当前F407配合合同，优先级高于本文后面的历史设计文字。F407仓库仍由下位机负责人
 > 自行修改；上位机仓库不生成或应用F407补丁。命令编号、15字节帧、CRC、序号和现有正常
@@ -150,6 +150,7 @@ A3 B3 18 SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
 
 | 命令 | 值 | `P2/P3` | `P4/P5` | `P6/P7` |
 |---|---:|---|---|---|
+| `PAUSE` | `0x01` | 0 | 0 | 0 |
 | `APPROACH_TARGET` | `0x09` | 目标图像X | 目标图像Y | 0 |
 | `HOLD` | `0x0A` | 0 | 0 | 0 |
 | `YIELD_BACKOFF` | `0x0B` | 有符号后退距离mm | 0 | 0 |
@@ -173,7 +174,43 @@ A3 B3 18 SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
 
 现有命令`GRAB_CONFIRMED=0x02`、`NAVIGATE_WAYPOINT=0x03`、`ENTER_SAFE_ZONE=0x05`、`TASK_COMPLETE=0x06`、`ABORT=0x07`、`RETURN_CENTER=0x08`继续保留。
 
-`HOLD`与旧的`STOP`语义不同：`HOLD`是可恢复停车，不能锁死比赛任务；`ABORT`才是故障后锁存停车。
+## HOLD、PAUSE、STOP和ABORT语义
+
+`PAUSE=0x01`沿用固定15字节帧：`P0=0x01`、`P1=CMD_VALID`，其余载荷全部为0，SEQ正常递增。
+例如`SEQ=0x20`时完整帧为：
+
+```text
+A3 B3 18 20 01 01 00 00 00 00 00 00 B8 B5 C3
+```
+
+- `HOLD=0x0A`是正常流程心跳。F407处于SEARCH时收到HOLD，继续本地90°/120°循环扫描；上位机等待目标或连续帧筛选时仍发送HOLD。
+- `PAUSE=0x01`明确冻结当前阶段并锁存停车，用于操作员暂停、定位重建、摄像头恢复或需要保留当前动作阶段的情况；PAUSE帧过期不能自行恢复。
+- `STOP=0x00`和`ABORT=0x07`不能用于普通等待、目标筛选或短暂视觉丢失。
+
+解除PAUSE必须收到当前阶段能够接受、字段合法且SEQ更新的命令：
+
+- SEARCH：`HOLD`；
+- APPROACH：带合法X/Y的`APPROACH_TARGET`；
+- NAV：带完整H/D/FLAGS的`NAVIGATE_WAYPOINT`；
+- RETURN：带完整H/D/FLAGS的`RETURN_CENTER`；
+- DISPERSE、YIELD、ESCAPE、CHANGE_LANE或释放动作：重发原动作命令。
+
+阶段不匹配、字段非法或重复SEQ的命令不得解除PAUSE。DISPERSE执行中持续约1秒收到HOLD时，
+F407按现有约定取消未完成打散并返回SEARCH；收到PAUSE只能冻结打散，解除时由上位机重发
+`DISPERSE_PILE`继续本次动作。
+
+F407侧需要按以下位置实现，以上位机本节语义为准：
+
+1. `Main/Inc/vision.h`：在`VisionMissionCode`加入`VISION_CMD_PAUSE=1`；
+2. `Main/Src/vision.c`：允许解析该命令，但必须校验`P1=CMD_VALID`且`P2～P7`全部为0；
+3. `Main/Src/Task.c`：增加独立的暂停锁存标志，不改变原`TaskState`和远程动作类型；收到合法新SEQ
+   PAUSE后ACK并`Motor_Stop()`，暂停锁存期间每个任务周期都保持停车，不能因250 ms命令过期恢复；
+4. 收到非PAUSE命令时，先按暂停前的当前阶段验证命令、FLAGS和数据；只有验证通过并准备实际接受
+   该命令时才清除暂停锁存。不能先解除再验证；
+5. 暂停远程动作时保存暂停开始时间，解除后补偿`remote_action.started_ms`及当前阶段计时，避免PAUSE
+   时间被7秒/15秒动作保护误算；
+6. SEARCH解除PAUSE的HOLD只恢复本地扫描，不切换TaskState；DISPERSE解除PAUSE必须是同一动作类型
+   的新SEQ `DISPERSE_PILE`，而HOLD仍按持续约1秒取消打散的现有语义执行。
 
 ## 任务硬联锁
 

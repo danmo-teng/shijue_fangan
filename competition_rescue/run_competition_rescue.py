@@ -46,7 +46,7 @@ from run_yolo_x5 import (  # noqa: E402
     load_labels,
 )
 
-from protocol import CMD_ABORT, CMD_HOLD  # noqa: E402
+from protocol import CMD_ABORT, CMD_HOLD, CMD_PAUSE  # noqa: E402
 from state_machine import (  # noqa: E402
     CARGO_CLASSES,
     CargoAudit,
@@ -682,25 +682,24 @@ class CompetitionPlanner:
         paused: bool,
         now: float,
     ) -> CompetitionOutput:
-        if paused and self.mission.state in {
-            CompetitionState.DISPERSE,
-            CompetitionState.FAULT,
-            CompetitionState.FINISHED,
-            CompetitionState.DETOUR,
-            CompetitionState.INITIAL_RELEASE,
-            CompetitionState.INVALID_RELEASE,
-            CompetitionState.INVALID_BACKOFF,
-            CompetitionState.FIELD_STUCK_YIELD,
-            CompetitionState.FIELD_STUCK_ESCAPE,
-            CompetitionState.SAFE_ZONE_ESCAPE,
-        }:
+        if paused and self.mission.state == CompetitionState.FAULT:
             return self.mission.step(vision, pose, stm, now)
+        if paused and self.mission.state == CompetitionState.WAIT_START:
+            return CompetitionOutput(
+                self.mission.state,
+                None,
+                "启动阶段等待摄像头恢复，不干预F407自主出发",
+                suppress_command_tx=True,
+                suppression_reason="camera_recovery_wait_start",
+                tx_policy="autonomous_start",
+                reason="camera_recovery_wait_start",
+            )
         if paused:
             return CompetitionOutput(
                 self.mission.state,
-                CommandRequest(CMD_HOLD),
-                "摄像头恢复中，保持车辆停车",
-                tx_policy="camera_pause_hold",
+                CommandRequest(CMD_PAUSE),
+                "摄像头恢复中，冻结当前阶段",
+                tx_policy="pause",
                 reason="camera_recovery",
             )
         return self.mission.step(vision, pose, stm, now)
@@ -729,6 +728,8 @@ class CompetitionPlanner:
             return "no_command"
         if output.command.opcode == CMD_HOLD:
             return "hold"
+        if output.command.opcode == CMD_PAUSE:
+            return "pause"
         if output.command.opcode == CMD_ABORT:
             return "fault_abort"
         return "normal_command"

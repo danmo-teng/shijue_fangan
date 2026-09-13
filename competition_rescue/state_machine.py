@@ -25,6 +25,7 @@ from protocol import (
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
+    CMD_PAUSE,
     CMD_RELEASE_BOTH,
     CMD_RELEASE_LEFT,
     CMD_RELEASE_RIGHT,
@@ -575,6 +576,9 @@ class CompetitionMission:
     def _hold(self) -> CommandRequest:
         return CommandRequest(CMD_HOLD)
 
+    def _pause(self) -> CommandRequest:
+        return CommandRequest(CMD_PAUSE)
+
     def _side_flags(self) -> int:
         return CMD_VALID | (1 << 3 if self.settings.side == "red" else 0)
 
@@ -828,7 +832,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 None,
-                "释放HOLD，等待F407自主完成目标丢失恢复",
+                "停止刷新APPROACH，等待F407自主完成目标丢失恢复",
                 event=event,
                 suppress_command_tx=True,
                 suppression_reason="f407_search_recovery",
@@ -985,10 +989,10 @@ class CompetitionMission:
             self._set_state(CompetitionState.CAPTURE_AUDIT, now)
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_HOLD, self._side_flags()),
+                self._pause(),
                 "稳定审核视觉帧已过期，取消待推进审核",
                 event="cargo_audit_pending_expired",
-                tx_policy="hold",
+                tx_policy="pause",
                 reason="audit_visual_stale",
             )
         if (
@@ -1362,11 +1366,11 @@ class CompetitionMission:
         if not self._vision_fresh(vision, now):
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_HOLD, self._side_flags()),
-                "夹内审核视觉帧已超时，保持停车等待新帧",
+                self._pause(),
+                "夹内审核视觉帧已超时，冻结当前审核阶段等待新帧",
                 self.selected_batch,
                 event="audit_visual_timeout",
-                tx_policy="hold",
+                tx_policy="pause",
                 reason="audit_visual_stale",
             )
         if self.cargo_recheck_pending:
@@ -1385,10 +1389,12 @@ class CompetitionMission:
             ) and not (new_sequence or new_timestamp):
                 return CompetitionOutput(
                     self.state,
-                    CommandRequest(CMD_HOLD, self._side_flags()),
+                    self._pause(),
                     "等待mode=30之后的新夹内视觉帧，再开始复审",
                     self.selected_batch,
                     event="audit_recheck_wait_frame",
+                    tx_policy="pause",
+                    reason="audit_recheck_wait_frame",
                 )
             self.audit_recheck_frame_floor = None
             self.audit_recheck_started_s = None
@@ -1698,7 +1704,7 @@ class CompetitionMission:
         use_safe_zone_heading: bool = True,
     ) -> CommandRequest:
         if not pose.valid:
-            return self._hold()
+            return self._pause()
         dx, dy = target[0] - pose.x_m, target[1] - pose.y_m
         distance = math.hypot(dx, dy)
         heading = math.degrees(math.atan2(dy, dx)) % 360.0
@@ -1737,9 +1743,9 @@ class CompetitionMission:
         if not self._pose_fresh(pose):
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_HOLD, self._side_flags()),
+                self._pause(),
                 "藏点复查路线等待新鲜定位",
-                tx_policy="hold",
+                tx_policy="pause",
                 reason="stash_return_pose_stale",
             )
         distance = _distance((pose.x_m, pose.y_m), target)
@@ -1818,12 +1824,10 @@ class CompetitionMission:
         if not pose.valid:
             return CompetitionOutput(
                 self.state,
-                None,
-                "返中定位暂时无效，停止更新RETURN并等待定位恢复",
+                self._pause(),
+                "返中定位暂时无效，冻结当前阶段等待定位恢复",
                 motion_expected=False,
-                suppress_command_tx=True,
-                suppression_reason="return_pose_stale",
-                tx_policy="navigation_pause",
+                tx_policy="pause",
                 reason="return_pose_stale",
             )
         distance = math.hypot(pose.x_m, pose.y_m)
@@ -1869,10 +1873,12 @@ class CompetitionMission:
         if not pose.valid:
             return CompetitionOutput(
                 self.state,
-                self._hold(),
-                "接近场地边缘但定位无效，保持停车",
+                self._pause(),
+                "接近场地边缘但定位无效，冻结当前阶段等待定位恢复",
                 self.selected_batch,
                 event="boundary_hold",
+                tx_policy="pause",
+                reason="boundary_pose_stale",
             )
         distance = min(0.35, math.hypot(pose.x_m, pose.y_m))
         heading = math.degrees(math.atan2(-pose.y_m, -pose.x_m)) % 360.0
@@ -2224,10 +2230,10 @@ class CompetitionMission:
             if reached and not stm.fresh:
                 return CompetitionOutput(
                     self.state,
-                    CommandRequest(CMD_HOLD, self._side_flags()),
+                    self._pause(),
                     "到达藏点但STM状态过期，暂不启动释放动作",
                     self.selected_batch,
-                    tx_policy="hold",
+                    tx_policy="pause",
                     reason="initial_stash_release_stm_stale",
                     expected_stm_modes=(STM_MODE_NAVIGATE,),
                 )
@@ -2235,10 +2241,10 @@ class CompetitionMission:
                 if not self._vision_fresh(vision, now):
                     return CompetitionOutput(
                         self.state,
-                        CommandRequest(CMD_HOLD, self._side_flags()),
+                        self._pause(),
                         "到达藏点但视觉暂时过期，等待新鲜帧后再释放",
                         self.selected_batch,
-                        tx_policy="hold",
+                        tx_policy="pause",
                         reason="initial_stash_release_vision_stale",
                         expected_stm_modes=(STM_MODE_NAVIGATE,),
                     )
@@ -2444,7 +2450,7 @@ class CompetitionMission:
 
     def _approach_command(self, candidate: TrackedCargo | None) -> CommandRequest:
         if candidate is None:
-            return self._hold()
+            return self._pause()
         x, y = candidate.center_px
         return CommandRequest(CMD_APPROACH_TARGET, self._side_flags(), x, y)
 
@@ -2470,10 +2476,10 @@ class CompetitionMission:
         if self.state == CompetitionState.FINISHED:
             return CompetitionOutput(
                 self.state,
-                self._hold(),
-                "任务完成，保持当前状态等待用户结束",
-                tx_policy="hold",
-                reason="mission_finished_hold",
+                self._pause(),
+                "任务完成，冻结当前阶段等待用户结束",
+                tx_policy="pause",
+                reason="mission_finished_pause",
             )
         if not stm.fresh:
             return CompetitionOutput(
@@ -2807,4 +2813,10 @@ class CompetitionMission:
                 return CompetitionOutput(self.state, self._hold(), f"回到中心搜索区，已完成{self.delivery_count}件")
             return self._return_center_output(pose, now, "持续返回中心")
 
-        return CompetitionOutput(self.state, self._hold(), "未处理状态，保持停车")
+        return CompetitionOutput(
+            self.state,
+            self._pause(),
+            "未处理状态，冻结当前阶段",
+            tx_policy="pause",
+            reason="unhandled_state_pause",
+        )

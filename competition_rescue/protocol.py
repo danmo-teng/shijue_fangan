@@ -16,6 +16,7 @@ FRAME_SIZE = 15
 TYPE_MISSION_COMMAND = 0x18
 
 CMD_STOP = 0x00
+CMD_PAUSE = 0x01
 CMD_GRAB_CONFIRMED = 0x02
 CMD_NAVIGATE_WAYPOINT = 0x03
 CMD_ENTER_SAFE_ZONE = 0x05
@@ -171,6 +172,10 @@ def approach_target_frame(sequence: int, x_px: int, y_px: int) -> bytes:
 
 def hold_frame(sequence: int) -> bytes:
     return mission_frame(sequence, CMD_HOLD, CMD_VALID)
+
+
+def pause_frame(sequence: int) -> bytes:
+    return mission_frame(sequence, CMD_PAUSE, CMD_VALID)
 
 
 def grab_frame(sequence: int, red_side: bool) -> bytes:
