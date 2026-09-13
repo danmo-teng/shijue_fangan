@@ -24,6 +24,9 @@
 
 开局阶段不再存在“单独绿色直接正式投送”分支。F407按`initial_stash`标志完成抓取、藏点NAV和
 双开释放，之后等待上位机`RETURN_CENTER`；开局藏物资不使用正式搜索阶段的mode37打散握手。
+开局没有稳定目标时，上位机持续发送HOLD并保持`INITIAL_OBSERVE`，让F407继续本地90°/120°扫描；
+不得通过本地观察超时设置`initial_stash_done`或提前进入正式SEARCH。只有收到本次藏点
+`RELEASE_BOTH`的新鲜mode34和ACK变化后，上位机才把开局藏物资标记为完成并开始返中。
 
 上位机只在`initial_stash=True`的夹内审核中放宽类别和数量限制。F407需要同步调整
 `task_validate_audit()`：

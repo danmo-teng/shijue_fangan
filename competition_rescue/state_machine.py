@@ -334,7 +334,6 @@ class CompetitionSettings:
     side: str
     start_zone: int = 1
     initial_stash_enabled: bool = True
-    initial_observe_s: float = 0.8
     audit_stable_frames: int = 3
     delivery_visual_frames: int = 5
     batch_radius_m: float = 0.55
@@ -641,6 +640,8 @@ class CompetitionMission:
             return (STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH)
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
+        if self.state == CompetitionState.INITIAL_OBSERVE:
+            return (STM_MODE_SEARCH,)
         if self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH}:
             return (
                 STM_MODE_APPROACH_TARGET,
@@ -2757,10 +2758,14 @@ class CompetitionMission:
                 if candidate is not None:
                     self._mark_target_seen(candidate, now)
                 return CompetitionOutput(self.state, self._approach_command(candidate), "锁定开局物资，统一执行临时藏物资", pile, event="initial_stash_locked")
-            if now - self.state_started_s >= self.settings.initial_observe_s:
-                self.initial_stash_done = True
-                self._set_state(CompetitionState.SEARCH, now)
-            return CompetitionOutput(self.state, self._hold(), "观察中心物资堆")
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "等待稳定开局物资并保持F407本地SEARCH扫描",
+                tx_policy="hold",
+                reason="initial_stash_target_wait",
+                expected_stm_modes=(STM_MODE_SEARCH,),
+            )
 
         if self.state == CompetitionState.INITIAL_APPROACH:
             return self._approach_output(
