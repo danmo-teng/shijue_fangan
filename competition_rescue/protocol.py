@@ -42,6 +42,7 @@ CMD_DRIVE_STRAIGHT = 1 << 1
 CMD_USE_FINAL_HEADING = 1 << 2
 CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
+CMD_CLUSTER_TARGET = 1 << 5
 
 AUDIT_INITIAL_STASH = 1 << 0
 AUDIT_DANGER_PRESENT = 1 << 1
@@ -108,6 +109,8 @@ def mission_frame(
         raise ValueError("sequence must be in 0..255")
     if not 0 <= command <= 0xFF or not 0 <= flags <= 0xFF:
         raise ValueError("command and flags must be bytes")
+    if flags & CMD_CLUSTER_TARGET and command != CMD_APPROACH_TARGET:
+        raise ValueError("CLUSTER_TARGET is only valid for APPROACH_TARGET")
     payload = (
         bytes((command, flags))
         + _i16be(arg_a, "arg_a")
@@ -166,8 +169,11 @@ class CargoAuditPayload:
         return FRAME_HEAD + body + crc.to_bytes(2, "little") + bytes((FRAME_TAIL,))
 
 
-def approach_target_frame(sequence: int, x_px: int, y_px: int) -> bytes:
-    return mission_frame(sequence, CMD_APPROACH_TARGET, CMD_VALID, x_px, y_px)
+def approach_target_frame(
+    sequence: int, x_px: int, y_px: int, *, cluster_target: bool = False
+) -> bytes:
+    flags = CMD_VALID | (CMD_CLUSTER_TARGET if cluster_target else 0)
+    return mission_frame(sequence, CMD_APPROACH_TARGET, flags, x_px, y_px)
 
 
 def hold_frame(sequence: int) -> bytes:

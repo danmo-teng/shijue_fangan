@@ -17,12 +17,14 @@ CMD_ENTER_SAFE_ZONE = 0x05
 CMD_TASK_COMPLETE = 0x06
 CMD_ABORT = 0x07
 CMD_RETURN_CENTER = 0x08
+CMD_APPROACH_TARGET = 0x09
 
 CMD_VALID = 1 << 0
 CMD_DRIVE_STRAIGHT = 1 << 1
 CMD_USE_FINAL_HEADING = 1 << 2
 CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
+CMD_CLUSTER_TARGET = 1 << 5
 
 STM_CLAW_VISIBLE = 1 << 0
 STM_GRIPPER_CLOSED = 1 << 1
@@ -55,6 +57,8 @@ class MissionCommand:
     def payload(self) -> bytes:
         if not 0 <= self.command <= 0xFF or not 0 <= self.flags <= 0xFF:
             raise ValueError("command and flags must be bytes")
+        if self.flags & CMD_CLUSTER_TARGET and self.command != CMD_APPROACH_TARGET:
+            raise ValueError("CLUSTER_TARGET is only valid for APPROACH_TARGET")
         if not 0 <= self.heading_cdeg < 36000:
             raise ValueError("heading_cdeg must be in 0..35999")
         return (

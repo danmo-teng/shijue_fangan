@@ -50,16 +50,35 @@ SEARCH → APPROACH_TARGET → mode=20
 → mode=22/GRIPPER_CLOSED → NAVIGATE
 ```
 
-不同投送区物资混在一起、危险物与其他物资混在一起时，F407只按以下顺序执行：
+发现需要打散的聚集目标时，不允许从SEARCH直接发送`DISPERSE_PILE`，必须按以下握手执行：
 
 ```text
-夹内审核非法 → RELEASE_BOTH → mode=34
-→ YIELD_BACKOFF → mode=30
-→ 确认空爪 → SEARCH → DISPERSE_PILE → mode=35
+SEARCH
+→ APPROACH_TARGET(flags=VALID|CLUSTER_TARGET，X/Y=聚集区域中心)
+→ 持续发送并等待F407新鲜mode=37且ACK已变化
+→ DISPERSE_PILE持续发送
+→ 新鲜mode=35且ACK已变化
+→ HOLD，使F407返回SEARCH
 ```
 
-空爪、没有`cargo_recheck_pending`时才接受`DISPERSE_PILE`。打散过程中不要因为视觉暂时
-漏帧而停止已经接受的DISPERSE动作；F407继续执行自身15秒动作保护。
+`CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为聚集区域中心X，P4/P5为
+聚集区域中心Y。F407只有接受该命令并完成聚集靠近后才上报mode37；mode37之前收到DISPERSE必须
+拒绝。打散过程中不要因为视觉暂时漏帧而停止已经接受的动作；F407继续执行自身15秒动作保护。
+
+正式夹内审核第一次无法判断物资左右归属时，`RELEASE_BOTH`不是最终放弃：
+
+```text
+第一次不明侧审核
+→ RELEASE_BOTH(separate_then_reaudit)
+→ F407内部完成双开、后退、闭爪撞分、退回和相机140°复审准备
+→ 新鲜mode=34且ACK已变化
+→ 上位机保持selected_batch，不发YIELD、不回SEARCH/APP
+→ 等待动作完成后的新视觉帧
+→ 重新发送CARGO_AUDIT
+```
+
+只有复审仍非法时的第二次`RELEASE_BOTH`才是`final_release`。明确可判断单侧异常的
+`RELEASE_LEFT/RIGHT`仍保留原YIELD后复审流程；临时藏堆到点后的双开仍是最终释放。
 
 ### 4. 正式安全区投送
 
@@ -144,14 +163,14 @@ F407需要区分可恢复告警和真正锁存故障：
 A3 B3 18 SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
 ```
 
-`P0`为命令，`P1`为`VALID/RED_SIDE/DRIVE_STRAIGHT/USE_FINAL_HEADING/DISTANCE_VALID`等标志；普通导航继续使用`P2/P3=剩余距离mm`、`P6/P7=绝对航向0.01°`。
+`P0`为命令，`P1`为`VALID/RED_SIDE/DRIVE_STRAIGHT/USE_FINAL_HEADING/DISTANCE_VALID/CLUSTER_TARGET`等标志；普通导航继续使用`P2/P3=剩余距离mm`、`P6/P7=绝对航向0.01°`。`CLUSTER_TARGET=bit5`只允许用于`APPROACH_TARGET`。
 
 ## 新命令
 
 | 命令 | 值 | `P2/P3` | `P4/P5` | `P6/P7` |
 |---|---:|---|---|---|
 | `PAUSE` | `0x01` | 0 | 0 | 0 |
-| `APPROACH_TARGET` | `0x09` | 目标图像X | 目标图像Y | 0 |
+| `APPROACH_TARGET` | `0x09` | 目标或聚集区域中心X | 目标或聚集区域中心Y | 0 |
 | `HOLD` | `0x0A` | 0 | 0 | 0 |
 | `YIELD_BACKOFF` | `0x0B` | 有符号后退距离mm | 0 | 0 |
 | `ESCAPE_MANEUVER` | `0x0C` | 有符号旋转角度deg | 有符号横移距离mm | 0 |
@@ -225,22 +244,24 @@ F407应在执行层再次拒绝下列情况：
 
 下位机只负责实时执行和硬联锁，不需要保存全场目标列表。上位机已经在`competition_detections.jsonl`保存所有识别结果，并通过稳定的track ID决定当前批次。
 
-上位机的`DISPERSE_PILE`不是F407到达中心后的固定动作，而是首件搜索阶段在新鲜视觉帧中确认“看到绿色但无法单独取得”后才发出的请求。普通无目标、视觉超时、夹内复审等待和夹爪闭合时，上位机不得新发该命令；F407也必须按空爪、无复审等待再次拦截。
+上位机的`DISPERSE_PILE`不是F407到达中心后的固定动作。只有聚集目标已连续稳定、上位机持续发送
+带`CLUSTER_TARGET`的APPROACH，而且F407用新鲜mode37和本次ACK确认靠近完成后才允许发送。
+普通无目标、视觉超时、夹内复审等待和夹爪闭合时，上位机不得新发该命令。
 
 非法审核的推荐状态握手为：
 
 ```text
 CAPTURE_AUDIT
-  → RELEASE_LEFT/RIGHT（释放异常侧）或 RELEASE_BOTH
-  → 新鲜mode=32/33/34
-  → YIELD_BACKOFF(-250 mm)
-  → 新鲜mode=30
-  → 单侧释放：保留selected_batch，重新CAPTURE_AUDIT
+  → 能判断异常侧：RELEASE_LEFT/RIGHT → mode=32/33 → YIELD_BACKOFF → mode=30 → 复审
+  → 第一次不能判断左右：RELEASE_BOTH(separate_then_reaudit) → mode=34 → 直接获取新图复审
+  → 两条复审路径都保留selected_batch
   → 复审合法：GRAB_CONFIRMED，等待GRIPPER_CLOSED=1
-  → 复审非法：RELEASE_BOTH，mode=34后再次YIELD_BACKOFF，清空批次回SEARCH
+  → 复审仍非法：第二次RELEASE_BOTH(final_release) → mode=34 → 清空批次回SEARCH
 ```
 
-`RELEASE_LEFT/RELEASE_RIGHT`表示打开并把对应侧物资留在原地；不能理解为“保留左/右侧”。`mode=32/33/34`和`mode=30`必须新鲜，上位机不能用本地超时猜测动作已经完成。
+`RELEASE_LEFT/RELEASE_RIGHT`表示打开并把对应侧物资留在原地；不能理解为“保留左/右侧”。所有完成
+跳转必须同时满足STM新鲜、mode正确、ACK相对动作开始前已变化；仅看到relay发送成功不能当作F407接受。
+LCD显示`CMD:APP REJ`时，上位机必须保留当前等待/复审阶段，不能跳到APPROACH。
 
 ## 停滞退让与脱困
 
@@ -262,6 +283,7 @@ T265平移、T265航向和有效编码器进展时，才请求一次`YIELD_BACKO
 34 RELEASE_BOTH_DONE
 35 DISPERSE_DONE
 36 LANE_DONE
+37 CLUSTER_READY
 ```
 
 退让和脱困期间必须有运动看门狗；如果电流、轮速、碰撞或机构故障已经明确，直接停车，不应继续旋转。
