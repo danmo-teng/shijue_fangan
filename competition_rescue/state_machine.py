@@ -651,6 +651,8 @@ class CompetitionMission:
         if self.state == CompetitionState.CLUSTER_APPROACH:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_CLUSTER_READY)
         if self.state == CompetitionState.AUDIT_CONFIRM:
+            if self.pending_audit_release_context == "recheck_empty_to_search":
+                return (STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH)
             return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CAPTURE_DONE)
         if self.state == CompetitionState.GRAB:
             return (STM_MODE_CAPTURE_DONE,)
@@ -1090,6 +1092,55 @@ class CompetitionMission:
                 tx_policy="pause",
                 reason="audit_visual_stale",
             )
+        if self.pending_audit_release_context == "recheck_empty_to_search":
+            if vision.capture_audit is not None:
+                self._clear_pending_audit()
+                self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+                return self._audit_output(vision, stm, now)
+            if (
+                self._relay_sent_since(
+                    stm, stable_command, self.pending_audit_tx_baseline
+                ) and
+                self._fresh_mode_after(
+                    stm, STM_MODE_SEARCH, self.pending_audit_initial_ack
+                )
+            ):
+                empty_audit = self.pending_audit
+                self._clear_selected_batch()
+                self.cargo_recheck_pending = False
+                self.audit_hits = 0
+                self.audit_last_signature = None
+                self.audit_last_frame_sequence = None
+                self.audit_recheck_frame_floor = None
+                self.audit_recheck_started_s = None
+                self._clear_pending_audit()
+                self._set_state(CompetitionState.SEARCH, now)
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    "稳定空爪审核已由F407确认并进入mode=3，重新搜索目标",
+                    audit=empty_audit,
+                    event="recheck_empty_search_confirmed",
+                    tx_policy="hold",
+                    reason="recheck_empty_acknowledged",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
+                )
+            event = (
+                "" if self.pending_audit_event_emitted
+                else "recheck_empty_stable_publish"
+            )
+            self.pending_audit_event_emitted = True
+            return CompetitionOutput(
+                self.state,
+                stable_command,
+                "持续发送稳定空爪审核，等待relay、ACK和F407 mode=3确认",
+                self.selected_batch,
+                self.pending_audit,
+                event=event,
+                tx_policy="audit_stable_publish",
+                reason="recheck_empty_pending_search",
+                expected_stm_modes=(STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH),
+            )
         if (
             vision.capture_audit is None or
             vision.capture_audit.signature != self.pending_audit_signature
@@ -1504,10 +1555,49 @@ class CompetitionMission:
             self.audit_recheck_frame_floor = None
             self.audit_recheck_started_s = None
         if vision.capture_audit is None:
-            self.audit_last_signature = None
-            self.audit_last_frame_sequence = None
-            self.audit_hits = 0
             assert self.selected_batch is not None
+            if self.cargo_recheck_pending:
+                empty_audit = CargoAudit(
+                    left_class="none",
+                    right_class="none",
+                    left_count=0,
+                    right_count=0,
+                    total_count=0,
+                    stable=False,
+                )
+                if vision.frame_sequence != self.audit_last_frame_sequence:
+                    self.audit_last_frame_sequence = vision.frame_sequence
+                    if empty_audit.signature == self.audit_last_signature:
+                        self.audit_hits += 1
+                    else:
+                        self.audit_last_signature = empty_audit.signature
+                        self.audit_hits = 1
+                stable_empty = replace(
+                    empty_audit,
+                    stable=self.audit_hits >= self.settings.audit_stable_frames,
+                )
+                if stable_empty.stable:
+                    self.audit_id = (self.audit_id + 1) & 0xFF
+                    stable_payload = stable_empty.to_protocol(
+                        initial_stash=self.selected_batch.initial_stash,
+                        destination=self.selected_batch.destination,
+                        audit_id=self.audit_id,
+                    )
+                    self._begin_audit_confirmation(
+                        stable_empty,
+                        stable_payload,
+                        False,
+                        "both",
+                        False,
+                        "recheck_empty_to_search",
+                        stm,
+                        now,
+                    )
+                    return self._audit_confirmation_output(vision, stm, now)
+            else:
+                self.audit_last_signature = None
+                self.audit_last_frame_sequence = None
+                self.audit_hits = 0
             empty_payload = CargoAudit().to_protocol(
                 initial_stash=self.selected_batch.initial_stash,
                 destination=self.selected_batch.destination,
@@ -1521,7 +1611,10 @@ class CompetitionMission:
                 None,
                 "cargo_audit_no_observation",
                 tx_policy="audit_unstable_publish",
-                reason="audit_no_observation",
+                reason=(
+                    "audit_recheck_empty_stabilizing"
+                    if self.cargo_recheck_pending else "audit_no_observation"
+                ),
             )
         audit = vision.capture_audit
         new_frame = (

@@ -61,6 +61,7 @@ CARGO_MIXED_MATERIAL = 6
 
 CARGO_CLASS_CODES = {
     "": CARGO_NONE,
+    "none": CARGO_NONE,
     "green_supply": CARGO_GREEN,
     "core_black": CARGO_CORE,
     "injured_orange": CARGO_INJURED,
