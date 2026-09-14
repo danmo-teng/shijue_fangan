@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 from capture_roi import (  # noqa: E402
     IMAGE_HEIGHT,
     IMAGE_WIDTH,
-    bbox_overlaps_capture_roi,
+    bbox_capture_roi_overlap_ratio,
     load_capture_roi,
     save_capture_roi,
 )
@@ -175,9 +175,14 @@ def main() -> int:
             polygon = tuple(points)
             for item in latest_detections:
                 x, y, width, height = item.bbox
+                overlap_ratio = (
+                    bbox_capture_roi_overlap_ratio(item.bbox, polygon)
+                    if len(polygon) >= 3 else 0.0
+                )
                 inside = (
-                    len(polygon) >= 3 and
-                    bbox_overlaps_capture_roi(item.bbox, polygon)
+                    overlap_ratio >= 1.0
+                    if item.class_name == "core_black"
+                    else overlap_ratio > 0.80
                 )
                 color = (0, 255, 255) if inside else (0, 200, 0)
                 p0 = (round(x * scale_x), round(y * scale_y))
@@ -242,7 +247,7 @@ def main() -> int:
             )
             cv2.putText(
                 shown,
-                f"points={len(points)}  yellow=bbox overlap > 80%",
+                f"points={len(points)}  yellow=core 100%, others > 80%",
                 (10, 41),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.48,

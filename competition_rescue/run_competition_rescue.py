@@ -48,6 +48,7 @@ from run_yolo_x5 import (  # noqa: E402
 
 from protocol import CMD_ABORT, CMD_HOLD, CMD_PAUSE  # noqa: E402
 from capture_roi import (  # noqa: E402
+    bbox_capture_roi_overlap_ratio,
     bbox_overlaps_capture_roi,
     load_capture_roi,
 )
@@ -266,7 +267,12 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
             )
         inside = False
         if safe_bbox is not None:
-            inside = bbox_overlap_ratio(detection.bbox, safe_bbox) > 0.80
+            overlap_ratio = bbox_overlap_ratio(detection.bbox, safe_bbox)
+            inside = (
+                overlap_ratio >= 1.0
+                if track.class_name == "core_black"
+                else overlap_ratio > 0.80
+            )
         result.append(
             TrackedCargo(
                 track_id=track.track_id,
@@ -380,7 +386,11 @@ def make_vision_snapshot(
     )
     capture = tuple(
         item for item in cargo
-        if item.visible and bbox_overlaps_capture_roi(item.bbox, polygon)
+        if item.visible and (
+            bbox_capture_roi_overlap_ratio(item.bbox, polygon) >= 1.0
+            if item.class_name == "core_black"
+            else bbox_overlaps_capture_roi(item.bbox, polygon)
+        )
     )
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
