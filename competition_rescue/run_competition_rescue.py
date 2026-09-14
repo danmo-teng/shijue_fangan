@@ -969,12 +969,28 @@ def draw_overlay(
     stm: StmSnapshot,
     fps: float,
     output_size: tuple[int, int],
+    capture_polygon: tuple[tuple[int, int], ...],
 ) -> np.ndarray:
     """Render a low-cost preview; task/debug details stay in JSONL logs."""
     output_width, output_height = output_size
     view = cv2.resize(image, (output_width, output_height), interpolation=cv2.INTER_AREA)
     scale_x = output_width / float(IMAGE_WIDTH)
     scale_y = output_height / float(IMAGE_HEIGHT)
+    scaled_capture_polygon = np.asarray(
+        [
+            (round(x * scale_x), round(y * scale_y))
+            for x, y in capture_polygon
+        ],
+        dtype=np.int32,
+    )
+    cv2.polylines(
+        view,
+        [scaled_capture_polygon],
+        True,
+        (0, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
     selected_ids = set(output.batch.track_ids) if output.batch is not None else set()
     for item in vision.cargo:
         x, y, box_width, box_height = item.bbox
@@ -1414,6 +1430,7 @@ def main() -> int:
                         current_stm,
                         current_fps,
                         display_output_size,
+                        capture_polygon,
                     )
                     cv2.imshow(WINDOW_NAME, shown)
                     key = cv2.waitKey(1) & 0xFF
