@@ -48,7 +48,7 @@ from run_yolo_x5 import (  # noqa: E402
 
 from protocol import CMD_ABORT, CMD_HOLD, CMD_PAUSE  # noqa: E402
 from capture_roi import (  # noqa: E402
-    bbox_center_in_capture_roi,
+    bbox_overlaps_capture_roi,
     load_capture_roi,
 )
 from state_machine import (  # noqa: E402
@@ -239,6 +239,19 @@ def safe_bbox_from_detections(detections, safe_class: str):
     return None if safe is None else safe.bbox
 
 
+def bbox_overlap_ratio(
+    target_bbox: tuple[int, int, int, int],
+    region_bbox: tuple[int, int, int, int],
+) -> float:
+    tx, ty, tw, th = target_bbox
+    sx, sy, sw, sh = region_bbox
+    if tw <= 0 or th <= 0 or sw <= 0 or sh <= 0:
+        return 0.0
+    overlap_width = max(0, min(tx + tw, sx + sw) - max(tx, sx))
+    overlap_height = max(0, min(ty + th, sy + sh) - max(ty, sy))
+    return float(overlap_width * overlap_height) / float(tw * th)
+
+
 def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
     result: list[TrackedCargo] = []
     for track in tracks:
@@ -253,19 +266,7 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
             )
         inside = False
         if safe_bbox is not None:
-            tx, ty, tw, th = detection.bbox
-            sx, sy, sw, sh = safe_bbox
-            center_inside = (
-                sx <= tx + tw * 0.5 <= sx + sw and
-                sy <= ty + th * 0.5 <= sy + sh
-            )
-            overlap_width = max(0, min(tx + tw, sx + sw) - max(tx, sx))
-            overlap_height = max(0, min(ty + th, sy + sh) - max(ty, sy))
-            overlap_ratio = (
-                overlap_width * overlap_height / max(1, tw * th)
-            )
-            overlaps = overlap_ratio >= 0.25
-            inside = center_inside or overlaps
+            inside = bbox_overlap_ratio(detection.bbox, safe_bbox) > 0.80
         result.append(
             TrackedCargo(
                 track_id=track.track_id,
@@ -379,7 +380,7 @@ def make_vision_snapshot(
     )
     capture = tuple(
         item for item in cargo
-        if item.visible and bbox_center_in_capture_roi(item.bbox, polygon)
+        if item.visible and bbox_overlaps_capture_roi(item.bbox, polygon)
     )
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()

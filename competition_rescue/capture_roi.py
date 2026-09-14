@@ -52,7 +52,7 @@ def save_capture_roi(path: Path, points: list[tuple[int, int]]) -> None:
         "schema_version": 1,
         "image_width": IMAGE_WIDTH,
         "image_height": IMAGE_HEIGHT,
-        "point_semantics": "bbox_center",
+        "point_semantics": "bbox_overlap_ratio",
         "polygon_px": [[x, y] for x, y in polygon],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,11 +64,25 @@ def save_capture_roi(path: Path, points: list[tuple[int, int]]) -> None:
     os.replace(temporary, path)
 
 
-def bbox_center_in_capture_roi(
+def bbox_capture_roi_overlap_ratio(
     bbox: tuple[int, int, int, int],
     polygon: tuple[tuple[int, int], ...],
-) -> bool:
+) -> float:
     x, y, width, height = bbox
-    center = (float(x) + float(width) * 0.5, float(y) + float(height) * 0.5)
-    contour = np.asarray(polygon, dtype=np.int32).reshape((-1, 1, 2))
-    return cv2.pointPolygonTest(contour, center, False) >= 0
+    if width <= 0 or height <= 0 or len(polygon) < 3:
+        return 0.0
+    local_polygon = np.asarray(
+        [(px - x, py - y) for px, py in polygon],
+        dtype=np.int32,
+    ).reshape((-1, 1, 2))
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.fillPoly(mask, [local_polygon], 1)
+    return float(np.count_nonzero(mask)) / float(width * height)
+
+
+def bbox_overlaps_capture_roi(
+    bbox: tuple[int, int, int, int],
+    polygon: tuple[tuple[int, int], ...],
+    minimum_ratio: float = 0.80,
+) -> bool:
+    return bbox_capture_roi_overlap_ratio(bbox, polygon) > minimum_ratio
