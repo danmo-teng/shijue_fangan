@@ -322,7 +322,6 @@ class CompetitionState(str, Enum):
     DETOUR = "DETOUR"
     INVALID_RELEASE = "INVALID_RELEASE"
     INVALID_BACKOFF = "INVALID_BACKOFF"
-    FIELD_STUCK_YIELD = "FIELD_STUCK_YIELD"
     FIELD_STUCK_ESCAPE = "FIELD_STUCK_ESCAPE"
     SAFE_ZONE_ESCAPE = "SAFE_ZONE_ESCAPE"
     FINISHED = "FINISHED"
@@ -487,6 +486,7 @@ class CompetitionMission:
         self.separation_search_pending = False
         self.initial_release_initial_ack: int | None = None
         self.invalid_release_initial_ack: int | None = None
+        self.invalid_release_tx_baseline: int | None = None
         self.grab_initial_ack: int | None = None
         self.navigation_initial_ack: int | None = None
         self.enter_initial_ack: int | None = None
@@ -530,6 +530,7 @@ class CompetitionMission:
         self.danger_event_latched = False
         self.danger_clear_frames = 0
         self.invalid_backoff_initial_ack: int | None = None
+        self.invalid_backoff_tx_baseline: int | None = None
         self.stm_fault_waiting = False
         self.motion_watch_state: CompetitionState | None = None
         self.motion_watch_started_s: float | None = None
@@ -565,6 +566,7 @@ class CompetitionMission:
                 self.search_recovery_resume_state = None
             if state != CompetitionState.INVALID_BACKOFF:
                 self.invalid_backoff_initial_ack = None
+                self.invalid_backoff_tx_baseline = None
             if state != CompetitionState.DISPERSE:
                 self.disperse_command = None
                 self.disperse_initial_ack = None
@@ -579,10 +581,10 @@ class CompetitionMission:
                 self.initial_release_initial_ack = None
             if state != CompetitionState.INVALID_RELEASE:
                 self.invalid_release_initial_ack = None
+                self.invalid_release_tx_baseline = None
             if state != CompetitionState.WAIT_STASH_SEARCH_HANDOFF:
                 self.stash_handoff_hold_tx_baseline = None
             if state not in {
-                CompetitionState.FIELD_STUCK_YIELD,
                 CompetitionState.FIELD_STUCK_ESCAPE,
                 CompetitionState.SAFE_ZONE_ESCAPE,
             }:
@@ -684,8 +686,6 @@ class CompetitionMission:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_LANE_DONE)
         if self.state == CompetitionState.INVALID_BACKOFF:
             return (STM_MODE_YIELD_DONE,)
-        if self.state == CompetitionState.FIELD_STUCK_YIELD:
-            return (STM_MODE_REMOTE_ACTION, STM_MODE_YIELD_DONE)
         if self.state in {
             CompetitionState.FIELD_STUCK_ESCAPE,
             CompetitionState.SAFE_ZONE_ESCAPE,
@@ -1029,6 +1029,8 @@ class CompetitionMission:
             self.invalid_release_initial_ack = (
                 stm.acknowledged_sequence if stm.fresh else None
             )
+        if self.invalid_release_tx_baseline is None:
+            self.invalid_release_tx_baseline = stm.relay_mission_tx_frames
 
     def _clear_pending_audit(self) -> None:
         self.pending_audit = None
@@ -1687,11 +1689,7 @@ class CompetitionMission:
     ) -> CompetitionOutput:
         self._arm_invalid_release(stm, now)
         side = self.invalid_release_side
-        opcode = {
-            "left": CMD_RELEASE_LEFT,
-            "right": CMD_RELEASE_RIGHT,
-            "both": CMD_RELEASE_BOTH,
-        }[side]
+        release_command = self._invalid_release_command()
         if self.invalid_release_context == "separate_then_search":
             message = "首次无法判断左右归属，双开并等待F407内部撞分后回SEARCH"
         elif self.invalid_release_context == "final_release":
@@ -1700,7 +1698,7 @@ class CompetitionMission:
             message = f"夹内组合非法，释放{side}侧后退复审"
         return CompetitionOutput(
             self.state,
-            CommandRequest(opcode, self._side_flags()),
+            release_command,
             message,
             self.selected_batch,
             audit,
@@ -1713,6 +1711,14 @@ class CompetitionMission:
                 STM_MODE_RELEASE_BOTH_DONE,
             ),
         )
+
+    def _invalid_release_command(self) -> CommandRequest:
+        opcode = {
+            "left": CMD_RELEASE_LEFT,
+            "right": CMD_RELEASE_RIGHT,
+            "both": CMD_RELEASE_BOTH,
+        }[self.invalid_release_side]
+        return CommandRequest(opcode, self._side_flags())
 
     def _update_delivery_observation(self, vision: VisionSnapshot, now: float) -> None:
         if self.state not in {
@@ -2314,23 +2320,6 @@ class CompetitionMission:
     def _stuck_recovery_output(
         self, pose: PoseSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
-        if self.state == CompetitionState.FIELD_STUCK_YIELD:
-            if self._fresh_mode_after(
-                stm, STM_MODE_YIELD_DONE, self.stuck_initial_ack
-            ):
-                resume = self.stuck_resume_state or CompetitionState.SEARCH
-                self._set_state(resume, now)
-                self._reset_motion_watch()
-                return None
-            return CompetitionOutput(
-                self.state,
-                self._yield_command(),
-                "场内长期无进展，等待F407完成本次退让",
-                self.selected_batch,
-                motion_expected=True,
-                stuck_phase="yield",
-                expected_stm_modes=(STM_MODE_YIELD_DONE,),
-            )
         if self.state in {
             CompetitionState.FIELD_STUCK_ESCAPE,
             CompetitionState.SAFE_ZONE_ESCAPE,
@@ -2441,25 +2430,12 @@ class CompetitionMission:
                 stuck_phase="safe_zone_escape",
                 expected_stm_modes=(STM_MODE_ESCAPE_DONE,),
             )
-        if self.stuck_recovery_level == 0:
-            self.stuck_recovery_level = 1
-            self._set_state(CompetitionState.FIELD_STUCK_YIELD, now)
-            return CompetitionOutput(
-                self.state,
-                self._yield_command(),
-                "确认场内长期无进展，申请后退让出空间",
-                self.selected_batch,
-                event="field_stuck_yield",
-                motion_expected=True,
-                stuck_phase="yield",
-                expected_stm_modes=(STM_MODE_YIELD_DONE,),
-            )
         self.stuck_recovery_level = 0
         self._set_state(CompetitionState.FIELD_STUCK_ESCAPE, now)
         return CompetitionOutput(
             self.state,
             self._escape_command(),
-            "退让后再次确认长期无进展，申请旋转横移脱困",
+            "确认场内长期无进展，申请旋转横移脱困",
             self.selected_batch,
             event="field_stuck_escape",
             motion_expected=True,
@@ -2923,9 +2899,20 @@ class CompetitionMission:
                 "right": STM_MODE_RELEASE_RIGHT_DONE,
                 "both": STM_MODE_RELEASE_BOTH_DONE,
             }[self.invalid_release_side]
-            if self._fresh_mode_after(
+            release_command = self._invalid_release_command()
+            release_complete = self._fresh_mode_after(
                 stm, expected_mode, self.invalid_release_initial_ack
-            ):
+            )
+            if self.invalid_release_side in {"left", "right"}:
+                release_complete = (
+                    release_complete and
+                    self._relay_sent_since(
+                        stm,
+                        release_command,
+                        self.invalid_release_tx_baseline,
+                    )
+                )
+            if release_complete:
                 if self.invalid_release_context == "separate_then_search":
                     self._clear_selected_batch()
                     self.cargo_recheck_pending = False
@@ -2964,9 +2951,10 @@ class CompetitionMission:
                     )
                 self._set_state(CompetitionState.INVALID_BACKOFF, now)
                 self.invalid_backoff_initial_ack = stm.acknowledged_sequence
+                self.invalid_backoff_tx_baseline = stm.relay_mission_tx_frames
                 return CompetitionOutput(
                     self.state,
-                    CommandRequest(CMD_YIELD_BACKOFF, CMD_VALID, -round(self.settings.yield_distance_m * 1000.0), 0),
+                    self._yield_command(),
                     "异常侧已释放，后退脱离后复审",
                     audit=audit,
                     event="invalid_release_done",
@@ -2978,8 +2966,14 @@ class CompetitionMission:
             return self._invalid_release_output(audit, stm, now)
 
         if self.state == CompetitionState.INVALID_BACKOFF:
-            if self._fresh_mode_after(
-                stm, STM_MODE_YIELD_DONE, self.invalid_backoff_initial_ack
+            yield_command = self._yield_command()
+            if (
+                self._relay_sent_since(
+                    stm, yield_command, self.invalid_backoff_tx_baseline
+                ) and
+                self._fresh_mode_after(
+                    stm, STM_MODE_YIELD_DONE, self.invalid_backoff_initial_ack
+                )
             ):
                 self.cargo_recheck_pending = True
                 self._set_state(CompetitionState.CAPTURE_AUDIT, now)
@@ -2988,7 +2982,7 @@ class CompetitionMission:
                 return self._audit_output(vision, stm, now)
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_YIELD_BACKOFF, CMD_VALID, -round(self.settings.yield_distance_m * 1000.0), 0),
+                yield_command,
                 "后退脱离非法物资",
                 motion_expected=True,
             )
