@@ -652,10 +652,21 @@ class CompetitionMission:
             )
         if self.state == CompetitionState.CLUSTER_APPROACH:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_CLUSTER_READY)
+        if self.state == CompetitionState.CAPTURE_AUDIT:
+            return (
+                STM_MODE_CAPTURE_AUDIT,
+                STM_MODE_APPROACH_RECOVER,
+                STM_MODE_SEARCH,
+            )
         if self.state == CompetitionState.AUDIT_CONFIRM:
             if self.pending_audit_release_context == "recheck_empty_to_search":
                 return (STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH)
-            return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CAPTURE_DONE)
+            return (
+                STM_MODE_CAPTURE_AUDIT,
+                STM_MODE_CAPTURE_DONE,
+                STM_MODE_APPROACH_RECOVER,
+                STM_MODE_SEARCH,
+            )
         if self.state == CompetitionState.GRAB:
             return (STM_MODE_CAPTURE_DONE,)
         if self.state in {
@@ -945,16 +956,16 @@ class CompetitionMission:
             STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER
         }:
             self.approach_f407_active_seen = True
+        if (
+            self.approach_command_accepted and
+            stm.fresh and
+            stm.mode == STM_MODE_CAPTURE_AUDIT and
+            stm.claw_visible
+        ):
+            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+            return self._audit_output(vision, stm, now)
         if candidate is not None:
             self._mark_target_seen(candidate, now)
-            if (
-                self.approach_command_accepted and
-                stm.fresh and
-                stm.mode == STM_MODE_CAPTURE_AUDIT and
-                stm.claw_visible
-            ):
-                self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-                return self._audit_output(vision, stm, now)
             if stm.mode in {
                 STM_MODE_SEARCH,
                 STM_MODE_APPROACH_TARGET,
@@ -1046,6 +1057,52 @@ class CompetitionMission:
         self.pending_audit_initial_ack = None
         self.pending_audit_event_emitted = False
 
+    def _audit_reacquire_output(
+        self, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput:
+        resume_state = (
+            CompetitionState.INITIAL_OBSERVE
+            if self.selected_batch is not None and self.selected_batch.initial_stash
+            else CompetitionState.SEARCH
+        )
+        self._clear_pending_audit()
+        self._clear_selected_batch()
+        self.cargo_recheck_pending = False
+        self.audit_hits = 0
+        self.audit_last_signature = None
+        self.audit_last_frame_sequence = None
+        self.audit_recheck_frame_floor = None
+        self.audit_recheck_started_s = None
+        self.last_selected_track_ids = ()
+        self.target_last_seen_s = None
+        self.target_last_center_px = None
+        self.target_last_area_px = None
+        self.target_last_class = None
+        if stm.mode == STM_MODE_SEARCH:
+            self._set_state(resume_state, now)
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "近距离观察未确认夹内物资，F407已回到SEARCH",
+                event="capture_audit_search_recovered",
+                tx_policy="recovery_hold",
+                reason="capture_audit_search_recovered",
+                expected_stm_modes=(STM_MODE_SEARCH,),
+            )
+        self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
+        self.search_recovery_resume_state = resume_state
+        return CompetitionOutput(
+            self.state,
+            None,
+            "F407进入近距离目标重捕获，清除旧审核并等待mode=3",
+            event="capture_audit_reacquire_start",
+            suppress_command_tx=True,
+            suppression_reason="f407_capture_reacquire",
+            tx_policy="autonomous_recovery",
+            reason="f407_capture_reacquire",
+            expected_stm_modes=(STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH),
+        )
+
     def _begin_audit_confirmation(
         self,
         audit: CargoAudit,
@@ -1083,6 +1140,15 @@ class CompetitionMission:
             CMD_VALID,
             audit=self.pending_audit_payload,
         )
+        if (
+            stm.fresh and
+            stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH} and
+            not (
+                stm.mode == STM_MODE_SEARCH and
+                self.pending_audit_release_context == "recheck_empty_to_search"
+            )
+        ):
+            return self._audit_reacquire_output(stm, now)
         if not self._vision_fresh(vision, now):
             self._clear_pending_audit()
             self._set_state(CompetitionState.CAPTURE_AUDIT, now)
@@ -1521,7 +1587,37 @@ class CompetitionMission:
     def _audit_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        if stm.fresh and stm.mode in {
+            STM_MODE_APPROACH_RECOVER,
+            STM_MODE_SEARCH,
+        }:
+            return self._audit_reacquire_output(stm, now)
         if not self._vision_fresh(vision, now):
+            if not self.cargo_recheck_pending:
+                assert self.selected_batch is not None
+                empty_payload = CargoAudit().to_protocol(
+                    initial_stash=self.selected_batch.initial_stash,
+                    destination=self.selected_batch.destination,
+                    audit_id=self.audit_id,
+                )
+                return CompetitionOutput(
+                    self.state,
+                    CommandRequest(
+                        CMD_CARGO_AUDIT,
+                        CMD_VALID,
+                        audit=empty_payload,
+                    ),
+                    "夹爪ROI暂未取得新鲜确认，发送非STABLE全零审核继续慢速观察",
+                    self.selected_batch,
+                    event="cargo_audit_no_observation",
+                    tx_policy="audit_unstable_publish",
+                    reason="audit_no_observation",
+                    expected_stm_modes=(
+                        STM_MODE_CAPTURE_AUDIT,
+                        STM_MODE_APPROACH_RECOVER,
+                        STM_MODE_SEARCH,
+                    ),
+                )
             return CompetitionOutput(
                 self.state,
                 self._pause(),
@@ -1608,7 +1704,11 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=empty_payload),
-                "夹内暂未识别到稳定物资，保持停车等待",
+                (
+                    "单侧分离后暂未识别到物资，原地等待稳定复审"
+                    if self.cargo_recheck_pending else
+                    "夹爪ROI暂未确认物资，发送非STABLE全零审核继续慢速观察"
+                ),
                 self.selected_batch,
                 None,
                 "cargo_audit_no_observation",
@@ -1616,6 +1716,11 @@ class CompetitionMission:
                 reason=(
                     "audit_recheck_empty_stabilizing"
                     if self.cargo_recheck_pending else "audit_no_observation"
+                ),
+                expected_stm_modes=(
+                    STM_MODE_CAPTURE_AUDIT,
+                    STM_MODE_APPROACH_RECOVER,
+                    STM_MODE_SEARCH,
                 ),
             )
         audit = vision.capture_audit
