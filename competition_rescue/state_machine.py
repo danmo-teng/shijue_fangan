@@ -492,6 +492,8 @@ class CompetitionMission:
         self.enter_initial_ack: int | None = None
         self.task_complete_initial_ack: int | None = None
         self.return_initial_ack: int | None = None
+        self.return_relay_tx_baseline: int | None = None
+        self.return_command_accepted = False
         self.stash_zero_initial_ack: int | None = None
         self.stash_handoff_initial_ack: int | None = None
         self.cargo_recheck_pending = False
@@ -582,6 +584,10 @@ class CompetitionMission:
             if state != CompetitionState.INVALID_RELEASE:
                 self.invalid_release_initial_ack = None
                 self.invalid_release_tx_baseline = None
+            if state != CompetitionState.RETURN_CENTER:
+                self.return_initial_ack = None
+                self.return_relay_tx_baseline = None
+                self.return_command_accepted = False
             if state != CompetitionState.WAIT_STASH_SEARCH_HANDOFF:
                 self.stash_handoff_hold_tx_baseline = None
             if state not in {
@@ -2165,6 +2171,26 @@ class CompetitionMission:
             motion_expected=True,
         )
 
+    def _begin_return(self, stm: StmSnapshot, now: float) -> None:
+        self.return_initial_ack = (
+            stm.acknowledged_sequence if stm.fresh else None
+        )
+        self.return_relay_tx_baseline = stm.relay_mission_tx_frames
+        self.return_command_accepted = False
+        self._set_state(CompetitionState.RETURN_CENTER, now)
+
+    def _latch_return_command_acceptance(self, stm: StmSnapshot) -> None:
+        if (
+            not self.return_command_accepted and
+            stm.fresh and
+            self.return_initial_ack is not None and
+            self.return_relay_tx_baseline is not None and
+            stm.relay_mission_tx_frames > self.return_relay_tx_baseline and
+            stm.relay_last_mission_command == CMD_RETURN_CENTER and
+            stm.acknowledged_sequence != self.return_initial_ack
+        ):
+            self.return_command_accepted = True
+
     def _outside_field(self, pose: PoseSnapshot) -> bool:
         if not pose.valid:
             return False
@@ -2433,7 +2459,10 @@ class CompetitionMission:
                 stm, STM_MODE_ESCAPE_DONE, self.stuck_initial_ack
             ):
                 resume = self.stuck_resume_state or CompetitionState.RETURN_CENTER
-                self._set_state(resume, now)
+                if resume == CompetitionState.RETURN_CENTER:
+                    self._begin_return(stm, now)
+                else:
+                    self._set_state(resume, now)
                 self._reset_motion_watch()
                 return None
             return CompetitionOutput(
@@ -3132,8 +3161,7 @@ class CompetitionMission:
                 self.stash_has_cargo = True
                 self._clear_selected_batch()
                 self.safe_zone_exit_pending = False
-                self.return_initial_ack = stm.acknowledged_sequence
-                self._set_state(CompetitionState.RETURN_CENTER, now)
+                self._begin_return(stm, now)
                 return self._return_center_output(pose, now, "临时物资已放下，返回中心寻找首件绿色")
             return CompetitionOutput(
                 self.state,
@@ -3228,8 +3256,7 @@ class CompetitionMission:
             ):
                 self._clear_selected_batch()
                 self.safe_zone_exit_pending = True
-                self.return_initial_ack = stm.acknowledged_sequence
-                self._set_state(CompetitionState.RETURN_CENTER, now)
+                self._begin_return(stm, now)
                 return self._return_center_output(pose, now, "下位机已完成投送，返回中心区域")
             if self._fresh_mode_after(
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
@@ -3240,6 +3267,7 @@ class CompetitionMission:
             return CompetitionOutput(self.state, CommandRequest(CMD_TASK_COMPLETE, self._side_flags()), "等待下位机张爪并退出安全区")
 
         if self.state == CompetitionState.RETURN_CENTER:
+            self._latch_return_command_acceptance(stm)
             if self._outside_field(pose):
                 self._set_state(CompetitionState.FAULT, now)
                 return CompetitionOutput(
@@ -3249,8 +3277,10 @@ class CompetitionMission:
                     self.selected_batch,
                     event="boundary_fault",
                 )
-            if self._fresh_mode_after(
-                stm, STM_MODE_SEARCH, self.return_initial_ack
+            if (
+                stm.fresh and
+                stm.mode == STM_MODE_SEARCH and
+                self.return_command_accepted
             ):
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), f"回到中心搜索区，已完成{self.delivery_count}件")

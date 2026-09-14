@@ -879,6 +879,8 @@ class CompetitionPlanner:
             "enter_initial_ack": self.mission.enter_initial_ack,
             "task_complete_initial_ack": self.mission.task_complete_initial_ack,
             "return_initial_ack": self.mission.return_initial_ack,
+            "return_relay_tx_baseline": self.mission.return_relay_tx_baseline,
+            "return_command_accepted": self.mission.return_command_accepted,
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
             "audit_hits": self.mission.audit_hits,
             "invalid_release_side": self.mission.invalid_release_side,
