@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "image_width": 1280,
+  "image_height": 1024,
+  "point_semantics": "bbox_center",
+  "polygon_px": [
+    [
+      0,
+      256
+    ],
+    [
+      1279,
+      256
+    ],
+    [
+      1279,
+      1023
+    ],
+    [
+      0,
+      1023
+    ]
+  ]
+}

@@ -47,6 +47,10 @@ from run_yolo_x5 import (  # noqa: E402
 )
 
 from protocol import CMD_ABORT, CMD_HOLD, CMD_PAUSE  # noqa: E402
+from capture_roi import (  # noqa: E402
+    bbox_center_in_capture_roi,
+    load_capture_roi,
+)
 from state_machine import (  # noqa: E402
     CARGO_CLASSES,
     CargoAudit,
@@ -89,6 +93,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--command-file", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/uart_command.bin")
     parser.add_argument("--config", type=Path, default=VISION_ROOT / "config/rescue_vision.json")
     parser.add_argument("--homography", type=Path, default=VISION_ROOT / "config/homography.txt")
+    parser.add_argument(
+        "--capture-roi",
+        type=Path,
+        default=VISION_ROOT / "config/capture_roi.json",
+    )
     parser.add_argument("--diagnostics", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_diagnostics.json")
     parser.add_argument("--detections-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_detections.jsonl")
     parser.add_argument("--events-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_events.jsonl")
@@ -362,9 +371,16 @@ def make_vision_snapshot(
     mission: CompetitionMission,
     frame_sequence: int,
     safe_zone_filter_blocked: bool = False,
+    capture_polygon: tuple[tuple[int, int], ...] | None = None,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
-    capture = tuple(item for item in cargo if item.visible and item.center_px[1] >= IMAGE_HEIGHT * 0.25)
+    polygon = capture_polygon or load_capture_roi(
+        VISION_ROOT / "config/capture_roi.json"
+    )
+    capture = tuple(
+        item for item in cargo
+        if item.visible and bbox_center_in_capture_roi(item.bbox, polygon)
+    )
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
     selected_classes = set(selected.classes) if selected is not None else set()
@@ -1041,6 +1057,7 @@ def main() -> int:
         raise
 
     config = load_config(args.config)
+    capture_polygon = load_capture_roi(args.capture_roi)
     localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
     scaler: VseScaler | None = None
     try:
@@ -1104,6 +1121,8 @@ def main() -> int:
             "initial_stash_enabled": not args.disable_initial_stash,
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
+            "capture_roi": str(args.capture_roi),
+            "capture_polygon_px": [list(point) for point in capture_polygon],
             "display_fps": args.display_fps,
             "detection_log_fps": args.detection_log_fps,
             "vision_fps": args.vision_fps,
@@ -1352,6 +1371,7 @@ def main() -> int:
                         mission,
                         packet.frame_id,
                         safe_zone_filter_blocked,
+                        capture_polygon,
                     )
                     planner.set_vision(latest_vision)
                     log_now = time.monotonic()
