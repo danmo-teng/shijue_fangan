@@ -19,6 +19,7 @@ CMD_STOP = 0x00
 CMD_PAUSE = 0x01
 CMD_GRAB_CONFIRMED = 0x02
 CMD_NAVIGATE_WAYPOINT = 0x03
+CMD_ALIGN_SAFE_ZONE = 0x04
 CMD_ENTER_SAFE_ZONE = 0x05
 CMD_TASK_COMPLETE = 0x06
 CMD_ABORT = 0x07
@@ -43,6 +44,8 @@ CMD_USE_FINAL_HEADING = 1 << 2
 CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
 CMD_CLUSTER_TARGET = 1 << 5
+CMD_STAGE_ONLY = 1 << 6
+CMD_VISUAL_CORRECTION_VALID = 1 << 6
 
 AUDIT_INITIAL_STASH = 1 << 0
 AUDIT_DANGER_PRESENT = 1 << 1
@@ -112,6 +115,12 @@ def mission_frame(
         raise ValueError("command and flags must be bytes")
     if flags & CMD_CLUSTER_TARGET and command != CMD_APPROACH_TARGET:
         raise ValueError("CLUSTER_TARGET is only valid for APPROACH_TARGET")
+    if flags & CMD_STAGE_ONLY and command not in {
+        CMD_NAVIGATE_WAYPOINT,
+        CMD_ALIGN_SAFE_ZONE,
+        CMD_ENTER_SAFE_ZONE,
+    }:
+        raise ValueError("bit6 is only valid for safe-zone staging commands")
     payload = (
         bytes((command, flags))
         + _i16be(arg_a, "arg_a")

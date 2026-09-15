@@ -834,6 +834,18 @@ class CompetitionPlanner:
             "delivery_completion_basis": self.mission.delivery_completion_basis,
             "delivery_timeout_reason": self.mission.delivery_timeout_reason,
             "delivery_conflict_frames": self.mission.delivery_conflict_frames,
+            "safe_zone_freeze_hits": self.mission.safe_zone_freeze_hits,
+            "safe_zone_freeze_frame_floor": self.mission.safe_zone_freeze_frame_floor,
+            "locked_safe_bbox": (
+                None
+                if self.mission.locked_safe_bbox is None
+                else list(self.mission.locked_safe_bbox)
+            ),
+            "locked_safe_target_x_px": self.mission.locked_safe_target_x_px,
+            "safe_zone_visual_pixel_error": self.mission.safe_zone_visual_pixel_error,
+            "safe_zone_visual_locked": self.mission.safe_zone_visual_locked,
+            "safe_zone_fallback": self.mission.safe_zone_fallback,
+            "last_fence_distance_mm": self.mission.last_fence_distance_mm,
             "carried_manifest": list(self.mission.carried_manifest),
             "carried_total_count": self.mission.carried_total_count,
             "carried_has_green": self.mission.carried_has_green,
