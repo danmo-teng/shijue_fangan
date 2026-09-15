@@ -4,7 +4,7 @@
 
 上位机仍通过定位进程的原子`uart_command.bin`发送固定15字节`TYPE=0x18`帧：
 
-> **当前配合版本说明（2026-09-13，以上位机`codex/gamepad-teleop`最新提交为准）**
+> **当前配合版本说明（2026-09-15，以上位机`codex/gamepad-teleop`最新提交为准）**
 >
 > 本节是当前F407配合合同，优先级高于本文后面的历史设计文字。F407仓库仍由下位机负责人
 > 自行修改；上位机仓库不生成或应用F407补丁。命令编号、15字节帧、CRC、序号和现有正常
@@ -55,20 +55,37 @@ SEARCH → APPROACH_TARGET → mode=20
 → mode=22/GRIPPER_CLOSED → NAVIGATE
 ```
 
+普通SEARCH候选通过现有类别、置信度、坐标范围和tracker hits检查后只需1个新帧，不再额外等待3帧。
+APPROACH目标短暂消失时，上位机最多150 ms重发最后坐标，之后明确发送HOLD让F407停车；F407不得再
+依赖250 ms任务帧或视觉帧超时。目标重新出现后，上位机继续发送APPROACH_TARGET。HOLD只停车并保留
+当前靠近上下文，不得自行当作彻底取消；若以后需要放弃目标，双方另行增加明确CANCEL语义。
+
 发现需要打散的聚集目标时，不允许从SEARCH直接发送`DISPERSE_PILE`，必须按以下握手执行：
 
 ```text
 SEARCH
 → APPROACH_TARGET(flags=VALID|CLUSTER_TARGET，X/Y=聚集区域中心)
 → 持续发送并等待F407新鲜mode=37且ACK已变化
-→ DISPERSE_PILE持续发送
-→ 新鲜mode=35且ACK已变化
-→ HOLD，使F407返回SEARCH
+→ 上位机用3个新视觉帧确认原目标位于聚集区域左侧、右侧或无法判断
+→ 左/右明确：DISPERSE_PILE置bit6 SIDE_VALID，右侧再置bit7 TARGET_RIGHT
+→ 选择性分离完成后新鲜mode=35且ACK已变化
+→ 上位机进入CAPTURE_AUDIT，不发送HOLD，复审后GRAB或继续释放/YIELD
+→ 左右无法判断：DISPERSE_PILE不置bit6/bit7
+→ 整堆撞分完成后新鲜mode=34且ACK已变化
+→ 上位机进入DISPERSE_RESELECT，原地重新关联原目标，不立即发送HOLD
 ```
 
 `CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为聚集区域中心X，P4/P5为
 聚集区域中心Y。F407只有接受该命令并完成聚集靠近后才上报mode37；mode37之前收到DISPERSE必须
 拒绝。打散过程中不要因为视觉暂时漏帧而停止已经接受的动作；F407继续执行自身15秒动作保护。
+
+`DISPERSE_PILE`的bit6/bit7语义为：bit6=`SIDE_VALID`，bit7=`TARGET_RIGHT`。bit7只能用于
+DISPERSE且必须和bit6同时置位。bit6置位时F407只分离并保留指定侧目标，完成报告mode35；bit6未
+置位时执行整堆撞分，完成报告mode34。所有完成都必须对应本次DISPERSE的ACK。
+
+mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT。mode34后F407保持原地等待重选；上位机
+找到已经独立的原目标时直接发送普通APPROACH，仍聚集且当前聚集目标撞分少于2次时重新发送
+CLUSTER_TARGET。约1.25秒且取得至少3个新帧仍无法关联时，上位机才发送HOLD回普通SEARCH。
 
 正式夹内审核第一次无法判断物资左右归属时，使用`separate_then_search`：
 
@@ -99,8 +116,10 @@ SEARCH
 蓝方物资(+150,-740) mm，蓝方伤员(-150,-740) mm
 ```
 
-`NAVIGATE_WAYPOINT`的`P1 bit6=STAGE_ONLY`。F407到`D=0`后只停车、置`DISTANCE_DONE`并保持
-`mode=10`，不得启动旧的安全区最后补推。随后上位机分两次使用`ALIGN_SAFE_ZONE=0x04`：
+`NAVIGATE_WAYPOINT`的`P1 bit6=STAGE_ONLY`。上位机进入预备点地图容差后会锁存并持续发送同一帧
+`D=0`，只有确认该D=0经过relay发送、ACK变化、新鲜mode10、`DISTANCE_DONE=1`且
+`GRIPPER_CLOSED=1`后才发送ALIGN。F407到`D=0`后只停车、置`DISTANCE_DONE`并保持mode10，
+不得启动旧的安全区最后补推。随后上位机分两次使用`ALIGN_SAFE_ZONE=0x04`：
 
 1. `P1=VALID|USE_FINAL_HEADING|RED_SIDE`，`P6/P7=红方9000或蓝方27000`。F407按定位/IMU航向
    原地对正；接收时可立即ACK，但转向期间继续报告mode10，真正完成后报告mode11。
@@ -124,7 +143,7 @@ P6/P7   bit6置位时为0；定位降级时为红方9000或蓝方27000
 
 bit6置位时，F407只能保持第二次ALIGN锁存的航向；定位距离只调节前进速度，不能修改方向。bit6未
 置位时，F407使用P6/P7的定位正方向降级推进。到机构理论位置后，F407锁存最后补推，忽略后续定位
-距离变化，改用编码器低速继续前进30～40 mm，完成后停车并报告mode15。推进速度、接近减速以及
+距离变化，以250 mm/s使用编码器继续前进50 mm，完成后停车并报告mode15。推进速度、接近减速以及
 普通+核心混合物资的二次推进仍全部由F407本地完成。
 
 冻结框只用于本次一次性视觉转角，不能在靠近过程中更新，也不能替代现有“物资区外→区内”投送
@@ -192,7 +211,7 @@ F407需要区分可恢复告警和真正锁存故障：
 A3 B3 18 SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
 ```
 
-`P0`为命令，`P1`为`VALID/RED_SIDE/DRIVE_STRAIGHT/USE_FINAL_HEADING/DISTANCE_VALID/CLUSTER_TARGET`等标志；普通导航继续使用`P2/P3=剩余距离mm`、`P6/P7=绝对航向0.01°`。`CLUSTER_TARGET=bit5`只允许用于`APPROACH_TARGET`。`bit6`按命令区分：NAV表示`STAGE_ONLY`，ALIGN表示`VISUAL_CORRECTION_VALID`，ENTER表示已完成视觉修正并锁存推进航向。
+`P0`为命令，`P1`为`VALID/RED_SIDE/DRIVE_STRAIGHT/USE_FINAL_HEADING/DISTANCE_VALID/CLUSTER_TARGET`等标志；普通导航继续使用`P2/P3=剩余距离mm`、`P6/P7=绝对航向0.01°`。`CLUSTER_TARGET=bit5`只允许用于`APPROACH_TARGET`。`bit6`按命令区分：NAV表示`STAGE_ONLY`，ALIGN/ENTER表示`VISUAL_CORRECTION_VALID`，DISPERSE表示`SIDE_VALID`；`bit7=TARGET_RIGHT`只能用于DISPERSE且必须同时置bit6。
 
 ## 新命令
 

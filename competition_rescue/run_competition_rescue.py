@@ -881,6 +881,25 @@ class CompetitionPlanner:
             "first_fault_code": self.mission.first_fault_code,
             "delivery_count": self.mission.delivery_count,
             "disperse_attempts": self.mission.disperse_attempts,
+            "disperse_expected_done_mode": self.mission.disperse_expected_done_mode,
+            "disperse_relay_tx_baseline": self.mission.disperse_relay_tx_baseline,
+            "cluster_id": self.mission.cluster_id,
+            "cluster_signature": self.mission.cluster_signature,
+            "cluster_target_class": self.mission.cluster_target_class,
+            "cluster_target_track_id": self.mission.cluster_target_track_id,
+            "cluster_target_bbox": (
+                None
+                if self.mission.cluster_target_bbox is None
+                else list(self.mission.cluster_target_bbox)
+            ),
+            "cluster_bbox": (
+                None
+                if self.mission.cluster_bbox is None
+                else list(self.mission.cluster_bbox)
+            ),
+            "cluster_keep_side": self.mission.cluster_keep_side,
+            "cluster_side_hits": self.mission.cluster_side_hits,
+            "disperse_reselect_new_frames": self.mission.disperse_reselect_new_frames,
             "cluster_initial_ack": self.mission.cluster_initial_ack,
             "cluster_relay_tx_baseline": self.mission.cluster_relay_tx_baseline,
             "approach_initial_ack": self.mission.approach_initial_ack,
@@ -888,12 +907,15 @@ class CompetitionPlanner:
             "pending_audit_initial_ack": self.mission.pending_audit_initial_ack,
             "grab_initial_ack": self.mission.grab_initial_ack,
             "navigation_initial_ack": self.mission.navigation_initial_ack,
+            "staging_zero_initial_ack": self.mission.staging_zero_initial_ack,
+            "staging_zero_tx_baseline": self.mission.staging_zero_tx_baseline,
             "enter_initial_ack": self.mission.enter_initial_ack,
             "task_complete_initial_ack": self.mission.task_complete_initial_ack,
             "return_initial_ack": self.mission.return_initial_ack,
             "return_relay_tx_baseline": self.mission.return_relay_tx_baseline,
             "return_command_accepted": self.mission.return_command_accepted,
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
+            "cargo_recheck_context": self.mission.cargo_recheck_context,
             "audit_hits": self.mission.audit_hits,
             "invalid_release_side": self.mission.invalid_release_side,
             "invalid_release_final": self.mission.invalid_release_final,

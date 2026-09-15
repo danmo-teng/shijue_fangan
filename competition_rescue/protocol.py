@@ -46,6 +46,8 @@ CMD_DISTANCE_VALID = 1 << 4
 CMD_CLUSTER_TARGET = 1 << 5
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
+CMD_SIDE_VALID = 1 << 6
+CMD_TARGET_RIGHT = 1 << 7
 
 AUDIT_INITIAL_STASH = 1 << 0
 AUDIT_DANGER_PRESENT = 1 << 1
@@ -119,8 +121,13 @@ def mission_frame(
         CMD_NAVIGATE_WAYPOINT,
         CMD_ALIGN_SAFE_ZONE,
         CMD_ENTER_SAFE_ZONE,
+        CMD_DISPERSE_PILE,
     }:
-        raise ValueError("bit6 is only valid for safe-zone staging commands")
+        raise ValueError("bit6 is not valid for this command")
+    if flags & CMD_TARGET_RIGHT and command != CMD_DISPERSE_PILE:
+        raise ValueError("TARGET_RIGHT is only valid for DISPERSE_PILE")
+    if flags & CMD_TARGET_RIGHT and not flags & CMD_SIDE_VALID:
+        raise ValueError("TARGET_RIGHT requires SIDE_VALID")
     payload = (
         bytes((command, flags))
         + _i16be(arg_a, "arg_a")
@@ -295,8 +302,20 @@ def release_frame(sequence: int, side: str) -> bytes:
     return mission_frame(sequence, command, CMD_VALID)
 
 
-def disperse_frame(sequence: int) -> bytes:
-    return mission_frame(sequence, CMD_DISPERSE_PILE, CMD_VALID)
+def disperse_frame(
+    sequence: int,
+    keep_side: str | None = None,
+    *,
+    red_side: bool = False,
+) -> bytes:
+    if keep_side not in {None, "left", "right"}:
+        raise ValueError("keep_side must be left, right or None")
+    flags = CMD_VALID | (CMD_RED_SIDE if red_side else 0)
+    if keep_side is not None:
+        flags |= CMD_SIDE_VALID
+    if keep_side == "right":
+        flags |= CMD_TARGET_RIGHT
+    return mission_frame(sequence, CMD_DISPERSE_PILE, flags)
 
 
 def change_lane_frame(sequence: int, lateral_m: float, forward_m: float) -> bytes:
