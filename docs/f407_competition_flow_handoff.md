@@ -65,19 +65,23 @@ APPROACH目标短暂消失时，上位机最多150 ms重发最后坐标，之后
 ```text
 SEARCH
 → APPROACH_TARGET(flags=VALID|CLUSTER_TARGET，X/Y=聚集区域中心)
-→ 持续发送并等待F407新鲜mode=37且ACK已变化
-→ 上位机用3个新视觉帧确认原目标位于聚集区域左侧、右侧或无法判断
-→ 左/右明确：DISPERSE_PILE置bit6 SIDE_VALID，右侧再置bit7 TARGET_RIGHT
+→ F407摄像头130°完成水平对正，再转到140°并上报mode=38
+→ 上位机立即进入夹爪ROI审核；无物资时持续发送非STABLE全零CARGO_AUDIT
+→ 连续稳定非空CARGO_AUDIT被ACK后，F407停车并上报mode=37
+→ 审核合法：上位机持续发送GRAB_CONFIRMED
+→ 需要分离且锁定目标明确在左/右爪：DISPERSE置bit6 SIDE_VALID，右侧再置bit7 TARGET_RIGHT
 → 选择性分离完成后新鲜mode=35且ACK已变化
 → 上位机进入CAPTURE_AUDIT，不发送HOLD，复审后GRAB或继续释放/YIELD
-→ 左右无法判断：DISPERSE_PILE不置bit6/bit7
+→ 锁定目标左右不明：DISPERSE_PILE不置bit6/bit7
 → 整堆撞分完成后新鲜mode=34且ACK已变化
 → 上位机进入DISPERSE_RESELECT，原地重新关联原目标，不立即发送HOLD
 ```
 
 `CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为聚集区域中心X，P4/P5为
-聚集区域中心Y。F407只有接受该命令并完成聚集靠近后才上报mode37；mode37之前收到DISPERSE必须
-拒绝。打散过程中不要因为视觉暂时漏帧而停止已经接受的动作；F407继续执行自身15秒动作保护。
+聚集区域中心Y。F407只有完成聚集靠近并进入140°夹内观察后才上报mode38；收到稳定非空审核后
+停车并上报mode37。mode37之前收到GRAB或DISPERSE必须拒绝。确认前若进入mode3或mode24，上位机
+清除旧审核、待发送GRAB/DISPERSE和锁定批次，重新进入目标选择。打散过程中不要因为视觉暂时漏帧
+而停止已经接受的动作；F407继续执行自身15秒动作保护。
 
 `DISPERSE_PILE`的bit6/bit7语义为：bit6=`SIDE_VALID`，bit7=`TARGET_RIGHT`。bit7只能用于
 DISPERSE且必须和bit6同时置位。bit6置位时F407只分离并保留指定侧目标，完成报告mode35；bit6未
@@ -122,7 +126,8 @@ CLUSTER_TARGET。约1.25秒且取得至少3个新帧仍无法关联时，上位�
 不得启动旧的安全区最后补推。随后上位机分两次使用`ALIGN_SAFE_ZONE=0x04`：
 
 1. `P1=VALID|USE_FINAL_HEADING|RED_SIDE`，`P6/P7=红方9000或蓝方27000`。F407按定位/IMU航向
-   原地对正；接收时可立即ACK，但转向期间继续报告mode10，真正完成后报告mode11。
+   原地对正；上位机不发送±10°补偿。F407首趟自行执行红方80°/蓝方280°，第二趟起恢复
+   90°/270°。接收时可立即ACK，但转向期间继续报告mode10，真正完成后报告mode11。
 2. 对正后，上位机才开始统计本方安全区。连续3个不同视觉帧识别成功后，取三个框坐标中位数并
    冻结；无镜像画面下物资区使用框宽1/3处，伤员区使用2/3处。第二个`ALIGN_SAFE_ZONE`设置
    `P1 bit6=VISUAL_CORRECTION_VALID`，`P2/P3=目标点X-640`的有符号像素误差。F407只在首次收到
@@ -294,7 +299,8 @@ F407应在执行层再次拒绝下列情况：
 下位机只负责实时执行和硬联锁，不需要保存全场目标列表。上位机已经在`competition_detections.jsonl`保存所有识别结果，并通过稳定的track ID决定当前批次。
 
 上位机的`DISPERSE_PILE`不是F407到达中心后的固定动作。只有聚集目标已连续稳定、上位机持续发送
-带`CLUSTER_TARGET`的APPROACH，而且F407用新鲜mode37和本次ACK确认靠近完成后才允许发送。
+带`CLUSTER_TARGET`的APPROACH；F407先上报mode38接受夹内审核，稳定非空审核后上报mode37，
+此后才允许上位机发送GRAB或DISPERSE。
 普通无目标、视觉超时、夹内复审等待和夹爪闭合时，上位机不得新发该命令。
 
 非法审核的推荐状态握手为：
@@ -332,6 +338,7 @@ T265平移、T265航向和有效编码器进展时，才请求一次`YIELD_BACKO
 35 DISPERSE_DONE
 36 LANE_DONE
 37 CLUSTER_READY
+38 CLUSTER_CAPTURE_AUDIT
 ```
 
 退让和脱困期间必须有运动看门狗；如果电流、轮速、碰撞或机构故障已经明确，直接停车，不应继续旋转。

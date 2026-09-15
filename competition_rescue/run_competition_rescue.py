@@ -898,7 +898,7 @@ class CompetitionPlanner:
                 else list(self.mission.cluster_bbox)
             ),
             "cluster_keep_side": self.mission.cluster_keep_side,
-            "cluster_side_hits": self.mission.cluster_side_hits,
+            "cluster_audit_active": self.mission.cluster_audit_active,
             "disperse_reselect_new_frames": self.mission.disperse_reselect_new_frames,
             "cluster_initial_ack": self.mission.cluster_initial_ack,
             "cluster_relay_tx_baseline": self.mission.cluster_relay_tx_baseline,
