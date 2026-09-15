@@ -39,6 +39,7 @@ from protocol import (
     CMD_ENTER_SAFE_ZONE,
     CMD_YIELD_BACKOFF,
     CMD_STAGE_ONLY,
+    CMD_USE_FINAL_HEADING,
     CMD_VALID,
     CMD_VISUAL_CORRECTION_VALID,
     mission_frame,
@@ -369,7 +370,7 @@ class CompetitionSettings:
     safe_zone_center_x_m: float = 0.15
     safe_zone_inner_edge_m: float = 1.20
     safe_fence_face_m: float = 1.14
-    safe_zone_staging_distance_m: float = 0.40
+    safe_zone_staging_distance_m: float = 0.60
     safe_zone_freeze_frames: int = 3
     safe_zone_acquire_timeout_s: float = 5.0
     push_plate_offset_m: float = 0.105
@@ -3289,7 +3290,7 @@ class CompetitionMission:
                     return CompetitionOutput(
                         self.state,
                         zero_command,
-                        "已进入400 mm预备点容差，持续发送STAGE NAV D=0等待F407确认",
+                        "已进入600 mm预备点容差，持续发送STAGE NAV D=0等待F407确认",
                         self.selected_batch,
                         motion_expected=True,
                         tx_policy="staging_zero",
@@ -3313,7 +3314,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 staging_command,
-                "前往对应安全区半区围栏前400 mm预备点",
+                "前往对应安全区半区围栏前600 mm预备点",
                 self.selected_batch,
                 motion_expected=True,
                 tx_policy="normal_command",
