@@ -74,7 +74,9 @@ SEARCH
 → 上位机进入CAPTURE_AUDIT，不发送HOLD，复审后GRAB或继续释放/YIELD
 → 锁定目标左右不明：DISPERSE_PILE不置bit6/bit7
 → 整堆撞分完成后新鲜mode=34且ACK已变化
-→ 上位机进入DISPERSE_RESELECT，原地重新关联原目标，不立即发送HOLD
+→ F407约500 ms后可自动进入mode=3；上位机把新鲜mode34或随后新鲜mode3都视为完成
+→ 清空旧审核、批次和track锁定，直接进入SEARCH发送HOLD
+→ 新SEARCH只使用撞分完成后的新视觉帧
 ```
 
 `CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为聚集区域中心X，P4/P5为
@@ -87,9 +89,9 @@ SEARCH
 DISPERSE且必须和bit6同时置位。bit6置位时F407只分离并保留指定侧目标，完成报告mode35；bit6未
 置位时执行整堆撞分，完成报告mode34。所有完成都必须对应本次DISPERSE的ACK。
 
-mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT。mode34后F407保持原地等待重选；上位机
-找到已经独立的原目标时直接发送普通APPROACH，仍聚集且当前聚集目标撞分少于2次时重新发送
-CLUSTER_TARGET。约1.25秒且取得至少3个新帧仍无法关联时，上位机才发送HOLD回普通SEARCH。
+mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT。无侧标志的整堆撞分按F407当前动作：
+Touch闭爪、1000 mm/s前撞0.25 m、500 mm/s后退0.25 m、双爪打开、mode34约500 ms后自动进入
+mode3。上位机不再静默停在撞分重选状态，也不在mode34分支发送CARGO_AUDIT或YIELD。
 
 正式夹内审核第一次无法判断物资左右归属时，使用`separate_then_search`：
 
@@ -120,9 +122,11 @@ CLUSTER_TARGET。约1.25秒且取得至少3个新帧仍无法关联时，上位�
 蓝方物资(+150,-540) mm，蓝方伤员(-150,-540) mm
 ```
 
-`NAVIGATE_WAYPOINT`的`P1 bit6=STAGE_ONLY`。上位机进入预备点地图容差后会锁存并持续发送同一帧
-`D=0`，只有确认该D=0经过relay发送、ACK变化、新鲜mode10、`DISTANCE_DONE=1`且
-`GRIPPER_CLOSED=1`后才发送ALIGN。F407到`D=0`后只停车、置`DISTANCE_DONE`并保持mode10，
+`NAVIGATE_WAYPOINT`的`P1 bit6=STAGE_ONLY`。进入预备点容差后，上位机持续发送
+`P1=VALID|DISTANCE_VALID|STAGE_ONLY|RED_SIDE(按阵营)`、`D=0`，H仍为当前位置到预备点航向，
+不置DRIVE_STRAIGHT或USE_FINAL_HEADING。上位机永久锁存本阶段D=0经过relay发送且ACK曾变化的证据；
+只有锁存成立、新鲜mode10、`DISTANCE_DONE=1`且`GRIPPER_CLOSED=1`后才发送ALIGN，不在最终时刻重新
+比较8位ACK。F407到`D=0`后只停车、置`DISTANCE_DONE`、把摄像头命令到120°并保持mode10，
 不得启动旧的安全区最后补推。随后上位机分两次使用`ALIGN_SAFE_ZONE=0x04`：
 
 1. `P1=VALID|USE_FINAL_HEADING|RED_SIDE`，`P6/P7=红方9000或蓝方27000`。F407按定位/IMU航向
@@ -316,6 +320,15 @@ CAPTURE_AUDIT
 `RELEASE_LEFT/RELEASE_RIGHT`表示打开并把对应侧物资留在原地；不能理解为“保留左/右侧”。所有完成
 跳转必须同时满足STM新鲜、mode正确、ACK相对动作开始前已变化；仅看到relay发送成功不能当作F407接受。
 LCD显示`CMD:APP REJ`时，上位机必须保留当前等待/复审阶段，不能跳到APPROACH。
+
+左右语义必须严格保持：`RELEASE_LEFT`打开左侧、保留右侧；`RELEASE_RIGHT`打开右侧、保留左侧；
+`DISPERSE+SIDE_VALID`且`TARGET_RIGHT=0`保留左侧，`TARGET_RIGHT=1`保留右侧。F407保留左侧时左爪
+65°夹紧、右爪72°打开；保留右侧时左爪108°打开、右爪115°夹紧。上位机只有确认对应保留侧
+count大于0才置SIDE_VALID；否则不置bit6/bit7，执行0.25 m整堆撞分。
+
+两侧都属于当前任务合规物资但仍需拆开时，依次优先：唯一包含green_supply的一侧、物体数量较少
+的一侧、锁定目标数量更多的一侧、轨迹更稳定的一侧、距离更近的一侧、稳定track ID较小的一侧；
+仍无法可靠判断才执行无侧标志整堆撞分。
 
 ## 停滞退让与脱困
 

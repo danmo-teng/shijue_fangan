@@ -170,6 +170,7 @@ def load_stm(path: Path) -> StmSnapshot:
         return StmSnapshot(
             mode=int(data.get("mode", 0)),
             flags=int(data.get("flags", 0)),
+            camera_pitch_cdeg=int(data.get("camera_pitch_cdeg", 0)),
             age_ms=age_ms,
             fault_code=int(data.get("fault_code", 0)),
             acknowledged_sequence=int(data.get("acknowledged_sequence", 0)),
@@ -313,6 +314,22 @@ def audit_from_cargo(
     # initial-stash path intentionally ignores category/count legality.
     injury_mixed = has_injury and len(visible) != 1
     left_name, right_name = side_class(left), side_class(right)
+
+    def track_stability(values: list[TrackedCargo]) -> int:
+        return max((item.hits for item in values), default=0)
+
+    def nearest_distance(values: list[TrackedCargo]) -> float | None:
+        distances = [item.distance_m for item in values if math.isfinite(item.distance_m)]
+        return min(distances, default=None)
+
+    def stable_track_id(values: list[TrackedCargo]) -> int | None:
+        if not values:
+            return None
+        return min(
+            values,
+            key=lambda item: (-item.hits, item.distance_m, item.track_id),
+        ).track_id
+
     left_invalid = left_name in {"danger_cyan", "unknown"} or (
         any(item.class_name == "injured_orange" for item in left) and
         any(item.class_name in {"green_supply", "core_black"} for item in left)
@@ -338,6 +355,12 @@ def audit_from_cargo(
         right_selected_count=sum(
             item.track_id in (selected_ids or set()) for item in right
         ),
+        left_track_stability=track_stability(left),
+        right_track_stability=track_stability(right),
+        left_nearest_distance_m=nearest_distance(left),
+        right_nearest_distance_m=nearest_distance(right),
+        left_stable_track_id=stable_track_id(left),
+        right_stable_track_id=stable_track_id(right),
     )
 
 
@@ -538,6 +561,7 @@ def stm_dict(stm: StmSnapshot) -> dict:
     return {
         "mode": stm.mode,
         "flags": stm.flags,
+        "camera_pitch_cdeg": stm.camera_pitch_cdeg,
         "age_ms": stm.age_ms if math.isfinite(stm.age_ms) else None,
         "fault_code": stm.fault_code,
         "acknowledged_sequence": stm.acknowledged_sequence,
@@ -898,8 +922,8 @@ class CompetitionPlanner:
                 else list(self.mission.cluster_bbox)
             ),
             "cluster_keep_side": self.mission.cluster_keep_side,
+            "cluster_keep_side_count": self.mission.cluster_keep_side_count,
             "cluster_audit_active": self.mission.cluster_audit_active,
-            "disperse_reselect_new_frames": self.mission.disperse_reselect_new_frames,
             "cluster_initial_ack": self.mission.cluster_initial_ack,
             "cluster_relay_tx_baseline": self.mission.cluster_relay_tx_baseline,
             "approach_initial_ack": self.mission.approach_initial_ack,
@@ -909,6 +933,16 @@ class CompetitionPlanner:
             "navigation_initial_ack": self.mission.navigation_initial_ack,
             "staging_zero_initial_ack": self.mission.staging_zero_initial_ack,
             "staging_zero_tx_baseline": self.mission.staging_zero_tx_baseline,
+            "staging_zero_accepted": self.mission.staging_zero_accepted,
+            "last_tx_opcode": stm.relay_last_mission_command,
+            "last_tx_seq": stm.relay_last_mission_sequence,
+            "relay_tx_frames": stm.relay_mission_tx_frames,
+            "relay_last_payload": list(stm.relay_last_mission_payload),
+            "staging_stm_mode": stm.mode,
+            "staging_stm_ack": stm.acknowledged_sequence,
+            "staging_distance_done": stm.distance_done,
+            "staging_gripper_closed": stm.gripper_closed,
+            "staging_camera_pitch_cdeg": stm.camera_pitch_cdeg,
             "enter_initial_ack": self.mission.enter_initial_ack,
             "task_complete_initial_ack": self.mission.task_complete_initial_ack,
             "return_initial_ack": self.mission.return_initial_ack,
@@ -949,10 +983,29 @@ class CompetitionPlanner:
                     })
                     self.last_state = output.state
                 if output.event:
-                    self.events_log.write(output.event, {
+                    event_data = {
                         "state": output.state.value,
                         "message": output.message,
-                    })
+                    }
+                    if output.event in {
+                        "safe_zone_staging_arrived",
+                        "staging_camera_firmware_mismatch",
+                    }:
+                        event_data.update({
+                            "upper_state": output.state.value,
+                            "last_tx_opcode": stm.relay_last_mission_command,
+                            "last_tx_seq": stm.relay_last_mission_sequence,
+                            "relay_tx_frames": stm.relay_mission_tx_frames,
+                            "relay_last_payload": list(
+                                stm.relay_last_mission_payload
+                            ),
+                            "stm_mode": stm.mode,
+                            "stm_ack": stm.acknowledged_sequence,
+                            "distance_done": stm.distance_done,
+                            "gripper_closed": stm.gripper_closed,
+                            "camera_pitch_cdeg": stm.camera_pitch_cdeg,
+                        })
+                    self.events_log.write(output.event, event_data)
                 diagnostics_now = time.monotonic()
                 if (
                     state_changed or

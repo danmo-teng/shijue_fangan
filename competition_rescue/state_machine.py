@@ -24,6 +24,7 @@ from protocol import (
     CMD_CHANGE_LANE,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
+    CMD_DRIVE_STRAIGHT,
     CMD_ESCAPE_MANEUVER,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
@@ -110,6 +111,7 @@ class StmSnapshot:
     relay_tx_errors: int = 0
     relay_last_sequence: int | None = None
     relay_last_tx_age_ms: float = math.inf
+    camera_pitch_cdeg: int = 0
 
     @property
     def claw_visible(self) -> bool:
@@ -179,6 +181,12 @@ class CargoAudit:
     right_invalid: bool = False
     left_selected_count: int = 0
     right_selected_count: int = 0
+    left_track_stability: int = 0
+    right_track_stability: int = 0
+    left_nearest_distance_m: float | None = None
+    right_nearest_distance_m: float | None = None
+    left_stable_track_id: int | None = None
+    right_stable_track_id: int | None = None
 
     @property
     def signature(self) -> tuple:
@@ -320,7 +328,6 @@ class CompetitionState(str, Enum):
     SEARCH = "SEARCH"
     CLUSTER_APPROACH = "CLUSTER_APPROACH"
     DISPERSE = "DISPERSE"
-    DISPERSE_RESELECT = "DISPERSE_RESELECT"
     APPROACH = "APPROACH"
     NAVIGATE = "NAVIGATE"
     ALIGN_SAFE_ZONE_BY_POSE = "ALIGN_SAFE_ZONE_BY_POSE"
@@ -359,8 +366,6 @@ class CompetitionSettings:
     search_min_turn_deg: float = 720.0
     search_target_confirm_frames: int = 1
     disperse_limit: int = 2
-    cluster_reselect_timeout_s: float = 1.25
-    cluster_reselect_min_frames: int = 3
     approach_missing_hold_s: float = 0.15
     yield_distance_m: float = 0.25
     detour_lateral_m: float = 0.25
@@ -404,8 +409,6 @@ class CompetitionSettings:
         if self.search_min_turn_deg <= 0 or self.search_target_confirm_frames <= 0:
             raise ValueError("search scan thresholds must be positive")
         if (
-            self.cluster_reselect_timeout_s <= 0 or
-            self.cluster_reselect_min_frames <= 0 or
             self.approach_missing_hold_s <= 0
         ):
             raise ValueError("cluster and approach timing settings must be positive")
@@ -540,7 +543,8 @@ class CompetitionMission:
         self.safe_zone_visual_align_initial_ack: int | None = None
         self.staging_zero_initial_ack: int | None = None
         self.staging_zero_tx_baseline: int | None = None
-        self.staging_zero_command: CommandRequest | None = None
+        self.staging_zero_accepted = False
+        self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s: float | None = None
         self.safe_zone_freeze_frame_floor: int | None = None
         self.safe_zone_freeze_last_frame_sequence: int | None = None
@@ -581,11 +585,8 @@ class CompetitionMission:
         self.cluster_bbox: tuple[int, int, int, int] | None = None
         self.cluster_signature: tuple | None = None
         self.cluster_keep_side: str | None = None
+        self.cluster_keep_side_count = 0
         self.cluster_audit_active = False
-        self.disperse_reselect_started_s: float | None = None
-        self.disperse_reselect_frame_floor: int | None = None
-        self.disperse_reselect_last_frame_sequence: int | None = None
-        self.disperse_reselect_new_frames = 0
         self.target_last_seen_s: float | None = None
         self.target_last_center_px: tuple[int, int] | None = None
         self.target_last_area_px: int | None = None
@@ -651,11 +652,6 @@ class CompetitionMission:
                 self.cluster_command = None
                 self.cluster_initial_ack = None
                 self.cluster_relay_tx_baseline = None
-            if state != CompetitionState.DISPERSE_RESELECT:
-                self.disperse_reselect_started_s = None
-                self.disperse_reselect_frame_floor = None
-                self.disperse_reselect_last_frame_sequence = None
-                self.disperse_reselect_new_frames = 0
             if state != CompetitionState.DETOUR:
                 self.detour_initial_ack = None
                 self.detour_execution_seen = False
@@ -672,6 +668,11 @@ class CompetitionMission:
                 self.safe_zone_align_initial_ack = None
             if state != CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
                 self.safe_zone_visual_align_initial_ack = None
+            if state != CompetitionState.NAVIGATE:
+                self.staging_zero_initial_ack = None
+                self.staging_zero_tx_baseline = None
+                self.staging_zero_accepted = False
+                self.staging_camera_mismatch_reported = False
             if state != CompetitionState.WAIT_STASH_SEARCH_HANDOFF:
                 self.stash_handoff_hold_tx_baseline = None
             if state not in {
@@ -721,6 +722,24 @@ class CompetitionMission:
             stm.relay_mission_tx_frames > baseline and
             stm.relay_last_mission_command == command.opcode and
             stm.relay_last_mission_payload == cls._command_payload(command)
+        )
+
+    @staticmethod
+    def _relay_sent_stage_zero_since(
+        stm: StmSnapshot, baseline: int | None
+    ) -> bool:
+        payload = stm.relay_last_mission_payload
+        expected_flags = CMD_VALID | CMD_DISTANCE_VALID | CMD_STAGE_ONLY
+        if payload and payload[1] & CMD_RED_SIDE:
+            expected_flags |= CMD_RED_SIDE
+        return (
+            stm.fresh and
+            baseline is not None and
+            stm.relay_mission_tx_frames > baseline and
+            stm.relay_last_mission_command == CMD_NAVIGATE_WAYPOINT and
+            len(payload) == 8 and
+            payload[1] == expected_flags and
+            payload[2:6] == (0, 0, 0, 0)
         )
 
     @staticmethod
@@ -790,8 +809,6 @@ class CompetitionMission:
             return (STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH)
         if self.state == CompetitionState.DISPERSE:
             return (self.disperse_expected_done_mode,)
-        if self.state == CompetitionState.DISPERSE_RESELECT:
-            return (STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_RELEASE:
             return (STM_MODE_RELEASE_BOTH_DONE,)
         if self.state == CompetitionState.INVALID_RELEASE:
@@ -890,6 +907,7 @@ class CompetitionMission:
         self.cluster_bbox = None
         self.cluster_signature = None
         self.cluster_keep_side = None
+        self.cluster_keep_side_count = 0
         self.cluster_audit_active = False
 
     def _arm_approach(self, stm: StmSnapshot) -> None:
@@ -1167,6 +1185,9 @@ class CompetitionMission:
         )
 
     def _arm_disperse(self, stm: StmSnapshot, keep_side: str | None) -> None:
+        if keep_side is not None and self.cluster_keep_side_count <= 0:
+            keep_side = None
+            self.cluster_keep_side = None
         flags = self._side_flags()
         if keep_side is not None:
             flags |= CMD_SIDE_VALID
@@ -1332,7 +1353,11 @@ class CompetitionMission:
                         reason="cluster_audit_valid",
                         expected_stm_modes=(STM_MODE_CAPTURE_DONE,),
                     )
-                self.cluster_keep_side = self._cluster_keep_side_from_audit(audit)
+                self.cluster_keep_side = self._preferred_keep_side(audit)
+                self.cluster_keep_side_count = {
+                    "left": audit.left_count,
+                    "right": audit.right_count,
+                }.get(self.cluster_keep_side, 0)
                 self.disperse_attempts += 1
                 return self._start_disperse(stm, now)
             event = (
@@ -1738,12 +1763,67 @@ class CompetitionMission:
             side_class in {"green_supply", "core_black", "mixed_material"}
         )
 
-    @staticmethod
-    def _cluster_keep_side_from_audit(audit: CargoAudit) -> str | None:
-        if audit.left_selected_count > 0 and audit.right_selected_count == 0:
-            return "left"
-        if audit.right_selected_count > 0 and audit.left_selected_count == 0:
-            return "right"
+    def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
+        left_nonempty = audit.left_count > 0
+        right_nonempty = audit.right_count > 0
+        left_legal = self._side_is_legal_for_task(
+            audit.left_class, audit.left_count
+        )
+        right_legal = self._side_is_legal_for_task(
+            audit.right_class, audit.right_count
+        )
+        if left_legal != right_legal:
+            return "left" if left_legal else "right"
+        if not left_legal:
+            return None
+        if left_nonempty != right_nonempty:
+            return "left" if left_nonempty else "right"
+        if not left_nonempty:
+            return None
+        left_has_green = audit.left_class in {
+            "green_supply",
+            "mixed_material",
+        }
+        right_has_green = audit.right_class in {
+            "green_supply",
+            "mixed_material",
+        }
+        if left_has_green != right_has_green:
+            return "left" if left_has_green else "right"
+        if audit.left_count != audit.right_count:
+            return "left" if audit.left_count < audit.right_count else "right"
+        if audit.left_selected_count != audit.right_selected_count:
+            return (
+                "left"
+                if audit.left_selected_count > audit.right_selected_count
+                else "right"
+            )
+        if audit.left_track_stability != audit.right_track_stability:
+            return (
+                "left"
+                if audit.left_track_stability > audit.right_track_stability
+                else "right"
+            )
+        if (
+            audit.left_nearest_distance_m is not None and
+            audit.right_nearest_distance_m is not None and
+            audit.left_nearest_distance_m != audit.right_nearest_distance_m
+        ):
+            return (
+                "left"
+                if audit.left_nearest_distance_m < audit.right_nearest_distance_m
+                else "right"
+            )
+        if (
+            audit.left_stable_track_id is not None and
+            audit.right_stable_track_id is not None and
+            audit.left_stable_track_id != audit.right_stable_track_id
+        ):
+            return (
+                "left"
+                if audit.left_stable_track_id < audit.right_stable_track_id
+                else "right"
+            )
         return None
 
     def _choose_release_side(self, audit: CargoAudit) -> str:
@@ -1793,14 +1873,12 @@ class CompetitionMission:
         }:
             return "right" if self.selected_batch and self.selected_batch.destination != "injury" else "left"
 
-        # For count overflow, retain the side with more legal cargo. If both
-        # sides are equally plausible, use the side containing locked tracks;
-        # without a reliable preference, discard both rather than guess.
         if left_legal and right_legal:
-            if audit.left_count != audit.right_count:
-                return "right" if audit.left_count > audit.right_count else "left"
-            if audit.left_selected_count != audit.right_selected_count:
-                return "right" if audit.left_selected_count > audit.right_selected_count else "left"
+            keep_side = self._preferred_keep_side(audit)
+            if keep_side == "left":
+                return "right"
+            if keep_side == "right":
+                return "left"
         return "both"
 
     def _audit_output(
@@ -2157,7 +2235,8 @@ class CompetitionMission:
         self.safe_zone_visual_align_initial_ack = None
         self.staging_zero_initial_ack = None
         self.staging_zero_tx_baseline = None
-        self.staging_zero_command = None
+        self.staging_zero_accepted = False
+        self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s = None
         self.safe_zone_freeze_frame_floor = None
         self.safe_zone_freeze_last_frame_sequence = None
@@ -2386,9 +2465,12 @@ class CompetitionMission:
         # F407 uses it as the field-frame translation direction and keeps the
         # chassis heading separately, so near-zone lateral correction remains
         # possible for the omni base.
-        flags = self._side_flags() | (1 << 1) | (1 << 2) | (1 << 4)
-        if staging_only:
-            flags |= CMD_STAGE_ONLY
+        flags = (
+            self._side_flags() | CMD_DISTANCE_VALID | CMD_STAGE_ONLY
+            if staging_only else
+            self._side_flags() | CMD_DRIVE_STRAIGHT |
+            CMD_USE_FINAL_HEADING | CMD_DISTANCE_VALID
+        )
         return CommandRequest(
             CMD_NAVIGATE_WAYPOINT,
             flags,
@@ -2969,127 +3051,33 @@ class CompetitionMission:
             expected_stm_modes=(self.disperse_expected_done_mode,),
         )
 
-    def _begin_disperse_reselect(
-        self, vision: VisionSnapshot, now: float
-    ) -> CompetitionOutput:
-        self.cargo_recheck_pending = False
-        self.cargo_recheck_context = "none"
-        self.audit_hits = 0
-        self.audit_last_signature = None
-        self.audit_last_frame_sequence = None
-        self.audit_recheck_frame_floor = None
-        self.audit_recheck_started_s = None
-        self._clear_pending_audit()
-        self.disperse_reselect_started_s = now
-        self.disperse_reselect_frame_floor = (
-            vision.frame_sequence if vision.frame_sequence > 0 else None
-        )
-        self.disperse_reselect_last_frame_sequence = None
-        self.disperse_reselect_new_frames = 0
-        self._set_state(CompetitionState.DISPERSE_RESELECT, now)
-        return CompetitionOutput(
-            self.state,
-            None,
-            "整堆撞分完成，原地用新视觉重新选择原目标",
-            self.selected_batch,
-            event="disperse_reselect_start",
-            suppress_command_tx=True,
-            suppression_reason="disperse_reselect_wait",
-            tx_policy="reselect_wait",
-            reason="disperse_reselect_wait",
-            expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
-        )
-
-    def _disperse_reselect_output(
-        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
-    ) -> CompetitionOutput:
-        new_frame = (
-            self._vision_fresh(vision, now) and
-            vision.frame_sequence != self.disperse_reselect_last_frame_sequence and
-            (
-                self.disperse_reselect_frame_floor is None or
-                vision.frame_sequence > self.disperse_reselect_frame_floor
-            )
-        )
-        if new_frame:
-            self.disperse_reselect_last_frame_sequence = vision.frame_sequence
-            self.disperse_reselect_new_frames += 1
-            target = self._cluster_target_for_vision(vision)
-            if target is not None:
-                visible = self._visible_cargo(vision)
-                self._mark_target_seen(target, now)
-                if self._is_isolated(target, visible):
-                    self._set_state(CompetitionState.APPROACH, now)
-                    self._arm_approach(stm)
-                    approach_command = self._approach_command(target)
-                    self.last_approach_command = approach_command
-                    return CompetitionOutput(
-                        self.state,
-                        approach_command,
-                        "撞分后重新找到原目标且已独立，直接靠近抓取",
-                        self.selected_batch,
-                        event="disperse_target_reselected",
-                        motion_expected=True,
-                        tx_policy="normal_command",
-                        reason="disperse_target_isolated",
-                    )
-                if self.disperse_attempts < self.settings.disperse_limit:
-                    return self._start_cluster_approach(
-                        vision,
-                        stm,
-                        now,
-                        preserve_cluster=True,
-                    )
-        elapsed = (
-            0.0
-            if self.disperse_reselect_started_s is None else
-            now - self.disperse_reselect_started_s
-        )
-        if (
-            elapsed >= self.settings.cluster_reselect_timeout_s and
-            self.disperse_reselect_new_frames >=
-            self.settings.cluster_reselect_min_frames
-        ):
-            self._clear_selected_batch()
-            self.separation_search_pending = True
-            self._set_state(CompetitionState.SEARCH, now)
-            return CompetitionOutput(
-                self.state,
-                self._hold(),
-                "撞分后获得足够新帧仍无法重选原目标，回到普通SEARCH",
-                event="disperse_reselect_timeout",
-                tx_policy="hold",
-                reason="disperse_reselect_timeout",
-                expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
-            )
-        return CompetitionOutput(
-            self.state,
-            None,
-            "撞分后原地等待原目标重新出现",
-            self.selected_batch,
-            suppress_command_tx=True,
-            suppression_reason="disperse_reselect_wait",
-            tx_policy="reselect_wait",
-            reason="disperse_reselect_wait",
-            expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
-        )
-
     def _disperse_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
         assert self.disperse_command is not None
-        if (
-            self._relay_sent_since(
-                stm,
-                self.disperse_command,
-                self.disperse_relay_tx_baseline,
-            ) and
-            self._fresh_mode_after(
-                stm,
-                self.disperse_expected_done_mode,
-                self.disperse_initial_ack,
+        command_sent = self._relay_sent_since(
+            stm,
+            self.disperse_command,
+            self.disperse_relay_tx_baseline,
+        )
+        ack_changed = (
+            stm.fresh and
+            self.disperse_initial_ack is not None and
+            stm.acknowledged_sequence != self.disperse_initial_ack
+        )
+        if self.disperse_expected_done_mode == STM_MODE_DISPERSE_DONE:
+            completed = (
+                command_sent and
+                ack_changed and
+                stm.mode == STM_MODE_DISPERSE_DONE
             )
-        ):
+        else:
+            completed = (
+                command_sent and
+                ack_changed and
+                stm.mode in {STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH}
+            )
+        if completed:
             if self.disperse_expected_done_mode == STM_MODE_DISPERSE_DONE:
                 self.cargo_recheck_pending = True
                 self.cargo_recheck_context = "disperse_selective"
@@ -3103,7 +3091,34 @@ class CompetitionMission:
                 self._clear_pending_audit()
                 self._set_state(CompetitionState.CAPTURE_AUDIT, now)
                 return self._audit_output(vision, stm, now)
-            return self._begin_disperse_reselect(vision, now)
+            self._clear_pending_audit()
+            self._clear_selected_batch()
+            self.cargo_recheck_pending = False
+            self.cargo_recheck_context = "none"
+            self.audit_hits = 0
+            self.audit_last_signature = None
+            self.audit_last_frame_sequence = None
+            self.audit_recheck_frame_floor = None
+            self.audit_recheck_started_s = None
+            self.grab_initial_ack = None
+            self._clear_cluster_context(reset_attempts=True)
+            self.separation_search_pending = False
+            self._set_state(CompetitionState.SEARCH, now)
+            self.search_epoch_frame_floor = (
+                vision.frame_sequence if vision.frame_sequence > 0 else None
+            )
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "整堆撞分完成并进入SEARCH，等待撞分后的新视觉帧",
+                event="disperse_search_complete",
+                tx_policy="hold",
+                reason="disperse_search_complete",
+                expected_stm_modes=(
+                    STM_MODE_RELEASE_BOTH_DONE,
+                    STM_MODE_SEARCH,
+                ),
+            )
         return CompetitionOutput(
             self.state,
             self.disperse_command,
@@ -3316,44 +3331,75 @@ class CompetitionMission:
             )
             if (
                 self._at_target(pose, target) or
-                self.staging_zero_command is not None
+                self.staging_zero_tx_baseline is not None
             ):
                 if self.staging_zero_tx_baseline is None:
                     self.staging_zero_tx_baseline = stm.relay_mission_tx_frames
                     self.staging_zero_initial_ack = stm.acknowledged_sequence
-                    self.staging_zero_command = replace(staging_command, arg_a=0)
-                assert self.staging_zero_command is not None
-                zero_command = self.staging_zero_command
+                zero_command = replace(staging_command, arg_a=0)
+                if (
+                    not self.staging_zero_accepted and
+                    stm.fresh and
+                    self.staging_zero_initial_ack is not None and
+                    self._relay_sent_stage_zero_since(
+                        stm, self.staging_zero_tx_baseline
+                    ) and
+                    stm.relay_last_mission_sequence is not None and
+                    stm.acknowledged_sequence ==
+                    stm.relay_last_mission_sequence and
+                    stm.acknowledged_sequence != self.staging_zero_initial_ack
+                ):
+                    self.staging_zero_accepted = True
                 staging_done = (
                     stm.fresh and
                     stm.mode == STM_MODE_NAVIGATE and
                     stm.distance_done and
                     stm.gripper_closed and
-                    self._relay_sent_since(
-                        stm, zero_command, self.staging_zero_tx_baseline
-                    ) and
-                    self._fresh_mode_after(
-                        stm, STM_MODE_NAVIGATE, self.staging_zero_initial_ack
-                    )
+                    self.staging_zero_accepted
+                )
+                camera_mismatch = (
+                    stm.fresh and
+                    stm.mode == STM_MODE_NAVIGATE and
+                    stm.distance_done and
+                    stm.camera_pitch_cdeg == 14000
                 )
                 if not staging_done:
+                    event = ""
+                    if camera_mismatch and not self.staging_camera_mismatch_reported:
+                        self.staging_camera_mismatch_reported = True
+                        event = "staging_camera_firmware_mismatch"
                     return CompetitionOutput(
                         self.state,
                         zero_command,
-                        "已进入600 mm预备点容差，持续发送STAGE NAV D=0等待F407确认",
+                        (
+                            "mode10和DISTANCE_DONE已成立但摄像头仍为140°，"
+                            "下位机固件版本与最新STAGE流程不匹配"
+                            if camera_mismatch else
+                            "已进入60 cm预备点容差，持续发送STAGE NAV D=0等待F407确认"
+                        ),
                         self.selected_batch,
+                        event=event,
                         motion_expected=True,
                         tx_policy="staging_zero",
                         reason="safe_zone_staging_zero_pending",
                         expected_stm_modes=(STM_MODE_NAVIGATE,),
                     )
+                mismatch_event = ""
+                if camera_mismatch and not self.staging_camera_mismatch_reported:
+                    self.staging_camera_mismatch_reported = True
+                    mismatch_event = "staging_camera_firmware_mismatch"
                 self._begin_safe_zone_pose_align(stm, now)
                 return CompetitionOutput(
                     self.state,
                     self._safe_zone_pose_align_command(),
-                    "到达安全区半区前40 cm预备点，按定位正方向对准安全区",
+                    (
+                        "STAGE完成但摄像头仍为140°，下位机固件版本不匹配；"
+                        "继续发送定位ALIGN"
+                        if camera_mismatch else
+                        "到达安全区半区前60 cm预备点，按定位正方向对准安全区"
+                    ),
                     self.selected_batch,
-                    event="safe_zone_staging_arrived",
+                    event=mismatch_event or "safe_zone_staging_arrived",
                     tx_policy="normal_command",
                     reason="safe_zone_pose_align_start",
                     expected_stm_modes=(
@@ -3726,9 +3772,6 @@ class CompetitionMission:
         if self.state == CompetitionState.DISPERSE:
             return self._disperse_output(vision, stm, now)
 
-        if self.state == CompetitionState.DISPERSE_RESELECT:
-            return self._disperse_reselect_output(vision, stm, now)
-
         if self.state == CompetitionState.APPROACH:
             if (
                 self._vision_fresh(vision, now) and
@@ -3784,7 +3827,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 self._safe_zone_pose_align_command(),
-                "在40 cm预备点按定位航向正对安全区",
+                "在60 cm预备点按定位航向正对安全区",
                 self.selected_batch,
                 tx_policy="normal_command",
                 reason="safe_zone_pose_align_wait",
