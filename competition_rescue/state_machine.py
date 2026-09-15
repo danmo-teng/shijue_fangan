@@ -531,6 +531,7 @@ class CompetitionMission:
         self.invalid_release_initial_ack: int | None = None
         self.invalid_release_tx_baseline: int | None = None
         self.grab_initial_ack: int | None = None
+        self.grab_complete_confirmed = False
         self.navigation_initial_ack: int | None = None
         self.enter_initial_ack: int | None = None
         self.task_complete_initial_ack: int | None = None
@@ -662,6 +663,8 @@ class CompetitionMission:
             if state != CompetitionState.INVALID_RELEASE:
                 self.invalid_release_initial_ack = None
                 self.invalid_release_tx_baseline = None
+            if state != CompetitionState.GRAB:
+                self.grab_complete_confirmed = False
             if state != CompetitionState.RETURN_CENTER:
                 self.return_initial_ack = None
                 self.return_relay_tx_baseline = None
@@ -935,12 +938,10 @@ class CompetitionMission:
             self.search_candidate_key = None
             self.search_candidate_hits = 0
             return False
-        if self.search_epoch_frame_floor is None:
-            self.search_epoch_frame_floor = vision.frame_sequence
-            self.search_candidate_key = None
-            self.search_candidate_hits = 0
-            return False
-        if vision.frame_sequence <= self.search_epoch_frame_floor:
+        if (
+            self.search_epoch_frame_floor is not None and
+            vision.frame_sequence <= self.search_epoch_frame_floor
+        ):
             return False
         if self.search_candidate_key != key:
             self.search_candidate_key = key
@@ -3797,18 +3798,40 @@ class CompetitionMission:
 
         if self.state == CompetitionState.GRAB:
             if (
+                stm.fresh and
+                stm.mode == STM_MODE_CAPTURE_DONE and
                 stm.gripper_closed and
-                self._fresh_mode_after(
-                    stm, STM_MODE_CAPTURE_DONE, self.grab_initial_ack
-                )
+                self.selected_batch is not None
             ):
+                self.grab_complete_confirmed = True
                 self.cargo_recheck_pending = False
                 self.cargo_recheck_context = "none"
+            if self.grab_complete_confirmed:
+                if not pose.valid:
+                    return CompetitionOutput(
+                        self.state,
+                        self._pause(),
+                        "抓取已完成，等待定位恢复后发送NAV",
+                        self.selected_batch,
+                        tx_policy="pause",
+                        reason="grab_complete_pose_wait",
+                        expected_stm_modes=(STM_MODE_CAPTURE_DONE,),
+                    )
                 self._reset_safe_zone_alignment()
                 self._set_state(CompetitionState.INITIAL_STASH_NAV if self.selected_batch and self.selected_batch.initial_stash else CompetitionState.NAVIGATE, now)
                 self.navigation_initial_ack = stm.acknowledged_sequence
                 self._reset_delivery_evidence()
-                return self._navigate(vision, pose, stm, now)
+                navigation = self._navigate(vision, pose, stm, now)
+                if (
+                    navigation.command is not None and
+                    navigation.command.opcode == CMD_NAVIGATE_WAYPOINT
+                ):
+                    navigation = replace(
+                        navigation,
+                        event="grab_complete_navigation_start",
+                        reason="grab_complete_navigation_start",
+                    )
+                return navigation
             return CompetitionOutput(self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()), "等待下位机完成合爪", self.selected_batch)
 
         if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE:

@@ -621,6 +621,8 @@ class CompetitionPlanner:
         self.diagnostics_period_s = 0.1
         self.last_diagnostics_s = -math.inf
         self.command_tx_suppression_reasons_logged: set[str] = set()
+        self.grab_waitnav_started_s: float | None = None
+        self.grab_waitnav_event_emitted = False
         self.termination_attempted = False
         self.termination_result: dict = {
             "attempted": False,
@@ -645,6 +647,53 @@ class CompetitionPlanner:
     def snapshot(self):
         with self.lock:
             return self.latest_output, self.latest_pose, self.latest_stm
+
+    def _update_grab_waitnav_diagnostic(
+        self,
+        output: CompetitionOutput,
+        pose: PoseSnapshot,
+        stm: StmSnapshot,
+        now: float,
+    ) -> None:
+        if output.state != CompetitionState.GRAB or stm.mode != 22:
+            self.grab_waitnav_started_s = None
+            self.grab_waitnav_event_emitted = False
+            return
+        if self.grab_waitnav_started_s is None:
+            self.grab_waitnav_started_s = now
+            return
+        if (
+            self.grab_waitnav_event_emitted or
+            now - self.grab_waitnav_started_s < 0.5
+        ):
+            return
+        if not stm.fresh:
+            block = "STM_STALE"
+        elif not stm.gripper_closed:
+            block = "GRIPPER_FLAG_MISSING"
+        elif not pose.valid:
+            block = "POSE_INVALID"
+        else:
+            block = "NAV_NOT_PUBLISHED"
+        self.grab_waitnav_event_emitted = True
+        self.events_log.write("grab_waitnav_detected", {
+            "upper_state": output.state.value,
+            "upper_reason": output.reason or output.message,
+            "waitnav_block": f"WAITNAV_BLOCK: {block}",
+            "stm_mode": stm.mode,
+            "stm_fresh": stm.fresh,
+            "stm_age_ms": stm.age_ms if math.isfinite(stm.age_ms) else None,
+            "stm_gripper_closed": stm.gripper_closed,
+            "stm_ack": stm.acknowledged_sequence,
+            "grab_initial_ack": self.mission.grab_initial_ack,
+            "relay_last_mission_command": stm.relay_last_mission_command,
+            "relay_last_mission_sequence": stm.relay_last_mission_sequence,
+            "relay_last_mission_payload": list(
+                stm.relay_last_mission_payload
+            ),
+            "pose_valid": pose.valid,
+            "pose_age_ms": pose.age_ms if math.isfinite(pose.age_ms) else None,
+        })
 
     def start(self) -> None:
         self.running = True
@@ -824,8 +873,17 @@ class CompetitionPlanner:
             "command_tx_suppressed": output.suppress_command_tx,
             "suppression_reason": output.suppression_reason,
             "upper_state": output.state.value,
+            "upper_reason": output.reason or output.suppression_reason or output.message,
             "stm_mode": stm.mode,
+            "stm_fresh": stm.fresh,
             "stm_age_ms": stm.age_ms if math.isfinite(stm.age_ms) else None,
+            "stm_gripper_closed": stm.gripper_closed,
+            "stm_ack": stm.acknowledged_sequence,
+            "relay_last_mission_command": stm.relay_last_mission_command,
+            "relay_last_mission_sequence": stm.relay_last_mission_sequence,
+            "relay_last_mission_payload": list(stm.relay_last_mission_payload),
+            "pose_valid": pose.valid,
+            "pose_age_ms": pose.age_ms if math.isfinite(pose.age_ms) else None,
             "command_opcode": None if output.command is None else output.command.opcode,
             "tx_policy": self._tx_policy(output),
             "reason": output.reason or output.suppression_reason or output.message,
@@ -972,6 +1030,9 @@ class CompetitionPlanner:
                     vision = self.latest_vision
                     paused = self.paused
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
+                self._update_grab_waitnav_diagnostic(
+                    output, pose, stm, started
+                )
                 self._log_command_tx_suppression(output)
                 self._publish(output)
                 state_changed = output.state != self.last_state
