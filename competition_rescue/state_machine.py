@@ -528,8 +528,11 @@ class CompetitionMission:
         self.invalid_release_context = "none"
         self.separation_search_pending = False
         self.initial_release_initial_ack: int | None = None
+        self.initial_release_tx_baseline: int | None = None
+        self.initial_release_command_accepted = False
         self.invalid_release_initial_ack: int | None = None
         self.invalid_release_tx_baseline: int | None = None
+        self.invalid_release_command_accepted = False
         self.grab_initial_ack: int | None = None
         self.grab_complete_confirmed = False
         self.navigation_initial_ack: int | None = None
@@ -538,12 +541,18 @@ class CompetitionMission:
         self.return_initial_ack: int | None = None
         self.return_relay_tx_baseline: int | None = None
         self.return_command_accepted = False
+        self.return_search_frame_floor: int | None = None
+        self.return_search_mode_seen = False
         self.stash_zero_initial_ack: int | None = None
         self.stash_handoff_initial_ack: int | None = None
         self.cargo_recheck_pending = False
         self.cargo_recheck_context = "none"
         self.safe_zone_align_initial_ack: int | None = None
+        self.safe_zone_align_tx_baseline: int | None = None
+        self.safe_zone_align_command_accepted = False
         self.safe_zone_visual_align_initial_ack: int | None = None
+        self.safe_zone_visual_align_tx_baseline: int | None = None
+        self.safe_zone_visual_align_command_accepted = False
         self.staging_zero_initial_ack: int | None = None
         self.staging_zero_tx_baseline: int | None = None
         self.staging_zero_accepted = False
@@ -578,9 +587,14 @@ class CompetitionMission:
         self.disperse_initial_ack: int | None = None
         self.disperse_relay_tx_baseline: int | None = None
         self.disperse_expected_done_mode = STM_MODE_DISPERSE_DONE
+        self.disperse_context = "observe"
+        self.disperse_observe_attempts = 0
+        self.disperse_command_accepted = False
         self.cluster_command: CommandRequest | None = None
         self.cluster_initial_ack: int | None = None
         self.cluster_relay_tx_baseline: int | None = None
+        self.cluster_command_accepted = False
+        self.cluster_execution_seen = False
         self.cluster_id = 0
         self.cluster_target_class: str | None = None
         self.cluster_target_track_id: int | None = None
@@ -611,6 +625,7 @@ class CompetitionMission:
         self.danger_clear_frames = 0
         self.invalid_backoff_initial_ack: int | None = None
         self.invalid_backoff_tx_baseline: int | None = None
+        self.invalid_backoff_command_accepted = False
         self.stm_fault_waiting = False
         self.motion_watch_state: CompetitionState | None = None
         self.motion_watch_started_s: float | None = None
@@ -618,6 +633,8 @@ class CompetitionMission:
         self.motion_watch_wheel_m: float | None = None
         self.stuck_resume_state: CompetitionState | None = None
         self.stuck_initial_ack: int | None = None
+        self.stuck_tx_baseline: int | None = None
+        self.stuck_command_accepted = False
         self.stuck_recovery_level = 0
         self.safe_zone_exit_pending = False
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
@@ -634,6 +651,8 @@ class CompetitionMission:
         self.carried_has_core = False
         self.carried_green_core_mixed = False
         self.delivery_completion_basis = ""
+        self.enter_tx_baseline: int | None = None
+        self.enter_command_accepted = False
 
     def _set_state(self, state: CompetitionState, now: float) -> None:
         if self.state != state:
@@ -647,22 +666,29 @@ class CompetitionMission:
             if state != CompetitionState.INVALID_BACKOFF:
                 self.invalid_backoff_initial_ack = None
                 self.invalid_backoff_tx_baseline = None
+                self.invalid_backoff_command_accepted = False
             if state != CompetitionState.DISPERSE:
                 self.disperse_command = None
                 self.disperse_initial_ack = None
                 self.disperse_relay_tx_baseline = None
+                self.disperse_command_accepted = False
             if state != CompetitionState.CLUSTER_APPROACH:
                 self.cluster_command = None
                 self.cluster_initial_ack = None
                 self.cluster_relay_tx_baseline = None
+                self.cluster_command_accepted = False
+                self.cluster_execution_seen = False
             if state != CompetitionState.DETOUR:
                 self.detour_initial_ack = None
                 self.detour_execution_seen = False
             if state != CompetitionState.INITIAL_RELEASE:
                 self.initial_release_initial_ack = None
+                self.initial_release_tx_baseline = None
+                self.initial_release_command_accepted = False
             if state != CompetitionState.INVALID_RELEASE:
                 self.invalid_release_initial_ack = None
                 self.invalid_release_tx_baseline = None
+                self.invalid_release_command_accepted = False
             if state != CompetitionState.GRAB:
                 self.grab_complete_confirmed = False
             if state != CompetitionState.RETURN_CENTER:
@@ -671,8 +697,12 @@ class CompetitionMission:
                 self.return_command_accepted = False
             if state != CompetitionState.ALIGN_SAFE_ZONE_BY_POSE:
                 self.safe_zone_align_initial_ack = None
+                self.safe_zone_align_tx_baseline = None
+                self.safe_zone_align_command_accepted = False
             if state != CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
                 self.safe_zone_visual_align_initial_ack = None
+                self.safe_zone_visual_align_tx_baseline = None
+                self.safe_zone_visual_align_command_accepted = False
             if state != CompetitionState.NAVIGATE:
                 self.staging_zero_initial_ack = None
                 self.staging_zero_tx_baseline = None
@@ -685,6 +715,14 @@ class CompetitionMission:
                 CompetitionState.SAFE_ZONE_ESCAPE,
             }:
                 self.stuck_initial_ack = None
+                self.stuck_tx_baseline = None
+                self.stuck_command_accepted = False
+            if state not in {
+                CompetitionState.ENTER_SAFE_ZONE,
+                CompetitionState.DELIVERY_VERIFY,
+            }:
+                self.enter_tx_baseline = None
+                self.enter_command_accepted = False
             if state == CompetitionState.SEARCH:
                 self.search_yaw_accum_deg = 0.0
                 self.search_last_yaw_deg = None
@@ -745,6 +783,47 @@ class CompetitionMission:
             len(payload) == 8 and
             payload[1] == expected_flags and
             payload[2:6] == (0, 0, 0, 0)
+        )
+
+    @staticmethod
+    def _relay_sent_opcode_since(
+        stm: StmSnapshot, opcode: int, baseline: int | None
+    ) -> bool:
+        return (
+            stm.fresh and
+            baseline is not None and
+            stm.relay_mission_tx_frames > baseline and
+            stm.relay_last_mission_command == opcode
+        )
+
+    @classmethod
+    def _command_acceptance_seen(
+        cls,
+        stm: StmSnapshot,
+        command: CommandRequest,
+        baseline: int | None,
+        initial_ack: int | None,
+        accepted: bool,
+    ) -> bool:
+        return accepted or (
+            initial_ack is not None and
+            cls._relay_sent_since(stm, command, baseline) and
+            stm.acknowledged_sequence != initial_ack
+        )
+
+    @classmethod
+    def _opcode_acceptance_seen(
+        cls,
+        stm: StmSnapshot,
+        opcode: int,
+        baseline: int | None,
+        initial_ack: int | None,
+        accepted: bool,
+    ) -> bool:
+        return accepted or (
+            initial_ack is not None and
+            cls._relay_sent_opcode_since(stm, opcode, baseline) and
+            stm.acknowledged_sequence != initial_ack
         )
 
     @staticmethod
@@ -906,6 +985,7 @@ class CompetitionMission:
     def _clear_cluster_context(self, *, reset_attempts: bool) -> None:
         if reset_attempts:
             self.disperse_attempts = 0
+            self.disperse_observe_attempts = 0
         self.cluster_target_class = None
         self.cluster_target_track_id = None
         self.cluster_target_bbox = None
@@ -1196,13 +1276,14 @@ class CompetitionMission:
             flags |= CMD_SIDE_VALID
         if keep_side == "right":
             flags |= CMD_TARGET_RIGHT
+        self.disperse_context = (
+            "selective" if keep_side is not None else "observe"
+        )
         self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags)
         self.disperse_initial_ack = stm.acknowledged_sequence if stm.fresh else None
         self.disperse_relay_tx_baseline = stm.relay_mission_tx_frames
-        self.disperse_expected_done_mode = (
-            STM_MODE_DISPERSE_DONE
-            if keep_side is not None else STM_MODE_RELEASE_BOTH_DONE
-        )
+        self.disperse_command_accepted = False
+        self.disperse_expected_done_mode = STM_MODE_DISPERSE_DONE
 
     def _arm_detour(self, stm: StmSnapshot, now: float) -> None:
         self.detour_initial_ack = stm.acknowledged_sequence if stm.fresh else None
@@ -1210,6 +1291,8 @@ class CompetitionMission:
 
     def _arm_initial_release(self, stm: StmSnapshot, now: float) -> None:
         self.initial_release_initial_ack = stm.acknowledged_sequence if stm.fresh else None
+        self.initial_release_tx_baseline = stm.relay_mission_tx_frames
+        self.initial_release_command_accepted = False
 
     def _arm_invalid_release(self, stm: StmSnapshot, now: float) -> None:
         if self.invalid_release_initial_ack is None:
@@ -1218,6 +1301,7 @@ class CompetitionMission:
             )
         if self.invalid_release_tx_baseline is None:
             self.invalid_release_tx_baseline = stm.relay_mission_tx_frames
+            self.invalid_release_command_accepted = False
 
     def _clear_pending_audit(self) -> None:
         self.pending_audit = None
@@ -1480,6 +1564,25 @@ class CompetitionMission:
                     tx_policy="normal_command",
                     reason="stable_audit_relay_confirmed",
                 )
+            if release_context == "disperse_reaudit":
+                self.cluster_keep_side = self._preferred_keep_side(audit)
+                self.cluster_keep_side_count = {
+                    "left": audit.left_count,
+                    "right": audit.right_count,
+                }.get(self.cluster_keep_side, 0)
+                if self.cluster_keep_side is not None:
+                    self.disperse_attempts += 1
+                    return self._start_disperse(stm, now)
+                if self.disperse_observe_attempts < 2:
+                    self.cluster_keep_side_count = 0
+                    self.disperse_attempts += 1
+                    return self._start_disperse(stm, now)
+                self.invalid_release_side = "both"
+                self.invalid_release_final = True
+                self.invalid_release_context = "disperse_final_release"
+                self._set_state(CompetitionState.INVALID_RELEASE, now)
+                self._arm_invalid_release(stm, now)
+                return self._invalid_release_output(audit, stm, now)
             self.invalid_release_side = release_side
             self.invalid_release_final = final_release
             self.invalid_release_context = release_context
@@ -2068,6 +2171,21 @@ class CompetitionMission:
                     now,
                 )
                 return self._audit_confirmation_output(vision, stm, now)
+            if self.cargo_recheck_context in {
+                "disperse_observe",
+                "disperse_selective",
+            }:
+                self._begin_audit_confirmation(
+                    stable,
+                    payload,
+                    False,
+                    "both",
+                    False,
+                    "disperse_reaudit",
+                    stm,
+                    now,
+                )
+                return self._audit_confirmation_output(vision, stm, now)
             release_side = self._choose_release_side(stable)
             if (
                 self.cargo_recheck_pending and
@@ -2273,6 +2391,8 @@ class CompetitionMission:
         self.safe_zone_align_initial_ack = (
             stm.acknowledged_sequence if stm.fresh else None
         )
+        self.safe_zone_align_tx_baseline = stm.relay_mission_tx_frames
+        self.safe_zone_align_command_accepted = False
         self._set_state(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE, now)
 
     def _begin_safe_zone_acquire(
@@ -2619,6 +2739,8 @@ class CompetitionMission:
         )
         self.return_relay_tx_baseline = stm.relay_mission_tx_frames
         self.return_command_accepted = False
+        self.return_search_frame_floor = None
+        self.return_search_mode_seen = False
         self._set_state(CompetitionState.RETURN_CENTER, now)
 
     def _latch_return_command_acceptance(self, stm: StmSnapshot) -> None:
@@ -2974,6 +3096,8 @@ class CompetitionMission:
         self.cluster_command = command
         self.cluster_initial_ack = stm.acknowledged_sequence
         self.cluster_relay_tx_baseline = stm.relay_mission_tx_frames
+        self.cluster_command_accepted = False
+        self.cluster_execution_seen = False
         self.cluster_keep_side = None
         return CompetitionOutput(
             self.state,
@@ -2993,15 +3117,31 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
         if stm.fresh and stm.mode in {
+            STM_MODE_APPROACH_TARGET,
+            STM_MODE_CLUSTER_CAPTURE_AUDIT,
+        }:
+            self.cluster_execution_seen = True
+        if (
+            not self.cluster_command_accepted and
+            stm.fresh and
+            self.cluster_initial_ack is not None and
+            self._relay_sent_cluster_since(stm, self.cluster_relay_tx_baseline) and
+            stm.acknowledged_sequence != self.cluster_initial_ack
+        ):
+            self.cluster_command_accepted = True
+        if (
+            stm.fresh and
+            stm.mode in {
             STM_MODE_APPROACH_RECOVER,
             STM_MODE_SEARCH,
-        }:
+            } and
+            (self.cluster_command_accepted or self.cluster_execution_seen)
+        ):
             return self._audit_reacquire_output(stm, now)
         if (
-            self._fresh_mode_after(
-                stm, STM_MODE_CLUSTER_CAPTURE_AUDIT, self.cluster_initial_ack
-            ) and
-            self._relay_sent_cluster_since(stm, self.cluster_relay_tx_baseline)
+            stm.fresh and
+            stm.mode == STM_MODE_CLUSTER_CAPTURE_AUDIT and
+            self.cluster_command_accepted
         ):
             self.cluster_audit_active = True
             self.cargo_recheck_pending = False
@@ -3045,7 +3185,7 @@ class CompetitionMission:
             (
                 f"锁定保留{self.cluster_keep_side}侧目标，启动选择性分离"
                 if self.cluster_keep_side is not None else
-                "目标左右归属不明确，启动整堆撞分"
+                "目标左右归属不明确，启动12°观察转向"
             ),
             event="disperse_start",
             motion_expected=True,
@@ -3058,70 +3198,36 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
         assert self.disperse_command is not None
-        command_sent = self._relay_sent_since(
+        self.disperse_command_accepted = self._command_acceptance_seen(
             stm,
             self.disperse_command,
             self.disperse_relay_tx_baseline,
+            self.disperse_initial_ack,
+            self.disperse_command_accepted,
         )
-        ack_changed = (
+        if (
             stm.fresh and
-            self.disperse_initial_ack is not None and
-            stm.acknowledged_sequence != self.disperse_initial_ack
-        )
-        if self.disperse_expected_done_mode == STM_MODE_DISPERSE_DONE:
-            completed = (
-                command_sent and
-                ack_changed and
-                stm.mode == STM_MODE_DISPERSE_DONE
+            stm.mode == STM_MODE_DISPERSE_DONE and
+            self.disperse_command_accepted
+        ):
+            if self.disperse_context == "observe":
+                self.disperse_observe_attempts += 1
+            self.cargo_recheck_pending = True
+            self.cargo_recheck_context = (
+                "disperse_observe"
+                if self.disperse_context == "observe" else
+                "disperse_selective"
             )
-        else:
-            completed = (
-                command_sent and
-                ack_changed and
-                stm.mode in {STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH}
-            )
-        if completed:
-            if self.disperse_expected_done_mode == STM_MODE_DISPERSE_DONE:
-                self.cargo_recheck_pending = True
-                self.cargo_recheck_context = "disperse_selective"
-                self.audit_hits = 0
-                self.audit_last_signature = None
-                self.audit_last_frame_sequence = None
-                self.audit_recheck_frame_floor = (
-                    vision.frame_sequence if vision.frame_sequence > 0 else None
-                )
-                self.audit_recheck_started_s = now
-                self._clear_pending_audit()
-                self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-                return self._audit_output(vision, stm, now)
-            self._clear_pending_audit()
-            self._clear_selected_batch()
-            self.cargo_recheck_pending = False
-            self.cargo_recheck_context = "none"
             self.audit_hits = 0
             self.audit_last_signature = None
             self.audit_last_frame_sequence = None
-            self.audit_recheck_frame_floor = None
-            self.audit_recheck_started_s = None
-            self.grab_initial_ack = None
-            self._clear_cluster_context(reset_attempts=True)
-            self.separation_search_pending = False
-            self._set_state(CompetitionState.SEARCH, now)
-            self.search_epoch_frame_floor = (
+            self.audit_recheck_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
             )
-            return CompetitionOutput(
-                self.state,
-                self._hold(),
-                "整堆撞分完成并进入SEARCH，等待撞分后的新视觉帧",
-                event="disperse_search_complete",
-                tx_policy="hold",
-                reason="disperse_search_complete",
-                expected_stm_modes=(
-                    STM_MODE_RELEASE_BOTH_DONE,
-                    STM_MODE_SEARCH,
-                ),
-            )
+            self.audit_recheck_started_s = now
+            self._clear_pending_audit()
+            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+            return self._audit_output(vision, stm, now)
         return CompetitionOutput(
             self.state,
             self.disperse_command,
@@ -3185,8 +3291,18 @@ class CompetitionMission:
             CompetitionState.FIELD_STUCK_ESCAPE,
             CompetitionState.SAFE_ZONE_ESCAPE,
         }:
-            if self._fresh_mode_after(
-                stm, STM_MODE_ESCAPE_DONE, self.stuck_initial_ack
+            escape_command = self._escape_command()
+            self.stuck_command_accepted = self._command_acceptance_seen(
+                stm,
+                escape_command,
+                self.stuck_tx_baseline,
+                self.stuck_initial_ack,
+                self.stuck_command_accepted,
+            )
+            if (
+                stm.fresh and
+                stm.mode == STM_MODE_ESCAPE_DONE and
+                self.stuck_command_accepted
             ):
                 resume = self.stuck_resume_state or CompetitionState.RETURN_CENTER
                 if resume == CompetitionState.RETURN_CENTER:
@@ -3197,7 +3313,7 @@ class CompetitionMission:
                 return None
             return CompetitionOutput(
                 self.state,
-                self._escape_command(),
+                escape_command,
                 (
                     "安全区退出长期无进展，等待F407抬起机构并完成脱困"
                     if self.state == CompetitionState.SAFE_ZONE_ESCAPE else
@@ -3281,6 +3397,8 @@ class CompetitionMission:
 
         self.stuck_resume_state = self.state
         self.stuck_initial_ack = stm.acknowledged_sequence
+        self.stuck_tx_baseline = stm.relay_mission_tx_frames
+        self.stuck_command_accepted = False
         self._reset_motion_watch()
         if self.state == CompetitionState.RETURN_CENTER and self.safe_zone_exit_pending:
             self._set_state(CompetitionState.SAFE_ZONE_ESCAPE, now)
@@ -3347,9 +3465,6 @@ class CompetitionMission:
                     self._relay_sent_stage_zero_since(
                         stm, self.staging_zero_tx_baseline
                     ) and
-                    stm.relay_last_mission_sequence is not None and
-                    stm.acknowledged_sequence ==
-                    stm.relay_last_mission_sequence and
                     stm.acknowledged_sequence != self.staging_zero_initial_ack
                 ):
                     self.staging_zero_accepted = True
@@ -3457,6 +3572,26 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
+        if self.return_search_mode_seen:
+            ready = (
+                stm.fresh and
+                stm.mode == STM_MODE_SEARCH and
+                stm.camera_pitch_cdeg == 9000 and
+                self._vision_fresh(vision, now) and
+                self.return_search_frame_floor is not None and
+                vision.frame_sequence > self.return_search_frame_floor
+            )
+            if not ready:
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    "返中完成后等待相机90°和新的SEARCH视觉帧",
+                    tx_policy="hold",
+                    reason="return_search_frame_gate",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
+                )
+            self.return_search_mode_seen = False
+            self.return_search_frame_floor = None
         if self.separation_search_pending:
             if stm.fresh and stm.mode == STM_MODE_SEARCH:
                 self.separation_search_pending = False
@@ -3835,8 +3970,18 @@ class CompetitionMission:
             return CompetitionOutput(self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()), "等待下位机完成合爪", self.selected_batch)
 
         if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE:
-            if self._fresh_mode_after(
-                stm, STM_MODE_ALIGN_SAFE_ZONE, self.safe_zone_align_initial_ack
+            pose_align_command = self._safe_zone_pose_align_command()
+            self.safe_zone_align_command_accepted = self._command_acceptance_seen(
+                stm,
+                pose_align_command,
+                self.safe_zone_align_tx_baseline,
+                self.safe_zone_align_initial_ack,
+                self.safe_zone_align_command_accepted,
+            )
+            if (
+                stm.fresh and
+                stm.mode == STM_MODE_ALIGN_SAFE_ZONE and
+                self.safe_zone_align_command_accepted
             ):
                 self._begin_safe_zone_acquire(vision, now)
                 return CompetitionOutput(
@@ -3851,7 +3996,7 @@ class CompetitionMission:
                 )
             return CompetitionOutput(
                 self.state,
-                self._safe_zone_pose_align_command(),
+                pose_align_command,
                 "在60 cm预备点按定位航向正对安全区",
                 self.selected_batch,
                 tx_policy="normal_command",
@@ -3865,6 +4010,8 @@ class CompetitionMission:
         if self.state == CompetitionState.ACQUIRE_SAFE_ZONE:
             if self._observe_safe_zone_freeze(vision, now):
                 self.safe_zone_visual_align_initial_ack = stm.acknowledged_sequence
+                self.safe_zone_visual_align_tx_baseline = stm.relay_mission_tx_frames
+                self.safe_zone_visual_align_command_accepted = False
                 self._set_state(CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX, now)
                 return CompetitionOutput(
                     self.state,
@@ -3890,6 +4037,8 @@ class CompetitionMission:
                 self.safe_zone_fallback = True
                 self.safe_zone_visual_locked = False
                 self.enter_initial_ack = stm.acknowledged_sequence
+                self.enter_tx_baseline = stm.relay_mission_tx_frames
+                self.enter_command_accepted = False
                 self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
                 return CompetitionOutput(
                     self.state,
@@ -3915,13 +4064,25 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
-            if self._fresh_mode_after(
-                stm,
-                STM_MODE_ALIGN_SAFE_ZONE,
-                self.safe_zone_visual_align_initial_ack,
+            visual_align_command = self._safe_zone_visual_align_command()
+            self.safe_zone_visual_align_command_accepted = (
+                self._command_acceptance_seen(
+                    stm,
+                    visual_align_command,
+                    self.safe_zone_visual_align_tx_baseline,
+                    self.safe_zone_visual_align_initial_ack,
+                    self.safe_zone_visual_align_command_accepted,
+                )
+            )
+            if (
+                stm.fresh and
+                stm.mode == STM_MODE_ALIGN_SAFE_ZONE and
+                self.safe_zone_visual_align_command_accepted
             ):
                 self.safe_zone_visual_locked = True
                 self.enter_initial_ack = stm.acknowledged_sequence
+                self.enter_tx_baseline = stm.relay_mission_tx_frames
+                self.enter_command_accepted = False
                 self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
                 return CompetitionOutput(
                     self.state,
@@ -3935,7 +4096,7 @@ class CompetitionMission:
                 )
             return CompetitionOutput(
                 self.state,
-                self._safe_zone_visual_align_command(),
+                visual_align_command,
                 "按冻结安全区分区点执行一次视觉修正转向",
                 self.selected_batch,
                 tx_policy="normal_command",
@@ -3954,21 +4115,27 @@ class CompetitionMission:
                 "both": STM_MODE_RELEASE_BOTH_DONE,
             }[self.invalid_release_side]
             release_command = self._invalid_release_command()
-            release_complete = self._fresh_mode_after(
-                stm, expected_mode, self.invalid_release_initial_ack
-            )
-            if self.invalid_release_side in {"left", "right"}:
-                release_complete = (
-                    release_complete and
-                    self._relay_sent_since(
-                        stm,
-                        release_command,
-                        self.invalid_release_tx_baseline,
-                    )
+            self.invalid_release_command_accepted = (
+                self._command_acceptance_seen(
+                    stm,
+                    release_command,
+                    self.invalid_release_tx_baseline,
+                    self.invalid_release_initial_ack,
+                    self.invalid_release_command_accepted,
                 )
+            )
+            release_complete = (
+                stm.fresh and
+                stm.mode == expected_mode and
+                self.invalid_release_command_accepted
+            )
             if release_complete:
-                if self.invalid_release_context == "separate_then_search":
+                if self.invalid_release_context in {
+                    "separate_then_search",
+                    "disperse_final_release",
+                }:
                     self._clear_selected_batch()
+                    self._clear_cluster_context(reset_attempts=True)
                     self.cargo_recheck_pending = False
                     self.cargo_recheck_context = "none"
                     self.audit_hits = 0
@@ -4008,6 +4175,7 @@ class CompetitionMission:
                 self._set_state(CompetitionState.INVALID_BACKOFF, now)
                 self.invalid_backoff_initial_ack = stm.acknowledged_sequence
                 self.invalid_backoff_tx_baseline = stm.relay_mission_tx_frames
+                self.invalid_backoff_command_accepted = False
                 return CompetitionOutput(
                     self.state,
                     self._yield_command(),
@@ -4023,13 +4191,17 @@ class CompetitionMission:
 
         if self.state == CompetitionState.INVALID_BACKOFF:
             yield_command = self._yield_command()
+            self.invalid_backoff_command_accepted = self._command_acceptance_seen(
+                stm,
+                yield_command,
+                self.invalid_backoff_tx_baseline,
+                self.invalid_backoff_initial_ack,
+                self.invalid_backoff_command_accepted,
+            )
             if (
-                self._relay_sent_since(
-                    stm, yield_command, self.invalid_backoff_tx_baseline
-                ) and
-                self._fresh_mode_after(
-                    stm, STM_MODE_YIELD_DONE, self.invalid_backoff_initial_ack
-                )
+                stm.fresh and
+                stm.mode == STM_MODE_YIELD_DONE and
+                self.invalid_backoff_command_accepted
             ):
                 self.cargo_recheck_pending = True
                 self.cargo_recheck_context = "single_side"
@@ -4077,8 +4249,22 @@ class CompetitionMission:
             return self._navigate(vision, pose, stm, now)
 
         if self.state == CompetitionState.INITIAL_RELEASE:
-            if self._fresh_mode_after(
-                stm, STM_MODE_RELEASE_BOTH_DONE, self.initial_release_initial_ack
+            initial_release_command = CommandRequest(
+                CMD_RELEASE_BOTH, self._side_flags()
+            )
+            self.initial_release_command_accepted = (
+                self._command_acceptance_seen(
+                    stm,
+                    initial_release_command,
+                    self.initial_release_tx_baseline,
+                    self.initial_release_initial_ack,
+                    self.initial_release_command_accepted,
+                )
+            )
+            if (
+                stm.fresh and
+                stm.mode == STM_MODE_RELEASE_BOTH_DONE and
+                self.initial_release_command_accepted
             ):
                 self.initial_stash_done = True
                 self.stash_has_cargo = True
@@ -4088,7 +4274,7 @@ class CompetitionMission:
                 return self._return_center_output(pose, now, "临时物资已放下，返回中心寻找首件绿色")
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_RELEASE_BOTH, self._side_flags()),
+                initial_release_command,
                 "等待本次藏点释放完成；未收到新鲜且已确认的mode=34",
                 self.selected_batch,
                 tx_policy="normal_command",
@@ -4119,8 +4305,17 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
-            if self._fresh_mode_after(
-                stm, STM_MODE_RAM_VERIFY, self.enter_initial_ack
+            self.enter_command_accepted = self._opcode_acceptance_seen(
+                stm,
+                CMD_ENTER_SAFE_ZONE,
+                self.enter_tx_baseline,
+                self.enter_initial_ack,
+                self.enter_command_accepted,
+            )
+            if (
+                stm.fresh and
+                stm.mode == STM_MODE_RAM_VERIFY and
+                self.enter_command_accepted
             ):
                 if self.delivery_observation_attempt == 0:
                     self._start_delivery_observation(now, 1)
@@ -4198,7 +4393,19 @@ class CompetitionMission:
                 self.return_command_accepted
             ):
                 self._set_state(CompetitionState.SEARCH, now)
-                return CompetitionOutput(self.state, self._hold(), f"回到中心搜索区，已完成{self.delivery_count}件")
+                self.return_search_mode_seen = True
+                self.return_search_frame_floor = (
+                    vision.frame_sequence if vision.frame_sequence > 0 else 0
+                )
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    f"回到中心搜索区，等待相机90°和新视觉帧；已完成{self.delivery_count}件",
+                    event="return_search_gate_start",
+                    tx_policy="hold",
+                    reason="return_search_frame_gate",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
+                )
             return self._return_center_output(pose, now, "持续返回中心")
 
         return CompetitionOutput(

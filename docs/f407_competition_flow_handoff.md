@@ -44,8 +44,14 @@ F407在`mode=17 FACE_FIELD_CENTER`中必须先快速转向中心航向，再正�
 “不转向、直接倒车、边倒车边修正”的返中方式。中心附近进入独立终止窗口后停车并报告`mode=3`。
 不要用普通HOLD提前把返中转换为SEARCH；HOLD只能在已经完成RETURN且F407处于SEARCH时作为搜索心跳。
 
-上位机在收到`mode=3`后还会让F407继续完成当前SEARCH的90°和120°两轮扫描；中心搜索累计约
-720°且没有连续3帧稳定目标时，才允许前往藏点复查。
+上位机在本次RETURN曾被relay发送并ACK后，收到`mode=3`只进入SEARCH准备门控：先持续发送HOLD，
+等待F407摄像头到`9000/90°`，并丢弃返中完成时及相机移动期间的旧帧。只有新鲜mode3、相机90°、
+视觉新鲜且frame_sequence大于返中完成帧下限时，才允许发送新的APPROACH_TARGET。中心搜索累计约
+720°且没有稳定目标时，才允许前往藏点复查。
+
+RETURN、CLUSTER_APPROACH、DISPERSE、RELEASE/YIELD、ESCAPE、两次ALIGN和ENTER等长动作统一使用
+接受锁存：动作开始保存初始ACK与relay计数基线；只要匹配命令在基线后经过relay且ACK曾变化，
+`command_accepted`永久置位；最终以新鲜完成mode和该锁存判断完成，不在结束时重新比较8位ACK。
 
 ### 3. 正式抓取、混装和打散
 
@@ -73,10 +79,10 @@ SEARCH
 → 选择性分离完成后新鲜mode=35且ACK已变化
 → 上位机进入CAPTURE_AUDIT，不发送HOLD，复审后GRAB或继续释放/YIELD
 → 锁定目标左右不明：DISPERSE_PILE不置bit6/bit7
-→ 整堆撞分完成后新鲜mode=34且ACK已变化
-→ F407约500 ms后可自动进入mode=3；上位机把新鲜mode34或随后新鲜mode3都视为完成
-→ 清空旧审核、批次和track锁定，直接进入SEARCH发送HOLD
-→ 新SEARCH只使用撞分完成后的新视觉帧
+→ F407原地转12°、相机保持140°、稳定300 ms并上报mode35
+→ 上位机保留批次和track线索，只使用mode35后的新ROI帧重新审核
+→ 最多执行两次无侧观察转向；仍无法分侧才发送最终RELEASE_BOTH
+→ 最终RELEASE_BOTH收到本次mode34和接受证据后清空批次并回SEARCH
 ```
 
 `CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为聚集区域中心X，P4/P5为
@@ -86,12 +92,12 @@ SEARCH
 而停止已经接受的动作；F407继续执行自身15秒动作保护。
 
 `DISPERSE_PILE`的bit6/bit7语义为：bit6=`SIDE_VALID`，bit7=`TARGET_RIGHT`。bit7只能用于
-DISPERSE且必须和bit6同时置位。bit6置位时F407只分离并保留指定侧目标，完成报告mode35；bit6未
-置位时执行整堆撞分，完成报告mode34。所有完成都必须对应本次DISPERSE的ACK。
+DISPERSE且必须和bit6同时置位。bit6置位时F407曲线分离并保留指定侧；bit6未置位时不再高速撞堆，
+只执行原地12°观察转向。两种DISPERSE都完成于mode35。
 
-mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT。无侧标志的整堆撞分按F407当前动作：
-Touch闭爪、1000 mm/s前撞0.25 m、500 mm/s后退0.25 m、双爪打开、mode34约500 ms后自动进入
-mode3。上位机不再静默停在撞分重选状态，也不在mode34分支发送CARGO_AUDIT或YIELD。
+mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT，并用frame floor拒绝动作前审核帧。
+无侧观察完成次数只在新鲜mode35且本次DISPERSE已经被接受后累计，最多两次。两次后仍无法分侧，
+上位机持续发送最终RELEASE_BOTH，等待新鲜mode34和该命令接受证据后清空批次回SEARCH。
 
 正式夹内审核第一次无法判断物资左右归属时，使用`separate_then_search`：
 
@@ -128,6 +134,9 @@ mode3。上位机不再静默停在撞分重选状态，也不在mode34分支发
 只有锁存成立、新鲜mode10、`DISTANCE_DONE=1`且`GRIPPER_CLOSED=1`后才发送ALIGN，不在最终时刻重新
 比较8位ACK。F407到`D=0`后只停车、置`DISTANCE_DONE`、把摄像头命令到120°并保持mode10，
 不得启动旧的安全区最后补推。随后上位机分两次使用`ALIGN_SAFE_ZONE=0x04`：
+
+正式投送从WAITNAV驶往预备点的`D>0`阶段也保持同一精简flags：蓝方`0x51`、红方`0x59`；普通NAV、
+藏堆NAV和RETURN继续使用完整方向flags，不得一起改成精简格式。
 
 1. `P1=VALID|USE_FINAL_HEADING|RED_SIDE`，`P6/P7=红方9000或蓝方27000`。F407按定位/IMU航向
    原地对正；上位机不发送±10°补偿。F407首趟自行执行红方80°/蓝方280°，第二趟起恢复
@@ -324,11 +333,11 @@ LCD显示`CMD:APP REJ`时，上位机必须保留当前等待/复审阶段，不
 左右语义必须严格保持：`RELEASE_LEFT`打开左侧、保留右侧；`RELEASE_RIGHT`打开右侧、保留左侧；
 `DISPERSE+SIDE_VALID`且`TARGET_RIGHT=0`保留左侧，`TARGET_RIGHT=1`保留右侧。F407保留左侧时左爪
 65°夹紧、右爪72°打开；保留右侧时左爪108°打开、右爪115°夹紧。上位机只有确认对应保留侧
-count大于0才置SIDE_VALID；否则不置bit6/bit7，执行0.25 m整堆撞分。
+count大于0才置SIDE_VALID；否则不置bit6/bit7，执行12°观察转向。
 
 两侧都属于当前任务合规物资但仍需拆开时，依次优先：唯一包含green_supply的一侧、物体数量较少
 的一侧、锁定目标数量更多的一侧、轨迹更稳定的一侧、距离更近的一侧、稳定track ID较小的一侧；
-仍无法可靠判断才执行无侧标志整堆撞分。
+仍无法可靠判断才执行无侧标志12°观察转向；最多两次，之后最终RELEASE_BOTH。
 
 ## 停滞退让与脱困
 

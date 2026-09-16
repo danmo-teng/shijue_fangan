@@ -623,6 +623,7 @@ class CompetitionPlanner:
         self.command_tx_suppression_reasons_logged: set[str] = set()
         self.grab_waitnav_started_s: float | None = None
         self.grab_waitnav_event_emitted = False
+        self.nav_waitnav_last_ack: int | None = None
         self.termination_attempted = False
         self.termination_result: dict = {
             "attempted": False,
@@ -655,19 +656,34 @@ class CompetitionPlanner:
         stm: StmSnapshot,
         now: float,
     ) -> None:
-        if output.state != CompetitionState.GRAB or stm.mode != 22:
+        grab_wait = output.state == CompetitionState.GRAB and stm.mode == 22
+        nav_wait = (
+            output.state == CompetitionState.NAVIGATE and
+            stm.mode == 22 and
+            stm.relay_last_mission_command == CMD_NAVIGATE_WAYPOINT
+        )
+        if not (grab_wait or nav_wait):
             self.grab_waitnav_started_s = None
+            self.grab_waitnav_event_emitted = False
+            self.nav_waitnav_last_ack = None
+            return
+        if nav_wait and self.nav_waitnav_last_ack != stm.acknowledged_sequence:
+            self.nav_waitnav_last_ack = stm.acknowledged_sequence
+            self.grab_waitnav_started_s = now
             self.grab_waitnav_event_emitted = False
             return
         if self.grab_waitnav_started_s is None:
             self.grab_waitnav_started_s = now
+            self.nav_waitnav_last_ack = stm.acknowledged_sequence
             return
         if (
             self.grab_waitnav_event_emitted or
             now - self.grab_waitnav_started_s < 0.5
         ):
             return
-        if not stm.fresh:
+        if nav_wait:
+            block = "NAV_REJECTED_OR_NOT_ACKED"
+        elif not stm.fresh:
             block = "STM_STALE"
         elif not stm.gripper_closed:
             block = "GRIPPER_FLAG_MISSING"
@@ -965,6 +981,9 @@ class CompetitionPlanner:
             "disperse_attempts": self.mission.disperse_attempts,
             "disperse_expected_done_mode": self.mission.disperse_expected_done_mode,
             "disperse_relay_tx_baseline": self.mission.disperse_relay_tx_baseline,
+            "disperse_context": self.mission.disperse_context,
+            "disperse_observe_attempts": self.mission.disperse_observe_attempts,
+            "disperse_command_accepted": self.mission.disperse_command_accepted,
             "cluster_id": self.mission.cluster_id,
             "cluster_signature": self.mission.cluster_signature,
             "cluster_target_class": self.mission.cluster_target_class,
@@ -984,6 +1003,8 @@ class CompetitionPlanner:
             "cluster_audit_active": self.mission.cluster_audit_active,
             "cluster_initial_ack": self.mission.cluster_initial_ack,
             "cluster_relay_tx_baseline": self.mission.cluster_relay_tx_baseline,
+            "cluster_command_accepted": self.mission.cluster_command_accepted,
+            "cluster_execution_seen": self.mission.cluster_execution_seen,
             "approach_initial_ack": self.mission.approach_initial_ack,
             "approach_command_accepted": self.mission.approach_command_accepted,
             "pending_audit_initial_ack": self.mission.pending_audit_initial_ack,
@@ -1002,10 +1023,13 @@ class CompetitionPlanner:
             "staging_gripper_closed": stm.gripper_closed,
             "staging_camera_pitch_cdeg": stm.camera_pitch_cdeg,
             "enter_initial_ack": self.mission.enter_initial_ack,
+            "enter_command_accepted": self.mission.enter_command_accepted,
             "task_complete_initial_ack": self.mission.task_complete_initial_ack,
             "return_initial_ack": self.mission.return_initial_ack,
             "return_relay_tx_baseline": self.mission.return_relay_tx_baseline,
             "return_command_accepted": self.mission.return_command_accepted,
+            "return_search_frame_floor": self.mission.return_search_frame_floor,
+            "return_search_mode_seen": self.mission.return_search_mode_seen,
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
             "cargo_recheck_context": self.mission.cargo_recheck_context,
             "audit_hits": self.mission.audit_hits,
