@@ -53,9 +53,9 @@ from protocol import (  # noqa: E402
     CMD_PAUSE,
 )
 from capture_roi import (  # noqa: E402
-    bbox_capture_roi_overlap_ratio,
-    bbox_overlaps_capture_roi,
-    load_capture_roi,
+    CaptureRois,
+    capture_side_for_bbox,
+    load_capture_rois,
 )
 from state_machine import (  # noqa: E402
     CARGO_CLASSES,
@@ -296,13 +296,22 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
 
 
 def audit_from_cargo(
-    items: tuple[TrackedCargo, ...], selected_ids: set[int] | None = None
+    items: tuple[TrackedCargo, ...],
+    selected_ids: set[int] | None = None,
+    side_by_track: dict[int, str] | None = None,
 ) -> CargoAudit | None:
     visible = [item for item in items if item.visible]
     if not visible:
         return None
-    left = [item for item in visible if item.center_px[0] < IMAGE_WIDTH // 2]
-    right = [item for item in visible if item.center_px[0] >= IMAGE_WIDTH // 2]
+    side_by_track = side_by_track or {}
+    left = [
+        item for item in visible
+        if side_by_track.get(item.track_id) == "left"
+    ]
+    right = [
+        item for item in visible
+        if side_by_track.get(item.track_id) == "right"
+    ]
 
     def side_class(values: list[TrackedCargo]) -> str:
         names = {item.class_name for item in values}
@@ -406,24 +415,38 @@ def make_vision_snapshot(
     mission: CompetitionMission,
     frame_sequence: int,
     safe_zone_filter_blocked: bool = False,
-    capture_polygon: tuple[tuple[int, int], ...] | None = None,
+    capture_rois: CaptureRois | None = None,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
-    polygon = capture_polygon or load_capture_roi(
+    rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )
-    capture = tuple(
-        item for item in cargo
-        if item.visible and (
-            bbox_capture_roi_overlap_ratio(item.bbox, polygon) >= 1.0
-            if item.class_name == "core_black"
-            else bbox_overlaps_capture_roi(item.bbox, polygon)
+    capture_items: list[TrackedCargo] = []
+    capture_side_by_track: dict[int, str] = {}
+    for item in cargo:
+        if not item.visible:
+            continue
+        capture_side = capture_side_for_bbox(
+            item.bbox,
+            rois,
+            require_full_overlap=item.class_name == "core_black",
         )
-    )
+        if capture_side is None:
+            continue
+        capture_items.append(item)
+        capture_side_by_track[item.track_id] = capture_side
+    capture = tuple(capture_items)
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
     selected_classes = set(selected.classes) if selected is not None else set()
-    audit = audit_from_cargo(capture, selected_ids) if stm.claw_visible else None
+    audit = (
+        audit_from_cargo(
+            capture,
+            selected_ids,
+            capture_side_by_track,
+        )
+        if stm.claw_visible else None
+    )
     target_candidates = [
         item for item in cargo
         if item.visible and (
@@ -1163,28 +1186,33 @@ def draw_overlay(
     stm: StmSnapshot,
     fps: float,
     output_size: tuple[int, int],
-    capture_polygon: tuple[tuple[int, int], ...],
+    capture_rois: CaptureRois,
 ) -> np.ndarray:
     """Render a low-cost preview; task/debug details stay in JSONL logs."""
     output_width, output_height = output_size
     view = cv2.resize(image, (output_width, output_height), interpolation=cv2.INTER_AREA)
     scale_x = output_width / float(IMAGE_WIDTH)
     scale_y = output_height / float(IMAGE_HEIGHT)
-    scaled_capture_polygon = np.asarray(
-        [
-            (round(x * scale_x), round(y * scale_y))
-            for x, y in capture_polygon
-        ],
-        dtype=np.int32,
-    )
-    cv2.polylines(
-        view,
-        [scaled_capture_polygon],
-        True,
-        (0, 255, 255),
-        2,
-        cv2.LINE_AA,
-    )
+    for polygon, color in (
+        (capture_rois.overall, (0, 255, 255)),
+        (capture_rois.left, (255, 128, 0)),
+        (capture_rois.right, (0, 128, 255)),
+    ):
+        scaled_polygon = np.asarray(
+            [
+                (round(x * scale_x), round(y * scale_y))
+                for x, y in polygon
+            ],
+            dtype=np.int32,
+        )
+        cv2.polylines(
+            view,
+            [scaled_polygon],
+            True,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
     selected_ids = set(output.batch.track_ids) if output.batch is not None else set()
     for item in vision.cargo:
         x, y, box_width, box_height = item.bbox
@@ -1267,7 +1295,7 @@ def main() -> int:
         raise
 
     config = load_config(args.config)
-    capture_polygon = load_capture_roi(args.capture_roi)
+    capture_rois = load_capture_rois(args.capture_roi)
     localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
     scaler: VseScaler | None = None
     try:
@@ -1332,7 +1360,9 @@ def main() -> int:
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "capture_roi": str(args.capture_roi),
-            "capture_polygon_px": [list(point) for point in capture_polygon],
+            "capture_polygon_px": [list(point) for point in capture_rois.overall],
+            "capture_left_polygon_px": [list(point) for point in capture_rois.left],
+            "capture_right_polygon_px": [list(point) for point in capture_rois.right],
             "display_fps": args.display_fps,
             "detection_log_fps": args.detection_log_fps,
             "vision_fps": args.vision_fps,
@@ -1581,7 +1611,7 @@ def main() -> int:
                         mission,
                         packet.frame_id,
                         safe_zone_filter_blocked,
-                        capture_polygon,
+                        capture_rois,
                     )
                     planner.set_vision(latest_vision)
                     log_now = time.monotonic()
@@ -1624,7 +1654,7 @@ def main() -> int:
                         current_stm,
                         current_fps,
                         display_output_size,
-                        capture_polygon,
+                        capture_rois,
                     )
                     cv2.imshow(WINDOW_NAME, shown)
                     key = cv2.waitKey(1) & 0xFF

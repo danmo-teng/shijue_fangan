@@ -19,11 +19,12 @@ sys.path.insert(0, str(VISION_ROOT))
 sys.path.insert(0, str(ROOT))
 
 from capture_roi import (  # noqa: E402
+    CaptureRois,
     IMAGE_HEIGHT,
     IMAGE_WIDTH,
-    bbox_capture_roi_overlap_ratio,
-    load_capture_roi,
-    save_capture_roi,
+    capture_side_for_bbox,
+    load_capture_rois,
+    save_capture_rois,
 )
 from rescue_vision.camera import LatestFrameCamera, resolve_camera_device  # noqa: E402
 from rescue_vision.vse import VseScaler  # noqa: E402
@@ -105,11 +106,18 @@ def main() -> int:
         decode_fps=args.decode_fps,
         output_format="nv12" if scaler is not None else "bgr",
     )
-    points = list(load_capture_roi(args.output))
-    status = "Left:add  Right:undo  C:clear  R:reload  S:save  Q:quit"
+    loaded_rois = load_capture_rois(args.output)
+    roi_points = {
+        "overall": list(loaded_rois.overall),
+        "left": list(loaded_rois.left),
+        "right": list(loaded_rois.right),
+    }
+    active_roi = "overall"
+    status = "1:overall  2:left  3:right  Left:add  Right:undo  C:clear  S:save"
 
     def mouse(event: int, x: int, y: int, _flags: int, _data) -> None:
         nonlocal status
+        points = roi_points[active_roi]
         image_x = max(0, min(IMAGE_WIDTH - 1, round(x * IMAGE_WIDTH / DISPLAY_WIDTH)))
         image_y = max(0, min(IMAGE_HEIGHT - 1, round(y * IMAGE_HEIGHT / DISPLAY_HEIGHT)))
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -172,18 +180,25 @@ def main() -> int:
             )
             scale_x = DISPLAY_WIDTH / IMAGE_WIDTH
             scale_y = DISPLAY_HEIGHT / IMAGE_HEIGHT
-            polygon = tuple(points)
+            rois = CaptureRois(
+                tuple(roi_points["overall"]),
+                tuple(roi_points["left"]),
+                tuple(roi_points["right"]),
+            )
             for item in latest_detections:
                 x, y, width, height = item.bbox
-                overlap_ratio = (
-                    bbox_capture_roi_overlap_ratio(item.bbox, polygon)
-                    if len(polygon) >= 3 else 0.0
+                capture_side = (
+                    capture_side_for_bbox(
+                        item.bbox,
+                        rois,
+                        require_full_overlap=item.class_name == "core_black",
+                    )
+                    if all(
+                        len(polygon) >= 3
+                        for polygon in (rois.overall, rois.left, rois.right)
+                    ) else None
                 )
-                inside = (
-                    overlap_ratio >= 1.0
-                    if item.class_name == "core_black"
-                    else overlap_ratio > 0.80
-                )
+                inside = capture_side is not None
                 color = (0, 255, 255) if inside else (0, 200, 0)
                 p0 = (round(x * scale_x), round(y * scale_y))
                 p1 = (
@@ -198,7 +213,7 @@ def main() -> int:
                 cv2.circle(shown, center, 4, color, -1)
                 cv2.putText(
                     shown,
-                    f"{item.class_name} {item.confidence:.2f}",
+                    f"{item.class_name} {item.confidence:.2f} {capture_side or '-'}",
                     (p0[0], max(18, p0[1] - 5)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.45,
@@ -206,34 +221,39 @@ def main() -> int:
                     1,
                     cv2.LINE_AA,
                 )
-            if points:
-                scaled = np.asarray(
-                    [
-                        (round(x * scale_x), round(y * scale_y))
-                        for x, y in points
-                    ],
-                    dtype=np.int32,
-                )
+            for roi_name, color in (
+                ("overall", (0, 255, 255)),
+                ("left", (255, 128, 0)),
+                ("right", (0, 128, 255)),
+            ):
+                points = roi_points[roi_name]
+                if not points:
+                    continue
+                scaled = np.asarray([
+                    (round(x * scale_x), round(y * scale_y))
+                    for x, y in points
+                ], dtype=np.int32)
                 cv2.polylines(
                     shown,
                     [scaled],
                     len(points) >= 3,
-                    (255, 0, 255),
-                    2,
+                    color,
+                    3 if roi_name == active_roi else 2,
                     cv2.LINE_AA,
                 )
-                for index, point in enumerate(scaled):
-                    cv2.circle(shown, tuple(point), 5, (255, 255, 255), -1)
-                    cv2.putText(
-                        shown,
-                        str(index + 1),
-                        (int(point[0]) + 6, int(point[1]) - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.45,
-                        (255, 255, 255),
-                        1,
-                        cv2.LINE_AA,
-                    )
+                if roi_name == active_roi:
+                    for index, point in enumerate(scaled):
+                        cv2.circle(shown, tuple(point), 5, (255, 255, 255), -1)
+                        cv2.putText(
+                            shown,
+                            str(index + 1),
+                            (int(point[0]) + 6, int(point[1]) - 6),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.45,
+                            (255, 255, 255),
+                            1,
+                            cv2.LINE_AA,
+                        )
             cv2.rectangle(shown, (0, 0), (DISPLAY_WIDTH, 48), (0, 0, 0), -1)
             cv2.putText(
                 shown,
@@ -247,7 +267,7 @@ def main() -> int:
             )
             cv2.putText(
                 shown,
-                f"points={len(points)}  yellow=core 100%, others > 80%",
+                f"active={active_roi} points={len(roi_points[active_roi])} yellow=accepted",
                 (10, 41),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.48,
@@ -259,17 +279,36 @@ def main() -> int:
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), ord("Q"), 27):
                 break
+            if key == ord("1"):
+                active_roi = "overall"
+                status = "editing overall ROI"
+            elif key == ord("2"):
+                active_roi = "left"
+                status = "editing left claw ROI"
+            elif key == ord("3"):
+                active_roi = "right"
+                status = "editing right claw ROI"
             if key in (ord("c"), ord("C")):
-                points.clear()
-                status = "polygon cleared"
+                roi_points[active_roi].clear()
+                status = f"{active_roi} polygon cleared"
             elif key in (ord("r"), ord("R")):
-                points[:] = load_capture_roi(args.output)
-                status = "polygon reloaded"
+                loaded_rois = load_capture_rois(args.output)
+                roi_points["overall"][:] = loaded_rois.overall
+                roi_points["left"][:] = loaded_rois.left
+                roi_points["right"][:] = loaded_rois.right
+                status = "all polygons reloaded"
             elif key in (ord("s"), ord("S")):
-                if len(points) < 3:
-                    status = "at least three points are required"
+                if any(len(points) < 3 for points in roi_points.values()):
+                    status = "all three ROIs require at least three points"
                 else:
-                    save_capture_roi(args.output, points)
+                    save_capture_rois(
+                        args.output,
+                        CaptureRois(
+                            tuple(roi_points["overall"]),
+                            tuple(roi_points["left"]),
+                            tuple(roi_points["right"]),
+                        ),
+                    )
                     status = f"saved: {args.output}"
             if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                 break

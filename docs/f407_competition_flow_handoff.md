@@ -99,12 +99,21 @@ mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT，并�
 无侧观察完成次数只在新鲜mode35且本次DISPERSE已经被接受后累计，最多两次。两次后仍无法分侧，
 上位机持续发送最终RELEASE_BOTH，等待新鲜mode34和该命令接受证据后清空批次回SEARCH。
 
-最终抓取和运输审核由1个新的`frame_sequence`直接形成显式STABLE，同一帧不得重复累计。曲线分离
-选侧不使用完整CargoAudit签名稳定计数，而使用最近3个新帧的独立侧向投票；2票选择同一非空侧即
-可置SIDE_VALID。数量轻微变化不清空投票。单侧绿色优先；两侧都有绿色或均无绿色时保留数量较少
-侧，平局依次比较selected_count、跟踪稳定度、距离和track_id。只有非空侧无法确认，或危险/未知
-物资归属完全不明时，才发送无侧DISPERSE执行12°观察。协议字段不变；投票未完成时发送非STABLE
-审核，形成最终运输结论或2票侧向结论后发送显式STABLE审核。
+最终抓取和运输审核由1个新的`frame_sequence`直接形成显式STABLE，同一帧不得重复累计。聚集筛选
+单独按本轮selected target判断类别和期望数量，默认只剩1件目标才允许GRAB，不复用允许1～3件运输
+的宽松规则。曲线分离选侧使用frame floor之后第1个新鲜、非空且保留侧数量大于0的审核帧，不再
+等待3帧2票。单侧绿色优先；两侧都有绿色或均无绿色时保留数量较少侧，平局依次比较selected_count、
+跟踪稳定度、距离和track_id。只有非空侧无法确认，或危险/未知物资归属完全不明时，才发送无侧
+DISPERSE执行12°观察。协议字段不变。
+
+聚集APPROACH期间F407保持双爪完全打开，上位机持续发送`APPROACH_TARGET|CLUSTER_TARGET`直到新鲜
+mode38，不等待GRIPPER_CLOSED。第一次带SIDE_VALID的曲线分离由F407执行15°保持，后续带侧分离执行
+25°保持；上位机不增加协议位，只保留cluster_id和selected_batch，每次mode35后使用动作完成后的
+第1个新帧复审，仍不合法就继续发送带侧DISPERSE。
+
+复审得到稳定空爪时，上位机持续发送显式STABLE全零CARGO_AUDIT，直到F407新鲜mode3；随后清除
+selected_batch、cluster上下文、侧向结果、旧track和frame floor，再进入SEARCH。无侧DISPERSE仍
+只表示12°观察转向，最多两次，不得恢复撞击流程。
 
 正式夹内审核第一次无法判断物资左右归属时，兼容命令仍使用`separate_then_search`上下文，但它是观察动作而不是最终释放：
 

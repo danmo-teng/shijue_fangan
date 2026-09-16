@@ -603,7 +603,7 @@ class CompetitionMission:
         self.cluster_keep_side_count = 0
         self.cluster_audit_active = False
         self.disperse_side_votes: deque[tuple[int, str | None, int]] = deque(
-            maxlen=3
+            maxlen=1
         )
         self.disperse_side_vote_last_frame_sequence: int | None = None
         self.target_last_seen_s: float | None = None
@@ -1525,22 +1525,7 @@ class CompetitionMission:
                     STM_MODE_SEARCH,
                 ),
             )
-        if not self._vision_fresh(vision, now):
-            self._clear_pending_audit()
-            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-            return CompetitionOutput(
-                self.state,
-                self._pause(),
-                "稳定审核视觉帧已过期，取消待推进审核",
-                event="cargo_audit_pending_expired",
-                tx_policy="pause",
-                reason="audit_visual_stale",
-            )
         if self.pending_audit_release_context == "recheck_empty_to_search":
-            if vision.capture_audit is not None:
-                self._clear_pending_audit()
-                self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-                return self._audit_output(vision, stm, now)
             if (
                 self._relay_sent_since(
                     stm, stable_command, self.pending_audit_tx_baseline
@@ -1551,6 +1536,7 @@ class CompetitionMission:
             ):
                 empty_audit = self.pending_audit
                 self._clear_selected_batch()
+                self._clear_cluster_context(reset_attempts=True)
                 self.cargo_recheck_pending = False
                 self.cargo_recheck_context = "none"
                 self.audit_hits = 0
@@ -1558,6 +1544,7 @@ class CompetitionMission:
                 self.audit_last_frame_sequence = None
                 self.audit_recheck_frame_floor = None
                 self.audit_recheck_started_s = None
+                self.last_selected_track_ids = ()
                 self._clear_pending_audit()
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(
@@ -1585,6 +1572,17 @@ class CompetitionMission:
                 tx_policy="audit_stable_publish",
                 reason="recheck_empty_pending_search",
                 expected_stm_modes=(STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH),
+            )
+        if not self._vision_fresh(vision, now):
+            self._clear_pending_audit()
+            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+            return CompetitionOutput(
+                self.state,
+                self._pause(),
+                "稳定审核视觉帧已过期，取消待推进审核",
+                event="cargo_audit_pending_expired",
+                tx_policy="pause",
+                reason="audit_visual_stale",
             )
         if (
             self._relay_sent_since(
@@ -1896,6 +1894,33 @@ class CompetitionMission:
             not audit.injury_mixed
         )
 
+    def _cluster_audit_valid(self, audit: CargoAudit) -> bool:
+        if self.selected_batch is None:
+            return False
+        target_class = self.cluster_target_class
+        if target_class is None and self.selected_batch.classes:
+            target_class = self.selected_batch.classes[0]
+        if target_class not in MATERIAL_CLASSES | {"injured_orange"}:
+            return False
+        expected_count = 1
+        if (
+            audit.total_count != expected_count or
+            audit.left_count + audit.right_count != expected_count or
+            audit.danger_present or
+            audit.unknown_present or
+            audit.injury_mixed
+        ):
+            return False
+        return (
+            audit.left_count == expected_count and
+            audit.right_count == 0 and
+            audit.left_class == target_class
+        ) or (
+            audit.right_count == expected_count and
+            audit.left_count == 0 and
+            audit.right_class == target_class
+        )
+
     def _side_is_legal_for_task(self, side_class: str, side_count: int) -> bool:
         if side_count <= 0:
             return False
@@ -2006,20 +2031,12 @@ class CompetitionMission:
         )
 
     def _disperse_side_vote_result(self) -> tuple[str | None, int, bool]:
-        side_counts = Counter(
-            side for _, side, count in self.disperse_side_votes
-            if side is not None and count > 0
-        )
-        for side in ("left", "right"):
-            if side_counts[side] < 2:
-                continue
-            keep_count = next(
-                count
-                for _, vote_side, count in reversed(self.disperse_side_votes)
-                if vote_side == side and count > 0
-            )
+        if not self.disperse_side_votes:
+            return None, 0, False
+        _, side, keep_count = self.disperse_side_votes[-1]
+        if side is not None and keep_count > 0:
             return side, keep_count, True
-        return None, 0, len(self.disperse_side_votes) >= 3
+        return None, 0, True
 
     def _choose_release_side(self, audit: CargoAudit) -> str:
         """Return the side to open; RELEASE_LEFT means discard left cargo."""
@@ -2247,7 +2264,18 @@ class CompetitionMission:
         if new_frame:
             self.audit_id = (self.audit_id + 1) & 0xFF
         assert self.selected_batch is not None
-        audit_valid = self._audit_valid(audit)
+        cluster_screening = (
+            self.cluster_audit_active or
+            self.cargo_recheck_context in {
+                "disperse_observe",
+                "disperse_selective",
+            }
+        )
+        audit_valid = (
+            self._cluster_audit_valid(audit)
+            if cluster_screening else
+            self._audit_valid(audit)
+        )
         disperse_vote_context = (
             not audit_valid and
             (
@@ -2284,7 +2312,7 @@ class CompetitionMission:
                         CMD_VALID,
                         audit=unstable_payload,
                     ),
-                    f"曲线分离选侧投票：{vote_summary}，等待最近3帧中2票一致",
+                    f"等待frame floor后的新鲜非空夹内帧：{vote_summary}",
                     self.selected_batch,
                     unstable,
                     "disperse_side_vote_wait",

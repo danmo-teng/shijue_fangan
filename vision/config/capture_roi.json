@@ -1,8 +1,9 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "image_width": 1280,
   "image_height": 1024,
-  "point_semantics": "bbox_overlap_ratio",
+  "point_semantics": "bbox_bottom_center_and_overlap_ratio",
+  "minimum_overlap_ratio": 0.8,
   "polygon_px": [
     [
       929,
@@ -84,5 +85,33 @@
       1028,
       276
     ]
+  ],
+  "left_polygon_px": [
+    [610, 240],
+    [415, 241],
+    [367, 268],
+    [304, 292],
+    [251, 321],
+    [216, 351],
+    [159, 404],
+    [120, 445],
+    [99, 513],
+    [75, 599],
+    [56, 756],
+    [52, 979],
+    [610, 983]
+  ],
+  "right_polygon_px": [
+    [670, 240],
+    [929, 237],
+    [1028, 276],
+    [1084, 321],
+    [1141, 400],
+    [1192, 467],
+    [1220, 553],
+    [1227, 664],
+    [1232, 781],
+    [1241, 987],
+    [670, 983]
   ]
 }
