@@ -118,6 +118,16 @@ mode38，不等待GRIPPER_CLOSED。第一次带SIDE_VALID的曲线分离由F407�
 帧发非STABLE审核，第二帧发STABLE审核；每个新视觉帧使用新audit_id，同一帧重复发送保持audit_id。
 聚集mode38/mode37和分离复审中的合法GRAB同样使用2帧；无效审核的分侧决策仍保持1帧。
 
+上位机只在STM新鲜、CLAW_VISIBLE=1且`camera_pitch_cdeg==14000`时建立夹内审核；全局cargo仅服务
+SEARCH/APPROACH。每次进入mode21、mode38或收到本次新鲜mode35后都会清除动作前审核和选侧缓存，
+设置新frame floor，只使用`frame_sequence > frame_floor`的140°ROI帧。F407的mode35必须保持
+CLAW_VISIBLE=1和相机140°，直到接受新的CARGO_AUDIT。
+
+左右绿色数量是上位机本地字段，不进入UART。选侧固定为：仅左绿保留左，仅右绿保留右；两侧有绿
+保留绿色数量较少侧，相同保留左；两侧无绿保留左，只有左空才保留右。只要overall ROI内存在任何
+可归侧候选就发送SIDE_VALID，右侧再置TARGET_RIGHT；普通物资混装、两侧数量相同或track接近不再
+触发无侧观察。无侧DISPERSE只保留给overall ROI内没有可强制归侧候选的异常情况。
+
 大ROI负责确认“物体存在”：满足底部中心和重叠条件的所有物体都进入total_count。左右爪ROI只负责
 分离方向；无法分侧的物体设置unknown_present并保留在total_count，使审核无法GRAB并走无侧12°观察。
 聚集只有总数为1、类别与selected target一致时才能GRAB。最终合法审核会重新确认selected_batch的

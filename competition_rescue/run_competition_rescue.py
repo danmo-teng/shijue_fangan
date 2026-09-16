@@ -362,6 +362,12 @@ def audit_from_cargo(
         right_class=right_name,
         left_count=len(left),
         right_count=len(right),
+        left_green_count=sum(
+            item.class_name == "green_supply" for item in left
+        ),
+        right_green_count=sum(
+            item.class_name == "green_supply" for item in right
+        ),
         total_count=len(visible),
         danger_present=has_danger,
         unknown_present=(
@@ -431,23 +437,29 @@ def make_vision_snapshot(
     )
     capture_items: list[TrackedCargo] = []
     capture_side_by_track: dict[int, str] = {}
-    for item in cargo:
-        if not item.visible:
-            continue
-        if not bbox_in_capture_roi(
-            item.bbox,
-            rois.overall,
-            require_full_overlap=item.class_name == "core_black",
-        ):
-            continue
-        capture_items.append(item)
-        capture_side = capture_side_for_bbox(
-            item.bbox,
-            rois,
-            require_full_overlap=item.class_name == "core_black",
-        )
-        if capture_side is not None:
-            capture_side_by_track[item.track_id] = capture_side
+    capture_enabled = (
+        stm.fresh and
+        stm.claw_visible and
+        stm.camera_pitch_cdeg == 14000
+    )
+    if capture_enabled:
+        for item in cargo:
+            if not item.visible:
+                continue
+            if not bbox_in_capture_roi(
+                item.bbox,
+                rois.overall,
+                require_full_overlap=item.class_name == "core_black",
+            ):
+                continue
+            capture_items.append(item)
+            capture_side = capture_side_for_bbox(
+                item.bbox,
+                rois,
+                require_full_overlap=item.class_name == "core_black",
+            )
+            if capture_side is not None:
+                capture_side_by_track[item.track_id] = capture_side
     capture = tuple(capture_items)
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
@@ -458,7 +470,7 @@ def make_vision_snapshot(
             selected_ids,
             capture_side_by_track,
         )
-        if stm.claw_visible else None
+        if capture_enabled else None
     )
     target_candidates = [
         item for item in cargo
@@ -1159,6 +1171,16 @@ class CompetitionPlanner:
                             ),
                             "audit_left_count": left_count,
                             "audit_right_count": right_count,
+                            "audit_left_green_count": (
+                                None
+                                if audit_snapshot is None else
+                                audit_snapshot.left_green_count
+                            ),
+                            "audit_right_green_count": (
+                                None
+                                if audit_snapshot is None else
+                                audit_snapshot.right_green_count
+                            ),
                             "audit_unassigned_count": max(
                                 0, total_count - left_count - right_count
                             ),
