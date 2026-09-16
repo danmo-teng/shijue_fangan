@@ -357,6 +357,7 @@ class CompetitionSettings:
     start_zone: int = 1
     initial_stash_enabled: bool = True
     audit_stable_frames: int = 1
+    normal_grab_audit_frames: int = 2
     delivery_visual_frames: int = 5
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
@@ -403,7 +404,11 @@ class CompetitionSettings:
             raise ValueError("start zone must be 1..4")
         if self.max_batch_count != 3:
             raise ValueError("competition batch maximum must remain 3")
-        if self.audit_stable_frames <= 0 or self.delivery_visual_frames <= 0:
+        if (
+            self.audit_stable_frames <= 0 or
+            self.normal_grab_audit_frames <= 0 or
+            self.delivery_visual_frames <= 0
+        ):
             raise ValueError("audit frame counts must be positive")
         if self.center_stop_radius_m < 0 or self.return_zero_tolerance_m <= 0:
             raise ValueError("return distance thresholds are invalid")
@@ -657,6 +662,7 @@ class CompetitionMission:
         self.carried_has_green = False
         self.carried_has_core = False
         self.carried_green_core_mixed = False
+        self.confirmed_delivery_destination: str | None = None
         self.delivery_completion_basis = ""
         self.enter_tx_baseline: int | None = None
         self.enter_command_accepted = False
@@ -1007,6 +1013,7 @@ class CompetitionMission:
         self.carried_has_green = False
         self.carried_has_core = False
         self.carried_green_core_mixed = False
+        self.confirmed_delivery_destination = None
         self.delivery_completion_basis = ""
         self.locked_target_track_id = None
         self.target_last_center_px = None
@@ -1021,6 +1028,7 @@ class CompetitionMission:
 
     def _clear_selected_batch(self) -> None:
         self.selected_batch = None
+        self.confirmed_delivery_destination = None
         self._clear_disperse_side_votes()
         self.locked_target_track_id = None
         self.target_missing_frames = 0
@@ -1105,6 +1113,28 @@ class CompetitionMission:
         self.carried_green_core_mixed = (
             self.carried_has_green and self.carried_has_core
         )
+        if (
+            self.selected_batch is not None and
+            not self.selected_batch.initial_stash
+        ):
+            confirmed_destination: str | None = None
+            if (
+                audit.total_count == 1 and
+                self.carried_manifest == ("injured_orange",)
+            ):
+                confirmed_destination = "injury"
+            elif (
+                self.carried_manifest and
+                set(self.carried_manifest).issubset(MATERIAL_CLASSES)
+            ):
+                confirmed_destination = "material"
+            if confirmed_destination is not None:
+                self.confirmed_delivery_destination = confirmed_destination
+                self.selected_batch = replace(
+                    self.selected_batch,
+                    classes=self.carried_manifest,
+                    destination=confirmed_destination,
+                )
         self._clear_cluster_context(reset_attempts=True)
 
     def carried_delivery_classes(self) -> frozenset[str]:
@@ -1229,11 +1259,11 @@ class CompetitionMission:
         }:
             self.approach_f407_active_seen = True
         if (
-            self.approach_command_accepted and
             stm.fresh and
             stm.mode == STM_MODE_CAPTURE_AUDIT and
             stm.claw_visible
         ):
+            self.approach_command_accepted = True
             self.audit_recheck_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
             )
@@ -1882,17 +1912,43 @@ class CompetitionMission:
         ):
             return False
         if not self.first_common_delivered:
-            return audit.total_count == 1 and counts == Counter({"green_supply": 1})
+            return (
+                audit.total_count == 1 and
+                counts == Counter({"green_supply": 1}) and
+                self._audit_matches_selected_batch(audit)
+            )
         if self.selected_batch.destination == "injury":
-            return audit.total_count == 1 and counts == Counter({"injured_orange": 1})
+            return (
+                audit.total_count == 1 and
+                counts == Counter({"injured_orange": 1}) and
+                self._audit_matches_selected_batch(audit)
+            )
         side_classes = {audit.left_class, audit.right_class} - {"", "mixed_material"}
         return (
             1 <= audit.total_count <= self.settings.max_batch_count and
             side_classes.issubset(MATERIAL_CLASSES) and
             audit.left_class not in {"injured_orange", "danger_cyan", "unknown"} and
             audit.right_class not in {"injured_orange", "danger_cyan", "unknown"} and
-            not audit.injury_mixed
+            not audit.injury_mixed and
+            self._audit_matches_selected_batch(audit)
         )
+
+    def _audit_matches_selected_batch(self, audit: CargoAudit) -> bool:
+        if self.selected_batch is None:
+            return False
+        if self.selected_batch.initial_stash:
+            return audit.total_count > 0
+        if audit.total_count != self.selected_batch.total_count:
+            return False
+        expected = Counter(self.selected_batch.classes)
+        if audit.left_class == "mixed_material" or audit.right_class == "mixed_material":
+            return set(expected).issubset(MATERIAL_CLASSES)
+        observed = Counter()
+        if audit.left_class:
+            observed[audit.left_class] += audit.left_count
+        if audit.right_class:
+            observed[audit.right_class] += audit.right_count
+        return observed == expected
 
     def _cluster_audit_valid(self, audit: CargoAudit) -> bool:
         if self.selected_batch is None:
@@ -2181,6 +2237,7 @@ class CompetitionMission:
                 )
                 if empty_new_frame:
                     self.audit_last_frame_sequence = vision.frame_sequence
+                    self.audit_id = (self.audit_id + 1) & 0xFF
                     if empty_audit.signature == self.audit_last_signature:
                         self.audit_hits += 1
                     else:
@@ -2194,7 +2251,6 @@ class CompetitionMission:
                     ),
                 )
                 if stable_empty.stable:
-                    self.audit_id = (self.audit_id + 1) & 0xFF
                     stable_payload = stable_empty.to_protocol(
                         initial_stash=self.selected_batch.initial_stash,
                         destination=self.selected_batch.destination,
@@ -2212,8 +2268,14 @@ class CompetitionMission:
                     )
                     return self._audit_confirmation_output(vision, stm, now)
             else:
+                empty_new_frame = (
+                    vision.frame_sequence > 0 and
+                    vision.frame_sequence != self.audit_last_frame_sequence
+                )
+                if empty_new_frame:
+                    self.audit_last_frame_sequence = vision.frame_sequence
+                    self.audit_id = (self.audit_id + 1) & 0xFF
                 self.audit_last_signature = None
-                self.audit_last_frame_sequence = None
                 self.audit_hits = 0
             empty_payload = CargoAudit().to_protocol(
                 initial_stash=self.selected_batch.initial_stash,
@@ -2254,16 +2316,6 @@ class CompetitionMission:
             else:
                 self.audit_last_signature = audit.signature
                 self.audit_hits = 1
-        stable = replace(
-            audit,
-            stable=(
-                new_frame and
-                self.audit_hits >= self.settings.audit_stable_frames
-            ),
-        )
-        if new_frame:
-            self.audit_id = (self.audit_id + 1) & 0xFF
-        assert self.selected_batch is not None
         cluster_screening = (
             self.cluster_audit_active or
             self.cargo_recheck_context in {
@@ -2271,6 +2323,25 @@ class CompetitionMission:
                 "disperse_selective",
             }
         )
+        normal_grab_audit = (
+            not cluster_screening and
+            not self.cargo_recheck_pending
+        )
+        required_audit_frames = (
+            self.settings.normal_grab_audit_frames
+            if normal_grab_audit else
+            self.settings.audit_stable_frames
+        )
+        stable = replace(
+            audit,
+            stable=(
+                new_frame and
+                self.audit_hits >= required_audit_frames
+            ),
+        )
+        if new_frame:
+            self.audit_id = (self.audit_id + 1) & 0xFF
+        assert self.selected_batch is not None
         audit_valid = (
             self._cluster_audit_valid(audit)
             if cluster_screening else
@@ -2394,7 +2465,7 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=payload),
-            f"等待夹内审核稳定：{stable.total_count}件，{self.audit_hits}/{self.settings.audit_stable_frames}",
+            f"等待夹内审核稳定：{stable.total_count}件，{self.audit_hits}/{required_audit_frames}",
             self.selected_batch,
             stable,
             "cargo_audit_wait",
@@ -2730,9 +2801,11 @@ class CompetitionMission:
         assert self.selected_batch is not None
         if self.selected_batch.destination == "stash":
             return self.settings.stash_point
-        if self.selected_batch.destination == "injury":
+        if self.confirmed_delivery_destination == "injury":
             return self.settings.injury_target_x_m, self.settings.safe_staging_y_m
-        return self.settings.material_target_x_m, self.settings.safe_staging_y_m
+        if self.confirmed_delivery_destination == "material":
+            return self.settings.material_target_x_m, self.settings.safe_staging_y_m
+        raise RuntimeError("formal delivery destination is not audit-confirmed")
 
     def _at_target(self, pose: PoseSnapshot, target: tuple[float, float]) -> bool:
         return (
@@ -2742,7 +2815,11 @@ class CompetitionMission:
         )
 
     def _delivery_lateral_aligned(self, pose: PoseSnapshot) -> bool:
-        if self.selected_batch is None or not pose.valid:
+        if (
+            self.selected_batch is None or
+            self.confirmed_delivery_destination is None or
+            not pose.valid
+        ):
             return False
         target_x, _ = self._target_point()
         return abs(pose.x_m - target_x) <= self.settings.fence_lateral_tolerance_m
@@ -4539,16 +4616,21 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.TASK_COMPLETE:
-            if any(
-                self._fresh_mode_after(
-                    stm, mode, self.task_complete_initial_ack
-                )
-                for mode in (STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER)
+            if (
+                stm.fresh and
+                stm.mode in {
+                    STM_MODE_EXIT_SAFE_ZONE,
+                    STM_MODE_FACE_FIELD_CENTER,
+                }
             ):
                 self._clear_selected_batch()
                 self.safe_zone_exit_pending = True
                 self._begin_return(stm, now)
-                return self._return_center_output(pose, now, "下位机已完成投送，返回中心区域")
+                return self._return_center_output(
+                    pose,
+                    now,
+                    "F407已进入本地退出/转向阶段，持续发送RETURN_CENTER",
+                )
             if self._fresh_mode_after(
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
             ):

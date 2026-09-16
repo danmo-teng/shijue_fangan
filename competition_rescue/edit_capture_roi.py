@@ -22,6 +22,7 @@ from capture_roi import (  # noqa: E402
     CaptureRois,
     IMAGE_HEIGHT,
     IMAGE_WIDTH,
+    bbox_in_capture_roi,
     capture_side_for_bbox,
     load_capture_rois,
     save_capture_rois,
@@ -198,8 +199,19 @@ def main() -> int:
                         for polygon in (rois.overall, rois.left, rois.right)
                     ) else None
                 )
-                inside = capture_side is not None
-                color = (0, 255, 255) if inside else (0, 200, 0)
+                inside_overall = (
+                    bbox_in_capture_roi(
+                        item.bbox,
+                        rois.overall,
+                        require_full_overlap=item.class_name == "core_black",
+                    )
+                    if len(rois.overall) >= 3 else False
+                )
+                color = (
+                    (0, 255, 255)
+                    if capture_side is not None else
+                    ((255, 0, 255) if inside_overall else (0, 200, 0))
+                )
                 p0 = (round(x * scale_x), round(y * scale_y))
                 p1 = (
                     round((x + width) * scale_x),

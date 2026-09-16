@@ -54,6 +54,7 @@ from protocol import (  # noqa: E402
 )
 from capture_roi import (  # noqa: E402
     CaptureRois,
+    bbox_in_capture_roi,
     capture_side_for_bbox,
     load_capture_rois,
 )
@@ -312,6 +313,10 @@ def audit_from_cargo(
         item for item in visible
         if side_by_track.get(item.track_id) == "right"
     ]
+    unassigned = [
+        item for item in visible
+        if side_by_track.get(item.track_id) not in {"left", "right"}
+    ]
 
     def side_class(values: list[TrackedCargo]) -> str:
         names = {item.class_name for item in values}
@@ -359,7 +364,10 @@ def audit_from_cargo(
         right_count=len(right),
         total_count=len(visible),
         danger_present=has_danger,
-        unknown_present="unknown" in {left_name, right_name},
+        unknown_present=(
+            bool(unassigned) or
+            "unknown" in {left_name, right_name}
+        ),
         injury_mixed=injury_mixed,
         left_invalid=left_invalid,
         right_invalid=right_invalid,
@@ -426,15 +434,20 @@ def make_vision_snapshot(
     for item in cargo:
         if not item.visible:
             continue
+        if not bbox_in_capture_roi(
+            item.bbox,
+            rois.overall,
+            require_full_overlap=item.class_name == "core_black",
+        ):
+            continue
+        capture_items.append(item)
         capture_side = capture_side_for_bbox(
             item.bbox,
             rois,
             require_full_overlap=item.class_name == "core_black",
         )
-        if capture_side is None:
-            continue
-        capture_items.append(item)
-        capture_side_by_track[item.track_id] = capture_side
+        if capture_side is not None:
+            capture_side_by_track[item.track_id] = capture_side
     capture = tuple(capture_items)
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
@@ -956,8 +969,17 @@ class CompetitionPlanner:
             "delivery_lateral_aligned": self.mission._delivery_lateral_aligned(pose),
             "delivery_target_point": (
                 None
-                if self.mission.selected_batch is None
+                if (
+                    self.mission.selected_batch is None or
+                    (
+                        self.mission.selected_batch.destination != "stash" and
+                        self.mission.confirmed_delivery_destination is None
+                    )
+                )
                 else list(self.mission._target_point())
+            ),
+            "confirmed_delivery_destination": (
+                self.mission.confirmed_delivery_destination
             ),
             "delivery_completion_basis": self.mission.delivery_completion_basis,
             "delivery_timeout_reason": self.mission.delivery_timeout_reason,

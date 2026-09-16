@@ -171,10 +171,11 @@ def capture_side_for_bbox(
     minimum_overlap_ratio: float = 0.80,
 ) -> str | None:
     required_ratio = 1.0 if require_full_overlap else minimum_overlap_ratio
-    overall_ratio = bbox_capture_roi_overlap_ratio(bbox, rois.overall)
-    if (
-        not bbox_bottom_center_in_roi(bbox, rois.overall) or
-        overall_ratio < required_ratio
+    if not bbox_in_capture_roi(
+        bbox,
+        rois.overall,
+        require_full_overlap=require_full_overlap,
+        minimum_overlap_ratio=minimum_overlap_ratio,
     ):
         return None
     left_ratio = bbox_capture_roi_overlap_ratio(bbox, rois.left)
@@ -195,3 +196,17 @@ def capture_side_for_bbox(
         if right_ratio > left_ratio:
             return "right"
     return None
+
+
+def bbox_in_capture_roi(
+    bbox: tuple[int, int, int, int],
+    polygon: tuple[tuple[int, int], ...],
+    *,
+    require_full_overlap: bool = False,
+    minimum_overlap_ratio: float = 0.80,
+) -> bool:
+    required_ratio = 1.0 if require_full_overlap else minimum_overlap_ratio
+    return (
+        bbox_bottom_center_in_roi(bbox, polygon) and
+        bbox_capture_roi_overlap_ratio(bbox, polygon) >= required_ratio
+    )
