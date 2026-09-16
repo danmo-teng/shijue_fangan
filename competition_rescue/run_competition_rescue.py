@@ -950,7 +950,7 @@ class CompetitionPlanner:
             "safe_zone_visual_pixel_error": self.mission.safe_zone_visual_pixel_error,
             "safe_zone_visual_locked": self.mission.safe_zone_visual_locked,
             "safe_zone_fallback": self.mission.safe_zone_fallback,
-            "last_fence_distance_mm": self.mission.last_fence_distance_mm,
+            "enter_distance_source": "f407_encoder",
             "carried_manifest": list(self.mission.carried_manifest),
             "carried_total_count": self.mission.carried_total_count,
             "carried_has_green": self.mission.carried_has_green,

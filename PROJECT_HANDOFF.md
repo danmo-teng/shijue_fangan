@@ -330,27 +330,26 @@ zone_center_x_abs_m = 0.150
 1140 - 105 = 1035 mm
 ```
 
-当前NAV停车点再保留7.5 mm余量：
+正式投送预备点以小车旋转中心为基准，位于靠近场地中心一侧围栏前600 mm：
 
 ```text
-红方 y=+1027.5 mm
-蓝方 y=-1027.5 mm
+红方 y=+540 mm
+蓝方 y=-540 mm
 ```
 
 NAV到ENTER：
 
-- 轴向误差≤30 mm；
-- 横向误差≤50 mm；
-- 或收到新鲜的`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`并满足合理横向/朝向条件；
-- 达到后锁存`delivery_arrival_confirmed`并直接发送新鲜的`ENTER_SAFE_ZONE`；
-- 下位机已删除安全区车头对正，不能再发送`ALIGN_SAFE_ZONE`等待`mode=11`。
+- STAGE NAV到预备点后持续发送D=0；
+- 等待新鲜`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`和本阶段ACK锁存；
+- 完成定位ALIGN和可选视觉ALIGN后发送`ENTER_SAFE_ZONE`；
+- ENTER不置`DISTANCE_VALID`，P2/P3固定为0，上位机定位不再参与推进；
+- F407从600 mm预备点开始按编码器累计整段推进距离。
 
 完成投送：
 
-- 必须已锁存到达；
-- 只接受新鲜`mode=15`；
-- 位姿在25 mm范围内稳定0.8秒；
-- 下位机新版本在`ENTER_SAFE_ZONE`后直接进入张爪/CHECK流程。
+- F407编码器到位后停车、张爪、摄像头转到120°并稳定；
+- F407上报新鲜`mode=15`后，上位机才累计新的区内视觉证据；
+- 视觉确认后发送`TASK_COMPLETE`进入退出安全区流程。
 
 ## 12. UART协议与线程
 

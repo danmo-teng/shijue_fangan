@@ -570,9 +570,6 @@ class CompetitionMission:
         self.safe_zone_visual_pixel_error = 0
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
-        self.last_fence_distance_mm = round(
-            settings.safe_zone_staging_distance_m * 1000.0
-        )
         self.delivery_outside_seen = False
         self.delivery_inside_hits = 0
         self.delivery_visual_confirmed = False
@@ -2458,6 +2455,8 @@ class CompetitionMission:
         self.delivery_last_frame_sequence = vision.frame_sequence
         if vision.delivery_target_outside_safe_zone:
             self.delivery_outside_seen = True
+        if self.state != CompetitionState.DELIVERY_VERIFY:
+            return
         if self.delivery_window_started_s is None:
             self.delivery_window_started_s = now
         self.delivery_last_new_frame_s = now
@@ -2534,9 +2533,6 @@ class CompetitionMission:
         self.safe_zone_visual_pixel_error = 0
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
-        self.last_fence_distance_mm = round(
-            self.settings.safe_zone_staging_distance_m * 1000.0
-        )
 
     def _safe_zone_pose_align_command(self) -> CommandRequest:
         return CommandRequest(
@@ -2618,20 +2614,8 @@ class CompetitionMission:
         )
         return True
 
-    def _update_fence_distance(self, pose: PoseSnapshot) -> None:
-        if pose.valid:
-            distance_m = max(
-                0.0,
-                self.settings.safe_fence_face_m
-                - self.settings.side_sign * pose.y_m,
-            )
-            self.last_fence_distance_mm = max(
-                0, min(32767, round(distance_m * 1000.0))
-            )
-
-    def _enter_safe_zone_command(self, pose: PoseSnapshot) -> CommandRequest:
-        self._update_fence_distance(pose)
-        flags = self._side_flags() | CMD_DRIVE_STRAIGHT | CMD_DISTANCE_VALID
+    def _enter_safe_zone_command(self) -> CommandRequest:
+        flags = self._side_flags() | CMD_DRIVE_STRAIGHT
         if self.safe_zone_visual_locked:
             flags |= CMD_VISUAL_CORRECTION_VALID
         else:
@@ -2639,7 +2623,7 @@ class CompetitionMission:
         return CommandRequest(
             CMD_ENTER_SAFE_ZONE,
             flags,
-            self.last_fence_distance_mm,
+            0,
             0,
             (
                 0
@@ -2674,8 +2658,6 @@ class CompetitionMission:
 
     def _delivery_timeout_output(
         self,
-        vision: VisionSnapshot,
-        pose: PoseSnapshot,
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
@@ -2684,7 +2666,7 @@ class CompetitionMission:
             self.delivery_timeout_reason = "first_observation_timeout"
             return CompetitionOutput(
                 self.state,
-                self._enter_safe_zone_command(pose),
+                self._enter_safe_zone_command(),
                 "首次投送视觉观察超时，原地重新观察",
                 self.selected_batch,
                 event="delivery_reobserve_start",
@@ -2708,7 +2690,7 @@ class CompetitionMission:
         self.delivery_timeout_reason = "observation_wait_extended"
         return CompetitionOutput(
             self.state,
-            self._enter_safe_zone_command(pose),
+            self._enter_safe_zone_command(),
             "等待F407进入投送完成状态，视觉未确认时不再重复推进",
             self.selected_batch,
             event="delivery_verify_wait_extended" if first_warning else "",
@@ -4186,7 +4168,7 @@ class CompetitionMission:
                 self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
                 return CompetitionOutput(
                     self.state,
-                    self._enter_safe_zone_command(pose),
+                    self._enter_safe_zone_command(),
                     "5秒内未连续识别3帧安全区，使用定位正方向降级推进",
                     self.selected_batch,
                     event="safe_zone_acquire_fallback",
@@ -4230,7 +4212,7 @@ class CompetitionMission:
                 self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
                 return CompetitionOutput(
                     self.state,
-                    self._enter_safe_zone_command(pose),
+                    self._enter_safe_zone_command(),
                     "冻结安全区分区点已对准，按锁存航向推进",
                     self.selected_batch,
                     event="safe_zone_entry",
@@ -4493,7 +4475,7 @@ class CompetitionMission:
                 self._set_state(CompetitionState.DELIVERY_VERIFY, now)
             return CompetitionOutput(
                 self.state,
-                self._enter_safe_zone_command(pose),
+                self._enter_safe_zone_command(),
                 "进入安全区并等待视觉确认",
                 self.selected_batch,
                 tx_policy="normal_command",
@@ -4517,10 +4499,10 @@ class CompetitionMission:
                 if self.delivery_observation_started_s is None:
                     self._start_delivery_observation(now, 1)
                 else:
-                    return self._delivery_timeout_output(vision, pose, stm, now)
+                    return self._delivery_timeout_output(stm, now)
             return CompetitionOutput(
                 self.state,
-                self._enter_safe_zone_command(pose),
+                self._enter_safe_zone_command(),
                 f"等待安全区视觉确认 {self.delivery_inside_hits}/{self.settings.delivery_inside_required}"
                 f"（窗口{len(self.delivery_window)}/{self.settings.delivery_window_frames}，漏检{self._delivery_window_misses()}）",
                 self.selected_batch,
