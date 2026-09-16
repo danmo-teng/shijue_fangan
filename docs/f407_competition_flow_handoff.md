@@ -99,10 +99,10 @@ mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT，并�
 无侧观察完成次数只在新鲜mode35且本次DISPERSE已经被接受后累计，最多两次。两次后仍无法分侧，
 上位机持续发送最终RELEASE_BOTH，等待新鲜mode34和该命令接受证据后清空批次回SEARCH。
 
-聚集mode38和分离复审由1个新的`frame_sequence`直接形成显式STABLE，同一帧不得重复累计；普通
-mode21抓取按下文单独要求2个新帧一致。聚集筛选
-单独按本轮selected target判断类别和期望数量，默认只剩1件目标才允许GRAB，不复用允许1～3件运输
-的宽松规则。曲线分离选侧使用frame floor之后第1个新鲜、非空且保留侧数量大于0的审核帧，不再
+普通mode21以及聚集/分离复审后最终允许GRAB，都要求2个不同新帧内容一致；同一帧不得重复累计。
+聚集筛选单独按本轮selected target判断类别和期望数量，连续两帧都只剩1件目标才允许GRAB，不复用
+允许1～3件运输的宽松规则。无效审核的曲线分离选侧仍使用frame floor之后第1个新鲜、非空且保留
+侧数量大于0的审核帧，不再
 等待3帧2票。单侧绿色优先；两侧都有绿色或均无绿色时保留数量较少侧，平局依次比较selected_count、
 跟踪稳定度、距离和track_id。只有非空侧无法确认，或危险/未知物资归属完全不明时，才发送无侧
 DISPERSE执行12°观察。协议字段不变。
@@ -116,7 +116,7 @@ mode38，不等待GRIPPER_CLOSED。第一次带SIDE_VALID的曲线分离由F407�
 不再等待原track重新出现；随后以180 mm/s最多慢爬500 mm。上位机收到新鲜mode21+CLAW_VISIBLE后
 停止APPROACH并记录frame floor。普通抓取要求frame floor之后2个不同frame_sequence内容一致：第一
 帧发非STABLE审核，第二帧发STABLE审核；每个新视觉帧使用新audit_id，同一帧重复发送保持audit_id。
-聚集mode38/mode37和分离复审仍保持1个新帧规则。
+聚集mode38/mode37和分离复审中的合法GRAB同样使用2帧；无效审核的分侧决策仍保持1帧。
 
 大ROI负责确认“物体存在”：满足底部中心和重叠条件的所有物体都进入total_count。左右爪ROI只负责
 分离方向；无法分侧的物体设置unknown_present并保留在total_count，使审核无法GRAB并走无侧12°观察。

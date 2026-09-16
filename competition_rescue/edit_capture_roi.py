@@ -26,6 +26,7 @@ from capture_roi import (  # noqa: E402
     capture_side_for_bbox,
     load_capture_rois,
     save_capture_rois,
+    split_capture_roi,
 )
 from rescue_vision.camera import LatestFrameCamera, resolve_camera_device  # noqa: E402
 from rescue_vision.vse import VseScaler  # noqa: E402
@@ -114,11 +115,11 @@ def main() -> int:
         "right": list(loaded_rois.right),
     }
     active_roi = "overall"
-    status = "1:overall  2:left  3:right  Left:add  Right:undo  C:clear  S:save"
+    status = "Left:add  Right:undo  C:clear  R:reload  S:save  sides:auto x=640"
 
     def mouse(event: int, x: int, y: int, _flags: int, _data) -> None:
         nonlocal status
-        points = roi_points[active_roi]
+        points = roi_points["overall"]
         image_x = max(0, min(IMAGE_WIDTH - 1, round(x * IMAGE_WIDTH / DISPLAY_WIDTH)))
         image_y = max(0, min(IMAGE_HEIGHT - 1, round(y * IMAGE_HEIGHT / DISPLAY_HEIGHT)))
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -181,11 +182,11 @@ def main() -> int:
             )
             scale_x = DISPLAY_WIDTH / IMAGE_WIDTH
             scale_y = DISPLAY_HEIGHT / IMAGE_HEIGHT
-            rois = CaptureRois(
-                tuple(roi_points["overall"]),
-                tuple(roi_points["left"]),
-                tuple(roi_points["right"]),
-            )
+            overall = tuple(roi_points["overall"])
+            left, right = split_capture_roi(overall)
+            roi_points["left"][:] = left
+            roi_points["right"][:] = right
+            rois = CaptureRois(overall, left, right)
             for item in latest_detections:
                 x, y, width, height = item.bbox
                 capture_side = (
@@ -295,14 +296,14 @@ def main() -> int:
                 active_roi = "overall"
                 status = "editing overall ROI"
             elif key == ord("2"):
-                active_roi = "left"
-                status = "editing left claw ROI"
+                active_roi = "overall"
+                status = "left ROI is derived automatically from x=640"
             elif key == ord("3"):
-                active_roi = "right"
-                status = "editing right claw ROI"
+                active_roi = "overall"
+                status = "right ROI is derived automatically from x=640"
             if key in (ord("c"), ord("C")):
-                roi_points[active_roi].clear()
-                status = f"{active_roi} polygon cleared"
+                roi_points["overall"].clear()
+                status = "overall polygon cleared"
             elif key in (ord("r"), ord("R")):
                 loaded_rois = load_capture_rois(args.output)
                 roi_points["overall"][:] = loaded_rois.overall
@@ -310,15 +311,18 @@ def main() -> int:
                 roi_points["right"][:] = loaded_rois.right
                 status = "all polygons reloaded"
             elif key in (ord("s"), ord("S")):
-                if any(len(points) < 3 for points in roi_points.values()):
-                    status = "all three ROIs require at least three points"
+                if len(roi_points["overall"]) < 3:
+                    status = "overall ROI requires at least three points"
                 else:
+                    left, right = split_capture_roi(
+                        tuple(roi_points["overall"])
+                    )
                     save_capture_rois(
                         args.output,
                         CaptureRois(
                             tuple(roi_points["overall"]),
-                            tuple(roi_points["left"]),
-                            tuple(roi_points["right"]),
+                            left,
+                            right,
                         ),
                     )
                     status = f"saved: {args.output}"

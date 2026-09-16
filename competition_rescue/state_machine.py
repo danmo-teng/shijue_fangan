@@ -358,6 +358,7 @@ class CompetitionSettings:
     initial_stash_enabled: bool = True
     audit_stable_frames: int = 1
     normal_grab_audit_frames: int = 2
+    cluster_grab_audit_frames: int = 2
     delivery_visual_frames: int = 5
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
@@ -407,6 +408,7 @@ class CompetitionSettings:
         if (
             self.audit_stable_frames <= 0 or
             self.normal_grab_audit_frames <= 0 or
+            self.cluster_grab_audit_frames <= 0 or
             self.delivery_visual_frames <= 0
         ):
             raise ValueError("audit frame counts must be positive")
@@ -2327,10 +2329,20 @@ class CompetitionMission:
             not cluster_screening and
             not self.cargo_recheck_pending
         )
+        audit_valid = (
+            self._cluster_audit_valid(audit)
+            if cluster_screening else
+            self._audit_valid(audit)
+        )
+        cluster_grab_audit = cluster_screening and audit_valid
         required_audit_frames = (
             self.settings.normal_grab_audit_frames
             if normal_grab_audit else
-            self.settings.audit_stable_frames
+            (
+                self.settings.cluster_grab_audit_frames
+                if cluster_grab_audit else
+                self.settings.audit_stable_frames
+            )
         )
         stable = replace(
             audit,
@@ -2342,11 +2354,6 @@ class CompetitionMission:
         if new_frame:
             self.audit_id = (self.audit_id + 1) & 0xFF
         assert self.selected_batch is not None
-        audit_valid = (
-            self._cluster_audit_valid(audit)
-            if cluster_screening else
-            self._audit_valid(audit)
-        )
         disperse_vote_context = (
             not audit_valid and
             (

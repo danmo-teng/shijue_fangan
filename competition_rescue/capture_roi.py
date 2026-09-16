@@ -19,18 +19,7 @@ DEFAULT_CAPTURE_POLYGON = (
     (IMAGE_WIDTH - 1, IMAGE_HEIGHT - 1),
     (0, IMAGE_HEIGHT - 1),
 )
-DEFAULT_LEFT_CLAW_POLYGON = (
-    (0, IMAGE_HEIGHT // 4),
-    (600, IMAGE_HEIGHT // 4),
-    (600, IMAGE_HEIGHT - 1),
-    (0, IMAGE_HEIGHT - 1),
-)
-DEFAULT_RIGHT_CLAW_POLYGON = (
-    (680, IMAGE_HEIGHT // 4),
-    (IMAGE_WIDTH - 1, IMAGE_HEIGHT // 4),
-    (IMAGE_WIDTH - 1, IMAGE_HEIGHT - 1),
-    (680, IMAGE_HEIGHT - 1),
-)
+CLAW_SPLIT_X = IMAGE_WIDTH // 2
 
 
 @dataclass(frozen=True)
@@ -38,6 +27,48 @@ class CaptureRois:
     overall: tuple[tuple[int, int], ...]
     left: tuple[tuple[int, int], ...]
     right: tuple[tuple[int, int], ...]
+
+
+def _clip_polygon_x(
+    polygon: tuple[tuple[int, int], ...],
+    *,
+    keep_left: bool,
+) -> tuple[tuple[int, int], ...]:
+    def inside(point: tuple[float, float]) -> bool:
+        return point[0] <= CLAW_SPLIT_X if keep_left else point[0] >= CLAW_SPLIT_X
+
+    def intersection(
+        start: tuple[float, float], end: tuple[float, float]
+    ) -> tuple[float, float]:
+        dx = end[0] - start[0]
+        if dx == 0:
+            return float(CLAW_SPLIT_X), start[1]
+        ratio = (CLAW_SPLIT_X - start[0]) / dx
+        return float(CLAW_SPLIT_X), start[1] + ratio * (end[1] - start[1])
+
+    output: list[tuple[float, float]] = []
+    values = [(float(x), float(y)) for x, y in polygon]
+    if not values:
+        return ()
+    start = values[-1]
+    for end in values:
+        if inside(end):
+            if not inside(start):
+                output.append(intersection(start, end))
+            output.append(end)
+        elif inside(start):
+            output.append(intersection(start, end))
+        start = end
+    return tuple((round(x), round(y)) for x, y in output)
+
+
+def split_capture_roi(
+    overall: tuple[tuple[int, int], ...]
+) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    return (
+        _clip_polygon_x(overall, keep_left=True),
+        _clip_polygon_x(overall, keep_left=False),
+    )
 
 
 def _validate_points(points) -> tuple[tuple[int, int], ...]:
@@ -58,31 +89,15 @@ def load_capture_rois(path: Path) -> CaptureRois:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return CaptureRois(
-            DEFAULT_CAPTURE_POLYGON,
-            DEFAULT_LEFT_CLAW_POLYGON,
-            DEFAULT_RIGHT_CLAW_POLYGON,
-        )
+        left, right = split_capture_roi(DEFAULT_CAPTURE_POLYGON)
+        return CaptureRois(DEFAULT_CAPTURE_POLYGON, left, right)
     if int(data.get("image_width", 0)) != IMAGE_WIDTH or int(
         data.get("image_height", 0)
     ) != IMAGE_HEIGHT:
         raise ValueError("capture ROI image size must be 1280x1024")
     overall = _validate_points(data.get("polygon_px"))
-    left_points = data.get("left_polygon_px")
-    right_points = data.get("right_polygon_px")
-    return CaptureRois(
-        overall,
-        (
-            _validate_points(left_points)
-            if left_points is not None else
-            DEFAULT_LEFT_CLAW_POLYGON
-        ),
-        (
-            _validate_points(right_points)
-            if right_points is not None else
-            DEFAULT_RIGHT_CLAW_POLYGON
-        ),
-    )
+    left, right = split_capture_roi(overall)
+    return CaptureRois(overall, left, right)
 
 
 def load_capture_roi(path: Path) -> tuple[tuple[int, int], ...]:
@@ -103,8 +118,7 @@ def save_capture_roi(path: Path, points: list[tuple[int, int]]) -> None:
 
 def save_capture_rois(path: Path, rois: CaptureRois) -> None:
     overall = _validate_points([[x, y] for x, y in rois.overall])
-    left = _validate_points([[x, y] for x, y in rois.left])
-    right = _validate_points([[x, y] for x, y in rois.right])
+    left, right = split_capture_roi(overall)
     payload = {
         "schema_version": 2,
         "image_width": IMAGE_WIDTH,
@@ -170,7 +184,6 @@ def capture_side_for_bbox(
     require_full_overlap: bool = False,
     minimum_overlap_ratio: float = 0.80,
 ) -> str | None:
-    required_ratio = 1.0 if require_full_overlap else minimum_overlap_ratio
     if not bbox_in_capture_roi(
         bbox,
         rois.overall,
@@ -178,23 +191,13 @@ def capture_side_for_bbox(
         minimum_overlap_ratio=minimum_overlap_ratio,
     ):
         return None
-    left_ratio = bbox_capture_roi_overlap_ratio(bbox, rois.left)
-    right_ratio = bbox_capture_roi_overlap_ratio(bbox, rois.right)
-    left_valid = (
-        bbox_bottom_center_in_roi(bbox, rois.left) and
-        left_ratio >= required_ratio
-    )
-    right_valid = (
-        bbox_bottom_center_in_roi(bbox, rois.right) and
-        right_ratio >= required_ratio
-    )
+    left_valid = bbox_bottom_center_in_roi(bbox, rois.left)
+    right_valid = bbox_bottom_center_in_roi(bbox, rois.right)
     if left_valid != right_valid:
         return "left" if left_valid else "right"
     if left_valid and right_valid:
-        if left_ratio > right_ratio:
-            return "left"
-        if right_ratio > left_ratio:
-            return "right"
+        x, _, width, _ = bbox
+        return "left" if x + width * 0.5 < CLAW_SPLIT_X else "right"
     return None
 
 

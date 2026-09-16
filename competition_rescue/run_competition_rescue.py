@@ -1123,6 +1123,52 @@ class CompetitionPlanner:
                         "state": output.state.value,
                         "message": output.message,
                     }
+                    audit_snapshot = (
+                        output.audit or
+                        self.mission.pending_audit or
+                        vision.capture_audit
+                    )
+                    wire_audit = (
+                        output.command.audit
+                        if output.command is not None else None
+                    )
+                    if audit_snapshot is not None or wire_audit is not None:
+                        left_count = (
+                            audit_snapshot.left_count
+                            if audit_snapshot is not None else
+                            wire_audit.left_count
+                        )
+                        right_count = (
+                            audit_snapshot.right_count
+                            if audit_snapshot is not None else
+                            wire_audit.right_count
+                        )
+                        total_count = (
+                            audit_snapshot.total_count
+                            if audit_snapshot is not None else
+                            wire_audit.total_count
+                        )
+                        event_data.update({
+                            "vision_frame_sequence": vision.frame_sequence,
+                            "audit_id": (
+                                None if wire_audit is None else wire_audit.audit_id
+                            ),
+                            "selected_target_class": (
+                                self.mission.cluster_target_class or
+                                self.mission.target_last_class
+                            ),
+                            "audit_left_count": left_count,
+                            "audit_right_count": right_count,
+                            "audit_unassigned_count": max(
+                                0, total_count - left_count - right_count
+                            ),
+                            "audit_total_count": total_count,
+                            "audit_stable": (
+                                wire_audit.stable
+                                if wire_audit is not None else
+                                audit_snapshot.stable
+                            ),
+                        })
                     if output.event in {
                         "safe_zone_staging_arrived",
                         "staging_camera_firmware_mismatch",
