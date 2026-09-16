@@ -62,7 +62,7 @@ SEARCH → APPROACH_TARGET → mode=20
 ```
 
 普通SEARCH候选通过现有类别、置信度、坐标范围和tracker hits检查后只需1个新帧，不再额外等待3帧。
-APPROACH目标短暂消失时，上位机最多150 ms重发最后坐标，之后明确发送HOLD让F407停车；F407不得再
+APPROACH目标短暂消失时，上位机在`max(0.30秒, 2.5×平均视觉帧周期)`窗口内重发最后坐标，之后明确发送HOLD让F407停车；F407不得再
 依赖250 ms任务帧或视觉帧超时。目标重新出现后，上位机继续发送APPROACH_TARGET。HOLD只停车并保留
 当前靠近上下文，不得自行当作彻底取消；若以后需要放弃目标，双方另行增加明确CANCEL语义。
 
@@ -92,32 +92,33 @@ SEARCH
 而停止已经接受的动作；F407继续执行自身15秒动作保护。
 
 `DISPERSE_PILE`的bit6/bit7语义为：bit6=`SIDE_VALID`，bit7=`TARGET_RIGHT`。bit7只能用于
-DISPERSE且必须和bit6同时置位。bit6置位时F407曲线分离并保留指定侧；bit6未置位时不再高速撞堆，
-只执行原地12°观察转向。两种DISPERSE都完成于mode35。
+DISPERSE且必须和bit6同时置位。bit6置位时F407曲线分离并保留指定侧；bit6未置位时执行原地12°
+观察转向。两种DISPERSE都完成于mode35。
 
 mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT，并用frame floor拒绝动作前审核帧。
 无侧观察完成次数只在新鲜mode35且本次DISPERSE已经被接受后累计，最多两次。两次后仍无法分侧，
 上位机持续发送最终RELEASE_BOTH，等待新鲜mode34和该命令接受证据后清空批次回SEARCH。
 
-正式夹内审核第一次无法判断物资左右归属时，使用`separate_then_search`：
+正式夹内审核第一次无法判断物资左右归属时，兼容命令仍使用`separate_then_search`上下文，但它是观察动作而不是最终释放：
 
 ```text
 第一次不明侧审核
 → RELEASE_BOTH(separate_then_search)
-→ F407内部完成双开、后退0.40m、Touch闭爪、700mm/s前撞0.40m、450mm/s后退0.40m
-→ 双爪重新完全打开并清除下位机复审标志
-→ 新鲜mode=34且ACK已变化
-→ 上位机清除selected_batch、cargo_recheck_pending和全部旧审核累计
-→ 上位机进入SEARCH并持续发送HOLD，不发YIELD/CARGO_AUDIT/GRAB/APPROACH
-→ 等待F407新鲜mode=3
-→ mode=3后从新的视觉帧重新选择撞散目标
+→ F407执行兼容性的12°观察转向并上报mode=35
+→ 上位机确认该RELEASE_BOTH经过relay发送且ACK曾变化，永久锁存本次接受证据
+→ 保留selected_batch，累计一次观察次数并进入CAPTURE_AUDIT
+→ 只使用mode35后的新夹爪ROI帧重新发送CARGO_AUDIT
+→ 可以分侧时发送DISPERSE_PILE|SIDE_VALID，保留右侧时再置TARGET_RIGHT
+→ 仍不能分侧且累计次数少于2时发送无侧DISPERSE_PILE再次观察
+→ 累计2次后仍不能分侧才发送最终RELEASE_BOTH
+→ 最终双开等待新鲜mode=34和本次命令接受证据，随后清空批次并回SEARCH
 ```
 
 明确可判断单侧异常的`RELEASE_LEFT/RIGHT`仍保留原YIELD后夹内复审流程；临时藏堆到点后的
 `RELEASE_BOTH`仍使用藏堆释放和返中流程，不属于撞分。
 
-撞分分支在mode34后不会进入`CAPTURE_AUDIT`，因此空爪时`capture_audit=None`不能再触发清零并
-永久停留WATCH；`CAPTURE_AUDIT`中的无观测等待只保留给真实夹内审核和单侧释放后的复审。
+兼容观察与两种DISPERSE都在mode35后进入`CAPTURE_AUDIT`；最终RELEASE_BOTH只有在两次观察后仍
+不能分侧时才执行，并在mode34后直接清空批次回SEARCH。
 
 ### 4. 正式安全区投送（2026-09-15新流程）
 
@@ -139,8 +140,8 @@ mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT，并�
 藏堆NAV和RETURN继续使用完整方向flags，不得一起改成精简格式。
 
 1. `P1=VALID|USE_FINAL_HEADING|RED_SIDE`，`P6/P7=红方9000或蓝方27000`。F407按定位/IMU航向
-   原地对正；上位机不发送±10°补偿。F407首趟自行执行红方80°/蓝方280°，第二趟起恢复
-   90°/270°。接收时可立即ACK，但转向期间继续报告mode10，真正完成后报告mode11。
+   固定执行红方90°、蓝方270°原地对正；上位机不发送角度补偿。接收时可立即ACK，但转向期间
+   继续报告mode10，真正完成后报告mode11。
 2. 对正后，上位机才开始统计本方安全区。连续3个不同视觉帧识别成功后，取三个框坐标中位数并
    冻结；无镜像画面下物资区使用框宽1/3处，伤员区使用2/3处。第二个`ALIGN_SAFE_ZONE`设置
    `P1 bit6=VISUAL_CORRECTION_VALID`，`P2/P3=目标点X-640`的有符号像素误差。F407只在首次收到
@@ -161,7 +162,7 @@ P6/P7   bit6置位时为0；定位降级时为红方9000或蓝方27000
 
 bit6置位时，F407只能保持第二次ALIGN锁存的航向；定位距离只调节前进速度，不能修改方向。bit6未
 置位时，F407使用P6/P7的定位正方向降级推进。到机构理论位置后，F407锁存最后补推，忽略后续定位
-距离变化，以250 mm/s使用编码器继续前进50 mm，完成后停车并报告mode15。推进速度、接近减速以及
+距离变化，以300 mm/s使用编码器继续前进200 mm，最长1200 ms，完成后停车并报告mode15。推进速度、接近减速以及
 普通+核心混合物资的二次推进仍全部由F407本地完成。
 
 冻结框只用于本次一次性视觉转角，不能在靠近过程中更新，也不能替代现有“物资区外→区内”投送
@@ -205,7 +206,8 @@ F407需要区分可恢复告警和真正锁存故障：
 - 可恢复的短时无进展、临时定位等待、目标帧超时、动作等待不能置永久fault；
 - 真正的电机方向/堵转、IMU失效、编码器硬故障仍按F407本地保护停车；
 - 上位机不把每个`fault_code`再次转换成ABORT，也不在通信短暂恢复前反复发ABORT；
-- F407自身命令看门狗、CRC和序号检查保持不变。
+- F407的CRC和序号检查保持不变；正常Task不再依赖任务帧龄自动停车。除启动自主阶段外，
+  上位机发现STM状态失联时持续发送PAUSE，状态恢复后重发当前阶段合法命令解除PAUSE。
 
 上位机只在用户主动急停/退出或确认车辆越界时发送ABORT。F407若已经进入锁存故障，等待
 人工复位，不要依靠上位机发送普通任务帧尝试“自动清故障”。
@@ -307,7 +309,7 @@ F407应在执行层再次拒绝下列情况：
 - 伤员与其他物资混装，或伤员数量不是1件；
 - 危险或未知目标进入安全区投送动作；
 - `RELEASE_LEFT/RIGHT`指定的爪子没有对应物资或动作条件不满足；
-- 命令帧失联、序号/CRC非法、电机故障、IMU/编码器故障。
+- 序号/CRC非法、电机故障、IMU/编码器故障。
 
 下位机只负责实时执行和硬联锁，不需要保存全场目标列表。上位机已经在`competition_detections.jsonl`保存所有识别结果，并通过稳定的track ID决定当前批次。
 
@@ -321,9 +323,11 @@ F407应在执行层再次拒绝下列情况：
 ```text
 CAPTURE_AUDIT
   → 能判断异常侧：RELEASE_LEFT/RIGHT → mode=32/33 → YIELD_BACKOFF → mode=30 → 复审
-  → 第一次不能判断左右：RELEASE_BOTH(separate_then_search) → mode=34
-  → 清空selected_batch和审核状态 → HOLD等待mode=3 → 重新搜索撞散后的目标
-  → 该路径禁止YIELD、CARGO_AUDIT、GRAB_CONFIRMED和提前APPROACH_TARGET
+  → 第一次不能判断左右：RELEASE_BOTH(separate_then_search) → 12°观察 → mode=35
+  → 保留selected_batch，只使用动作后的新ROI帧发送CARGO_AUDIT复审
+  → 可以分侧：DISPERSE_PILE|SIDE_VALID → mode=35 → 再复审
+  → 仍不能分侧且累计少于2次：无侧DISPERSE_PILE → mode=35 → 再复审
+  → 累计2次仍不能分侧：最终RELEASE_BOTH → mode=34 → 清空批次并回SEARCH
 ```
 
 `RELEASE_LEFT/RELEASE_RIGHT`表示打开并把对应侧物资留在原地；不能理解为“保留左/右侧”。所有完成

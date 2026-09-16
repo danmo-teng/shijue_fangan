@@ -368,7 +368,8 @@ class CompetitionSettings:
     search_min_turn_deg: float = 720.0
     search_target_confirm_frames: int = 1
     disperse_limit: int = 2
-    approach_missing_hold_s: float = 0.15
+    approach_missing_hold_min_s: float = 0.30
+    approach_missing_frame_multiplier: float = 2.5
     yield_distance_m: float = 0.25
     detour_lateral_m: float = 0.25
     boundary_margin_m: float = 0.08
@@ -411,7 +412,8 @@ class CompetitionSettings:
         if self.search_min_turn_deg <= 0 or self.search_target_confirm_frames <= 0:
             raise ValueError("search scan thresholds must be positive")
         if (
-            self.approach_missing_hold_s <= 0
+            self.approach_missing_hold_min_s <= 0 or
+            self.approach_missing_frame_multiplier <= 0
         ):
             raise ValueError("cluster and approach timing settings must be positive")
         if self.near_material_max_distance_m <= 0:
@@ -526,7 +528,6 @@ class CompetitionMission:
         self.invalid_release_side = "both"
         self.invalid_release_final = False
         self.invalid_release_context = "none"
-        self.separation_search_pending = False
         self.initial_release_initial_ack: int | None = None
         self.initial_release_tx_baseline: int | None = None
         self.initial_release_command_accepted = False
@@ -610,6 +611,9 @@ class CompetitionMission:
         self.target_last_class: str | None = None
         self.target_missing_frames = 0
         self.target_missing_frame_sequence: int | None = None
+        self.vision_frame_period_s: float | None = None
+        self.vision_period_last_sequence: int | None = None
+        self.vision_period_last_observed_s: float | None = None
         self.locked_target_track_id: int | None = None
         self.approach_f407_active_seen = False
         self.approach_initial_ack: int | None = None
@@ -620,6 +624,8 @@ class CompetitionMission:
         self.resume_state: CompetitionState | None = None
         self.detour_lateral_m = settings.detour_lateral_m
         self.detour_initial_ack: int | None = None
+        self.detour_tx_baseline: int | None = None
+        self.detour_command_accepted = False
         self.detour_execution_seen = False
         self.danger_event_latched = False
         self.danger_clear_frames = 0
@@ -680,6 +686,8 @@ class CompetitionMission:
                 self.cluster_execution_seen = False
             if state != CompetitionState.DETOUR:
                 self.detour_initial_ack = None
+                self.detour_tx_baseline = None
+                self.detour_command_accepted = False
                 self.detour_execution_seen = False
             if state != CompetitionState.INITIAL_RELEASE:
                 self.initial_release_initial_ack = None
@@ -831,8 +839,6 @@ class CompetitionMission:
         return pose.valid and pose.age_ms <= 250.0
 
     def expected_stm_modes(self) -> tuple[int, ...]:
-        if self.state == CompetitionState.SEARCH and self.separation_search_pending:
-            return (STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH)
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_OBSERVE:
@@ -896,6 +902,11 @@ class CompetitionMission:
         if self.state == CompetitionState.INITIAL_RELEASE:
             return (STM_MODE_RELEASE_BOTH_DONE,)
         if self.state == CompetitionState.INVALID_RELEASE:
+            if (
+                self.invalid_release_context == "separate_then_search" and
+                not self.invalid_release_final
+            ):
+                return (STM_MODE_DISPERSE_DONE,)
             return ({
                 "left": STM_MODE_RELEASE_LEFT_DONE,
                 "right": STM_MODE_RELEASE_RIGHT_DONE,
@@ -927,6 +938,40 @@ class CompetitionMission:
         if self.target_last_seen_s is None:
             return None
         return max(0.0, (now - self.target_last_seen_s) * 1000.0)
+
+    def _update_vision_frame_period(self, vision: VisionSnapshot) -> None:
+        sequence = vision.frame_sequence
+        observed_s = vision.observed_monotonic_s
+        if sequence <= 0 or observed_s is None:
+            return
+        if (
+            self.vision_period_last_sequence is not None and
+            self.vision_period_last_observed_s is not None and
+            sequence > self.vision_period_last_sequence and
+            observed_s > self.vision_period_last_observed_s
+        ):
+            sample_s = observed_s - self.vision_period_last_observed_s
+            if self.vision_frame_period_s is None:
+                self.vision_frame_period_s = sample_s
+            else:
+                self.vision_frame_period_s = (
+                    0.8 * self.vision_frame_period_s + 0.2 * sample_s
+                )
+        if (
+            self.vision_period_last_sequence is None or
+            sequence != self.vision_period_last_sequence
+        ):
+            self.vision_period_last_sequence = sequence
+            self.vision_period_last_observed_s = observed_s
+
+    def _approach_missing_hold_window_s(self) -> float:
+        if self.vision_frame_period_s is None:
+            return self.settings.approach_missing_hold_min_s
+        return max(
+            self.settings.approach_missing_hold_min_s,
+            self.settings.approach_missing_frame_multiplier *
+            self.vision_frame_period_s,
+        )
 
     def _mark_target_seen(self, candidate: TrackedCargo, now: float) -> None:
         self.target_last_seen_s = now
@@ -1233,15 +1278,19 @@ class CompetitionMission:
             return self._search_recovery_output(
                 vision, stm, now, event="search_recovery_start"
             )
+        missing_hold_window_s = self._approach_missing_hold_window_s()
         if (
             self.target_last_seen_s is not None and
-            now - self.target_last_seen_s <= self.settings.approach_missing_hold_s and
+            now - self.target_last_seen_s <= missing_hold_window_s and
             self.last_approach_command is not None
         ):
             return CompetitionOutput(
                 self.state,
                 self.last_approach_command,
-                "目标短暂缺帧，150 ms内保留最后APPROACH坐标",
+                (
+                    "目标短暂缺帧，在动态窗口"
+                    f"{missing_hold_window_s * 1000.0:.0f} ms内保留最后APPROACH坐标"
+                ),
                 self.selected_batch,
                 motion_expected=True,
                 tx_policy="normal_command",
@@ -1256,7 +1305,10 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             self._hold(),
-            "目标缺帧超过150 ms，明确发送HOLD停车等待目标重新出现",
+            (
+                "目标缺帧超过动态窗口"
+                f"{missing_hold_window_s * 1000.0:.0f} ms，明确发送HOLD停车等待目标重新出现"
+            ),
             self.selected_batch,
             tx_policy="hold",
             reason="approach_target_missing_hold",
@@ -1287,6 +1339,8 @@ class CompetitionMission:
 
     def _arm_detour(self, stm: StmSnapshot, now: float) -> None:
         self.detour_initial_ack = stm.acknowledged_sequence if stm.fresh else None
+        self.detour_tx_baseline = stm.relay_mission_tx_frames
+        self.detour_command_accepted = False
         self.detour_execution_seen = False
 
     def _arm_initial_release(self, stm: StmSnapshot, now: float) -> None:
@@ -2229,11 +2283,26 @@ class CompetitionMission:
         side = self.invalid_release_side
         release_command = self._invalid_release_command()
         if self.invalid_release_context == "separate_then_search":
-            message = "首次无法判断左右归属，双开并等待F407内部撞分后回SEARCH"
-        elif self.invalid_release_context == "final_release":
+            message = "首次无法判断左右归属，发送兼容RELEASE_BOTH执行12°观察转向"
+        elif self.invalid_release_context in {
+            "final_release",
+            "disperse_final_release",
+        }:
             message = "复审仍非法，执行最终双开"
         else:
             message = f"夹内组合非法，释放{side}侧后退复审"
+        expected_mode = (
+            STM_MODE_DISPERSE_DONE
+            if (
+                self.invalid_release_context == "separate_then_search" and
+                not self.invalid_release_final
+            )
+            else {
+                "left": STM_MODE_RELEASE_LEFT_DONE,
+                "right": STM_MODE_RELEASE_RIGHT_DONE,
+                "both": STM_MODE_RELEASE_BOTH_DONE,
+            }[side]
+        )
         return CompetitionOutput(
             self.state,
             release_command,
@@ -2243,11 +2312,7 @@ class CompetitionMission:
             "invalid_cargo_release",
             tx_policy="normal_command",
             reason="invalid_audit_release",
-            expected_stm_modes=(
-                STM_MODE_RELEASE_LEFT_DONE,
-                STM_MODE_RELEASE_RIGHT_DONE,
-                STM_MODE_RELEASE_BOTH_DONE,
-            ),
+            expected_stm_modes=(expected_mode,),
         )
 
     def _invalid_release_command(self) -> CommandRequest:
@@ -3592,31 +3657,6 @@ class CompetitionMission:
                 )
             self.return_search_mode_seen = False
             self.return_search_frame_floor = None
-        if self.separation_search_pending:
-            if stm.fresh and stm.mode == STM_MODE_SEARCH:
-                self.separation_search_pending = False
-                self.search_epoch_frame_floor = (
-                    vision.frame_sequence if vision.frame_sequence > 0 else None
-                )
-                self.search_candidate_key = None
-                self.search_candidate_hits = 0
-                return CompetitionOutput(
-                    self.state,
-                    self._hold(),
-                    "F407已进入新鲜mode=3，下一新帧开始重新选择撞散后的目标",
-                    event="separation_search_handoff_complete",
-                    tx_policy="hold",
-                    reason="separation_search_ready",
-                    expected_stm_modes=(STM_MODE_SEARCH,),
-                )
-            return CompetitionOutput(
-                self.state,
-                self._hold(),
-                "撞分完成后持续发送HOLD，等待F407新鲜上报mode=3",
-                tx_policy="hold",
-                reason="separation_search_handoff_pending",
-                expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
-            )
         self._update_search_scan_progress(pose)
         if not self._vision_fresh(vision, now):
             return CompetitionOutput(
@@ -3791,6 +3831,7 @@ class CompetitionMission:
     ) -> CompetitionOutput:
         if self.state_started_s == 0.0:
             self.state_started_s = now
+        self._update_vision_frame_period(vision)
         self._update_delivery_observation(vision, now)
         self._update_danger_event(vision, now)
         if self.state == CompetitionState.FAULT:
@@ -3810,24 +3851,24 @@ class CompetitionMission:
                 reason="mission_finished_pause",
             )
         if not stm.fresh:
-            if self.state == CompetitionState.SEARCH and self.separation_search_pending:
+            if self.state == CompetitionState.WAIT_START:
                 return CompetitionOutput(
                     self.state,
-                    self._hold(),
-                    "撞分完成后持续发送HOLD，等待F407恢复新鲜状态并上报mode=3",
-                    tx_policy="hold",
-                    reason="separation_search_stm_wait",
-                    expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
+                    None,
+                    "启动自主阶段等待STM状态恢复，不覆盖F407自主出发",
+                    suppress_command_tx=True,
+                    suppression_reason="f407_autonomous_start",
+                    tx_policy="autonomous_start",
+                    reason="f407_autonomous_start",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
                 )
             return CompetitionOutput(
                 self.state,
-                None,
-                "STM状态失联，停止发布新任务命令并等待F407看门狗处理",
+                self._pause(),
+                "STM状态失联，持续发送PAUSE冻结当前阶段；状态恢复后重发当前阶段合法命令",
                 self.selected_batch,
-                suppress_command_tx=True,
-                suppression_reason="stm_status_stale",
-                tx_policy="communication_wait",
-                reason="stm_status_stale",
+                tx_policy="pause",
+                reason="stm_status_stale_pause",
                 expected_stm_modes=self.expected_stm_modes(),
             )
         if stm.fault:
@@ -4109,11 +4150,19 @@ class CompetitionMission:
 
         if self.state == CompetitionState.INVALID_RELEASE:
             audit = vision.capture_audit or CargoAudit()
-            expected_mode = {
-                "left": STM_MODE_RELEASE_LEFT_DONE,
-                "right": STM_MODE_RELEASE_RIGHT_DONE,
-                "both": STM_MODE_RELEASE_BOTH_DONE,
-            }[self.invalid_release_side]
+            observe_release = (
+                self.invalid_release_context == "separate_then_search" and
+                not self.invalid_release_final
+            )
+            expected_mode = (
+                STM_MODE_DISPERSE_DONE
+                if observe_release else
+                {
+                    "left": STM_MODE_RELEASE_LEFT_DONE,
+                    "right": STM_MODE_RELEASE_RIGHT_DONE,
+                    "both": STM_MODE_RELEASE_BOTH_DONE,
+                }[self.invalid_release_side]
+            )
             release_command = self._invalid_release_command()
             self.invalid_release_command_accepted = (
                 self._command_acceptance_seen(
@@ -4130,9 +4179,25 @@ class CompetitionMission:
                 self.invalid_release_command_accepted
             )
             if release_complete:
+                if observe_release:
+                    self.disperse_observe_attempts += 1
+                    self.cargo_recheck_pending = True
+                    self.cargo_recheck_context = "disperse_observe"
+                    self.audit_hits = 0
+                    self.audit_last_signature = None
+                    self.audit_last_frame_sequence = None
+                    self.audit_recheck_frame_floor = (
+                        vision.frame_sequence if vision.frame_sequence > 0 else None
+                    )
+                    self.audit_recheck_started_s = now
+                    self._clear_pending_audit()
+                    self.invalid_release_context = "none"
+                    self.invalid_release_final = False
+                    self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+                    return self._audit_output(vision, stm, now)
                 if self.invalid_release_context in {
-                    "separate_then_search",
                     "disperse_final_release",
+                    "final_release",
                 }:
                     self._clear_selected_batch()
                     self._clear_cluster_context(reset_attempts=True)
@@ -4144,33 +4209,23 @@ class CompetitionMission:
                     self.audit_recheck_frame_floor = None
                     self.audit_recheck_started_s = None
                     self._clear_pending_audit()
-                    self.separation_search_pending = True
                     self.invalid_release_context = "none"
                     self.invalid_release_final = False
-                    self._set_state(CompetitionState.SEARCH, now)
-                    return CompetitionOutput(
-                        self.state,
-                        self._hold(),
-                        "F407已完成不明侧撞分并上报mode=34，清空旧批次并等待mode=3",
-                        audit=audit,
-                        event="separate_then_search_start",
-                        tx_policy="hold",
-                        reason="separation_search_handoff_pending",
-                        expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
+                    self.search_epoch_frame_floor = (
+                        vision.frame_sequence if vision.frame_sequence > 0 else None
                     )
-                if self.invalid_release_context == "final_release":
-                    self._clear_selected_batch()
-                    self.cargo_recheck_pending = False
-                    self.cargo_recheck_context = "none"
+                    self.search_candidate_key = None
+                    self.search_candidate_hits = 0
                     self._set_state(CompetitionState.SEARCH, now)
                     return CompetitionOutput(
                         self.state,
                         self._hold(),
-                        "复审仍非法，本次最终双开已由新鲜mode=34和ACK确认",
+                        "最终RELEASE_BOTH已由新鲜mode=34和本次命令接受证据确认，清空批次并回SEARCH",
+                        audit=audit,
                         event="final_release_done",
                         tx_policy="hold",
                         reason="final_release_acknowledged",
-                        expected_stm_modes=(STM_MODE_SEARCH, STM_MODE_RELEASE_BOTH_DONE),
+                        expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE, STM_MODE_SEARCH),
                     )
                 self._set_state(CompetitionState.INVALID_BACKOFF, now)
                 self.invalid_backoff_initial_ack = stm.acknowledged_sequence
@@ -4283,19 +4338,31 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.DETOUR:
+            detour_command = CommandRequest(
+                CMD_CHANGE_LANE,
+                CMD_VALID,
+                round(self.detour_lateral_m * 1000.0),
+                0,
+            )
+            self.detour_command_accepted = self._command_acceptance_seen(
+                stm,
+                detour_command,
+                self.detour_tx_baseline,
+                self.detour_initial_ack,
+                self.detour_command_accepted,
+            )
             if stm.fresh and stm.mode == STM_MODE_REMOTE_ACTION:
                 self.detour_execution_seen = True
             if (
-                self.detour_execution_seen and
-                self._fresh_mode_after(
-                stm, STM_MODE_LANE_DONE, self.detour_initial_ack
-                )
+                stm.fresh and
+                stm.mode == STM_MODE_LANE_DONE and
+                self.detour_command_accepted
             ):
                 self._set_state(self.resume_state or CompetitionState.NAVIGATE, now)
                 return CompetitionOutput(self.state, self._hold(), "换道完成，恢复原任务路线", self.selected_batch, event="detour_done")
             return CompetitionOutput(
                 self.state,
-                CommandRequest(CMD_CHANGE_LANE, CMD_VALID, round(self.detour_lateral_m * 1000.0), 0),
+                detour_command,
                 "持续执行本次危险目标换道，等待新鲜mode=36",
                 self.selected_batch,
                 motion_expected=True,
