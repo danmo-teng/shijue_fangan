@@ -46,7 +46,12 @@ from run_yolo_x5 import (  # noqa: E402
     load_labels,
 )
 
-from protocol import CMD_ABORT, CMD_HOLD, CMD_PAUSE  # noqa: E402
+from protocol import (  # noqa: E402
+    CMD_ABORT,
+    CMD_HOLD,
+    CMD_NAVIGATE_WAYPOINT,
+    CMD_PAUSE,
+)
 from capture_roi import (  # noqa: E402
     bbox_capture_roi_overlap_ratio,
     bbox_overlaps_capture_roi,
