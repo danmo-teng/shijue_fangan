@@ -128,6 +128,24 @@ def mission_frame(
         raise ValueError("TARGET_RIGHT is only valid for DISPERSE_PILE")
     if flags & CMD_TARGET_RIGHT and not flags & CMD_SIDE_VALID:
         raise ValueError("TARGET_RIGHT requires SIDE_VALID")
+    if command == CMD_ENTER_SAFE_ZONE:
+        visual = bool(flags & CMD_VISUAL_CORRECTION_VALID)
+        fallback_heading = 9000 if flags & CMD_RED_SIDE else 27000
+        if (
+            not flags & CMD_DRIVE_STRAIGHT or
+            flags & CMD_DISTANCE_VALID or
+            arg_a != 0 or
+            arg_b != 0
+        ):
+            raise ValueError("ENTER uses F407 encoder distance with zero D")
+        if visual:
+            if flags & CMD_USE_FINAL_HEADING or aux_cdeg != 0:
+                raise ValueError("visual ENTER must use the latched ALIGN heading")
+        elif (
+            not flags & CMD_USE_FINAL_HEADING or
+            aux_cdeg != fallback_heading
+        ):
+            raise ValueError("fallback ENTER must use the side heading")
     payload = (
         bytes((command, flags))
         + _i16be(arg_a, "arg_a")

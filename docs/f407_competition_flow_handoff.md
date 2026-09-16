@@ -197,8 +197,8 @@ F407修改建议保持简单：
 1. `vision.c`和`delivery_enter_command_ok()`接受上述无`DISTANCE_VALID`、D=0的ENTER格式。
 2. 第一次在ALIGN完成状态接受ENTER时，只锁存一次编码器`path_mm`起点和最终航向；后续重复ENTER
    只ACK，不能重置起点。
-3. 用本地编码器累计完成整段推进。按现有参数等效初值可设为`600-113+200=687 mm`，速度和减速
-   继续使用现有本地参数，后续只通过实车调整这一总距离。
+3. 用F407当前已有的本地编码器流程完成整段推进；上位机不发送实时围栏距离，也不参与本地推进
+   距离、速度或终点判断。
 4. 编码器到达设定距离后立即停车，沿用现有张爪、摄像头120°和300 ms稳定流程，随后上报
    `mode=15/TASK_RAM_VERIFY`。
 5. mode15中重复ENTER只ACK并保持停车；收到上位机视觉确认后的TASK_COMPLETE再执行退出安全区。
@@ -208,6 +208,19 @@ F407修改建议保持简单：
 投送完成后F407先本地后退0.30 m并上报mode16，再进入mode17。上位机看到新鲜mode16或mode17后
 立即持续发送原有RETURN_CENTER H/D；F407在mode16继续完成本地后退，在mode17开始接受RETURN，
 不得把提前到达的RETURN当作HOLD或用它中断本地退出。
+
+为避免mode16期间曾收到PAUSE后无法恢复，F407在TASK_EXIT_SAFE_ZONE收到字段合法的新SEQ
+RETURN_CENTER时应ACK并保存最新H/D，但继续执行本地0.30 m后退，不提前切换状态。ACK用于解除PAUSE；
+后退完成进入mode17后直接使用已保存的最新RETURN。重复RETURN只更新H/D，不重置后退距离。
+
+当前F407还应补齐两项会影响连续启动和维护的一致性：
+
+- `TASK_STOPPED + TASK_FAULT_REMOTE_STOP`收到一组新的合法赛前配置时，视为操作员明确启动新一轮任务，
+  清除REMOTE_STOP并重新执行任务初始化/自主出发。电机、IMU、非法状态等其他fault仍要求人工复位，
+  不能被配置帧清除。
+- 同步更新`tools/vision_protocol.py`、`tools/test_vision_protocol.py`和`MISSION_PROTOCOL.md`中的旧ENTER
+  距离格式、旧聚集mode说明及普通单目标单帧STABLE说明，使参考工具与实际C固件一致。无侧DISPERSE
+  的注释统一为12°观察转向，不再写“整堆撞击”。
 
 冻结框只用于本次一次性视觉转角，不能在靠近过程中更新，也不能替代现有“物资区外→区内”投送
 确认所用的实时安全区检测。上位机在NAV/ENTER阶段只保留“曾在区外”证据，收到mode15后清空区内

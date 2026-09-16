@@ -1942,7 +1942,7 @@ class CompetitionMission:
             return False
         expected = Counter(self.selected_batch.classes)
         if audit.left_class == "mixed_material" or audit.right_class == "mixed_material":
-            return set(expected).issubset(MATERIAL_CLASSES)
+            return set(expected) == set(MATERIAL_CLASSES)
         observed = Counter()
         if audit.left_class:
             observed[audit.left_class] += audit.left_count
@@ -2438,6 +2438,11 @@ class CompetitionMission:
                 )
                 return self._audit_confirmation_output(vision, stm, now)
             release_side = self._choose_release_side(stable)
+            if (
+                (release_side == "left" and stable.left_count <= 0) or
+                (release_side == "right" and stable.right_count <= 0)
+            ):
+                release_side = "both"
             if (
                 self.cargo_recheck_pending and
                 self.cargo_recheck_context != "disperse_selective"
