@@ -356,7 +356,7 @@ class CompetitionSettings:
     side: str
     start_zone: int = 1
     initial_stash_enabled: bool = True
-    audit_stable_frames: int = 3
+    audit_stable_frames: int = 1
     delivery_visual_frames: int = 5
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
@@ -605,6 +605,10 @@ class CompetitionMission:
         self.cluster_keep_side: str | None = None
         self.cluster_keep_side_count = 0
         self.cluster_audit_active = False
+        self.disperse_side_votes: deque[tuple[int, str | None, int]] = deque(
+            maxlen=3
+        )
+        self.disperse_side_vote_last_frame_sequence: int | None = None
         self.target_last_seen_s: float | None = None
         self.target_last_center_px: tuple[int, int] | None = None
         self.target_last_area_px: int | None = None
@@ -998,6 +1002,7 @@ class CompetitionMission:
 
     def _select_batch(self, batch: CargoBatch) -> None:
         self.selected_batch = batch
+        self._clear_disperse_side_votes()
         self.invalid_release_context = "none"
         self.invalid_release_final = False
         self.carried_manifest = ()
@@ -1019,6 +1024,7 @@ class CompetitionMission:
 
     def _clear_selected_batch(self) -> None:
         self.selected_batch = None
+        self._clear_disperse_side_votes()
         self.locked_target_track_id = None
         self.target_missing_frames = 0
         self.target_missing_frame_sequence = None
@@ -1028,6 +1034,7 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_cluster_context(self, *, reset_attempts: bool) -> None:
+        self._clear_disperse_side_votes()
         if reset_attempts:
             self.disperse_attempts = 0
             self.disperse_observe_attempts = 0
@@ -1230,6 +1237,10 @@ class CompetitionMission:
             stm.mode == STM_MODE_CAPTURE_AUDIT and
             stm.claw_visible
         ):
+            self.audit_recheck_frame_floor = (
+                vision.frame_sequence if vision.frame_sequence > 0 else None
+            )
+            self.audit_recheck_started_s = now
             self._set_state(CompetitionState.CAPTURE_AUDIT, now)
             return self._audit_output(vision, stm, now)
         if candidate is not None:
@@ -1494,11 +1505,6 @@ class CompetitionMission:
                         reason="cluster_audit_valid",
                         expected_stm_modes=(STM_MODE_CAPTURE_DONE,),
                     )
-                self.cluster_keep_side = self._preferred_keep_side(audit)
-                self.cluster_keep_side_count = {
-                    "left": audit.left_count,
-                    "right": audit.right_count,
-                }.get(self.cluster_keep_side, 0)
                 self.disperse_attempts += 1
                 return self._start_disperse(stm, now)
             event = (
@@ -1584,13 +1590,6 @@ class CompetitionMission:
                 expected_stm_modes=(STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH),
             )
         if (
-            vision.capture_audit is None or
-            vision.capture_audit.signature != self.pending_audit_signature
-        ):
-            self._clear_pending_audit()
-            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
-            return self._audit_output(vision, stm, now)
-        if (
             self._relay_sent_since(
                 stm, stable_command, self.pending_audit_tx_baseline
             ) and
@@ -1619,11 +1618,6 @@ class CompetitionMission:
                     reason="stable_audit_relay_confirmed",
                 )
             if release_context == "disperse_reaudit":
-                self.cluster_keep_side = self._preferred_keep_side(audit)
-                self.cluster_keep_side_count = {
-                    "left": audit.left_count,
-                    "right": audit.right_count,
-                }.get(self.cluster_keep_side, 0)
                 if self.cluster_keep_side is not None:
                     self.disperse_attempts += 1
                     return self._start_disperse(stm, now)
@@ -1926,15 +1920,18 @@ class CompetitionMission:
     def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
         left_nonempty = audit.left_count > 0
         right_nonempty = audit.right_count > 0
-        left_legal = self._side_is_legal_for_task(
-            audit.left_class, audit.left_count
+        danger_side_known = (
+            audit.left_class == "danger_cyan" or
+            audit.right_class == "danger_cyan"
         )
-        right_legal = self._side_is_legal_for_task(
-            audit.right_class, audit.right_count
+        unknown_side_known = (
+            audit.left_class == "unknown" or
+            audit.right_class == "unknown"
         )
-        if left_legal != right_legal:
-            return "left" if left_legal else "right"
-        if not left_legal:
+        if (
+            (audit.danger_present and not danger_side_known) or
+            (audit.unknown_present and not unknown_side_known)
+        ):
             return None
         if left_nonempty != right_nonempty:
             return "left" if left_nonempty else "right"
@@ -1984,7 +1981,48 @@ class CompetitionMission:
                 if audit.left_stable_track_id < audit.right_stable_track_id
                 else "right"
             )
-        return None
+        return "left"
+
+    def _clear_disperse_side_votes(self) -> None:
+        self.disperse_side_votes.clear()
+        self.disperse_side_vote_last_frame_sequence = None
+
+    def _observe_disperse_side_vote(
+        self, frame_sequence: int, audit: CargoAudit
+    ) -> None:
+        if (
+            frame_sequence <= 0 or
+            frame_sequence == self.disperse_side_vote_last_frame_sequence
+        ):
+            return
+        self.disperse_side_vote_last_frame_sequence = frame_sequence
+        keep_side = self._preferred_keep_side(audit)
+        keep_count = {
+            "left": audit.left_count,
+            "right": audit.right_count,
+        }.get(keep_side, 0)
+        if keep_count <= 0:
+            keep_side = None
+            keep_count = 0
+        self.disperse_side_votes.append(
+            (frame_sequence, keep_side, keep_count)
+        )
+
+    def _disperse_side_vote_result(self) -> tuple[str | None, int, bool]:
+        side_counts = Counter(
+            side for _, side, count in self.disperse_side_votes
+            if side is not None and count > 0
+        )
+        for side in ("left", "right"):
+            if side_counts[side] < 2:
+                continue
+            keep_count = next(
+                count
+                for _, vote_side, count in reversed(self.disperse_side_votes)
+                if vote_side == side and count > 0
+            )
+            return side, keep_count, True
+        return None, 0, len(self.disperse_side_votes) >= 3
 
     def _choose_release_side(self, audit: CargoAudit) -> str:
         """Return the side to open; RELEASE_LEFT means discard left cargo."""
@@ -2074,20 +2112,23 @@ class CompetitionMission:
                     STM_MODE_SEARCH,
                 ),
             )
-        if self.cargo_recheck_pending or self.cluster_audit_active:
+        if (
+            self.cargo_recheck_pending or
+            self.cluster_audit_active or
+            self.audit_recheck_frame_floor is not None or
+            self.audit_recheck_started_s is not None
+        ):
             new_sequence = (
-                self.audit_recheck_frame_floor is not None and
-                vision.frame_sequence > self.audit_recheck_frame_floor
-            )
-            new_timestamp = (
-                self.audit_recheck_started_s is not None and
-                vision.observed_monotonic_s is not None and
-                vision.observed_monotonic_s > self.audit_recheck_started_s
+                vision.frame_sequence > 0 and
+                (
+                    self.audit_recheck_frame_floor is None or
+                    vision.frame_sequence > self.audit_recheck_frame_floor
+                )
             )
             if (
                 self.audit_recheck_frame_floor is not None or
                 self.audit_recheck_started_s is not None
-            ) and not (new_sequence or new_timestamp):
+            ) and not new_sequence:
                 assert self.selected_batch is not None
                 empty_payload = CargoAudit().to_protocol(
                     initial_stash=self.selected_batch.initial_stash,
@@ -2120,7 +2161,11 @@ class CompetitionMission:
                     total_count=0,
                     stable=False,
                 )
-                if vision.frame_sequence != self.audit_last_frame_sequence:
+                empty_new_frame = (
+                    vision.frame_sequence > 0 and
+                    vision.frame_sequence != self.audit_last_frame_sequence
+                )
+                if empty_new_frame:
                     self.audit_last_frame_sequence = vision.frame_sequence
                     if empty_audit.signature == self.audit_last_signature:
                         self.audit_hits += 1
@@ -2129,7 +2174,10 @@ class CompetitionMission:
                         self.audit_hits = 1
                 stable_empty = replace(
                     empty_audit,
-                    stable=self.audit_hits >= self.settings.audit_stable_frames,
+                    stable=(
+                        empty_new_frame and
+                        self.audit_hits >= self.settings.audit_stable_frames
+                    ),
                 )
                 if stable_empty.stable:
                     self.audit_id = (self.audit_id + 1) & 0xFF
@@ -2182,7 +2230,7 @@ class CompetitionMission:
             )
         audit = vision.capture_audit
         new_frame = (
-            vision.frame_sequence <= 0 or
+            vision.frame_sequence > 0 and
             vision.frame_sequence != self.audit_last_frame_sequence
         )
         if new_frame:
@@ -2192,15 +2240,68 @@ class CompetitionMission:
             else:
                 self.audit_last_signature = audit.signature
                 self.audit_hits = 1
-        stable = replace(audit, stable=self.audit_hits >= self.settings.audit_stable_frames)
-        self.audit_id = (self.audit_id + 1) & 0xFF
+        stable = replace(
+            audit,
+            stable=(
+                new_frame and
+                self.audit_hits >= self.settings.audit_stable_frames
+            ),
+        )
+        if new_frame:
+            self.audit_id = (self.audit_id + 1) & 0xFF
         assert self.selected_batch is not None
+        audit_valid = self._audit_valid(audit)
+        disperse_vote_context = (
+            not audit_valid and
+            (
+                self.cluster_audit_active or
+                self.cargo_recheck_context in {
+                    "disperse_observe",
+                    "disperse_selective",
+                }
+            )
+        )
+        if disperse_vote_context:
+            if new_frame:
+                self._observe_disperse_side_vote(
+                    vision.frame_sequence, audit
+                )
+            keep_side, keep_count, vote_ready = (
+                self._disperse_side_vote_result()
+            )
+            if not vote_ready:
+                unstable = replace(audit, stable=False)
+                unstable_payload = unstable.to_protocol(
+                    initial_stash=self.selected_batch.initial_stash,
+                    destination=self.selected_batch.destination,
+                    audit_id=self.audit_id,
+                )
+                vote_summary = [
+                    side or "unknown"
+                    for _, side, _ in self.disperse_side_votes
+                ]
+                return CompetitionOutput(
+                    self.state,
+                    CommandRequest(
+                        CMD_CARGO_AUDIT,
+                        CMD_VALID,
+                        audit=unstable_payload,
+                    ),
+                    f"曲线分离选侧投票：{vote_summary}，等待最近3帧中2票一致",
+                    self.selected_batch,
+                    unstable,
+                    "disperse_side_vote_wait",
+                    tx_policy="audit_unstable_publish",
+                    reason="disperse_side_vote_pending",
+                )
+            self.cluster_keep_side = keep_side
+            self.cluster_keep_side_count = keep_count
         payload = stable.to_protocol(
             initial_stash=self.selected_batch.initial_stash,
             destination=self.selected_batch.destination,
             audit_id=self.audit_id,
         )
-        if stable.stable and self._audit_valid(stable):
+        if stable.stable and audit_valid:
             self._begin_audit_confirmation(
                 stable,
                 payload,
@@ -2212,7 +2313,7 @@ class CompetitionMission:
                 now,
             )
             return self._audit_confirmation_output(vision, stm, now)
-        if stable.stable and not self._audit_valid(stable):
+        if stable.stable and not audit_valid:
             if self.cluster_audit_active:
                 self._begin_audit_confirmation(
                     stable,
@@ -3208,6 +3309,7 @@ class CompetitionMission:
             stm.mode == STM_MODE_CLUSTER_CAPTURE_AUDIT and
             self.cluster_command_accepted
         ):
+            self._clear_disperse_side_votes()
             self.cluster_audit_active = True
             self.cargo_recheck_pending = False
             self.cargo_recheck_context = "none"
@@ -3275,6 +3377,7 @@ class CompetitionMission:
             stm.mode == STM_MODE_DISPERSE_DONE and
             self.disperse_command_accepted
         ):
+            self._clear_disperse_side_votes()
             if self.disperse_context == "observe":
                 self.disperse_observe_attempts += 1
             self.cargo_recheck_pending = True
@@ -4180,6 +4283,7 @@ class CompetitionMission:
             )
             if release_complete:
                 if observe_release:
+                    self._clear_disperse_side_votes()
                     self.disperse_observe_attempts += 1
                     self.cargo_recheck_pending = True
                     self.cargo_recheck_context = "disperse_observe"
