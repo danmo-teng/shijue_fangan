@@ -92,31 +92,44 @@ SEARCH
 而停止已经接受的动作；F407继续执行自身15秒动作保护。
 
 `DISPERSE_PILE`的bit6/bit7语义为：bit6=`SIDE_VALID`，bit7=`TARGET_RIGHT`。bit7只能用于
-DISPERSE且必须和bit6同时置位。bit6置位时F407曲线分离并保留指定侧；bit6未置位时执行原地12°
-观察转向。两种DISPERSE都完成于mode35。
+DISPERSE且必须和bit6同时置位。bit6置位时F407曲线分离并保留指定侧；bit6未置位且bit5未置位时
+执行原地12°观察转向。这两种普通DISPERSE完成于mode35；bit5首件轻撞完成后直接mode3。
 
 mode35后F407保持夹内复审状态，上位机持续发送CARGO_AUDIT，并用frame floor拒绝动作前审核帧。
 无侧观察完成次数只在新鲜mode35且本次DISPERSE已经被接受后累计，最多两次。两次后仍无法分侧，
 上位机持续发送最终RELEASE_BOTH，等待新鲜mode34和该命令接受证据后清空批次回SEARCH。
 
 普通mode21以及聚集/分离复审后最终允许GRAB，都要求2个不同新帧内容一致；同一帧不得重复累计。
-聚集筛选单独按本轮selected target判断类别和期望数量，连续两帧都只剩1件目标才允许GRAB，不复用
-允许1～3件运输的宽松规则。无效审核的曲线分离选侧仍使用frame floor之后第1个新鲜、非空且保留
-侧数量大于0的审核帧，不再
-等待3帧2票。单侧绿色优先；两侧都有绿色或均无绿色时保留数量较少侧，平局依次比较selected_count、
-跟踪稳定度、距离和track_id。只有非空侧无法确认，或危险/未知物资归属完全不明时，才发送无侧
-DISPERSE执行12°观察。协议字段不变。
+首件正式绿色完成前仍要求恰好1件绿色；首件完成后的material允许夹内实际1～3件普通、核心或
+MIXED_MATERIAL，伤员仍须单独1件，不再要求与APPROACH前selected_batch完全一致。无效审核的曲线
+分离选侧仍使用frame floor之后第1个新鲜、非空审核帧。仅左侧有绿色保留左，仅右侧有绿色保留右；
+两侧都有绿色时保留绿色数量较少侧，相同保留左；两侧都无绿色时保留左，只有左空才保留右。普通
+混装、数量相同、track接近不再触发无侧观察。只有overall ROI内完全没有可强制归侧候选时，才发送
+无侧DISPERSE执行12°观察。协议字段不变。
 
 聚集APPROACH期间F407保持双爪完全打开，上位机持续发送`APPROACH_TARGET|CLUSTER_TARGET`直到新鲜
-mode38，不等待GRIPPER_CLOSED。第一次带SIDE_VALID的曲线分离由F407执行15°保持，后续带侧分离执行
-25°保持；上位机不增加协议位，只保留cluster_id和selected_batch，每次mode35后使用动作完成后的
-第1个新帧复审，仍不合法就继续发送带侧DISPERSE。
+mode38，不等待GRIPPER_CLOSED。所有带SIDE_VALID的DISPERSE曲线都使用固定15°保持；25°只属于普通
+RELEASE_LEFT/RIGHT单侧释放。每次mode35后使用动作完成后的新帧复审。
+
+新增`DISPERSE_PILE P1 bit5=FIRST_GREEN_BUMP`，仅用于首件正式绿色尚未完成的中心混堆轻撞，且不能
+与SIDE_VALID/TARGET_RIGHT同时置位。F407接受后ACK并进入mode25，固定执行：后退0.10 m→Touch闭爪
+→前进0.20 m→后退0.10 m→双开；完成后直接进入mode3，不上报mode35。重复新SEQ同命令只ACK且
+不重启动作。上位机确认本次接受证据和新鲜mode3后清除旧目标并用新帧重搜。首件绿色完成后拒绝bit5。
 
 普通单目标按新版流程：F407在125°水平对正后直接转到140°，稳定后进入mode21并置CLAW_VISIBLE，
 不再等待原track重新出现；随后以180 mm/s最多慢爬500 mm。上位机收到新鲜mode21+CLAW_VISIBLE后
 停止APPROACH并记录frame floor。普通抓取要求frame floor之后2个不同frame_sequence内容一致：第一
 帧发非STABLE审核，第二帧发STABLE审核；每个新视觉帧使用新audit_id，同一帧重复发送保持audit_id。
 聚集mode38/mode37和分离复审中的合法GRAB同样使用2帧；无效审核的分侧决策仍保持1帧。
+
+最终GRAB两帧的一致性需要忽略单件目标位于左爪还是右爪，只比较总数、实际类别集合以及危险/未知/
+混装标志。F407的`task_latch_audit()`也应按该归一化语义累计普通两帧；显式STABLE第二帧不得因为左右
+抖动被本地重新清零。上位机出现第一张合法候选后会忽略一张瞬时无效帧，连续2张无效才重新分离；
+稳定空爪仍按原流程回SEARCH。
+
+SEARCH顺序固定为120°一圈再90°一圈。F407累计完成约720°且仍无目标后保持mode3并进入
+SEARCH_WAIT_RETURN；收到合法RETURN_CENTER后ACK并进入mode17。上位机持续发送实时H/D到D=0，
+F407重新mode3后从120°开始新一轮搜索。任何阶段收到合法APPROACH都应立即退出等待并接管目标。
 
 上位机只在STM新鲜、CLAW_VISIBLE=1且`camera_pitch_cdeg==14000`时建立夹内审核；全局cargo仅服务
 SEARCH/APPROACH。每次进入mode21、mode38或收到本次新鲜mode35后都会清除动作前审核和选侧缓存，
@@ -130,8 +143,9 @@ CLAW_VISIBLE=1和相机140°，直到接受新的CARGO_AUDIT。
 
 大ROI负责确认“物体存在”：满足底部中心和重叠条件的所有物体都进入total_count。左右爪ROI只负责
 分离方向；无法分侧的物体设置unknown_present并保留在total_count，使审核无法GRAB并走无侧12°观察。
-聚集只有总数为1、类别与selected target一致时才能GRAB。最终合法审核会重新确认selected_batch的
-实际类别和material/injury目的地；审核不一致时继续分离，不得沿用原目的地运输。
+首件正式绿色阶段只有总数为1且为绿色时才能GRAB；首件完成后的material可按夹内实际1～3件普通/
+核心组合GRAB，伤员仍须单独1件。最终合法审核会把实际类别、数量和material/injury目的地写回
+selected_batch；非法审核继续分离。
 
 复审得到稳定空爪时，上位机持续发送显式STABLE全零CARGO_AUDIT，直到F407新鲜mode3；随后清除
 selected_batch、cluster上下文、侧向结果、旧track和frame floor，再进入SEARCH。无侧DISPERSE仍

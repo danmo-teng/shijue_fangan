@@ -430,6 +430,7 @@ def make_vision_snapshot(
     frame_sequence: int,
     safe_zone_filter_blocked: bool = False,
     capture_rois: CaptureRois | None = None,
+    low_conf_green_seen: bool = False,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     rois = capture_rois or load_capture_rois(
@@ -533,6 +534,7 @@ def make_vision_snapshot(
         delivery_target_inside_track_ids=delivery_inside_ids,
         delivery_target_outside_track_ids=delivery_outside_ids,
         safe_zone_filter_blocked=safe_zone_filter_blocked,
+        low_conf_green_seen=low_conf_green_seen,
     )
 
 
@@ -921,6 +923,7 @@ class CompetitionPlanner:
                 "classes": list(output.batch.classes),
                 "destination": output.batch.destination,
                 "initial_stash": output.batch.initial_stash,
+                "confirmed_total_count": output.batch.confirmed_total_count,
             }
         audit = None if output.audit is None else asdict(output.audit)
         command = None if output.command is None else {
@@ -1037,9 +1040,11 @@ class CompetitionPlanner:
                 "delivery_target_inside_safe_zone": vision.delivery_target_inside_safe_zone,
                 "delivery_target_outside_safe_zone": vision.delivery_target_outside_safe_zone,
                 "safe_zone_filter_blocked": vision.safe_zone_filter_blocked,
+                "low_conf_green_seen": vision.low_conf_green_seen,
             },
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
+            "first_green_bump_used": self.mission.first_green_bump_used,
             "first_fault_code": self.mission.first_fault_code,
             "delivery_count": self.mission.delivery_count,
             "disperse_attempts": self.mission.disperse_attempts,
@@ -1668,6 +1673,11 @@ def main() -> int:
                         )
                     else:
                         detections, timing = detector.infer(packet.image)
+                    low_conf_green_seen = any(
+                        item.class_name == "green_supply" and
+                        float(item.confidence) < GREEN_SUPPLY_SCORE_THRESHOLD
+                        for item in detections
+                    )
                     detections = [
                         item for item in detections
                         if item.class_name != "green_supply" or
@@ -1685,7 +1695,7 @@ def main() -> int:
                         safe_zone_filter_blocked = False
                     elif recent_safe_bbox is not None and safe_zone_missing_frames < 2:
                         safe_zone_missing_frames += 1
-                        safe_bbox = None
+                        safe_bbox = recent_safe_bbox
                         safe_zone_filter_blocked = True
                     else:
                         recent_safe_bbox = None
@@ -1702,6 +1712,7 @@ def main() -> int:
                         packet.frame_id,
                         safe_zone_filter_blocked,
                         capture_rois,
+                        low_conf_green_seen,
                     )
                     planner.set_vision(latest_vision)
                     log_now = time.monotonic()

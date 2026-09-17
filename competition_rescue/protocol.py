@@ -44,6 +44,7 @@ CMD_USE_FINAL_HEADING = 1 << 2
 CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
 CMD_CLUSTER_TARGET = 1 << 5
+CMD_FIRST_GREEN_BUMP = 1 << 5
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
@@ -115,8 +116,11 @@ def mission_frame(
         raise ValueError("sequence must be in 0..255")
     if not 0 <= command <= 0xFF or not 0 <= flags <= 0xFF:
         raise ValueError("command and flags must be bytes")
-    if flags & CMD_CLUSTER_TARGET and command != CMD_APPROACH_TARGET:
-        raise ValueError("CLUSTER_TARGET is only valid for APPROACH_TARGET")
+    if flags & CMD_CLUSTER_TARGET and command not in {
+        CMD_APPROACH_TARGET,
+        CMD_DISPERSE_PILE,
+    }:
+        raise ValueError("bit5 is only valid for APPROACH_TARGET or DISPERSE_PILE")
     if flags & CMD_STAGE_ONLY and command not in {
         CMD_NAVIGATE_WAYPOINT,
         CMD_ALIGN_SAFE_ZONE,
@@ -128,6 +132,12 @@ def mission_frame(
         raise ValueError("TARGET_RIGHT is only valid for DISPERSE_PILE")
     if flags & CMD_TARGET_RIGHT and not flags & CMD_SIDE_VALID:
         raise ValueError("TARGET_RIGHT requires SIDE_VALID")
+    if (
+        command == CMD_DISPERSE_PILE and
+        flags & CMD_FIRST_GREEN_BUMP and
+        flags & (CMD_SIDE_VALID | CMD_TARGET_RIGHT)
+    ):
+        raise ValueError("FIRST_GREEN_BUMP cannot use side-selection flags")
     if command == CMD_ENTER_SAFE_ZONE:
         visual = bool(flags & CMD_VISUAL_CORRECTION_VALID)
         fallback_heading = 9000 if flags & CMD_RED_SIDE else 27000
@@ -325,10 +335,15 @@ def disperse_frame(
     keep_side: str | None = None,
     *,
     red_side: bool = False,
+    first_green_bump: bool = False,
 ) -> bytes:
     if keep_side not in {None, "left", "right"}:
         raise ValueError("keep_side must be left, right or None")
+    if first_green_bump and keep_side is not None:
+        raise ValueError("FIRST_GREEN_BUMP cannot select a side")
     flags = CMD_VALID | (CMD_RED_SIDE if red_side else 0)
+    if first_green_bump:
+        flags |= CMD_FIRST_GREEN_BUMP
     if keep_side is not None:
         flags |= CMD_SIDE_VALID
     if keep_side == "right":
