@@ -183,36 +183,39 @@ def test_search_recovery_follows_f407_modes_without_local_timeout() -> None:
     output = mission.step(visible, pose(), stm(mode=3), 0.0)
     assert output.state == CompetitionState.APPROACH
 
-    # One or two missed frames preserve the locked target and stop producing
-    # new APPROACH frames while F407 owns its frame-age handling.
-    for sequence in (2, 3):
-        output = mission.step(
-            VisionSnapshot(frame_sequence=sequence, observed_monotonic_s=sequence * 0.1),
-            pose(),
-            stm(mode=20, flags=0),
-            sequence * 0.1,
-        )
-        assert output.state == CompetitionState.APPROACH
-        assert output.command is None and output.suppress_command_tx
-
+    # After the dynamic missing-frame window, explicit HOLD starts the F407
+    # 500 ms recovery timer without clearing the target early.
     output = mission.step(
-        VisionSnapshot(frame_sequence=4, observed_monotonic_s=0.4),
+        VisionSnapshot(frame_sequence=2, observed_monotonic_s=0.4),
         pose(),
-        stm(mode=24),
+        stm(mode=20, flags=0),
         0.4,
     )
+    assert output.state == CompetitionState.APPROACH
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert mission.selected_batch is not None
+
+    output = mission.step(
+        VisionSnapshot(frame_sequence=3, observed_monotonic_s=0.9),
+        pose(),
+        stm(mode=24),
+        0.9,
+    )
     assert output.state == CompetitionState.WAIT_SEARCH_RECOVERY
-    assert output.command is None and output.suppress_command_tx
+    assert output.command and output.command.opcode == CMD_HOLD
+    assert mission.selected_batch is None
+    assert mission.locked_target_track_id is None
+    assert mission.target_last_center_px is None
 
     # No local recovery timer may turn a long mode24 wait into ABORT.
     output = mission.step(
-        VisionSnapshot(frame_sequence=5, observed_monotonic_s=20.0),
+        VisionSnapshot(frame_sequence=4, observed_monotonic_s=20.0),
         PoseSnapshot(False, age_ms=999.0),
         stm(mode=24),
         20.0,
     )
     assert output.state == CompetitionState.WAIT_SEARCH_RECOVERY
-    assert output.command is None and output.suppress_command_tx
+    assert output.command and output.command.opcode == CMD_HOLD
 
     # Fresh mode3 alone completes the handoff; visual and pose freshness are
     # intentionally irrelevant here.
@@ -224,6 +227,7 @@ def test_search_recovery_follows_f407_modes_without_local_timeout() -> None:
     )
     assert output.state == CompetitionState.SEARCH
     assert output.command and output.command.opcode == CMD_HOLD
+    assert mission.search_epoch_frame_floor == 5
 
 
 def test_target_reassociation_and_only_real_abort_sources() -> None:

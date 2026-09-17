@@ -9,6 +9,7 @@ atomic command-file relay.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import asdict
 import json
 import math
@@ -433,6 +434,9 @@ def safe_zone_push_corridor(
     first_common_delivered: bool,
     excluded_track_ids: frozenset[int] = frozenset(),
     safe_sweep_capture_offset_mm: float = 150.0,
+    carried_manifest: tuple[str, ...] = (),
+    carried_total_count: int = 0,
+    recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
 ) -> tuple[tuple[tuple[int, int], ...], TrackedCargo | None, int | None]:
     if safe_bbox is None or destination not in {"material", "injury"}:
         return (), None, None
@@ -467,13 +471,12 @@ def safe_zone_push_corridor(
         if not first_common_delivered else
         frozenset({"danger_cyan", "injured_orange"})
     )
-    candidates: list[tuple[int, TrackedCargo]] = []
+    corridor_items: list[tuple[TrackedCargo, tuple[float, float]]] = []
+    near_field_items: list[TrackedCargo] = []
     for item in cargo:
         if (
             not item.visible or
-            item.track_id in excluded_track_ids or
             item.inside_safe_zone or
-            item.class_name not in blocking_classes or
             item.relative_xy_m is None or
             item.relative_xy_m[1] <= 0.0
         ):
@@ -485,8 +488,54 @@ def safe_zone_push_corridor(
         )
         if cv2.pointPolygonTest(contour, bottom_center, False) < 0:
             continue
+        corridor_items.append((item, bottom_center))
         if cv2.pointPolygonTest(claw_near_field, bottom_center, False) >= 0:
+            near_field_items.append(item)
+
+    carried_counts = Counter(carried_manifest)
+    near_field_matches_manifest = (
+        carried_total_count > 0 and
+        len(near_field_items) == carried_total_count and
+        Counter(item.class_name for item in near_field_items) == carried_counts
+    )
+
+    def overlaps_carried_height(item: TrackedCargo) -> bool:
+        _, item_y, _, item_height = item.bbox
+        item_bottom = item_y + item_height
+        for _, carried_y, _, carried_height in recent_carried_bboxes:
+            overlap_height = max(
+                0,
+                min(item_bottom, carried_y + carried_height) -
+                max(item_y, carried_y),
+            )
+            if overlap_height / max(1, min(item_height, carried_height)) >= 0.60:
+                return True
+        return False
+
+    candidates: list[tuple[int, TrackedCargo]] = []
+    for item, bottom_center in corridor_items:
+        if (
+            item.track_id in excluded_track_ids or
+            item.class_name not in blocking_classes
+        ):
             continue
+        in_claw_near_field = (
+            cv2.pointPolygonTest(claw_near_field, bottom_center, False) >= 0
+        )
+        different_critical_class = (
+            item.class_name in {"danger_cyan", "injured_orange"} and
+            carried_counts[item.class_name] == 0
+        )
+        if (
+            in_claw_near_field and
+            not different_critical_class and
+            (
+                near_field_matches_manifest or
+                overlaps_carried_height(item)
+            )
+        ):
+            continue
+        assert item.relative_xy_m is not None
         distance_mm = max(
             80,
             min(
@@ -515,6 +564,7 @@ def make_vision_snapshot(
     safe_zone_filter_blocked: bool = False,
     capture_rois: CaptureRois | None = None,
     low_conf_green_seen: bool = False,
+    recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     rois = capture_rois or load_capture_rois(
@@ -608,7 +658,16 @@ def make_vision_snapshot(
     delivery_inside = bool(delivery_inside_ids)
     delivery_outside = bool(delivery_outside_ids)
     danger, side = danger_ahead(cargo, approach_target)
-    corridor_bbox = mission.locked_safe_bbox or safe_bbox
+    current_carried_bboxes = ()
+    if (
+        mission.carried_total_count > 0 and
+        len(delivery_items) == mission.carried_total_count and
+        Counter(item.class_name for item in delivery_items) ==
+        Counter(mission.carried_manifest)
+    ):
+        current_carried_bboxes = tuple(item.bbox for item in delivery_items)
+    carried_bbox_reference = current_carried_bboxes or recent_carried_bboxes
+    corridor_bbox = None if safe_zone_filter_blocked else safe_bbox
     corridor_destination = (
         mission.confirmed_delivery_destination or
         (selected.destination if selected is not None else None)
@@ -627,6 +686,9 @@ def make_vision_snapshot(
         mission.first_common_delivered,
         frozenset(corridor_excluded_track_ids),
         mission.settings.safe_sweep_capture_offset_mm,
+        mission.carried_manifest,
+        mission.carried_total_count,
+        carried_bbox_reference,
     )
     return VisionSnapshot(
         frame_sequence=frame_sequence,
@@ -652,6 +714,7 @@ def make_vision_snapshot(
         safe_corridor_obstacle_track_id=(
             None if corridor_obstacle is None else corridor_obstacle.track_id
         ),
+        carried_reference_bboxes=current_carried_bboxes,
     )
 
 
@@ -1647,6 +1710,7 @@ def main() -> int:
     camera_restarts = 0
     recent_safe_bbox: tuple[int, int, int, int] | None = None
     safe_zone_missing_frames = 0
+    recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = ()
 
     def create_camera() -> LatestFrameCamera:
         return LatestFrameCamera(
@@ -1853,7 +1917,14 @@ def main() -> int:
                         safe_zone_filter_blocked,
                         capture_rois,
                         low_conf_green_seen,
+                        recent_carried_bboxes,
                     )
+                    if not mission.carried_manifest:
+                        recent_carried_bboxes = ()
+                    elif latest_vision.carried_reference_bboxes:
+                        recent_carried_bboxes = (
+                            latest_vision.carried_reference_bboxes
+                        )
                     planner.set_vision(latest_vision)
                     log_now = time.monotonic()
                     if log_now >= next_detection_log:

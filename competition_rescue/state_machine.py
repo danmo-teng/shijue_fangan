@@ -284,6 +284,7 @@ class VisionSnapshot:
     safe_corridor_obstacle_class: str | None = None
     safe_corridor_obstacle_distance_mm: int | None = None
     safe_corridor_obstacle_track_id: int | None = None
+    carried_reference_bboxes: tuple[tuple[int, int, int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1289,13 +1290,46 @@ class CompetitionMission:
     def carried_delivery_count(self) -> int:
         return max(1, self.carried_total_count, len(self.carried_manifest))
 
-    def _begin_search_recovery(
-        self, resume_state: CompetitionState, now: float
+    def _clear_search_recovery_context(
+        self,
+        vision: VisionSnapshot,
+        *,
+        clear_carried: bool,
     ) -> None:
-        if self.selected_batch is not None:
-            self.last_selected_track_ids = self.selected_batch.track_ids
+        self._clear_pending_audit()
+        self._clear_selected_batch()
+        if clear_carried:
+            self._clear_carried_manifest()
+        self._clear_cluster_context(reset_attempts=True)
+        self.cargo_recheck_pending = False
+        self.cargo_recheck_context = "none"
+        self.audit_hits = 0
+        self.audit_last_signature = None
+        self.audit_last_frame_sequence = None
+        self.audit_recheck_frame_floor = None
+        self.audit_recheck_started_s = None
+        self.audit_legal_candidate_pending = False
+        self.audit_invalid_after_legal_hits = 0
+        self.invalid_release_side = "both"
+        self.invalid_release_final = False
+        self.invalid_release_context = "none"
+        self.last_selected_track_ids = ()
+        self.target_last_seen_s = None
+        self.target_last_center_px = None
+        self.target_last_area_px = None
+        self.target_last_class = None
+        self.target_missing_frames = 0
+        self.target_missing_frame_sequence = None
+        self.search_epoch_frame_floor = (
+            vision.frame_sequence if vision.frame_sequence > 0 else None
+        )
+
+    def _begin_search_recovery(
+        self, vision: VisionSnapshot, now: float
+    ) -> None:
+        self._clear_search_recovery_context(vision, clear_carried=False)
         self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
-        self.search_recovery_resume_state = resume_state
+        self.search_recovery_resume_state = CompetitionState.SEARCH
 
     def _search_recovery_output(
         self,
@@ -1311,9 +1345,10 @@ class CompetitionMission:
             STM_MODE_SEARCH,
         )
         if stm.fresh and stm.mode == STM_MODE_SEARCH:
-            resume = self.search_recovery_resume_state or CompetitionState.SEARCH
-            self._clear_selected_batch()
-            self._set_state(resume, now)
+            self._set_state(CompetitionState.SEARCH, now)
+            self.search_epoch_frame_floor = (
+                vision.frame_sequence if vision.frame_sequence > 0 else None
+            )
             return CompetitionOutput(
                 self.state,
                 self._hold(),
@@ -1323,54 +1358,24 @@ class CompetitionMission:
                 reason="f407_search_recovery_complete",
                 expected_stm_modes=expected,
             )
-        candidate = (
-            self._target_for_batch(vision)
-            if self._vision_fresh(vision, now) and self.selected_batch is not None
-            else None
-        )
-        if candidate is not None and stm.fresh and stm.mode in {
-            STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER
-        }:
-            approach_state = (
-                CompetitionState.INITIAL_APPROACH
-                if self.search_recovery_resume_state == CompetitionState.INITIAL_OBSERVE
-                else CompetitionState.APPROACH
-            )
-            self._mark_target_seen(candidate, now)
-            self._set_state(approach_state, now)
-            return CompetitionOutput(
-                self.state,
-                self._approach_command(candidate),
-                "锁定目标重新出现，继续下位机靠近流程",
-                self.selected_batch,
-                event="approach_target_reassociated",
-                motion_expected=True,
-                tx_policy="normal_command",
-                reason="approach_target_reappeared",
-                expected_stm_modes=(STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER),
-            )
         if stm.fresh and stm.mode in {
             STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER
         }:
             return CompetitionOutput(
                 self.state,
-                None,
-                "停止刷新APPROACH，等待F407自主完成目标丢失恢复",
+                self._hold(),
+                "持续发送HOLD，等待F407静止完成目标丢失恢复并进入mode3",
                 event=event,
-                suppress_command_tx=True,
-                suppression_reason="f407_search_recovery",
-                tx_policy="autonomous_recovery",
+                tx_policy="hold",
                 reason="f407_approach_recovery",
                 expected_stm_modes=expected,
             )
         return CompetitionOutput(
             self.state,
-            None,
+            self._hold(),
             f"等待F407目标丢失恢复状态，当前mode={stm.mode}",
             event=event,
-            suppress_command_tx=True,
-            suppression_reason="f407_search_recovery",
-            tx_policy="autonomous_recovery",
+            tx_policy="hold",
             reason="f407_search_recovery_wait",
             expected_stm_modes=expected,
         )
@@ -1381,7 +1386,6 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
         *,
-        search_state: CompetitionState,
         message: str,
     ) -> CompetitionOutput:
         vision_fresh = self._vision_fresh(vision, now)
@@ -1416,6 +1420,28 @@ class CompetitionMission:
                 recheck_context="none",
             )
             return self._audit_output(vision, stm, now)
+        if stm.mode == STM_MODE_SEARCH and (
+            self.approach_f407_active_seen or self.target_missing_frames > 2
+        ):
+            self._clear_search_recovery_context(vision, clear_carried=False)
+            self._set_state(CompetitionState.SEARCH, now)
+            self.search_epoch_frame_floor = (
+                vision.frame_sequence if vision.frame_sequence > 0 else None
+            )
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "F407已回到SEARCH，清除旧目标并等待恢复后的新视觉帧",
+                event="search_recovery_complete",
+                tx_policy="recovery_hold",
+                reason="f407_search_recovery_complete",
+                expected_stm_modes=(STM_MODE_SEARCH,),
+            )
+        if stm.mode == STM_MODE_APPROACH_RECOVER:
+            self._begin_search_recovery(vision, now)
+            return self._search_recovery_output(
+                vision, stm, now, event="search_recovery_start"
+            )
         if candidate is not None:
             self._mark_target_seen(candidate, now)
             if stm.mode in {
@@ -1443,25 +1469,6 @@ class CompetitionMission:
         elif vision_fresh:
             self._note_target_missing_frame(vision)
 
-        if stm.mode == STM_MODE_SEARCH and (
-            self.approach_f407_active_seen or self.target_missing_frames > 2
-        ):
-            self._clear_selected_batch()
-            self._set_state(search_state, now)
-            return CompetitionOutput(
-                self.state,
-                self._hold(),
-                "F407已回到SEARCH，重新选择目标",
-                event="search_recovery_complete",
-                tx_policy="recovery_hold",
-                reason="f407_search_recovery_complete",
-                expected_stm_modes=(STM_MODE_SEARCH,),
-            )
-        if stm.mode == STM_MODE_APPROACH_RECOVER:
-            self._begin_search_recovery(search_state, now)
-            return self._search_recovery_output(
-                vision, stm, now, event="search_recovery_start"
-            )
         missing_hold_window_s = self._approach_missing_hold_window_s()
         if (
             self.target_last_seen_s is not None and
@@ -1670,39 +1677,16 @@ class CompetitionMission:
             self.post_grab_audit_active or
             self.pending_audit_release_context.startswith("post_grab_")
         )
-        resume_state = (
-            CompetitionState.SEARCH
-            if post_grab_recovery else
-            CompetitionState.INITIAL_OBSERVE
-            if self.selected_batch is not None and self.selected_batch.initial_stash
-            else CompetitionState.SEARCH
+        self._clear_search_recovery_context(
+            vision,
+            clear_carried=post_grab_recovery,
         )
-        self._clear_pending_audit()
-        self._clear_selected_batch()
-        self.post_grab_audit_active = False
-        self.post_grab_camera_ready = None
-        if post_grab_recovery:
-            self._clear_carried_manifest()
-        self.cargo_recheck_pending = False
-        self.cargo_recheck_context = "none"
         self.grab_initial_ack = None
-        self._clear_cluster_context(reset_attempts=True)
-        self.audit_hits = 0
-        self.audit_last_signature = None
-        self.audit_last_frame_sequence = None
-        self.audit_recheck_frame_floor = None
-        self.audit_recheck_started_s = None
-        self.last_selected_track_ids = ()
-        self.target_last_seen_s = None
-        self.target_last_center_px = None
-        self.target_last_area_px = None
-        self.target_last_class = None
         if stm.mode == STM_MODE_SEARCH:
-            self._set_state(resume_state, now)
-            if post_grab_recovery:
-                self.search_epoch_frame_floor = (
-                    vision.frame_sequence if vision.frame_sequence > 0 else None
-                )
+            self._set_state(CompetitionState.SEARCH, now)
+            self.search_epoch_frame_floor = (
+                vision.frame_sequence if vision.frame_sequence > 0 else None
+            )
             return CompetitionOutput(
                 self.state,
                 self._hold(),
@@ -1721,15 +1705,13 @@ class CompetitionMission:
                 expected_stm_modes=(STM_MODE_SEARCH,),
             )
         self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
-        self.search_recovery_resume_state = resume_state
+        self.search_recovery_resume_state = CompetitionState.SEARCH
         return CompetitionOutput(
             self.state,
-            None,
-            "F407进入近距离目标重捕获，清除旧审核并等待mode=3",
+            self._hold(),
+            "F407进入mode24恢复，清除旧目标和审核并持续HOLD等待mode3",
             event="capture_audit_reacquire_start",
-            suppress_command_tx=True,
-            suppression_reason="f407_capture_reacquire",
-            tx_policy="autonomous_recovery",
+            tx_policy="hold",
             reason="f407_capture_reacquire",
             expected_stm_modes=(STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH),
         )
@@ -4760,7 +4742,6 @@ class CompetitionMission:
                 vision,
                 stm,
                 now,
-                search_state=CompetitionState.INITIAL_OBSERVE,
                 message="靠近中心物资堆",
             )
 
@@ -4781,7 +4762,6 @@ class CompetitionMission:
                 vision,
                 stm,
                 now,
-                search_state=CompetitionState.SEARCH,
                 message="靠近锁定批次",
             )
 

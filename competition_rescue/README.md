@@ -41,7 +41,9 @@ cd /home/sunrise/RDK_X5/shijue_fangan/competition_rescue
 
 正式抓取完成后先导航到对应安全区半区靠近场地中心一侧围栏前`0.60 m`预备点；该距离以小车旋转中心为基准，红方预备点`y=+0.54 m`、蓝方预备点`y=-0.54 m`。随后按红方`90°`或蓝方`270°`定位航向正对安全区；上位机始终发送9000/27000，不增加角度补偿。进入预备点容差后持续发送STAGE NAV `D=0`，只以新鲜`mode10+DISTANCE_DONE+GRIPPER_CLOSED`锁存到达，不要求当前8位ACK相对阶段初值发生变化。对正后才统计本方安全区；连续3个不同视觉帧识别成功后，取三帧框坐标中位数并冻结，本次物资区使用冻结框宽`1/3`处，伤员区使用`2/3`处，向F407发送一次有符号像素偏差完成视觉修正转向。冻结后不再用近距离残缺安全区框改变方向。5秒内未形成连续3帧时直接按定位正方向降级推进。ENTER阶段上位机发送`D=0`且不置`DISTANCE_VALID`，定位不再参与推进速度或终点判断；F407从600 mm预备点开始完全按本地编码器累计距离，到位停车、张爪并把摄像头转到120°，稳定后上报mode15。上位机从mode15之后的新视觉帧确认物资进入安全区，再发送TASK_COMPLETE。
 
-第二次视觉ALIGN后，走廊判断会排除本轮delivery items、携带/锁定track、安全区内物体和夹爪近场ROI。`CLEAR_SAFE_ZONE`前进量按“视觉纵向距离减去`--safe-sweep-capture-offset-mm`”计算后裁剪到80～600 mm，默认偏置150 mm并可实车标定。本次CLEAR已经ACK且看到新鲜`mode23+GRIPPER_CLOSED+CLAW_VISIBLE`即可进入扫障后复审；mode39只保留为诊断证据。mode41期间持续HOLD并清空批次、carried manifest、track、审核及NAV/ALIGN/ENTER/扫障上下文，等F407驶回距边至少400 mm并进入mode3后，只接受动作后的新视觉帧重新SEARCH。
+第二次视觉ALIGN完成时重新记录frame floor；冻结框只用于计算本次视觉修正量，最终走廊必须等待转向完成后的新视觉帧和新鲜`safe_bbox`，不得退回使用冻结框或短时缓存框。走廊先排除本轮delivery items和携带/锁定track；底部20%夹爪近场目标仅在完整类别/数量与carried manifest一致，或与最近确认携带框的纵向重叠至少60%时排除，与携带清单不同类别的危险物或伤员仍视为障碍。`CLEAR_SAFE_ZONE`前进量按“视觉纵向距离减去`--safe-sweep-capture-offset-mm`”计算后裁剪到80～600 mm，默认偏置150 mm并可实车标定。本次CLEAR已经ACK且看到新鲜`mode23+GRIPPER_CLOSED+CLAW_VISIBLE`即可进入扫障后复审；mode39只保留为诊断证据。mode41期间持续HOLD并清空批次、carried manifest、track、审核及NAV/ALIGN/ENTER/扫障上下文，等F407驶回距边至少400 mm并进入mode3后，只接受动作后的新视觉帧重新SEARCH。
+
+APPROACH目标超过动态缺帧窗口后持续发送HOLD。目标在F407进入mode24前恢复时，新的`APPROACH_TARGET`会取消本地恢复；一旦看到mode24或mode3，上位机立即清除selected batch、锁定track、最后APPROACH坐标和旧审核，持续HOLD等待mode3，并只从恢复动作后的新视觉帧重新SEARCH。
 
 投送完成后F407先本地后退`0.30 m`再进入mode17；上位机看到新鲜mode16或mode17后立即持续发送原有`RETURN_CENTER H/D`，不会用HOLD中断本地退出。距离进入中心小容差后仍发送`D=0`。收到新鲜mode3后先保持HOLD，等待摄像头到120°并取得返中完成后的新视觉帧，才允许下一轮APPROACH。
 
