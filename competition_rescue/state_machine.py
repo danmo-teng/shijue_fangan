@@ -196,11 +196,17 @@ class CargoAudit:
     @property
     def signature(self) -> tuple:
         classes = Counter()
-        for class_name, count in (
-            (self.left_class, self.left_count),
-            (self.right_class, self.right_count),
+        for class_name, count, green_count in (
+            (self.left_class, self.left_count, self.left_green_count),
+            (self.right_class, self.right_count, self.right_green_count),
         ):
-            if class_name and count > 0:
+            if not class_name or count <= 0:
+                continue
+            if class_name == "mixed_material":
+                bounded_green = max(0, min(count, green_count))
+                classes["green_supply"] += bounded_green
+                classes["core_black"] += count - bounded_green
+            else:
                 classes[class_name] += count
         return (
             self.total_count,
@@ -1555,6 +1561,44 @@ class CompetitionMission:
         self.pending_audit_event_emitted = False
         self._set_state(CompetitionState.AUDIT_CONFIRM, now)
 
+    def _resume_legal_audit_before_disperse(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        """Do not start DISPERSE when the latest fresh claw audit is legal."""
+        if not (
+            self._vision_fresh(vision, now) and
+            stm.fresh and
+            stm.claw_visible and
+            stm.camera_pitch_cdeg == 14000 and
+            vision.capture_audit is not None
+        ):
+            return None
+        audit = vision.capture_audit
+        cluster_screening = (
+            self.cluster_audit_active or
+            self.cargo_recheck_context in {
+                "disperse_observe",
+                "disperse_selective",
+            }
+        )
+        audit_valid = (
+            self._cluster_audit_valid(audit)
+            if cluster_screening else self._audit_valid(audit)
+        )
+        if not audit_valid:
+            return None
+
+        self._clear_pending_audit()
+        self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+        self.audit_recheck_frame_floor = None
+        self.audit_recheck_started_s = None
+        self.audit_legal_candidate_pending = False
+        self.audit_invalid_after_legal_hits = 0
+        self._clear_disperse_side_votes()
+        self.cluster_keep_side = None
+        self.cluster_keep_side_count = 0
+        return self._audit_output(vision, stm, now)
+
     def _audit_confirmation_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
@@ -1586,8 +1630,8 @@ class CompetitionMission:
                 audit = self.pending_audit
                 valid = self.pending_audit_valid
                 self._clear_pending_audit()
-                self.cluster_audit_active = False
                 if valid:
+                    self.cluster_audit_active = False
                     self._latch_carried_manifest(audit)
                     self._set_state(CompetitionState.GRAB, now)
                     self.grab_initial_ack = stm.acknowledged_sequence
@@ -1602,6 +1646,12 @@ class CompetitionMission:
                         reason="cluster_audit_valid",
                         expected_stm_modes=(STM_MODE_CAPTURE_DONE,),
                     )
+                legal_output = self._resume_legal_audit_before_disperse(
+                    vision, stm, now
+                )
+                if legal_output is not None:
+                    return legal_output
+                self.cluster_audit_active = False
                 if self._should_first_green_bump(audit):
                     return self._start_first_green_bump(stm, now)
                 self.disperse_attempts += 1
@@ -1715,6 +1765,11 @@ class CompetitionMission:
                     reason="stable_audit_relay_confirmed",
                 )
             if release_context == "disperse_reaudit":
+                legal_output = self._resume_legal_audit_before_disperse(
+                    vision, stm, now
+                )
+                if legal_output is not None:
+                    return legal_output
                 if self._should_first_green_bump(audit):
                     return self._start_first_green_bump(stm, now)
                 if self.cluster_keep_side is not None:
@@ -1990,11 +2045,13 @@ class CompetitionMission:
                 audit.total_count == 1 and
                 counts == Counter({"green_supply": 1})
             )
-        if self.selected_batch.destination == "injury":
-            return (
-                audit.total_count == 1 and
-                counts == Counter({"injured_orange": 1})
-            )
+        if (
+            audit.total_count == 1 and
+            counts == Counter({"injured_orange": 1})
+        ):
+            return True
+        if "injured_orange" in counts:
+            return False
         side_classes = {audit.left_class, audit.right_class} - {"", "mixed_material"}
         return (
             1 <= audit.total_count <= self.settings.max_batch_count and
@@ -2337,13 +2394,6 @@ class CompetitionMission:
             vision.frame_sequence > 0 and
             vision.frame_sequence != self.audit_last_frame_sequence
         )
-        if new_frame:
-            self.audit_last_frame_sequence = vision.frame_sequence
-            if audit.signature == self.audit_last_signature:
-                self.audit_hits += 1
-            else:
-                self.audit_last_signature = audit.signature
-                self.audit_hits = 1
         cluster_screening = (
             self.cluster_audit_active or
             self.cargo_recheck_context in {
@@ -2360,6 +2410,49 @@ class CompetitionMission:
             if cluster_screening else
             self._audit_valid(audit)
         )
+        if (
+            new_frame and
+            cluster_screening and
+            not audit_valid and
+            self.audit_legal_candidate_pending
+        ):
+            self.audit_last_frame_sequence = vision.frame_sequence
+            self.audit_invalid_after_legal_hits += 1
+            if self.audit_invalid_after_legal_hits < 2:
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    "忽略一张瞬时非法审核，保留首张合法候选",
+                    self.selected_batch,
+                    audit,
+                    event="audit_invalid_after_legal_hold",
+                    tx_policy="hold",
+                    reason="audit_invalid_after_legal_grace",
+                )
+            self.audit_legal_candidate_pending = False
+        if (
+            cluster_screening and
+            not audit_valid and
+            self.audit_legal_candidate_pending and
+            self.audit_invalid_after_legal_hits == 1
+        ):
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "瞬时非法审核帧尚未被下一张新帧确认，保持合法候选基线",
+                self.selected_batch,
+                audit,
+                tx_policy="hold",
+                reason="audit_invalid_after_legal_grace",
+            )
+        if new_frame:
+            self.audit_last_frame_sequence = vision.frame_sequence
+            if audit.signature == self.audit_last_signature:
+                self.audit_hits += 1
+            else:
+                self.audit_last_signature = audit.signature
+                self.audit_hits = 1
+            self.audit_id = (self.audit_id + 1) & 0xFF
         cluster_grab_audit = cluster_screening and audit_valid
         required_audit_frames = (
             self.settings.normal_grab_audit_frames
@@ -2377,47 +2470,11 @@ class CompetitionMission:
                 self.audit_hits >= required_audit_frames
             ),
         )
-        if new_frame:
-            self.audit_id = (self.audit_id + 1) & 0xFF
         assert self.selected_batch is not None
         if cluster_screening and new_frame:
             if audit_valid:
                 self.audit_legal_candidate_pending = True
                 self.audit_invalid_after_legal_hits = 0
-            elif self.audit_legal_candidate_pending:
-                self.audit_invalid_after_legal_hits += 1
-        if (
-            cluster_screening and
-            not audit_valid and
-            self.audit_legal_candidate_pending and
-            self.audit_invalid_after_legal_hits < 2
-        ):
-            unstable = replace(audit, stable=False)
-            unstable_payload = unstable.to_protocol(
-                initial_stash=self.selected_batch.initial_stash,
-                destination=self.selected_batch.destination,
-                audit_id=self.audit_id,
-            )
-            return CompetitionOutput(
-                self.state,
-                CommandRequest(
-                    CMD_CARGO_AUDIT,
-                    CMD_VALID,
-                    audit=unstable_payload,
-                ),
-                "已出现首张合法候选，忽略一张瞬时无效帧并等待下一帧",
-                self.selected_batch,
-                unstable,
-                "audit_invalid_after_legal_wait",
-                tx_policy="audit_unstable_publish",
-                reason="audit_invalid_after_legal_grace",
-            )
-        if (
-            cluster_screening and
-            not audit_valid and
-            self.audit_invalid_after_legal_hits >= 2
-        ):
-            self.audit_legal_candidate_pending = False
         disperse_vote_context = (
             not audit_valid and
             (
@@ -3555,6 +3612,12 @@ class CompetitionMission:
             self.disperse_initial_ack,
             self.disperse_command_accepted,
         )
+        if not self.disperse_command_accepted:
+            legal_output = self._resume_legal_audit_before_disperse(
+                vision, stm, now
+            )
+            if legal_output is not None:
+                return legal_output
         if (
             self.disperse_context == "first_green_bump" and
             stm.fresh and
