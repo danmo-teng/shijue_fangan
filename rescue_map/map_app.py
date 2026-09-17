@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--localization-mode",
         choices=("fusion", "t265"),
-        default="fusion",
+        default="t265",
         help="fusion uses T265 plus encoders; t265 keeps task UART but ignores encoders",
     )
     parser.add_argument("--localization-json", type=Path)
@@ -96,11 +96,20 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_T265_MAP_TIMEOUT_S,
         help="map startup relocalization timeout in seconds",
     )
-    parser.add_argument(
+    translation_scale = parser.add_mutually_exclusive_group()
+    translation_scale.add_argument(
         "--enable-t265-translation-scale",
+        dest="enable_t265_translation_scale",
         action="store_true",
         help="enable the T265 translation scale calibration",
     )
+    translation_scale.add_argument(
+        "--disable-t265-translation-scale",
+        dest="enable_t265_translation_scale",
+        action="store_false",
+        help="disable the T265 translation scale calibration",
+    )
+    parser.set_defaults(enable_t265_translation_scale=True)
     parser.add_argument(
         "--t265-translation-scale",
         type=float,
@@ -197,7 +206,7 @@ class RescueMapApp:
         self.vision_process: subprocess.Popen | None = None
         self.fullscreen = options.fullscreen
         self.hitboxes: dict[str, tuple[int, int, int, int]] = {}
-        self.message = "请选择出发区和红蓝方，然后开始"
+        self.message = "请选择1～4号出发区和红蓝方，点击按钮或按Enter启动"
         self.started_monotonic = time.monotonic()
         self.last_live_read_monotonic: float | None = None
 
@@ -364,39 +373,24 @@ class RescueMapApp:
             text.add("选择本方颜色", (x0, 300), 22, (230, 230, 230), True)
             self.button(canvas, text, "red", "红方", (x0, 330, x0 + 150, 382), self.side == "red", (55, 55, 185))
             self.button(canvas, text, "blue", "蓝方", (x0 + 175, 330, x0 + 325, 382), self.side == "blue", (185, 110, 20))
-            text.add("定位方式", (x0, 420), 22, (230, 230, 230), True)
-            self.button(canvas, text, "fusion", "T265+编码器", (x0, 450, x0 + 150, 502), self.localization_mode == "fusion", (55, 125, 80))
-            self.button(canvas, text, "t265", "仅T265", (x0 + 175, 450, x0 + 325, 502), self.localization_mode == "t265", (75, 100, 165))
-            text.add("导入T265预建地图", (x0, 530), 20, (230, 230, 230), True)
-            self.button(canvas, text, "t265_map_off", "关闭", (x0, 550, x0 + 150, 598), not self.t265_map_enabled)
-            self.button(canvas, text, "t265_map_on", "开启", (x0 + 175, 550, x0 + 325, 598), self.t265_map_enabled, (55, 125, 80))
-            map_name = self.t265_map_path.name if self.t265_map_path is not None else "未找到地图文件"
-            map_state = "可用" if self.t265_map_path is not None and self.t265_map_path.is_file() else "未找到"
-            text.add(f"地图：{map_name}", (x0, 620), 13, (210, 210, 215))
-            text.add(f"状态：{map_state}（开启后需等待重定位）", (x0, 642), 13, (0, 205, 255) if self.t265_map_enabled else (165, 165, 170))
-            text.add("T265平移比例", (x0, 665), 20, (230, 230, 230), True)
-            text.add(f"{self.t265_translation_scale:.3f}×", (x0 + 220, 665), 21, (220, 200, 80), True, "mm")
-            self.button(canvas, text, "t265_scale_off", "关闭", (x0, 680, x0 + 75, 723), not self.t265_translation_scale_enabled)
-            self.button(canvas, text, "t265_scale_minus", "−0.01", (x0 + 83, 680, x0 + 158, 723))
-            self.button(canvas, text, "t265_scale_plus", "+0.01", (x0 + 167, 680, x0 + 242, 723))
-            self.button(canvas, text, "t265_scale_on", "开启", (x0 + 250, 680, x0 + 325, 723), self.t265_translation_scale_enabled, (145, 105, 45))
-            text.add("只缩放T265杠杆臂修正后的平移和速度", (x0, 742), 13, (165, 165, 170))
-            text.add("编码器融合权重", (x0, 765), 19, (230, 230, 230), True)
-            text.add(f"{self.encoder_weight * 100:.0f}%", (x0 + 255, 765), 21, (220, 80, 220), True, "mm")
-            self.button(canvas, text, "weight_minus_10", "−10%", (x0, 778, x0 + 75, 821))
-            self.button(canvas, text, "weight_minus_5", "−5%", (x0 + 83, 778, x0 + 158, 821))
-            self.button(canvas, text, "weight_plus_5", "+5%", (x0 + 167, 778, x0 + 242, 821))
-            self.button(canvas, text, "weight_plus_10", "+10%", (x0 + 250, 778, x0 + 325, 821))
-            text.add("距角落顶点（直线距离）", (x0, 846), 18, (230, 230, 230), True)
-            text.add(f"{self.corner_offset_m * 1000:.0f} mm", (x0 + 162, 871), 21, (245, 245, 245), True, "mm")
-            self.button(canvas, text, "offset_minus_50", "−50", (x0, 882, x0 + 75, 925))
-            self.button(canvas, text, "offset_minus_10", "−10", (x0 + 83, 882, x0 + 158, 925))
-            self.button(canvas, text, "offset_plus_10", "+10", (x0 + 167, 882, x0 + 242, 925))
-            self.button(canvas, text, "offset_plus_50", "+50", (x0 + 250, 882, x0 + 325, 925))
-            self.button(canvas, text, "start", "确认并开始", (x0, 915, x0 + 325, 970), True, (35, 135, 70))
+            text.add("固定启动配置", (x0, 435), 22, (230, 230, 230), True)
+            localization_label = (
+                "仅T265（UART任务通信保留）"
+                if self.localization_mode == "t265" else
+                "T265+编码器（命令行覆盖）"
+            )
+            scale_label = (
+                f"开启 {self.t265_translation_scale:.3f}×"
+                if self.t265_translation_scale_enabled else "关闭（命令行覆盖）"
+            )
+            text.add(f"定位：{localization_label}", (x0, 475), 17, (200, 210, 225))
+            text.add(f"T265直线比例：{scale_label}", (x0, 510), 18, (220, 200, 80), True)
+            text.add("出发点：所选区域中心", (x0, 545), 17, (200, 210, 225))
+            self.button(canvas, text, "start", "确认并开始", (x0, 610, x0 + 325, 675), True, (35, 135, 70))
             pose = initial_pose(self.zone, self.corner_offset_m)
-            text.add(f"M地图  T比例  K/L权重  Enter开始 | X={pose.x_m:+.2f} Y={pose.y_m:+.2f} 车头={pose.yaw_deg:.0f}°", (x0, 995), 12, (220, 220, 220))
-            text.add(self.message, (x0, 1018), 13, (0, 215, 255))
+            text.add("键盘：1～4选区域，R/B选颜色，Enter启动", (x0, 725), 15, (220, 220, 220))
+            text.add(f"X={pose.x_m:+.2f}  Y={pose.y_m:+.2f}  车头={pose.yaw_deg:.0f}°", (x0, 755), 15, (190, 190, 195))
+            text.add(self.message, (x0, 800), 14, (0, 215, 255))
         else:
             pose = self.pose
             quality_color = {
@@ -487,38 +481,6 @@ class RescueMapApp:
                     self.pose = initial_pose(self.zone, self.corner_offset_m)
                 elif name in {"red", "blue"}:
                     self.side = name
-                elif name in {"fusion", "t265"}:
-                    self.localization_mode = name
-                elif name == "t265_map_off":
-                    self.t265_map_enabled = False
-                    self.message = "本次不导入T265预建地图"
-                elif name == "t265_map_on":
-                    self.t265_map_enabled = True
-                    self.message = "已选择导入T265地图，开始时必须完成重定位"
-                elif name == "t265_scale_off":
-                    self.t265_translation_scale_enabled = False
-                elif name == "t265_scale_on":
-                    self.t265_translation_scale_enabled = True
-                elif name == "t265_scale_minus":
-                    self.adjust_t265_translation_scale(-0.01)
-                elif name == "t265_scale_plus":
-                    self.adjust_t265_translation_scale(0.01)
-                elif name.startswith("weight_"):
-                    weight_deltas = {
-                        "weight_minus_10": -0.10,
-                        "weight_minus_5": -0.05,
-                        "weight_plus_5": 0.05,
-                        "weight_plus_10": 0.10,
-                    }
-                    self.adjust_encoder_weight(weight_deltas[name])
-                elif name.startswith("offset_"):
-                    offsets_mm = {
-                        "offset_minus_50": -50.0,
-                        "offset_minus_10": -10.0,
-                        "offset_plus_10": 10.0,
-                        "offset_plus_50": 50.0,
-                    }
-                    self.adjust_corner_offset(offsets_mm[name])
                 elif name == "start":
                     self.start_session()
                 break
@@ -799,29 +761,6 @@ class RescueMapApp:
                 self.side = "red"
             elif key in (ord("b"), ord("B")):
                 self.side = "blue"
-            elif key in (ord("e"), ord("E")):
-                self.localization_mode = "t265" if self.localization_mode == "fusion" else "fusion"
-            elif key in (ord("m"), ord("M")):
-                self.t265_map_enabled = not self.t265_map_enabled
-                self.message = "已开启T265地图导入" if self.t265_map_enabled else "已关闭T265地图导入"
-            elif key in (ord("t"), ord("T")):
-                self.t265_translation_scale_enabled = not self.t265_translation_scale_enabled
-            elif key in (ord(","), ord("<")):
-                self.adjust_t265_translation_scale(-0.01)
-            elif key in (ord("."), ord(">")):
-                self.adjust_t265_translation_scale(0.01)
-            elif key in (ord("k"), ord("K")):
-                self.adjust_encoder_weight(-0.05)
-            elif key in (ord("l"), ord("L")):
-                self.adjust_encoder_weight(0.05)
-            elif key in (ord("-"), ord("_")):
-                self.adjust_corner_offset(-10.0)
-            elif key in (ord("+"), ord("=")):
-                self.adjust_corner_offset(10.0)
-            elif key == ord("["):
-                self.adjust_corner_offset(-50.0)
-            elif key == ord("]"):
-                self.adjust_corner_offset(50.0)
             elif key in (10, 13):
                 self.start_session()
         else:

@@ -66,7 +66,8 @@ cd /home/sunrise/RDK_X5/shijue_fangan/rescue_map
 ./install_desktop_launcher.sh
 ```
 
-启动界面选择出发区、红/蓝方、定位方式，点击开始后同时启动：
+启动界面只选择1～4号出发区和红/蓝方；默认使用仅T265并开启`1.040`平移比例。点击开始或按
+`Enter`后通过同一个启动函数同时启动：
 
 1. T265定位或T265+编码器融合；
 2. UART收发与任务命令转发；

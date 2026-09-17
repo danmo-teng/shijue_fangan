@@ -35,6 +35,9 @@ export DISPLAY="${DISPLAY:-:0}"
 exec python3 "${script_dir}/map_app.py" \
     --launch-localization \
     --launch-vision \
+    --localization-mode t265 \
+    --enable-t265-translation-scale \
+    --t265-translation-scale 1.040 \
     --uart /dev/ttyS1 \
     --baud 115200 \
     --fullscreen \
