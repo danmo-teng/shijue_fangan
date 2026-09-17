@@ -417,6 +417,7 @@ class CompetitionSettings:
     safe_zone_staging_distance_m: float = 0.60
     safe_zone_freeze_frames: int = 3
     safe_zone_acquire_timeout_s: float = 5.0
+    safe_sweep_capture_offset_mm: float = 150.0
     push_plate_offset_m: float = 0.105
     fence_stop_margin_m: float = 0.0075
     delivery_observation_timeout_s: float = 5.0
@@ -465,7 +466,8 @@ class CompetitionSettings:
         if (
             self.safe_zone_staging_distance_m <= 0 or
             self.safe_zone_freeze_frames <= 0 or
-            self.safe_zone_acquire_timeout_s <= 0
+            self.safe_zone_acquire_timeout_s <= 0 or
+            self.safe_sweep_capture_offset_mm < 0
         ):
             raise ValueError("safe-zone staging parameters must be positive")
         if self.delivery_observation_timeout_s <= 0 or self.delivery_window_s <= 0:
@@ -565,6 +567,7 @@ class CompetitionMission:
         self.pending_audit_final = False
         self.pending_audit_release_context = "none"
         self.pending_audit_signature: tuple | None = None
+        self.pending_audit_hits = 0
         self.pending_audit_frame_sequence: int | None = None
         self.pending_audit_observed_s: float | None = None
         self.pending_audit_tx_baseline: int | None = None
@@ -1565,6 +1568,7 @@ class CompetitionMission:
         self.pending_audit_final = False
         self.pending_audit_release_context = "none"
         self.pending_audit_signature = None
+        self.pending_audit_hits = 0
         self.pending_audit_frame_sequence = None
         self.pending_audit_observed_s = None
         self.pending_audit_tx_baseline = None
@@ -1750,6 +1754,7 @@ class CompetitionMission:
         self.pending_audit_signature = self._audit_signature_for_state(
             audit, valid
         )
+        self.pending_audit_hits = self.audit_hits
         self.pending_audit_frame_sequence = self.audit_last_frame_sequence
         self.pending_audit_observed_s = now
         self.pending_audit_tx_baseline = stm.relay_mission_tx_frames
@@ -1831,7 +1836,13 @@ class CompetitionMission:
             not stm.audit_valid and
             self._vision_fresh(vision, now) and
             vision.frame_sequence > 0 and
-            vision.frame_sequence != self.pending_audit_frame_sequence and
+            (
+                self.pending_audit_frame_sequence is None or
+                vision.frame_sequence > self.pending_audit_frame_sequence
+            ) and
+            vision.capture_audit is not None and
+            stm.claw_visible and
+            stm.camera_pitch_cdeg == 14000 and
             stm.mode in {
                 STM_MODE_CAPTURE_AUDIT,
                 STM_MODE_CLUSTER_READY,
@@ -1839,12 +1850,18 @@ class CompetitionMission:
             }
         ):
             post_grab = self.pending_audit_release_context == "post_grab_valid"
+            continued_signature = self.pending_audit_signature
+            continued_hits = self.pending_audit_hits
+            continued_frame_sequence = self.pending_audit_frame_sequence
             self._clear_pending_audit()
             self._set_state(
                 CompetitionState.POST_GRAB_AUDIT
                 if post_grab else CompetitionState.CAPTURE_AUDIT,
                 now,
             )
+            self.audit_last_signature = continued_signature
+            self.audit_hits = continued_hits
+            self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
         if self.pending_audit_release_context == "cluster_capture":
             if (
@@ -2970,7 +2987,7 @@ class CompetitionMission:
         side = self.invalid_release_side
         release_command = self._invalid_release_command()
         if self.invalid_release_context == "separate_then_search":
-            message = "首次无法判断左右归属，发送无侧DISPERSE执行12°观察转向"
+            message = "首次无法判断左右归属，发送无侧DISPERSE执行20°观察转向"
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",
@@ -3112,7 +3129,11 @@ class CompetitionMission:
 
     def _reset_safe_zone_alignment(self) -> None:
         self.safe_zone_align_initial_ack = None
+        self.safe_zone_align_tx_baseline = None
+        self.safe_zone_align_command_accepted = False
         self.safe_zone_visual_align_initial_ack = None
+        self.safe_zone_visual_align_tx_baseline = None
+        self.safe_zone_visual_align_command_accepted = False
         self.staging_zero_initial_ack = None
         self.staging_zero_tx_baseline = None
         self.staging_zero_accepted = False
@@ -3210,12 +3231,19 @@ class CompetitionMission:
         self.audit_last_frame_sequence = None
         self.audit_recheck_frame_floor = None
         self.audit_recheck_started_s = None
+        self.audit_legal_candidate_pending = False
+        self.audit_invalid_after_legal_hits = 0
+        self.invalid_release_side = "both"
+        self.invalid_release_final = False
+        self.invalid_release_context = "none"
         self.last_selected_track_ids = ()
         self.target_last_seen_s = None
         self.target_last_center_px = None
         self.target_last_area_px = None
         self.target_last_class = None
         self.navigation_initial_ack = None
+        self.grab_initial_ack = None
+        self.grab_complete_confirmed = False
         self.enter_initial_ack = None
         self.enter_tx_baseline = None
         self.enter_command_accepted = False
@@ -3223,6 +3251,8 @@ class CompetitionMission:
         self.return_initial_ack = None
         self.return_relay_tx_baseline = None
         self.return_command_accepted = False
+        self.return_search_frame_floor = None
+        self.return_search_mode_seen = False
         self.safe_zone_exit_pending = False
         self.resume_state = None
         self._reset_motion_watch()
@@ -3949,7 +3979,7 @@ class CompetitionMission:
             (
                 f"锁定保留{self.cluster_keep_side}侧目标，启动选择性分离"
                 if self.cluster_keep_side is not None else
-                "目标左右归属不明确，启动12°观察转向"
+                "目标左右归属不明确，启动20°观察转向"
             ),
             event="disperse_start",
             motion_expected=True,
@@ -4655,7 +4685,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 self._hold(),
-                "F407已触发300 mm边界恢复，清除旧任务并等待转向中心后回SEARCH",
+                "F407已触发边界恢复，清除旧任务并等待张爪、转向中心、驶入距边至少400 mm后回SEARCH",
                 event="f407_boundary_recovery",
                 tx_policy="hold",
                 reason="f407_boundary_recovery",
@@ -4679,7 +4709,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 self._hold(),
-                "等待F407完成边界转向并回mode3",
+                "等待F407完成边界恢复并驶入距边至少400 mm后回mode3",
                 tx_policy="hold",
                 reason="f407_boundary_recovery_wait",
                 expected_stm_modes=(STM_MODE_BOUNDARY_RECOVER, STM_MODE_SEARCH),
@@ -5041,7 +5071,6 @@ class CompetitionMission:
                 self.safe_sweep_execution_seen = True
             if (
                 self.safe_sweep_command_accepted and
-                self.safe_sweep_execution_seen and
                 stm.fresh and
                 stm.mode == STM_MODE_POST_GRAB_AUDIT and
                 stm.gripper_closed and
@@ -5054,9 +5083,9 @@ class CompetitionMission:
                 self.state,
                 self.safe_sweep_command,
                 (
-                    "F407正在mode39扫障并重新夹回原货物"
+                    "F407正在mode39扫障并重新夹回原货物，mode39仅作诊断"
                     if stm.mode == STM_MODE_SAFE_SWEEP else
-                    "持续发送CLEAR_SAFE_ZONE，等待本次ACK和mode39"
+                    "持续发送CLEAR_SAFE_ZONE，等待本次ACK或新鲜mode23夹爪状态"
                 ),
                 self.selected_batch,
                 motion_expected=True,

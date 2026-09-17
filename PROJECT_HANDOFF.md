@@ -355,7 +355,7 @@ zone_center_x_abs_m = 0.150
 NAV到ENTER：
 
 - STAGE NAV到预备点后持续发送D=0；
-- 等待新鲜`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`和本阶段ACK锁存；
+- 只等待新鲜`mode=10 + GRIPPER_CLOSED + DISTANCE_DONE`锁存，不把当前8位ACK相对阶段初值变化作为门槛；
 - 完成定位ALIGN和可选视觉ALIGN后发送`ENTER_SAFE_ZONE`；
 - ENTER不置`DISTANCE_VALID`，P2/P3固定为0，上位机定位不再参与推进；
 - F407从600 mm预备点开始按编码器累计整段推进距离。

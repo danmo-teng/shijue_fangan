@@ -124,6 +124,12 @@ def arguments() -> argparse.Namespace:
         help="debug only: skip the configured opening temporary-relocation strategy",
     )
     parser.add_argument("--yield-distance-mm", type=float, default=250.0)
+    parser.add_argument(
+        "--safe-sweep-capture-offset-mm",
+        type=float,
+        default=150.0,
+        help="视觉纵向参考点到夹爪入口的机械距离与入爪余量之和",
+    )
     parser.add_argument("--camera-retries", type=int, default=1)
     return parser.parse_args()
 
@@ -425,6 +431,8 @@ def safe_zone_push_corridor(
     safe_bbox: tuple[int, int, int, int] | None,
     destination: str | None,
     first_common_delivered: bool,
+    excluded_track_ids: frozenset[int] = frozenset(),
+    safe_sweep_capture_offset_mm: float = 150.0,
 ) -> tuple[tuple[tuple[int, int], ...], TrackedCargo | None, int | None]:
     if safe_bbox is None or destination not in {"material", "injury"}:
         return (), None, None
@@ -444,6 +452,16 @@ def safe_zone_push_corridor(
         (max(0, min(IMAGE_WIDTH - 1, entrance_left)), entrance_y),
     )
     contour = np.asarray(polygon, dtype=np.int32)
+    claw_near_field_top = round(IMAGE_HEIGHT * 0.80)
+    claw_near_field = np.asarray(
+        (
+            (IMAGE_WIDTH // 2 - front_half_width, IMAGE_HEIGHT - 1),
+            (IMAGE_WIDTH // 2 + front_half_width, IMAGE_HEIGHT - 1),
+            (IMAGE_WIDTH // 2 + front_half_width, claw_near_field_top),
+            (IMAGE_WIDTH // 2 - front_half_width, claw_near_field_top),
+        ),
+        dtype=np.int32,
+    )
     blocking_classes = (
         CARGO_CLASSES
         if not first_common_delivered else
@@ -453,6 +471,7 @@ def safe_zone_push_corridor(
     for item in cargo:
         if (
             not item.visible or
+            item.track_id in excluded_track_ids or
             item.inside_safe_zone or
             item.class_name not in blocking_classes or
             item.relative_xy_m is None or
@@ -466,7 +485,18 @@ def safe_zone_push_corridor(
         )
         if cv2.pointPolygonTest(contour, bottom_center, False) < 0:
             continue
-        distance_mm = max(80, min(600, round(item.relative_xy_m[1] * 1000.0)))
+        if cv2.pointPolygonTest(claw_near_field, bottom_center, False) >= 0:
+            continue
+        distance_mm = max(
+            80,
+            min(
+                600,
+                round(
+                    item.relative_xy_m[1] * 1000.0 -
+                    safe_sweep_capture_offset_mm
+                ),
+            ),
+        )
         candidates.append((distance_mm, item))
     if not candidates:
         return polygon, None, None
@@ -583,11 +613,20 @@ def make_vision_snapshot(
         mission.confirmed_delivery_destination or
         (selected.destination if selected is not None else None)
     )
+    corridor_excluded_track_ids = {
+        item.track_id for item in delivery_items
+    }
+    corridor_excluded_track_ids.update(selected_ids)
+    corridor_excluded_track_ids.update(mission.last_selected_track_ids)
+    if mission.locked_target_track_id is not None:
+        corridor_excluded_track_ids.add(mission.locked_target_track_id)
     corridor, corridor_obstacle, corridor_distance_mm = safe_zone_push_corridor(
         cargo,
         corridor_bbox,
         corridor_destination,
         mission.first_common_delivered,
+        frozenset(corridor_excluded_track_ids),
+        mission.settings.safe_sweep_capture_offset_mm,
     )
     return VisionSnapshot(
         frame_sequence=frame_sequence,
@@ -1529,6 +1568,7 @@ def main() -> int:
         start_zone=start_zone,
         initial_stash_enabled=not args.disable_initial_stash,
         yield_distance_m=args.yield_distance_mm / 1000.0,
+        safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
     ))
     planner = CompetitionPlanner(
         mission,
@@ -1553,6 +1593,7 @@ def main() -> int:
             "initial_stash_enabled": not args.disable_initial_stash,
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
+            "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
             "capture_roi": str(args.capture_roi),
             "capture_polygon_px": [list(point) for point in capture_rois.overall],
             "capture_left_polygon_px": [list(point) for point in capture_rois.left],
