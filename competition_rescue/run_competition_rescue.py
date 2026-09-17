@@ -61,6 +61,10 @@ from capture_roi import (  # noqa: E402
 )
 from state_machine import (  # noqa: E402
     CARGO_CLASSES,
+    SAFE_CORRIDOR_BLOCKED,
+    SAFE_CORRIDOR_CLEAR,
+    SAFE_CORRIDOR_HOMOGRAPHY_MISSING,
+    SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN,
     CargoAudit,
     CommandRequest,
     CompetitionMission,
@@ -437,9 +441,14 @@ def safe_zone_push_corridor(
     carried_manifest: tuple[str, ...] = (),
     carried_total_count: int = 0,
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
-) -> tuple[tuple[tuple[int, int], ...], TrackedCargo | None, int | None]:
+) -> tuple[
+    tuple[tuple[int, int], ...],
+    TrackedCargo | None,
+    int | None,
+    str,
+]:
     if safe_bbox is None or destination not in {"material", "injury"}:
-        return (), None, None
+        return (), None, None, SAFE_CORRIDOR_CLEAR
     x, y, width, height = safe_bbox
     midpoint = x + width // 2
     if destination == "injury":
@@ -476,9 +485,7 @@ def safe_zone_push_corridor(
     for item in cargo:
         if (
             not item.visible or
-            item.inside_safe_zone or
-            item.relative_xy_m is None or
-            item.relative_xy_m[1] <= 0.0
+            item.inside_safe_zone
         ):
             continue
         box_x, box_y, box_width, box_height = item.bbox
@@ -513,6 +520,7 @@ def safe_zone_push_corridor(
         return False
 
     candidates: list[tuple[int, TrackedCargo]] = []
+    unknown_distance_candidates: list[TrackedCargo] = []
     for item, bottom_center in corridor_items:
         if (
             item.track_id in excluded_track_ids or
@@ -535,7 +543,9 @@ def safe_zone_push_corridor(
             )
         ):
             continue
-        assert item.relative_xy_m is not None
+        if item.relative_xy_m is None or item.relative_xy_m[1] <= 0.0:
+            unknown_distance_candidates.append(item)
+            continue
         distance_mm = max(
             80,
             min(
@@ -547,10 +557,25 @@ def safe_zone_push_corridor(
             ),
         )
         candidates.append((distance_mm, item))
+    if unknown_distance_candidates:
+        obstacle = max(
+            unknown_distance_candidates,
+            key=lambda item: (
+                item.bbox[1] + item.bbox[3],
+                item.area_px,
+                -item.track_id,
+            ),
+        )
+        return (
+            polygon,
+            obstacle,
+            None,
+            SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN,
+        )
     if not candidates:
-        return polygon, None, None
+        return polygon, None, None, SAFE_CORRIDOR_CLEAR
     distance_mm, obstacle = min(candidates, key=lambda entry: (entry[0], entry[1].track_id))
-    return polygon, obstacle, distance_mm
+    return polygon, obstacle, distance_mm, SAFE_CORRIDOR_BLOCKED
 
 
 def make_vision_snapshot(
@@ -679,7 +704,12 @@ def make_vision_snapshot(
     corridor_excluded_track_ids.update(mission.last_selected_track_ids)
     if mission.locked_target_track_id is not None:
         corridor_excluded_track_ids.add(mission.locked_target_track_id)
-    corridor, corridor_obstacle, corridor_distance_mm = safe_zone_push_corridor(
+    (
+        corridor,
+        corridor_obstacle,
+        corridor_distance_mm,
+        corridor_status,
+    ) = safe_zone_push_corridor(
         cargo,
         corridor_bbox,
         corridor_destination,
@@ -690,6 +720,8 @@ def make_vision_snapshot(
         mission.carried_total_count,
         carried_bbox_reference,
     )
+    if not localizer.calibrated:
+        corridor_status = SAFE_CORRIDOR_HOMOGRAPHY_MISSING
     return VisionSnapshot(
         frame_sequence=frame_sequence,
         observed_monotonic_s=time.monotonic(),
@@ -714,6 +746,8 @@ def make_vision_snapshot(
         safe_corridor_obstacle_track_id=(
             None if corridor_obstacle is None else corridor_obstacle.track_id
         ),
+        safe_corridor_status=corridor_status,
+        ground_localizer_calibrated=localizer.calibrated,
         carried_reference_bboxes=current_carried_bboxes,
     )
 
@@ -1230,6 +1264,8 @@ class CompetitionPlanner:
                 "safe_corridor_obstacle_class": vision.safe_corridor_obstacle_class,
                 "safe_corridor_obstacle_distance_mm": vision.safe_corridor_obstacle_distance_mm,
                 "safe_corridor_obstacle_track_id": vision.safe_corridor_obstacle_track_id,
+                "safe_corridor_status": vision.safe_corridor_status,
+                "ground_localizer_calibrated": vision.ground_localizer_calibrated,
                 "low_conf_green_seen": vision.low_conf_green_seen,
             },
             "initial_stash_done": self.mission.initial_stash_done,
@@ -1532,6 +1568,17 @@ def draw_overlay(
             (255, 0, 255),
             2,
         )
+    if not vision.ground_localizer_calibrated:
+        cv2.putText(
+            view,
+            "HOMOGRAPHY_MISSING",
+            (12, 34),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.75,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
     return view
 
 
@@ -1593,6 +1640,22 @@ def main() -> int:
     config = load_config(args.config)
     capture_rois = load_capture_rois(args.capture_roi)
     localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    if not localizer.calibrated:
+        homography_metadata = args.homography.with_suffix(
+            args.homography.suffix + ".meta.json"
+        )
+        homography_message = (
+            "HOMOGRAPHY_MISSING: 正式比赛缺少1280×1024地面标定，"
+            "最终走廊推进将被禁止；请运行"
+            "vision/calibrate_ground.py生成并部署homography.txt及.meta.json"
+        )
+        print(homography_message, file=sys.stderr)
+        events.write("homography_missing", {
+            "message": homography_message,
+            "homography": str(args.homography),
+            "metadata": str(homography_metadata),
+            "required_resolution": [IMAGE_WIDTH, IMAGE_HEIGHT],
+        })
     scaler: VseScaler | None = None
     try:
         detector = X5YoloV8(
@@ -1657,6 +1720,8 @@ def main() -> int:
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
+            "homography": str(args.homography),
+            "homography_calibrated": localizer.calibrated,
             "capture_roi": str(args.capture_roi),
             "capture_polygon_px": [list(point) for point in capture_rois.overall],
             "capture_left_polygon_px": [list(point) for point in capture_rois.left],

@@ -82,6 +82,11 @@ STM_MODE_SAFE_SWEEP = 39
 STM_MODE_SAFE_SWEEP_DONE = 40
 STM_MODE_BOUNDARY_RECOVER = 41
 
+SAFE_CORRIDOR_CLEAR = "CLEAR"
+SAFE_CORRIDOR_BLOCKED = "BLOCKED"
+SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN = "OBSTACLE_DISTANCE_UNKNOWN"
+SAFE_CORRIDOR_HOMOGRAPHY_MISSING = "HOMOGRAPHY_MISSING"
+
 
 def angle_error_deg(target: float, current: float) -> float:
     return (target - current + 180.0) % 360.0 - 180.0
@@ -284,6 +289,8 @@ class VisionSnapshot:
     safe_corridor_obstacle_class: str | None = None
     safe_corridor_obstacle_distance_mm: int | None = None
     safe_corridor_obstacle_track_id: int | None = None
+    safe_corridor_status: str = SAFE_CORRIDOR_CLEAR
+    ground_localizer_calibrated: bool = True
     carried_reference_bboxes: tuple[tuple[int, int, int, int], ...] = ()
 
 
@@ -1876,6 +1883,8 @@ class CompetitionMission:
                         reason="cluster_audit_valid",
                         expected_stm_modes=(STM_MODE_CAPTURE_DONE,),
                     )
+                if audit.danger_present:
+                    return self._start_danger_release(audit, stm, now)
                 legal_output = self._resume_legal_audit_before_disperse(
                     vision, stm, now
                 )
@@ -1883,9 +1892,9 @@ class CompetitionMission:
                     return legal_output
                 self.cluster_audit_active = False
                 if self._should_first_green_bump(audit):
-                    return self._start_first_green_bump(stm, now)
+                    return self._start_first_green_bump(audit, stm, now)
                 self.disperse_attempts += 1
-                return self._start_disperse(stm, now)
+                return self._start_disperse(audit, stm, now)
             event = (
                 "" if self.pending_audit_event_emitted
                 else "cluster_audit_stable_publish"
@@ -2044,6 +2053,8 @@ class CompetitionMission:
             ):
                 audit = self.pending_audit
                 self._clear_pending_audit()
+                if audit.danger_present:
+                    return self._start_danger_release(audit, stm, now)
                 release_side = self._choose_release_side(audit)
                 if (
                     (release_side == "left" and audit.left_count <= 0) or
@@ -2143,6 +2154,8 @@ class CompetitionMission:
                     tx_policy="normal_command",
                     reason="stable_audit_relay_confirmed",
                 )
+            if audit.danger_present:
+                return self._start_danger_release(audit, stm, now)
             if release_context == "disperse_reaudit":
                 legal_output = self._resume_legal_audit_before_disperse(
                     vision, stm, now
@@ -2150,14 +2163,14 @@ class CompetitionMission:
                 if legal_output is not None:
                     return legal_output
                 if self._should_first_green_bump(audit):
-                    return self._start_first_green_bump(stm, now)
+                    return self._start_first_green_bump(audit, stm, now)
                 if self.cluster_keep_side is not None:
                     self.disperse_attempts += 1
-                    return self._start_disperse(stm, now)
+                    return self._start_disperse(audit, stm, now)
                 if self.disperse_observe_attempts < 2:
                     self.cluster_keep_side_count = 0
                     self.disperse_attempts += 1
-                    return self._start_disperse(stm, now)
+                    return self._start_disperse(audit, stm, now)
                 self.invalid_release_side = "both"
                 self.invalid_release_final = True
                 self.invalid_release_context = "disperse_final_release"
@@ -2403,8 +2416,6 @@ class CompetitionMission:
             counts[audit.right_class] += audit.right_count
         if self.selected_batch is None:
             return False
-        if self.selected_batch.initial_stash:
-            return audit.total_count > 0
         if (
             audit.total_count <= 0 or
             audit.total_count > self.settings.max_batch_count or
@@ -2419,6 +2430,8 @@ class CompetitionMission:
             audit.injury_mixed
         ):
             return False
+        if self.selected_batch.initial_stash:
+            return audit.total_count > 0
         if not self.first_common_delivered:
             return (
                 audit.total_count == 1 and
@@ -2485,7 +2498,15 @@ class CompetitionMission:
         return None
 
     def _should_first_green_bump(self, audit: CargoAudit) -> bool:
-        if self.first_common_delivered or self.first_green_bump_used:
+        if (
+            self.first_common_delivered or
+            self.first_green_bump_used or
+            audit.danger_present or
+            audit.unknown_present or
+            audit.injury_mixed or
+            audit.left_invalid or
+            audit.right_invalid
+        ):
             return False
         green_total = audit.left_green_count + audit.right_green_count
         if audit.total_count < 2 or green_total <= 0:
@@ -2497,6 +2518,43 @@ class CompetitionMission:
             audit.right_count == 1 and audit.right_green_count == 1
         )
         return not (left_isolated_green or right_isolated_green)
+
+    @staticmethod
+    def _danger_release_side(audit: CargoAudit) -> str:
+        if audit.unknown_present:
+            return "both"
+        left_danger_only = (
+            audit.left_class == "danger_cyan" and
+            audit.left_count > 0
+        )
+        right_danger_only = (
+            audit.right_class == "danger_cyan" and
+            audit.right_count > 0
+        )
+        if left_danger_only != right_danger_only:
+            return "left" if left_danger_only else "right"
+        return "both"
+
+    def _start_danger_release(
+        self,
+        audit: CargoAudit,
+        stm: StmSnapshot,
+        now: float,
+    ) -> CompetitionOutput:
+        side = self._danger_release_side(audit)
+        self.invalid_release_side = side
+        self.invalid_release_final = side == "both"
+        self.invalid_release_context = (
+            "danger_final_release"
+            if side == "both" else
+            "danger_single_side_then_reaudit"
+        )
+        self.cluster_audit_active = False
+        self.post_grab_audit_active = False
+        self.post_grab_camera_ready = None
+        self._set_state(CompetitionState.INVALID_RELEASE, now)
+        self._arm_invalid_release(stm, now)
+        return self._invalid_release_output(audit, stm, now)
 
     def _clear_disperse_side_votes(self) -> None:
         self.disperse_side_votes.clear()
@@ -2973,8 +3031,15 @@ class CompetitionMission:
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",
+            "danger_final_release",
         }:
-            message = "复审仍非法，执行最终双开"
+            message = (
+                "危险物无法可靠分侧，强制RELEASE_BOTH"
+                if self.invalid_release_context == "danger_final_release" else
+                "复审仍非法，执行最终双开"
+            )
+        elif self.invalid_release_context == "danger_single_side_then_reaudit":
+            message = f"危险物明确位于{side}侧，强制释放后YIELD复审"
         else:
             message = f"夹内组合非法，释放{side}侧后退复审"
         expected_mode = (
@@ -3908,13 +3973,12 @@ class CompetitionMission:
             stm.acknowledged_sequence != self.cluster_initial_ack
         ):
             self.cluster_command_accepted = True
+        if stm.fresh and stm.mode == STM_MODE_APPROACH_RECOVER:
+            return self._audit_reacquire_output(vision, stm, now)
         if (
             stm.fresh and
-            stm.mode in {
-            STM_MODE_APPROACH_RECOVER,
-            STM_MODE_SEARCH,
-            } and
-            (self.cluster_command_accepted or self.cluster_execution_seen)
+            stm.mode == STM_MODE_SEARCH and
+            self.cluster_execution_seen
         ):
             return self._audit_reacquire_output(vision, stm, now)
         if (
@@ -3952,7 +4016,11 @@ class CompetitionMission:
             ),
         )
 
-    def _start_disperse(self, stm: StmSnapshot, now: float) -> CompetitionOutput:
+    def _start_disperse(
+        self, audit: CargoAudit, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput:
+        if audit.danger_present:
+            return self._start_danger_release(audit, stm, now)
         self._set_state(CompetitionState.DISPERSE, now)
         self._arm_disperse(stm, self.cluster_keep_side)
         return CompetitionOutput(
@@ -3971,8 +4039,10 @@ class CompetitionMission:
         )
 
     def _start_first_green_bump(
-        self, stm: StmSnapshot, now: float
+        self, audit: CargoAudit, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        if audit.danger_present:
+            return self._start_danger_release(audit, stm, now)
         self.first_green_bump_used = True
         self._set_state(CompetitionState.DISPERSE, now)
         self._arm_disperse(stm, None, first_green_bump=True)
@@ -3999,6 +4069,18 @@ class CompetitionMission:
             self.disperse_initial_ack,
             self.disperse_command_accepted,
         )
+        if (
+            not self.disperse_command_accepted and
+            self._vision_fresh(vision, now) and
+            vision.capture_audit is not None and
+            vision.capture_audit.danger_present and
+            stm.fresh and
+            stm.claw_visible and
+            stm.camera_pitch_cdeg == 14000
+        ):
+            return self._start_danger_release(
+                vision.capture_audit, stm, now
+            )
         if not self.disperse_command_accepted:
             legal_output = self._resume_legal_audit_before_disperse(
                 vision, stm, now
@@ -4975,6 +5057,42 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
                 )
             self.safe_corridor_last_frame_sequence = vision.frame_sequence
+            if (
+                not vision.ground_localizer_calibrated or
+                vision.safe_corridor_status == SAFE_CORRIDOR_HOMOGRAPHY_MISSING
+            ):
+                return CompetitionOutput(
+                    self.state,
+                    self._safe_zone_visual_align_command(),
+                    (
+                        "HOMOGRAPHY_MISSING：缺少1280×1024地面标定，"
+                        "保持mode11停车；请运行vision/calibrate_ground.py"
+                    ),
+                    self.selected_batch,
+                    tx_policy="normal_command",
+                    reason="HOMOGRAPHY_MISSING",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
+            if (
+                vision.safe_corridor_status ==
+                SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN or
+                (
+                    vision.safe_corridor_obstacle_class is not None and
+                    vision.safe_corridor_obstacle_distance_mm is None
+                )
+            ):
+                return CompetitionOutput(
+                    self.state,
+                    self._safe_zone_visual_align_command(),
+                    (
+                        "OBSTACLE_DISTANCE_UNKNOWN：走廊内阻挡目标无可靠距离，"
+                        "保持mode11停车，禁止ENTER"
+                    ),
+                    self.selected_batch,
+                    tx_policy="normal_command",
+                    reason="OBSTACLE_DISTANCE_UNKNOWN",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
             if vision.safe_corridor_obstacle_class is not None:
                 if self.safe_sweep_attempts < 2:
                     return self._start_safe_zone_clear(vision, stm, now)
@@ -5013,6 +5131,43 @@ class CompetitionMission:
             )
             if new_corridor_frame:
                 self.safe_corridor_last_frame_sequence = vision.frame_sequence
+                if (
+                    not vision.ground_localizer_calibrated or
+                    vision.safe_corridor_status ==
+                    SAFE_CORRIDOR_HOMOGRAPHY_MISSING
+                ):
+                    return CompetitionOutput(
+                        self.state,
+                        self._pause(),
+                        (
+                            "HOMOGRAPHY_MISSING：缺少1280×1024地面标定，"
+                            "保持mode11停车，禁止ENTER"
+                        ),
+                        self.selected_batch,
+                        tx_policy="pause",
+                        reason="HOMOGRAPHY_MISSING",
+                        expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                    )
+                if (
+                    vision.safe_corridor_status ==
+                    SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN or
+                    (
+                        vision.safe_corridor_obstacle_class is not None and
+                        vision.safe_corridor_obstacle_distance_mm is None
+                    )
+                ):
+                    return CompetitionOutput(
+                        self.state,
+                        self._pause(),
+                        (
+                            "OBSTACLE_DISTANCE_UNKNOWN：走廊内阻挡目标"
+                            "无可靠距离，保持mode11停车，禁止ENTER"
+                        ),
+                        self.selected_batch,
+                        tx_policy="pause",
+                        reason="OBSTACLE_DISTANCE_UNKNOWN",
+                        expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                    )
                 if vision.safe_corridor_obstacle_class is None:
                     self.enter_initial_ack = stm.acknowledged_sequence
                     self.enter_tx_baseline = stm.relay_mission_tx_frames
@@ -5127,8 +5282,14 @@ class CompetitionMission:
                 if self.invalid_release_context in {
                     "disperse_final_release",
                     "final_release",
+                    "danger_final_release",
                 }:
+                    danger_final_release = (
+                        self.invalid_release_context == "danger_final_release"
+                    )
                     self._clear_selected_batch()
+                    if danger_final_release:
+                        self._clear_carried_manifest()
                     self._clear_cluster_context(reset_attempts=True)
                     self.cargo_recheck_pending = False
                     self.cargo_recheck_context = "none"
