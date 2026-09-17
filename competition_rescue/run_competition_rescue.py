@@ -1109,6 +1109,7 @@ class CompetitionPlanner:
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
             "cargo_recheck_context": self.mission.cargo_recheck_context,
             "post_grab_audit_active": self.mission.post_grab_audit_active,
+            "post_grab_camera_ready": self.mission.post_grab_camera_ready,
             "audit_hits": self.mission.audit_hits,
             "invalid_release_side": self.mission.invalid_release_side,
             "invalid_release_final": self.mission.invalid_release_final,
