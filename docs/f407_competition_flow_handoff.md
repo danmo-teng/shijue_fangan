@@ -474,10 +474,12 @@ T265平移、T265航向和有效编码器进展时，才请求一次`YIELD_BACKO
 2. `Main/Inc/Task.h`增加`TASK_POST_GRAB_AUDIT=23`。协议mode23表示已经合爪、摄像头保持140°、
    `GRIPPER_CLOSED=1`、`CLAW_VISIBLE=1`、底盘停车并等待合爪后的新审核；mode22继续只表示最终审核
    已通过、允许接收NAV。
-3. 合爪前普通mode21、聚集mode38/mode37和分离复审全部要求3个不同`audit_id`且语义签名一致。
-   同一审核帧以不同任务SEQ重复发送时不能累计。语义签名比较`total_count`、实际类别数量、
-   `DANGER_PRESENT`、`UNKNOWN_PRESENT`和`INJURY_MIXED`，左右整体互换仍视为一致；任何不一致审核
-   立即清零旧连续计数并以新审核重新计数，不再容忍中间一张非法帧。
+3. 合爪前普通mode21、聚集mode38/mode37、分离复审和mode23合爪后复审全部要求3个不同
+   `audit_id`且语义签名一致。同一审核帧以不同任务SEQ重复发送时不能累计。首件合法审核归一化为
+   `FIRST_GREEN`，后续合法物资归一化为`MATERIAL_LEGAL+total_count`，单伤员归一化为
+   `INJURY_SINGLE`；非法审核归一化为`INVALID+total_count+DANGER_PRESENT+UNKNOWN_PRESENT+
+   INJURY_MIXED+DESTINATION_INJURY`，不比较左右位置以及绿色、核心、mixed的精确组成。任何语义
+   不一致审核立即以当前帧重新从1计数。
 4. 合法条件：首件正式绿色未完成时必须恰好1个绿色；首件完成后，恰好1个伤员合法，或1～3件
    普通/核心/普通核心混合合法；危险、未知、超过3件、伤员混装均非法。`DESTINATION_INJURY`
    必须与本次实际审核一致：单伤员置1，合法物资置0。不能沿用APPROACH前的目标类别判断审核。
@@ -497,7 +499,7 @@ T265平移、T265航向和有效编码器进展时，才请求一次`YIELD_BACKO
    只能使用本次回到140°之后的新audit_id重新累计3帧。
 10. 有限恢复最终失败时F407双开并直接回mode3。上位机在mode23或待确认审核阶段看到新鲜mode3，
     会清除selected_batch、carried manifest、track、审核和frame floor，并等待动作后的新帧重新SEARCH。
-11. mode23形成连续3帧非法审核后保持停车并等待释放/分离命令3秒；上位机在非法审核ACK后会立即
+11. mode23形成连续3帧非法审核后保持停车并等待释放/分离命令4秒；上位机在非法审核ACK后会立即
     发送动作。窗口结束仍未收到合法动作时，F407双开并回mode3，不能进入mode22或沿用旧审核。
 
 完整握手：

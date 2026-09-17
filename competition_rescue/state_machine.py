@@ -1192,7 +1192,18 @@ class CompetitionMission:
                 return ("INJURY_SINGLE",)
             if manifest and set(manifest).issubset(MATERIAL_CLASSES):
                 return ("MATERIAL_LEGAL", audit.total_count)
-        return ("INVALID",) + audit.signature
+        # Match F407's task-semantic normalization.  An invalid observation
+        # remains the same decision when green/core/mixed classification or
+        # claw side jitters, as long as its count, blocking flags and encoded
+        # destination stay unchanged.
+        return (
+            "INVALID",
+            audit.total_count,
+            audit.danger_present,
+            audit.unknown_present,
+            audit.injury_mixed,
+            self._audit_destination(audit),
+        )
 
     def _latch_carried_manifest(self, audit: CargoAudit) -> None:
         self.carried_manifest = self._manifest_for_audit(audit)
@@ -4617,7 +4628,6 @@ class CompetitionMission:
                 stm.mode == STM_MODE_POST_GRAB_AUDIT and
                 stm.gripper_closed and
                 stm.claw_visible and
-                stm.camera_pitch_cdeg == 14000 and
                 self.selected_batch is not None
             ):
                 self._begin_post_grab_audit(vision, now)
