@@ -66,6 +66,7 @@ STM_MODE_FACE_FIELD_CENTER = 17
 STM_MODE_APPROACH_TARGET = 20
 STM_MODE_CAPTURE_AUDIT = 21
 STM_MODE_CAPTURE_DONE = 22
+STM_MODE_POST_GRAB_AUDIT = 23
 STM_MODE_APPROACH_RECOVER = 24
 STM_MODE_REMOTE_ACTION = 25
 STM_MODE_YIELD_DONE = 30
@@ -123,6 +124,10 @@ class StmSnapshot:
     @property
     def gripper_closed(self) -> bool:
         return bool(self.flags & (1 << 1))
+
+    @property
+    def audit_valid(self) -> bool:
+        return bool(self.flags & (1 << 4))
 
     @property
     def motors_active(self) -> bool:
@@ -342,6 +347,7 @@ class CompetitionState(str, Enum):
     CAPTURE_AUDIT = "CAPTURE_AUDIT"
     AUDIT_CONFIRM = "AUDIT_CONFIRM"
     GRAB = "GRAB"
+    POST_GRAB_AUDIT = "POST_GRAB_AUDIT"
     INITIAL_STASH_NAV = "INITIAL_STASH_NAV"
     INITIAL_RELEASE = "INITIAL_RELEASE"
     SEARCH = "SEARCH"
@@ -373,9 +379,10 @@ class CompetitionSettings:
     side: str
     start_zone: int = 1
     initial_stash_enabled: bool = True
-    audit_stable_frames: int = 1
-    normal_grab_audit_frames: int = 2
-    cluster_grab_audit_frames: int = 2
+    audit_stable_frames: int = 3
+    normal_grab_audit_frames: int = 3
+    cluster_grab_audit_frames: int = 3
+    post_grab_audit_frames: int = 3
     delivery_visual_frames: int = 5
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
@@ -426,6 +433,7 @@ class CompetitionSettings:
             self.audit_stable_frames <= 0 or
             self.normal_grab_audit_frames <= 0 or
             self.cluster_grab_audit_frames <= 0 or
+            self.post_grab_audit_frames <= 0 or
             self.delivery_visual_frames <= 0
         ):
             raise ValueError("audit frame counts must be positive")
@@ -563,6 +571,7 @@ class CompetitionMission:
         self.invalid_release_command_accepted = False
         self.grab_initial_ack: int | None = None
         self.grab_complete_confirmed = False
+        self.post_grab_audit_active = False
         self.navigation_initial_ack: int | None = None
         self.enter_initial_ack: int | None = None
         self.task_complete_initial_ack: int | None = None
@@ -896,6 +905,12 @@ class CompetitionMission:
         if self.state == CompetitionState.AUDIT_CONFIRM:
             if self.pending_audit_release_context == "recheck_empty_to_search":
                 return (STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH)
+            if self.pending_audit_release_context.startswith("post_grab_"):
+                return (
+                    STM_MODE_POST_GRAB_AUDIT,
+                    STM_MODE_CAPTURE_DONE,
+                    STM_MODE_SEARCH,
+                )
             return (
                 STM_MODE_CAPTURE_AUDIT,
                 STM_MODE_CAPTURE_DONE,
@@ -905,7 +920,9 @@ class CompetitionMission:
                 STM_MODE_SEARCH,
             )
         if self.state == CompetitionState.GRAB:
-            return (STM_MODE_CAPTURE_DONE,)
+            return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_READY, STM_MODE_POST_GRAB_AUDIT)
+        if self.state == CompetitionState.POST_GRAB_AUDIT:
+            return (STM_MODE_POST_GRAB_AUDIT, STM_MODE_CAPTURE_DONE, STM_MODE_SEARCH)
         if self.state in {
             CompetitionState.INITIAL_STASH_NAV,
             CompetitionState.NAVIGATE,
@@ -1053,6 +1070,7 @@ class CompetitionMission:
     def _clear_selected_batch(self) -> None:
         self.selected_batch = None
         self.confirmed_delivery_destination = None
+        self.post_grab_audit_active = False
         self._clear_disperse_side_votes()
         self.locked_target_track_id = None
         self.target_missing_frames = 0
@@ -1114,7 +1132,8 @@ class CompetitionMission:
             self.search_candidate_hits >= self.settings.search_target_confirm_frames
         )
 
-    def _latch_carried_manifest(self, audit: CargoAudit) -> None:
+    @staticmethod
+    def _manifest_for_audit(audit: CargoAudit) -> tuple[str, ...]:
         classes: list[str] = []
         for class_name, count, green_count in (
             (audit.left_class, audit.left_count, audit.left_green_count),
@@ -1130,7 +1149,29 @@ class CompetitionMission:
                 classes.extend([class_name] * count)
         if not classes and audit.total_count > 0:
             classes = ["unknown"] * audit.total_count
-        self.carried_manifest = tuple(classes)
+        return tuple(classes)
+
+    def _audit_destination(self, audit: CargoAudit) -> str:
+        assert self.selected_batch is not None
+        if self.selected_batch.initial_stash:
+            return self.selected_batch.destination
+        manifest = self._manifest_for_audit(audit)
+        if audit.total_count == 1 and manifest == ("injured_orange",):
+            return "injury"
+        if manifest and set(manifest).issubset(MATERIAL_CLASSES):
+            return "material"
+        return self.selected_batch.destination
+
+    def _audit_payload(self, audit: CargoAudit) -> CargoAuditPayload:
+        assert self.selected_batch is not None
+        return audit.to_protocol(
+            initial_stash=self.selected_batch.initial_stash,
+            destination=self._audit_destination(audit),
+            audit_id=self.audit_id,
+        )
+
+    def _latch_carried_manifest(self, audit: CargoAudit) -> None:
+        self.carried_manifest = self._manifest_for_audit(audit)
         self.carried_total_count = audit.total_count
         self.carried_has_green = (
             "green_supply" in self.carried_manifest
@@ -1467,6 +1508,7 @@ class CompetitionMission:
         recheck_pending: bool,
         recheck_context: str,
     ) -> None:
+        self.post_grab_audit_active = False
         self.cluster_audit_active = cluster_active
         self.cargo_recheck_pending = recheck_pending
         self.cargo_recheck_context = recheck_context
@@ -1485,6 +1527,26 @@ class CompetitionMission:
         self.cluster_keep_side_count = 0
         self._set_state(CompetitionState.CAPTURE_AUDIT, now)
 
+    def _begin_post_grab_audit(
+        self, vision: VisionSnapshot, now: float
+    ) -> None:
+        self.post_grab_audit_active = True
+        self.cluster_audit_active = False
+        self.audit_hits = 0
+        self.audit_last_signature = None
+        self.audit_last_frame_sequence = None
+        self.audit_recheck_frame_floor = (
+            vision.frame_sequence if vision.frame_sequence > 0 else None
+        )
+        self.audit_recheck_started_s = now
+        self.audit_legal_candidate_pending = False
+        self.audit_invalid_after_legal_hits = 0
+        self._clear_disperse_side_votes()
+        self.cluster_keep_side = None
+        self.cluster_keep_side_count = 0
+        self._clear_pending_audit()
+        self._set_state(CompetitionState.POST_GRAB_AUDIT, now)
+
     def _audit_reacquire_output(
         self, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
@@ -1495,6 +1557,7 @@ class CompetitionMission:
         )
         self._clear_pending_audit()
         self._clear_selected_batch()
+        self.post_grab_audit_active = False
         self.cargo_recheck_pending = False
         self.cargo_recheck_context = "none"
         self.grab_initial_ack = None
@@ -1625,14 +1688,17 @@ class CompetitionMission:
                 ) and
                 self._fresh_mode_after(
                     stm, STM_MODE_CLUSTER_READY, self.pending_audit_initial_ack
-                )
+                ) and
+                (not self.pending_audit_valid or stm.audit_valid)
             ):
                 audit = self.pending_audit
                 valid = self.pending_audit_valid
                 self._clear_pending_audit()
                 if valid:
                     self.cluster_audit_active = False
-                    self._latch_carried_manifest(audit)
+                    self.post_grab_audit_active = False
+                    self.cargo_recheck_pending = False
+                    self.cargo_recheck_context = "none"
                     self._set_state(CompetitionState.GRAB, now)
                     self.grab_initial_ack = stm.acknowledged_sequence
                     return CompetitionOutput(
@@ -1689,6 +1755,7 @@ class CompetitionMission:
                 empty_audit = self.pending_audit
                 self._clear_selected_batch()
                 self._clear_cluster_context(reset_attempts=True)
+                self.post_grab_audit_active = False
                 self.cargo_recheck_pending = False
                 self.cargo_recheck_context = "none"
                 self.audit_hits = 0
@@ -1723,7 +1790,103 @@ class CompetitionMission:
                 event=event,
                 tx_policy="audit_stable_publish",
                 reason="recheck_empty_pending_search",
-                expected_stm_modes=(STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH),
+                expected_stm_modes=(
+                    STM_MODE_CAPTURE_AUDIT,
+                    STM_MODE_POST_GRAB_AUDIT,
+                    STM_MODE_SEARCH,
+                ),
+            )
+        if self.pending_audit_release_context == "post_grab_valid":
+            if (
+                self._relay_sent_since(
+                    stm, stable_command, self.pending_audit_tx_baseline
+                ) and
+                self._fresh_mode_after(
+                    stm, STM_MODE_CAPTURE_DONE, self.pending_audit_initial_ack
+                ) and
+                stm.gripper_closed and
+                stm.audit_valid
+            ):
+                audit = self.pending_audit
+                self._clear_pending_audit()
+                self._latch_carried_manifest(audit)
+                self.post_grab_audit_active = False
+                self.grab_complete_confirmed = True
+                self._set_state(CompetitionState.GRAB, now)
+                return CompetitionOutput(
+                    self.state,
+                    None,
+                    "合爪后3帧审核已确认，下一周期启动对应目的地NAV",
+                    self.selected_batch,
+                    audit,
+                    event="post_grab_audit_confirmed",
+                    tx_policy="post_grab_handoff",
+                    reason="post_grab_audit_confirmed",
+                    expected_stm_modes=(STM_MODE_CAPTURE_DONE,),
+                )
+            event = (
+                "post_grab_audit_stable_publish"
+                if not self.pending_audit_event_emitted else ""
+            )
+            self.pending_audit_event_emitted = True
+            return CompetitionOutput(
+                self.state,
+                stable_command,
+                "持续发送合爪后稳定审核，等待AUDIT_VALID和mode=22",
+                self.selected_batch,
+                self.pending_audit,
+                event=event,
+                tx_policy="audit_stable_publish",
+                reason="post_grab_audit_pending",
+                expected_stm_modes=(
+                    STM_MODE_POST_GRAB_AUDIT,
+                    STM_MODE_CAPTURE_DONE,
+                ),
+            )
+        if self.pending_audit_release_context == "post_grab_invalid":
+            if (
+                self._relay_sent_since(
+                    stm, stable_command, self.pending_audit_tx_baseline
+                ) and
+                self._fresh_mode_after(
+                    stm, STM_MODE_POST_GRAB_AUDIT,
+                    self.pending_audit_initial_ack,
+                )
+            ):
+                audit = self.pending_audit
+                self._clear_pending_audit()
+                release_side = self._choose_release_side(audit)
+                if (
+                    (release_side == "left" and audit.left_count <= 0) or
+                    (release_side == "right" and audit.right_count <= 0)
+                ):
+                    release_side = "both"
+                self.invalid_release_side = release_side
+                self.invalid_release_final = release_side == "both"
+                self.invalid_release_context = (
+                    "final_release"
+                    if release_side == "both" else
+                    "single_side_then_reaudit"
+                )
+                self.post_grab_audit_active = False
+                self._set_state(CompetitionState.INVALID_RELEASE, now)
+                self._arm_invalid_release(stm, now)
+                return self._invalid_release_output(audit, stm, now)
+            event = (
+                "post_grab_invalid_stable_publish"
+                if not self.pending_audit_event_emitted else ""
+            )
+            self.pending_audit_event_emitted = True
+            return CompetitionOutput(
+                self.state,
+                stable_command,
+                "持续发送合爪后非法审核，等待F407确认后执行释放分离",
+                self.selected_batch,
+                self.pending_audit,
+                event=event,
+                tx_policy="audit_stable_publish",
+                reason="post_grab_invalid_pending",
+                expected_stm_modes=(STM_MODE_POST_GRAB_AUDIT,),
             )
         if not self._vision_fresh(vision, now):
             self._clear_pending_audit()
@@ -1742,7 +1905,8 @@ class CompetitionMission:
             ) and
             self._fresh_mode_after(
                 stm, STM_MODE_CAPTURE_AUDIT, self.pending_audit_initial_ack
-            )
+            ) and
+            (not self.pending_audit_valid or stm.audit_valid)
         ):
             audit = self.pending_audit
             valid = self.pending_audit_valid
@@ -1751,7 +1915,9 @@ class CompetitionMission:
             release_context = self.pending_audit_release_context
             self._clear_pending_audit()
             if valid:
-                self._latch_carried_manifest(audit)
+                self.post_grab_audit_active = False
+                self.cargo_recheck_pending = False
+                self.cargo_recheck_context = "none"
                 self._set_state(CompetitionState.GRAB, now)
                 self.grab_initial_ack = stm.acknowledged_sequence
                 return CompetitionOutput(
@@ -2221,11 +2387,7 @@ class CompetitionMission:
             stm.camera_pitch_cdeg == 14000
         ):
             assert self.selected_batch is not None
-            empty_payload = CargoAudit().to_protocol(
-                initial_stash=self.selected_batch.initial_stash,
-                destination=self.selected_batch.destination,
-                audit_id=self.audit_id,
-            )
+            empty_payload = self._audit_payload(CargoAudit())
             return CompetitionOutput(
                 self.state,
                 CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=empty_payload),
@@ -2244,11 +2406,7 @@ class CompetitionMission:
             )
         if not self._vision_fresh(vision, now):
             assert self.selected_batch is not None
-            empty_payload = CargoAudit().to_protocol(
-                initial_stash=self.selected_batch.initial_stash,
-                destination=self.selected_batch.destination,
-                audit_id=self.audit_id,
-            )
+            empty_payload = self._audit_payload(CargoAudit())
             return CompetitionOutput(
                 self.state,
                 CommandRequest(
@@ -2285,11 +2443,7 @@ class CompetitionMission:
                 self.audit_recheck_started_s is not None
             ) and not new_sequence:
                 assert self.selected_batch is not None
-                empty_payload = CargoAudit().to_protocol(
-                    initial_stash=self.selected_batch.initial_stash,
-                    destination=self.selected_batch.destination,
-                    audit_id=self.audit_id,
-                )
+                empty_payload = self._audit_payload(CargoAudit())
                 return CompetitionOutput(
                     self.state,
                     CommandRequest(
@@ -2307,7 +2461,7 @@ class CompetitionMission:
             self.audit_recheck_started_s = None
         if vision.capture_audit is None:
             assert self.selected_batch is not None
-            if self.cargo_recheck_pending:
+            if self.cargo_recheck_pending or self.post_grab_audit_active:
                 empty_audit = CargoAudit(
                     left_class="none",
                     right_class="none",
@@ -2336,11 +2490,7 @@ class CompetitionMission:
                     ),
                 )
                 if stable_empty.stable:
-                    stable_payload = stable_empty.to_protocol(
-                        initial_stash=self.selected_batch.initial_stash,
-                        destination=self.selected_batch.destination,
-                        audit_id=self.audit_id,
-                    )
+                    stable_payload = self._audit_payload(stable_empty)
                     self._begin_audit_confirmation(
                         stable_empty,
                         stable_payload,
@@ -2362,15 +2512,13 @@ class CompetitionMission:
                     self.audit_id = (self.audit_id + 1) & 0xFF
                 self.audit_last_signature = None
                 self.audit_hits = 0
-            empty_payload = CargoAudit().to_protocol(
-                initial_stash=self.selected_batch.initial_stash,
-                destination=self.selected_batch.destination,
-                audit_id=self.audit_id,
-            )
+            empty_payload = self._audit_payload(CargoAudit())
             return CompetitionOutput(
                 self.state,
                 CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=empty_payload),
                 (
+                        "合爪后暂未识别到物资，等待3帧稳定空爪审核"
+                    if self.post_grab_audit_active else
                     "单侧分离后暂未识别到物资，原地等待稳定复审"
                     if self.cargo_recheck_pending else
                     "夹爪ROI暂未确认物资，发送非STABLE全零审核继续慢速观察"
@@ -2410,41 +2558,6 @@ class CompetitionMission:
             if cluster_screening else
             self._audit_valid(audit)
         )
-        if (
-            new_frame and
-            cluster_screening and
-            not audit_valid and
-            self.audit_legal_candidate_pending
-        ):
-            self.audit_last_frame_sequence = vision.frame_sequence
-            self.audit_invalid_after_legal_hits += 1
-            if self.audit_invalid_after_legal_hits < 2:
-                return CompetitionOutput(
-                    self.state,
-                    self._hold(),
-                    "忽略一张瞬时非法审核，保留首张合法候选",
-                    self.selected_batch,
-                    audit,
-                    event="audit_invalid_after_legal_hold",
-                    tx_policy="hold",
-                    reason="audit_invalid_after_legal_grace",
-                )
-            self.audit_legal_candidate_pending = False
-        if (
-            cluster_screening and
-            not audit_valid and
-            self.audit_legal_candidate_pending and
-            self.audit_invalid_after_legal_hits == 1
-        ):
-            return CompetitionOutput(
-                self.state,
-                self._hold(),
-                "瞬时非法审核帧尚未被下一张新帧确认，保持合法候选基线",
-                self.selected_batch,
-                audit,
-                tx_policy="hold",
-                reason="audit_invalid_after_legal_grace",
-            )
         if new_frame:
             self.audit_last_frame_sequence = vision.frame_sequence
             if audit.signature == self.audit_last_signature:
@@ -2455,6 +2568,8 @@ class CompetitionMission:
             self.audit_id = (self.audit_id + 1) & 0xFF
         cluster_grab_audit = cluster_screening and audit_valid
         required_audit_frames = (
+            self.settings.post_grab_audit_frames
+            if self.post_grab_audit_active else
             self.settings.normal_grab_audit_frames
             if normal_grab_audit else
             (
@@ -2474,6 +2589,9 @@ class CompetitionMission:
         if cluster_screening and new_frame:
             if audit_valid:
                 self.audit_legal_candidate_pending = True
+                self.audit_invalid_after_legal_hits = 0
+            else:
+                self.audit_legal_candidate_pending = False
                 self.audit_invalid_after_legal_hits = 0
         disperse_vote_context = (
             not audit_valid and
@@ -2495,11 +2613,7 @@ class CompetitionMission:
             )
             if not vote_ready:
                 unstable = replace(audit, stable=False)
-                unstable_payload = unstable.to_protocol(
-                    initial_stash=self.selected_batch.initial_stash,
-                    destination=self.selected_batch.destination,
-                    audit_id=self.audit_id,
-                )
+                unstable_payload = self._audit_payload(unstable)
                 vote_summary = [
                     side or "unknown"
                     for _, side, _ in self.disperse_side_votes
@@ -2520,11 +2634,7 @@ class CompetitionMission:
                 )
             self.cluster_keep_side = keep_side
             self.cluster_keep_side_count = keep_count
-        payload = stable.to_protocol(
-            initial_stash=self.selected_batch.initial_stash,
-            destination=self.selected_batch.destination,
-            audit_id=self.audit_id,
-        )
+        payload = self._audit_payload(stable)
         if stable.stable and audit_valid:
             self._begin_audit_confirmation(
                 stable,
@@ -2532,12 +2642,29 @@ class CompetitionMission:
                 True,
                 "both",
                 False,
-                "cluster_capture" if self.cluster_audit_active else "valid",
+                (
+                    "post_grab_valid"
+                    if self.post_grab_audit_active else
+                    "cluster_capture"
+                    if self.cluster_audit_active else "valid"
+                ),
                 stm,
                 now,
             )
             return self._audit_confirmation_output(vision, stm, now)
         if stable.stable and not audit_valid:
+            if self.post_grab_audit_active:
+                self._begin_audit_confirmation(
+                    stable,
+                    payload,
+                    False,
+                    "both",
+                    False,
+                    "post_grab_invalid",
+                    stm,
+                    now,
+                )
+                return self._audit_confirmation_output(vision, stm, now)
             if self.cluster_audit_active:
                 self._begin_audit_confirmation(
                     stable,
@@ -4368,13 +4495,14 @@ class CompetitionMission:
         if self.state == CompetitionState.GRAB:
             if (
                 stm.fresh and
-                stm.mode == STM_MODE_CAPTURE_DONE and
+                stm.mode == STM_MODE_POST_GRAB_AUDIT and
                 stm.gripper_closed and
+                stm.claw_visible and
+                stm.camera_pitch_cdeg == 14000 and
                 self.selected_batch is not None
             ):
-                self.grab_complete_confirmed = True
-                self.cargo_recheck_pending = False
-                self.cargo_recheck_context = "none"
+                self._begin_post_grab_audit(vision, now)
+                return self._audit_output(vision, stm, now)
             if self.grab_complete_confirmed:
                 if not pose.valid:
                     return CompetitionOutput(
@@ -4401,7 +4529,16 @@ class CompetitionMission:
                         reason="grab_complete_navigation_start",
                     )
                 return navigation
-            return CompetitionOutput(self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()), "等待下位机完成合爪", self.selected_batch)
+            return CompetitionOutput(
+                self.state,
+                CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()),
+                "等待F407完成核心前探（如需要）和合爪，并进入mode=23复审",
+                self.selected_batch,
+                expected_stm_modes=(STM_MODE_POST_GRAB_AUDIT,),
+            )
+
+        if self.state == CompetitionState.POST_GRAB_AUDIT:
+            return self._audit_output(vision, stm, now)
 
         if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE:
             pose_align_command = self._safe_zone_pose_align_command()

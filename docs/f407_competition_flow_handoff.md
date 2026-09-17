@@ -461,3 +461,48 @@ T265平移、T265航向和有效编码器进展时，才请求一次`YIELD_BACKO
 
 返中验收必须确认上位机持续发送指向固定中心点`(0,0)`的`RETURN_CENTER`，直到F407真正上报
 `SEARCH`；不能用中心圆、600 mm圆周或`HOLD`提前切换搜索。
+
+## 2026-09-17：合爪前后双重审核（最新要求，覆盖旧抓取审核描述）
+
+上位机现在要求最新版F407提供`mode=23/POST_GRAB_AUDIT`和TYPE `0x17` flags bit4
+`AUDIT_VALID`。未适配这两个字段的旧固件不会被上位机误判为审核成功，也不会进入NAV。
+
+请严格按以下流程修改F407，不改变15字节帧格式和现有命令编号：
+
+1. `Main/Inc/vision.h`增加`VISION_STM_AUDIT_VALID = 0x10U`；`Task.c`发布TYPE `0x17`
+   时，只有当前已接收审核且`audit_valid=true`才置bit4。ACK只表示收到命令，不能代替该位。
+2. `Main/Inc/Task.h`增加`TASK_POST_GRAB_AUDIT=23`。协议mode23表示已经合爪、摄像头保持140°、
+   `GRIPPER_CLOSED=1`、`CLAW_VISIBLE=1`、底盘停车并等待合爪后的新审核；mode22继续只表示最终审核
+   已通过、允许接收NAV。
+3. 合爪前普通mode21、聚集mode38/mode37和分离复审全部要求3个不同`audit_id`且语义签名一致。
+   同一审核帧以不同任务SEQ重复发送时不能累计。语义签名比较`total_count`、实际类别数量、
+   `DANGER_PRESENT`、`UNKNOWN_PRESENT`和`INJURY_MIXED`，左右整体互换仍视为一致；任何不一致审核
+   立即清零旧连续计数并以新审核重新计数，不再容忍中间一张非法帧。
+4. 合法条件：首件正式绿色未完成时必须恰好1个绿色；首件完成后，恰好1个伤员合法，或1～3件
+   普通/核心/普通核心混合合法；危险、未知、超过3件、伤员混装均非法。`DESTINATION_INJURY`
+   必须与本次实际审核一致：单伤员置1，合法物资置0。不能沿用APPROACH前的目标类别判断审核。
+5. F407收到已通过合爪前审核的`GRAB_CONFIRMED`后，如果审核中包含核心物资，先锁存当前航向，
+   以近距离慢速和编码器累计向前50 mm，再停车执行`Claw_Touch()`；不含核心时直接合爪。
+   重复`GRAB_CONFIRMED`只ACK并保持动作幂等，不能重复启动50 mm。
+6. `Claw_Touch()`完成后不要直接进入mode22。清除合爪前审核缓存，进入mode23，保持相机140°和
+   双爪当前角度，等待上位机从新的frame floor发送合爪后3帧审核。
+7. mode23收到合法STABLE审核并确认本地`audit_valid=true`后，ACK该审核并进入mode22；收到稳定
+   空爪审核时双爪打开并回mode3；收到稳定非法审核时保持mode23并允许现有
+   `RELEASE_LEFT/RIGHT/BOTH`或`DISPERSE_PILE`处理。单侧释放完成后仍沿用YIELD和140°复审流程。
+8. `GRAB_CONFIRMED`只允许在合爪前审核已满足3帧且`AUDIT_VALID=1`的mode21或mode37接受。
+   审核非法时保持原状态并显示`GRAB REJ`，但上位机按新流程不会发送这种命令。
+
+完整握手：
+
+```text
+mode21或mode38
+→ 合爪前连续3帧CARGO_AUDIT
+→ F407置AUDIT_VALID
+→ GRAB_CONFIRMED
+→ 若含核心则编码器前进50 mm
+→ Claw_Touch
+→ mode23（清除旧审核）
+→ 合爪后连续3帧CARGO_AUDIT
+→ 合法：AUDIT_VALID=1并进入mode22
+→ 上位机按合爪后实际清单发送NAV
+```

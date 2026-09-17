@@ -447,17 +447,22 @@ def make_vision_snapshot(
         for item in cargo:
             if not item.visible:
                 continue
+            capture_overlap = (
+                0.60
+                if item.class_name in {"core_black", "injured_orange"}
+                else 0.80
+            )
             if not bbox_in_capture_roi(
                 item.bbox,
                 rois.overall,
-                require_full_overlap=item.class_name == "core_black",
+                minimum_overlap_ratio=capture_overlap,
             ):
                 continue
             capture_items.append(item)
             capture_side = capture_side_for_bbox(
                 item.bbox,
                 rois,
-                require_full_overlap=item.class_name == "core_black",
+                minimum_overlap_ratio=capture_overlap,
             )
             if capture_side is not None:
                 capture_side_by_track[item.track_id] = capture_side
@@ -622,6 +627,7 @@ def stm_dict(stm: StmSnapshot) -> dict:
         "acknowledged_sequence": stm.acknowledged_sequence,
         "claw_visible": stm.claw_visible,
         "gripper_closed": stm.gripper_closed,
+        "audit_valid": stm.audit_valid,
         "motors_active": stm.motors_active,
         "distance_done": stm.distance_done,
         "relay_tx_frames": stm.relay_tx_frames,
@@ -755,6 +761,7 @@ class CompetitionPlanner:
             "stm_fresh": stm.fresh,
             "stm_age_ms": stm.age_ms if math.isfinite(stm.age_ms) else None,
             "stm_gripper_closed": stm.gripper_closed,
+            "stm_audit_valid": stm.audit_valid,
             "stm_ack": stm.acknowledged_sequence,
             "grab_initial_ack": self.mission.grab_initial_ack,
             "relay_last_mission_command": stm.relay_last_mission_command,
@@ -1101,6 +1108,7 @@ class CompetitionPlanner:
             "return_search_mode_seen": self.mission.return_search_mode_seen,
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
             "cargo_recheck_context": self.mission.cargo_recheck_context,
+            "post_grab_audit_active": self.mission.post_grab_audit_active,
             "audit_hits": self.mission.audit_hits,
             "invalid_release_side": self.mission.invalid_release_side,
             "invalid_release_final": self.mission.invalid_release_final,
