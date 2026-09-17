@@ -420,6 +420,60 @@ def danger_ahead(
     return True, "left" if cx < IMAGE_WIDTH * 0.5 else "right"
 
 
+def safe_zone_push_corridor(
+    cargo: tuple[TrackedCargo, ...],
+    safe_bbox: tuple[int, int, int, int] | None,
+    destination: str | None,
+    first_common_delivered: bool,
+) -> tuple[tuple[tuple[int, int], ...], TrackedCargo | None, int | None]:
+    if safe_bbox is None or destination not in {"material", "injury"}:
+        return (), None, None
+    x, y, width, height = safe_bbox
+    midpoint = x + width // 2
+    if destination == "injury":
+        entrance_left, entrance_right = midpoint, x + width
+    else:
+        entrance_left, entrance_right = x, midpoint
+    entrance_y = max(0, min(IMAGE_HEIGHT - 1, y + height))
+    front_y = IMAGE_HEIGHT - 1
+    front_half_width = max(80, min(180, width // 4))
+    polygon = (
+        (IMAGE_WIDTH // 2 - front_half_width, front_y),
+        (IMAGE_WIDTH // 2 + front_half_width, front_y),
+        (max(0, min(IMAGE_WIDTH - 1, entrance_right)), entrance_y),
+        (max(0, min(IMAGE_WIDTH - 1, entrance_left)), entrance_y),
+    )
+    contour = np.asarray(polygon, dtype=np.int32)
+    blocking_classes = (
+        CARGO_CLASSES
+        if not first_common_delivered else
+        frozenset({"danger_cyan", "injured_orange"})
+    )
+    candidates: list[tuple[int, TrackedCargo]] = []
+    for item in cargo:
+        if (
+            not item.visible or
+            item.inside_safe_zone or
+            item.class_name not in blocking_classes or
+            item.relative_xy_m is None or
+            item.relative_xy_m[1] <= 0.0
+        ):
+            continue
+        box_x, box_y, box_width, box_height = item.bbox
+        bottom_center = (
+            float(box_x + box_width * 0.5),
+            float(box_y + box_height),
+        )
+        if cv2.pointPolygonTest(contour, bottom_center, False) < 0:
+            continue
+        distance_mm = max(80, min(600, round(item.relative_xy_m[1] * 1000.0)))
+        candidates.append((distance_mm, item))
+    if not candidates:
+        return polygon, None, None
+    distance_mm, obstacle = min(candidates, key=lambda entry: (entry[0], entry[1].track_id))
+    return polygon, obstacle, distance_mm
+
+
 def make_vision_snapshot(
     detections,
     tracks,
@@ -524,6 +578,17 @@ def make_vision_snapshot(
     delivery_inside = bool(delivery_inside_ids)
     delivery_outside = bool(delivery_outside_ids)
     danger, side = danger_ahead(cargo, approach_target)
+    corridor_bbox = mission.locked_safe_bbox or safe_bbox
+    corridor_destination = (
+        mission.confirmed_delivery_destination or
+        (selected.destination if selected is not None else None)
+    )
+    corridor, corridor_obstacle, corridor_distance_mm = safe_zone_push_corridor(
+        cargo,
+        corridor_bbox,
+        corridor_destination,
+        mission.first_common_delivered,
+    )
     return VisionSnapshot(
         frame_sequence=frame_sequence,
         observed_monotonic_s=time.monotonic(),
@@ -540,6 +605,14 @@ def make_vision_snapshot(
         delivery_target_outside_track_ids=delivery_outside_ids,
         safe_zone_filter_blocked=safe_zone_filter_blocked,
         low_conf_green_seen=low_conf_green_seen,
+        safe_corridor_polygon=corridor,
+        safe_corridor_obstacle_class=(
+            None if corridor_obstacle is None else corridor_obstacle.class_name
+        ),
+        safe_corridor_obstacle_distance_mm=corridor_distance_mm,
+        safe_corridor_obstacle_track_id=(
+            None if corridor_obstacle is None else corridor_obstacle.track_id
+        ),
     )
 
 
@@ -1017,6 +1090,10 @@ class CompetitionPlanner:
             "safe_zone_visual_pixel_error": self.mission.safe_zone_visual_pixel_error,
             "safe_zone_visual_locked": self.mission.safe_zone_visual_locked,
             "safe_zone_fallback": self.mission.safe_zone_fallback,
+            "safe_sweep_attempts": self.mission.safe_sweep_attempts,
+            "safe_sweep_command_accepted": self.mission.safe_sweep_command_accepted,
+            "safe_sweep_execution_seen": self.mission.safe_sweep_execution_seen,
+            "safe_sweep_reaudit_active": self.mission.safe_sweep_reaudit_active,
             "enter_distance_source": "f407_encoder",
             "carried_manifest": list(self.mission.carried_manifest),
             "carried_total_count": self.mission.carried_total_count,
@@ -1047,6 +1124,10 @@ class CompetitionPlanner:
                 "delivery_target_inside_safe_zone": vision.delivery_target_inside_safe_zone,
                 "delivery_target_outside_safe_zone": vision.delivery_target_outside_safe_zone,
                 "safe_zone_filter_blocked": vision.safe_zone_filter_blocked,
+                "safe_corridor_polygon": [list(point) for point in vision.safe_corridor_polygon],
+                "safe_corridor_obstacle_class": vision.safe_corridor_obstacle_class,
+                "safe_corridor_obstacle_distance_mm": vision.safe_corridor_obstacle_distance_mm,
+                "safe_corridor_obstacle_track_id": vision.safe_corridor_obstacle_track_id,
                 "low_conf_green_seen": vision.low_conf_green_seen,
             },
             "initial_stash_done": self.mission.initial_stash_done,
@@ -1317,6 +1398,15 @@ def draw_overlay(
             2,
             cv2.LINE_AA,
         )
+    if vision.safe_corridor_polygon:
+        corridor = np.asarray(
+            [
+                (round(x * scale_x), round(y * scale_y))
+                for x, y in vision.safe_corridor_polygon
+            ],
+            dtype=np.int32,
+        )
+        cv2.polylines(view, [corridor], True, (255, 255, 0), 2, cv2.LINE_AA)
     selected_ids = set(output.batch.track_ids) if output.batch is not None else set()
     for item in vision.cargo:
         x, y, box_width, box_height = item.bbox

@@ -151,13 +151,13 @@ selected_batch；非法审核继续分离。
 selected_batch、cluster上下文、侧向结果、旧track和frame floor，再进入SEARCH。无侧DISPERSE仍
 只表示12°观察转向，最多两次，不得恢复撞击流程。
 
-正式夹内审核第一次无法判断物资左右归属时，兼容命令仍使用`separate_then_search`上下文，但它是观察动作而不是最终释放：
+正式夹内审核第一次无法判断物资左右归属时，`separate_then_search`上下文使用无侧DISPERSE观察，不能复用最终双开的RELEASE_BOTH：
 
 ```text
 第一次不明侧审核
-→ RELEASE_BOTH(separate_then_search)
+→ DISPERSE_PILE（不置SIDE_VALID/TARGET_RIGHT）
 → F407执行兼容性的12°观察转向并上报mode=35
-→ 上位机确认该RELEASE_BOTH经过relay发送且ACK曾变化，永久锁存本次接受证据
+→ 上位机确认该DISPERSE经过relay发送且ACK曾变化，永久锁存本次接受证据
 → 保留selected_batch，累计一次观察次数并进入CAPTURE_AUDIT
 → 只使用mode35后的新夹爪ROI帧重新发送CARGO_AUDIT
 → 可以分侧时发送DISPERSE_PILE|SIDE_VALID，保留右侧时再置TARGET_RIGHT
@@ -169,7 +169,7 @@ selected_batch、cluster上下文、侧向结果、旧track和frame floor，再�
 明确可判断单侧异常的`RELEASE_LEFT/RIGHT`仍保留原YIELD后夹内复审流程；临时藏堆到点后的
 `RELEASE_BOTH`仍使用藏堆释放和返中流程，不属于撞分。
 
-兼容观察与两种DISPERSE都在mode35后进入`CAPTURE_AUDIT`；最终RELEASE_BOTH只有在两次观察后仍
+无侧观察与带侧DISPERSE都在mode35后进入`CAPTURE_AUDIT`；最终RELEASE_BOTH只有在两次观察后仍
 不能分侧时才执行，并在mode34后直接清空批次回SEARCH。
 
 ### 4. 正式安全区投送（2026-09-15新流程）
@@ -183,9 +183,9 @@ selected_batch、cluster上下文、侧向结果、旧track和frame floor，再�
 
 `NAVIGATE_WAYPOINT`的`P1 bit6=STAGE_ONLY`。进入预备点容差后，上位机持续发送
 `P1=VALID|DISTANCE_VALID|STAGE_ONLY|RED_SIDE(按阵营)`、`D=0`，H仍为当前位置到预备点航向，
-不置DRIVE_STRAIGHT或USE_FINAL_HEADING。上位机永久锁存本阶段D=0经过relay发送且ACK曾变化的证据；
-只有锁存成立、新鲜mode10、`DISTANCE_DONE=1`且`GRIPPER_CLOSED=1`后才发送ALIGN，不在最终时刻重新
-比较8位ACK。F407到`D=0`后只停车、置`DISTANCE_DONE`、把摄像头命令到120°并保持mode10，
+不置DRIVE_STRAIGHT或USE_FINAL_HEADING。新鲜mode10、`DISTANCE_DONE=1`且`GRIPPER_CLOSED=1`
+即可锁存预备点完成并发送ALIGN，不再把当前8位ACK与阶段初始ACK比较作为永久门槛。F407到`D=0`
+后只停车、置`DISTANCE_DONE`、把摄像头命令到120°并保持mode10，
 不得启动旧的安全区最后补推。随后上位机分两次使用`ALIGN_SAFE_ZONE=0x04`：
 
 正式投送从WAITNAV驶往预备点的`D>0`阶段也保持同一精简flags：蓝方`0x51`、红方`0x59`；普通NAV、
@@ -199,6 +199,12 @@ selected_batch、cluster上下文、侧向结果、旧track和frame floor，再�
    `P1 bit6=VISUAL_CORRECTION_VALID`，`P2/P3=目标点X-640`的有符号像素误差。F407只在首次收到
    该上下文时把像素误差换算为相对转角，重复的新SEQ帧只ACK、不得重复累加转角；执行期间报告
    mode10，转向完成后重新报告mode11并锁存最终推进航向。
+
+第二次视觉ALIGN完成后，上位机检查车头到对应安全半区入口之间的推进走廊，并排除安全区框内目标。
+首件正式绿色投送时走廊内任意物体触发`CLEAR_SAFE_ZONE=0x13`；之后只在危险物或伤员挡路时触发。
+`P2/P3`为80～600 mm前进距离，`P4/P5`为暂放横移（物资/核心`+150`，伤员`-150`），`P6/P7=0`。
+上位机持续发送到ACK且看到mode39；F407重新夹回原货物进入mode23后重新完成3个不同audit_id审核，
+合法后进入mode40。mode40不能直接ENTER，必须重新执行定位ALIGN和视觉ALIGN。每趟最多扫障2次。
 
 如果第一次定位对正完成后的5秒内没有形成连续3帧安全区，上位机跳过第二次视觉修正，直接使用
 红方90°或蓝方270°的定位正方向推进；这是唯一新增超时，不得再增加视觉漏帧或对正超时。
@@ -331,6 +337,7 @@ A3 B3 18 SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
 | `DISPERSE_PILE` | `0x10` | 0 | 0 | 0 |
 | `CHANGE_LANE` | `0x11` | 有符号横移距离mm | 有符号前进距离mm | 0 |
 | `CARGO_AUDIT` | `0x12` | 左爪类别码 | 右爪类别码 | 审核信息 |
+| `CLEAR_SAFE_ZONE` | `0x13` | 前进距离80～600 mm | 暂放横移±150 mm | 0 |
 
 `CARGO_AUDIT`类别码：`0=空`、`1=普通`、`2=核心`、`3=伤员`、`4=危险`、`5=未知`、`6=普通+核心混合`。
 
@@ -405,7 +412,7 @@ F407应在执行层再次拒绝下列情况：
 ```text
 CAPTURE_AUDIT
   → 能判断异常侧：RELEASE_LEFT/RIGHT → mode=32/33 → YIELD_BACKOFF → mode=30 → 复审
-  → 第一次不能判断左右：RELEASE_BOTH(separate_then_search) → 12°观察 → mode=35
+  → 第一次不能判断左右：无侧DISPERSE_PILE → 12°观察 → mode=35
   → 保留selected_batch，只使用动作后的新ROI帧发送CARGO_AUDIT复审
   → 可以分侧：DISPERSE_PILE|SIDE_VALID → mode=35 → 再复审
   → 仍不能分侧且累计少于2次：无侧DISPERSE_PILE → mode=35 → 再复审
@@ -447,7 +454,14 @@ T265平移、T265航向和有效编码器进展时，才请求一次`YIELD_BACKO
 36 LANE_DONE
 37 CLUSTER_READY
 38 CLUSTER_CAPTURE_AUDIT
+39 SAFE_SWEEP
+40 SAFE_SWEEP_DONE
+41 BOUNDARY_RECOVER
 ```
+
+mode41由F407按普通阶段距地图边300 mm、ENTER推进距边50 mm的本地阈值触发。上位机收到后清除
+当前批次、track、审核、NAV/ALIGN/ENTER和扫障上下文，只发送HOLD而不重发旧动作；F407完成转向
+中心并回mode3后，上位机从动作后的新视觉帧重新SEARCH。
 
 退让和脱困期间必须有运动看门狗；如果电流、轮速、碰撞或机构故障已经明确，直接停车，不应继续旋转。
 

@@ -37,6 +37,7 @@ CMD_RELEASE_BOTH = 0x0F
 CMD_DISPERSE_PILE = 0x10
 CMD_CHANGE_LANE = 0x11
 CMD_CARGO_AUDIT = 0x12
+CMD_CLEAR_SAFE_ZONE = 0x13
 
 CMD_VALID = 1 << 0
 CMD_DRIVE_STRAIGHT = 1 << 1
@@ -156,6 +157,16 @@ def mission_frame(
             aux_cdeg != fallback_heading
         ):
             raise ValueError("fallback ENTER must use the side heading")
+    if command == CMD_CLEAR_SAFE_ZONE:
+        allowed_flags = CMD_VALID | CMD_RED_SIDE
+        if flags & ~allowed_flags or not flags & CMD_VALID:
+            raise ValueError("CLEAR_SAFE_ZONE only allows CMD_VALID and RED_SIDE")
+        if not 80 <= arg_a <= 600:
+            raise ValueError("CLEAR_SAFE_ZONE forward distance must be 80..600 mm")
+        if abs(arg_b) != 150:
+            raise ValueError("CLEAR_SAFE_ZONE lateral offset must be +150 or -150 mm")
+        if aux_cdeg != 0:
+            raise ValueError("CLEAR_SAFE_ZONE P6/P7 must be zero")
     payload = (
         bytes((command, flags))
         + _i16be(arg_a, "arg_a")

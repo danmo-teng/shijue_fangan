@@ -21,7 +21,7 @@ from protocol import (
     CMD_ALIGN_SAFE_ZONE,
     CMD_APPROACH_TARGET,
     CMD_CARGO_AUDIT,
-    CMD_CHANGE_LANE,
+    CMD_CLEAR_SAFE_ZONE,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISTANCE_VALID,
@@ -78,6 +78,9 @@ STM_MODE_DISPERSE_DONE = 35
 STM_MODE_LANE_DONE = 36
 STM_MODE_CLUSTER_READY = 37
 STM_MODE_CLUSTER_CAPTURE_AUDIT = 38
+STM_MODE_SAFE_SWEEP = 39
+STM_MODE_SAFE_SWEEP_DONE = 40
+STM_MODE_BOUNDARY_RECOVER = 41
 
 
 def angle_error_deg(target: float, current: float) -> float:
@@ -277,6 +280,10 @@ class VisionSnapshot:
     delivery_target_outside_track_ids: tuple[int, ...] = ()
     safe_zone_filter_blocked: bool = False
     low_conf_green_seen: bool = False
+    safe_corridor_polygon: tuple[tuple[int, int], ...] = ()
+    safe_corridor_obstacle_class: str | None = None
+    safe_corridor_obstacle_distance_mm: int | None = None
+    safe_corridor_obstacle_track_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -358,6 +365,9 @@ class CompetitionState(str, Enum):
     ALIGN_SAFE_ZONE_BY_POSE = "ALIGN_SAFE_ZONE_BY_POSE"
     ACQUIRE_SAFE_ZONE = "ACQUIRE_SAFE_ZONE"
     ALIGN_SAFE_ZONE_BY_LOCKED_BOX = "ALIGN_SAFE_ZONE_BY_LOCKED_BOX"
+    SAFE_ZONE_CORRIDOR_CHECK = "SAFE_ZONE_CORRIDOR_CHECK"
+    CLEAR_SAFE_ZONE = "CLEAR_SAFE_ZONE"
+    WAIT_SAFE_ZONE_CLEAR = "WAIT_SAFE_ZONE_CLEAR"
     ENTER_SAFE_ZONE = "ENTER_SAFE_ZONE"
     DELIVERY_VERIFY = "DELIVERY_VERIFY"
     TASK_COMPLETE = "TASK_COMPLETE"
@@ -607,6 +617,15 @@ class CompetitionMission:
         self.safe_zone_visual_pixel_error = 0
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
+        self.safe_corridor_frame_floor: int | None = None
+        self.safe_corridor_last_frame_sequence: int | None = None
+        self.safe_sweep_attempts = 0
+        self.safe_sweep_command: CommandRequest | None = None
+        self.safe_sweep_initial_ack: int | None = None
+        self.safe_sweep_tx_baseline: int | None = None
+        self.safe_sweep_command_accepted = False
+        self.safe_sweep_execution_seen = False
+        self.safe_sweep_reaudit_active = False
         self.delivery_outside_seen = False
         self.delivery_inside_hits = 0
         self.delivery_visual_confirmed = False
@@ -750,6 +769,12 @@ class CompetitionMission:
                 self.safe_zone_visual_align_initial_ack = None
                 self.safe_zone_visual_align_tx_baseline = None
                 self.safe_zone_visual_align_command_accepted = False
+            if state != CompetitionState.CLEAR_SAFE_ZONE:
+                self.safe_sweep_command = None
+                self.safe_sweep_initial_ack = None
+                self.safe_sweep_tx_baseline = None
+                self.safe_sweep_command_accepted = False
+                self.safe_sweep_execution_seen = False
             if state != CompetitionState.NAVIGATE:
                 self.staging_zero_initial_ack = None
                 self.staging_zero_tx_baseline = None
@@ -923,7 +948,12 @@ class CompetitionMission:
         if self.state == CompetitionState.GRAB:
             return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_READY, STM_MODE_POST_GRAB_AUDIT)
         if self.state == CompetitionState.POST_GRAB_AUDIT:
-            return (STM_MODE_POST_GRAB_AUDIT, STM_MODE_CAPTURE_DONE, STM_MODE_SEARCH)
+            return (
+                STM_MODE_POST_GRAB_AUDIT,
+                STM_MODE_CAPTURE_DONE,
+                STM_MODE_SAFE_SWEEP_DONE,
+                STM_MODE_SEARCH,
+            )
         if self.state in {
             CompetitionState.INITIAL_STASH_NAV,
             CompetitionState.NAVIGATE,
@@ -933,8 +963,16 @@ class CompetitionMission:
             CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
             CompetitionState.ACQUIRE_SAFE_ZONE,
             CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+            CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+            CompetitionState.WAIT_SAFE_ZONE_CLEAR,
         }:
             return (STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE)
+        if self.state == CompetitionState.CLEAR_SAFE_ZONE:
+            return (
+                STM_MODE_ALIGN_SAFE_ZONE,
+                STM_MODE_SAFE_SWEEP,
+                STM_MODE_POST_GRAB_AUDIT,
+            )
         if self.state in {
             CompetitionState.ENTER_SAFE_ZONE,
             CompetitionState.DELIVERY_VERIFY,
@@ -961,8 +999,6 @@ class CompetitionMission:
                 "right": STM_MODE_RELEASE_RIGHT_DONE,
                 "both": STM_MODE_RELEASE_BOTH_DONE,
             }[self.invalid_release_side],)
-        if self.state == CompetitionState.DETOUR:
-            return (STM_MODE_REMOTE_ACTION, STM_MODE_LANE_DONE)
         if self.state == CompetitionState.INVALID_BACKOFF:
             return (STM_MODE_YIELD_DONE,)
         if self.state in {
@@ -1069,6 +1105,7 @@ class CompetitionMission:
         self.confirmed_delivery_destination = None
         self.post_grab_audit_active = False
         self.post_grab_camera_ready = None
+        self.safe_sweep_reaudit_active = False
         self._clear_disperse_side_votes()
         self.locked_target_track_id = None
         self.target_missing_frames = 0
@@ -1713,7 +1750,7 @@ class CompetitionMission:
         self.pending_audit_signature = self._audit_signature_for_state(
             audit, valid
         )
-        self.pending_audit_frame_sequence = None
+        self.pending_audit_frame_sequence = self.audit_last_frame_sequence
         self.pending_audit_observed_s = now
         self.pending_audit_tx_baseline = stm.relay_mission_tx_frames
         self.pending_audit_initial_ack = (
@@ -1789,6 +1826,26 @@ class CompetitionMission:
             )
             if camera_edge or stm.camera_pitch_cdeg != 14000:
                 return self._audit_output(vision, stm, now)
+        if (
+            self.pending_audit_valid and
+            not stm.audit_valid and
+            self._vision_fresh(vision, now) and
+            vision.frame_sequence > 0 and
+            vision.frame_sequence != self.pending_audit_frame_sequence and
+            stm.mode in {
+                STM_MODE_CAPTURE_AUDIT,
+                STM_MODE_CLUSTER_READY,
+                STM_MODE_POST_GRAB_AUDIT,
+            }
+        ):
+            post_grab = self.pending_audit_release_context == "post_grab_valid"
+            self._clear_pending_audit()
+            self._set_state(
+                CompetitionState.POST_GRAB_AUDIT
+                if post_grab else CompetitionState.CAPTURE_AUDIT,
+                now,
+            )
+            return self._audit_output(vision, stm, now)
         if self.pending_audit_release_context == "cluster_capture":
             if (
                 self._relay_sent_since(
@@ -1909,12 +1966,17 @@ class CompetitionMission:
                 ),
             )
         if self.pending_audit_release_context == "post_grab_valid":
+            expected_done_mode = (
+                STM_MODE_SAFE_SWEEP_DONE
+                if self.safe_sweep_reaudit_active else
+                STM_MODE_CAPTURE_DONE
+            )
             if (
                 self._relay_sent_since(
                     stm, stable_command, self.pending_audit_tx_baseline
                 ) and
                 self._fresh_mode_after(
-                    stm, STM_MODE_CAPTURE_DONE, self.pending_audit_initial_ack
+                    stm, expected_done_mode, self.pending_audit_initial_ack
                 ) and
                 stm.gripper_closed and
                 stm.audit_valid
@@ -1924,6 +1986,20 @@ class CompetitionMission:
                 self._latch_carried_manifest(audit)
                 self.post_grab_audit_active = False
                 self.post_grab_camera_ready = None
+                if self.safe_sweep_reaudit_active:
+                    self.safe_sweep_reaudit_active = False
+                    self._begin_safe_zone_pose_align(stm, now)
+                    return CompetitionOutput(
+                        self.state,
+                        self._safe_zone_pose_align_command(),
+                        "扫障后3帧审核合法且F407进入mode40，重新执行定位ALIGN",
+                        self.selected_batch,
+                        audit,
+                        event="safe_zone_clear_realign_start",
+                        tx_policy="normal_command",
+                        reason="safe_zone_clear_realign_start",
+                        expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                    )
                 self.grab_complete_confirmed = True
                 self._set_state(CompetitionState.GRAB, now)
                 return CompetitionOutput(
@@ -1954,6 +2030,7 @@ class CompetitionMission:
                 expected_stm_modes=(
                     STM_MODE_POST_GRAB_AUDIT,
                     STM_MODE_CAPTURE_DONE,
+                    STM_MODE_SAFE_SWEEP_DONE,
                 ),
             )
         if self.pending_audit_release_context == "post_grab_invalid":
@@ -2013,12 +2090,17 @@ class CompetitionMission:
                 tx_policy="pause",
                 reason="audit_visual_stale",
             )
+        audit_confirm_mode = (
+            STM_MODE_SAFE_SWEEP_DONE
+            if self.pending_audit_valid and self.safe_sweep_reaudit_active else
+            STM_MODE_CAPTURE_AUDIT
+        )
         if (
             self._relay_sent_since(
                 stm, stable_command, self.pending_audit_tx_baseline
             ) and
             self._fresh_mode_after(
-                stm, STM_MODE_CAPTURE_AUDIT, self.pending_audit_initial_ack
+                stm, audit_confirm_mode, self.pending_audit_initial_ack
             ) and
             (not self.pending_audit_valid or stm.audit_valid)
         ):
@@ -2029,6 +2111,24 @@ class CompetitionMission:
             release_context = self.pending_audit_release_context
             self._clear_pending_audit()
             if valid:
+                if self.safe_sweep_reaudit_active:
+                    self._latch_carried_manifest(audit)
+                    self.safe_sweep_reaudit_active = False
+                    self.post_grab_audit_active = False
+                    self.cargo_recheck_pending = False
+                    self.cargo_recheck_context = "none"
+                    self._begin_safe_zone_pose_align(stm, now)
+                    return CompetitionOutput(
+                        self.state,
+                        self._safe_zone_pose_align_command(),
+                        "扫障分离复审合法且F407进入mode40，重新执行定位ALIGN",
+                        self.selected_batch,
+                        audit,
+                        event="safe_zone_clear_realign_start",
+                        tx_policy="normal_command",
+                        reason="safe_zone_clear_realign_start",
+                        expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                    )
                 self.post_grab_audit_active = False
                 self.cargo_recheck_pending = False
                 self.cargo_recheck_context = "none"
@@ -2870,7 +2970,7 @@ class CompetitionMission:
         side = self.invalid_release_side
         release_command = self._invalid_release_command()
         if self.invalid_release_context == "separate_then_search":
-            message = "首次无法判断左右归属，发送兼容RELEASE_BOTH执行12°观察转向"
+            message = "首次无法判断左右归属，发送无侧DISPERSE执行12°观察转向"
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",
@@ -2903,6 +3003,11 @@ class CompetitionMission:
         )
 
     def _invalid_release_command(self) -> CommandRequest:
+        if (
+            self.invalid_release_context == "separate_then_search" and
+            not self.invalid_release_final
+        ):
+            return CommandRequest(CMD_DISPERSE_PILE, self._side_flags())
         opcode = {
             "left": CMD_RELEASE_LEFT,
             "right": CMD_RELEASE_RIGHT,
@@ -3022,6 +3127,15 @@ class CompetitionMission:
         self.safe_zone_visual_pixel_error = 0
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
+        self.safe_corridor_frame_floor = None
+        self.safe_corridor_last_frame_sequence = None
+        self.safe_sweep_attempts = 0
+        self.safe_sweep_command = None
+        self.safe_sweep_initial_ack = None
+        self.safe_sweep_tx_baseline = None
+        self.safe_sweep_command_accepted = False
+        self.safe_sweep_execution_seen = False
+        self.safe_sweep_reaudit_active = False
 
     def _safe_zone_pose_align_command(self) -> CommandRequest:
         return CommandRequest(
@@ -3037,6 +3151,87 @@ class CompetitionMission:
             max(-32768, min(32767, self.safe_zone_visual_pixel_error)),
             0,
         )
+
+    def _begin_safe_corridor_check(
+        self, vision: VisionSnapshot, now: float
+    ) -> None:
+        self.safe_corridor_frame_floor = (
+            vision.frame_sequence if vision.frame_sequence > 0 else None
+        )
+        self.safe_corridor_last_frame_sequence = None
+        self._set_state(CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, now)
+
+    def _start_safe_zone_clear(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput:
+        distance_mm = vision.safe_corridor_obstacle_distance_mm
+        assert distance_mm is not None
+        destination = (
+            self.confirmed_delivery_destination or
+            (self.selected_batch.destination if self.selected_batch else None)
+        )
+        lateral_mm = -150 if destination == "injury" else 150
+        self.safe_sweep_command = CommandRequest(
+            CMD_CLEAR_SAFE_ZONE,
+            self._side_flags(),
+            max(80, min(600, int(distance_mm))),
+            lateral_mm,
+            0,
+        )
+        self.safe_sweep_initial_ack = stm.acknowledged_sequence
+        self.safe_sweep_tx_baseline = stm.relay_mission_tx_frames
+        self.safe_sweep_command_accepted = False
+        self.safe_sweep_execution_seen = False
+        self.safe_sweep_attempts += 1
+        self._set_state(CompetitionState.CLEAR_SAFE_ZONE, now)
+        return CompetitionOutput(
+            self.state,
+            self.safe_sweep_command,
+            f"安全区推进走廊发现{vision.safe_corridor_obstacle_class}，执行第{self.safe_sweep_attempts}次扫障",
+            self.selected_batch,
+            event="safe_zone_clear_start",
+            motion_expected=True,
+            tx_policy="normal_command",
+            reason="safe_zone_corridor_blocked",
+            expected_stm_modes=(STM_MODE_SAFE_SWEEP,),
+        )
+
+    def _clear_for_boundary_recovery(
+        self, vision: VisionSnapshot, now: float
+    ) -> None:
+        self._clear_pending_audit()
+        self._clear_selected_batch()
+        self._clear_carried_manifest()
+        self._clear_cluster_context(reset_attempts=True)
+        self.cargo_recheck_pending = False
+        self.cargo_recheck_context = "none"
+        self.audit_hits = 0
+        self.audit_last_signature = None
+        self.audit_last_frame_sequence = None
+        self.audit_recheck_frame_floor = None
+        self.audit_recheck_started_s = None
+        self.last_selected_track_ids = ()
+        self.target_last_seen_s = None
+        self.target_last_center_px = None
+        self.target_last_area_px = None
+        self.target_last_class = None
+        self.navigation_initial_ack = None
+        self.enter_initial_ack = None
+        self.enter_tx_baseline = None
+        self.enter_command_accepted = False
+        self.task_complete_initial_ack = None
+        self.return_initial_ack = None
+        self.return_relay_tx_baseline = None
+        self.return_command_accepted = False
+        self.safe_zone_exit_pending = False
+        self.resume_state = None
+        self._reset_motion_watch()
+        self._reset_safe_zone_alignment()
+        self._reset_delivery_evidence()
+        self.search_epoch_frame_floor = (
+            vision.frame_sequence if vision.frame_sequence > 0 else None
+        )
+        self._set_state(CompetitionState.BOUNDARY_RECOVERY, now)
 
     def _begin_safe_zone_pose_align(self, stm: StmSnapshot, now: float) -> None:
         self.safe_zone_align_initial_ack = (
@@ -3397,83 +3592,6 @@ class CompetitionMission:
             stm.acknowledged_sequence != self.return_initial_ack
         ):
             self.return_command_accepted = True
-
-    def _outside_field(self, pose: PoseSnapshot) -> bool:
-        if not pose.valid:
-            return False
-        limit = FIELD_HALF_M - self.settings.boundary_margin_m
-        return abs(pose.x_m) > limit or abs(pose.y_m) > limit
-
-    def _boundary_risk(self, pose: PoseSnapshot, target: tuple[float, float]) -> bool:
-        if not pose.valid:
-            return False
-        # Keep the chassis centre inside the field by its 130 mm radius plus
-        # the configured stopping margin. Only trigger when the requested
-        # target continues toward the boundary; a route from the start corner
-        # inward to the stash point remains allowed.
-        limit = FIELD_HALF_M - 0.130 - self.settings.boundary_margin_m
-        for coordinate, destination in ((pose.x_m, target[0]), (pose.y_m, target[1])):
-            if abs(coordinate) <= limit:
-                continue
-            if coordinate > 0.0 and destination > coordinate:
-                return True
-            if coordinate < 0.0 and destination < coordinate:
-                return True
-        return False
-
-    def _boundary_recovery_output(self, pose: PoseSnapshot, now: float) -> CompetitionOutput:
-        if not pose.valid:
-            return CompetitionOutput(
-                self.state,
-                self._pause(),
-                "接近场地边缘但定位无效，冻结当前阶段等待定位恢复",
-                self.selected_batch,
-                event="boundary_hold",
-                tx_policy="pause",
-                reason="boundary_pose_stale",
-            )
-        distance = min(0.35, math.hypot(pose.x_m, pose.y_m))
-        heading = math.degrees(math.atan2(-pose.y_m, -pose.x_m)) % 360.0
-        return CompetitionOutput(
-            self.state,
-            CommandRequest(
-                CMD_NAVIGATE_WAYPOINT,
-                self._side_flags() | (1 << 1) | (1 << 2) | (1 << 4),
-                round(distance * 1000.0),
-                0,
-                round(heading * 100.0) % 36000,
-            ),
-            "接近场地边缘，转向场地内部",
-            self.selected_batch,
-            event="boundary_recovery",
-            motion_expected=True,
-        )
-
-    def _start_detour(
-        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
-    ) -> CompetitionOutput:
-        self.danger_event_latched = True
-        self.danger_clear_frames = 0
-        self.resume_state = self.state
-        self._set_state(CompetitionState.DETOUR, now)
-        self._arm_detour(stm, now)
-        lateral = self.settings.detour_lateral_m
-        if vision.danger_side == "right":
-            lateral = abs(lateral)
-        elif vision.danger_side == "left":
-            lateral = -abs(lateral)
-        self.detour_lateral_m = lateral
-        return CompetitionOutput(
-            self.state,
-            CommandRequest(CMD_CHANGE_LANE, CMD_VALID, round(lateral * 1000.0), 0),
-            f"前方危险目标，向{('左' if lateral > 0 else '右')}侧换道",
-            self.selected_batch,
-            event="danger_detour",
-            motion_expected=True,
-            tx_policy="normal_command",
-            reason="danger_detour",
-            expected_stm_modes=(STM_MODE_LANE_DONE,),
-        )
 
     def _update_danger_event(self, vision: VisionSnapshot, now: float) -> None:
         if self.state == CompetitionState.DETOUR or not self._vision_fresh(vision, now):
@@ -4148,13 +4266,6 @@ class CompetitionMission:
         navigation_accepted = self._fresh_mode_after(
             stm, STM_MODE_NAVIGATE, self.navigation_initial_ack
         )
-        if self._outside_field(pose):
-            self._set_state(CompetitionState.FAULT, now)
-            return CompetitionOutput(self.state, CommandRequest(CMD_ABORT, self._side_flags()), "超出场地边界，安全停车", self.selected_batch, event="boundary_fault")
-        if self._boundary_risk(pose, target):
-            self.resume_state = self.state
-            self._set_state(CompetitionState.BOUNDARY_RECOVERY, now)
-            return self._boundary_recovery_output(pose, now)
         if self.selected_batch.destination != "stash":
             staging_command = self._navigation_command(
                 pose, target, staging_only=True
@@ -4170,11 +4281,9 @@ class CompetitionMission:
                 if (
                     not self.staging_zero_accepted and
                     stm.fresh and
-                    self.staging_zero_initial_ack is not None and
-                    self._relay_sent_stage_zero_since(
-                        stm, self.staging_zero_tx_baseline
-                    ) and
-                    stm.acknowledged_sequence != self.staging_zero_initial_ack
+                    stm.mode == STM_MODE_NAVIGATE and
+                    stm.distance_done and
+                    stm.gripper_closed
                 ):
                     self.staging_zero_accepted = True
                 staging_done = (
@@ -4540,6 +4649,42 @@ class CompetitionMission:
             )
         self.stm_fault_waiting = False
 
+        if stm.mode == STM_MODE_BOUNDARY_RECOVER:
+            if self.state != CompetitionState.BOUNDARY_RECOVERY:
+                self._clear_for_boundary_recovery(vision, now)
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "F407已触发300 mm边界恢复，清除旧任务并等待转向中心后回SEARCH",
+                event="f407_boundary_recovery",
+                tx_policy="hold",
+                reason="f407_boundary_recovery",
+                expected_stm_modes=(STM_MODE_BOUNDARY_RECOVER, STM_MODE_SEARCH),
+            )
+        if self.state == CompetitionState.BOUNDARY_RECOVERY:
+            if stm.mode == STM_MODE_SEARCH:
+                self._set_state(CompetitionState.SEARCH, now)
+                self.search_epoch_frame_floor = (
+                    vision.frame_sequence if vision.frame_sequence > 0 else None
+                )
+                return CompetitionOutput(
+                    self.state,
+                    self._hold(),
+                    "F407边界转向完成，从动作后的新视觉帧重新SEARCH",
+                    event="f407_boundary_recovery_done",
+                    tx_policy="hold",
+                    reason="f407_boundary_recovery_done",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
+                )
+            return CompetitionOutput(
+                self.state,
+                self._hold(),
+                "等待F407完成边界转向并回mode3",
+                tx_policy="hold",
+                reason="f407_boundary_recovery_wait",
+                expected_stm_modes=(STM_MODE_BOUNDARY_RECOVER, STM_MODE_SEARCH),
+            )
+
         stuck_output = self._stuck_recovery_output(pose, stm, now)
         if stuck_output is not None:
             return stuck_output
@@ -4602,12 +4747,6 @@ class CompetitionMission:
             return self._disperse_output(vision, stm, now)
 
         if self.state == CompetitionState.APPROACH:
-            if (
-                self._vision_fresh(vision, now) and
-                vision.danger_ahead and
-                not self.danger_event_latched
-            ):
-                return self._start_detour(vision, stm, now)
             return self._approach_output(
                 vision,
                 stm,
@@ -4780,19 +4919,16 @@ class CompetitionMission:
                 self.safe_zone_visual_align_command_accepted
             ):
                 self.safe_zone_visual_locked = True
-                self.enter_initial_ack = stm.acknowledged_sequence
-                self.enter_tx_baseline = stm.relay_mission_tx_frames
-                self.enter_command_accepted = False
-                self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
+                self._begin_safe_corridor_check(vision, now)
                 return CompetitionOutput(
                     self.state,
-                    self._enter_safe_zone_command(),
-                    "冻结安全区分区点已对准，按锁存航向推进",
+                    visual_align_command,
+                    "第二次视觉ALIGN完成，建立安全半区入口推进走廊并检查障碍",
                     self.selected_batch,
-                    event="safe_zone_entry",
+                    event="safe_zone_corridor_check_start",
                     tx_policy="normal_command",
-                    reason="safe_zone_visual_push_start",
-                    expected_stm_modes=(STM_MODE_RAM_VERIFY,),
+                    reason="safe_zone_corridor_check_start",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
                 )
             return CompetitionOutput(
                 self.state,
@@ -4804,6 +4940,135 @@ class CompetitionMission:
                 expected_stm_modes=(
                     STM_MODE_NAVIGATE,
                     STM_MODE_ALIGN_SAFE_ZONE,
+                ),
+            )
+
+        if self.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK:
+            new_corridor_frame = (
+                self._vision_fresh(vision, now) and
+                vision.frame_sequence > 0 and
+                (
+                    self.safe_corridor_frame_floor is None or
+                    vision.frame_sequence > self.safe_corridor_frame_floor
+                ) and
+                vision.frame_sequence != self.safe_corridor_last_frame_sequence and
+                bool(vision.safe_corridor_polygon)
+            )
+            if not new_corridor_frame:
+                return CompetitionOutput(
+                    self.state,
+                    self._safe_zone_visual_align_command(),
+                    "保持第二次ALIGN结果，等待新的安全区推进走廊画面",
+                    self.selected_batch,
+                    tx_policy="normal_command",
+                    reason="safe_zone_corridor_frame_wait",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
+            self.safe_corridor_last_frame_sequence = vision.frame_sequence
+            if vision.safe_corridor_obstacle_class is not None:
+                if self.safe_sweep_attempts < 2:
+                    return self._start_safe_zone_clear(vision, stm, now)
+                self._set_state(CompetitionState.WAIT_SAFE_ZONE_CLEAR, now)
+                return CompetitionOutput(
+                    self.state,
+                    self._pause(),
+                    "本趟已完成2次扫障但推进走廊仍有阻挡，保持停车等待处理",
+                    self.selected_batch,
+                    event="safe_zone_clear_limit_reached",
+                    tx_policy="pause",
+                    reason="safe_zone_clear_limit_reached",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
+            self.enter_initial_ack = stm.acknowledged_sequence
+            self.enter_tx_baseline = stm.relay_mission_tx_frames
+            self.enter_command_accepted = False
+            self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
+            return CompetitionOutput(
+                self.state,
+                self._enter_safe_zone_command(),
+                "推进走廊已确认无须扫障，按锁存航向推进安全区",
+                self.selected_batch,
+                event="safe_zone_entry",
+                tx_policy="normal_command",
+                reason="safe_zone_visual_push_start",
+                expected_stm_modes=(STM_MODE_RAM_VERIFY,),
+            )
+
+        if self.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR:
+            new_corridor_frame = (
+                self._vision_fresh(vision, now) and
+                vision.frame_sequence > 0 and
+                vision.frame_sequence != self.safe_corridor_last_frame_sequence and
+                bool(vision.safe_corridor_polygon)
+            )
+            if new_corridor_frame:
+                self.safe_corridor_last_frame_sequence = vision.frame_sequence
+                if vision.safe_corridor_obstacle_class is None:
+                    self.enter_initial_ack = stm.acknowledged_sequence
+                    self.enter_tx_baseline = stm.relay_mission_tx_frames
+                    self.enter_command_accepted = False
+                    self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
+                    return CompetitionOutput(
+                        self.state,
+                        self._enter_safe_zone_command(),
+                        "人工处理后推进走廊已清空，解除PAUSE并进入安全区",
+                        self.selected_batch,
+                        event="safe_zone_clear_wait_resolved",
+                        tx_policy="normal_command",
+                        reason="safe_zone_clear_wait_resolved",
+                        expected_stm_modes=(STM_MODE_RAM_VERIFY,),
+                    )
+            return CompetitionOutput(
+                self.state,
+                self._pause(),
+                "扫障次数已达2次且走廊仍被阻挡，保持当前阶段停车",
+                self.selected_batch,
+                tx_policy="pause",
+                reason="safe_zone_clear_limit_wait",
+                expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+            )
+
+        if self.state == CompetitionState.CLEAR_SAFE_ZONE:
+            assert self.safe_sweep_command is not None
+            self.safe_sweep_command_accepted = self._command_acceptance_seen(
+                stm,
+                self.safe_sweep_command,
+                self.safe_sweep_tx_baseline,
+                self.safe_sweep_initial_ack,
+                self.safe_sweep_command_accepted,
+            )
+            if stm.fresh and stm.mode == STM_MODE_SAFE_SWEEP:
+                self.safe_sweep_execution_seen = True
+            if (
+                self.safe_sweep_command_accepted and
+                self.safe_sweep_execution_seen and
+                stm.fresh and
+                stm.mode == STM_MODE_POST_GRAB_AUDIT and
+                stm.gripper_closed and
+                stm.claw_visible
+            ):
+                self.safe_sweep_reaudit_active = True
+                self._begin_post_grab_audit(vision, now)
+                return self._audit_output(vision, stm, now)
+            return CompetitionOutput(
+                self.state,
+                self.safe_sweep_command,
+                (
+                    "F407正在mode39扫障并重新夹回原货物"
+                    if stm.mode == STM_MODE_SAFE_SWEEP else
+                    "持续发送CLEAR_SAFE_ZONE，等待本次ACK和mode39"
+                ),
+                self.selected_batch,
+                motion_expected=True,
+                tx_policy="normal_command",
+                reason=(
+                    "safe_zone_clear_running"
+                    if stm.mode == STM_MODE_SAFE_SWEEP else
+                    "safe_zone_clear_accept_wait"
+                ),
+                expected_stm_modes=(
+                    STM_MODE_SAFE_SWEEP,
+                    STM_MODE_POST_GRAB_AUDIT,
                 ),
             )
 
@@ -4928,36 +5193,13 @@ class CompetitionMission:
                 motion_expected=True,
             )
 
-        if self.state == CompetitionState.BOUNDARY_RECOVERY:
-            limit = FIELD_HALF_M - 0.130 - self.settings.boundary_margin_m
-            if pose.valid and abs(pose.x_m) <= limit and abs(pose.y_m) <= limit:
-                self._set_state(self.resume_state or CompetitionState.SEARCH, now)
-                return CompetitionOutput(self.state, self._hold(), "已回到场地安全区域，恢复原任务")
-            if self._outside_field(pose):
-                self._set_state(CompetitionState.FAULT, now)
-                return CompetitionOutput(self.state, CommandRequest(CMD_ABORT, self._side_flags()), "确认车辆越界，安全停车", self.selected_batch, event="boundary_fault")
-            return self._boundary_recovery_output(pose, now)
-
         if self.state == CompetitionState.RETURN_STASH:
-            if (
-                self._vision_fresh(vision, now) and
-                vision.danger_ahead and
-                not self.danger_event_latched
-            ):
-                return self._start_detour(vision, stm, now)
             return self._return_stash_output(pose, stm, now)
 
         if self.state == CompetitionState.WAIT_STASH_SEARCH_HANDOFF:
             return self._stash_search_handoff_output(stm, now)
 
         if self.state in {CompetitionState.INITIAL_STASH_NAV, CompetitionState.NAVIGATE}:
-            if (
-                self._vision_fresh(vision, now) and
-                vision.danger_ahead and
-                not self.danger_event_latched and
-                not (self.selected_batch and self.selected_batch.initial_stash)
-            ):
-                return self._start_detour(vision, stm, now)
             return self._navigate(vision, pose, stm, now)
 
         if self.state == CompetitionState.INITIAL_RELEASE:
@@ -4992,40 +5234,6 @@ class CompetitionMission:
                 tx_policy="normal_command",
                 reason="initial_stash_release_pending",
                 expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE,),
-            )
-
-        if self.state == CompetitionState.DETOUR:
-            detour_command = CommandRequest(
-                CMD_CHANGE_LANE,
-                CMD_VALID,
-                round(self.detour_lateral_m * 1000.0),
-                0,
-            )
-            self.detour_command_accepted = self._command_acceptance_seen(
-                stm,
-                detour_command,
-                self.detour_tx_baseline,
-                self.detour_initial_ack,
-                self.detour_command_accepted,
-            )
-            if stm.fresh and stm.mode == STM_MODE_REMOTE_ACTION:
-                self.detour_execution_seen = True
-            if (
-                stm.fresh and
-                stm.mode == STM_MODE_LANE_DONE and
-                self.detour_command_accepted
-            ):
-                self._set_state(self.resume_state or CompetitionState.NAVIGATE, now)
-                return CompetitionOutput(self.state, self._hold(), "换道完成，恢复原任务路线", self.selected_batch, event="detour_done")
-            return CompetitionOutput(
-                self.state,
-                detour_command,
-                "持续执行本次危险目标换道，等待新鲜mode=36",
-                self.selected_batch,
-                motion_expected=True,
-                tx_policy="normal_command",
-                reason="detour_completion_pending",
-                expected_stm_modes=(STM_MODE_LANE_DONE,),
             )
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
@@ -5107,15 +5315,6 @@ class CompetitionMission:
 
         if self.state == CompetitionState.RETURN_CENTER:
             self._latch_return_command_acceptance(stm)
-            if self._outside_field(pose):
-                self._set_state(CompetitionState.FAULT, now)
-                return CompetitionOutput(
-                    self.state,
-                    CommandRequest(CMD_ABORT, self._side_flags()),
-                    "返中过程中确认车辆越界，安全停车",
-                    self.selected_batch,
-                    event="boundary_fault",
-                )
             if (
                 stm.fresh and
                 stm.mode == STM_MODE_SEARCH and
