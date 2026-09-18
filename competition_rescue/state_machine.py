@@ -1677,6 +1677,11 @@ class CompetitionMission:
     def _audit_reacquire_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        resume_state = (
+            CompetitionState.INITIAL_OBSERVE
+            if self.settings.initial_stash_enabled and not self.initial_stash_done
+            else CompetitionState.SEARCH
+        )
         post_grab_recovery = (
             self.post_grab_audit_active or
             self.pending_audit_release_context.startswith("post_grab_")
@@ -1687,18 +1692,14 @@ class CompetitionMission:
         )
         self.grab_initial_ack = None
         if stm.mode == STM_MODE_SEARCH:
-            self._set_state(CompetitionState.SEARCH, now)
+            self._set_state(resume_state, now)
             self.search_epoch_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
             )
             return CompetitionOutput(
                 self.state,
                 self._hold(),
-                (
-                    "mode23有限视觉恢复仍未形成3帧审核，F407已双开回SEARCH"
-                    if post_grab_recovery else
-                    "近距离观察未确认夹内物资，F407已回到SEARCH"
-                ),
+                f"F407已回mode3，清除旧任务，等待新帧继续{resume_state.value}",
                 event=(
                     "post_grab_recovery_search"
                     if post_grab_recovery else
@@ -1709,7 +1710,7 @@ class CompetitionMission:
                 expected_stm_modes=(STM_MODE_SEARCH,),
             )
         self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
-        self.search_recovery_resume_state = CompetitionState.SEARCH
+        self.search_recovery_resume_state = resume_state
         return CompetitionOutput(
             self.state,
             self._hold(),
@@ -2423,6 +2424,11 @@ class CompetitionMission:
             counts[audit.right_class] += audit.right_count
         if self.selected_batch is None:
             return False
+        # Opening relocation is non-empty-pile handling, not formal sorting.
+        # Match F407 STASH_NONEMPTY before count/category/side checks, both
+        # before grabbing and in the mode23 post-grab audit.
+        if self.selected_batch.initial_stash:
+            return audit.total_count > 0
         if (
             audit.total_count <= 0 or
             audit.total_count > self.settings.max_batch_count or
@@ -2437,8 +2443,6 @@ class CompetitionMission:
             audit.injury_mixed
         ):
             return False
-        if self.selected_batch.initial_stash:
-            return audit.total_count > 0
         if not self.first_common_delivered:
             return (
                 audit.total_count == 1 and
@@ -4437,16 +4441,6 @@ class CompetitionMission:
                 )
             )
             if reached:
-                if not self._vision_fresh(vision, now):
-                    return CompetitionOutput(
-                        self.state,
-                        self._pause(),
-                        "到达藏点但视觉暂时过期，等待新鲜帧后再释放",
-                        self.selected_batch,
-                        tx_policy="pause",
-                        reason="initial_stash_release_vision_stale",
-                        expected_stm_modes=(STM_MODE_NAVIGATE,),
-                    )
                 self._set_state(CompetitionState.INITIAL_RELEASE, now)
                 self._arm_initial_release(stm, now)
                 return CompetitionOutput(self.state, CommandRequest(CMD_RELEASE_BOTH, self._side_flags()), "到达临时藏物资点，释放整批物资", self.selected_batch, event="stash_arrived")
@@ -5234,6 +5228,8 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.INVALID_RELEASE:
+            if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}:
+                return self._audit_reacquire_output(vision, stm, now)
             audit = vision.capture_audit or CargoAudit()
             observe_release = (
                 self.invalid_release_context == "separate_then_search" and
@@ -5332,6 +5328,8 @@ class CompetitionMission:
             return self._invalid_release_output(audit, stm, now)
 
         if self.state == CompetitionState.INVALID_BACKOFF:
+            if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}:
+                return self._audit_reacquire_output(vision, stm, now)
             yield_command = self._yield_command()
             self.invalid_backoff_command_accepted = self._command_acceptance_seen(
                 stm,

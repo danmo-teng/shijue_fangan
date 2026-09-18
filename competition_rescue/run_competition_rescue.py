@@ -1952,9 +1952,28 @@ def main() -> int:
                     next_vision = now + 1.0 / args.vision_fps
                     last_inference_id = packet.frame_id
                     if packet.pixel_format == "nv12":
-                        detections, timing = detector.infer_nv12(
-                            packet.image, IMAGE_WIDTH, IMAGE_HEIGHT, scaler
-                        )
+                        if scaler is not None:
+                            try:
+                                detections, timing = detector.infer_nv12(
+                                    packet.image, IMAGE_WIDTH, IMAGE_HEIGHT, scaler
+                                )
+                            except RuntimeError as error:
+                                if args.preprocess != "auto" or "VSE缩放失败" not in str(error):
+                                    raise
+                                events.write("vse_runtime_cpu_fallback", {
+                                    "error": str(error),
+                                    "frame_sequence": packet.frame_id,
+                                    "action": "continue_inference_with_cpu",
+                                })
+                                scaler.close()
+                                scaler = None
+                                detections, timing = detector.infer(
+                                    cv2.cvtColor(packet.image, cv2.COLOR_YUV2BGR_NV12)
+                                )
+                        else:
+                            detections, timing = detector.infer(
+                                cv2.cvtColor(packet.image, cv2.COLOR_YUV2BGR_NV12)
+                            )
                     else:
                         detections, timing = detector.infer(packet.image)
                     low_conf_green_seen = any(
