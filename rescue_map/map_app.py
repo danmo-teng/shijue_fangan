@@ -63,6 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RDK X5 rescue-field selector and pose map")
     parser.add_argument("--zone", type=int, choices=range(1, 5), help="skip zone selection")
     parser.add_argument("--side", choices=("red", "blue"), help="skip side selection")
+    parser.add_argument("--opening-strategy", choices=("attack", "defense"), default="attack")
     parser.add_argument("--corner-offset-mm", type=float, default=DEFAULT_CORNER_OFFSET_M * 1000.0)
     parser.add_argument(
         "--encoder-weight",
@@ -168,6 +169,7 @@ class RescueMapApp:
         self.map_left, self.map_top, self.map_size = 30, 60, 850
         self.zone = options.zone or 1
         self.side = options.side or "red"
+        self.opening_strategy = getattr(options, "opening_strategy", "attack")
         self.selecting = not (options.zone and options.side)
         self.corner_offset_m = options.corner_offset_mm / 1000.0
         self.encoder_weight = float(options.encoder_weight)
@@ -373,7 +375,9 @@ class RescueMapApp:
             text.add("选择本方颜色", (x0, 300), 22, (230, 230, 230), True)
             self.button(canvas, text, "red", "红方", (x0, 330, x0 + 150, 382), self.side == "red", (55, 55, 185))
             self.button(canvas, text, "blue", "蓝方", (x0 + 175, 330, x0 + 325, 382), self.side == "blue", (185, 110, 20))
-            text.add("固定启动配置", (x0, 435), 22, (230, 230, 230), True)
+            text.add("开局策略", (x0, 400), 22, (230, 230, 230), True)
+            self.button(canvas, text, "attack", "进攻", (x0, 435, x0 + 150, 483), self.opening_strategy == "attack")
+            self.button(canvas, text, "defense", "防守", (x0 + 175, 435, x0 + 325, 483), self.opening_strategy == "defense")
             localization_label = (
                 "仅T265（UART任务通信保留）"
                 if self.localization_mode == "t265" else
@@ -383,9 +387,9 @@ class RescueMapApp:
                 f"开启 {self.t265_translation_scale:.3f}×"
                 if self.t265_translation_scale_enabled else "关闭（命令行覆盖）"
             )
-            text.add(f"定位：{localization_label}", (x0, 475), 17, (200, 210, 225))
-            text.add(f"T265直线比例：{scale_label}", (x0, 510), 18, (220, 200, 80), True)
-            text.add("出发点：所选区域中心", (x0, 545), 17, (200, 210, 225))
+            text.add(f"定位：{localization_label}", (x0, 520), 17, (200, 210, 225))
+            text.add(f"T265直线比例：{scale_label}", (x0, 555), 18, (220, 200, 80), True)
+            text.add("进攻：对方区前30cm；防守：内移15cm", (x0, 590), 14, (200, 210, 225))
             self.button(canvas, text, "start", "确认并开始", (x0, 610, x0 + 325, 675), True, (35, 135, 70))
             pose = initial_pose(self.zone, self.corner_offset_m)
             text.add("键盘：1～4选区域，R/B选颜色，Enter启动", (x0, 725), 15, (220, 220, 220))
@@ -399,6 +403,7 @@ class RescueMapApp:
                 "WAITING": (160, 160, 165),
             }.get(pose.quality, (50, 80, 235))
             text.add(f"{self.zone}号出发区 / {'红方' if self.side == 'red' else '蓝方'}", (x0, 135), 23, (235, 235, 235), True)
+            text.add(f"开局：{'进攻' if self.opening_strategy == 'attack' else '防守'}藏物资", (x0, 161), 15, (200, 210, 225))
             text.add(f"定位状态：{pose.quality}", (x0, 185), 21, quality_color, True)
             text.add(f"X：{pose.x_m:+.3f} m", (x0, 235), 25, (245, 245, 245), True)
             text.add(f"Y：{pose.y_m:+.3f} m", (x0, 275), 25, (245, 245, 245), True)
@@ -481,6 +486,8 @@ class RescueMapApp:
                     self.pose = initial_pose(self.zone, self.corner_offset_m)
                 elif name in {"red", "blue"}:
                     self.side = name
+                elif name in {"attack", "defense"}:
+                    self.opening_strategy = name
                 elif name == "start":
                     self.start_session()
                 break
@@ -534,6 +541,7 @@ class RescueMapApp:
             self.t265_map_path,
             self.t265_translation_scale_enabled,
             self.t265_translation_scale,
+            opening_strategy=self.opening_strategy,
         )
         write_localization_config(
             PROJECT_ROOT / "localization/config/localization.example.conf",

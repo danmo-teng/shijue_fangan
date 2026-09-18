@@ -96,6 +96,38 @@ def angle_error_deg(target: float, current: float) -> float:
     return (target - current + 180.0) % 360.0 - 180.0
 
 
+def point_in_polygon(point: tuple[float, float], polygon: tuple[tuple[int, int], ...]) -> bool:
+    """Shared pixel-region test, including its boundary."""
+    if len(polygon) < 3:
+        return False
+    x, y = point
+    inside = False
+    ax, ay = polygon[-1]
+    for bx, by in polygon:
+        cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax)
+        if abs(cross) < 1e-6 and min(ax, bx) <= x <= max(ax, bx) and min(ay, by) <= y <= max(ay, by):
+            return True
+        if (ay > y) != (by > y) and x < (bx - ax) * (y - ay) / (by - ay) + ax:
+            inside = not inside
+        ax, ay = bx, by
+    return inside
+
+
+def cargo_in_front_region(item: TrackedCargo, polygon: tuple[tuple[int, int], ...],
+                          safe_bbox: tuple[int, int, int, int] | None) -> bool:
+    """Sweep-only geometry; does not relax delivery success or claw audits."""
+    x, y, w, h = item.bbox
+    center = (x + w / 2, y + h / 2)
+    foot = (x + w / 2, y + h)
+    if item.inside_safe_zone:
+        return False
+    if safe_bbox is not None:
+        sx, sy, sw, sh = safe_bbox
+        if any(sx <= px <= sx + sw and sy <= py <= sy + sh for px, py in (center, foot)):
+            return False
+    return point_in_polygon(center, polygon) and point_in_polygon(foot, polygon)
+
+
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
@@ -298,6 +330,7 @@ class VisionSnapshot:
     ground_localizer_calibrated: bool = True
     carried_reference_bboxes: tuple[tuple[int, int, int, int], ...] = ()
     safe_sweep_capture_audit: CargoAudit | None = None
+    safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass
@@ -470,8 +503,11 @@ class CompetitionSettings:
     stuck_wheel_progress_m: float = 0.02
     escape_spin_deg: int = 90
     escape_lateral_m: float = 0.16
+    opening_strategy: str = "attack"
 
     def __post_init__(self) -> None:
+        if self.opening_strategy not in {"attack", "defense"}:
+            raise ValueError("opening strategy must be attack or defense")
         if self.side not in {"red", "blue"}:
             raise ValueError("side must be red or blue")
         if self.start_zone not in {1, 2, 3, 4}:
@@ -568,7 +604,9 @@ class CompetitionSettings:
         # Keep the temporary pile away from the centre-to-safe-zone transport
         # corridor and away from either safe zone.  The point is a strategy
         # parameter, not a field-coordinate correction.
-        stash_x = 0.85 if self.start_zone in {2, 4} else -0.85
+        if self.opening_strategy == "attack":
+            return -self.material_target_x_m, -self.side_sign * (self.safe_fence_face_m - 0.30)
+        stash_x = 0.70 if self.start_zone in {2, 4} else -0.70
         stash_y = 0.55 if self.side == "red" else -0.55
         return stash_x, stash_y
 
@@ -3329,7 +3367,9 @@ class CompetitionMission:
             expected_stm_modes=(STM_MODE_SAFE_SWEEP,),
         )
 
-    def safe_sweep_target(self, cargo: tuple[TrackedCargo, ...]) -> TrackedCargo | None:
+    def safe_sweep_target(self, cargo: tuple[TrackedCargo, ...],
+                          polygon: tuple[tuple[int, int], ...] = (),
+                          safe_bbox: tuple[int, int, int, int] | None = None) -> TrackedCargo | None:
         context = self.safe_sweep_pickup
         if context is None:
             return None
@@ -3337,6 +3377,7 @@ class CompetitionMission:
             item for item in cargo
             if item.visible and not item.inside_safe_zone and
             item.track_id not in context.excluded_ids and
+            cargo_in_front_region(item, polygon, safe_bbox) and
             (
                 item.class_name in context.original_classes
                 if context.recovering_original else
@@ -3345,6 +3386,13 @@ class CompetitionMission:
         ]
         if not candidates:
             return None
+        if context.target_bbox is not None:
+            bx, by, bw, bh = context.target_bbox
+            candidates = [item for item in candidates if item.track_id == context.target_id or
+                          math.hypot(item.center_px[0] - (bx + bw / 2),
+                                     item.center_px[1] - (by + bh / 2)) <= max(100, bw, bh)]
+            if not candidates:
+                return None
         bbox = context.target_bbox
         cx, cy = ((bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2)
                   if bbox else (640, 512))
@@ -3407,7 +3455,10 @@ class CompetitionMission:
 
         if stm.mode == approach_mode:
             target = (
-                self.safe_sweep_target(vision.cargo)
+                self.safe_sweep_target(
+                    vision.cargo, vision.safe_sweep_search_polygon,
+                    None if vision.safe_zone_filter_blocked else vision.safe_bbox,
+                )
                 if self._vision_fresh(vision, now) and
                 vision.frame_sequence > context.frame_floor else None
             )

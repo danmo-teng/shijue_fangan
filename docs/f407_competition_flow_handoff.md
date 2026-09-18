@@ -1,5 +1,8 @@
 # 完整智能救援流程的 F407 配合说明
 
+> 最新上位机策略：[前方ROI与进攻/防守藏点](f407_front_roi_opening_strategy.md)。
+> 默认进攻，防守藏点向内150 mm；两种策略保持INITIAL_STASH与原NAV/释放/返中协议。
+
 > af8c534扫障回退修正：[抓障后回退摆头修正要求](f407_sweep_reverse_trace_fix.md)。
 > 修复mode39内部逐点回退控制；不改变以下两件上限和扫障42～46协议。
 

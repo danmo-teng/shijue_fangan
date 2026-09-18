@@ -73,6 +73,7 @@ from state_machine import (  # noqa: E402
     StmSnapshot,
     TrackedCargo,
     VisionSnapshot,
+    cargo_in_front_region,
 )
 
 
@@ -429,6 +430,20 @@ def danger_ahead(
     return True, "left" if cx < IMAGE_WIDTH * 0.5 else "right"
 
 
+def safe_zone_corridor_polygon(safe_bbox, destination):
+    if safe_bbox is None or destination not in {"material", "injury"}:
+        return ()
+    x, y, width, height = safe_bbox
+    midpoint = x + width // 2
+    left, right = (midpoint, x + width) if destination == "injury" else (x, midpoint)
+    top = max(0, min(IMAGE_HEIGHT - 1, y + height))
+    half = max(80, min(180, width // 4))
+    return ((IMAGE_WIDTH // 2 - half, IMAGE_HEIGHT - 1),
+            (IMAGE_WIDTH // 2 + half, IMAGE_HEIGHT - 1),
+            (max(0, min(IMAGE_WIDTH - 1, right)), top),
+            (max(0, min(IMAGE_WIDTH - 1, left)), top))
+
+
 def safe_zone_push_corridor(
     cargo: tuple[TrackedCargo, ...],
     safe_bbox: tuple[int, int, int, int] | None,
@@ -447,22 +462,9 @@ def safe_zone_push_corridor(
 ]:
     if safe_bbox is None or destination not in {"material", "injury"}:
         return (), None, None, SAFE_CORRIDOR_CLEAR
-    x, y, width, height = safe_bbox
-    midpoint = x + width // 2
-    if destination == "injury":
-        entrance_left, entrance_right = midpoint, x + width
-    else:
-        entrance_left, entrance_right = x, midpoint
-    entrance_y = max(0, min(IMAGE_HEIGHT - 1, y + height))
-    front_y = IMAGE_HEIGHT - 1
+    width = safe_bbox[2]
     front_half_width = max(80, min(180, width // 4))
-    polygon = (
-        (IMAGE_WIDTH // 2 - front_half_width, front_y),
-        (IMAGE_WIDTH // 2 + front_half_width, front_y),
-        (max(0, min(IMAGE_WIDTH - 1, entrance_right)), entrance_y),
-        (max(0, min(IMAGE_WIDTH - 1, entrance_left)), entrance_y),
-    )
-    contour = np.asarray(polygon, dtype=np.int32)
+    polygon = safe_zone_corridor_polygon(safe_bbox, destination)
     claw_near_field_top = round(IMAGE_HEIGHT * 0.80)
     claw_near_field = np.asarray(
         (
@@ -491,7 +493,7 @@ def safe_zone_push_corridor(
             float(box_x + box_width * 0.5),
             float(box_y + box_height),
         )
-        if cv2.pointPolygonTest(contour, bottom_center, False) < 0:
+        if not cargo_in_front_region(item, polygon, safe_bbox):
             continue
         corridor_items.append((item, bottom_center))
         if cv2.pointPolygonTest(claw_near_field, bottom_center, False) >= 0:
@@ -611,7 +613,21 @@ def make_vision_snapshot(
     )
     # Separate obstacle audit from the original delivery manifest. Only the
     # locked/reassociated sweep target actually inside the claw ROI counts.
-    sweep_target = mission.safe_sweep_target(cargo)
+    sweep_search_polygon = ()
+    if mission.safe_sweep_pickup is not None:
+        # Camera-relative front channel during pickup/retrieval. A live
+        # 120-degree safe-box corridor takes priority for obstacle approach;
+        # never reuse a frozen 120-degree box after the camera tilts to 140.
+        top = 240 if stm.camera_pitch_cdeg == 14000 else 0
+        sweep_search_polygon = ((460, top), (820, top), (820, 1023), (460, 1023))
+        if (not mission.safe_sweep_pickup.recovering_original and
+                stm.camera_pitch_cdeg == 12000 and not safe_zone_filter_blocked):
+            sweep_search_polygon = safe_zone_corridor_polygon(
+                safe_bbox, mission.confirmed_delivery_destination
+            ) or sweep_search_polygon
+    sweep_target = mission.safe_sweep_target(
+        cargo, sweep_search_polygon, None if safe_zone_filter_blocked else safe_bbox
+    )
     sweep_capture = tuple(
         item for item in capture
         if sweep_target is not None and item.track_id == sweep_target.track_id
@@ -740,6 +756,7 @@ def make_vision_snapshot(
         ground_localizer_calibrated=localizer.calibrated,
         carried_reference_bboxes=current_carried_bboxes,
         safe_sweep_capture_audit=sweep_audit,
+        safe_sweep_search_polygon=sweep_search_polygon,
     )
 
 
@@ -1333,6 +1350,7 @@ class CompetitionPlanner:
                 "delivery_target_outside_safe_zone": vision.delivery_target_outside_safe_zone,
                 "safe_zone_filter_blocked": vision.safe_zone_filter_blocked,
                 "safe_corridor_polygon": [list(point) for point in vision.safe_corridor_polygon],
+                "safe_sweep_search_polygon": [list(point) for point in vision.safe_sweep_search_polygon],
                 "safe_corridor_obstacle_class": vision.safe_corridor_obstacle_class,
                 "safe_corridor_obstacle_distance_mm": vision.safe_corridor_obstacle_distance_mm,
                 "safe_corridor_obstacle_track_id": vision.safe_corridor_obstacle_track_id,
@@ -1346,6 +1364,8 @@ class CompetitionPlanner:
                 "low_conf_green_seen": vision.low_conf_green_seen,
             },
             "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
+            "opening_strategy": self.mission.settings.opening_strategy,
+            "stash_point_m": list(self.mission.settings.stash_point),
             "max_material_batch_count": self.mission.settings.max_batch_count,
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
@@ -1604,11 +1624,16 @@ def draw_overlay(
     view = cv2.resize(image, (output_width, output_height), interpolation=cv2.INTER_AREA)
     scale_x = output_width / float(IMAGE_WIDTH)
     scale_y = output_height / float(IMAGE_HEIGHT)
-    for polygon, color in (
+    front_check = output.state in {
+        CompetitionState.ALIGN_SAFE_ZONE_BY_POSE, CompetitionState.ACQUIRE_SAFE_ZONE,
+        CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX, CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+        CompetitionState.CLEAR_SAFE_ZONE, CompetitionState.WAIT_SAFE_ZONE_CLEAR,
+    }
+    for polygon, color in (() if front_check else (
         (capture_rois.overall, (0, 255, 255)),
         (capture_rois.left, (255, 128, 0)),
         (capture_rois.right, (0, 128, 255)),
-    ):
+    )):
         scaled_polygon = np.asarray(
             [
                 (round(x * scale_x), round(y * scale_y))
@@ -1624,11 +1649,15 @@ def draw_overlay(
             2,
             cv2.LINE_AA,
         )
-    if vision.safe_corridor_polygon:
+    front_polygon = (
+        vision.safe_sweep_search_polygon if output.state == CompetitionState.CLEAR_SAFE_ZONE
+        else vision.safe_corridor_polygon
+    )
+    if front_polygon:
         corridor = np.asarray(
             [
                 (round(x * scale_x), round(y * scale_y))
-                for x, y in vision.safe_corridor_polygon
+                for x, y in front_polygon
             ],
             dtype=np.int32,
         )
@@ -1636,7 +1665,9 @@ def draw_overlay(
     selected_ids = set(output.batch.track_ids) if output.batch is not None else set()
     for item in vision.cargo:
         x, y, box_width, box_height = item.bbox
-        if item.class_name == "danger_cyan":
+        if front_check and not cargo_in_front_region(item, front_polygon, vision.safe_bbox):
+            color = (100, 100, 100)
+        elif item.class_name == "danger_cyan":
             color = (0, 0, 255)
         elif item.track_id in selected_ids:
             color = (0, 255, 255)
@@ -1686,6 +1717,7 @@ def main() -> int:
         raise RuntimeError(f"请先在完整比赛地图窗口选择出发区和红蓝方：{args.session}")
     side = str(session["side"])
     start_zone = int(session.get("start_zone", 1))
+    opening_strategy = str(session.get("opening_strategy", "attack"))
     events = JsonlLog(args.events_log)
     detection_log = JsonlLog(args.detections_log)
     events.write("runner_starting", {
@@ -1773,6 +1805,7 @@ def main() -> int:
     mission = CompetitionMission(CompetitionSettings(
         side=side,
         start_zone=start_zone,
+        opening_strategy=opening_strategy,
         initial_stash_enabled=not args.disable_initial_stash,
         yield_distance_m=args.yield_distance_mm / 1000.0,
         safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
@@ -1799,6 +1832,8 @@ def main() -> int:
             "start_zone": start_zone,
             "initial_stash_enabled": not args.disable_initial_stash,
             "initial_stash_done": mission.initial_stash_done,
+            "opening_strategy": mission.settings.opening_strategy,
+            "stash_point_m": list(mission.settings.stash_point),
             "max_material_batch_count": mission.settings.max_batch_count,
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
@@ -2013,8 +2048,6 @@ def main() -> int:
                 continue
             packet = camera.latest()
             if packet is not None:
-                latest_image = packet.image
-                latest_pixel_format = packet.pixel_format
                 if packet.frame_id != last_packet_id:
                     last_packet_id = packet.frame_id
                 if packet.frame_id != last_inference_id and now >= next_vision:
@@ -2045,6 +2078,10 @@ def main() -> int:
                             )
                     else:
                         detections, timing = detector.infer(packet.image)
+                    # Display exactly the image that produced latest_vision,
+                    # not a newer camera frame underneath older ROI/results.
+                    latest_image = packet.image.copy()
+                    latest_pixel_format = packet.pixel_format
                     low_conf_green_seen = any(
                         item.class_name == "green_supply" and
                         float(item.confidence) < GREEN_SUPPLY_SCORE_THRESHOLD

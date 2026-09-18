@@ -289,7 +289,10 @@ def write_session(
     t265_map_path: Path | None = None,
     t265_translation_scale_enabled: bool = False,
     t265_translation_scale: float = DEFAULT_T265_TRANSLATION_SCALE,
+    opening_strategy: str = "attack",
 ) -> None:
+    if opening_strategy not in {"attack", "defense"}:
+        raise ValueError("opening strategy must be attack or defense")
     if side not in {"red", "blue"}:
         raise ValueError("side must be red or blue")
     if localization_mode not in {"fusion", "t265"}:
@@ -303,6 +306,7 @@ def write_session(
         "schema_version": 3,
         "start_zone": zone,
         "side": side,
+        "opening_strategy": opening_strategy,
         "corner_offset_m": corner_offset_m,
         "localization_mode": localization_mode,
         "encoder_fusion_weight": encoder_fusion_weight,
