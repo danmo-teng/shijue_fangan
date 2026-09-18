@@ -616,6 +616,11 @@ def make_vision_snapshot(
         item for item in capture
         if sweep_target is not None and item.track_id == sweep_target.track_id
     )
+    if mission.safe_sweep_pickup is not None and mission.safe_sweep_pickup.recovering_original:
+        # Recovering the load is formal delivery again. Count the WHOLE claw
+        # ROI, including unexpected cargo; never truncate it to the target
+        # or the two-item limit and accidentally hide overload/danger.
+        sweep_capture = capture
     sweep_audit = (
         audit_from_cargo(sweep_capture, set(), capture_side_by_track)
         if capture_enabled and mission.safe_sweep_pickup is not None else None
@@ -1221,6 +1226,8 @@ class CompetitionPlanner:
                 None if self.mission.safe_sweep_pickup is None else {
                     "target_id": self.mission.safe_sweep_pickup.target_id,
                     "target_class": self.mission.safe_sweep_pickup.target_class,
+                    "recovering_original": self.mission.safe_sweep_pickup.recovering_original,
+                    "original_classes": sorted(self.mission.safe_sweep_pickup.original_classes),
                     "target_bbox": self.mission.safe_sweep_pickup.target_bbox,
                     "mode": self.mission.safe_sweep_pickup.mode,
                     "frame_floor": self.mission.safe_sweep_pickup.frame_floor,
@@ -1273,6 +1280,7 @@ class CompetitionPlanner:
                 "low_conf_green_seen": vision.low_conf_green_seen,
             },
             "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
+            "max_material_batch_count": self.mission.settings.max_batch_count,
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
             "first_green_bump_used": self.mission.first_green_bump_used,
@@ -1722,6 +1730,7 @@ def main() -> int:
             "start_zone": start_zone,
             "initial_stash_enabled": not args.disable_initial_stash,
             "initial_stash_done": mission.initial_stash_done,
+            "max_material_batch_count": mission.settings.max_batch_count,
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,

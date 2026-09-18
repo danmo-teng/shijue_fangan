@@ -84,6 +84,9 @@ STM_MODE_SAFE_SWEEP_DONE = 40
 STM_MODE_BOUNDARY_RECOVER = 41
 STM_MODE_SAFE_SWEEP_APPROACH = 42
 STM_MODE_SAFE_SWEEP_AUDIT = 43
+STM_MODE_SAFE_SWEEP_RETRIEVE = 44
+STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT = 45
+STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED = 46
 
 SAFE_CORRIDOR_CLEAR = "CLEAR"
 SAFE_CORRIDOR_BLOCKED = "BLOCKED"
@@ -305,6 +308,10 @@ class SweepPickupContext:
     target_class: str | None
     target_bbox: tuple[int, int, int, int] | None
     excluded_ids: frozenset[int]
+    original_ids: frozenset[int] = frozenset()
+    original_classes: frozenset[str] = frozenset()
+    recovering_original: bool = False
+    audit_signature: tuple | None = None
     mode: int | None = None
     frame_floor: int = 0
     last_audit_frame: int = 0
@@ -428,7 +435,7 @@ class CompetitionSettings:
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
     capture_clearance_m: float = 0.16
-    max_batch_count: int = 3
+    max_batch_count: int = 2
     center_stop_radius_m: float = 0.0
     return_zero_tolerance_m: float = 0.025
     vision_stale_s: float = 0.30
@@ -469,8 +476,8 @@ class CompetitionSettings:
             raise ValueError("side must be red or blue")
         if self.start_zone not in {1, 2, 3, 4}:
             raise ValueError("start zone must be 1..4")
-        if self.max_batch_count != 3:
-            raise ValueError("competition batch maximum must remain 3")
+        if self.max_batch_count != 2:
+            raise ValueError("formal material batches must contain at most 2 items")
         if (
             self.audit_stable_frames <= 0 or
             self.normal_grab_audit_frames <= 0 or
@@ -1008,6 +1015,9 @@ class CompetitionMission:
                 STM_MODE_SAFE_SWEEP,
                 STM_MODE_SAFE_SWEEP_APPROACH,
                 STM_MODE_SAFE_SWEEP_AUDIT,
+                STM_MODE_SAFE_SWEEP_RETRIEVE,
+                STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT,
+                STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED,
                 STM_MODE_POST_GRAB_AUDIT,
             )
         if self.state in {
@@ -3275,12 +3285,14 @@ class CompetitionMission:
             self.confirmed_delivery_destination or
             (self.selected_batch.destination if self.selected_batch else None)
         )
-        lateral_mm = -150 if destination == "injury" else 150
+        # Sign selects the original-load side; magnitude is the forward
+        # placement stroke after a 90-degree turn, not a lateral translation.
+        placement_mm = -200 if destination == "injury" else 200
         self.safe_sweep_command = CommandRequest(
             CMD_CLEAR_SAFE_ZONE,
             self._side_flags(),
             0,  # Pixel-guided pickup, not a predicted forward distance.
-            lateral_mm,
+            placement_mm,
             0,
         )
         self.safe_sweep_initial_ack = stm.acknowledged_sequence
@@ -3299,6 +3311,10 @@ class CompetitionMission:
             target_class=vision.safe_corridor_obstacle_class,
             target_bbox=vision.safe_corridor_obstacle_bbox,
             excluded_ids=frozenset(original_ids),
+            original_ids=frozenset(original_ids),
+            original_classes=frozenset(self.carried_manifest or (
+                self.selected_batch.classes if self.selected_batch else ()
+            )),
             frame_floor=vision.frame_sequence,
         )
         return CompetitionOutput(
@@ -3321,7 +3337,11 @@ class CompetitionMission:
             item for item in cargo
             if item.visible and not item.inside_safe_zone and
             item.track_id not in context.excluded_ids and
-            item.class_name == context.target_class
+            (
+                item.class_name in context.original_classes
+                if context.recovering_original else
+                item.class_name == context.target_class
+            )
         ]
         if not candidates:
             return None
@@ -3330,6 +3350,7 @@ class CompetitionMission:
                   if bbox else (640, 512))
         return min(candidates, key=lambda item: (
             item.track_id != context.target_id,
+            context.recovering_original and item.track_id not in context.original_ids,
             (item.center_px[0] - cx) ** 2 + (item.center_px[1] - cy) ** 2,
             -item.area_px,
         ))
@@ -3341,29 +3362,50 @@ class CompetitionMission:
         assert context is not None
         # These modes can only occur after F407 has accepted visual CLEAR.
         self.safe_sweep_command_accepted = True
+        if (stm.mode in {STM_MODE_SAFE_SWEEP_RETRIEVE, STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT}
+                and not context.recovering_original):
+            # Switch roles once. Original IDs become eligible; the last
+            # obstacle track must not be selected as the original load.
+            context.recovering_original = True
+            context.excluded_ids = frozenset(
+                (context.target_id,) if context.target_id is not None else ()
+            )
+            context.target_id = None
+            context.target_class = None
+            context.target_bbox = None
+        approach_mode = (
+            STM_MODE_SAFE_SWEEP_RETRIEVE if context.recovering_original
+            else STM_MODE_SAFE_SWEEP_APPROACH
+        )
+        audit_mode = (
+            STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT if context.recovering_original
+            else STM_MODE_SAFE_SWEEP_AUDIT
+        )
+        role = "原物资找回（前进累计最多200 mm）" if context.recovering_original else "扫障取障"
         if context.grab_started and context.mode == stm.mode:
             return CompetitionOutput(
                 self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()),
-                "扫障取障确认抓取，等待F407回mode39移障并取回原物资",
+                f"{role}确认抓取，等待F407回mode39完成后续动作",
                 self.selected_batch, tx_policy="normal_command",
                 reason="safe_sweep_pickup_grab",
                 expected_stm_modes=(STM_MODE_SAFE_SWEEP, STM_MODE_POST_GRAB_AUDIT),
             )
         mode_changed = context.mode != stm.mode
         camera_ready = stm.claw_visible and stm.camera_pitch_cdeg == 14000
-        if mode_changed or (stm.mode == STM_MODE_SAFE_SWEEP_AUDIT and
+        if mode_changed or (stm.mode == audit_mode and
                             camera_ready != context.camera_ready):
             context.mode = stm.mode
             context.frame_floor = vision.frame_sequence
             context.last_audit_frame = vision.frame_sequence
             context.audit_hits = 0
+            context.audit_signature = None
             context.audit_command = None
             context.grab_started = False
             context.last_approach = None
             context.last_seen_s = None
         context.camera_ready = camera_ready
 
-        if stm.mode == STM_MODE_SAFE_SWEEP_APPROACH:
+        if stm.mode == approach_mode:
             target = (
                 self.safe_sweep_target(vision.cargo)
                 if self._vision_fresh(vision, now) and
@@ -3381,12 +3423,12 @@ class CompetitionMission:
                 command = None
             return CompetitionOutput(
                 self.state, command or self._hold(),
-                "扫障专用靠近：发送障碍像素坐标" if command else
-                "扫障专用搜索：等待新的障碍画面，由F407在mode42搜索/恢复",
+                f"{role}：发送目标像素坐标" if command else
+                f"{role}：等待新目标画面，F407负责搜索及累计行程限额",
                 self.selected_batch, motion_expected=command is not None,
                 tx_policy="normal_command" if command else "hold",
                 reason="safe_sweep_pixel_approach" if command else "safe_sweep_target_wait",
-                expected_stm_modes=(STM_MODE_SAFE_SWEEP_APPROACH, STM_MODE_SAFE_SWEEP_AUDIT),
+                expected_stm_modes=(approach_mode, audit_mode),
             )
 
         fresh_audit = self._vision_fresh(vision, now) and camera_ready
@@ -3394,35 +3436,60 @@ class CompetitionMission:
             context.last_audit_frame = vision.frame_sequence
             context.audit_id = (context.audit_id + 1) & 0xFF
             audit = vision.safe_sweep_capture_audit or CargoAudit()
-            context.audit_hits = context.audit_hits + 1 if audit.total_count > 0 else 0
+            valid = (
+                self._audit_valid(audit) and
+                self._audit_destination(audit) == self.confirmed_delivery_destination
+                if context.recovering_original else audit.total_count > 0
+            )
+            signature = (
+                self._audit_signature_for_state(audit, valid)
+                if context.recovering_original else ("SWEEP_NONEMPTY",)
+            )
+            context.audit_hits = (
+                context.audit_hits + 1 if valid and signature == context.audit_signature
+                else 1 if valid else 0
+            )
+            context.audit_signature = signature
             audit = replace(audit, stable=context.audit_hits >= self.settings.audit_stable_frames)
             payload = replace(
-                audit.to_protocol(initial_stash=False, destination="material", audit_id=context.audit_id),
-                sweep_pickup=True,
+                audit.to_protocol(
+                    initial_stash=False,
+                    destination=self.confirmed_delivery_destination or "material",
+                    audit_id=context.audit_id,
+                ),
+                sweep_pickup=not context.recovering_original,
+                destination_injury=(context.recovering_original and
+                                    self.confirmed_delivery_destination == "injury"),
             )
             context.audit_command = CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=payload)
         if not fresh_audit:
             context.audit_hits = 0
+            context.audit_signature = None
             context.audit_command = None
         command = context.audit_command or CommandRequest(
             CMD_CARGO_AUDIT, CMD_VALID,
-            audit=CargoAuditPayload(audit_id=context.audit_id, sweep_pickup=True),
+            audit=CargoAuditPayload(
+                audit_id=context.audit_id, sweep_pickup=not context.recovering_original,
+                destination_injury=(context.recovering_original and
+                                    self.confirmed_delivery_destination == "injury"),
+            ),
         )
         relay_payload = stm.relay_last_mission_payload
         if (fresh_audit and context.audit_hits >= self.settings.audit_stable_frames and
                 stm.audit_valid and len(relay_payload) == 8 and
                 relay_payload[0] == CMD_CARGO_AUDIT and
-                relay_payload[5] & AUDIT_SWEEP_PICKUP and relay_payload[7] > 0):
+                bool(relay_payload[5] & AUDIT_SWEEP_PICKUP) == (not context.recovering_original) and
+                relay_payload[7] > 0):
             context.grab_started = True
             return self._safe_sweep_pickup_output(vision, stm, now)
         return CompetitionOutput(
             self.state, command,
-            f"扫障夹内非空审核{context.audit_hits}/{self.settings.audit_stable_frames}；允许危险物，等待AUDIT_VALID",
+            f"{role}审核{context.audit_hits}/{self.settings.audit_stable_frames}，等待AUDIT_VALID",
             self.selected_batch,
             audit=vision.safe_sweep_capture_audit,
             tx_policy="audit_stable_publish" if command.audit.stable else "audit_unstable_publish",
             reason="safe_sweep_pickup_audit",
-            expected_stm_modes=(STM_MODE_SAFE_SWEEP_AUDIT,),
+            expected_stm_modes=(audit_mode,),
         )
 
     def _clear_for_boundary_recovery(
@@ -5261,7 +5328,23 @@ class CompetitionMission:
 
         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
             assert self.safe_sweep_command is not None
-            if stm.mode in {STM_MODE_SAFE_SWEEP_APPROACH, STM_MODE_SAFE_SWEEP_AUDIT}:
+            if stm.mode == STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED:
+                # F407 reports 46 only after opening and backing to the
+                # staging point. This is an abandoned delivery, never DONE.
+                self._clear_search_recovery_context(vision, clear_carried=True)
+                self._reset_safe_zone_alignment()
+                self._reset_delivery_evidence()
+                self._begin_return(stm, now)
+                return replace(
+                    self._return_center_output(pose, now, "原物资200 mm内未找回，放弃本趟并返回场地中心"),
+                    event="safe_sweep_retrieve_failed",
+                    reason="safe_sweep_retrieve_failed_return",
+                    expected_stm_modes=(STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED, STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH),
+                )
+            if stm.mode in {
+                STM_MODE_SAFE_SWEEP_APPROACH, STM_MODE_SAFE_SWEEP_AUDIT,
+                STM_MODE_SAFE_SWEEP_RETRIEVE, STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT,
+            }:
                 return self._safe_sweep_pickup_output(vision, stm, now)
             if self.safe_sweep_pickup is not None:
                 # A subsequent 42/43 is a new camera/action epoch, not the
@@ -5306,6 +5389,9 @@ class CompetitionMission:
                     STM_MODE_SAFE_SWEEP,
                     STM_MODE_SAFE_SWEEP_APPROACH,
                     STM_MODE_SAFE_SWEEP_AUDIT,
+                    STM_MODE_SAFE_SWEEP_RETRIEVE,
+                    STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT,
+                    STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED,
                     STM_MODE_POST_GRAB_AUDIT,
                 ),
             )

@@ -164,8 +164,9 @@ def mission_frame(
             raise ValueError("CLEAR_SAFE_ZONE only allows CMD_VALID and RED_SIDE")
         if arg_a != 0 and not 80 <= arg_a <= 600:
             raise ValueError("CLEAR_SAFE_ZONE uses 0 for visual pickup or legacy 80..600 mm")
-        if abs(arg_b) != 150:
-            raise ValueError("CLEAR_SAFE_ZONE lateral offset must be +150 or -150 mm")
+        placement_mm = 200 if arg_a == 0 else 150
+        if abs(arg_b) != placement_mm:
+            raise ValueError("visual CLEAR uses +/-200 mm turn-and-place; legacy CLEAR uses +/-150 mm")
         if aux_cdeg != 0:
             raise ValueError("CLEAR_SAFE_ZONE P6/P7 must be zero")
     payload = (
