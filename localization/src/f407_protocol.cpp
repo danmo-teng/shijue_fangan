@@ -169,14 +169,17 @@ void F407FrameParser::consume(std::uint8_t value)
     if (index_ == 0) {
         if (value == kFrameHead1) {
             frame_[index_++] = value;
+        } else {
+            have_status_context_ = false;
         }
         return;
     }
     if (index_ == 1) {
         if (value == kFrameHead2) {
             frame_[index_++] = value;
-        } else if (value != kFrameHead1) {
-            index_ = 0;
+        } else {
+            have_status_context_ = false;
+            if (value != kFrameHead1) index_ = 0;
         }
         return;
     }

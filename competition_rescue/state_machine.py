@@ -87,6 +87,7 @@ STM_MODE_SAFE_SWEEP_AUDIT = 43
 STM_MODE_SAFE_SWEEP_RETRIEVE = 44
 STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT = 45
 STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED = 46
+STM_MODE_CAPTURE_RETURN_WAIT = 47
 
 SAFE_CORRIDOR_CLEAR = "CLEAR"
 SAFE_CORRIDOR_BLOCKED = "BLOCKED"
@@ -484,7 +485,7 @@ class CompetitionSettings:
     vision_stale_s: float = 0.30
     search_min_turn_deg: float = 720.0
     search_target_confirm_frames: int = 1
-    disperse_limit: int = 2
+    disperse_limit: int = 3
     approach_missing_hold_min_s: float = 0.30
     approach_missing_frame_multiplier: float = 2.5
     yield_distance_m: float = 0.25
@@ -728,6 +729,9 @@ class CompetitionMission:
         self.search_candidate_hits = 0
         self.stash_checked = False
         self.disperse_attempts = 0
+        self.separation_keep_side: str | None = None
+        self.separation_request_epoch = 0
+        self.separation_request_counted = False
         self.disperse_command: CommandRequest | None = None
         self.disperse_initial_ack: int | None = None
         self.disperse_relay_tx_baseline: int | None = None
@@ -789,6 +793,7 @@ class CompetitionMission:
         self.invalid_backoff_tx_baseline: int | None = None
         self.invalid_backoff_command_accepted = False
         self.stm_fault_waiting = False
+
         self.motion_watch_state: CompetitionState | None = None
         self.motion_watch_started_s: float | None = None
         self.motion_watch_pose: tuple[float, float, float] | None = None
@@ -1015,7 +1020,7 @@ class CompetitionMission:
 
     def expected_stm_modes(self) -> tuple[int, ...]:
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
-            return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
+            return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_OBSERVE:
             return (STM_MODE_SEARCH,)
         if self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH}:
@@ -1199,6 +1204,8 @@ class CompetitionMission:
 
     def _select_batch(self, batch: CargoBatch) -> None:
         self.task_generation += 1
+        self.disperse_attempts = 0
+        self.separation_keep_side = None
         self.deferred_cluster_ids = frozenset()
         self.deferred_cluster_bbox = None
         self.deferred_cluster_class = None
@@ -1246,6 +1253,7 @@ class CompetitionMission:
         self._clear_disperse_side_votes()
         if reset_attempts:
             self.disperse_attempts = 0
+            self.separation_keep_side = None
             self.disperse_observe_attempts = 0
         self.cluster_target_class = None
         self.cluster_target_track_id = None
@@ -1464,6 +1472,7 @@ class CompetitionMission:
         expected = (
             STM_MODE_APPROACH_TARGET,
             STM_MODE_APPROACH_RECOVER,
+            STM_MODE_CAPTURE_RETURN_WAIT,
             STM_MODE_SEARCH,
         )
         if stm.fresh and stm.mode == STM_MODE_SEARCH:
@@ -1634,6 +1643,8 @@ class CompetitionMission:
         *,
         first_green_bump: bool = False,
     ) -> None:
+        self.separation_request_epoch += 1
+        self.separation_request_counted = False
         if first_green_bump:
             self.disperse_context = "first_green_bump"
             self.disperse_command = CommandRequest(
@@ -1677,6 +1688,8 @@ class CompetitionMission:
 
     def _arm_invalid_release(self, stm: StmSnapshot, now: float) -> None:
         if self.invalid_release_initial_ack is None:
+            self.separation_request_epoch += 1
+            self.separation_request_counted = False
             self.invalid_release_initial_ack = (
                 stm.acknowledged_sequence if stm.fresh else None
             )
@@ -1803,7 +1816,7 @@ class CompetitionMission:
         )
         self._clear_search_recovery_context(
             vision,
-            clear_carried=post_grab_recovery,
+            clear_carried=True,
         )
         self.grab_initial_ack = None
         if stm.mode == STM_MODE_SEARCH:
@@ -1923,6 +1936,11 @@ class CompetitionMission:
             )
         ):
             return self._audit_reacquire_output(vision, stm, now)
+        if (self.disperse_attempts >= self.settings.disperse_limit and
+                not self.pending_audit_valid and stm.audit_ready and not stm.audit_valid):
+            audit = self.pending_audit
+            self._clear_pending_audit()
+            return self._start_capture_abandon(audit, stm, now, third=True)
         if (
             self.pending_audit_release_context.startswith("post_grab_") and
             stm.fresh and
@@ -2013,7 +2031,6 @@ class CompetitionMission:
                 self.cluster_audit_active = False
                 if self._should_first_green_bump(audit):
                     return self._start_first_green_bump(audit, stm, now)
-                self.disperse_attempts += 1
                 return self._start_disperse(audit, stm, now)
             event = (
                 "" if self.pending_audit_event_emitted
@@ -2286,11 +2303,9 @@ class CompetitionMission:
                 if self._should_first_green_bump(audit):
                     return self._start_first_green_bump(audit, stm, now)
                 if self.cluster_keep_side is not None:
-                    self.disperse_attempts += 1
                     return self._start_disperse(audit, stm, now)
                 if self.disperse_observe_attempts < 2:
                     self.cluster_keep_side_count = 0
-                    self.disperse_attempts += 1
                     return self._start_disperse(audit, stm, now)
                 self.invalid_release_side = "both"
                 self.invalid_release_final = True
@@ -2625,6 +2640,7 @@ class CompetitionMission:
         if (
             self.first_common_delivered or
             self.first_green_bump_used or
+            self.disperse_attempts > 0 or
             audit.danger_present or
             audit.unknown_present or
             audit.injury_mixed or
@@ -3093,6 +3109,7 @@ class CompetitionMission:
             if self.cargo_recheck_context in {
                 "disperse_observe",
                 "disperse_selective",
+                "single_side",
             }:
                 self._begin_audit_confirmation(
                     stable,
@@ -3154,6 +3171,8 @@ class CompetitionMission:
         release_command = self._invalid_release_command()
         if self.invalid_release_context == "separate_then_search":
             message = "首次无法判断左右归属，发送无侧DISPERSE执行20°观察转向"
+        elif self.invalid_release_context == "third_separation_failed":
+            message = "第三次复审已就绪且仍非法，双开并等待mode24后退、mode47返中交接"
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",
@@ -3189,7 +3208,13 @@ class CompetitionMission:
             "invalid_cargo_release",
             tx_policy="normal_command",
             reason="invalid_audit_release",
-            expected_stm_modes=(expected_mode,),
+            expected_stm_modes=(
+                (STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
+                if self.invalid_release_context == "third_separation_failed" else
+                (expected_mode, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
+                if side == "both" and release_command.opcode == CMD_RELEASE_BOTH else
+                (expected_mode,)
+            ),
         )
 
     def _invalid_release_command(self) -> CommandRequest:
@@ -4199,17 +4224,19 @@ class CompetitionMission:
                 )
             same_cluster = self._same_cluster_target(target)
             previous_attempts = self.disperse_attempts if same_cluster else 0
+            previous_keep_side = self.separation_keep_side if same_cluster else None
             previous_cluster_id = self.cluster_id
             if same_cluster and previous_attempts >= self.settings.disperse_limit:
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
-                    "当前聚集目标已完成2次撞分，不再重复启动",
+                    "当前聚集目标已完成3次带侧分离，不再请求第四次",
                     tx_policy="hold",
                     reason="cluster_disperse_limit_reached",
                 )
             self._clear_cluster_context(reset_attempts=True)
             self.disperse_attempts = previous_attempts
+            self.separation_keep_side = previous_keep_side
             self.cluster_id = (
                 previous_cluster_id
                 if same_cluster else previous_cluster_id + 1
@@ -4220,13 +4247,15 @@ class CompetitionMission:
             destination = (
                 "injury" if target.class_name == "injured_orange" else "material"
             )
-            self._select_batch(
-                CargoBatch(
+            batch = CargoBatch(
                     (target.track_id,),
                     (target.class_name,),
                     destination,
                 )
-            )
+            if same_cluster and self.selected_batch is not None:
+                self.selected_batch = batch
+            else:
+                self._select_batch(batch)
             self._mark_target_seen(target, now)
             self.cluster_signature = (
                 self.cluster_id,
@@ -4387,11 +4416,44 @@ class CompetitionMission:
             ),
         )
 
+    def _start_capture_abandon(
+        self, audit: CargoAudit, stm: StmSnapshot, now: float, *, third: bool = False
+    ) -> CompetitionOutput:
+        self.invalid_release_side = "both"
+        self.invalid_release_final = True
+        self.invalid_release_context = "third_separation_failed" if third else "final_release"
+        self._set_state(CompetitionState.INVALID_RELEASE, now)
+        return self._invalid_release_output(audit, stm, now)
+
+    def _count_separation_acceptance(self, keep_side: str) -> None:
+        if not self.separation_request_counted:
+            self.disperse_attempts += 1
+            self.separation_keep_side = keep_side
+            self.separation_request_counted = True
+
     def _start_disperse(
         self, audit: CargoAudit, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        if self.disperse_attempts >= self.settings.disperse_limit:
+            return self._start_capture_abandon(audit, stm, now, third=True)
         if audit.danger_present:
             return self._start_danger_release(audit, stm, now)
+        if self.separation_keep_side is not None:
+            side = self.separation_keep_side
+            count = audit.left_count if side == "left" else audit.right_count
+            invalid = audit.left_invalid if side == "left" else audit.right_invalid
+            if count <= 0 or invalid:
+                return self._start_capture_abandon(audit, stm, now)
+            self.cluster_keep_side = side
+            self.cluster_keep_side_count = count
+        if self.cluster_keep_side is not None:
+            side = self.cluster_keep_side
+            category = audit.left_class if side == "left" else audit.right_class
+            count = audit.left_count if side == "left" else audit.right_count
+            green = audit.left_green_count if side == "left" else audit.right_green_count
+            eligible = (green > 0 or category == "green_supply") if not self.first_common_delivered else category in (MATERIAL_CLASSES | {"injured_orange"})
+            if count <= 0 or not eligible:
+                return self._start_capture_abandon(audit, stm, now)
         self._set_state(CompetitionState.DISPERSE, now)
         self._arm_disperse(stm, self.cluster_keep_side)
         return CompetitionOutput(
@@ -4440,6 +4502,10 @@ class CompetitionMission:
             self.disperse_initial_ack,
             self.disperse_command_accepted,
         )
+        if self.disperse_command_accepted and self.disperse_context == "selective":
+            self._count_separation_acceptance(
+                "right" if self.disperse_command.flags & CMD_TARGET_RIGHT else "left"
+            )
         if (
             not self.disperse_command_accepted and
             self._vision_fresh(vision, now) and
@@ -5123,6 +5189,37 @@ class CompetitionMission:
             )
         self.stm_fault_waiting = False
 
+        if stm.mode == STM_MODE_SEARCH and self.state in {
+            CompetitionState.GRAB, CompetitionState.DISPERSE,
+            CompetitionState.POST_GRAB_AUDIT, CompetitionState.CAPTURE_AUDIT,
+            CompetitionState.AUDIT_CONFIRM,
+        }:
+            return self._audit_reacquire_output(vision, stm, now)
+
+        if stm.mode == STM_MODE_CAPTURE_RETURN_WAIT and self.state != CompetitionState.RETURN_CENTER:
+            # Only F407's mode47 proves that this path opened the claws and
+            # finished the 300 mm retreat. Never infer it from time in mode24.
+            self._clear_search_recovery_context(vision, clear_carried=True)
+            self._reset_safe_zone_alignment()
+            self._reset_delivery_evidence()
+            self.safe_zone_exit_pending = False
+            self._begin_return(stm, now)
+            return replace(
+                self._return_center_output(pose, now, "第三次分离失败，F407已完成张爪后退，返回中心"),
+                event="capture_failure_return_start", reason="capture_return_wait_handoff",
+                expected_stm_modes=(STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH),
+            )
+        if stm.mode == STM_MODE_APPROACH_RECOVER and self.state in {
+            CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
+            CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT,
+            CompetitionState.AUDIT_CONFIRM, CompetitionState.POST_GRAB_AUDIT,
+            CompetitionState.GRAB, CompetitionState.DISPERSE,
+            CompetitionState.INVALID_RELEASE, CompetitionState.INVALID_BACKOFF,
+        }:
+            if self.state == CompetitionState.CLUSTER_APPROACH:
+                self._defer_failed_cluster(vision)
+            return self._audit_reacquire_output(vision, stm, now)
+
         if stm.mode == STM_MODE_BOUNDARY_RECOVER:
             if self.state != CompetitionState.BOUNDARY_RECOVERY:
                 self._clear_for_boundary_recovery(vision, now)
@@ -5613,6 +5710,8 @@ class CompetitionMission:
                     self.invalid_release_command_accepted,
                 )
             )
+            if self.invalid_release_command_accepted and release_command.opcode in {CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT}:
+                self._count_separation_acceptance("right" if release_command.opcode == CMD_RELEASE_LEFT else "left")
             release_complete = (
                 stm.fresh and
                 stm.mode == expected_mode and
@@ -5854,7 +5953,7 @@ class CompetitionMission:
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
-                    f"回到中心搜索区，等待相机90°和新视觉帧；已完成{self.delivery_count}件",
+                    f"回到中心搜索区，等待相机120°和新视觉帧；已完成{self.delivery_count}件",
                     event="return_search_gate_start",
                     tx_policy="hold",
                     reason="return_search_frame_gate",

@@ -55,6 +55,11 @@ from protocol import (  # noqa: E402
     CMD_PAUSE,
     CMD_APPROACH_TARGET,
     CMD_CARGO_AUDIT,
+    CMD_DISPERSE_PILE,
+    CMD_RELEASE_LEFT,
+    CMD_RELEASE_RIGHT,
+    CMD_RELEASE_BOTH,
+    CMD_RETURN_CENTER,
     command_context_frame,
 )
 from capture_roi import (  # noqa: E402
@@ -909,6 +914,9 @@ class CompetitionPlanner:
         self.sequence = 0
         self.protocol_task = secrets.randbelow(65535) + 1
         self.protocol_action = secrets.randbelow(65535) + 1
+        self.protocol_task_cursor = self.protocol_task
+        self.protocol_action_cursor = self.protocol_action
+        self.protocol_accepted: StmSnapshot | None = None
         self.protocol_task_generation = mission.task_generation
         self.protocol_action_key = None
         self.protocol_source_stamp = None
@@ -1150,9 +1158,11 @@ class CompetitionPlanner:
         if output.suppress_command_tx:
             return
         command = output.command or CommandRequest(CMD_HOLD)
-        if self.protocol_task_generation != self.mission.task_generation:
+        overlay = command.opcode in {CMD_HOLD, CMD_PAUSE}
+        if not overlay and self.protocol_task_generation != self.mission.task_generation:
             self.protocol_task_generation = self.mission.task_generation
-            self.protocol_task = (self.protocol_task + 1) & 0xFFFF
+            self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
+            self.protocol_task = self.protocol_task_cursor
             self.protocol_action_key = None
         # HOLD/PAUSE suspend the current action; they do not allocate a new
         # mechanical epoch. Dynamic coordinates and audit IDs are not keys.
@@ -1165,12 +1175,19 @@ class CompetitionPlanner:
                 command.audit.sweep_pickup,
             ),
         ) if command.opcode == CMD_CARGO_AUDIT else None
-        key = (command.opcode, command.flags, audit_role)
-        if (command.opcode not in {CMD_HOLD, CMD_PAUSE} or self.protocol_action_key is None):
+        separation_epoch = (
+            self.mission.separation_request_epoch
+            if command.opcode in {CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT, CMD_RELEASE_BOTH}
+            else None
+        )
+        key = (command.opcode, command.flags, audit_role, separation_epoch)
+        if not overlay or (self.protocol_accepted is None and self.protocol_action_key is None):
             if key != self.protocol_action_key:
-                self.protocol_action = (self.protocol_action + 1) & 0xFFFF
+                self.protocol_action_cursor = (self.protocol_action_cursor + 1) & 0xFFFF
+                self.protocol_action = self.protocol_action_cursor
                 if self.protocol_action == 0:
-                    self.protocol_task = (self.protocol_task + 1) & 0xFFFF
+                    self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
+                    self.protocol_task = self.protocol_task_cursor
                 self.protocol_action_key = key
                 self.protocol_source_stamp = None
                 self.protocol_vision_frame = 0
@@ -1188,13 +1205,64 @@ class CompetitionPlanner:
             frame = (pickup.last_audit_frame if pickup is not None else
                      self.mission.pending_audit_frame_sequence or self.mission.audit_last_frame_sequence or 0)
             self.protocol_vision_frame = frame & 0xFFFFFFFF
+        owner = self.protocol_accepted if overlay else None
         context = command_context_frame(
-            self.sequence, self.protocol_task, self.protocol_action,
+            self.sequence,
+            owner.task_id if owner is not None else self.protocol_task,
+            owner.action_id if owner is not None else self.protocol_action,
             self.protocol_vision_frame if command.opcode in {CMD_APPROACH_TARGET, CMD_CARGO_AUDIT} else 0,
         )
         write_command_frame(self.command_path, context + command.to_frame(self.sequence))
-        self.protocol_last_output = output
+        if not overlay or self.protocol_last_output is None:
+            self.protocol_last_output = output
         self.sequence = (self.sequence + 1) & 0xFF
+
+    def _adopt_recovery_context(self) -> None:
+        """Cancel an unaccepted request without reusing its allocated IDs."""
+        owner = self.protocol_accepted
+        if owner is not None:
+            self.protocol_task = owner.task_id
+            self.protocol_action = owner.action_id
+        self.protocol_task_generation = self.mission.task_generation
+        self.protocol_action_key = None
+        self.protocol_source_stamp = None
+        self.protocol_vision_frame = 0
+        self.protocol_last_output = None
+
+    def _is_recovery_observation(self, stm: StmSnapshot) -> bool:
+        if not stm.fresh:
+            return False
+        state = self.mission.state
+        if stm.mode == 41:
+            return True
+        if stm.mode == 47:
+            return (state != CompetitionState.RETURN_CENTER or
+                    (stm.context_valid and stm.task_id != self.protocol_task))
+        if stm.mode == 46:
+            return (state == CompetitionState.CLEAR_SAFE_ZONE or
+                    (state == CompetitionState.RETURN_CENTER and stm.context_valid and
+                     stm.task_id != self.protocol_task))
+        capture_states = {
+            CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM,
+            CompetitionState.POST_GRAB_AUDIT, CompetitionState.GRAB,
+            CompetitionState.DISPERSE, CompetitionState.INVALID_RELEASE,
+            CompetitionState.INVALID_BACKOFF, CompetitionState.WAIT_SEARCH_RECOVERY,
+        }
+        if stm.mode == 24:
+            return state in capture_states | {
+                CompetitionState.APPROACH, CompetitionState.INITIAL_APPROACH,
+                CompetitionState.CLUSTER_APPROACH,
+            }
+        if stm.mode == 3:
+            if state in capture_states | {CompetitionState.BOUNDARY_RECOVERY}:
+                return True
+            if state == CompetitionState.CLUSTER_APPROACH:
+                return self.mission.cluster_execution_seen
+            if state in {CompetitionState.APPROACH, CompetitionState.INITIAL_APPROACH}:
+                return self.mission.approach_f407_active_seen
+            return (state == CompetitionState.RETURN_CENTER and stm.context_valid and
+                    stm.accepted_command == CMD_RETURN_CENTER and bool(stm.action_status & 1))
+        return False
 
     def _output_for_cycle(
         self,
@@ -1205,6 +1273,14 @@ class CompetitionPlanner:
         now: float,
     ) -> CompetitionOutput:
         self.protocol_vision = vision
+        if stm.fresh and stm.context_valid and stm.action_status & 1:
+            self.protocol_accepted = stm
+        # Recovery is an observation from the MCU, not an ACK of the last
+        # requested action. Handle it before context_pending/camera pause.
+        if self._is_recovery_observation(stm):
+            self._adopt_recovery_context()
+            result = self.mission.step(vision, pose, replace(stm, context_matches=True), now)
+            return result
         if paused and self.mission.state == CompetitionState.FAULT:
             return self.mission.step(vision, pose, stm, now)
         if paused and self.mission.state == CompetitionState.WAIT_START:
@@ -1300,6 +1376,9 @@ class CompetitionPlanner:
                 "task_id": self.protocol_task,
                 "action_id": self.protocol_action,
                 "vision_frame": self.protocol_vision_frame,
+                "accepted_task_id": None if self.protocol_accepted is None else self.protocol_accepted.task_id,
+                "accepted_action_id": None if self.protocol_accepted is None else self.protocol_accepted.action_id,
+                "accepted_command": None if self.protocol_accepted is None else self.protocol_accepted.accepted_command,
             },
             "state": output.state.value,
             "message": output.message,
@@ -1456,6 +1535,8 @@ class CompetitionPlanner:
             "first_fault_code": self.mission.first_fault_code,
             "delivery_count": self.mission.delivery_count,
             "disperse_attempts": self.mission.disperse_attempts,
+            "separation_keep_side": self.mission.separation_keep_side,
+            "separation_request_epoch": self.mission.separation_request_epoch,
             "disperse_expected_done_mode": self.mission.disperse_expected_done_mode,
             "disperse_relay_tx_baseline": self.mission.disperse_relay_tx_baseline,
             "disperse_context": self.mission.disperse_context,
