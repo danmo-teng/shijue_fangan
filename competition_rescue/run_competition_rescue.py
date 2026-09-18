@@ -82,6 +82,7 @@ from state_machine import (  # noqa: E402
     StmSnapshot,
     TrackedCargo,
     VisionSnapshot,
+    STM_MODE_TRANSPORT_AUDIT,
     cargo_in_front_region,
 )
 
@@ -596,7 +597,7 @@ def make_vision_snapshot(
                 continue
             capture_overlap = (
                 0.60
-                if item.class_name in {"core_black", "injured_orange"}
+                if stm.mode == STM_MODE_TRANSPORT_AUDIT or item.class_name in {"core_black", "injured_orange"}
                 else 0.80
             )
             if not bbox_in_capture_roi(
@@ -1244,6 +1245,7 @@ class CompetitionPlanner:
                      stm.task_id != self.protocol_task))
         capture_states = {
             CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM,
+            CompetitionState.TRANSPORT_AUDIT,
             CompetitionState.POST_GRAB_AUDIT, CompetitionState.GRAB,
             CompetitionState.DISPERSE, CompetitionState.INVALID_RELEASE,
             CompetitionState.INVALID_BACKOFF, CompetitionState.WAIT_SEARCH_RECOVERY,
@@ -1598,6 +1600,8 @@ class CompetitionPlanner:
             "cargo_recheck_pending": self.mission.cargo_recheck_pending,
             "cargo_recheck_context": self.mission.cargo_recheck_context,
             "post_grab_audit_active": self.mission.post_grab_audit_active,
+            "transport_audit_camera_ready": self.mission.transport_audit_camera_ready,
+            "transport_audit_frame_floor": self.mission.transport_audit_frame_floor,
             "post_grab_camera_ready": self.mission.post_grab_camera_ready,
             "audit_hits": self.mission.audit_hits,
             "invalid_release_side": self.mission.invalid_release_side,

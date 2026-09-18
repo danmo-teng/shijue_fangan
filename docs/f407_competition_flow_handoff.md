@@ -1,5 +1,8 @@
 # 完整智能救援流程的 F407 配合说明
 
+> 当前新增要求：[停用自动地图边界恢复与预备点mode48复审](f407_transport_audit_disable_boundary.md)。
+> STAGE停车后先140°复审，合法后才定位ALIGN；投送后的1秒策略不变。
+
 > 当前配套：[cd5a072限推审核、三次分离和恢复分流](f407_cd5a072_upper_adaptation.md)。
 > mode47只用于第三次非法后的返中等待；上下文恢复先于pending等待门，S1退区不被打断。
 

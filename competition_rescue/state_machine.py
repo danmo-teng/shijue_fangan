@@ -88,6 +88,7 @@ STM_MODE_SAFE_SWEEP_RETRIEVE = 44
 STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT = 45
 STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED = 46
 STM_MODE_CAPTURE_RETURN_WAIT = 47
+STM_MODE_TRANSPORT_AUDIT = 48
 
 SAFE_CORRIDOR_CLEAR = "CLEAR"
 SAFE_CORRIDOR_BLOCKED = "BLOCKED"
@@ -444,6 +445,7 @@ class CompetitionState(str, Enum):
     DISPERSE = "DISPERSE"
     APPROACH = "APPROACH"
     NAVIGATE = "NAVIGATE"
+    TRANSPORT_AUDIT = "TRANSPORT_AUDIT"
     ALIGN_SAFE_ZONE_BY_POSE = "ALIGN_SAFE_ZONE_BY_POSE"
     ACQUIRE_SAFE_ZONE = "ACQUIRE_SAFE_ZONE"
     ALIGN_SAFE_ZONE_BY_LOCKED_BOX = "ALIGN_SAFE_ZONE_BY_LOCKED_BOX"
@@ -674,6 +676,12 @@ class CompetitionMission:
         self.grab_complete_confirmed = False
         self.post_grab_audit_active = False
         self.post_grab_camera_ready: bool | None = None
+        self.transport_audit_command: CommandRequest | None = None
+        self.transport_audit_camera_ready = False
+        self.transport_audit_frame_floor = 0
+        self.transport_audit_value: CargoAudit | None = None
+        self.transport_audit_tx_baseline: int | None = None
+        self.transport_audit_initial_ack: int | None = None
         self.navigation_initial_ack: int | None = None
         self.enter_initial_ack: int | None = None
         self.task_complete_initial_ack: int | None = None
@@ -866,6 +874,13 @@ class CompetitionMission:
                 self.invalid_release_command_accepted = False
             if state != CompetitionState.GRAB:
                 self.grab_complete_confirmed = False
+            if state != CompetitionState.TRANSPORT_AUDIT:
+                self.transport_audit_command = None
+                self.transport_audit_value = None
+                self.transport_audit_camera_ready = False
+                self.transport_audit_frame_floor = 0
+                self.transport_audit_tx_baseline = None
+                self.transport_audit_initial_ack = None
             if state != CompetitionState.RETURN_CENTER:
                 self.return_initial_ack = None
                 self.return_relay_tx_baseline = None
@@ -1044,6 +1059,8 @@ class CompetitionMission:
                 STM_MODE_APPROACH_RECOVER,
                 STM_MODE_SEARCH,
             )
+        if self.state == CompetitionState.TRANSPORT_AUDIT:
+            return (STM_MODE_NAVIGATE, STM_MODE_TRANSPORT_AUDIT, STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT)
         if self.state == CompetitionState.AUDIT_CONFIRM:
             if self.pending_audit_release_context == "recheck_empty_to_search":
                 return (STM_MODE_CAPTURE_AUDIT, STM_MODE_SEARCH)
@@ -4785,6 +4802,127 @@ class CompetitionMission:
             expected_stm_modes=(STM_MODE_ESCAPE_DONE,),
         )
 
+    def _begin_transport_audit(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput:
+        self._clear_pending_audit()
+        self.post_grab_audit_active = False
+        self._set_state(CompetitionState.TRANSPORT_AUDIT, now)
+        self.audit_epoch += 1
+        self.transport_audit_frame_floor = vision.frame_sequence
+        self.transport_audit_camera_ready = False
+        self.transport_audit_tx_baseline = stm.relay_mission_tx_frames
+        self.transport_audit_initial_ack = stm.acknowledged_sequence
+        return replace(
+            self._transport_audit_output(vision, pose, stm, now),
+            event="transport_audit_start",
+        )
+
+    def _transport_audit_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput:
+        assert self.selected_batch is not None
+        ready = (stm.fresh and stm.mode == STM_MODE_TRANSPORT_AUDIT and
+                 stm.claw_visible and stm.gripper_closed and stm.camera_pitch_cdeg == 14000)
+        if ready != self.transport_audit_camera_ready:
+            self.transport_audit_camera_ready = ready
+            self.transport_audit_frame_floor = vision.frame_sequence
+            self.audit_last_frame_sequence = None
+            self.audit_last_signature = None
+            self.audit_hits = 0
+            self.transport_audit_command = None
+            self.transport_audit_value = None
+        empty_command = CommandRequest(
+            CMD_CARGO_AUDIT, CMD_VALID, audit=self._audit_payload(CargoAudit())
+        )
+        if not ready or not self._vision_fresh(vision, now):
+            self.audit_hits = 0
+            self.audit_last_signature = None
+            self.transport_audit_command = None
+            self.transport_audit_value = None
+            return CompetitionOutput(
+                self.state, empty_command,
+                "预备点停车，等待mode48、夹爪闭合、140°就绪及新视觉帧；不推进ALIGN",
+                self.selected_batch, tx_policy="audit_unstable_publish",
+                reason="transport_audit_camera_wait",
+                expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_TRANSPORT_AUDIT),
+            )
+        previous_command = self.transport_audit_command
+        previous_signature = self.audit_last_signature
+        if vision.frame_sequence > max(self.transport_audit_frame_floor, self.audit_last_frame_sequence or 0):
+            audit = vision.capture_audit or CargoAudit()
+            valid = self._audit_valid(audit)
+            signature = self._audit_signature_for_state(audit, valid)
+            self.audit_hits = self.audit_hits + 1 if signature == self.audit_last_signature else 1
+            self.audit_last_signature = signature
+            self.audit_last_frame_sequence = vision.frame_sequence
+            self.audit_id = (self.audit_id + 1) & 0xFF
+            self.transport_audit_value = replace(audit, stable=self.audit_hits >= self.settings.audit_stable_frames)
+            self.transport_audit_command = CommandRequest(
+                CMD_CARGO_AUDIT, CMD_VALID, audit=self._audit_payload(self.transport_audit_value)
+            )
+        audit = self.transport_audit_value
+        valid = audit is not None and self._audit_valid(audit)
+        confirmed = (
+            audit is not None and self.audit_hits >= self.settings.audit_stable_frames and
+            previous_command is not None and previous_command.audit.stable and
+            previous_signature == self.audit_last_signature and
+            stm.audit_ready and stm.audit_valid == valid and
+            self._relay_sent_since(stm, previous_command, self.transport_audit_tx_baseline) and
+            self._opcode_acceptance_seen(
+                stm, CMD_CARGO_AUDIT, self.transport_audit_tx_baseline,
+                self.transport_audit_initial_ack, False,
+            )
+        )
+        if confirmed:
+            if valid:
+                old_destination = self.confirmed_delivery_destination
+                if self._audit_destination(audit) != old_destination and not self._pose_fresh(pose):
+                    return CompetitionOutput(
+                        self.state, self._pause(),
+                        "预备点复审合法但目的地已变化，等待定位恢复后重新导航",
+                        self.selected_batch, audit, tx_policy="pause",
+                        reason="transport_audit_redirect_pose_wait",
+                        expected_stm_modes=(STM_MODE_TRANSPORT_AUDIT,),
+                    )
+                self._latch_carried_manifest(audit)
+                self._reset_safe_zone_alignment()
+                if self.confirmed_delivery_destination != old_destination:
+                    self._set_state(CompetitionState.NAVIGATE, now)
+                    self.navigation_initial_ack = stm.acknowledged_sequence
+                    return CompetitionOutput(
+                        self.state, self._navigation_command(pose, self._target_point(), staging_only=True),
+                        "预备点复审发现目的地变化，重新导航到实际物资对应预备点",
+                        self.selected_batch, audit, event="transport_audit_redirect",
+                        reason="transport_audit_destination_changed", tx_policy="normal_command",
+                        expected_stm_modes=(STM_MODE_NAVIGATE,),
+                    )
+                self._begin_safe_zone_pose_align(stm, now)
+                return CompetitionOutput(
+                    self.state, self._safe_zone_pose_align_command(),
+                    "预备点完整夹爪复审合法，请F407恢复相机120°并开始定位ALIGN",
+                    self.selected_batch, audit, event="transport_audit_confirmed",
+                    reason="transport_audit_valid", tx_policy="normal_command",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
+            if self.disperse_attempts >= self.settings.disperse_limit:
+                return self._start_capture_abandon(audit, stm, now, third=True)
+            if audit.danger_present:
+                return self._start_danger_release(audit, stm, now)
+            side = self._choose_release_side(audit) if audit.total_count > 0 else "both"
+            self.invalid_release_side = side
+            self.invalid_release_final = side == "both"
+            self.invalid_release_context = "final_release" if side == "both" else "single_side_then_reaudit"
+            self._set_state(CompetitionState.INVALID_RELEASE, now)
+            return self._invalid_release_output(audit, stm, now)
+        command = self.transport_audit_command or empty_command
+        return CompetitionOutput(
+            self.state, command,
+            f"预备点完整夹爪复审{self.audit_hits}/{self.settings.audit_stable_frames}，等待READY/VALID；不允许超时放行",
+            self.selected_batch, audit, tx_policy="audit_stable_publish" if command.audit.stable else "audit_unstable_publish",
+            reason="transport_audit_pending", expected_stm_modes=(STM_MODE_TRANSPORT_AUDIT,),
+        )
+
     def _navigate(
         self,
         vision: VisionSnapshot,
@@ -4795,6 +4933,9 @@ class CompetitionMission:
         if self.selected_batch is None:
             self._set_state(CompetitionState.SEARCH, now)
             return CompetitionOutput(self.state, self._hold(), "没有锁定批次，返回搜索")
+        if (self.selected_batch.destination != "stash" and stm.fresh and
+                stm.mode == STM_MODE_TRANSPORT_AUDIT and stm.gripper_closed):
+            return self._begin_transport_audit(vision, pose, stm, now)
         target = self._target_point()
         navigation_accepted = self._fresh_mode_after(
             stm, STM_MODE_NAVIGATE, self.navigation_initial_ack
@@ -4826,56 +4967,18 @@ class CompetitionMission:
                     stm.gripper_closed and
                     self.staging_zero_accepted
                 )
-                camera_mismatch = (
-                    stm.fresh and
-                    stm.mode == STM_MODE_NAVIGATE and
-                    stm.distance_done and
-                    stm.camera_pitch_cdeg == 14000
-                )
                 if not staging_done:
-                    event = ""
-                    if camera_mismatch and not self.staging_camera_mismatch_reported:
-                        self.staging_camera_mismatch_reported = True
-                        event = "staging_camera_firmware_mismatch"
                     return CompetitionOutput(
                         self.state,
                         zero_command,
-                        (
-                            "mode10和DISTANCE_DONE已成立但摄像头仍为140°，"
-                            "下位机固件版本与最新STAGE流程不匹配"
-                            if camera_mismatch else
-                            "已进入60 cm预备点容差，持续发送STAGE NAV D=0等待F407确认"
-                        ),
+                        "已进入60 cm预备点容差，持续发送STAGE NAV D=0等待F407确认",
                         self.selected_batch,
-                        event=event,
                         motion_expected=True,
                         tx_policy="staging_zero",
                         reason="safe_zone_staging_zero_pending",
                         expected_stm_modes=(STM_MODE_NAVIGATE,),
                     )
-                mismatch_event = ""
-                if camera_mismatch and not self.staging_camera_mismatch_reported:
-                    self.staging_camera_mismatch_reported = True
-                    mismatch_event = "staging_camera_firmware_mismatch"
-                self._begin_safe_zone_pose_align(stm, now)
-                return CompetitionOutput(
-                    self.state,
-                    self._safe_zone_pose_align_command(),
-                    (
-                        "STAGE完成但摄像头仍为140°，下位机固件版本不匹配；"
-                        "继续发送定位ALIGN"
-                        if camera_mismatch else
-                        "到达安全区半区前60 cm预备点，按定位正方向对准安全区"
-                    ),
-                    self.selected_batch,
-                    event=mismatch_event or "safe_zone_staging_arrived",
-                    tx_policy="normal_command",
-                    reason="safe_zone_pose_align_start",
-                    expected_stm_modes=(
-                        STM_MODE_NAVIGATE,
-                        STM_MODE_ALIGN_SAFE_ZONE,
-                    ),
-                )
+                return self._begin_transport_audit(vision, pose, stm, now)
             return CompetitionOutput(
                 self.state,
                 staging_command,
@@ -5193,6 +5296,7 @@ class CompetitionMission:
             CompetitionState.GRAB, CompetitionState.DISPERSE,
             CompetitionState.POST_GRAB_AUDIT, CompetitionState.CAPTURE_AUDIT,
             CompetitionState.AUDIT_CONFIRM,
+            CompetitionState.TRANSPORT_AUDIT,
         }:
             return self._audit_reacquire_output(vision, stm, now)
 
@@ -5215,6 +5319,7 @@ class CompetitionMission:
             CompetitionState.AUDIT_CONFIRM, CompetitionState.POST_GRAB_AUDIT,
             CompetitionState.GRAB, CompetitionState.DISPERSE,
             CompetitionState.INVALID_RELEASE, CompetitionState.INVALID_BACKOFF,
+            CompetitionState.TRANSPORT_AUDIT,
         }:
             if self.state == CompetitionState.CLUSTER_APPROACH:
                 self._defer_failed_cluster(vision)
@@ -5315,6 +5420,9 @@ class CompetitionMission:
                 now,
                 message="靠近中心物资堆",
             )
+
+        if self.state == CompetitionState.TRANSPORT_AUDIT:
+            return self._transport_audit_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.SEARCH:
             if self.settings.initial_stash_enabled and not self.initial_stash_done:
