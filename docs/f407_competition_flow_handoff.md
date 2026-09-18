@@ -541,3 +541,23 @@ mode21或mode38
 → 合法：AUDIT_VALID=1并进入mode22
 → 上位机按合爪后实际清单发送NAV
 ```
+
+## 2026-09-18：对照F407 16c4b77的流程适配
+
+本次只读核对下位机 `16c4b77` 的 `Main/Src/Task.c` 和
+`Main/Inc/app_config.h`，仅修改上位机。
+
+- 投送进入新鲜mode15并确认ENTER已接受后，视觉观察最多1秒。
+  提前确认则立即发送TASK_COMPLETE；超时同样进入TASK_COMPLETE，
+  不再第二轮观察，完成依据记录为 `delivery_visual_timeout`，不能记为视觉确认成功。
+  F407的 `APP_DELIVERY_VERIFY_WAIT_MS=1200`：上位机1秒切换后持续发送完成命令，
+  F407到自身1200 ms门槛才实际进入mode16。因此上位机修改不能把实际退出压到1秒以内。
+- F407聚集mode38只有收齐3个不同audit_id才进入mode37。上位机待确认期间继续
+  消费真实新帧，包括非法聚集审核；稳定空爪待回SEARCH同样续ID。
+  重复同一视觉帧不生成新ID，避免丢包后双方永久等待。
+- F407在释放/分离后的 `cargo_recheck_pending` 阶段只接受RELEASE_BOTH。
+  此阶段危险复审直接双侧释放；首次危险审核仍按明确左右侧释放并YIELD复审，
+  不改为FIRST_GREEN_BUMP或DISPERSE。
+
+STAGE、两次ALIGN、转向后新框走廊检查、0x13及mode39/23/40、mode41
+继续按现有协议运行。缺标定和走廊不可用的门禁保持现有行为。

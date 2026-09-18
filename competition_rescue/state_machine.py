@@ -428,12 +428,12 @@ class CompetitionSettings:
     safe_sweep_capture_offset_mm: float = 150.0
     push_plate_offset_m: float = 0.105
     fence_stop_margin_m: float = 0.0075
-    delivery_observation_timeout_s: float = 5.0
+    delivery_observation_timeout_s: float = 1.0
     delivery_window_s: float = 1.0
     delivery_window_frames: int = 7
     delivery_inside_required: int = 5
     delivery_max_misses: int = 2
-    delivery_max_observations: int = 2
+    delivery_max_observations: int = 1
     stuck_observation_s: float = 3.0
     stuck_translation_m: float = 0.03
     stuck_yaw_deg: float = 3.0
@@ -1818,24 +1818,34 @@ class CompetitionMission:
             if camera_edge or stm.camera_pitch_cdeg != 14000:
                 return self._audit_output(vision, stm, now)
         if (
-            self.pending_audit_valid and
-            not stm.audit_valid and
+            (
+                (self.pending_audit_valid and not stm.audit_valid) or
+                (
+                    self.pending_audit_release_context == "cluster_capture" and
+                    stm.mode == STM_MODE_CLUSTER_CAPTURE_AUDIT
+                ) or
+                self.pending_audit_release_context == "recheck_empty_to_search"
+            ) and
             self._vision_fresh(vision, now) and
             vision.frame_sequence > 0 and
             (
                 self.pending_audit_frame_sequence is None or
                 vision.frame_sequence > self.pending_audit_frame_sequence
             ) and
-            vision.capture_audit is not None and
+            (
+                vision.capture_audit is not None or
+                self.pending_audit_release_context == "recheck_empty_to_search"
+            ) and
             stm.claw_visible and
             stm.camera_pitch_cdeg == 14000 and
             stm.mode in {
                 STM_MODE_CAPTURE_AUDIT,
+                STM_MODE_CLUSTER_CAPTURE_AUDIT,
                 STM_MODE_CLUSTER_READY,
                 STM_MODE_POST_GRAB_AUDIT,
             }
         ):
-            post_grab = self.pending_audit_release_context == "post_grab_valid"
+            post_grab = self.post_grab_audit_active
             continued_signature = self.pending_audit_signature
             continued_hits = self.pending_audit_hits
             continued_frame_sequence = self.pending_audit_frame_sequence
@@ -2538,7 +2548,9 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
-        side = self._danger_release_side(audit)
+        # F407 task_release_command_valid only accepts RELEASE_BOTH while
+        # cargo_recheck_pending (after RELEASE/YIELD or either DISPERSE).
+        side = "both" if self.cargo_recheck_pending else self._danger_release_side(audit)
         self.invalid_release_side = side
         self.invalid_release_final = side == "both"
         self.invalid_release_context = (
@@ -3419,41 +3431,13 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
-        if self.delivery_observation_attempt < self.settings.delivery_max_observations:
-            self._start_delivery_observation(now, self.delivery_observation_attempt + 1)
-            self.delivery_timeout_reason = "first_observation_timeout"
-            return CompetitionOutput(
-                self.state,
-                self._enter_safe_zone_command(),
-                "首次投送视觉观察超时，原地重新观察",
-                self.selected_batch,
-                event="delivery_reobserve_start",
-                tx_policy="normal_command",
-                reason="delivery_reobserve",
-            )
-        if stm.fresh and stm.mode in {
-            STM_MODE_RAM_VERIFY,
-            STM_MODE_EXIT_SAFE_ZONE,
-            STM_MODE_FACE_FIELD_CENTER,
-            STM_MODE_SEARCH,
-        }:
-            return self._finish_delivery(
-                stm,
-                now,
-                basis="delivery_timeout_after_reobserve",
-                message="投送视觉在有限观察窗口内未确认，按F407已完成投送进入下一阶段",
-                event="delivery_timeout_complete",
-            )
-        first_warning = self.delivery_timeout_reason != "observation_wait_extended"
-        self.delivery_timeout_reason = "observation_wait_extended"
-        return CompetitionOutput(
-            self.state,
-            self._enter_safe_zone_command(),
-            "等待F407进入投送完成状态，视觉未确认时不再重复推进",
-            self.selected_batch,
-            event="delivery_verify_wait_extended" if first_warning else "",
-            tx_policy="normal_command",
-            reason=self.delivery_timeout_reason,
+        self.delivery_timeout_reason = "delivery_visual_timeout"
+        return self._finish_delivery(
+            stm,
+            now,
+            basis="delivery_visual_timeout",
+            message="投送视觉观察达到1秒仍未确认，发送TASK_COMPLETE进入退出返中阶段",
+            event="delivery_timeout_complete",
         )
 
     def _target_point(self) -> tuple[float, float]:
@@ -5456,7 +5440,9 @@ class CompetitionMission:
             if (
                 self.delivery_observation_started_s is None or
                 self._delivery_observation_elapsed(now) is not None and
-                self._delivery_observation_elapsed(now) >= self.settings.delivery_observation_timeout_s
+                self._delivery_observation_elapsed(now) >= min(
+                    1.0, self.settings.delivery_observation_timeout_s
+                )
             ):
                 if self.delivery_observation_started_s is None:
                     self._start_delivery_observation(now, 1)
