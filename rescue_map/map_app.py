@@ -206,6 +206,9 @@ class RescueMapApp:
         self.pose = initial_pose(self.zone, self.corner_offset_m)
         self.localization_process: subprocess.Popen | None = None
         self.vision_process: subprocess.Popen | None = None
+        self.session_started = False
+        self.vision_start_pending = False
+        self.runtime_archived_on_reset = False
         self.fullscreen = options.fullscreen
         self.hitboxes: dict[str, tuple[int, int, int, int]] = {}
         self.message = "请选择1～4号出发区和红蓝方，点击按钮或按Enter启动"
@@ -389,12 +392,13 @@ class RescueMapApp:
             )
             text.add(f"定位：{localization_label}", (x0, 520), 17, (200, 210, 225))
             text.add(f"T265直线比例：{scale_label}", (x0, 555), 18, (220, 200, 80), True)
-            text.add("进攻：对方区前40cm；防守：内移15cm", (x0, 590), 14, (200, 210, 225))
+            text.add("进攻：对方区前45cm；防守：内移15cm", (x0, 590), 14, (200, 210, 225))
             self.button(canvas, text, "start", "确认并开始", (x0, 610, x0 + 325, 675), True, (35, 135, 70))
             pose = initial_pose(self.zone, self.corner_offset_m)
-            text.add("键盘：1～4选区域，R/B选颜色，Enter启动", (x0, 725), 15, (220, 220, 220))
+            text.add("1～4选区域；R复位；Enter启动", (x0, 725), 15, (220, 220, 220))
             text.add(f"X={pose.x_m:+.2f}  Y={pose.y_m:+.2f}  车头={pose.yaw_deg:.0f}°", (x0, 755), 15, (190, 190, 195))
             text.add(self.message, (x0, 800), 14, (0, 215, 255))
+            text.add("复位后：摆回出发位，下位机重新上电", (x0, 835), 14, (190, 190, 195))
         else:
             pose = self.pose
             quality_color = {
@@ -454,7 +458,7 @@ class RescueMapApp:
             text.add(f"数据年龄：{age_text}", (x0, 825), 17, (175, 175, 180))
             if abs(pose.x_m) > FIELD_HALF_M or abs(pose.y_m) > FIELD_HALF_M:
                 text.add("警告：融合坐标已越出场地边界", (x0, 860), 17, (40, 70, 235), True)
-            text.add("S 重选  R 清轨迹  F 全屏  Q 退出", (x0, 900), 17, (180, 180, 185))
+            text.add("S 重选  R 复位  F 全屏  Q 退出", (x0, 900), 17, (180, 180, 185))
             if self.localization_process and self.localization_process.poll() is not None:
                 text.add(f"定位进程已退出：{self.localization_process.returncode}", (x0, 935), 17, (50, 80, 235), True)
             elif self.message:
@@ -515,6 +519,8 @@ class RescueMapApp:
             self.select_at(x, y)
 
     def start_session(self) -> None:
+        if self.session_started:
+            return
         if self.t265_map_enabled:
             if self.t265_map_path is None or not self.t265_map_path.is_file() or self.t265_map_path.stat().st_size <= 0:
                 self.message = "T265地图文件不存在，无法开启地图模式"
@@ -529,7 +535,9 @@ class RescueMapApp:
         self.last_live_read_monotonic = None
         RUNTIME.mkdir(parents=True, exist_ok=True)
         self.localization_log.parent.mkdir(parents=True, exist_ok=True)
-        self.archive_previous_runtime()
+        if not self.runtime_archived_on_reset:
+            self.archive_previous_runtime()
+        self.runtime_archived_on_reset = False
         write_session(
             RUNTIME / "session.json",
             self.zone,
@@ -557,6 +565,7 @@ class RescueMapApp:
         (RUNTIME / "mission_diagnostics.json").unlink(missing_ok=True)
         (RUNTIME / "localization_events.jsonl").unlink(missing_ok=True)
         self.selecting = False
+        self.session_started = True
         self.started_monotonic = time.monotonic()
         if self.t265_map_enabled:
             self.message = "等待T265导入地图并完成重定位"
@@ -574,15 +583,58 @@ class RescueMapApp:
                 self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
             except OSError as exc:
                 self.message = f"定位启动失败：{exc}"
-        if self.options.launch_vision and not self.options.screenshot:
-            try:
-                command = self.vision_command()
-                self.vision_process = subprocess.Popen(
-                    command,
-                    cwd=PROJECT_ROOT / "mission_test",
-                )
-            except OSError as exc:
-                self.message = f"识别启动失败：{exc}"
+                self.session_started = False
+                self.selecting = True
+                return
+        self.vision_start_pending = bool(
+            self.options.launch_vision and not self.options.screenshot and not self.options.demo
+        )
+
+    def maybe_start_vision(self) -> None:
+        if not self.vision_start_pending:
+            return
+        if self.localization_process is not None and self.localization_process.poll() is not None:
+            self.vision_start_pending = False
+            self.session_started = False
+            self.selecting = True
+            self.message = "定位已退出；修复后按Enter重试"
+            return
+        if (self.pose.quality not in {"GOOD", "DEGRADED"}
+                or self.pose.age_ms > 250.0 or not self.pose.t265_map_startup_ready):
+            self.message = "等待新鲜定位就绪，再启动识别"
+            return
+        try:
+            self.vision_process = subprocess.Popen(
+                self.vision_command(), cwd=PROJECT_ROOT / "mission_test",
+            )
+            self.vision_start_pending = False
+            self.message = "定位就绪，识别流程已启动"
+        except OSError as exc:
+            self.stop_session_processes()
+            self.session_started = False
+            self.selecting = True
+            self.message = f"识别启动失败：{exc}"
+
+    def reset_session(self) -> None:
+        # Keep the UART relay alive until vision has sent its shutdown command.
+        self.stop_session_processes()
+        if not self.runtime_archived_on_reset:
+            self.archive_previous_runtime()
+            self.runtime_archived_on_reset = True
+        for path in (
+            self.localization_json, RUNTIME / "stm32_status.json",
+            RUNTIME / "uart_command.bin", RUNTIME / "mission_diagnostics.json",
+            RUNTIME / "competition_diagnostics.json", RUNTIME / "delivery_contact_pose.json",
+        ):
+            path.unlink(missing_ok=True)
+        self.session_started = False
+        self.selecting = True
+        self.trajectory.reset()
+        self.odometry_trajectory.reset()
+        self.pose = initial_pose(self.zone, self.corner_offset_m)
+        self.last_live_read_monotonic = None
+        self.started_monotonic = time.monotonic()
+        self.message = "已复位，保留选择；按Enter重新启动"
 
     def archive_previous_runtime(self) -> None:
         """Copy the previous session files before starting a new run."""
@@ -649,9 +701,8 @@ class RescueMapApp:
             "--display-fps", "15",
         ]
         if self.t265_map_enabled:
-            # The mission process starts in parallel with localization and
-            # otherwise could exhaust its normal 30 s wait before map
-            # relocalization has completed.
+            # Keep the existing map-mode startup allowance for the runner's
+            # own pose/configuration handshake after localization is ready.
             command += [
                 "--startup-timeout",
                 f"{max(45.0, self.relocalization_timeout_s + 15.0):.3f}",
@@ -671,6 +722,7 @@ class RescueMapApp:
                 process.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
                 process.kill()
+                process.wait(timeout=2.0)
 
     def stop_vision(self) -> None:
         self.stop_process(self.vision_process)
@@ -681,6 +733,7 @@ class RescueMapApp:
         self.localization_process = None
 
     def stop_session_processes(self) -> None:
+        self.vision_start_pending = False
         # Stop vision first so it releases the camera and stops producing UART
         # command files before the localization relay closes the serial port.
         self.stop_vision()
@@ -741,6 +794,7 @@ class RescueMapApp:
                 )
         self.trajectory.update(self.pose)
         self.update_odometry_trajectory()
+        self.maybe_start_vision()
 
     def update_odometry_trajectory(self) -> None:
         if not self.pose.odom_available or self.pose.quality not in {"GOOD", "DEGRADED", "LOST"}:
@@ -761,27 +815,21 @@ class RescueMapApp:
         key &= 0xFF
         if key in (ord("q"), ord("Q"), 27):
             return False
+        if key in (ord("r"), ord("R")):
+            self.reset_session()
+            return True
         if self.selecting:
             if ord("1") <= key <= ord("4"):
                 self.zone = key - ord("0")
                 self.pose = initial_pose(self.zone, self.corner_offset_m)
-            elif key in (ord("r"), ord("R")):
-                self.side = "red"
             elif key in (ord("b"), ord("B")):
                 self.side = "blue"
             elif key in (10, 13):
                 self.start_session()
         else:
             if key in (ord("s"), ord("S")):
-                self.stop_session_processes()
-                self.selecting = True
+                self.reset_session()
                 self.message = "重新选择后需再次确认开始"
-            elif key in (ord("r"), ord("R")):
-                self.trajectory.seed(self.pose.x_m, self.pose.y_m)
-                if self.pose.odom_available:
-                    self.odometry_trajectory.seed(self.pose.odom_x_m, self.pose.odom_y_m)
-                else:
-                    self.odometry_trajectory.seed(self.pose.x_m, self.pose.y_m)
             elif key in (ord("f"), ord("F")):
                 self.fullscreen = not self.fullscreen
                 cv2.setWindowProperty(

@@ -619,7 +619,7 @@ class CompetitionSettings:
         # corridor and away from either safe zone.  The point is a strategy
         # parameter, not a field-coordinate correction.
         if self.opening_strategy == "attack":
-            return -self.material_target_x_m, -self.side_sign * (self.safe_fence_face_m - 0.40)
+            return -self.material_target_x_m, -self.side_sign * (self.safe_fence_face_m - 0.45)
         stash_x = 0.70 if self.start_zone in {2, 4} else -0.70
         stash_y = 0.55 if self.side == "red" else -0.55
         return stash_x, stash_y
