@@ -885,6 +885,9 @@ class CompetitionPlanner:
         self.grab_waitnav_started_s: float | None = None
         self.grab_waitnav_event_emitted = False
         self.nav_waitnav_last_ack: int | None = None
+        self.sweep_observation_key: tuple[int, int, bool] | None = None
+        self.sweep_observation_started_s: float | None = None
+        self.sweep_observation_start_pose: dict | None = None
         self.termination_attempted = False
         self.termination_result: dict = {
             "attempted": False,
@@ -971,6 +974,60 @@ class CompetitionPlanner:
             ),
             "pose_valid": pose.valid,
             "pose_age_ms": pose.age_ms if math.isfinite(pose.age_ms) else None,
+        })
+
+    def _update_safe_sweep_diagnostic(
+        self,
+        output: CompetitionOutput,
+        vision: VisionSnapshot,
+        pose: PoseSnapshot,
+        stm: StmSnapshot,
+        now: float,
+    ) -> None:
+        """Observe wire mode/claw edges only; never infer a mechanical subphase."""
+        active = (
+            output.state == CompetitionState.CLEAR_SAFE_ZONE or
+            self.mission.safe_sweep_reaudit_active
+        )
+        if not active:
+            if self.sweep_observation_key is not None:
+                self.events_log.write("safe_sweep_observation_end", {
+                    "previous_observation": self.sweep_observation_key,
+                    "upper_state": output.state.value,
+                    "stm": stm_dict(stm),
+                    "pose": pose_dict(pose),
+                })
+            self.sweep_observation_key = None
+            self.sweep_observation_started_s = None
+            self.sweep_observation_start_pose = None
+            return
+        if not stm.fresh:
+            return
+        key = (self.mission.safe_sweep_attempts, stm.mode, stm.gripper_closed)
+        if key == self.sweep_observation_key:
+            return
+        previous = self.sweep_observation_key
+        previous_elapsed = (
+            None if self.sweep_observation_started_s is None else
+            max(0.0, now - self.sweep_observation_started_s)
+        )
+        self.sweep_observation_key = key
+        self.sweep_observation_started_s = now
+        self.sweep_observation_start_pose = pose_dict(pose)
+        pickup = self.mission.safe_sweep_pickup
+        self.events_log.write("safe_sweep_mode_observed", {
+            "previous_observation": previous,
+            "previous_observation_elapsed_s": previous_elapsed,
+            "attempt": key[0],
+            "upper_state": output.state.value,
+            "stm": stm_dict(stm),
+            "pose": pose_dict(pose),
+            "vision_frame_sequence": vision.frame_sequence,
+            "command_opcode": None if output.command is None else output.command.opcode,
+            "reason": output.reason,
+            "recovering_original": None if pickup is None else pickup.recovering_original,
+            "pickup_grab_started": None if pickup is None else pickup.grab_started,
+            "mechanical_subphase_available": False,
         })
 
     def start(self) -> None:
@@ -1222,6 +1279,15 @@ class CompetitionPlanner:
             "safe_sweep_execution_seen": self.mission.safe_sweep_execution_seen,
             "safe_sweep_reaudit_active": self.mission.safe_sweep_reaudit_active,
             "safe_sweep_control": "pixel_approach",
+            "safe_sweep_observation": {
+                "key": self.sweep_observation_key,
+                "elapsed_s": (
+                    None if self.sweep_observation_started_s is None else
+                    max(0.0, diagnostic_now - self.sweep_observation_started_s)
+                ),
+                "start_pose": self.sweep_observation_start_pose,
+                "mechanical_subphase_available": False,
+            },
             "safe_sweep_pickup": (
                 None if self.mission.safe_sweep_pickup is None else {
                     "target_id": self.mission.safe_sweep_pickup.target_id,
@@ -1365,6 +1431,9 @@ class CompetitionPlanner:
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
                 self._update_grab_waitnav_diagnostic(
                     output, pose, stm, started
+                )
+                self._update_safe_sweep_diagnostic(
+                    output, vision, pose, stm, started
                 )
                 self._log_command_tx_suppression(output)
                 self._publish(output)

@@ -1,5 +1,8 @@
 # 可直接复制给F407：两件上限、mode41修复、转向放置与限距找回
 
+> 此契约已由af8c534实现；后续发现抓障后回退摆头，详见
+> [回退控制修正要求](f407_sweep_reverse_trace_fix.md)。本文数量及协议要求继续有效。
+
 本次只读核对下位机GitHub HEAD `c71efd6`（feat: add vision-guided safe-zone obstacle pickup）。
 其mode42/43、扫障审核bit6已经实现，但仍采用150 mm横移暂放、普通/核心最多3件，
 HOLD接收分支仍会打断mode41转向。本文件覆盖旧扫障说明中的对应条款。
