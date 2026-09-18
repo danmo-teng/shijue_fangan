@@ -63,8 +63,6 @@ from state_machine import (  # noqa: E402
     CARGO_CLASSES,
     SAFE_CORRIDOR_BLOCKED,
     SAFE_CORRIDOR_CLEAR,
-    SAFE_CORRIDOR_HOMOGRAPHY_MISSING,
-    SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN,
     CargoAudit,
     CommandRequest,
     CompetitionMission,
@@ -133,7 +131,7 @@ def arguments() -> argparse.Namespace:
         "--safe-sweep-capture-offset-mm",
         type=float,
         default=150.0,
-        help="视觉纵向参考点到夹爪入口的机械距离与入爪余量之和",
+        help="兼容旧启动参数；视觉扫障不再使用此距离偏移",
     )
     parser.add_argument("--camera-retries", type=int, default=1)
     return parser.parse_args()
@@ -519,8 +517,7 @@ def safe_zone_push_corridor(
                 return True
         return False
 
-    candidates: list[tuple[int, TrackedCargo]] = []
-    unknown_distance_candidates: list[TrackedCargo] = []
+    candidates: list[TrackedCargo] = []
     for item, bottom_center in corridor_items:
         if (
             item.track_id in excluded_track_ids or
@@ -543,39 +540,14 @@ def safe_zone_push_corridor(
             )
         ):
             continue
-        if item.relative_xy_m is None or item.relative_xy_m[1] <= 0.0:
-            unknown_distance_candidates.append(item)
-            continue
-        distance_mm = max(
-            80,
-            min(
-                600,
-                round(
-                    item.relative_xy_m[1] * 1000.0 -
-                    safe_sweep_capture_offset_mm
-                ),
-            ),
-        )
-        candidates.append((distance_mm, item))
-    if unknown_distance_candidates:
-        obstacle = max(
-            unknown_distance_candidates,
-            key=lambda item: (
-                item.bbox[1] + item.bbox[3],
-                item.area_px,
-                -item.track_id,
-            ),
-        )
-        return (
-            polygon,
-            obstacle,
-            None,
-            SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN,
-        )
+        candidates.append(item)
     if not candidates:
         return polygon, None, None, SAFE_CORRIDOR_CLEAR
-    distance_mm, obstacle = min(candidates, key=lambda entry: (entry[0], entry[1].track_id))
-    return polygon, obstacle, distance_mm, SAFE_CORRIDOR_BLOCKED
+    # Pixel ordering chooses a target; it is not a ground-distance estimate.
+    obstacle = max(candidates, key=lambda item: (
+        item.bbox[1] + item.bbox[3], item.area_px, -item.track_id,
+    ))
+    return polygon, obstacle, None, SAFE_CORRIDOR_BLOCKED
 
 
 def make_vision_snapshot(
@@ -637,6 +609,17 @@ def make_vision_snapshot(
         )
         if capture_enabled else None
     )
+    # Separate obstacle audit from the original delivery manifest. Only the
+    # locked/reassociated sweep target actually inside the claw ROI counts.
+    sweep_target = mission.safe_sweep_target(cargo)
+    sweep_capture = tuple(
+        item for item in capture
+        if sweep_target is not None and item.track_id == sweep_target.track_id
+    )
+    sweep_audit = (
+        audit_from_cargo(sweep_capture, set(), capture_side_by_track)
+        if capture_enabled and mission.safe_sweep_pickup is not None else None
+    )
     target_candidates = [
         item for item in cargo
         if item.visible and (
@@ -685,6 +668,7 @@ def make_vision_snapshot(
     danger, side = danger_ahead(cargo, approach_target)
     current_carried_bboxes = ()
     if (
+        mission.state != CompetitionState.CLEAR_SAFE_ZONE and
         mission.carried_total_count > 0 and
         len(delivery_items) == mission.carried_total_count and
         Counter(item.class_name for item in delivery_items) ==
@@ -720,8 +704,6 @@ def make_vision_snapshot(
         mission.carried_total_count,
         carried_bbox_reference,
     )
-    if not localizer.calibrated:
-        corridor_status = SAFE_CORRIDOR_HOMOGRAPHY_MISSING
     return VisionSnapshot(
         frame_sequence=frame_sequence,
         observed_monotonic_s=time.monotonic(),
@@ -746,9 +728,13 @@ def make_vision_snapshot(
         safe_corridor_obstacle_track_id=(
             None if corridor_obstacle is None else corridor_obstacle.track_id
         ),
+        safe_corridor_obstacle_bbox=(
+            None if corridor_obstacle is None else corridor_obstacle.bbox
+        ),
         safe_corridor_status=corridor_status,
         ground_localizer_calibrated=localizer.calibrated,
         carried_reference_bboxes=current_carried_bboxes,
+        safe_sweep_capture_audit=sweep_audit,
     )
 
 
@@ -1230,6 +1216,19 @@ class CompetitionPlanner:
             "safe_sweep_command_accepted": self.mission.safe_sweep_command_accepted,
             "safe_sweep_execution_seen": self.mission.safe_sweep_execution_seen,
             "safe_sweep_reaudit_active": self.mission.safe_sweep_reaudit_active,
+            "safe_sweep_control": "pixel_approach",
+            "safe_sweep_pickup": (
+                None if self.mission.safe_sweep_pickup is None else {
+                    "target_id": self.mission.safe_sweep_pickup.target_id,
+                    "target_class": self.mission.safe_sweep_pickup.target_class,
+                    "target_bbox": self.mission.safe_sweep_pickup.target_bbox,
+                    "mode": self.mission.safe_sweep_pickup.mode,
+                    "frame_floor": self.mission.safe_sweep_pickup.frame_floor,
+                    "audit_id": self.mission.safe_sweep_pickup.audit_id,
+                    "audit_hits": self.mission.safe_sweep_pickup.audit_hits,
+                    "grab_started": self.mission.safe_sweep_pickup.grab_started,
+                }
+            ),
             "enter_distance_source": "f407_encoder",
             "carried_manifest": list(self.mission.carried_manifest),
             "carried_total_count": self.mission.carried_total_count,
@@ -1264,8 +1263,13 @@ class CompetitionPlanner:
                 "safe_corridor_obstacle_class": vision.safe_corridor_obstacle_class,
                 "safe_corridor_obstacle_distance_mm": vision.safe_corridor_obstacle_distance_mm,
                 "safe_corridor_obstacle_track_id": vision.safe_corridor_obstacle_track_id,
+                "safe_corridor_obstacle_bbox": vision.safe_corridor_obstacle_bbox,
                 "safe_corridor_status": vision.safe_corridor_status,
                 "ground_localizer_calibrated": vision.ground_localizer_calibrated,
+                "safe_sweep_capture_count": (
+                    vision.safe_sweep_capture_audit.total_count
+                    if vision.safe_sweep_capture_audit is not None else 0
+                ),
                 "low_conf_green_seen": vision.low_conf_green_seen,
             },
             "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
@@ -1575,17 +1579,6 @@ def draw_overlay(
             (255, 0, 255),
             2,
         )
-    if not vision.ground_localizer_calibrated:
-        cv2.putText(
-            view,
-            "HOMOGRAPHY_MISSING",
-            (12, 34),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.75,
-            (0, 0, 255),
-            2,
-            cv2.LINE_AA,
-        )
     return view
 
 
@@ -1650,26 +1643,23 @@ def main() -> int:
     homography_metadata = args.homography.with_suffix(
         args.homography.suffix + ".meta.json"
     )
-    localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    try:
+        localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    except (OSError, ValueError, TypeError) as error:
+        # Ground distance is optional; a stale calibration must not block
+        # pixel-guided approach, sweep or encoder-controlled delivery.
+        events.write("optional_homography_ignored", {"error": str(error)})
+        localizer = GroundLocalizer()
     homography_diagnostics = {
         "homography": str(args.homography),
         "metadata": str(homography_metadata),
         "required_resolution": [IMAGE_WIDTH, IMAGE_HEIGHT],
         "localizer.calibrated": localizer.calibrated,
+        "required_for_delivery": False,
+        "safe_sweep_control": "pixel_approach",
     }
     print(json.dumps(homography_diagnostics, ensure_ascii=False))
-    events.write("homography_deployment_check", homography_diagnostics)
-    if not localizer.calibrated:
-        homography_message = (
-            "HOMOGRAPHY_MISSING: 正式比赛缺少1280×1024地面标定，"
-            "最终走廊推进将被禁止；请运行"
-            "vision/calibrate_ground.py生成并部署homography.txt及.meta.json"
-        )
-        print(homography_message, file=sys.stderr)
-        events.write("homography_missing", {
-            "message": homography_message,
-            **homography_diagnostics,
-        })
+    events.write("optional_homography_status", homography_diagnostics)
     scaler: VseScaler | None = None
     try:
         detector = X5YoloV8(
@@ -1735,6 +1725,7 @@ def main() -> int:
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
+            "safe_sweep_capture_offset_ignored": True,
             **homography_diagnostics,
             "homography_calibrated": localizer.calibrated,
             "capture_roi": str(args.capture_roi),

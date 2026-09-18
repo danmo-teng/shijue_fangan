@@ -57,6 +57,7 @@ AUDIT_UNKNOWN_PRESENT = 1 << 2
 AUDIT_INJURY_MIXED = 1 << 3
 AUDIT_STABLE = 1 << 4
 AUDIT_DESTINATION_INJURY = 1 << 5
+AUDIT_SWEEP_PICKUP = 1 << 6
 
 CARGO_NONE = 0
 CARGO_GREEN = 1
@@ -161,8 +162,8 @@ def mission_frame(
         allowed_flags = CMD_VALID | CMD_RED_SIDE
         if flags & ~allowed_flags or not flags & CMD_VALID:
             raise ValueError("CLEAR_SAFE_ZONE only allows CMD_VALID and RED_SIDE")
-        if not 80 <= arg_a <= 600:
-            raise ValueError("CLEAR_SAFE_ZONE forward distance must be 80..600 mm")
+        if arg_a != 0 and not 80 <= arg_a <= 600:
+            raise ValueError("CLEAR_SAFE_ZONE uses 0 for visual pickup or legacy 80..600 mm")
         if abs(arg_b) != 150:
             raise ValueError("CLEAR_SAFE_ZONE lateral offset must be +150 or -150 mm")
         if aux_cdeg != 0:
@@ -194,6 +195,7 @@ class CargoAuditPayload:
     initial_stash: bool = False
     destination_injury: bool = False
     audit_id: int = 0
+    sweep_pickup: bool = False
 
     def frame(self, sequence: int) -> bytes:
         left = CARGO_CLASS_CODES.get(self.left_class, CARGO_UNKNOWN)
@@ -209,6 +211,7 @@ class CargoAuditPayload:
         flags |= AUDIT_INJURY_MIXED if self.injury_mixed else 0
         flags |= AUDIT_STABLE if self.stable else 0
         flags |= AUDIT_DESTINATION_INJURY if self.destination_injury else 0
+        flags |= AUDIT_SWEEP_PICKUP if self.sweep_pickup else 0
         packed_counts = self.left_count | (self.right_count << 2)
         payload = bytes((
             CMD_CARGO_AUDIT,

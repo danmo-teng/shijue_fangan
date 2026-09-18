@@ -26,6 +26,6 @@
 保持正式投送的危险物优先释放、20度观察、mode24恢复、STAGE/ALIGN/ENTER、
 0x13及mode39/23/40、mode41协议不变。
 
-上位机仍缺现场homography.txt和homography.txt.meta.json，这不是F407对齐故障。
-需在1280×1024下使用vision/calibrate_ground.py实测生成两文件，确认距离不再为null；
-不得用虚构矩阵掩盖缺标定。F407不需要为此更改ALIGN或ENTER协议。
+最新流程已取消homography部署限制，走廊仅使用像素判断。
+有障碍时需配套[无测距视觉扫障协议](f407_visual_sweep_request.md)，
+无障碍直接使用原ENTER，距离为null不再阻止投送。
