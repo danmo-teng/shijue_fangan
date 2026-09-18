@@ -122,6 +122,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--diagnostics", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_diagnostics.json")
     parser.add_argument("--detections-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_detections.jsonl")
     parser.add_argument("--events-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_events.jsonl")
+    parser.add_argument("--reset-request", type=Path, help="启动窗口的整轮复位请求文件")
+    parser.add_argument("--reset-session-token", default="", help="本轮启动窗口复位令牌")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="normal")
     parser.add_argument("--display-fps", type=float, default=10.0)
     parser.add_argument(
@@ -2391,6 +2393,26 @@ def main() -> int:
                     if key in (ord("q"), ord("Q")):
                         exit_reason = "user_q"
                         running = False
+                    elif key in (ord("r"), ord("R")):
+                        if args.reset_request is not None and args.reset_session_token:
+                            try:
+                                write_atomic_json(args.reset_request, {
+                                    "session_token": args.reset_session_token,
+                                    "timestamp_monotonic_ns": time.monotonic_ns(),
+                                })
+                                events.write("session_reset_forwarded", {
+                                    "source": "vision_window",
+                                })
+                                exit_reason = "user_reset"
+                                running = False
+                            except OSError as error:
+                                events.write("session_reset_forward_failed", {
+                                    "error": str(error),
+                                })
+                        else:
+                            events.write("session_reset_unavailable", {
+                                "reason": "runner_not_owned_by_startup_window",
+                            })
                     elif key == 27:
                         events.write("display_escape_ignored", {
                             "window_mode": active_window_mode,

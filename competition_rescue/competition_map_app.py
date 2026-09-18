@@ -7,6 +7,8 @@ remains intact and both programs keep the same localization configuration.
 """
 from __future__ import annotations
 
+import json
+import secrets
 import shutil
 import sys
 import time
@@ -21,6 +23,47 @@ from map_app import RUNTIME, RescueMapApp, parse_args  # noqa: E402
 
 class CompetitionMapApp(RescueMapApp):
     """Reuse the existing selector and map, but launch the new task runner."""
+
+    def __init__(self, options) -> None:
+        super().__init__(options)
+        self.reset_request_path = RUNTIME / "startup_reset_request.json"
+        self.reset_session_token = None
+
+    def record_reset_event(self, event: str, source: str) -> None:
+        try:
+            RUNTIME.mkdir(parents=True, exist_ok=True)
+            with (RUNTIME / "startup_events.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({
+                    "event": event, "source": source,
+                    "timestamp_monotonic_ns": time.monotonic_ns(),
+                    "side": self.side, "start_zone": self.zone,
+                    "opening_strategy": self.opening_strategy,
+                }, ensure_ascii=False) + "\n")
+        except OSError as error:
+            print(f"复位日志写入失败：{error}", file=sys.stderr)
+
+    def reset_session(self, source: str = "map_window") -> None:
+        self.record_reset_event("session_reset_requested", source)
+        super().reset_session()
+        self.reset_session_token = None
+        self.reset_request_path.unlink(missing_ok=True)
+        self.record_reset_event("session_reset_completed", source)
+
+    def consume_reset_request(self) -> bool:
+        try:
+            request = json.loads(self.reset_request_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return False
+        except (OSError, ValueError):
+            return False
+        self.reset_request_path.unlink(missing_ok=True)
+        # A leftover request must never reset a later session or another runner.
+        if (not isinstance(request, dict) or not self.session_started
+                or self.reset_session_token is None
+                or request.get("session_token") != self.reset_session_token):
+            return False
+        self.reset_session(source="vision_window")
+        return True
 
     def archive_previous_runtime(self) -> None:
         super().archive_previous_runtime()
@@ -46,6 +89,8 @@ class CompetitionMapApp(RescueMapApp):
                 continue
 
     def vision_command(self) -> list[str]:
+        self.reset_request_path.unlink(missing_ok=True)
+        self.reset_session_token = secrets.token_hex(16)
         return [
             str(PROJECT_ROOT / "competition_rescue/run_competition_rescue.sh"),
             "--session", str(RUNTIME / "session.json"),
@@ -57,11 +102,15 @@ class CompetitionMapApp(RescueMapApp):
             "--diagnostics", str(RUNTIME / "competition_diagnostics.json"),
             "--detections-log", str(RUNTIME / "competition_detections.jsonl"),
             "--events-log", str(RUNTIME / "competition_events.jsonl"),
+            "--reset-request", str(self.reset_request_path),
+            "--reset-session-token", self.reset_session_token,
             "--window-mode", "normal",
             "--startup-timeout", f"{max(60.0, self.relocalization_timeout_s + 20.0):.3f}",
         ]
 
     def update_pose(self) -> None:
+        if self.consume_reset_request():
+            return
         super().update_pose()
         if (
             not self.selecting and
