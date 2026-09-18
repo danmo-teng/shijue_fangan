@@ -1,5 +1,8 @@
 # 完整智能救援流程的 F407 配合说明
 
+> 聚集恢复更新：[130°对正360°刷新与mode24锁存](f407_cluster_full_turn_refresh.md)。
+> 已核对2d1957a；恢复不改变首件单绿色及整场任务进度。
+
 > 最新上位机策略：[前方ROI与进攻/防守藏点](f407_front_roi_opening_strategy.md)。
 > 默认进攻，防守藏点向内150 mm；两种策略保持INITIAL_STASH与原NAV/释放/返中协议。
 

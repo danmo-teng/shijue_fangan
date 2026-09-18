@@ -728,6 +728,14 @@ class CompetitionMission:
         self.cluster_relay_tx_baseline: int | None = None
         self.cluster_command_accepted = False
         self.cluster_execution_seen = False
+        self.cluster_command_frame: int = 0
+        self.cluster_command_observed_s: float | None = None
+        self.cluster_align_last_yaw: float | None = None
+        self.cluster_align_last_sample_s: float | None = None
+        self.cluster_align_turn_deg = 0.0
+        self.deferred_cluster_ids: frozenset[int] = frozenset()
+        self.deferred_cluster_bbox: tuple[int, int, int, int] | None = None
+        self.deferred_cluster_class: str | None = None
         self.cluster_id = 0
         self.cluster_target_class: str | None = None
         self.cluster_target_track_id: int | None = None
@@ -821,6 +829,11 @@ class CompetitionMission:
                 self.cluster_relay_tx_baseline = None
                 self.cluster_command_accepted = False
                 self.cluster_execution_seen = False
+                self.cluster_command_frame = 0
+                self.cluster_command_observed_s = None
+                self.cluster_align_last_yaw = None
+                self.cluster_align_last_sample_s = None
+                self.cluster_align_turn_deg = 0.0
             if state != CompetitionState.DETOUR:
                 self.detour_initial_ack = None
                 self.detour_tx_baseline = None
@@ -1167,6 +1180,9 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.deferred_cluster_ids = frozenset()
+        self.deferred_cluster_bbox = None
+        self.deferred_cluster_class = None
         self.selected_batch = batch
         self._clear_disperse_side_votes()
         self.invalid_release_context = "none"
@@ -4049,9 +4065,17 @@ class CompetitionMission:
                 + abs(math.log(max(1, item.area_px) / old_area))
             )
 
-        ranked = sorted(visible, key=lambda item: (score(item), -item.area_px))
-        if len(ranked) > 1 and score(ranked[1]) - score(ranked[0]) < 0.35:
+        # A cluster is a region, not one uniquely identifiable identical box.
+        # Require spatial continuity, then deterministically choose an anchor;
+        # two equally plausible greens in the same pile must not freeze APP.
+        reference = self.cluster_bbox or self.cluster_target_bbox
+        rx, ry, rw, rh = reference
+        visible = [item for item in visible if
+                   item.bbox[0] <= rx + rw and item.bbox[0] + item.bbox[2] >= rx and
+                   item.bbox[1] <= ry + rh and item.bbox[1] + item.bbox[3] >= ry]
+        if not visible:
             return None
+        ranked = sorted(visible, key=lambda item: (score(item), -item.area_px, item.track_id))
         target = ranked[0]
         self.cluster_target_track_id = target.track_id
         self.cluster_target_bbox = target.bbox
@@ -4061,6 +4085,8 @@ class CompetitionMission:
                 track_ids=(target.track_id,),
                 classes=(target.class_name,),
             )
+        self.locked_target_track_id = target.track_id
+        self.last_selected_track_ids = (target.track_id,)
         return target
 
     def _same_cluster_target(self, target: TrackedCargo) -> bool:
@@ -4097,7 +4123,7 @@ class CompetitionMission:
         if target is None:
             return None
         items = self._cluster_members_for_target(vision, target)
-        if len(items) < 2:
+        if not items:
             return None
         cluster_bbox = self._items_bbox(items)
         assert cluster_bbox is not None
@@ -4193,6 +4219,11 @@ class CompetitionMission:
         self.cluster_relay_tx_baseline = stm.relay_mission_tx_frames
         self.cluster_command_accepted = False
         self.cluster_execution_seen = False
+        self.cluster_command_frame = vision.frame_sequence
+        self.cluster_command_observed_s = now
+        self.cluster_align_last_yaw = None
+        self.cluster_align_last_sample_s = None
+        self.cluster_align_turn_deg = 0.0
         self.cluster_keep_side = None
         return CompetitionOutput(
             self.state,
@@ -4208,8 +4239,27 @@ class CompetitionMission:
             ),
         )
 
+    def _defer_failed_cluster(self, vision: VisionSnapshot) -> None:
+        self.deferred_cluster_class = self.cluster_target_class
+        self.deferred_cluster_bbox = self.cluster_bbox or self.cluster_target_bbox
+        self.deferred_cluster_ids = frozenset(
+            item.track_id for item in vision.cargo
+            if item.class_name == self.cluster_target_class and (
+                item.track_id == self.cluster_target_track_id or
+                (self.deferred_cluster_bbox is not None and self._boxes_overlap(
+                    item.bbox, self.deferred_cluster_bbox
+                ))
+            )
+        ) | frozenset(self.last_selected_track_ids)
+
+    @staticmethod
+    def _boxes_overlap(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
+        return (a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and
+                a[1] < b[1] + b[3] and b[1] < a[1] + a[3])
+
     def _cluster_approach_output(
-        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+        *, pose: PoseSnapshot | None = None,
     ) -> CompetitionOutput:
         if stm.fresh and stm.mode in {
             STM_MODE_APPROACH_TARGET,
@@ -4225,13 +4275,39 @@ class CompetitionMission:
         ):
             self.cluster_command_accepted = True
         if stm.fresh and stm.mode == STM_MODE_APPROACH_RECOVER:
+            self._defer_failed_cluster(vision)
             return self._audit_reacquire_output(vision, stm, now)
         if (
             stm.fresh and
             stm.mode == STM_MODE_SEARCH and
             self.cluster_execution_seen
         ):
+            self._defer_failed_cluster(vision)
             return self._audit_reacquire_output(vision, stm, now)
+        if stm.fresh and stm.mode == STM_MODE_APPROACH_TARGET and stm.camera_pitch_cdeg == 13000:
+            if pose is not None and self._pose_fresh(pose):
+                if (self.cluster_align_last_yaw is not None and
+                        self.cluster_align_last_sample_s is not None and
+                        now - self.cluster_align_last_sample_s <= 0.25):
+                    self.cluster_align_turn_deg += abs(angle_error_deg(pose.yaw_deg, self.cluster_align_last_yaw))
+                self.cluster_align_last_yaw = pose.yaw_deg
+                self.cluster_align_last_sample_s = now
+                if self.cluster_align_turn_deg >= 360.0:
+                    self._defer_failed_cluster(vision)
+                    self._begin_search_recovery(vision, now)
+                    return replace(
+                        self._search_recovery_output(vision, stm, now),
+                        event="cluster_align_full_turn_recovery",
+                        reason="cluster_align_360_refresh",
+                        message="聚集130°原地对正累计达到360°，HOLD结束本轮并等待mode24→mode3重新选目标",
+                    )
+            else:
+                self.cluster_align_last_yaw = None
+                self.cluster_align_last_sample_s = None
+        else:
+            self.cluster_align_last_yaw = None
+            self.cluster_align_last_sample_s = None
+            self.cluster_align_turn_deg = 0.0
         if (
             stm.fresh and
             stm.mode == STM_MODE_CLUSTER_CAPTURE_AUDIT and
@@ -4247,10 +4323,21 @@ class CompetitionMission:
                 recheck_context="none",
             )
             return self._audit_output(vision, stm, now)
-        if self._vision_fresh(vision, now):
+        if (self._vision_fresh(vision, now) and vision.frame_sequence > self.cluster_command_frame):
+            self.cluster_command_frame = vision.frame_sequence
             command = self._cluster_approach_command(vision)
             if command is not None:
                 self.cluster_command = command
+                self.cluster_command_observed_s = now
+                self.target_last_seen_s = now
+        if (self.cluster_command_observed_s is None or
+                now - self.cluster_command_observed_s > self._approach_missing_hold_window_s()):
+            return CompetitionOutput(
+                self.state, self._hold(),
+                "聚集目标坐标已超过动态缺帧窗口，HOLD等待新帧或F407恢复；不再重发旧坐标",
+                self.selected_batch, tx_policy="hold", reason="cluster_target_missing_hold",
+                expected_stm_modes=(STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH),
+            )
         assert self.cluster_command is not None
         return CompetitionOutput(
             self.state,
@@ -4755,6 +4842,23 @@ class CompetitionMission:
                 tx_policy="hold",
                 reason="STALE",
             )
+        if self.deferred_cluster_class is not None:
+            if self.search_yaw_accum_deg >= 360.0:
+                # One search pass gives other targets priority, not a
+                # permanent blacklist when the scene contains only one pile.
+                self.deferred_cluster_ids = frozenset()
+                self.deferred_cluster_bbox = None
+                self.deferred_cluster_class = None
+            else:
+                vision = replace(vision, cargo=tuple(
+                    item for item in vision.cargo
+                    if not (
+                        item.class_name == self.deferred_cluster_class and
+                        (item.track_id in self.deferred_cluster_ids or
+                         (self.deferred_cluster_bbox is not None and
+                          self._boxes_overlap(item.bbox, self.deferred_cluster_bbox)))
+                    )
+                ))
         if not self.first_common_delivered:
             visible = self._visible_cargo(vision)
             visible_green = [
@@ -5097,7 +5201,7 @@ class CompetitionMission:
             return self._search_recovery_output(vision, stm, now)
 
         if self.state == CompetitionState.CLUSTER_APPROACH:
-            return self._cluster_approach_output(vision, stm, now)
+            return self._cluster_approach_output(vision, stm, now, pose=pose)
 
         if self.state == CompetitionState.DISPERSE:
             return self._disperse_output(vision, stm, now)

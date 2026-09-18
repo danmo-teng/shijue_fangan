@@ -1399,6 +1399,13 @@ class CompetitionPlanner:
             "cluster_relay_tx_baseline": self.mission.cluster_relay_tx_baseline,
             "cluster_command_accepted": self.mission.cluster_command_accepted,
             "cluster_execution_seen": self.mission.cluster_execution_seen,
+            "cluster_align_turn_deg": self.mission.cluster_align_turn_deg,
+            "cluster_command_frame": self.mission.cluster_command_frame,
+            "cluster_command_age_ms": (
+                None if self.mission.cluster_command_observed_s is None else
+                max(0.0, diagnostic_now - self.mission.cluster_command_observed_s) * 1000.0
+            ),
+            "deferred_cluster_ids": sorted(self.mission.deferred_cluster_ids),
             "approach_initial_ack": self.mission.approach_initial_ack,
             "approach_command_accepted": self.mission.approach_command_accepted,
             "pending_audit_initial_ack": self.mission.pending_audit_initial_ack,
