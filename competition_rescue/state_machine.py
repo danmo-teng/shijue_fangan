@@ -809,6 +809,8 @@ class CompetitionMission:
         self.motion_watch_started_s: float | None = None
         self.motion_watch_pose: tuple[float, float, float] | None = None
         self.motion_watch_wheel_m: float | None = None
+        self.motion_watch_stopped_navigation = False
+        self.motion_watch_last_observed_s: float | None = None
         self.stuck_resume_state: CompetitionState | None = None
         self.stuck_initial_ack: int | None = None
         self.stuck_tx_baseline: int | None = None
@@ -4645,6 +4647,8 @@ class CompetitionMission:
         self.motion_watch_started_s = None
         self.motion_watch_pose = None
         self.motion_watch_wheel_m = None
+        self.motion_watch_stopped_navigation = False
+        self.motion_watch_last_observed_s = None
 
     def _motion_command_for_state(self) -> int | None:
         if self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH}:
@@ -4677,11 +4681,33 @@ class CompetitionMission:
             if (
                 stm.fresh and
                 stm.mode == STM_MODE_ESCAPE_DONE and
-                self.stuck_command_accepted
+                self.stuck_command_accepted and
+                (self.stuck_resume_state != CompetitionState.NAVIGATE or (
+                    stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_ESCAPE_MANEUVER and
+                    bool(stm.action_status & 1)
+                ))
             ):
                 resume = self.stuck_resume_state or CompetitionState.RETURN_CENTER
                 if resume == CompetitionState.RETURN_CENTER:
                     self._begin_return(stm, now)
+                elif resume == CompetitionState.NAVIGATE:
+                    # A completed physical escape starts a new NAV action,
+                    # not a new cargo task. Never reuse pre-escape arrival.
+                    self._reset_safe_zone_alignment()
+                    self.navigation_initial_ack = stm.acknowledged_sequence
+                    self._set_state(resume, now)
+                    self._reset_motion_watch()
+                    return CompetitionOutput(
+                        self.state,
+                        self._navigation_command(pose, self._target_point(), staging_only=True),
+                        "脱困已完成，按当前位置重新导航到原预备点",
+                        self.selected_batch,
+                        event="staging_escape_navigation_resumed",
+                        reason="staging_escape_navigation_resumed",
+                        motion_expected=True,
+                        expected_stm_modes=(STM_MODE_NAVIGATE,),
+                    )
                 else:
                     self._set_state(resume, now)
                 self._reset_motion_watch()
@@ -4700,7 +4726,24 @@ class CompetitionMission:
                 expected_stm_modes=(STM_MODE_ESCAPE_DONE,),
             )
 
+        # A stopped MCU cannot create the wheel progress required by its own
+        # NAV wait gate. Observe this separately from motor-active stalls.
+        stopped_navigation = (
+            self.state == CompetitionState.NAVIGATE and
+            self.selected_batch is not None and
+            not self.selected_batch.initial_stash and
+            self._pose_fresh(pose) and stm.fresh and not stm.fault and
+            stm.context_valid and stm.context_matches and
+            stm.accepted_command == CMD_NAVIGATE_WAYPOINT and
+            bool(stm.action_status & 1) and
+            stm.mode == STM_MODE_NAVIGATE and stm.gripper_closed and
+            not stm.motors_active and not stm.distance_done and
+            stm.relay_last_mission_command == CMD_NAVIGATE_WAYPOINT and
+            self.staging_zero_tx_baseline is None and
+            not self._at_target(pose, self._target_point())
+        )
         if (
+            not stopped_navigation and
             self.state in {
                 CompetitionState.INITIAL_STASH_NAV,
                 CompetitionState.NAVIGATE,
@@ -4732,15 +4775,22 @@ class CompetitionMission:
             stm.fresh and
             not stm.fault and
             stm.mode == expected_mode and
-            stm.motors_active and
+            (stm.motors_active or stopped_navigation) and
             stm.relay_last_mission_command == command
         )
         if not active:
             self._reset_motion_watch()
             return None
         current_pose = (pose.x_m, pose.y_m, pose.yaw_deg)
-        if self.motion_watch_state != self.state or self.motion_watch_pose is None:
+        observation_gap = (stopped_navigation and
+                           self.motion_watch_last_observed_s is not None and
+                           now - self.motion_watch_last_observed_s > 0.25)
+        self.motion_watch_last_observed_s = now
+        if (self.motion_watch_state != self.state or self.motion_watch_pose is None
+                or self.motion_watch_stopped_navigation != stopped_navigation
+                or observation_gap):
             self.motion_watch_state = self.state
+            self.motion_watch_stopped_navigation = stopped_navigation
             self.motion_watch_started_s = now
             self.motion_watch_pose = current_pose
             self.motion_watch_wheel_m = pose.wheel_progress_m
@@ -4754,7 +4804,8 @@ class CompetitionMission:
         progressed = (
             translated >= self.settings.stuck_translation_m or
             rotated >= self.settings.stuck_yaw_deg or
-            wheel_progress >= self.settings.stuck_wheel_progress_m
+            (not stopped_navigation and
+             wheel_progress >= self.settings.stuck_wheel_progress_m)
         )
         if progressed:
             self.stuck_recovery_level = 0
@@ -4792,9 +4843,10 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             self._escape_command(),
-            "确认场内长期无进展，申请旋转横移脱困",
+            ("预备点导航未到达但已持续停车，申请现有脱困动作"
+             if stopped_navigation else "确认场内长期无进展，申请旋转横移脱困"),
             self.selected_batch,
-            event="field_stuck_escape",
+            event="staging_navigation_stopped" if stopped_navigation else "field_stuck_escape",
             motion_expected=True,
             stuck_phase="escape",
             expected_stm_modes=(STM_MODE_ESCAPE_DONE,),
