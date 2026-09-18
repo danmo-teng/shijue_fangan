@@ -440,6 +440,7 @@ bool write_stm_status_json(const std::string &path,
          << "  \"action_id\": " << status.action_id << ",\n"
          << "  \"accepted_command\": " << static_cast<unsigned>(status.accepted_command) << ",\n"
          << "  \"action_status\": " << static_cast<unsigned>(status.action_status) << ",\n"
+         << "  \"rejected_action_id\": " << status.rejected_action_id << ",\n"
          << "  \"relay\": {\"tx_frames\": " << relay_frames
          << ", \"tx_errors\": " << relay_errors
          << ", \"last_sequence\": " << static_cast<unsigned>(relay_sequence)

@@ -205,6 +205,7 @@ def load_stm(path: Path) -> StmSnapshot:
             action_id=int(data.get("action_id", 0)),
             accepted_command=int(data.get("accepted_command", 0)),
             action_status=int(data.get("action_status", 0)),
+            rejected_action_id=int(data.get("rejected_action_id", 0)),
             relay_mission_tx_frames=int(
                 relay.get("mission_tx_frames", relay.get("tx_frames", 0))
             ),
@@ -857,6 +858,7 @@ def stm_dict(stm: StmSnapshot) -> dict:
         "action_id": stm.action_id,
         "accepted_command": stm.accepted_command,
         "action_status": stm.action_status,
+        "rejected_action_id": stm.rejected_action_id,
         "audit_ready": stm.audit_ready,
         "flags": stm.flags,
         "camera_pitch_cdeg": stm.camera_pitch_cdeg,
@@ -1266,6 +1268,36 @@ class CompetitionPlanner:
                     stm.accepted_command == CMD_RETURN_CENTER and bool(stm.action_status & 1))
         return False
 
+    def _reconcile_transport_rejection(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        # An older accepted status alone is only a delayed ACK. Require the
+        # MCU's explicit same-task rejection of the actual pending action.
+        if not (stm.fresh and stm.context_valid and stm.action_status & 4 and
+                stm.task_id == self.protocol_task and
+                stm.rejected_action_id == self.protocol_action and
+                self.protocol_last_output is not None and
+                self.mission.selected_batch is not None and
+                not self.mission.selected_batch.initial_stash):
+            return None
+        if not (self.mission.transport_audit_handoff_active or
+                self.mission.state == CompetitionState.TRANSPORT_AUDIT):
+            return None
+        if stm.mode not in {10, STM_MODE_TRANSPORT_AUDIT}:
+            return None
+        self._adopt_recovery_context()
+        current = replace(stm, context_matches=True)
+        if stm.mode == 10 and (not stm.distance_done or not stm.gripper_closed):
+            return self.mission._resume_stage_navigation(pose, current, now)
+        # Restart an actual full-ROI observation, not the rejected stale
+        # release/ALIGN/NAV. READY/VALID determines its normal exit afterward.
+        return replace(
+            self.mission._begin_transport_audit(vision, pose, current, now),
+            event="transport_audit_request_rejected",
+            reason="transport_audit_reobserve_after_reject",
+            message="下位机明确拒绝当前预备点请求，回到完整夹爪复审并按最新READY/VALID重新决策",
+        )
+
     def _output_for_cycle(
         self,
         vision: VisionSnapshot,
@@ -1305,6 +1337,9 @@ class CompetitionPlanner:
             )
         matches = (stm.context_valid and stm.task_id == self.protocol_task and
                    stm.action_id == self.protocol_action)
+        reconciled = self._reconcile_transport_rejection(vision, pose, stm, now)
+        if reconciled is not None:
+            return reconciled
         if (self.protocol_last_output is not None and stm.fresh and
                 not matches and stm.mode != 41 and not stm.fault):
             # Re-send this request while waiting for its paired status. Do
@@ -1538,6 +1573,7 @@ class CompetitionPlanner:
             "delivery_count": self.mission.delivery_count,
             "disperse_attempts": self.mission.disperse_attempts,
             "separation_keep_side": self.mission.separation_keep_side,
+            "separation_side_attempts": self.mission.separation_side_attempts,
             "separation_request_epoch": self.mission.separation_request_epoch,
             "disperse_expected_done_mode": self.mission.disperse_expected_done_mode,
             "disperse_relay_tx_baseline": self.mission.disperse_relay_tx_baseline,

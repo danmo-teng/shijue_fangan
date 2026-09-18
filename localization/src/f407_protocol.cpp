@@ -216,6 +216,7 @@ void F407FrameParser::validate_frame()
         pending_status_context_.action_id = get_u16_be(&frame_[6]);
         pending_status_context_.accepted_command = frame_[8];
         pending_status_context_.action_status = frame_[9];
+        pending_status_context_.rejected_action_id = get_u16_be(&frame_[10]);
         have_status_context_ = true;
         index_ = 0;
         return;

@@ -389,7 +389,7 @@ class RescueMapApp:
             )
             text.add(f"定位：{localization_label}", (x0, 520), 17, (200, 210, 225))
             text.add(f"T265直线比例：{scale_label}", (x0, 555), 18, (220, 200, 80), True)
-            text.add("进攻：对方区前30cm；防守：内移15cm", (x0, 590), 14, (200, 210, 225))
+            text.add("进攻：对方区前40cm；防守：内移15cm", (x0, 590), 14, (200, 210, 225))
             self.button(canvas, text, "start", "确认并开始", (x0, 610, x0 + 325, 675), True, (35, 135, 70))
             pose = initial_pose(self.zone, self.corner_offset_m)
             text.add("键盘：1～4选区域，R/B选颜色，Enter启动", (x0, 725), 15, (220, 220, 220))

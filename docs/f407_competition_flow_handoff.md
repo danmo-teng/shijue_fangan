@@ -1,5 +1,8 @@
 # 完整智能救援流程的 F407 配合说明
 
+> 最新规则：[单件正式运输、分离总次数与mode48拒绝恢复](f407_single_cargo_stage_reject.md)。
+> 进攻藏点改为围栏前40 cm；0x1E保留位携带同任务拒绝action，须与F407配套。
+
 > 当前新增要求：[停用自动地图边界恢复与预备点mode48复审](f407_transport_audit_disable_boundary.md)。
 > STAGE停车后先140°复审，合法后才定位ALIGN；投送后的1秒策略不变。
 

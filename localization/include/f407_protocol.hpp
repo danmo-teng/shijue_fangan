@@ -61,6 +61,7 @@ struct StmStatusFrame {
     std::uint16_t action_id = 0;
     std::uint8_t accepted_command = 0;
     std::uint8_t action_status = 0;
+    std::uint16_t rejected_action_id = 0;
 };
 
 struct ParserStats {
