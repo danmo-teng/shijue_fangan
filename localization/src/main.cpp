@@ -435,6 +435,11 @@ bool write_stm_status_json(const std::string &path,
          << "  \"acknowledged_sequence\": "
          << static_cast<unsigned>(status.acknowledged_sequence) << ",\n"
          << "  \"fault_code\": " << static_cast<unsigned>(status.fault_code) << ",\n"
+         << "  \"context_valid\": " << (status.context_valid ? "true" : "false") << ",\n"
+         << "  \"task_id\": " << status.task_id << ",\n"
+         << "  \"action_id\": " << status.action_id << ",\n"
+         << "  \"accepted_command\": " << static_cast<unsigned>(status.accepted_command) << ",\n"
+         << "  \"action_status\": " << static_cast<unsigned>(status.action_status) << ",\n"
          << "  \"relay\": {\"tx_frames\": " << relay_frames
          << ", \"tx_errors\": " << relay_errors
          << ", \"last_sequence\": " << static_cast<unsigned>(relay_sequence)
@@ -467,13 +472,25 @@ bool write_stm_status_json(const std::string &path,
 }
 
 bool read_relay_frame(const std::string &path,
-                      std::array<std::uint8_t, omni::kFrameSize> &result)
+                      std::array<std::uint8_t, omni::kFrameSize> &result,
+                      std::array<std::uint8_t, omni::kFrameSize> &context,
+                      bool &contextual)
 {
+    contextual = false;
+    context.fill(0);
     if (path.empty()) return false;
     std::ifstream file(path, std::ios::binary);
     if (!file) return false;
     file.read(reinterpret_cast<char *>(result.data()), result.size());
     if (file.gcount() != static_cast<std::streamsize>(result.size())) return false;
+    if (result[2] == omni::kCommandContextMessageType) {
+        context = result;
+        file.read(reinterpret_cast<char *>(result.data()), result.size());
+        if (file.gcount() != static_cast<std::streamsize>(result.size()) ||
+            result[2] != omni::kMissionCommandMessageType || context[3] != result[3] ||
+            !omni::validate_relay_frame(context.data(), context.size())) return false;
+        contextual = true;
+    }
     char extra = 0;
     if (file.get(extra)) return false;
     return omni::validate_relay_frame(result.data(), result.size());
@@ -850,6 +867,9 @@ int main(int argc, char **argv)
                     constexpr auto heartbeat_period = std::chrono::milliseconds(10);
                     std::array<std::uint8_t, omni::kFrameSize> last_input{};
                     std::array<std::uint8_t, omni::kFrameSize> active_mission{};
+                    std::array<std::uint8_t, omni::kFrameSize> active_context{};
+                    std::array<std::uint8_t, omni::kFrameSize> last_context{};
+                    bool active_contextual = false;
                     bool have_last_input = false;
                     bool have_active_mission = false;
                     std::uint8_t mission_sequence = 0;
@@ -858,8 +878,13 @@ int main(int argc, char **argv)
                     constexpr auto heartbeat_bridge_limit =
                         std::chrono::milliseconds(250);
 
-                    auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
+                    auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame,
+                                        const std::array<std::uint8_t, omni::kFrameSize> *context = nullptr) {
                         std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        if (context && !uart->write_all(context->data(), context->size(), 50)) {
+                            relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
+                            return;
+                        }
                         if (uart->write_all(frame.data(), frame.size(), 50)) {
                             relay_tx_frames.fetch_add(1, std::memory_order_relaxed);
                             relay_last_sequence.store(frame[3], std::memory_order_relaxed);
@@ -881,10 +906,13 @@ int main(int argc, char **argv)
 
                     while (running.load(std::memory_order_relaxed) && !g_stop) {
                         std::array<std::uint8_t, omni::kFrameSize> input{};
+                        std::array<std::uint8_t, omni::kFrameSize> context{};
+                        bool contextual = false;
                         const auto now = std::chrono::steady_clock::now();
-                        if (read_relay_frame(options.command_file_path, input) &&
-                            (!have_last_input || input != last_input)) {
+                        if (read_relay_frame(options.command_file_path, input, context, contextual) &&
+                            (!have_last_input || input != last_input || context != last_context)) {
                             last_input = input;
+                            last_context = context;
                             have_last_input = true;
                             last_input_change = now;
                             if (input[2] == omni::kMissionCommandMessageType) {
@@ -892,6 +920,8 @@ int main(int argc, char **argv)
                                     mission_sequence = input[3];
                                 }
                                 active_mission = input;
+                                active_context = context;
+                                active_contextual = contextual;
                                 have_active_mission = true;
                                 const std::uint8_t command = input[4];
                                 const bool distance_valid = (input[5] & 0x10u) != 0u;
@@ -923,9 +953,12 @@ int main(int argc, char **argv)
                         }
                         if (have_active_mission && now >= next_heartbeat) {
                             auto heartbeat = active_mission;
+                            auto context_heartbeat = active_context;
+                            const auto sequence = mission_sequence++;
                             if (omni::refresh_mission_frame_sequence(
-                                    heartbeat, mission_sequence++)) {
-                                transmit(heartbeat);
+                                    heartbeat, sequence) &&
+                                (!active_contextual || omni::refresh_mission_frame_sequence(context_heartbeat, sequence))) {
+                                transmit(heartbeat, active_contextual ? &context_heartbeat : nullptr);
                             } else {
                                 relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
                                 have_active_mission = false;

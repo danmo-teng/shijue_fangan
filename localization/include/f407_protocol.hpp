@@ -15,6 +15,8 @@ constexpr std::uint8_t kOdomMessageType = 0x15;
 constexpr std::uint8_t kFusedPoseMessageType = 0x16;
 constexpr std::uint8_t kStmStatusMessageType = 0x17;
 constexpr std::uint8_t kMissionCommandMessageType = 0x18;
+constexpr std::uint8_t kCommandContextMessageType = 0x1D;
+constexpr std::uint8_t kStatusContextMessageType = 0x1E;
 constexpr std::size_t kFrameSize = 15;
 
 constexpr std::uint8_t kOdomM1Valid = 1u << 0;
@@ -54,6 +56,11 @@ struct StmStatusFrame {
     std::uint16_t camera_pitch_cdeg = 0;
     std::uint8_t acknowledged_sequence = 0;
     std::uint8_t fault_code = 0;
+    bool context_valid = false;
+    std::uint16_t task_id = 0;
+    std::uint16_t action_id = 0;
+    std::uint8_t accepted_command = 0;
+    std::uint8_t action_status = 0;
 };
 
 struct ParserStats {
@@ -101,6 +108,8 @@ private:
     std::uint8_t last_sequence_ = 0;
     bool have_status_sequence_ = false;
     std::uint8_t last_status_sequence_ = 0;
+    bool have_status_context_ = false;
+    StmStatusFrame pending_status_context_{};
 };
 
 }  // namespace omni

@@ -160,6 +160,12 @@ class StmSnapshot:
     relay_last_sequence: int | None = None
     relay_last_tx_age_ms: float = math.inf
     camera_pitch_cdeg: int = 0
+    context_valid: bool = False
+    task_id: int = 0
+    action_id: int = 0
+    accepted_command: int = 0
+    action_status: int = 0
+    context_matches: bool = False
 
     @property
     def claw_visible(self) -> bool:
@@ -172,6 +178,10 @@ class StmSnapshot:
     @property
     def audit_valid(self) -> bool:
         return bool(self.flags & (1 << 4))
+
+    @property
+    def audit_ready(self) -> bool:
+        return bool(self.flags & (1 << 6))
 
     @property
     def motors_active(self) -> bool:
@@ -615,6 +625,8 @@ class CompetitionMission:
     """Upper-level competition strategy with lower-level safety handshakes."""
 
     def __init__(self, settings: CompetitionSettings) -> None:
+        self.task_generation = 0
+        self.audit_epoch = 0
         self.settings = settings
         self.state = CompetitionState.WAIT_START
         self.state_started_s = 0.0
@@ -970,6 +982,9 @@ class CompetitionMission:
         initial_ack: int | None,
         accepted: bool,
     ) -> bool:
+        if stm.context_valid:
+            return accepted or (stm.fresh and stm.context_matches and
+                                bool(stm.action_status & 1) and stm.accepted_command == command.opcode)
         return accepted or (
             initial_ack is not None and
             cls._relay_sent_since(stm, command, baseline) and
@@ -985,6 +1000,9 @@ class CompetitionMission:
         initial_ack: int | None,
         accepted: bool,
     ) -> bool:
+        if stm.context_valid:
+            return accepted or (stm.fresh and stm.context_matches and
+                                bool(stm.action_status & 1) and stm.accepted_command == opcode)
         return accepted or (
             initial_ack is not None and
             cls._relay_sent_opcode_since(stm, opcode, baseline) and
@@ -1180,6 +1198,7 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.task_generation += 1
         self.deferred_cluster_ids = frozenset()
         self.deferred_cluster_bbox = None
         self.deferred_cluster_class = None
@@ -1503,8 +1522,12 @@ class CompetitionMission:
                 STM_MODE_CAPTURE_AUDIT,
                 STM_MODE_APPROACH_RECOVER,
             } and
-            self.approach_initial_ack is not None and
-            stm.acknowledged_sequence != self.approach_initial_ack
+            (
+                (stm.context_valid and stm.context_matches and bool(stm.action_status & 1) and
+                 stm.accepted_command == CMD_APPROACH_TARGET) or
+                (not stm.context_valid and self.approach_initial_ack is not None and
+                 stm.acknowledged_sequence != self.approach_initial_ack)
+            )
         ):
             self.approach_command_accepted = True
         if self.approach_command_accepted and stm.mode in {
@@ -1685,6 +1708,7 @@ class CompetitionMission:
         recheck_pending: bool,
         recheck_context: str,
     ) -> None:
+        self.audit_epoch += 1
         self.post_grab_audit_active = False
         self.post_grab_camera_ready = None
         self.cluster_audit_active = cluster_active
@@ -1708,6 +1732,7 @@ class CompetitionMission:
     def _begin_post_grab_audit(
         self, vision: VisionSnapshot, now: float
     ) -> None:
+        self.audit_epoch += 1
         self.post_grab_audit_active = True
         self.post_grab_camera_ready = None
         self.cluster_audit_active = False
@@ -1910,6 +1935,7 @@ class CompetitionMission:
                 return self._audit_output(vision, stm, now)
         if (
             (
+                not stm.audit_ready or
                 (self.pending_audit_valid and not stm.audit_valid) or
                 (
                     self.pending_audit_release_context == "cluster_capture" and
@@ -1922,10 +1948,6 @@ class CompetitionMission:
             (
                 self.pending_audit_frame_sequence is None or
                 vision.frame_sequence > self.pending_audit_frame_sequence
-            ) and
-            (
-                vision.capture_audit is not None or
-                self.pending_audit_release_context == "recheck_empty_to_search"
             ) and
             stm.claw_visible and
             stm.camera_pitch_cdeg == 14000 and
@@ -1958,7 +1980,7 @@ class CompetitionMission:
                 self._fresh_mode_after(
                     stm, STM_MODE_CLUSTER_READY, self.pending_audit_initial_ack
                 ) and
-                (not self.pending_audit_valid or stm.audit_valid)
+                stm.audit_ready and (not self.pending_audit_valid or stm.audit_valid)
             ):
                 audit = self.pending_audit
                 valid = self.pending_audit_valid
@@ -2141,6 +2163,7 @@ class CompetitionMission:
             )
         if self.pending_audit_release_context == "post_grab_invalid":
             if (
+                stm.audit_ready and
                 self._relay_sent_since(
                     stm, stable_command, self.pending_audit_tx_baseline
                 ) and
@@ -2210,7 +2233,7 @@ class CompetitionMission:
             self._fresh_mode_after(
                 stm, audit_confirm_mode, self.pending_audit_initial_ack
             ) and
-            (not self.pending_audit_valid or stm.audit_valid)
+            stm.audit_ready and (not self.pending_audit_valid or stm.audit_valid)
         ):
             audit = self.pending_audit
             valid = self.pending_audit_valid
@@ -3926,6 +3949,12 @@ class CompetitionMission:
         self._set_state(CompetitionState.RETURN_CENTER, now)
 
     def _latch_return_command_acceptance(self, stm: StmSnapshot) -> None:
+        if stm.context_valid:
+            self.return_command_accepted = self._opcode_acceptance_seen(
+                stm, CMD_RETURN_CENTER, self.return_relay_tx_baseline,
+                self.return_initial_ack, self.return_command_accepted,
+            )
+            return
         if (
             not self.return_command_accepted and
             stm.fresh and
@@ -4271,7 +4300,11 @@ class CompetitionMission:
             stm.fresh and
             self.cluster_initial_ack is not None and
             self._relay_sent_cluster_since(stm, self.cluster_relay_tx_baseline) and
-            stm.acknowledged_sequence != self.cluster_initial_ack
+            (
+                (stm.context_valid and stm.context_matches and bool(stm.action_status & 1) and
+                 stm.accepted_command == CMD_APPROACH_TARGET) or
+                (not stm.context_valid and stm.acknowledged_sequence != self.cluster_initial_ack)
+            )
         ):
             self.cluster_command_accepted = True
         if stm.fresh and stm.mode == STM_MODE_APPROACH_RECOVER:
@@ -4501,6 +4534,8 @@ class CompetitionMission:
     def _fresh_mode_after(
         stm: StmSnapshot, expected_mode: int, initial_ack: int | None
     ) -> bool:
+        if stm.context_valid:
+            return stm.fresh and stm.context_matches and bool(stm.action_status & 1) and stm.mode == expected_mode
         return (
             stm.fresh and
             stm.mode == expected_mode and

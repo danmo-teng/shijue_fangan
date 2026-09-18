@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 import math
 import re
+import secrets
 import signal
 import subprocess
 import sys
@@ -52,6 +53,9 @@ from protocol import (  # noqa: E402
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
     CMD_PAUSE,
+    CMD_APPROACH_TARGET,
+    CMD_CARGO_AUDIT,
+    command_context_frame,
 )
 from capture_roi import (  # noqa: E402
     CaptureRois,
@@ -190,6 +194,11 @@ def load_stm(path: Path) -> StmSnapshot:
             age_ms=age_ms,
             fault_code=int(data.get("fault_code", 0)),
             acknowledged_sequence=int(data.get("acknowledged_sequence", 0)),
+            context_valid=bool(data.get("context_valid", False)),
+            task_id=int(data.get("task_id", 0)),
+            action_id=int(data.get("action_id", 0)),
+            accepted_command=int(data.get("accepted_command", 0)),
+            action_status=int(data.get("action_status", 0)),
             relay_mission_tx_frames=int(
                 relay.get("mission_tx_frames", relay.get("tx_frames", 0))
             ),
@@ -837,6 +846,12 @@ def pose_dict(pose: PoseSnapshot) -> dict:
 def stm_dict(stm: StmSnapshot) -> dict:
     return {
         "mode": stm.mode,
+        "context_valid": stm.context_valid,
+        "task_id": stm.task_id,
+        "action_id": stm.action_id,
+        "accepted_command": stm.accepted_command,
+        "action_status": stm.action_status,
+        "audit_ready": stm.audit_ready,
         "flags": stm.flags,
         "camera_pitch_cdeg": stm.camera_pitch_cdeg,
         "age_ms": stm.age_ms if math.isfinite(stm.age_ms) else None,
@@ -892,6 +907,14 @@ class CompetitionPlanner:
         self.latest_pose = PoseSnapshot()
         self.latest_stm = StmSnapshot()
         self.sequence = 0
+        self.protocol_task = secrets.randbelow(65535) + 1
+        self.protocol_action = secrets.randbelow(65535) + 1
+        self.protocol_task_generation = mission.task_generation
+        self.protocol_action_key = None
+        self.protocol_source_stamp = None
+        self.protocol_vision_frame = 0
+        self.protocol_vision = VisionSnapshot()
+        self.protocol_last_output: CompetitionOutput | None = None
         self.running = False
         self.error: Exception | None = None
         self.last_state = mission.state
@@ -976,6 +999,12 @@ class CompetitionPlanner:
         self.events_log.write("grab_waitnav_detected", {
             "upper_state": output.state.value,
             "upper_reason": output.reason or output.message,
+            "protocol_context": {
+                "task_id": self.protocol_task,
+                "action_id": self.protocol_action,
+                "vision_frame": self.protocol_vision_frame,
+                "status_matches": stm.context_valid and stm.task_id == self.protocol_task and stm.action_id == self.protocol_action,
+            },
             "waitnav_block": f"WAITNAV_BLOCK: {block}",
             "stm_mode": stm.mode,
             "stm_fresh": stm.fresh,
@@ -1120,11 +1149,51 @@ class CompetitionPlanner:
     def _publish(self, output: CompetitionOutput) -> None:
         if output.suppress_command_tx:
             return
-        command = output.command
-        if command is None:
-            write_command_frame(self.command_path, self._hold_frame())
-        else:
-            write_command_frame(self.command_path, command.to_frame(self.sequence))
+        command = output.command or CommandRequest(CMD_HOLD)
+        if self.protocol_task_generation != self.mission.task_generation:
+            self.protocol_task_generation = self.mission.task_generation
+            self.protocol_task = (self.protocol_task + 1) & 0xFFFF
+            self.protocol_action_key = None
+        # HOLD/PAUSE suspend the current action; they do not allocate a new
+        # mechanical epoch. Dynamic coordinates and audit IDs are not keys.
+        pickup = self.mission.safe_sweep_pickup
+        audit_role = (
+            self.mission.audit_epoch,
+            None if pickup is None else pickup.mode,
+            None if command.audit is None else (
+                command.audit.initial_stash, command.audit.destination_injury,
+                command.audit.sweep_pickup,
+            ),
+        ) if command.opcode == CMD_CARGO_AUDIT else None
+        key = (command.opcode, command.flags, audit_role)
+        if (command.opcode not in {CMD_HOLD, CMD_PAUSE} or self.protocol_action_key is None):
+            if key != self.protocol_action_key:
+                self.protocol_action = (self.protocol_action + 1) & 0xFFFF
+                if self.protocol_action == 0:
+                    self.protocol_task = (self.protocol_task + 1) & 0xFFFF
+                self.protocol_action_key = key
+                self.protocol_source_stamp = None
+                self.protocol_vision_frame = 0
+        if command.opcode == CMD_APPROACH_TARGET:
+            stamp = (
+                pickup.last_seen_s if pickup is not None else
+                self.mission.cluster_command_observed_s
+                if output.state == CompetitionState.CLUSTER_APPROACH else
+                self.mission.target_last_seen_s
+            )
+            if stamp is not None and stamp != self.protocol_source_stamp:
+                self.protocol_source_stamp = stamp
+                self.protocol_vision_frame = self.protocol_vision.frame_sequence & 0xFFFFFFFF
+        elif command.opcode == CMD_CARGO_AUDIT:
+            frame = (pickup.last_audit_frame if pickup is not None else
+                     self.mission.pending_audit_frame_sequence or self.mission.audit_last_frame_sequence or 0)
+            self.protocol_vision_frame = frame & 0xFFFFFFFF
+        context = command_context_frame(
+            self.sequence, self.protocol_task, self.protocol_action,
+            self.protocol_vision_frame if command.opcode in {CMD_APPROACH_TARGET, CMD_CARGO_AUDIT} else 0,
+        )
+        write_command_frame(self.command_path, context + command.to_frame(self.sequence))
+        self.protocol_last_output = output
         self.sequence = (self.sequence + 1) & 0xFF
 
     def _output_for_cycle(
@@ -1135,6 +1204,7 @@ class CompetitionPlanner:
         paused: bool,
         now: float,
     ) -> CompetitionOutput:
+        self.protocol_vision = vision
         if paused and self.mission.state == CompetitionState.FAULT:
             return self.mission.step(vision, pose, stm, now)
         if paused and self.mission.state == CompetitionState.WAIT_START:
@@ -1155,7 +1225,15 @@ class CompetitionPlanner:
                 tx_policy="pause",
                 reason="camera_recovery",
             )
-        return self.mission.step(vision, pose, stm, now)
+        matches = (stm.context_valid and stm.task_id == self.protocol_task and
+                   stm.action_id == self.protocol_action)
+        if (self.protocol_last_output is not None and stm.fresh and
+                not matches and stm.mode != 41 and not stm.fault):
+            # Re-send this request while waiting for its paired status. Do
+            # not replace it with PAUSE and prevent acceptance of the action.
+            return replace(self.protocol_last_output, event="", reason="command_context_pending",
+                           message="等待本次任务/动作上下文回执，重发原请求")
+        return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
 
     def _log_command_tx_suppression(self, output: CompetitionOutput) -> None:
         if not output.suppress_command_tx:
@@ -1218,6 +1296,11 @@ class CompetitionPlanner:
         write_atomic_json(self.diagnostics_path, {
             "schema_version": 1,
             "timestamp_monotonic_ns": time.monotonic_ns(),
+            "protocol_context": {
+                "task_id": self.protocol_task,
+                "action_id": self.protocol_action,
+                "vision_frame": self.protocol_vision_frame,
+            },
             "state": output.state.value,
             "message": output.message,
             "event": output.event,
@@ -1890,6 +1973,7 @@ def main() -> int:
     tracker = MultiFrameTracker(config)
     last_packet_id = 0
     last_inference_id = 0
+    vision_sequence = 0  # Session-wide: camera restarts must not rewind this ID.
     latest_image: np.ndarray | None = None
     latest_pixel_format = "bgr"
     latest_vision = VisionSnapshot()
@@ -2089,6 +2173,7 @@ def main() -> int:
                     # not a newer camera frame underneath older ROI/results.
                     latest_image = packet.image.copy()
                     latest_pixel_format = packet.pixel_format
+                    vision_sequence += 1
                     low_conf_green_seen = any(
                         item.class_name == "green_supply" and
                         float(item.confidence) < GREEN_SUPPLY_SCORE_THRESHOLD
@@ -2125,7 +2210,7 @@ def main() -> int:
                         safe_bbox,
                         stm,
                         mission,
-                        packet.frame_id,
+                        vision_sequence,
                         safe_zone_filter_blocked,
                         capture_rois,
                         low_conf_green_seen,
@@ -2143,7 +2228,7 @@ def main() -> int:
                         detection_log.write(
                             "frame",
                             detection_log_record(
-                                packet.frame_id,
+                                vision_sequence,
                                 timing,
                                 detection_objects,
                                 latest_vision.cargo,

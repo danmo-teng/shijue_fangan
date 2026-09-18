@@ -124,7 +124,7 @@ bool validate_relay_frame(const std::uint8_t *data, std::size_t size)
         return false;
     }
     if (data[2] != 0x11u && data[2] != 0x12u &&
-        data[2] != kMissionCommandMessageType) {
+        data[2] != kMissionCommandMessageType && data[2] != kCommandContextMessageType) {
         return false;
     }
     const std::uint16_t expected = modbus_crc16(&data[2], 10);
@@ -138,7 +138,7 @@ bool refresh_mission_frame_sequence(
     std::uint8_t sequence)
 {
     if (!validate_relay_frame(frame.data(), frame.size()) ||
-        frame[2] != kMissionCommandMessageType) {
+        (frame[2] != kMissionCommandMessageType && frame[2] != kCommandContextMessageType)) {
         return false;
     }
     frame[3] = sequence;
@@ -193,19 +193,37 @@ void F407FrameParser::validate_frame()
     const std::uint16_t received = static_cast<std::uint16_t>(frame_[12]) |
         static_cast<std::uint16_t>(static_cast<std::uint16_t>(frame_[13]) << 8);
     if (frame_[14] != kFrameTail ||
-        (frame_[2] != kOdomMessageType && frame_[2] != kStmStatusMessageType)) {
+        (frame_[2] != kOdomMessageType && frame_[2] != kStmStatusMessageType &&
+         frame_[2] != kStatusContextMessageType)) {
         ++stats_.malformed;
         resynchronize();
         return;
     }
     if (received != expected) {
+        have_status_context_ = false;
         ++stats_.crc_errors;
         resynchronize();
         return;
     }
 
+    if (frame_[2] == kStatusContextMessageType) {
+        pending_status_context_ = StmStatusFrame{};
+        pending_status_context_.sequence = frame_[3];
+        pending_status_context_.task_id = get_u16_be(&frame_[4]);
+        pending_status_context_.action_id = get_u16_be(&frame_[6]);
+        pending_status_context_.accepted_command = frame_[8];
+        pending_status_context_.action_status = frame_[9];
+        have_status_context_ = true;
+        index_ = 0;
+        return;
+    }
     if (frame_[2] == kStmStatusMessageType) {
         StmStatusFrame status;
+        if (have_status_context_ && pending_status_context_.sequence == frame_[3]) {
+            status = pending_status_context_;
+            status.context_valid = true;
+        }
+        have_status_context_ = false;
         status.sequence = frame_[3];
         status.flags = frame_[4];
         status.mode = frame_[5];
@@ -233,6 +251,7 @@ void F407FrameParser::validate_frame()
         return;
     }
 
+    have_status_context_ = false;
     EncoderFrame parsed;
     parsed.sequence = frame_[3];
     parsed.position[0] = get_u16_be(&frame_[4]);
@@ -262,6 +281,7 @@ void F407FrameParser::validate_frame()
 
 void F407FrameParser::resynchronize()
 {
+    have_status_context_ = false;
     std::size_t start = kFrameSize;
     for (std::size_t i = 1; i + 1 < kFrameSize; ++i) {
         if (frame_[i] == kFrameHead1 && frame_[i + 1] == kFrameHead2) {

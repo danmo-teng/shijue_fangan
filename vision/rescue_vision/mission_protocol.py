@@ -123,8 +123,10 @@ class Stm32Status:
 
 
 def write_command_frame(path: Path, packet: bytes) -> None:
-    if len(packet) != 15:
-        raise ValueError("relayed UART command must be exactly 15 bytes")
+    if len(packet) != 15 and not (
+        len(packet) == 30 and packet[2] == 0x1D and packet[17] == 0x18 and packet[3] == packet[18]
+    ):
+        raise ValueError("relay expects one 15-byte frame or a paired 0x1D/0x18 bundle")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_bytes(packet)

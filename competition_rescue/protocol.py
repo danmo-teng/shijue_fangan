@@ -14,6 +14,15 @@ FRAME_HEAD = bytes((0xA3, 0xB3))
 FRAME_TAIL = 0xC3
 FRAME_SIZE = 15
 TYPE_MISSION_COMMAND = 0x18
+TYPE_COMMAND_CONTEXT = 0x1D
+TYPE_STATUS_CONTEXT = 0x1E
+
+
+def command_context_frame(sequence: int, task_id: int, action_id: int, vision_frame: int) -> bytes:
+    """Pair with 0x18 using the same transport SEQ; IDs survive heartbeats."""
+    payload = task_id.to_bytes(2, "big") + action_id.to_bytes(2, "big") + vision_frame.to_bytes(4, "big")
+    body = bytes((TYPE_COMMAND_CONTEXT, sequence)) + payload
+    return FRAME_HEAD + body + crc16_modbus(body).to_bytes(2, "little") + bytes((FRAME_TAIL,))
 
 CMD_STOP = 0x00
 CMD_PAUSE = 0x01
