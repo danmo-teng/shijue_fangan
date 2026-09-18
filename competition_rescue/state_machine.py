@@ -1334,9 +1334,15 @@ class CompetitionMission:
     def _begin_search_recovery(
         self, vision: VisionSnapshot, now: float
     ) -> None:
+        resume_state = (
+            CompetitionState.INITIAL_OBSERVE
+            if self.state == CompetitionState.INITIAL_APPROACH or (
+                self.settings.initial_stash_enabled and not self.initial_stash_done
+            ) else CompetitionState.SEARCH
+        )
         self._clear_search_recovery_context(vision, clear_carried=False)
         self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
-        self.search_recovery_resume_state = CompetitionState.SEARCH
+        self.search_recovery_resume_state = resume_state
 
     def _search_recovery_output(
         self,
@@ -1352,14 +1358,17 @@ class CompetitionMission:
             STM_MODE_SEARCH,
         )
         if stm.fresh and stm.mode == STM_MODE_SEARCH:
-            self._set_state(CompetitionState.SEARCH, now)
+            resume_state = self.search_recovery_resume_state or CompetitionState.SEARCH
+            if self.settings.initial_stash_enabled and not self.initial_stash_done:
+                resume_state = CompetitionState.INITIAL_OBSERVE
+            self._set_state(resume_state, now)
             self.search_epoch_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
             )
             return CompetitionOutput(
                 self.state,
                 self._hold(),
-                "F407已完成目标丢失恢复，等待重新搜索",
+                f"F407已完成目标丢失恢复，等待新视觉帧后继续{resume_state.value}",
                 event="search_recovery_complete",
                 tx_policy="recovery_hold",
                 reason="f407_search_recovery_complete",
@@ -1430,20 +1439,8 @@ class CompetitionMission:
         if stm.mode == STM_MODE_SEARCH and (
             self.approach_f407_active_seen or self.target_missing_frames > 2
         ):
-            self._clear_search_recovery_context(vision, clear_carried=False)
-            self._set_state(CompetitionState.SEARCH, now)
-            self.search_epoch_frame_floor = (
-                vision.frame_sequence if vision.frame_sequence > 0 else None
-            )
-            return CompetitionOutput(
-                self.state,
-                self._hold(),
-                "F407已回到SEARCH，清除旧目标并等待恢复后的新视觉帧",
-                event="search_recovery_complete",
-                tx_policy="recovery_hold",
-                reason="f407_search_recovery_complete",
-                expected_stm_modes=(STM_MODE_SEARCH,),
-            )
+            self._begin_search_recovery(vision, now)
+            return self._search_recovery_output(vision, stm, now)
         if stm.mode == STM_MODE_APPROACH_RECOVER:
             self._begin_search_recovery(vision, now)
             return self._search_recovery_output(
@@ -4799,6 +4796,18 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.INITIAL_OBSERVE:
+            if self.search_epoch_frame_floor is not None:
+                if (
+                    not self._vision_fresh(vision, now) or
+                    vision.frame_sequence <= self.search_epoch_frame_floor
+                ):
+                    return CompetitionOutput(
+                        self.state, self._hold(),
+                        "开局藏堆恢复后等待新的视觉帧",
+                        tx_policy="hold", reason="initial_stash_recovery_frame_wait",
+                        expected_stm_modes=(STM_MODE_SEARCH,),
+                    )
+                self.search_epoch_frame_floor = None
             pile = self._pile_batch(vision) if self._vision_fresh(vision, now) else None
             if pile is not None:
                 self._select_batch(pile)
@@ -4828,6 +4837,16 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.SEARCH:
+            if self.settings.initial_stash_enabled and not self.initial_stash_done:
+                self._clear_search_recovery_context(vision, clear_carried=True)
+                self._set_state(CompetitionState.INITIAL_OBSERVE, now)
+                return CompetitionOutput(
+                    self.state, self._hold(),
+                    "状态异常：SEARCH但initial_stash_done=false，返回INITIAL_OBSERVE重试藏堆",
+                    event="initial_stash_state_anomaly",
+                    tx_policy="hold", reason="INITIAL_STASH_STATE_ANOMALY",
+                    expected_stm_modes=(STM_MODE_SEARCH,),
+                )
             return self._handle_search(vision, pose, stm, now)
 
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
@@ -4965,21 +4984,20 @@ class CompetitionMission:
                 now - self.safe_zone_acquire_started_s >=
                 self.settings.safe_zone_acquire_timeout_s
             ):
-                self.safe_zone_fallback = True
-                self.safe_zone_visual_locked = False
-                self.enter_initial_ack = stm.acknowledged_sequence
-                self.enter_tx_baseline = stm.relay_mission_tx_frames
-                self.enter_command_accepted = False
-                self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
+                reason = (
+                    SAFE_CORRIDOR_HOMOGRAPHY_MISSING
+                    if not vision.ground_localizer_calibrated or
+                    vision.safe_corridor_status == SAFE_CORRIDOR_HOMOGRAPHY_MISSING
+                    else "SAFE_CORRIDOR_UNAVAILABLE"
+                )
                 return CompetitionOutput(
                     self.state,
-                    self._enter_safe_zone_command(),
-                    "5秒内未连续识别3帧安全区，使用定位正方向降级推进",
+                    self._safe_zone_pose_align_command(),
+                    f"{reason}：安全区冻结超时，保持mode11等待标定和完整视觉ALIGN走廊检查",
                     self.selected_batch,
-                    event="safe_zone_acquire_fallback",
                     tx_policy="normal_command",
-                    reason="safe_zone_position_fallback",
-                    expected_stm_modes=(STM_MODE_RAM_VERIFY,),
+                    reason=reason,
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
                 )
             return CompetitionOutput(
                 self.state,
@@ -5036,6 +5054,17 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK:
+            if (
+                not vision.ground_localizer_calibrated or
+                vision.safe_corridor_status == SAFE_CORRIDOR_HOMOGRAPHY_MISSING
+            ):
+                return CompetitionOutput(
+                    self.state, self._safe_zone_visual_align_command(),
+                    "HOMOGRAPHY_MISSING：保持mode11，禁止扫障和ENTER",
+                    self.selected_batch, tx_policy="normal_command",
+                    reason="HOMOGRAPHY_MISSING",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
             new_corridor_frame = (
                 self._vision_fresh(vision, now) and
                 vision.frame_sequence > 0 and
@@ -5050,29 +5079,13 @@ class CompetitionMission:
                 return CompetitionOutput(
                     self.state,
                     self._safe_zone_visual_align_command(),
-                    "保持第二次ALIGN结果，等待新的安全区推进走廊画面",
+                    "SAFE_CORRIDOR_UNAVAILABLE：保持mode11，等待视觉ALIGN完成后的新安全区推进走廊画面",
                     self.selected_batch,
                     tx_policy="normal_command",
-                    reason="safe_zone_corridor_frame_wait",
+                    reason="SAFE_CORRIDOR_UNAVAILABLE",
                     expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
                 )
             self.safe_corridor_last_frame_sequence = vision.frame_sequence
-            if (
-                not vision.ground_localizer_calibrated or
-                vision.safe_corridor_status == SAFE_CORRIDOR_HOMOGRAPHY_MISSING
-            ):
-                return CompetitionOutput(
-                    self.state,
-                    self._safe_zone_visual_align_command(),
-                    (
-                        "HOMOGRAPHY_MISSING：缺少1280×1024地面标定，"
-                        "保持mode11停车；请运行vision/calibrate_ground.py"
-                    ),
-                    self.selected_batch,
-                    tx_policy="normal_command",
-                    reason="HOMOGRAPHY_MISSING",
-                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
-                )
             if (
                 vision.safe_corridor_status ==
                 SAFE_CORRIDOR_OBSTACLE_DISTANCE_UNKNOWN or

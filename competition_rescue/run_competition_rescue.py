@@ -1268,6 +1268,7 @@ class CompetitionPlanner:
                 "ground_localizer_calibrated": vision.ground_localizer_calibrated,
                 "low_conf_green_seen": vision.low_conf_green_seen,
             },
+            "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
             "first_green_bump_used": self.mission.first_green_bump_used,
@@ -1368,6 +1369,12 @@ class CompetitionPlanner:
                         "state": output.state.value,
                         "message": output.message,
                     }
+                    if output.event == "initial_stash_state_anomaly":
+                        event_data.update({
+                            "invalid_state": "SEARCH",
+                            "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
+                            "initial_stash_done": self.mission.initial_stash_done,
+                        })
                     audit_snapshot = (
                         output.audit or
                         self.mission.pending_audit or
@@ -1639,11 +1646,20 @@ def main() -> int:
 
     config = load_config(args.config)
     capture_rois = load_capture_rois(args.capture_roi)
+    args.homography = args.homography.resolve()
+    homography_metadata = args.homography.with_suffix(
+        args.homography.suffix + ".meta.json"
+    )
     localizer = GroundLocalizer.load(args.homography, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    homography_diagnostics = {
+        "homography": str(args.homography),
+        "metadata": str(homography_metadata),
+        "required_resolution": [IMAGE_WIDTH, IMAGE_HEIGHT],
+        "localizer.calibrated": localizer.calibrated,
+    }
+    print(json.dumps(homography_diagnostics, ensure_ascii=False))
+    events.write("homography_deployment_check", homography_diagnostics)
     if not localizer.calibrated:
-        homography_metadata = args.homography.with_suffix(
-            args.homography.suffix + ".meta.json"
-        )
         homography_message = (
             "HOMOGRAPHY_MISSING: 正式比赛缺少1280×1024地面标定，"
             "最终走廊推进将被禁止；请运行"
@@ -1652,9 +1668,7 @@ def main() -> int:
         print(homography_message, file=sys.stderr)
         events.write("homography_missing", {
             "message": homography_message,
-            "homography": str(args.homography),
-            "metadata": str(homography_metadata),
-            "required_resolution": [IMAGE_WIDTH, IMAGE_HEIGHT],
+            **homography_diagnostics,
         })
     scaler: VseScaler | None = None
     try:
@@ -1717,10 +1731,11 @@ def main() -> int:
             "side": side,
             "start_zone": start_zone,
             "initial_stash_enabled": not args.disable_initial_stash,
+            "initial_stash_done": mission.initial_stash_done,
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
-            "homography": str(args.homography),
+            **homography_diagnostics,
             "homography_calibrated": localizer.calibrated,
             "capture_roi": str(args.capture_roi),
             "capture_polygon_px": [list(point) for point in capture_rois.overall],
