@@ -48,14 +48,13 @@ T265 6DoF pose (200 Hz)
 mapper；`tracker=3/mapper=0`显示`DEGRADED`而不是虚假的高精度`GOOD`，但仍可供任务规划使用。
 
 `camera_offset_forward_m/left_m`表示T265双目成像器中心 tracking origin 相对三轮运动学旋转中心的
-前向/左向距离，单位m；当前实测为后方29.6 mm、右侧30.1 mm，因此配置为
-`camera_offset_forward_m=-0.0296`、`camera_offset_left_m=-0.0301`。正方向是车头forward和车体left，
-不能混用T265外壳中心、105 mm推板距离、150 mm前拨板距离或130 mm轮子运动学半径。位置和速度
-lever-arm只补偿一次，轮式中心里程计不再叠加该偏置。
+前向/左向距离，单位m。当前侧向安装基线先使用0，重新测量后再填写；不能混用T265外壳中心、
+105 mm推板距离、150 mm前拨板距离或130 mm轮子运动学半径。位置和速度 lever-arm只补偿一次，
+轮式中心里程计不再叠加该偏置。
 
-原地逆时针90°时，tracking origin的理论假位移约为(+59.7,+0.5) mm，修正后的robot-center
-位移应接近0；CSV和JSON会同时记录raw tracking-origin位置、修正后的机器人中心位移、偏置参数，
-以及T265 robot-center与wheel odometry的逐帧位置差。JSON还分别记录原始编码器增量和加权后的融合增量。
+侧向基线暂不启用杠杆臂或编码器补偿；重新测量偏置后，CSV和JSON会同时记录 raw
+tracking-origin 位置、修正后的机器人中心位移、偏置参数，以及 T265 robot-center 与 wheel
+odometry 的逐帧位置差。JSON还分别记录原始编码器增量和加权后的融合增量。
 
 ## 定位调试日志
 
@@ -70,7 +69,7 @@ lever-arm只补偿一次，轮式中心里程计不再叠加该偏置。
 `encoder_fusion_weight` 的数值暗中启用或关闭。
 
 T265平移比例调试由 `t265_translation_scale_enabled` 和
-`t265_translation_scale` 控制，示例文件保留关闭状态并给出 `1.040` 的A/B试验值。
+`t265_translation_scale` 控制，侧向安装示例默认关闭并使用 `1.000`；完成受控距离测试后才单独启用比例。
 启用后只缩放lever-arm修正后的机器人中心平移和速度，raw tracking-origin、相机偏置、yaw
 和轮式里程计不变；因此可以随时关闭并保留原始/缩放后数据对照。
 
@@ -137,19 +136,18 @@ rotate_tangent = (M1 + M2 + M3) / 3
 错误。轮式旋转增量保留到日志作为对照，实际轮式里程计和EKF预测的航向增量由T265陀螺仪
 按T265自身时间戳积分并定期由T265四元数姿态重同步，不能用最新速率乘F407 ODOM间隔。
 
-`encoder_fusion_weight`范围0～1，默认0.25：0表示编码器平移不进入EKF，1表示完整使用编码器
+`encoder_fusion_weight`范围0～1，侧向T265-only基线为0：0表示编码器平移不进入EKF，1表示完整使用编码器
 平移。原始紫色轮式里程计不缩放，便于和T265对照。地图启动页可按5%或10%调节该值。
 
-## 镜头朝上的三维姿态投影
+## 侧向安装的三维姿态投影
 
 配置项`camera_robot_forward_axis`和`camera_robot_up_axis`表示“机器人轴在T265 Pose本体坐标中的
-坐标”。实车验证上一版`-T265 X`会使地图轨迹与实际运动相反，因此当前校准轴为车头
-`+T265 Pose X`。实测“车向右而地图向左”说明横向轴反了；镜头朝上时机器人上方对应
-`-T265 Pose Z`，因此左向由`up×forward`得到`-T265 Pose Y`：
+坐标”。历史朝右安装的 `277c4a8` 方案在当前四元数框架中的等价轴为车头
+`-T265 Pose X`、机器人上方`+T265 Pose Y`，因此左向由`up×forward`得到`+T265 Pose Z`：
 
 ```ini
-camera_robot_forward_axis = +x
-camera_robot_up_axis = -z
+camera_robot_forward_axis = -x
+camera_robot_up_axis = +y
 ```
 
 程序从完整`translation.xyz / velocity.xyz / quaternion.xyzw / angular_velocity.xyz`构造相机到
@@ -352,10 +350,7 @@ python3 tools/merge_vision_pose.py \
 ## 实车标定顺序
 
 1. 填写 T265 tracking origin 相对车体旋转中心的 `camera_offset_forward_m/left_m`。
-2. 按实装填写机器人前轴和上轴在T265本体坐标中的方向，禁止用固定±90°二维补偿猜测镜头朝上的姿态。
-3. 架空车轮，分别转动 M1/M2/M3，确认原始计数和 `encoder_sign` 一致。
-4. 平地前进 1 m、横移 1 m，核对轮径和 1768 counts/rev；不要用减速带路段标定轮径。
-5. 原地旋转 360°，对比轮式运动学角度与T265陀螺角度并测量 `wheel_center_radius_m`；该参数
-   当前主要用于日志诊断，未标定前可保持 0；同时检查 `gyro_pose_sync_error_deg` 是否周期归零。
-6. 从四个出发区分别越过/绕过减速带，确认 JSON 中 `wheel.gate` 显示 `startup_obstacle` 或 `corner_obstacle`。
-7. 在平地复测闭合路线，用 CSV 比较 T265、轮式预测和融合输出，再调整协方差和速度残差门限。
+2. 按实装填写机器人前轴和上轴在T265本体坐标中的方向，当前朝右基线为 `-x/+y`，禁止恢复固定二维yaw补偿。
+3. 仅T265模式下沿车体前向移动、向左横移，再原地旋转90°，分别核对 forward、left、yaw。
+4. 若轴向正确但距离比例有系统误差，再单独开启 `t265_translation_scale` 测试。
+5. 若重新启用融合模式，才架空车轮确认 M1/M2/M3 和 `encoder_sign`；正式侧向基线不使用编码器。

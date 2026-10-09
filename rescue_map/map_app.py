@@ -110,12 +110,14 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="disable the T265 translation scale calibration",
     )
-    parser.set_defaults(enable_t265_translation_scale=True)
+    # The side-facing T265 calibration starts from native scale. Enable the
+    # empirical scale only after a controlled side-mount distance check.
+    parser.set_defaults(enable_t265_translation_scale=False)
     parser.add_argument(
         "--t265-translation-scale",
         type=float,
-        default=DEFAULT_T265_TRANSLATION_SCALE,
-        help="T265 translation scale value, normally 1.040 for A/B testing",
+        default=1.0,
+        help="T265 translation scale value; side-mount baseline is 1.000",
     )
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
@@ -172,10 +174,13 @@ class RescueMapApp:
         self.opening_strategy = getattr(options, "opening_strategy", "attack")
         self.selecting = not (options.zone and options.side)
         self.corner_offset_m = options.corner_offset_mm / 1000.0
-        self.encoder_weight = float(options.encoder_weight)
+        requested_encoder_weight = float(options.encoder_weight)
+        self.localization_mode = options.localization_mode
+        # T265-only is the formal side-mount mode. Keep the generated config
+        # explicit even though --ignore-encoders is the runtime authority.
+        self.encoder_weight = 0.0 if self.localization_mode == "t265" else requested_encoder_weight
         if not 0.0 <= self.encoder_weight <= 1.0:
             raise ValueError("encoder weight must be in 0..1")
-        self.localization_mode = options.localization_mode
         requested_map = getattr(options, "t265_map", None)
         self.t265_map_path: Path | None = (
             Path(requested_map) if requested_map is not None else discover_t265_map()
