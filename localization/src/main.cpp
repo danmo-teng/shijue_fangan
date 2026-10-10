@@ -773,7 +773,7 @@ int main(int argc, char **argv)
 
         std::cerr << "[CONFIG] start_zone=" << config.start_zone
                   << " wheel=" << config.wheel_diameter_m * 1000.0 << " mm"
-                  << " counts/rev=" << config.counts_per_wheel_revolution
+                  << " counts/rev=" << std::setprecision(10) << config.counts_per_wheel_revolution
                   << " startup_gate=" << config.startup_wheel_disable_distance_m << " m"
                   << " t265_translation_scale="
                   << (config.t265_translation_scale_enabled

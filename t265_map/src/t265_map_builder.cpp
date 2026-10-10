@@ -498,7 +498,7 @@ public:
         }
 
         constexpr double wheel_diameter_m = 0.070;
-        constexpr double counts_per_revolution = 1768.0;
+        constexpr double counts_per_revolution = 1061.268;
         constexpr double distance_per_count = kPi * wheel_diameter_m / counts_per_revolution;
         constexpr double sqrt3 = 1.73205080756887729353;
         // F407 convention: M1=right, M2=left, M3=rear. All three raw

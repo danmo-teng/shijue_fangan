@@ -63,6 +63,7 @@ from protocol import (  # noqa: E402
     command_context_frame,
 )
 from capture_roi import (  # noqa: E402
+    bbox_capture_roi_overlap_ratio,
     CaptureRois,
     bbox_in_capture_roi,
     capture_side_for_bbox,
@@ -331,7 +332,7 @@ def audit_from_cargo(
 ) -> CargoAudit | None:
     visible = [item for item in items if item.visible]
     if not visible:
-        return None
+        return CargoAudit()
     side_by_track = side_by_track or {}
     left = [
         item for item in visible
@@ -386,6 +387,7 @@ def audit_from_cargo(
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
     return CargoAudit(
+        class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
         left_class=left_name,
         right_class=right_name,
         left_count=len(left),
@@ -398,10 +400,7 @@ def audit_from_cargo(
         ),
         total_count=len(visible),
         danger_present=has_danger,
-        unknown_present=(
-            bool(unassigned) or
-            "unknown" in {left_name, right_name}
-        ),
+        unknown_present="unknown" in all_names,
         injury_mixed=injury_mixed,
         left_invalid=left_invalid,
         right_invalid=right_invalid,
@@ -570,6 +569,33 @@ def safe_zone_push_corridor(
     return polygon, obstacle, None, SAFE_CORRIDOR_BLOCKED
 
 
+def capture_image_quality(image, pixel_format: str, rois: CaptureRois,
+                          calibrated: bool) -> str:
+    """Reject measurable incomplete/covered views; valid empty is a real image."""
+    if not calibrated:
+        return "capture_roi_uncalibrated"
+    expected_shape = ((IMAGE_HEIGHT * 3 // 2, IMAGE_WIDTH) if pixel_format == "nv12"
+                      else (IMAGE_HEIGHT, IMAGE_WIDTH, 3))
+    if image is None or image.shape != expected_shape:
+        return "capture_image_incomplete"
+    if (len(rois.overall) < 3 or any(
+            not (0 <= x < IMAGE_WIDTH and 0 <= y < IMAGE_HEIGHT)
+            for x, y in rois.overall)):
+        return "capture_roi_incomplete"
+    gray = (image[:IMAGE_HEIGHT] if pixel_format == "nv12"
+            else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+    mask = np.zeros((IMAGE_HEIGHT // 8, IMAGE_WIDTH // 8), np.uint8)
+    polygon = np.asarray(rois.overall, np.int32) // 8
+    cv2.fillPoly(mask, [polygon], 1)
+    pixels = gray[::8, ::8][mask.astype(bool)]
+    if pixels.size == 0:
+        return "capture_roi_incomplete"
+    if (float(pixels.std()) < 2.0 or
+            float(np.mean((pixels < 5) | (pixels > 250))) > 0.95):
+        return "capture_image_obscured"
+    return ""
+
+
 def make_vision_snapshot(
     detections,
     tracks,
@@ -582,6 +608,8 @@ def make_vision_snapshot(
     capture_rois: CaptureRois | None = None,
     low_conf_green_seen: bool = False,
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
+    capture_quality_reason: str = "",
+    observed_s: float | None = None,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     rois = capture_rois or load_capture_rois(
@@ -594,10 +622,20 @@ def make_vision_snapshot(
         stm.claw_visible and
         stm.camera_pitch_cdeg == 14000
     )
+    capture_observation_valid = (capture_enabled and frame_sequence > 0 and
+                                 not capture_quality_reason)
     if capture_enabled:
-        for item in cargo:
+        for item in tracked_cargo(tracks, None):
             if not item.visible:
                 continue
+            x, y, width, height = item.bbox
+            if (
+                x <= 0 or y <= 0 or
+                x + width >= IMAGE_WIDTH - 1 or
+                y + height >= IMAGE_HEIGHT - 1
+            ) and bbox_capture_roi_overlap_ratio(item.bbox, rois.overall) > 0.0:
+                capture_observation_valid = False
+                capture_quality_reason = "claw_target_truncated"
             capture_overlap = (
                 0.60
                 if stm.mode == STM_MODE_TRANSPORT_AUDIT or item.class_name in {"core_black", "injured_orange"}
@@ -608,6 +646,9 @@ def make_vision_snapshot(
                 rois.overall,
                 minimum_overlap_ratio=capture_overlap,
             ):
+                if bbox_capture_roi_overlap_ratio(item.bbox, rois.overall) >= 0.20:
+                    capture_observation_valid = False
+                    capture_quality_reason = "claw_target_partial_roi"
                 continue
             capture_items.append(item)
             capture_side = capture_side_for_bbox(
@@ -615,9 +656,16 @@ def make_vision_snapshot(
                 rois,
                 minimum_overlap_ratio=capture_overlap,
             )
-            if capture_side is not None:
-                capture_side_by_track[item.track_id] = capture_side
+            capture_side_by_track[item.track_id] = capture_side or (
+                "left" if item.center_px[0] <= IMAGE_WIDTH // 2 else "right"
+            )
     capture = tuple(capture_items)
+    for index, item in enumerate(capture):
+        if any(bbox_overlap_ratio(item.bbox, other.bbox) >= 0.60 or
+               bbox_overlap_ratio(other.bbox, item.bbox) >= 0.60
+               for other in capture[index + 1:]):
+            capture_observation_valid = False
+            capture_quality_reason = "claw_targets_occluded"
     selected = mission.selected_batch
     selected_ids = set(selected.track_ids) if selected is not None else set()
     selected_classes = set(selected.classes) if selected is not None else set()
@@ -627,7 +675,7 @@ def make_vision_snapshot(
             selected_ids,
             capture_side_by_track,
         )
-        if capture_enabled else None
+        if capture_observation_valid else None
     )
     # Separate obstacle audit from the original delivery manifest. Only the
     # locked/reassociated sweep target actually inside the claw ROI counts.
@@ -657,7 +705,7 @@ def make_vision_snapshot(
         sweep_capture = capture
     sweep_audit = (
         audit_from_cargo(sweep_capture, set(), capture_side_by_track)
-        if capture_enabled and mission.safe_sweep_pickup is not None else None
+        if capture_observation_valid and mission.safe_sweep_pickup is not None else None
     )
     target_candidates = [
         item for item in cargo
@@ -745,13 +793,15 @@ def make_vision_snapshot(
     )
     return VisionSnapshot(
         frame_sequence=frame_sequence,
-        observed_monotonic_s=time.monotonic(),
+        observed_monotonic_s=time.monotonic() if observed_s is None else observed_s,
         cargo=cargo,
         capture_cargo=capture,
         safe_bbox=safe_bbox,
         danger_ahead=danger,
         danger_side=side,
         capture_audit=audit,
+        capture_observation_valid=capture_observation_valid,
+        capture_observation_reason=capture_quality_reason,
         delivery_target_found=bool(delivery_items),
         delivery_target_inside_safe_zone=delivery_inside,
         delivery_target_outside_safe_zone=delivery_outside,
@@ -1175,10 +1225,6 @@ class CompetitionPlanner:
         audit_role = (
             self.mission.audit_epoch,
             None if pickup is None else pickup.mode,
-            None if command.audit is None else (
-                command.audit.initial_stash, command.audit.destination_injury,
-                command.audit.sweep_pickup,
-            ),
         ) if command.opcode == CMD_CARGO_AUDIT else None
         separation_epoch = (
             self.mission.separation_request_epoch
@@ -1209,6 +1255,8 @@ class CompetitionPlanner:
         elif command.opcode == CMD_CARGO_AUDIT:
             frame = (pickup.last_audit_frame if pickup is not None else
                      self.mission.pending_audit_frame_sequence or self.mission.audit_last_frame_sequence or 0)
+            if command.audit_vision_frame is not None:
+                frame = command.audit_vision_frame
             self.protocol_vision_frame = frame & 0xFFFFFFFF
         owner = self.protocol_accepted if overlay else None
         context = command_context_frame(
@@ -1259,6 +1307,12 @@ class CompetitionPlanner:
                 CompetitionState.APPROACH, CompetitionState.INITIAL_APPROACH,
                 CompetitionState.CLUSTER_APPROACH,
             }
+        if stm.mode == 49:
+            return (stm.context_valid and stm.task_id == self.protocol_task and
+                    not self.mission.post_grab_half_close_active and state in capture_states | {
+                CompetitionState.GRAB,
+                CompetitionState.POST_GRAB_AUDIT,
+            })
         if stm.mode == 3:
             if state in capture_states | {CompetitionState.BOUNDARY_RECOVERY}:
                 return True
@@ -1317,7 +1371,11 @@ class CompetitionPlanner:
             self._adopt_recovery_context()
             result = self.mission.step(vision, pose, replace(stm, context_matches=True), now)
             return result
-        if paused and self.mission.state == CompetitionState.FAULT:
+        if stm.fresh and stm.context_valid and stm.task_id == self.protocol_task:
+            timeout = self.mission._audit_wire_timeout_output(stm, now)
+            if timeout is not None:
+                return timeout
+        if self.mission.state == CompetitionState.FAULT:
             return self.mission.step(vision, pose, stm, now)
         if paused and self.mission.state == CompetitionState.WAIT_START:
             return CompetitionOutput(
@@ -1342,6 +1400,14 @@ class CompetitionPlanner:
         reconciled = self._reconcile_transport_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
+        if (stm.fresh and stm.context_valid and stm.task_id == self.protocol_task and
+                stm.mode in {21, 23, 37, 38, 48, 49, 50} and
+                self.mission.state in {CompetitionState.CAPTURE_AUDIT,
+                    CompetitionState.POST_GRAB_AUDIT, CompetitionState.AUDIT_CONFIRM,
+                    CompetitionState.TRANSPORT_AUDIT}):
+            # Re-evaluate evidence even while an audit ACK is in flight.
+            # Otherwise the context gate can keep transmitting expired STABLE.
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.protocol_last_output is not None and stm.fresh and
                 not matches and stm.mode != 41 and not stm.fault):
             # Re-send this request while waiting for its paired status. Do
@@ -1642,6 +1708,11 @@ class CompetitionPlanner:
             "transport_audit_frame_floor": self.mission.transport_audit_frame_floor,
             "post_grab_camera_ready": self.mission.post_grab_camera_ready,
             "audit_hits": self.mission.audit_hits,
+            "audit_wire_mode": self.mission.audit_wire_mode,
+            "audit_wire_mode_started_s": self.mission.audit_wire_mode_started_s,
+            "audit_last_evidence_s": self.mission.audit_last_evidence_s,
+            "capture_observation_valid": vision.capture_observation_valid,
+            "capture_observation_reason": vision.capture_observation_reason,
             "invalid_release_side": self.mission.invalid_release_side,
             "invalid_release_final": self.mission.invalid_release_final,
             "invalid_release_context": self.mission.invalid_release_context,
@@ -2338,6 +2409,11 @@ def main() -> int:
                         capture_rois,
                         low_conf_green_seen,
                         recent_carried_bboxes,
+                        capture_quality_reason=capture_image_quality(
+                            packet.image, packet.pixel_format, capture_rois,
+                            args.capture_roi.is_file(),
+                        ),
+                        observed_s=packet.published_ns / 1_000_000_000.0,
                     )
                     if not mission.carried_manifest:
                         recent_carried_bboxes = ()

@@ -209,7 +209,7 @@ left = (M1 + M2 - 2*M3) / 3
 
 ```ini
 wheel_diameter_m = 0.070
-counts_per_wheel_revolution = 1768
+counts_per_wheel_revolution = 1061.268
 encoder_sign_m1 = -1
 encoder_sign_m2 = -1
 encoder_sign_m3 = -1
