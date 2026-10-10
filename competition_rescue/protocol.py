@@ -207,6 +207,20 @@ class CargoAuditPayload:
     audit_id: int = 0
     sweep_pickup: bool = False
 
+    @property
+    def semantic_signature(self) -> tuple:
+        """Compare exactly the evidence visible to F407, ignoring claw side."""
+        payload = self.frame(0)[4:12]
+        histogram = [0] * (CARGO_MIXED_MATERIAL + 1)
+        zero_class_mask = 0
+        for class_code, count in ((payload[2], payload[4] & 3),
+                                  (payload[3], (payload[4] >> 2) & 3)):
+            histogram[class_code] += count
+            if count == 0 and class_code != CARGO_NONE:
+                zero_class_mask |= 1 << class_code
+        return (payload[7], payload[5] & ~AUDIT_STABLE,
+                tuple(histogram), zero_class_mask)
+
     def frame(self, sequence: int) -> bytes:
         left = CARGO_CLASS_CODES.get(self.left_class, CARGO_UNKNOWN)
         right = CARGO_CLASS_CODES.get(self.right_class, CARGO_UNKNOWN)

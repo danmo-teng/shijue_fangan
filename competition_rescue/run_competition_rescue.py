@@ -624,6 +624,9 @@ def make_vision_snapshot(
     )
     capture_observation_valid = (capture_enabled and frame_sequence > 0 and
                                  not capture_quality_reason)
+    image_observation_valid = capture_observation_valid
+    image_quality_reason = capture_quality_reason
+    target_quality: dict[int, str] = {}
     if capture_enabled:
         for item in tracked_cargo(tracks, None):
             if not item.visible:
@@ -636,6 +639,7 @@ def make_vision_snapshot(
             ) and bbox_capture_roi_overlap_ratio(item.bbox, rois.overall) > 0.0:
                 capture_observation_valid = False
                 capture_quality_reason = "claw_target_truncated"
+                target_quality[item.track_id] = capture_quality_reason
             capture_overlap = (
                 0.60
                 if stm.mode == STM_MODE_TRANSPORT_AUDIT or item.class_name in {"core_black", "injured_orange"}
@@ -649,6 +653,7 @@ def make_vision_snapshot(
                 if bbox_capture_roi_overlap_ratio(item.bbox, rois.overall) >= 0.20:
                     capture_observation_valid = False
                     capture_quality_reason = "claw_target_partial_roi"
+                    target_quality[item.track_id] = capture_quality_reason
                 continue
             capture_items.append(item)
             capture_side = capture_side_for_bbox(
@@ -661,12 +666,19 @@ def make_vision_snapshot(
             )
     capture = tuple(capture_items)
     for index, item in enumerate(capture):
-        if any(bbox_overlap_ratio(item.bbox, other.bbox) >= 0.60 or
-               bbox_overlap_ratio(other.bbox, item.bbox) >= 0.60
-               for other in capture[index + 1:]):
-            capture_observation_valid = False
-            capture_quality_reason = "claw_targets_occluded"
+        for other in capture[index + 1:]:
+            if (bbox_overlap_ratio(item.bbox, other.bbox) >= 0.60 or
+                    bbox_overlap_ratio(other.bbox, item.bbox) >= 0.60):
+                capture_observation_valid = False
+                capture_quality_reason = "claw_targets_occluded"
+                target_quality[item.track_id] = capture_quality_reason
+                target_quality[other.track_id] = capture_quality_reason
     selected = mission.selected_batch
+    if selected is not None and selected.initial_stash and capture and image_observation_valid:
+        # A detected nonempty pile is enough for opening relocation. Object
+        # overlap/mixture is expected; image/ROI/camera validity still applies.
+        capture_observation_valid = True
+        capture_quality_reason = ""
     selected_ids = set(selected.track_ids) if selected is not None else set()
     selected_classes = set(selected.classes) if selected is not None else set()
     audit = (
@@ -698,14 +710,24 @@ def make_vision_snapshot(
         item for item in capture
         if sweep_target is not None and item.track_id == sweep_target.track_id
     )
-    if mission.safe_sweep_pickup is not None and mission.safe_sweep_pickup.recovering_original:
+    recovering_original = bool(mission.safe_sweep_pickup is not None and
+                               (mission.safe_sweep_pickup.recovering_original or stm.mode in {44, 45}))
+    sweep_observation_valid = capture_observation_valid
+    sweep_quality_reason = capture_quality_reason
+    if recovering_original:
         # Recovering the load is formal delivery again. Count the WHOLE claw
         # ROI, including unexpected cargo; never truncate it to the target
         # or the two-item limit and accidentally hide overload/danger.
         sweep_capture = capture
+    elif mission.safe_sweep_pickup is not None:
+        # Only defects involving this obstacle invalidate a mode43 view.
+        # Unrelated overlapping cargo elsewhere in the ROI is not its load.
+        sweep_quality_reason = (image_quality_reason or
+                                (target_quality.get(sweep_target.track_id, "") if sweep_target else ""))
+        sweep_observation_valid = image_observation_valid and not sweep_quality_reason
     sweep_audit = (
         audit_from_cargo(sweep_capture, set(), capture_side_by_track)
-        if capture_observation_valid and mission.safe_sweep_pickup is not None else None
+        if sweep_observation_valid and mission.safe_sweep_pickup is not None else None
     )
     target_candidates = [
         item for item in cargo
@@ -802,6 +824,8 @@ def make_vision_snapshot(
         capture_audit=audit,
         capture_observation_valid=capture_observation_valid,
         capture_observation_reason=capture_quality_reason,
+        safe_sweep_observation_valid=sweep_observation_valid,
+        safe_sweep_observation_reason=sweep_quality_reason,
         delivery_target_found=bool(delivery_items),
         delivery_target_inside_safe_zone=delivery_inside,
         delivery_target_outside_safe_zone=delivery_outside,
@@ -982,6 +1006,7 @@ class CompetitionPlanner:
         self.error: Exception | None = None
         self.last_state = mission.state
         self.paused = False
+        self.pause_reason = "manual"
         self.diagnostics_period_s = 0.1
         self.last_diagnostics_s = -math.inf
         self.command_tx_suppression_reasons_logged: set[str] = set()
@@ -1008,9 +1033,10 @@ class CompetitionPlanner:
         with self.lock:
             self.latest_vision = vision
 
-    def set_paused(self, paused: bool) -> None:
+    def set_paused(self, paused: bool, *, reason: str = "manual") -> None:
         with self.lock:
             self.paused = paused
+            self.pause_reason = reason
 
     def snapshot(self):
         with self.lock:
@@ -1286,6 +1312,8 @@ class CompetitionPlanner:
         if not stm.fresh:
             return False
         state = self.mission.state
+        if stm.mode in {24, 3} and self.mission.committed_audit_handoff_mode is not None:
+            return True
         if stm.mode == 41:
             return True
         if stm.mode == 47:
@@ -1313,6 +1341,10 @@ class CompetitionPlanner:
                 CompetitionState.GRAB,
                 CompetitionState.POST_GRAB_AUDIT,
             })
+        if stm.mode in {42, 44} and state == CompetitionState.CLEAR_SAFE_ZONE:
+            pickup = self.mission.safe_sweep_pickup
+            return bool(stm.context_valid and stm.task_id == self.protocol_task and
+                        pickup is not None and pickup.mode in {43, 45})
         if stm.mode == 3:
             if state in capture_states | {CompetitionState.BOUNDARY_RECOVERY}:
                 return True
@@ -1354,6 +1386,37 @@ class CompetitionPlanner:
             message="下位机明确拒绝当前预备点请求，回到完整夹爪复审并按最新READY/VALID重新决策",
         )
 
+    def _reconcile_sweep_rejection(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        if not (stm.fresh and stm.context_valid and stm.action_status & 4 and
+                stm.task_id == self.protocol_task and
+                stm.rejected_action_id == self.protocol_action and
+                self.protocol_last_output is not None and
+                (self.mission.state == CompetitionState.CLEAR_SAFE_ZONE or
+                 self.mission.safe_sweep_reaudit_active) and
+                stm.mode in {23, 39, 42, 43, 44, 45}):
+            return None
+        self._adopt_recovery_context()
+        current = replace(stm, context_matches=True)
+        if stm.mode == 23:
+            self.mission.safe_sweep_reaudit_active = True
+            self.mission._begin_post_grab_audit(vision, now)
+        else:
+            pickup = self.mission.safe_sweep_pickup
+            if pickup is not None:
+                # Reset visual evidence, not the accepted CLEAR mechanics or
+                # the original load/obstacle identity.
+                pickup.mode = None
+                pickup.grab_started = False
+                pickup.audit_command = None
+            self.mission.safe_sweep_command_accepted = True
+        return replace(
+            self.mission.step(vision, pose, current, now),
+            event="safe_sweep_request_rejected", reason="safe_sweep_reobserve_after_reject",
+            message="下位机明确拒绝当前扫障请求，按实际模式恢复目标查找或新帧审核",
+        )
+
     def _output_for_cycle(
         self,
         vision: VisionSnapshot,
@@ -1365,13 +1428,19 @@ class CompetitionPlanner:
         self.protocol_vision = vision
         if stm.fresh and stm.context_valid and stm.action_status & 1:
             self.protocol_accepted = stm
+        if paused and self.pause_reason == "manual" and self.mission.state != CompetitionState.FAULT:
+            self.mission._audit_wire_timeout_output(stm, now, manual_paused=True)
+            return CompetitionOutput(
+                self.mission.state, CommandRequest(CMD_PAUSE),
+                "人工PAUSE，冻结审核握手期限直到恢复", tx_policy="pause", reason="manual_pause",
+            )
         # Recovery is an observation from the MCU, not an ACK of the last
         # requested action. Handle it before context_pending/camera pause.
         if self._is_recovery_observation(stm):
             self._adopt_recovery_context()
             result = self.mission.step(vision, pose, replace(stm, context_matches=True), now)
             return result
-        if stm.fresh and stm.context_valid and stm.task_id == self.protocol_task:
+        if stm.fresh and not stm.fault:
             timeout = self.mission._audit_wire_timeout_output(stm, now)
             if timeout is not None:
                 return timeout
@@ -1400,11 +1469,17 @@ class CompetitionPlanner:
         reconciled = self._reconcile_transport_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
+        reconciled = self._reconcile_sweep_rejection(vision, pose, stm, now)
+        if reconciled is not None:
+            return reconciled
+        if (stm.fresh and stm.mode in {22, 40, 50} and
+                (not self.mission._has_committed_audit(stm.mode) or self.mission.selected_batch is None)):
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (stm.fresh and stm.context_valid and stm.task_id == self.protocol_task and
-                stm.mode in {21, 23, 37, 38, 48, 49, 50} and
+                stm.mode in {21, 22, 23, 37, 38, 39, 40, 42, 43, 44, 45, 48, 49, 50} and
                 self.mission.state in {CompetitionState.CAPTURE_AUDIT,
                     CompetitionState.POST_GRAB_AUDIT, CompetitionState.AUDIT_CONFIRM,
-                    CompetitionState.TRANSPORT_AUDIT}):
+                    CompetitionState.TRANSPORT_AUDIT, CompetitionState.CLEAR_SAFE_ZONE}):
             # Re-evaluate evidence even while an audit ACK is in flight.
             # Otherwise the context gate can keep transmitting expired STABLE.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
@@ -1713,6 +1788,10 @@ class CompetitionPlanner:
             "audit_last_evidence_s": self.mission.audit_last_evidence_s,
             "capture_observation_valid": vision.capture_observation_valid,
             "capture_observation_reason": vision.capture_observation_reason,
+            "safe_sweep_observation_valid": vision.safe_sweep_observation_valid,
+            "safe_sweep_observation_reason": vision.safe_sweep_observation_reason,
+            "missing_committed_audit_mode": self.mission.missing_committed_audit_mode,
+            "committed_audit_handoff_mode": self.mission.committed_audit_handoff_mode,
             "invalid_release_side": self.mission.invalid_release_side,
             "invalid_release_final": self.mission.invalid_release_final,
             "invalid_release_context": self.mission.invalid_release_context,
@@ -2195,12 +2274,12 @@ def main() -> int:
     try:
         # Start the planner in a paused/hold state first. Camera startup and
         # later recovery must never leave a previous motion command active.
-        planner.set_paused(True)
+        planner.set_paused(True, reason="camera_recovery")
         planner.start()
         try:
             camera = create_camera()
             camera.start()
-            planner.set_paused(False)
+            planner.set_paused(False, reason="camera_recovery")
         except Exception as error:
             if camera is not None:
                 camera.stop()
@@ -2262,7 +2341,7 @@ def main() -> int:
                     else:
                         camera_recovery_pending = False
                         camera_restarts = 0
-                        planner.set_paused(False)
+                        planner.set_paused(False, reason="camera_recovery")
                         last_packet_id = 0
                         last_inference_id = 0
                         next_vision = now
@@ -2281,7 +2360,7 @@ def main() -> int:
                     "retry": camera_restarts,
                 })
                 if camera_restarts < args.camera_retries:
-                    planner.set_paused(True)
+                    planner.set_paused(True, reason="camera_recovery")
                     camera.stop()
                     camera_restarts += 1
                     if camera_decoder == "jpu":
@@ -2318,9 +2397,9 @@ def main() -> int:
                         "output_format": camera_output_format,
                         "retry": camera_restarts,
                     })
-                    planner.set_paused(False)
+                    planner.set_paused(False, reason="camera_recovery")
                     continue
-                planner.set_paused(True)
+                planner.set_paused(True, reason="camera_recovery")
                 camera.stop()
                 camera = None
                 camera_recovery_pending = True
