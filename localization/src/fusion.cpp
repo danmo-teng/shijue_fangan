@@ -15,7 +15,8 @@ Pose2d start_pose_for_zone(const LocalizationConfig &config)
     pose.x_m = right ? config.start_center_m : -config.start_center_m;
     pose.y_m = top ? config.start_center_m : -config.start_center_m;
     const double heading_deg[] = {0.0, 135.0, 45.0, 225.0, 315.0};
-    pose.yaw_rad = radians(heading_deg[config.start_zone]);
+    pose.yaw_rad = radians(std::fmod(
+        heading_deg[config.start_zone] + config.start_heading_offset_deg + 360.0, 360.0));
     return pose;
 }
 

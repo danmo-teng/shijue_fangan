@@ -303,7 +303,8 @@ omni::Pose2d configured_start_pose(const omni::LocalizationConfig &config)
     return {
         right ? config.start_center_m : -config.start_center_m,
         top ? config.start_center_m : -config.start_center_m,
-        omni::radians(headings_deg[config.start_zone]),
+        omni::radians(std::fmod(
+            headings_deg[config.start_zone] + config.start_heading_offset_deg + 360.0, 360.0)),
     };
 }
 

@@ -118,6 +118,7 @@ LocalizationConfig load_config(const std::string &path)
 #define SET_DOUBLE(name) if (key == #name) { config.name = number(value, key); continue; }
         SET_DOUBLE(field_half_m)
         SET_DOUBLE(start_center_m)
+        SET_DOUBLE(start_heading_offset_deg)
         SET_DOUBLE(wheel_diameter_m)
         SET_DOUBLE(counts_per_wheel_revolution)
         SET_DOUBLE(encoder_to_robot_yaw_deg)
@@ -175,6 +176,10 @@ void validate_config(const LocalizationConfig &c)
 {
     if (c.start_zone < 1 || c.start_zone > 4) {
         throw std::runtime_error("start_zone must be 1..4");
+    }
+    if (!std::isfinite(c.start_heading_offset_deg) ||
+        std::fabs(c.start_heading_offset_deg) > 180.0) {
+        throw std::runtime_error("start_heading_offset_deg must be in [-180,180]");
     }
     // Zero is a valid origin for the standalone centre-start debug map.
     if (c.field_half_m <= 0.0 || c.start_center_m < 0.0 ||

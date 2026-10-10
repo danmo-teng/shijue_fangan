@@ -9,6 +9,8 @@ struct LocalizationConfig {
     int start_zone = 4;
     double field_half_m = 1.5;
     double start_center_m = 1.35;
+    // Field-reference heading offset; zero preserves competition start zones.
+    double start_heading_offset_deg = 0.0;
 
     double wheel_diameter_m = 0.070;
     double counts_per_wheel_revolution = 1061.268;

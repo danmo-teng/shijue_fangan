@@ -276,6 +276,7 @@ void test_projection_gate_and_filter()
 
     omni::LocalizationConfig centre_config = config;
     centre_config.start_center_m = 0.0;
+    centre_config.start_heading_offset_deg = 45.0;
     centre_config.camera_offset_forward_m = 0.0;
     centre_config.camera_offset_left_m = 0.0;
     omni::validate_config(centre_config);
@@ -285,8 +286,9 @@ void test_projection_gate_and_filter()
         const auto centre = centre_projector.project(lens_up_pose(0.0));
         check(near(centre.pose.x_m, 0.0) && near(centre.pose.y_m, 0.0),
               "debug centre-start initializes the actual projected pose at origin");
-        check(near(omni::degrees(centre.pose.yaw_rad), expected_heading[zone]),
-              "debug centre-start preserves selected initial heading");
+        check(near(omni::wrap_angle(centre.pose.yaw_rad -
+                                  omni::radians(expected_heading[zone] + 45.0)), 0.0),
+              "debug centre-start rotates initial heading 45 degrees counterclockwise");
     }
 
     omni::LocalizationConfig lens_up_config = config;

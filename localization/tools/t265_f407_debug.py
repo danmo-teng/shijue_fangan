@@ -103,7 +103,8 @@ def find_csv(path: Path) -> tuple[Path, Path | None]:
 
 
 def write_debug_config(source: Path, target: Path, start_zone: int | None = None,
-                       *, center_origin: bool = False) -> None:
+                       *, center_origin: bool = False,
+                       start_heading_offset_deg: float | None = None) -> None:
     """Keep wheel samples enabled while making their EKF weight exactly zero."""
     lines = source.read_text(encoding="utf-8").splitlines()
     replacements = {
@@ -119,6 +120,8 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
         replacements["start_zone"] = f"start_zone = {start_zone}"
     if center_origin:
         replacements["start_center_m"] = "start_center_m = 0.0"
+    if start_heading_offset_deg is not None:
+        replacements["start_heading_offset_deg"] = f"start_heading_offset_deg = {start_heading_offset_deg}"
     seen: set[str] = set()
     output: list[str] = []
     for line in lines:
