@@ -102,7 +102,8 @@ def find_csv(path: Path) -> tuple[Path, Path | None]:
     return csv_path, path
 
 
-def write_debug_config(source: Path, target: Path, start_zone: int | None = None) -> None:
+def write_debug_config(source: Path, target: Path, start_zone: int | None = None,
+                       *, center_origin: bool = False) -> None:
     """Keep wheel samples enabled while making their EKF weight exactly zero."""
     lines = source.read_text(encoding="utf-8").splitlines()
     replacements = {
@@ -116,6 +117,8 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
         if start_zone not in (1, 2, 3, 4):
             raise ValueError("start_zone must be in 1..4")
         replacements["start_zone"] = f"start_zone = {start_zone}"
+    if center_origin:
+        replacements["start_center_m"] = "start_center_m = 0.0"
     seen: set[str] = set()
     output: list[str] = []
     for line in lines:
@@ -375,6 +378,15 @@ def analyze(csv_path: Path, output_path: Path | None, trial: str,
         },
         "events": read_events(csv_path),
     }
+    metadata_path = csv_path.parent / "metadata.json"
+    if metadata_path.exists():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if metadata.get("mode") == "interactive_f407_motion_debug":
+                result["protocol"] = metadata["protocol"]
+                result["effective_config"] = metadata.get("effective_config", {})
+        except (OSError, ValueError, KeyError, AttributeError):
+            pass
     if output_path is not None:
         output_path.write_text(
             json.dumps(result, ensure_ascii=False, indent=2) + "\n",
@@ -499,15 +511,33 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--label", default="manual")
     parser.add_argument("--trial", choices=("unknown", "still", "rotate", "linear", "combined"),
                         default="unknown")
-    parser.add_argument("--offset-forward", type=float, default=-0.0296)
-    parser.add_argument("--offset-left", type=float, default=-0.0301)
+    parser.add_argument("--offset-forward", type=float,
+                        help="分析偏置；默认读取本轮localization.conf")
+    parser.add_argument("--offset-left", type=float,
+                        help="分析偏置；默认读取本轮localization.conf")
     return parser.parse_args()
 
 
 def main() -> int:
     args = arguments()
+    config_path = args.config
     if args.analyze:
         csv_path, run_dir = find_csv(args.analyze)
+        config_path = csv_path.parent / "localization.conf"
+    # Match the C++ constructor only if an old capture has no saved value.
+    offsets = {"camera_offset_forward_m": -0.0296, "camera_offset_left_m": -0.0301}
+    if config_path.exists():
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            line = line.split("#", 1)[0].strip()
+            if "=" in line:
+                key, value = (part.strip() for part in line.split("=", 1))
+                if key in offsets:
+                    offsets[key] = float(value)
+    if args.offset_forward is None:
+        args.offset_forward = offsets["camera_offset_forward_m"]
+    if args.offset_left is None:
+        args.offset_left = offsets["camera_offset_left_m"]
+    if args.analyze:
         output = None if run_dir is None else run_dir / "analysis.json"
         print_report(analyze(csv_path, output, args.trial,
                              args.offset_forward, args.offset_left))

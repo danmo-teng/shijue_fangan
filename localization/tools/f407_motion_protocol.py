@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Protocol adapter for F407 ``feat/uart-motion-debug``."""
+"""MotionDebug adapter for F407 76f69b1 (the scanner 0x19/0x1A protocol)."""
 from __future__ import annotations
 
 import math
-from collections import deque
 from typing import Callable
 
 
@@ -12,14 +11,17 @@ FRAME_TAIL = 0xC3
 FRAME_SIZE = 15
 PAYLOAD_SIZE = 8
 MSG_ODOM = 0x15
-MSG_MOTION_COMMAND = 0x17
-MSG_MOTION_STATUS = 0x18
+MSG_MOTION_COMMAND = 0x19
+MSG_MOTION_STATUS = 0x1A
 
 MOTION_CMD_STOP = 0x00
-MOTION_CMD_TURN_REL = 0x01
-MOTION_CMD_MOVE_DISTANCE = 0x02
-MOTION_TURN_NEGATIVE = 0x01
-MOTION_MOVE_FIELD_FRAME = 0x01
+MOTION_CMD_TURN_REL = 0x02
+MOTION_CMD_MOVE_DISTANCE = 0x03  # MOVE_BODY; retain the map's function names.
+MOTION_CMD_MOVE_FIELD = 0x04
+MOTION_VALID = 0x01
+MOTION_KEEP_HEADING = 0x02
+MOTION_FIELD_FRAME = 0x04
+MOTION_ACK_REQUIRED = 0x08
 
 MOTION_STATE_IDLE = 0x00
 MOTION_STATE_RUNNING = 0x01
@@ -27,13 +29,10 @@ MOTION_STATE_DONE = 0x02
 MOTION_STATE_FAULT = 0x03
 MOTION_STATE_STOPPED = 0x04
 
-MOTION_STATUS_IMU_READY = 0x01
-MOTION_STATUS_ODOM_VALID = 0x02
-MOTION_STATUS_MOTOR_FAULT = 0x04
 MOTION_MAX_DISTANCE_MM = 10_000
 MOTION_MIN_SPEED_MM_S = 50
 MOTION_MAX_SPEED_MM_S = 700
-MOTION_MAX_TURN_CDEG = 36_000
+MOTION_TURN_RADIUS_MM = 130.0  # APP_MOTION_DEBUG_TURN_RADIUS_MM at 76f69b1.
 
 STATE_NAMES = {
     MOTION_STATE_IDLE: "IDLE",
@@ -45,7 +44,8 @@ STATE_NAMES = {
 COMMAND_NAMES = {
     MOTION_CMD_STOP: "STOP",
     MOTION_CMD_TURN_REL: "TURN_REL",
-    MOTION_CMD_MOVE_DISTANCE: "MOVE_DISTANCE",
+    MOTION_CMD_MOVE_DISTANCE: "MOVE_BODY",
+    MOTION_CMD_MOVE_FIELD: "MOVE_FIELD",
 }
 
 
@@ -60,7 +60,7 @@ def crc16_modbus(data: bytes) -> int:
 
 def build_frame(message_type: int, sequence: int, payload: bytes) -> bytes:
     if message_type not in (MSG_MOTION_COMMAND,):
-        raise ValueError("this adapter only builds TYPE=0x17 motion commands")
+        raise ValueError("this adapter only builds TYPE=0x19 motion commands")
     if not 0 <= sequence <= 0xFF or len(payload) != PAYLOAD_SIZE:
         raise ValueError("invalid sequence or payload length")
     body = bytes((message_type, sequence)) + payload
@@ -76,18 +76,23 @@ def _speed(speed_mm_s: int) -> int:
 
 
 def motion_stop_frame(sequence: int) -> bytes:
-    return build_frame(MSG_MOTION_COMMAND, sequence, bytes(8))
+    return build_frame(MSG_MOTION_COMMAND, sequence,
+                       bytes((MOTION_CMD_STOP, MOTION_VALID | MOTION_ACK_REQUIRED)) + bytes(6))
 
 
 def motion_turn_frame(sequence: int, angle_deg: float, speed_mm_s: int = 300) -> bytes:
     if not math.isfinite(angle_deg) or not -360.0 <= angle_deg <= 360.0:
         raise ValueError("angle must be in -360..360 degrees")
-    angle_cdeg = int(round(abs(angle_deg) * 100.0))
-    if not 0 < angle_cdeg <= MOTION_MAX_TURN_CDEG:
+    angle_ddeg = int(round(angle_deg * 10.0))
+    if angle_ddeg == 0:
         raise ValueError("angle must be non-zero and no more than 360 degrees")
-    payload = bytes((MOTION_CMD_TURN_REL,
-                     MOTION_TURN_NEGATIVE if angle_deg < 0.0 else 0))
-    payload += angle_cdeg.to_bytes(2, "big") + _speed(speed_mm_s).to_bytes(2, "big") + bytes(2)
+    # The UI retains wheel-tangent mm/s. New TURN_REL takes 0.1 degree/s;
+    # match the firmware's 130 mm turn radius rather than treating mm/s as yaw.
+    turn_rate_ddeg_s = int(round(
+        math.degrees(_speed(speed_mm_s) / MOTION_TURN_RADIUS_MM) * 10.0))
+    payload = bytes((MOTION_CMD_TURN_REL, MOTION_VALID | MOTION_ACK_REQUIRED))
+    payload += angle_ddeg.to_bytes(2, "big", signed=True) + bytes(2)
+    payload += turn_rate_ddeg_s.to_bytes(2, "big")
     return build_frame(MSG_MOTION_COMMAND, sequence, payload)
 
 
@@ -97,11 +102,15 @@ def motion_move_frame(sequence: int, direction_deg: float, distance_mm: int,
         raise ValueError("direction must be in 0..360 degrees")
     if not 0 < distance_mm <= MOTION_MAX_DISTANCE_MM:
         raise ValueError(f"distance must be in 1..{MOTION_MAX_DISTANCE_MM} mm")
-    direction_cdeg = int(round(direction_deg * 100.0)) % 36000
-    payload = bytes((MOTION_CMD_MOVE_DISTANCE,
-                     MOTION_MOVE_FIELD_FRAME if field_frame else 0))
-    payload += direction_cdeg.to_bytes(2, "big")
-    payload += int(distance_mm).to_bytes(2, "big")
+    direction = math.radians(direction_deg)
+    forward_mm = int(round(distance_mm * math.cos(direction)))
+    left_mm = int(round(distance_mm * math.sin(direction)))
+    command = MOTION_CMD_MOVE_FIELD if field_frame else MOTION_CMD_MOVE_DISTANCE
+    flags = MOTION_VALID | MOTION_ACK_REQUIRED | (
+        MOTION_FIELD_FRAME if field_frame else MOTION_KEEP_HEADING)
+    payload = bytes((command, flags))
+    payload += forward_mm.to_bytes(2, "big", signed=True)
+    payload += left_mm.to_bytes(2, "big", signed=True)
     payload += _speed(speed_mm_s).to_bytes(2, "big")
     return build_frame(MSG_MOTION_COMMAND, sequence, payload)
 
@@ -137,20 +146,20 @@ def parse_motion_status(frame: bytes) -> dict[str, int | bool | str]:
     message_type, sequence, payload = parse_frame(frame)
     if message_type != MSG_MOTION_STATUS:
         raise ValueError("not a motion status frame")
-    health = payload[6]
+    state = payload[1]
+    heading_cdeg = int.from_bytes(payload[6:8], "big")
+    if state not in STATE_NAMES or heading_cdeg >= 36000:
+        raise ValueError("invalid motion status")
     return {
         "sequence": sequence,
-        "state": payload[0],
-        "state_name": STATE_NAMES.get(payload[0], "UNKNOWN"),
-        "command": payload[1],
-        "command_name": COMMAND_NAMES.get(payload[1], "UNKNOWN"),
-        "progress": int.from_bytes(payload[2:4], "big"),
-        "remaining": int.from_bytes(payload[4:6], "big"),
-        "health": health,
-        "imu_ready": bool(health & MOTION_STATUS_IMU_READY),
-        "odom_valid": bool(health & MOTION_STATUS_ODOM_VALID),
-        "motor_fault": bool(health & MOTION_STATUS_MOTOR_FAULT),
-        "command_sequence": payload[7],
+        "state": state,
+        "state_name": STATE_NAMES[state],
+        "command": payload[3],
+        "command_name": COMMAND_NAMES.get(payload[3], "UNKNOWN"),
+        "progress": int.from_bytes(payload[4:6], "big", signed=True),
+        "fault": payload[2],
+        "heading_cdeg": heading_cdeg,
+        "command_sequence": payload[0],
     }
 
 
@@ -202,6 +211,12 @@ class StreamParser:
                 del self.buffer[:1]
                 continue
             del self.buffer[:FRAME_SIZE]
+            try:
+                decoded = (parse_odometry(candidate) if message_type == MSG_ODOM
+                           else parse_motion_status(candidate))
+            except ValueError:
+                self.stats["malformed"] += 1
+                continue
             self.stats["frames"] += 1
             if message_type == MSG_ODOM:
                 if self._last_odom_sequence is not None:
@@ -211,7 +226,7 @@ class StreamParser:
                 self._last_odom_sequence = sequence
                 self.stats["odom_frames"] += 1
                 if self.on_odom is not None:
-                    self.on_odom(parse_odometry(candidate))
+                    self.on_odom(decoded)
             else:
                 if self._last_status_sequence is not None:
                     gap = (sequence - self._last_status_sequence) & 0xFF
@@ -219,6 +234,6 @@ class StreamParser:
                         self.stats["status_sequence_gaps"] += gap - 1
                 self._last_status_sequence = sequence
                 self.stats["motion_status_frames"] += 1
-                self.latest_status = parse_motion_status(candidate)
+                self.latest_status = decoded
                 if self.on_motion_status is not None:
                     self.on_motion_status(self.latest_status)

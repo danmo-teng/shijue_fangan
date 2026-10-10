@@ -6,6 +6,7 @@ from f407_motion_protocol import (
     FRAME_HEAD,
     FRAME_TAIL,
     MOTION_CMD_TURN_REL,
+    MOTION_CMD_MOVE_DISTANCE,
     MOTION_STATE_RUNNING,
     MSG_MOTION_STATUS,
     MSG_ODOM,
@@ -14,6 +15,7 @@ from f407_motion_protocol import (
     motion_move_frame,
     motion_stop_frame,
     motion_turn_frame,
+    parse_motion_status,
 )
 
 
@@ -23,20 +25,23 @@ def inbound(message_type: int, sequence: int, payload: bytes) -> bytes:
 
 
 def main() -> None:
-    assert motion_turn_frame(0, 90.0, 300).hex(" ").upper() == (
-        "A3 B3 17 00 01 00 23 28 01 2C 00 00 A6 E4 C3"
-    )
-    assert motion_move_frame(3, 90.0, 1000, 300).hex(" ").upper() == (
-        "A3 B3 17 03 02 00 23 28 03 E8 01 2C B2 09 C3"
-    )
-    assert motion_stop_frame(5).hex(" ").upper() == (
-        "A3 B3 17 05 00 00 00 00 00 00 00 00 FF 18 C3"
-    )
+    # Payloads match F407 76f69b1 vision.c and t265_map/scan_protocol.hpp.
+    turn = motion_turn_frame(0, 90.0, 300)
+    assert turn[2] == 0x19 and turn[4:12] == bytes.fromhex("02 09 03 84 00 00 05 2A")
+    assert motion_turn_frame(1, -180.0)[6:8] == (-1800).to_bytes(2, "big", signed=True)
+    assert motion_turn_frame(2, 360.0)[6:8] == (3600).to_bytes(2, "big", signed=True)
+    left = motion_move_frame(3, 90.0, 630, 300)
+    assert left[4:12] == bytes.fromhex("03 0B 00 00 02 76 01 2C")
+    assert motion_move_frame(4, 0.0, 740, 300)[4:12] == bytes.fromhex("03 0B 02 E4 00 00 01 2C")
+    assert motion_stop_frame(5)[4:12] == bytes.fromhex("00 09 00 00 00 00 00 00")
+    for frame in (turn, left, motion_stop_frame(5)):
+        assert len(frame) == 15
+        assert crc16_modbus(frame[2:12]) == int.from_bytes(frame[12:14], "little")
 
     odom = inbound(MSG_ODOM, 7, bytes((0, 1, 0, 2, 0, 3, 10, 7)))
     status = inbound(
         MSG_MOTION_STATUS, 4,
-        bytes((MOTION_STATE_RUNNING, MOTION_CMD_TURN_REL, 0, 100, 0, 200, 3, 9)),
+        bytes((9, MOTION_STATE_RUNNING, 0, MOTION_CMD_TURN_REL, 0, 100, 0x23, 0x28)),
     )
     seen = []
     parser = StreamParser(
@@ -47,8 +52,20 @@ def main() -> None:
     parser.feed(odom[5:] + status)
     assert seen[0][0] == "odom" and seen[0][1]["m3_count"] == 3
     assert seen[1][0] == "status" and seen[1][1]["command_sequence"] == 9
+    assert seen[1][1]["heading_cdeg"] == 9000 and seen[1][1]["progress"] == 100
     assert parser.stats["frames"] == 2
     assert parser.stats["crc_errors"] == 0
+    negative = inbound(MSG_MOTION_STATUS, 5,
+                       bytes((10, 2, 0, MOTION_CMD_MOVE_DISTANCE, 0xFE, 0x0C, 0, 0)))
+    assert parse_motion_status(negative)["progress"] == -500
+    corrupt = bytearray(status)
+    corrupt[8] ^= 1
+    parser.feed(corrupt + negative)
+    assert parser.stats["crc_errors"] == 1
+    assert seen[-1][1]["command_sequence"] == 10
+    malformed = inbound(MSG_MOTION_STATUS, 6, bytes((10, 99, 0, 2, 0, 0, 0, 0)))
+    parser.feed(malformed + odom)
+    assert parser.stats["malformed"] >= 1
     print("F407 motion protocol PASS")
 
 

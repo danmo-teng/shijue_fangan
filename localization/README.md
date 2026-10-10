@@ -161,7 +161,11 @@ camera_robot_up_axis = +y
 
 ## F407/T265 专用对照调试
 
-F407 `feat/uart-motion-debug` 分支（当前 `9774dac`）已按固定15字节帧通过USART3发送编码器累计
+桌面运动地图的当前部署以[中心起点调试说明](../docs/t265_f407_center_debug.md)为准：
+F407 `76f69b1` 的 **MotionDebug** 配置，命令0x19、状态0x1A，MG310参数1061.268 counts/rev。
+下文只监听采集器的旧分支背景和历史示例不代表当前桌面地图的烧录要求。
+
+历史 F407 `feat/uart-motion-debug` 分支 `9774dac` 按固定15字节帧通过USART3发送编码器累计
 位置：`TYPE=0x15`为100 Hz左右的三路累计编码器位置，`M1=右轮、M2=左轮、M3=后轮`，三个
 编码器符号均为`-1`；`TYPE=0x17`为上位机运动命令，`TYPE=0x18`为F407运动状态。接口定义以
 [F407运动调试交接](https://github.com/gandizm/F407-Rescue-Robot/blob/9774dac/docs/f407_motion_debug_handoff.md)
@@ -202,27 +206,25 @@ robot-center的初始物理偏置；`rotation_check`比较90/180/270/360°理论
 非对角线较大表示轮序、符号或平面轴混用；`interface_observation`检查F407帧是否连续、有效和
 状态位是否正常。原始数据仍以CSV为准，自动结论不能替代实际原地旋转和直线标定。
 
-如果需要像原地图程序一样观察轨迹并主动发送`feat/uart-motion-debug`分支的F407运动命令，运行：
+桌面 `T265-F407-调试地图.desktop` 或以下入口用于当前运动定位调试：
 
 ```bash
 python3 localization/tools/t265_f407_motion_map.py
 ```
 
-窗口只提供该分支的`TURN_REL`、`MOVE_DISTANCE`和`STOP`，对应原地旋转、forward/left定距和
-安全停车；不发送旧救援任务协议的`TYPE=0x11/0x12/0x18`命令。F407运动命令直接通过USART3发送一次，
-F407用本地IMU/三轮里程计闭环完成，返回的`TYPE=0x18`状态会显示进度/剩余/健康位。地图同时显示
-T265修正中心、raw tracking origin和轮式中心三条轨迹，运行日志保存在独立目录。
+地图与本轮定位日志初始位置均为中心 `(0,0)`，初始航向沿用原4号315°；
+安装轴保留当前待验证的侧装基线，记录完整三维位姿和四元数。
+窗口使用独立 `TYPE=0x19` 命令、`TYPE=0x1A` 状态，配套 F407 `76f69b1` **MotionDebug**。
 
-四项定位实验的实际操作：
+1. `原地90°/180°/360°`保持原转角，以F407本地IMU完成信号结束实验。
+2. `直行测试`与`左横移测试`发送面板所选距离；默认1000 mm，粗调±100 mm、细调±10 mm。
+   键盘I/K粗调、逗号/句号细调，V直行、L左横移。
+3. `转向返航`沿已有方式转向并驶向地图中心，不覆盖手动测试距离。
+4. S/STOP停车，Q退出。启动时另存本轮配置，退出后自动分析采用本轮实际偏置。
 
-1. 点击`原地90°/180°/360°`，程序分别发送`TURN_REL`，F407自动使用陀螺仪闭环旋转，状态变为`DONE`后实验自动结束。
-2. 点击`直行1m`，程序发送相对车体forward方向的`MOVE_DISTANCE(0°,1000 mm)`，F407用本地三轮里程计定距。
-3. 点击`横移1m`，程序发送相对车体physical-left方向的`MOVE_DISTANCE(90°,1000 mm)`，这是当前分支支持的真正横移测试。
-4. 点击`转向返航`，程序先按T265当前位置计算指向场地中心的相对转角，收到转角`DONE`后自动发送forward方向定距移动，形成一次转向加直线返航。
-
-每次实验的发送、`RUNNING`、`DONE`、`FAULT`和`STOPPED`状态会追加写入运行目录的`events.jsonl`和
-`f407_motion_status.jsonl`，分析报告会把这些状态与CSV对照。F407分支接口定义见
-`f407_motion_protocol.py`；程序退出时会自动发送STOP。
+每次启动在 `rescue_map/runtime/history/t265_f407_motion_map/<时间>_interactive/`
+建立独立目录，保存全速定位CSV、本轮配置、原始UART接收流、带真实参数的命令帧、
+实验编号和事件、F407状态历史及分析。参见[完整说明及可转交的烧录要求](../docs/t265_f407_center_debug.md)。
 
 安装桌面启动图标：
 
@@ -238,8 +240,8 @@ F407和上位机均使用115200 8N1、`A3 B3 ... C3`固定15字节帧和CRC-16/M
 A3 B3 15 SEQ M1_H M1_L M2_H M2_L M3_H M3_L DT STATUS CRC_LO CRC_HI C3
 ```
 
-上位机救援任务仍使用`localization/src/f407_protocol.*`中的旧任务协议；本运动调试地图使用独立
-的`localization/tools/f407_motion_protocol.py`，不能把旧任务的`TYPE=0x18`命令当作本分支的运动命令。
+上位机救援任务使用`localization/src/f407_protocol.*`中的任务协议；本运动调试地图使用独立
+的`localization/tools/f407_motion_protocol.py`（0x19/0x1A），不能把比赛0x18任务命令当作运动调试命令。
 
 ## 编译与测试
 

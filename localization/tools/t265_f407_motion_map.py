@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Simple interactive map for F407 ``feat/uart-motion-debug``.
+"""Interactive calibration map for F407 76f69b1 MotionDebug.
 
 The F407 motion-debug branch has a different protocol from the competition
-task firmware: TYPE=0x17 is a one-shot motion command and TYPE=0x18 is the
+task firmware: TYPE=0x19 is a one-shot motion command and TYPE=0x1A is the
 motion status.  This program owns the real F407 UART, forwards its ODOM bytes
 through a pseudo-terminal to the existing T265 localizer, and keeps the full
 T265/encoder CSV in the same run directory.
@@ -62,6 +62,9 @@ FONT_REGULAR = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 FONT_MEDIUM = "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc"
 LOGICAL_WIDTH, LOGICAL_HEIGHT = 1280, 1024
 FIELD_HALF_M = 1.5
+LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@76f69b1ca657f5478031335cb8045c6ababf8c19 (MotionDebug)"
+MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
+                       turn_angle_unit="signed 0.1 degree", move_arguments="signed forward/left mm")
 
 
 def read_json(path: Path | None) -> dict | None:
@@ -74,9 +77,18 @@ def read_json(path: Path | None) -> dict | None:
 
 
 def start_pose(zone: int) -> tuple[float, float, float]:
-    signs = {1: (-1.0, 1.0), 2: (1.0, 1.0), 3: (-1.0, -1.0), 4: (1.0, -1.0)}
     headings = {1: 135.0, 2: 45.0, 3: 225.0, 4: 315.0}
-    return signs[zone][0] * 1.35, signs[zone][1] * 1.35, headings[zone]
+    return 0.0, 0.0, headings[zone]
+
+
+def config_values(path: Path) -> dict[str, str]:
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    return values
 
 
 def wrap_degrees(value: float) -> float:
@@ -130,6 +142,8 @@ class F407SerialBridge:
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
+        self.rx_log = None
+        self.log_error: str | None = None
 
     def _on_motion_status(self, status: dict) -> None:
         timestamp_ns = time.monotonic_ns()
@@ -145,8 +159,8 @@ class F407SerialBridge:
             temporary.replace(self.status_path)
             with self.status_log_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(document, ensure_ascii=False) + "\n")
-        except OSError:
-            pass
+        except OSError as error:
+            self.log_error = str(error)
 
     def _forward_to_pty(self, data: bytes) -> None:
         try:
@@ -165,10 +179,22 @@ class F407SerialBridge:
                 return
             if not data:
                 continue
+            # Retain the complete receive stream even if T265 never boots or
+            # a frame fails CRC/decoding. Host monotonic time aligns it to CSV.
+            if self.rx_log is not None:
+                try:
+                    self.rx_log.write(json.dumps({
+                        "timestamp_monotonic_ns": time.monotonic_ns(),
+                        "data_hex": data.hex(),
+                    }) + "\n")
+                except OSError as error:
+                    self.log_error = str(error)
             self.parser.feed(data)
             self._forward_to_pty(data)
 
     def start(self) -> None:
+        self.rx_log = (self.status_path.parent / "uart_rx.jsonl").open(
+            "a", encoding="utf-8", buffering=1)
         self.serial = serial.Serial(
             self.device, self.baud, timeout=0.05, write_timeout=0.20
         )
@@ -192,12 +218,15 @@ class F407SerialBridge:
 
     def stop(self) -> None:
         self.stop_event.set()
-        if self.serial is not None:
-            self.serial.close()
         if self.thread is not None:
             self.thread.join(timeout=1.0)
+        if self.serial is not None:
+            self.serial.close()
         self.thread = None
         self.serial = None
+        if self.rx_log is not None:
+            self.rx_log.close()
+            self.rx_log = None
         for fd in (self.master_fd, self.slave_fd):
             try:
                 os.close(fd)
@@ -239,8 +268,12 @@ class MotionMapApp:
         self.active_test: str | None = None
         self.active_command_sequence: int | None = None
         self.return_phase: str | None = None
+        self.return_distance_mm = 0
         self.distance_mm = 1000
         self.speed_mm_s = 300
+        self.test_id = 0
+        self.active_test_parameters: dict = {}
+        self.session_config: dict[str, str] = {}
 
     @staticmethod
     def detect_screen_size() -> tuple[int, int]:
@@ -291,15 +324,14 @@ class MotionMapApp:
         }
         for zone, rect in zones.items():
             self.world_rect(canvas, *rect, (215, 35, 220), -1)
-            self.world_rect(canvas, *rect, (0, 245, 255) if zone == self.zone else (80, 30, 80),
-                            4 if zone == self.zone else 2)
+            self.world_rect(canvas, *rect, (80, 30, 80), 2)
             text.add(zone, self.world_to_pixel((rect[0] + rect[2]) / 2,
                                                (rect[1] + rect[3]) / 2), 32, (20, 20, 20), True, "mm")
         cv2.rectangle(canvas, (ml, mt), (ml + size, mt + size), (35, 35, 35), 4)
         origin = self.world_to_pixel(0.0, 0.0)
         cv2.line(canvas, (origin[0] - 10, origin[1]), (origin[0] + 10, origin[1]), (70, 70, 70), 2)
         cv2.line(canvas, (origin[0], origin[1] - 10), (origin[0], origin[1] + 10), (70, 70, 70), 2)
-        text.add("场地中心", (origin[0] + 12, origin[1] - 10), 15, (70, 70, 70))
+        text.add("测试起点 (0,0)", (origin[0] + 30, origin[1] - 28), 15, (70, 70, 70))
         text.add("T265中心", (ml + 20, mt + size - 28), 15, (20, 150, 245), True)
         text.add("轮式中心", (ml + 150, mt + size - 28), 15, (220, 80, 220), True)
         text.add("raw origin", (ml + 280, mt + size - 28), 15, (50, 170, 80), True)
@@ -319,7 +351,7 @@ class MotionMapApp:
         try:
             x, y, yaw = float(pose["x_m"]), float(pose["y_m"]), float(pose["yaw_deg"])
         except (KeyError, TypeError, ValueError):
-            return
+            x, y, yaw = start_pose(self.zone)
         center = self.world_to_pixel(x, y)
         tip = self.world_to_pixel(x + 0.24 * math.cos(math.radians(yaw)),
                                   y + 0.24 * math.sin(math.radians(yaw)))
@@ -357,10 +389,11 @@ class MotionMapApp:
         running = self.localizer is not None and self.localizer.poll() is None
         text.add("定位进程运行中" if running else "定位进程未运行", (x0, 68), 16,
                  (50, 220, 65) if running else (50, 80, 230), True)
-        text.add(f"地图锚点：{self.zone}号（只影响T265显示）", (x0, 96), 15, (220, 220, 220))
-        for index in range(4):
-            self.button(canvas, text, f"zone{index + 1}", str(index + 1),
-                        (x0 + index * 42, 110, x0 + 34 + index * 42, 140), index + 1 == self.zone)
+        text.add(f"测试起点：(0,0)  初始航向 {start_pose(self.zone)[2]:.0f}°", (x0, 96), 15, (220, 220, 220))
+        forward = self.session_config.get("camera_robot_forward_axis", "?")
+        up = self.session_config.get("camera_robot_up_axis", "?")
+        text.add(f"待验证轴：forward={forward} / up={up}", (x0, 123), 15, (220, 220, 220))
+        text.add("定位未就绪时，中心图标仅表示测试起点", (x0, 149), 13, (175, 175, 180))
         pose = self.localization.get("pose", {})
         try:
             text.add(f"T265中心：{float(pose['x_m']):+.3f} / {float(pose['y_m']):+.3f} m",
@@ -376,7 +409,9 @@ class MotionMapApp:
         except (KeyError, TypeError, ValueError):
             text.add("轮式中心：等待F407编码器", (x0, 240), 16, (180, 130, 180), True)
         comparison = self.localization.get("comparison", {})
-        text.add(f"T265-轮式：{float(comparison.get('t265_vs_wheel_odom_distance_m', -1.0)):.3f} m",
+        error_m = comparison.get("t265_vs_wheel_odom_distance_m")
+        comparison_text = "T265-轮式：等待数据" if error_m is None else f"T265-轮式：{float(error_m):.3f} m"
+        text.add(comparison_text,
                  (x0, 266), 16, (0, 205, 220))
         t265 = self.localization.get("t265", {})
         text.add(f"raw偏置：{float(t265.get('camera_offset_forward_m', 0.0)):+.4f} / {float(t265.get('camera_offset_left_m', 0.0)):+.4f} m",
@@ -387,11 +422,17 @@ class MotionMapApp:
         status = self.motion_status
         state = int(status.get("state", 0)) if status else 0
         command = int(status.get("command", 0)) if status else 0
-        health = int(status.get("health", 0)) if status else 0
+        fault = int(status.get("fault", 0)) if status else 0
         status_age = self.status_age(status)
-        text.add(f"F407：{STATE_NAMES.get(state, 'UNKNOWN')} / {COMMAND_NAMES.get(command, 'UNKNOWN')} age={status_age:.0f}ms",
+        status_text = (f"F407：{STATE_NAMES.get(state, 'UNKNOWN')} / {COMMAND_NAMES.get(command, 'UNKNOWN')} age={status_age:.0f}ms"
+                       if status else "F407：等待0x1A运动状态")
+        text.add(status_text,
                  (x0, 350), 15, (245, 215, 150), True)
-        text.add(f"进度={int(status.get('progress', 0))}  剩余={int(status.get('remaining', 0))}  健康=0x{health:02X}",
+        unit = "0.1°" if command == MOTION_CMD_TURN_REL else "mm"
+        heading = float(status.get("heading_cdeg", 0)) * 0.01
+        progress_text = (f"进度={int(status.get('progress', 0))}{unit}  故障={fault}  IMU={heading:.1f}°"
+                         if status else "运动进度及IMU航向：等待数据")
+        text.add(progress_text,
                  (x0, 374), 15, (245, 215, 150))
         stats = self.bridge.status_snapshot()[1] if self.bridge else {}
         text.add(f"F407帧：ODOM={stats.get('odom_frames', 0)} STATUS={stats.get('motion_status_frames', 0)}",
@@ -404,13 +445,15 @@ class MotionMapApp:
         self.button(canvas, text, "dplus", "距离+100", (x0 + 84, 480, x0 + 162, 514))
         self.button(canvas, text, "sminus", "速度-50", (x0 + 168, 480, x0 + 246, 514))
         self.button(canvas, text, "splus", "速度+50", (x0 + 252, 480, x0 + 330, 514))
+        self.button(canvas, text, "dfineminus", "细调-10mm", (x0, 520, x0 + 158, 550))
+        self.button(canvas, text, "dfineplus", "细调+10mm", (x0 + 172, 520, x0 + 330, 550))
 
-        self.button(canvas, text, "stop", "STOP", (x0, 535, x0 + 330, 580), False, (100, 55, 55))
+        self.button(canvas, text, "stop", "STOP", (x0, 558, x0 + 330, 590), False, (100, 55, 55))
         self.button(canvas, text, "rotate90", "原地90°", (x0, 595, x0 + 103, 630), self.active_test == "rotate_90deg", (75, 75, 105))
         self.button(canvas, text, "rotate180", "原地180°", (x0 + 113, 595, x0 + 226, 630), self.active_test == "rotate_180deg", (75, 75, 105))
         self.button(canvas, text, "rotate360", "原地360°", (x0 + 236, 595, x0 + 330, 630), self.active_test == "rotate_360deg", (75, 75, 105))
-        self.button(canvas, text, "forward1m", "直行1m", (x0, 642, x0 + 103, 677), self.active_test == "forward_1m", (55, 110, 80))
-        self.button(canvas, text, "lateral1m", "横移1m", (x0 + 113, 642, x0 + 226, 677), self.active_test == "lateral_1m", (55, 110, 80))
+        self.button(canvas, text, "forward", "直行测试", (x0, 642, x0 + 103, 677), self.active_test == "forward", (55, 110, 80))
+        self.button(canvas, text, "lateral", "左横移测试", (x0 + 113, 642, x0 + 226, 677), self.active_test == "lateral", (55, 110, 80))
         self.button(canvas, text, "returntest", "转向返航", (x0 + 236, 642, x0 + 330, 677), self.active_test == "turn_and_return", (55, 100, 135))
         command = self.last_sent_command
         if command:
@@ -423,7 +466,8 @@ class MotionMapApp:
         text.add(f"实验：{active}{phase}", (x0, 770), 16, (0, 215, 255), True)
         text.add("点击实验按钮：第一次开始，完成后自动结束；再次点击可中止", (x0, 800), 13, (175, 175, 180))
         text.add("旋转/移动均由F407本地IMU和三轮里程计闭环完成", (x0, 824), 13, (175, 175, 180))
-        text.add("1-4改地图锚点  I/K距离  U/J速度  Q退出", (x0, 860), 14, (175, 175, 180))
+        text.add("I/K粗调100mm  ,/.细调10mm  U/J速度", (x0, 860), 14, (175, 175, 180))
+        text.add("V直行  L左移  O/P/0旋转  S停车  Q退出", (x0, 881), 14, (175, 175, 180))
         text.add(f"日志：{self.run_dir.name if self.run_dir else '未启动'}", (x0, 905), 14, (175, 175, 180))
         text.add(self.message, (x0, 970), 15, (0, 215, 255))
 
@@ -479,6 +523,8 @@ class MotionMapApp:
                     tracking = data.get("t265", {}).get("tracking_origin", {})
                     self.append_point(self.raw_points, tracking.get("x_m"), tracking.get("y_m"))
         if self.bridge is not None:
+            if self.bridge.log_error is not None:
+                self.message = f"测试日志保存失败：{self.bridge.log_error}"
             status, _ = self.bridge.status_snapshot()
             if status is not None:
                 timestamp = int(status.get("timestamp_monotonic_ns", 0))
@@ -495,6 +541,8 @@ class MotionMapApp:
             "wall_time": datetime.now().isoformat(timespec="milliseconds"),
             "event": name,
             "details": details or {},
+            "test_id": self.test_id,
+            "test_parameters": dict(self.active_test_parameters),
             "localization": {
                 "pose": self.localization.get("pose"),
                 "t265": self.localization.get("t265", {}),
@@ -521,6 +569,14 @@ class MotionMapApp:
                 "sequence": sequence,
                 "description": description,
                 "frame_hex": packet.hex(" ").upper(),
+                "test_id": self.test_id,
+                "test_parameters": dict(self.active_test_parameters),
+                "wire": {
+                    "type": packet[2], "opcode": packet[4], "flags": packet[5],
+                    "arg1": int.from_bytes(packet[6:8], "big", signed=True),
+                    "arg2": int.from_bytes(packet[8:10], "big", signed=True),
+                    "speed": int.from_bytes(packet[10:12], "big"),
+                },
             }
             try:
                 with self.commands_path.open("a", encoding="utf-8") as stream:
@@ -550,6 +606,8 @@ class MotionMapApp:
     def send_turn(self, angle_deg: float) -> int:
         sequence = self.command_sequence & 0xFF
         packet = motion_turn_frame(sequence, angle_deg, self.speed_mm_s)
+        self.record_event("turn_requested", {"angle_deg": angle_deg,
+                                             "wheel_tangent_speed_mm_s": self.speed_mm_s})
         result = self.send_packet(packet, "TURN_REL", f"相对转角 {angle_deg:+.1f}°，速度 {self.speed_mm_s} mm/s")
         if result >= 0:
             self.message = f"已发送 TURN_REL {angle_deg:+.1f}°，等待F407完成"
@@ -559,7 +617,10 @@ class MotionMapApp:
         sequence = self.command_sequence & 0xFF
         packet = motion_move_frame(sequence, direction_deg, distance_mm,
                                    self.speed_mm_s, field_frame=False)
-        result = self.send_packet(packet, "MOVE_DISTANCE",
+        self.record_event("move_requested", {"direction_deg": direction_deg,
+                                             "distance_mm": distance_mm,
+                                             "speed_mm_s": self.speed_mm_s})
+        result = self.send_packet(packet, "MOVE_BODY",
                                   f"相对方向 {direction_deg:.1f}°，距离 {distance_mm} mm，速度 {self.speed_mm_s} mm/s")
         if result >= 0:
             self.message = f"已发送 MOVE_DISTANCE {direction_deg:.1f}°/{distance_mm} mm"
@@ -577,16 +638,21 @@ class MotionMapApp:
             self.send_stop("切换实验，中止上一动作")
         self.active_test = name
         self.return_phase = None
+        self.test_id += 1
+        self.active_test_parameters = {"name": name, "distance_mm": self.distance_mm,
+                                       "speed_mm_s": self.speed_mm_s}
         self.record_event(f"{name}_start")
         action()
 
     def start_forward(self) -> None:
-        self.distance_mm = 1000
-        self.send_move(0.0, 1000)
+        self.send_move(0.0, self.distance_mm)
 
     def start_lateral(self) -> None:
-        self.distance_mm = 1000
-        self.send_move(90.0, 1000)
+        self.send_move(90.0, self.distance_mm)
+
+    def adjust_distance(self, delta_mm: int) -> None:
+        self.distance_mm = max(1, min(10000, self.distance_mm + delta_mm))
+        self.record_event("distance_selected", {"distance_mm": self.distance_mm})
 
     def start_return(self) -> None:
         pose = self.localization.get("pose", {})
@@ -596,12 +662,19 @@ class MotionMapApp:
             self.active_test = None
             self.message = "T265位置尚未就绪，不能计算返航方向"
             return
-        distance = min(10000, max(1, int(round(math.hypot(x, y) * 1000.0))))
+        measured_distance_mm = math.hypot(x, y) * 1000.0
+        if measured_distance_mm <= 10.0:
+            self.record_event("turn_and_return_end_already_center")
+            self.active_test = None
+            self.active_command_sequence = None
+            self.message = "已在地图中心，无需返航"
+            return
+        distance = min(10000, max(1, int(round(measured_distance_mm))))
         desired_yaw = math.degrees(math.atan2(-y, -x)) % 360.0
         turn = wrap_degrees(desired_yaw - current_yaw)
         if abs(turn) < 1.0:
             turn = 1.0
-        self.distance_mm = distance
+        self.return_distance_mm = distance
         self.return_phase = "turn"
         self.record_event("turn_and_return_plan", {
             "turn_angle_deg": turn,
@@ -620,7 +693,7 @@ class MotionMapApp:
             if self.active_test == "turn_and_return" and self.return_phase == "turn":
                 self.record_event("turn_and_return_turn_done")
                 self.return_phase = "move"
-                self.active_command_sequence = self.send_move(0.0, self.distance_mm)
+                self.active_command_sequence = self.send_move(0.0, self.return_distance_mm)
                 return
             self.record_event(f"{self.active_test}_end_done")
             self.message = f"实验 {self.active_test} 完成"
@@ -638,9 +711,7 @@ class MotionMapApp:
         for name, (x0, y0, x1, y1) in self.hitboxes.items():
             if not (x0 <= x <= x1 and y0 <= y <= y1):
                 continue
-            if name.startswith("zone"):
-                self.zone = int(name[-1])
-            elif name == "stop":
+            if name == "stop":
                 if self.active_test is not None:
                     self.record_event(f"{self.active_test}_end_manual_stop")
                     self.active_test = None
@@ -652,16 +723,20 @@ class MotionMapApp:
                 self.toggle_test("rotate_180deg", lambda: self.send_turn(180.0))
             elif name == "rotate360":
                 self.toggle_test("rotate_360deg", lambda: self.send_turn(360.0))
-            elif name == "forward1m":
-                self.toggle_test("forward_1m", self.start_forward)
-            elif name == "lateral1m":
-                self.toggle_test("lateral_1m", self.start_lateral)
+            elif name == "forward":
+                self.toggle_test("forward", self.start_forward)
+            elif name == "lateral":
+                self.toggle_test("lateral", self.start_lateral)
             elif name == "returntest":
                 self.toggle_test("turn_and_return", self.start_return)
             elif name == "dminus":
-                self.distance_mm = max(1, self.distance_mm - 100)
+                self.adjust_distance(-100)
             elif name == "dplus":
-                self.distance_mm = min(10000, self.distance_mm + 100)
+                self.adjust_distance(100)
+            elif name == "dfineminus":
+                self.adjust_distance(-10)
+            elif name == "dfineplus":
+                self.adjust_distance(10)
             elif name == "sminus":
                 self.speed_mm_s = max(50, self.speed_mm_s - 50)
             elif name == "splus":
@@ -684,7 +759,9 @@ class MotionMapApp:
             suffix += 1
         self.run_dir.mkdir(parents=True, exist_ok=False)
         config_path = self.run_dir / "localization.conf"
-        write_debug_config(DEFAULT_CONFIG, config_path, start_zone=self.zone)
+        write_debug_config(self.options.config, config_path, start_zone=self.zone,
+                           center_origin=True)
+        self.session_config = config_values(config_path)
         self.localization_json = self.run_dir / "localization_result.json"
         self.motion_status_path = self.run_dir / "f407_motion_status.json"
         self.events_path = self.run_dir / "events.jsonl"
@@ -715,13 +792,19 @@ class MotionMapApp:
             start_new_session=True,
         )
         metadata = {
-            "schema_version": 1,
+            "schema_version": 2,
+            "created_local": datetime.now().astimezone().isoformat(timespec="seconds"),
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "mode": "interactive_f407_motion_debug",
             "zone": self.zone,
+            "initial_pose": {"x_m": 0.0, "y_m": 0.0, "yaw_deg": start_pose(self.zone)[2]},
+            "source_config": str(self.options.config),
+            "effective_config": self.session_config,
+            "distance_controls_mm": {"coarse": 100, "fine": 10, "initial": self.distance_mm},
             "listen_and_control": True,
-            "lower_repository": "gandizm/F407-Rescue-Robot@9774dac",
-            "protocol": PROTOCOL,
+            "expected_lower_firmware": LOWER_FIRMWARE,
+            "actual_lower_firmware": "operator must confirm; UART does not report commit",
+            "protocol": MOTION_PROTOCOL,
             "localizer_command": command,
             "files": {
                 "localization_csv": "localization_debug.csv",
@@ -732,12 +815,23 @@ class MotionMapApp:
                 "commands": self.commands_path.name,
                 "analysis": "analysis.json",
                 "localizer_log": localizer_log_path.name,
+                "uart_rx_history": "uart_rx.jsonl",
+                "effective_config": "localization.conf",
             },
         }
+        try:
+            metadata["upper_git_commit"] = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True).strip()
+            metadata["upper_tracked_changes"] = subprocess.check_output(
+                ["git", "diff", "--name-only", "HEAD"], cwd=PROJECT_ROOT, text=True).splitlines()
+        except (OSError, subprocess.SubprocessError):
+            metadata["upper_git_commit"] = "unavailable"
         (self.run_dir / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         self.message = "已启动：等待F407 ODOM和运动状态"
+        self.record_event("session_started", {"initial_pose": metadata["initial_pose"]})
+        print(f"测试日志目录：{self.run_dir}", flush=True)
 
     def stop_session(self) -> None:
         if self.active_test is not None:
@@ -770,27 +864,39 @@ class MotionMapApp:
             csv_path = self.run_dir / "localization_debug.csv"
             if csv_path.exists():
                 try:
-                    analyze(csv_path, self.run_dir / "analysis.json", "unknown",
-                            -0.0296, -0.0301)
-                except (OSError, RuntimeError, ValueError):
-                    pass
+                    result = analyze(csv_path, None, "unknown",
+                                     float(self.session_config.get("camera_offset_forward_m", "-0.0296")),
+                                     float(self.session_config.get("camera_offset_left_m", "-0.0301")))
+                    result["protocol"] = MOTION_PROTOCOL
+                    result["effective_config"] = self.session_config
+                    (self.run_dir / "analysis.json").write_text(
+                        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                except (OSError, RuntimeError, ValueError) as error:
+                    self.record_event("analysis_failed", {"error": str(error)})
+            self.record_event("session_stopped")
 
     def handle_key(self, key: int) -> bool:
         key &= 0xFF
         if key in (ord("q"), ord("Q"), 27):
             return False
-        if ord("1") <= key <= ord("4"):
-            self.zone = key - ord("0")
-        elif key in (ord("i"), ord("I")):
-            self.distance_mm = max(1, self.distance_mm - 100)
+        if key in (ord("i"), ord("I")):
+            self.adjust_distance(-100)
         elif key in (ord("k"), ord("K")):
-            self.distance_mm = min(10000, self.distance_mm + 100)
+            self.adjust_distance(100)
+        elif key in (ord(","), ord("<")):
+            self.adjust_distance(-10)
+        elif key in (ord("."), ord(">")):
+            self.adjust_distance(10)
         elif key in (ord("u"), ord("U")):
             self.speed_mm_s = min(700, self.speed_mm_s + 50)
         elif key in (ord("j"), ord("J")):
             self.speed_mm_s = max(50, self.speed_mm_s - 50)
         elif key in (ord("s"), ord("S")):
-            self.select_at(920, 550)
+            if self.active_test is not None:
+                self.record_event(f"{self.active_test}_end_manual_stop")
+            self.active_test = None
+            self.return_phase = None
+            self.send_stop()
         elif key in (ord("o"), ord("O")):
             self.toggle_test("rotate_90deg", lambda: self.send_turn(90.0))
         elif key in (ord("p"), ord("P")):
@@ -798,9 +904,9 @@ class MotionMapApp:
         elif key == ord("0"):
             self.toggle_test("rotate_360deg", lambda: self.send_turn(360.0))
         elif key in (ord("v"), ord("V")):
-            self.toggle_test("forward_1m", self.start_forward)
+            self.toggle_test("forward", self.start_forward)
         elif key in (ord("l"), ord("L")):
-            self.toggle_test("lateral_1m", self.start_lateral)
+            self.toggle_test("lateral", self.start_lateral)
         elif key in (ord("y"), ord("Y")):
             self.toggle_test("turn_and_return", self.start_return)
         elif key in (ord("f"), ord("F")):
@@ -810,15 +916,15 @@ class MotionMapApp:
         return True
 
     def run(self) -> int:
-        self.start_session()
-        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-        cv2.resizeWindow(WINDOW_NAME, self.screen_width, self.screen_height)
-        cv2.imshow(WINDOW_NAME, self.render_screen())
-        cv2.waitKey(1)
-        cv2.setMouseCallback(WINDOW_NAME, self.mouse_callback)
-        if self.options.fullscreen:
-            cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         try:
+            self.start_session()
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+            cv2.resizeWindow(WINDOW_NAME, self.screen_width, self.screen_height)
+            cv2.imshow(WINDOW_NAME, self.render_screen())
+            cv2.waitKey(1)
+            cv2.setMouseCallback(WINDOW_NAME, self.mouse_callback)
+            if self.options.fullscreen:
+                cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             while True:
                 self.update_data()
                 cv2.imshow(WINDOW_NAME, self.render_screen())
@@ -828,7 +934,10 @@ class MotionMapApp:
                     break
         finally:
             self.stop_session()
-            cv2.destroyWindow(WINDOW_NAME)
+            try:
+                cv2.destroyWindow(WINDOW_NAME)
+            except cv2.error:
+                pass
         return 0
 
 
@@ -837,6 +946,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--serial")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
+                        help="本轮测试配置；复制到独立日志目录，保留安装轴和偏置")
     parser.add_argument("--zone", type=int, choices=range(1, 5), default=4)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_RUN_ROOT)
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)

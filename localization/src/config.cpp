@@ -176,7 +176,8 @@ void validate_config(const LocalizationConfig &c)
     if (c.start_zone < 1 || c.start_zone > 4) {
         throw std::runtime_error("start_zone must be 1..4");
     }
-    if (c.field_half_m <= 0.0 || c.start_center_m <= 0.0 ||
+    // Zero is a valid origin for the standalone centre-start debug map.
+    if (c.field_half_m <= 0.0 || c.start_center_m < 0.0 ||
         c.start_center_m >= c.field_half_m) {
         throw std::runtime_error("invalid field/start dimensions");
     }
