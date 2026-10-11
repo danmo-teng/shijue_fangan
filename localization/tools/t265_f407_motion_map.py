@@ -63,6 +63,7 @@ FONT_MEDIUM = "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc"
 LOGICAL_WIDTH, LOGICAL_HEIGHT = 1280, 1024
 FIELD_HALF_M = 1.5
 START_HEADING_OFFSET_DEG = 45.0
+DEBUG_FORWARD_AXIS = "+x"  # Straight-motion field test reversed the old -x baseline.
 LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@76f69b1ca657f5478031335cb8045c6ababf8c19 (MotionDebug)"
 MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="signed forward/left mm")
@@ -761,7 +762,9 @@ class MotionMapApp:
         self.run_dir.mkdir(parents=True, exist_ok=False)
         config_path = self.run_dir / "localization.conf"
         write_debug_config(self.options.config, config_path, start_zone=self.zone,
-                           center_origin=True, start_heading_offset_deg=START_HEADING_OFFSET_DEG)
+                           center_origin=True, start_heading_offset_deg=START_HEADING_OFFSET_DEG,
+                           camera_robot_forward_axis=(DEBUG_FORWARD_AXIS if
+                               self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None))
         self.session_config = config_values(config_path)
         self.localization_json = self.run_dir / "localization_result.json"
         self.motion_status_path = self.run_dir / "f407_motion_status.json"
