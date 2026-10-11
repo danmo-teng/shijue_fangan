@@ -64,6 +64,7 @@ LOGICAL_WIDTH, LOGICAL_HEIGHT = 1280, 1024
 FIELD_HALF_M = 1.5
 START_HEADING_OFFSET_DEG = 45.0
 DEBUG_FORWARD_AXIS = "+x"  # Straight-motion field test reversed the old -x baseline.
+DEBUG_COMMAND_FORWARD_SIGN = -1  # Positive firmware forward moved the chassis backward in field tests.
 LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@76f69b1ca657f5478031335cb8045c6ababf8c19 (MotionDebug)"
 MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="signed forward/left mm")
@@ -617,9 +618,15 @@ class MotionMapApp:
 
     def send_move(self, direction_deg: float, distance_mm: int) -> int:
         sequence = self.command_sequence & 0xFF
-        packet = motion_move_frame(sequence, direction_deg, distance_mm,
+        # Compensate only the tested chassis longitudinal command sign.
+        # Reflecting forward preserves +90-degree left movement and yaw.
+        wire_direction_deg = ((180.0 - direction_deg) % 360.0
+                              if DEBUG_COMMAND_FORWARD_SIGN < 0 else direction_deg)
+        packet = motion_move_frame(sequence, wire_direction_deg, distance_mm,
                                    self.speed_mm_s, field_frame=False)
         self.record_event("move_requested", {"direction_deg": direction_deg,
+                                             "wire_direction_deg": wire_direction_deg,
+                                             "forward_command_sign": DEBUG_COMMAND_FORWARD_SIGN,
                                              "distance_mm": distance_mm,
                                              "speed_mm_s": self.speed_mm_s})
         result = self.send_packet(packet, "MOVE_BODY",
@@ -805,6 +812,7 @@ class MotionMapApp:
             "source_config": str(self.options.config),
             "effective_config": self.session_config,
             "distance_controls_mm": {"coarse": 100, "fine": 10, "initial": self.distance_mm},
+            "forward_command_sign": DEBUG_COMMAND_FORWARD_SIGN,
             "listen_and_control": True,
             "expected_lower_firmware": LOWER_FIRMWARE,
             "actual_lower_firmware": "operator must confirm; UART does not report commit",
