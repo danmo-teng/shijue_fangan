@@ -105,7 +105,8 @@ def find_csv(path: Path) -> tuple[Path, Path | None]:
 def write_debug_config(source: Path, target: Path, start_zone: int | None = None,
                        *, center_origin: bool = False,
                        start_heading_offset_deg: float | None = None,
-                       camera_robot_forward_axis: str | None = None) -> None:
+                       camera_robot_forward_axis: str | None = None,
+                       camera_robot_up_axis: str | None = None) -> None:
     """Keep wheel samples enabled while making their EKF weight exactly zero."""
     lines = source.read_text(encoding="utf-8").splitlines()
     replacements = {
@@ -125,6 +126,8 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
         replacements["start_heading_offset_deg"] = f"start_heading_offset_deg = {start_heading_offset_deg}"
     if camera_robot_forward_axis is not None:
         replacements["camera_robot_forward_axis"] = f"camera_robot_forward_axis = {camera_robot_forward_axis}"
+    if camera_robot_up_axis is not None:
+        replacements["camera_robot_up_axis"] = f"camera_robot_up_axis = {camera_robot_up_axis}"
     seen: set[str] = set()
     output: list[str] = []
     for line in lines:
