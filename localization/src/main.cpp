@@ -54,6 +54,7 @@ struct Options {
     double frame_timeout_sec = 5.0;
     bool debug_sdk = false;
     bool ignore_encoders = false;
+    bool disable_pose_jumping = false;
 };
 
 struct TimedEncoderFrame {
@@ -155,6 +156,7 @@ void usage(const char *program)
         << "  --rate HZ           stdout/JSON rate, default 20\n"
         << "  --tx-rate HZ        legacy fused-pose UART rate (default 0/off)\n"
         << "  --ignore-encoders   keep UART/task active but do not fuse wheel odometry\n"
+        << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
         << "  -h, --help          show help\n";
@@ -208,6 +210,8 @@ Options parse_options(int argc, char **argv)
             options.debug_sdk = true;
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
+        } else if (argument == "--disable-pose-jumping") {
+            options.disable_pose_jumping = true;
         } else {
             throw std::invalid_argument("unknown option: " + argument);
         }
@@ -1041,7 +1045,7 @@ int main(int argc, char **argv)
         rs_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
 
         std::unique_ptr<rs2::pose_sensor> map_pose_sensor;
-        if (t265_map.enabled) {
+        if (t265_map.enabled || options.disable_pose_jumping) {
             // Resolve and obtain the pose sensor from the same pipeline
             // configuration before importing the map. This is required by the
             // T265 map API and avoids opening a second USB handle.
@@ -1050,8 +1054,37 @@ int main(int argc, char **argv)
             map_pose_sensor.reset(new rs2::pose_sensor(
                 resolved_device.first<rs2::pose_sensor>()));
             if (!*map_pose_sensor) {
-                throw std::runtime_error("T265 pose sensor is unavailable for map import");
+                throw std::runtime_error("T265 pose sensor is unavailable for configuration");
             }
+        }
+        if (options.disable_pose_jumping) {
+            if (!map_pose_sensor->supports(RS2_OPTION_ENABLE_POSE_JUMPING)) {
+                throw std::runtime_error("T265 does not support enable_pose_jumping");
+            }
+            const rs2_option pose_options[] = {
+                RS2_OPTION_ENABLE_MAPPING, RS2_OPTION_ENABLE_RELOCALIZATION,
+                RS2_OPTION_ENABLE_POSE_JUMPING, RS2_OPTION_ENABLE_MAP_PRESERVATION};
+            const char *names[] = {
+                "enable_mapping", "enable_relocalization", "enable_pose_jumping", "enable_map_preservation"};
+            for (int i = 0; i < 4; ++i) {
+                std::ostringstream data;
+                data << "{\"name\":\"" << names[i] << "\"";
+                if (map_pose_sensor->supports(pose_options[i])) {
+                    const float before = map_pose_sensor->get_option(pose_options[i]);
+                    if (pose_options[i] == RS2_OPTION_ENABLE_POSE_JUMPING) {
+                        map_pose_sensor->set_option(pose_options[i], 0.0f);
+                    }
+                    const float after = map_pose_sensor->get_option(pose_options[i]);
+                    data << ",\"supported\":true,\"before\":" << before << ",\"after\":" << after;
+                    std::cerr << "[T265 OPTION] " << names[i] << '=' << after << '\n';
+                } else {
+                    data << ",\"supported\":false";
+                }
+                data << '}';
+                event_log.write("t265_debug_option", data.str());
+            }
+        }
+        if (t265_map.enabled) {
 
             auto set_map_option = [&](rs2_option option, float value, const char *name) {
                 if (!map_pose_sensor->supports(option)) {
@@ -1158,6 +1191,8 @@ int main(int argc, char **argv)
         bool map_confidence_stable = false;
         auto map_confidence_stable_start = map_wait_start;
         auto last_pose_frame_time = map_wait_start;
+        omni::T265RawPose previous_debug_pose;
+        bool have_previous_debug_pose = false;
         auto fail_map_startup = [&](bool frame_timeout, double wait_ms,
                                     std::uint8_t tracker_confidence,
                                     std::uint8_t mapper_confidence,
@@ -1271,6 +1306,35 @@ int main(int argc, char **argv)
             raw.timestamp_s = pose_frame.get_timestamp() * 0.001;
             raw.tracker_confidence = pose.tracker_confidence;
             raw.mapper_confidence = pose.mapper_confidence;
+            if (options.disable_pose_jumping) {
+                if (have_previous_debug_pose) {
+                    const double dt = raw.timestamp_s - previous_debug_pose.timestamp_s;
+                    double residual_squared = 0.0;
+                    double displacement_squared = 0.0;
+                    for (int i = 0; i < 3; ++i) {
+                        const double displacement = raw.translation_m[i] - previous_debug_pose.translation_m[i];
+                        const double predicted = 0.5 * (raw.velocity_mps[i] +
+                            previous_debug_pose.velocity_mps[i]) * dt;
+                        residual_squared += (displacement - predicted) * (displacement - predicted);
+                        displacement_squared += displacement * displacement;
+                    }
+                    const double residual = std::sqrt(residual_squared);
+                    // Diagnostics only: preserve the raw pose and existing
+                    // estimator/control paths; do not invent a fixed position.
+                    if (dt > 0.050 || (dt > 0.0 && dt <= 0.020 && residual > 0.050)) {
+                        std::ostringstream data;
+                        data << "{\"t265_timestamp_s\":" << std::setprecision(15) << raw.timestamp_s
+                             << ",\"dt_s\":" << dt
+                             << ",\"displacement_m\":" << std::sqrt(displacement_squared)
+                             << ",\"velocity_residual_m\":" << residual
+                             << ",\"tracker_confidence\":" << static_cast<unsigned>(raw.tracker_confidence)
+                             << ",\"mapper_confidence\":" << static_cast<unsigned>(raw.mapper_confidence) << '}';
+                        event_log.write(dt > 0.050 ? "t265_pose_gap" : "t265_position_discontinuity", data.str());
+                    }
+                }
+                previous_debug_pose = raw;
+                have_previous_debug_pose = true;
+            }
             t265_map.event_count = relocalization_event_count.load(
                 std::memory_order_relaxed);
             t265_map.relocalized = relocalized.load(

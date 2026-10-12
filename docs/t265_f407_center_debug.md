@@ -50,6 +50,40 @@ T265偏置、比例与其余参数继续沿用，同时把起点放在中心、
 初始航向可在启动前用 `--zone 1/2/3/4` 指定，调试入口加45°后依次对应180°/90°/270°/0°；
 运行中不提供只改变图标而不改变定位参考的虚假锚点切换。
 
+## 2026-10-12位置连续性与候选补偿
+
+桌面入口现在自动传入`--disable-pose-jumping`，在没有导入地图时也明确将
+SDK的`enable_pose_jumping`设为0。使用同一pipeline的pose sensor，不另开USB设备。
+mapping、relocalization和map preservation在此调试路径只读取，不额外改变。
+实际读取的选项前后值记录在本轮`localization_events.jsonl`的`t265_debug_option`中；
+`localizer.log`同时打印实际值。`metadata.json`的requested字段只表示请求，不能代替SDK回读。
+
+本轮原始CSV、UART计数流、命令、状态和事件记录保持。新增诊断仅记录：
+
+- `t265_pose_gap`：设备姿态时间间隔超过50ms。
+- `t265_position_discontinuity`：间隔不超过20ms，原始三维位置增量与梯形积分速度的差超过50mm。
+
+诊断不裁剪原始数据、不伪造固定位置、不增加运动故障锁存或自动联停。
+SDK关闭位置跳变也不保证消除所有漂移；下轮应检查这些事件是否仍出现。
+
+桌面默认仍使用偏置0、比例1.000的基线。拟合值不是已测量安装参数，提供两份可选配置，
+使用已有`--config`入口依次对比，不新增界面：
+
+```bash
+# A：仅候选偏置，后29mm、右79mm，比例仍为1.000。
+/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh \
+  --config /home/sunrise/RDK_X5/shijue_fangan/localization/config/t265_debug_offset_candidate.conf
+
+# B：相同候选偏置，开启1.058比例。
+/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh \
+  --config /home/sunrise/RDK_X5/shijue_fangan/localization/config/t265_debug_offset_scale_candidate.conf
+```
+
+两份候选都沿用当前测试的+x/-y轴、中心起点、初始0°、轮式180°安装角、MG310计数和
+零融合权重。实测偏置得到后应替换候选值，再决定是否保留比例；本次未把候选写入正式比赛配置。
+F407本轮停止后的实际转角普遍超过目标3～5°，应在下位机核对末段减速、制动与停稳判定；
+不通过修改T265航向比例处理，本文仅作同步建议，没有修改下位机或生成补丁。
+
 ## F407 应烧录的版本（可直接交给下位机助手）
 
 2026-10-12已只读核对公开仓库：
@@ -114,6 +148,7 @@ rescue_map/runtime/history/t265_f407_motion_map/<时间>_interactive/
 - `f407_motion_status.jsonl`及JSON：全部运动状态历史和最新快照。
 - `localizer.log`、`localization_result.json`、`analysis.json`：运行输出、
   最新位姿及自动对照。自动分析读取本轮真实偏置，不写死旧朝上安装偏置。
+- `localization_events.jsonl`：SDK选项回读及T265采样空档、位置不连续诊断。
 
 退出后可重复分析同一次目录；默认从该目录的配置读取偏置，保留当时协议：
 
