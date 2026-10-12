@@ -65,8 +65,11 @@ FIELD_HALF_M = 1.5
 START_HEADING_OFFSET_DEG = 45.0
 DEBUG_FORWARD_AXIS = "+x"  # Straight-motion field test reversed the old -x baseline.
 DEBUG_UP_AXIS = "-y"  # Raw gravity alignment and gyro/quaternion comparison agree on -Y up.
-DEBUG_COMMAND_FORWARD_SIGN = -1  # Positive firmware forward moved the chassis backward in field tests.
-LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@76f69b1ca657f5478031335cb8045c6ababf8c19 (MotionDebug)"
+DEBUG_COMMAND_FORWARD_SIGN = 1
+DEBUG_COMMAND_LEFT_SIGN = -1
+DEBUG_COMMAND_TURN_SIGN = -1
+DEBUG_ENCODER_TO_ROBOT_YAW_DEG = 180.0
+LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@036b5d11e52a51c8107575da069e95585b14c158 (MotionDebug)"
 MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="signed forward/left mm")
 
@@ -609,8 +612,11 @@ class MotionMapApp:
 
     def send_turn(self, angle_deg: float) -> int:
         sequence = self.command_sequence & 0xFF
-        packet = motion_turn_frame(sequence, angle_deg, self.speed_mm_s)
+        wire_angle_deg = angle_deg * DEBUG_COMMAND_TURN_SIGN
+        packet = motion_turn_frame(sequence, wire_angle_deg, self.speed_mm_s)
         self.record_event("turn_requested", {"angle_deg": angle_deg,
+                                             "wire_angle_deg": wire_angle_deg,
+                                             "turn_command_sign": DEBUG_COMMAND_TURN_SIGN,
                                              "wheel_tangent_speed_mm_s": self.speed_mm_s})
         result = self.send_packet(packet, "TURN_REL", f"相对转角 {angle_deg:+.1f}°，速度 {self.speed_mm_s} mm/s")
         if result >= 0:
@@ -619,15 +625,18 @@ class MotionMapApp:
 
     def send_move(self, direction_deg: float, distance_mm: int) -> int:
         sequence = self.command_sequence & 0xFF
-        # Compensate only the tested chassis longitudinal command sign.
-        # Reflecting forward preserves +90-degree left movement and yaw.
-        wire_direction_deg = ((180.0 - direction_deg) % 360.0
-                              if DEBUG_COMMAND_FORWARD_SIGN < 0 else direction_deg)
+        # Apply the observed command signs independently; never rotate the
+        # T265 reference to compensate a changed firmware/motor convention.
+        direction_rad = math.radians(direction_deg)
+        wire_direction_deg = math.degrees(math.atan2(
+            DEBUG_COMMAND_LEFT_SIGN * math.sin(direction_rad),
+            DEBUG_COMMAND_FORWARD_SIGN * math.cos(direction_rad))) % 360.0
         packet = motion_move_frame(sequence, wire_direction_deg, distance_mm,
                                    self.speed_mm_s, field_frame=False)
         self.record_event("move_requested", {"direction_deg": direction_deg,
                                              "wire_direction_deg": wire_direction_deg,
                                              "forward_command_sign": DEBUG_COMMAND_FORWARD_SIGN,
+                                             "left_command_sign": DEBUG_COMMAND_LEFT_SIGN,
                                              "distance_mm": distance_mm,
                                              "speed_mm_s": self.speed_mm_s})
         result = self.send_packet(packet, "MOVE_BODY",
@@ -774,6 +783,8 @@ class MotionMapApp:
                            camera_robot_forward_axis=(DEBUG_FORWARD_AXIS if
                                self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None),
                            camera_robot_up_axis=(DEBUG_UP_AXIS if
+                               self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None),
+                           encoder_to_robot_yaw_deg=(DEBUG_ENCODER_TO_ROBOT_YAW_DEG if
                                self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None))
         self.session_config = config_values(config_path)
         self.localization_json = self.run_dir / "localization_result.json"
@@ -816,6 +827,8 @@ class MotionMapApp:
             "effective_config": self.session_config,
             "distance_controls_mm": {"coarse": 100, "fine": 10, "initial": self.distance_mm},
             "forward_command_sign": DEBUG_COMMAND_FORWARD_SIGN,
+            "left_command_sign": DEBUG_COMMAND_LEFT_SIGN,
+            "turn_command_sign": DEBUG_COMMAND_TURN_SIGN,
             "listen_and_control": True,
             "expected_lower_firmware": LOWER_FIRMWARE,
             "actual_lower_firmware": "operator must confirm; UART does not report commit",
