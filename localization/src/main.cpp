@@ -54,7 +54,7 @@ struct Options {
     double frame_timeout_sec = 5.0;
     bool debug_sdk = false;
     bool ignore_encoders = false;
-    bool disable_pose_jumping = false;
+    int pose_jumping_override = -1; // -1 leaves the SDK setting unchanged.
 };
 
 struct TimedEncoderFrame {
@@ -156,6 +156,7 @@ void usage(const char *program)
         << "  --rate HZ           stdout/JSON rate, default 20\n"
         << "  --tx-rate HZ        legacy fused-pose UART rate (default 0/off)\n"
         << "  --ignore-encoders   keep UART/task active but do not fuse wheel odometry\n"
+        << "  --enable-pose-jumping   enable T265 pose jumps and log debug continuity events\n"
         << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
@@ -210,8 +211,10 @@ Options parse_options(int argc, char **argv)
             options.debug_sdk = true;
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
+        } else if (argument == "--enable-pose-jumping") {
+            options.pose_jumping_override = 1;
         } else if (argument == "--disable-pose-jumping") {
-            options.disable_pose_jumping = true;
+            options.pose_jumping_override = 0;
         } else {
             throw std::invalid_argument("unknown option: " + argument);
         }
@@ -1045,7 +1048,7 @@ int main(int argc, char **argv)
         rs_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
 
         std::unique_ptr<rs2::pose_sensor> map_pose_sensor;
-        if (t265_map.enabled || options.disable_pose_jumping) {
+        if (t265_map.enabled || options.pose_jumping_override >= 0) {
             // Resolve and obtain the pose sensor from the same pipeline
             // configuration before importing the map. This is required by the
             // T265 map API and avoids opening a second USB handle.
@@ -1057,7 +1060,7 @@ int main(int argc, char **argv)
                 throw std::runtime_error("T265 pose sensor is unavailable for configuration");
             }
         }
-        if (options.disable_pose_jumping) {
+        if (options.pose_jumping_override >= 0) {
             if (!map_pose_sensor->supports(RS2_OPTION_ENABLE_POSE_JUMPING)) {
                 throw std::runtime_error("T265 does not support enable_pose_jumping");
             }
@@ -1072,7 +1075,8 @@ int main(int argc, char **argv)
                 if (map_pose_sensor->supports(pose_options[i])) {
                     const float before = map_pose_sensor->get_option(pose_options[i]);
                     if (pose_options[i] == RS2_OPTION_ENABLE_POSE_JUMPING) {
-                        map_pose_sensor->set_option(pose_options[i], 0.0f);
+                        map_pose_sensor->set_option(
+                            pose_options[i], static_cast<float>(options.pose_jumping_override));
                     }
                     const float after = map_pose_sensor->get_option(pose_options[i]);
                     data << ",\"supported\":true,\"before\":" << before << ",\"after\":" << after;
@@ -1306,7 +1310,7 @@ int main(int argc, char **argv)
             raw.timestamp_s = pose_frame.get_timestamp() * 0.001;
             raw.tracker_confidence = pose.tracker_confidence;
             raw.mapper_confidence = pose.mapper_confidence;
-            if (options.disable_pose_jumping) {
+            if (options.pose_jumping_override >= 0) {
                 if (have_previous_debug_pose) {
                     const double dt = raw.timestamp_s - previous_debug_pose.timestamp_s;
                     double residual_squared = 0.0;

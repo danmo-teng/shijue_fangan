@@ -52,8 +52,10 @@ T265偏置、比例与其余参数继续沿用，同时把起点放在中心、
 
 ## 2026-10-12位置连续性与候选补偿
 
-桌面入口现在自动传入`--disable-pose-jumping`，在没有导入地图时也明确将
-SDK的`enable_pose_jumping`设为0。使用同一pipeline的pose sensor，不另开USB设备。
+`76e828b`曾在桌面入口强制关闭位置跳变。后续实车记录出现明显距离少算，
+当前桌面入口改为自动传入`--enable-pose-jumping`，明确将SDK的
+`enable_pose_jumping`恢复为1，保留相同诊断用于单项对照。使用同一pipeline的
+pose sensor，不另开USB设备。原`--disable-pose-jumping`仍可用于明确指定的对照运行。
 mapping、relocalization和map preservation在此调试路径只读取，不额外改变。
 实际读取的选项前后值记录在本轮`localization_events.jsonl`的`t265_debug_option`中；
 `localizer.log`同时打印实际值。`metadata.json`的requested字段只表示请求，不能代替SDK回读。
@@ -64,7 +66,14 @@ mapping、relocalization和map preservation在此调试路径只读取，不额�
 - `t265_position_discontinuity`：间隔不超过20ms，原始三维位置增量与梯形积分速度的差超过50mm。
 
 诊断不裁剪原始数据、不伪造固定位置、不增加运动故障锁存或自动联停。
-SDK关闭位置跳变也不保证消除所有漂移；下轮应检查这些事件是否仍出现。
+恢复位置跳变后仍检查这些事件及距离误差，不能只凭轨迹连续与否判断精度。
+
+桌面入口的`encoder_fusion_weight=0`使轮式平移预测增量为零，但它未传入
+`--ignore-encoders`，地图显示仍经过已有`PlanarEkf`的T265观测更新；因此不是
+原始T265位姿逐帧直接显示。预测航向来自T265陀螺时间线，没有新增独立F407
+航向融合，也没有向T265 SDK注入轮速。本次对照只恢复SDK位置跳变，不改变此路径。
+用户提供的后20mm、右70mm对应`forward=-0.020m, left=-0.070m`，仅作为
+离线分析的初步几何约束；桌面实际偏置仍保持0/0，比例和轴向保持原值。
 
 桌面默认仍使用偏置0、比例1.000的基线。拟合值不是已测量安装参数，提供两份可选配置，
 使用已有`--config`入口依次对比，不新增界面：
