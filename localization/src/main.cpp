@@ -54,6 +54,7 @@ struct Options {
     double frame_timeout_sec = 5.0;
     bool debug_sdk = false;
     bool ignore_encoders = false;
+    bool t265_only_output = false;
     int pose_jumping_override = -1; // -1 leaves the SDK setting unchanged.
 };
 
@@ -156,6 +157,7 @@ void usage(const char *program)
         << "  --rate HZ           stdout/JSON rate, default 20\n"
         << "  --tx-rate HZ        legacy fused-pose UART rate (default 0/off)\n"
         << "  --ignore-encoders   keep UART/task active but do not fuse wheel odometry\n"
+        << "  --t265-only-output  output T265 directly, retaining wheel reference logs\n"
         << "  --enable-pose-jumping   enable T265 pose jumps and log debug continuity events\n"
         << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
@@ -211,6 +213,8 @@ Options parse_options(int argc, char **argv)
             options.debug_sdk = true;
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
+        } else if (argument == "--t265-only-output") {
+            options.t265_only_output = true;
         } else if (argument == "--enable-pose-jumping") {
             options.pose_jumping_override = 1;
         } else if (argument == "--disable-pose-jumping") {
@@ -1547,7 +1551,9 @@ int main(int argc, char **argv)
                             t265_field_dy * std::sin(command_heading);
                         navigation_wheel_progress_m += progress;
                     }
-                    filter.predict(fusion_increment, config);
+                    if (!options.t265_only_output) {
+                        filter.predict(fusion_increment, config);
+                    }
                     wheel_debug.accepted_this_pose = true;
                     wheel_debug.latest_increment_accepted = true;
                     wheel_debug.latest_accepted_update_ns = wheel_debug.latest_frame_ns;
@@ -1566,7 +1572,7 @@ int main(int argc, char **argv)
                     static_cast<double>(config.uart_stale_ms);
             const bool navigation_wheel_primary =
                 omni::navigation_wheel_primary_enabled(
-                    navigation_active, !options.ignore_encoders,
+                    navigation_active, !options.ignore_encoders && !options.t265_only_output,
                     accepted_wheel_fresh, config.encoder_fusion_weight);
             const bool navigation_distance_valid = navigation_active &&
                 config.navigation_distance_compensation_enabled &&
@@ -1601,7 +1607,7 @@ int main(int argc, char **argv)
                         std::chrono::duration_cast<std::chrono::steady_clock::duration>(period);
                 }
             }
-            if (options.ignore_encoders) {
+            if (options.ignore_encoders || options.t265_only_output) {
                 const omni::Pose2d before_t265 = filter.pose();
                 innovation_m = std::hypot(
                     latest_t265.pose.x_m - before_t265.x_m,

@@ -107,7 +107,9 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
                        start_heading_offset_deg: float | None = None,
                        camera_robot_forward_axis: str | None = None,
                        camera_robot_up_axis: str | None = None,
-                       encoder_to_robot_yaw_deg: float | None = None) -> None:
+                       encoder_to_robot_yaw_deg: float | None = None,
+                       camera_offset_forward_m: float | None = None,
+                       camera_offset_left_m: float | None = None) -> None:
     """Keep wheel samples enabled while making their EKF weight exactly zero."""
     lines = source.read_text(encoding="utf-8").splitlines()
     replacements = {
@@ -131,6 +133,10 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
         replacements["camera_robot_up_axis"] = f"camera_robot_up_axis = {camera_robot_up_axis}"
     if encoder_to_robot_yaw_deg is not None:
         replacements["encoder_to_robot_yaw_deg"] = f"encoder_to_robot_yaw_deg = {encoder_to_robot_yaw_deg}"
+    if camera_offset_forward_m is not None:
+        replacements["camera_offset_forward_m"] = f"camera_offset_forward_m = {camera_offset_forward_m}"
+    if camera_offset_left_m is not None:
+        replacements["camera_offset_left_m"] = f"camera_offset_left_m = {camera_offset_left_m}"
     seen: set[str] = set()
     output: list[str] = []
     for line in lines:

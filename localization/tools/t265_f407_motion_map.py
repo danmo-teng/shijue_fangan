@@ -69,6 +69,8 @@ DEBUG_COMMAND_FORWARD_SIGN = 1
 DEBUG_COMMAND_LEFT_SIGN = -1
 DEBUG_COMMAND_TURN_SIGN = -1
 DEBUG_ENCODER_TO_ROBOT_YAW_DEG = 180.0
+DEBUG_CAMERA_OFFSET_FORWARD_M = -0.020
+DEBUG_CAMERA_OFFSET_LEFT_M = -0.070
 LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@036b5d11e52a51c8107575da069e95585b14c158 (MotionDebug)"
 MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="signed forward/left mm")
@@ -785,6 +787,10 @@ class MotionMapApp:
                            camera_robot_up_axis=(DEBUG_UP_AXIS if
                                self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None),
                            encoder_to_robot_yaw_deg=(DEBUG_ENCODER_TO_ROBOT_YAW_DEG if
+                               self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None),
+                           camera_offset_forward_m=(DEBUG_CAMERA_OFFSET_FORWARD_M if
+                               self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None),
+                           camera_offset_left_m=(DEBUG_CAMERA_OFFSET_LEFT_M if
                                self.options.config.resolve() == DEFAULT_CONFIG.resolve() else None))
         self.session_config = config_values(config_path)
         self.localization_json = self.run_dir / "localization_result.json"
@@ -806,6 +812,7 @@ class MotionMapApp:
             "--csv", str(self.run_dir / "localization_debug.csv"),
             "--events", str(self.run_dir / "localization_events.jsonl"),
             "--enable-pose-jumping",
+            "--t265-only-output",
             "--rate", "20",
             "--tx-rate", "0",
             "--uart", self.bridge.slave_path,
@@ -833,6 +840,7 @@ class MotionMapApp:
             "turn_command_sign": DEBUG_COMMAND_TURN_SIGN,
             "disable_pose_jumping_requested": False,
             "enable_pose_jumping_requested": True,
+            "pose_source": "t265_direct_with_camera_offset",
             "listen_and_control": True,
             "expected_lower_firmware": LOWER_FIRMWARE,
             "actual_lower_firmware": "operator must confirm; UART does not report commit",
