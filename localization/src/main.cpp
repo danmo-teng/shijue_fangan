@@ -1106,9 +1106,10 @@ int main(int argc, char **argv)
             set_map_option(RS2_OPTION_ENABLE_MAPPING, 1.0f, "enable_mapping");
             set_map_option(RS2_OPTION_ENABLE_RELOCALIZATION, 1.0f,
                            "enable_relocalization");
-            // Do not allow a relocalization update to create a discontinuous
-            // pose jump during the competition task.
-            set_map_option(RS2_OPTION_ENABLE_POSE_JUMPING, 0.0f,
+            // An explicit setting also applies when importing a map.
+            set_map_option(RS2_OPTION_ENABLE_POSE_JUMPING,
+                           options.pose_jumping_override >= 0
+                               ? static_cast<float>(options.pose_jumping_override) : 0.0f,
                            "enable_pose_jumping");
             if (map_pose_sensor->supports(RS2_OPTION_ENABLE_MAP_PRESERVATION)) {
                 map_pose_sensor->set_option(RS2_OPTION_ENABLE_MAP_PRESERVATION, 0.0f);
@@ -1152,6 +1153,12 @@ int main(int argc, char **argv)
                 });
         }
         pipeline.start(rs_config);
+        if (map_pose_sensor) {
+            const float pose_jumping = map_pose_sensor->get_option(RS2_OPTION_ENABLE_POSE_JUMPING);
+            event_log.write("t265_pose_jumping_final",
+                            "{\"value\":" + std::to_string(pose_jumping) + "}");
+            std::cerr << "[T265 OPTION FINAL] enable_pose_jumping=" << pose_jumping << '\n';
+        }
         event_log.write(
             "pipeline_started",
             "{\"t265_map_enabled\":" +
@@ -1531,7 +1538,7 @@ int main(int argc, char **argv)
                     }
                     if (navigation_active &&
                         config.navigation_distance_compensation_enabled &&
-                        !options.ignore_encoders) {
+                        !options.ignore_encoders && !options.t265_only_output) {
                         // Distance compensation uses the T265 heading at the
                         // middle of this encoder interval and the raw
                         // three-wheel translation. It does not depend on the
@@ -1576,7 +1583,7 @@ int main(int argc, char **argv)
                     accepted_wheel_fresh, config.encoder_fusion_weight);
             const bool navigation_distance_valid = navigation_active &&
                 config.navigation_distance_compensation_enabled &&
-                !options.ignore_encoders && accepted_wheel_fresh;
+                !options.ignore_encoders && !options.t265_only_output && accepted_wheel_fresh;
             if (navigation_wheel_primary && !previous_navigation_wheel_primary) {
                 next_navigation_position_correction = now;
             }

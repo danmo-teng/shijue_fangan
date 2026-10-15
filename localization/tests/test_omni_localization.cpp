@@ -266,14 +266,41 @@ void test_projection_gate_and_filter()
     for (int zone = 1; zone <= 4; ++zone) {
         config.start_zone = zone;
         omni::T265FieldProjector zone_projector(config);
-        omni::T265RawPose zone_raw = lens_up_pose(0.0);
+        omni::T265RawPose zone_raw;
+        zone_raw.rotation_xyzw[0] = 1.0; // Rx(180): installed -Y points up.
+        zone_raw.rotation_xyzw[3] = 0.0;
+        zone_raw.tracker_confidence = 3;
         const omni::T265FieldPose zone_field = zone_projector.project(zone_raw);
         check(near(zone_field.pose.x_m, expected_x[zone]), "selected zone initial field X");
         check(near(zone_field.pose.y_m, expected_y[zone]), "selected zone initial field Y");
         check(near(omni::degrees(zone_field.pose.yaw_rad), expected_heading[zone]),
               "selected zone outward heading");
+        zone_raw.translation_m[0] = 1.0;
+        const auto forward = zone_projector.project(zone_raw);
+        const double heading = omni::radians(expected_heading[zone]);
+        check(near(forward.pose.x_m, expected_x[zone] + std::cos(heading)) &&
+              near(forward.pose.y_m, expected_y[zone] + std::sin(heading)),
+              "side-mounted forward motion follows each competition start heading");
+        zone_raw.translation_m[0] = 0.0;
+        zone_raw.translation_m[2] = -1.0;
+        const auto left = zone_projector.project(zone_raw);
+        check(near(left.pose.x_m, expected_x[zone] - std::sin(heading)) &&
+              near(left.pose.y_m, expected_y[zone] + std::cos(heading)),
+              "side-mounted left motion follows each competition start heading");
+        const auto turned_q = multiply(axis_angle(0.0, 1.0, 0.0, 90.0),
+                                       axis_angle(1.0, 0.0, 0.0, 180.0));
+        zone_raw.rotation_xyzw[0] = turned_q.x;
+        zone_raw.rotation_xyzw[1] = turned_q.y;
+        zone_raw.rotation_xyzw[2] = turned_q.z;
+        zone_raw.rotation_xyzw[3] = turned_q.w;
+        const auto turned = zone_projector.project(zone_raw);
+        check(near(omni::wrap_angle(turned.pose.yaw_rad - heading - omni::radians(90.0)), 0.0),
+              "side-mounted counterclockwise turn increases field heading by 90 degrees");
     }
 
+    // Keep the historical lens-up geometry cases explicit after changing defaults.
+    config.camera_robot_up_axis[1] = 0.0;
+    config.camera_robot_up_axis[2] = -1.0;
     omni::LocalizationConfig centre_config = config;
     centre_config.start_center_m = 0.0;
     centre_config.start_heading_offset_deg = 45.0;
@@ -293,9 +320,11 @@ void test_projection_gate_and_filter()
 
     omni::LocalizationConfig lens_up_config = config;
     lens_up_config.start_zone = 2;
-    check(near(lens_up_config.camera_offset_forward_m, -0.0296) &&
-          near(lens_up_config.camera_offset_left_m, -0.0301),
-          "default T265 lever-arm calibration uses measured stereo-centre offsets");
+    check(near(config.camera_offset_forward_m, -0.020) &&
+          near(config.camera_offset_left_m, -0.070),
+          "default T265 lever arm matches the validated side-mounted setup");
+    lens_up_config.camera_offset_forward_m = -0.0296;
+    lens_up_config.camera_offset_left_m = -0.0301;
     check(!lens_up_config.navigation_distance_compensation_enabled,
           "raw navigation distance compensation is disabled by default");
     omni::T265FieldProjector still_projector(lens_up_config);
@@ -564,6 +593,8 @@ void test_projection_gate_and_filter()
 void test_t265_yaw_time_sync()
 {
     omni::LocalizationConfig config;
+    config.camera_robot_up_axis[1] = 0.0;
+    config.camera_robot_up_axis[2] = -1.0;
     config.start_zone = 2;
     config.t265_gyro_pose_resync_period_s = 0.25;
     omni::T265FieldProjector projector(config);

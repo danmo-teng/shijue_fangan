@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
         "--localization-mode",
         choices=("fusion", "t265"),
         default="t265",
-        help="fusion uses T265 plus encoders; t265 keeps task UART but ignores encoders",
+        help="fusion uses T265 plus encoders; t265 outputs T265 directly with wheel reference logs",
     )
     parser.add_argument("--localization-json", type=Path)
     parser.add_argument(
@@ -177,7 +177,7 @@ class RescueMapApp:
         requested_encoder_weight = float(options.encoder_weight)
         self.localization_mode = options.localization_mode
         # T265-only is the formal side-mount mode. Keep the generated config
-        # explicit even though --ignore-encoders is the runtime authority.
+        # explicit even though --t265-only-output is the runtime authority.
         self.encoder_weight = 0.0 if self.localization_mode == "t265" else requested_encoder_weight
         if not 0.0 <= self.encoder_weight <= 1.0:
             raise ValueError("encoder weight must be in 0..1")
@@ -458,7 +458,7 @@ class RescueMapApp:
                 primary = "轮式" if pose.navigation_wheel_primary else "T265"
                 text.add(f"轮速门控：{pose.wheel_gate}  当前主导：{primary}", (x0, 790), 16, (175, 175, 180))
             else:
-                text.add("编码器融合：已关闭（仍保留UART通信）", (x0, 755), 18, (200, 200, 205))
+                text.add("轮式仅作参考，定位仅T265", (x0, 755), 18, (200, 200, 205))
             age_text = "--" if math.isinf(pose.age_ms) else f"{pose.age_ms:.0f} ms"
             text.add(f"数据年龄：{age_text}", (x0, 825), 17, (175, 175, 180))
             if abs(pose.x_m) > FIELD_HALF_M or abs(pose.y_m) > FIELD_HALF_M:
@@ -693,7 +693,7 @@ class RescueMapApp:
                 "--relocalization-timeout", f"{self.relocalization_timeout_s:.3f}",
             ]
         if self.localization_mode == "t265":
-            command.append("--ignore-encoders")
+            command += ["--t265-only-output", "--enable-pose-jumping"]
         if self.options.uart.lower() not in {"", "none", "off"}:
             command += ["--uart", self.options.uart, "--baud", str(self.options.baud)]
         return command

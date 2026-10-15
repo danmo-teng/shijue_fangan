@@ -15,21 +15,21 @@ struct LocalizationConfig {
     double wheel_diameter_m = 0.070;
     double counts_per_wheel_revolution = 1061.268;
     int encoder_sign[3] = {-1, -1, -1};
-    double encoder_to_robot_yaw_deg = 0.0;
-    double encoder_fusion_weight = 0.25;
-    double wheel_center_radius_m = 0.130;
+    double encoder_to_robot_yaw_deg = 180.0;
+    double encoder_fusion_weight = 0.0;
+    double wheel_center_radius_m = 0.0;
 
     // Metres. +forward is the robot nose and +left is the robot's left side.
     // This is the T265 stereo-imager tracking origin relative to the
     // three-wheel kinematic rotation centre.
-    double camera_offset_forward_m = -0.0296;
-    double camera_offset_left_m = -0.0301;
+    double camera_offset_forward_m = -0.020;
+    double camera_offset_left_m = -0.070;
     // Optional empirical scale for corrected robot-centre translation. Keep
     // disabled during normal operation; the value is for A/B calibration.
     bool t265_translation_scale_enabled = false;
     double t265_translation_scale = 1.0;
     double camera_robot_forward_axis[3] = {1.0, 0.0, 0.0};
-    double camera_robot_up_axis[3] = {0.0, 0.0, -1.0};
+    double camera_robot_up_axis[3] = {0.0, -1.0, 0.0};
 
     double startup_wheel_disable_distance_m = 0.70;
     double corner_exclusion_inner_m = 0.75;

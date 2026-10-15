@@ -7,6 +7,7 @@ import math
 import sys
 import tempfile
 import time
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,16 +58,18 @@ def main() -> None:
         assert "run_mission_test.sh" in app.vision_command()[0]
         assert math.isclose(app.encoder_weight, 0.25)
         assert not app.t265_map_enabled
-        assert math.isclose(app.t265_translation_scale, 1.04)
+        assert math.isclose(app.t265_translation_scale, 1.0)
         runtime_config = (map_app.RUNTIME / "localization.conf").read_text(encoding="utf-8")
         assert "t265_translation_scale_enabled = false" in runtime_config
-        assert "t265_translation_scale = 1.040" in runtime_config
+        assert "t265_translation_scale = 1.000" in runtime_config
         app.adjust_encoder_weight(0.10)
         assert math.isclose(app.encoder_weight, 0.35)
         app.localization_mode = "t265"
         assert "--uart" in app.localization_command()
         assert "--command-file" in app.localization_command()
-        assert "--ignore-encoders" in app.localization_command()
+        assert "--t265-only-output" in app.localization_command()
+        assert "--enable-pose-jumping" in app.localization_command()
+        assert "--ignore-encoders" not in app.localization_command()
         assert "run_mission_test.sh" in app.vision_command()[0]
         map_file = root / "t265_localization.raw"
         map_file.write_bytes(b"test-map")
@@ -78,7 +81,7 @@ def main() -> None:
         assert "--relocalization-timeout" in map_command
         app.t265_translation_scale_enabled = True
         app.adjust_t265_translation_scale(0.01)
-        assert math.isclose(app.t265_translation_scale, 1.05)
+        assert math.isclose(app.t265_translation_scale, 1.01)
         app.adjust_corner_offset(50.0)
         assert math.isclose(app.corner_offset_m, 0.15 * math.sqrt(2.0) + 0.05)
 
@@ -101,11 +104,17 @@ def main() -> None:
         try:
             app.options.launch_localization = True
             app.options.launch_vision = True
+            app.session_started = False
             app.start_session()
-            assert len(launched) == 2 and "--uart" in launched[0]
-            assert "--ignore-encoders" in launched[0]
-            assert "run_mission_test.sh" in launched[1][0]
+            assert len(launched) == 1 and "--uart" in launched[0]
+            assert "--t265-only-output" in launched[0]
             assert app.message == "T265定位进程已启动"
+            app.maybe_start_vision()
+            assert len(launched) == 1 and app.vision_start_pending
+            app.pose = replace(app.pose, quality="GOOD", age_ms=0.0,
+                               t265_map_startup_ready=True)
+            app.maybe_start_vision()
+            assert len(launched) == 2 and "run_mission_test.sh" in launched[1][0]
         finally:
             app.stop_session_processes()
             map_app.subprocess.Popen = original_popen
