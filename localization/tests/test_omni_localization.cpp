@@ -165,7 +165,6 @@ void test_protocol()
 void test_kinematics()
 {
     omni::LocalizationConfig config;
-    config.encoder_sign[0] = config.encoder_sign[1] = config.encoder_sign[2] = 1;
     config.encoder_to_robot_yaw_deg = 0.0;
     config.wheel_center_radius_m = 0.1;
     omni::OmniEncoderIntegrator integrator(config);
@@ -192,9 +191,9 @@ void test_kinematics()
     integrator.update(baseline, increment, reason);
     omni::EncoderFrame left = baseline;
     left.sequence = 11;
-    left.position[0] = 10;
-    left.position[1] = 10;
-    left.position[2] = static_cast<std::uint16_t>(-20);
+    left.position[0] = static_cast<std::uint16_t>(-10);
+    left.position[1] = static_cast<std::uint16_t>(-10);
+    left.position[2] = 20;
     check(integrator.update(left, increment, reason), "left update accepted");
     check(near(increment.left_m, 20.0 * metres_per_count, 1e-12),
           "F407 M1/M2/M3 lateral kinematics");

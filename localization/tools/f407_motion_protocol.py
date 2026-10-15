@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MotionDebug adapter for F407 76f69b1 (the scanner 0x19/0x1A protocol)."""
+"""MotionDebug adapter for F407 4071c71 (unchanged 0x19/0x1A protocol)."""
 from __future__ import annotations
 
 import math
@@ -32,7 +32,8 @@ MOTION_STATE_STOPPED = 0x04
 MOTION_MAX_DISTANCE_MM = 10_000
 MOTION_MIN_SPEED_MM_S = 50
 MOTION_MAX_SPEED_MM_S = 700
-MOTION_TURN_RADIUS_MM = 130.0  # APP_MOTION_DEBUG_TURN_RADIUS_MM at 76f69b1.
+MOTION_TURN_RADIUS_MM = 130.0  # Protocol speed conversion, not odometry yaw enable.
+MOTION_TURN_TIMEOUT_S = 10.0
 
 STATE_NAMES = {
     MOTION_STATE_IDLE: "IDLE",

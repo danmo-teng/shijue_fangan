@@ -1,5 +1,101 @@
 # F407 MG310 与完整比赛上位机同步
 
+## 2026-10-15：4071c71 增量适配
+
+下位机执行代码基线为`4071c71f0eab3a6a360b8e3d00815bdd6ad25236`；核对时
+远端HEAD `93f7550`只比它增加交接文档。上位机从`79d7dc1`增量适配，不覆盖main，
+不修改下位机仓库。源码版本不代表实机已经烧录，FIFO精度也仍需实测。
+
+### 轮式完整变换与旧日志差异
+
+1. `0x15`原始16位累计计数按回绕求增量；每轮符号-1只乘一次。
+2. 乘`pi * 0.070 / 1061.268`得到轮位移m1/m2/m3，轮序为右前/左前/后。
+3. 定位器与建图工具共用`three_wheel_translation`：
+   `forward=-(m1-m2)/sqrt(3)`，`left=(m1+m2-2*m3)/3`。
+4. 定位器附加旋转`encoder_to_robot_yaw_deg`默认0；建图参考使用上述原生车体轴。
+5. 轮式参考平移按T265航向投影到场地；正式四区航向与起点不变。
+
+`79d7dc1`的旧实现为正号forward再旋转180°，最终forward与新公式一致，left相反。
+旧文档的“实测180°”对应当时未确认烧录版本的测试，不能证明适用于4071c71。
+本次移除这项符号补丁，不修改T265的+x/-y、后20mm/右70mm或位置跳变设置；
+历史日志及其中参数不改写，需用已确认的4071c71分别复核前进和左移。
+若未来启用轮式yaw，公式为`-(m1+m2+m3)/(3R)`；当前`R=0`继续禁用，
+130mm只用于MotionDebug转速协议换算，不能用它自动开启轮式yaw。
+
+### MotionDebug、分离与故障
+
+- MOVE_BODY发送物理前进/左移，左移改为正arg2；逆时针TURN仍取负号。
+  轮缘mm/s仅在协议边界转换一次为0.1度/秒。界面移动范围50～700mm/s；
+  TURN理想执行时间达到10秒时提示可能超时，不改变下位机时限。
+- DONE须同时匹配命令SEQ、opcode、本次发送后时间及1秒内的新鲜状态；
+  FAULT、STOPPED或超过1秒无匹配状态取消自动返航后续段，迟到DONE不能恢复。
+  失联仅表示机械状态未知，不声称下位机已停。正式H/D和Gamepad不套此调试符号。
+  NormalRun与MotionDebug基础极性相同，但转角速度规划不同，不能互相替代精度验收。
+- 分离候选与运输合法性分开：mixed_material须有完整计数及绿色/核心ROI证据、
+  可靠侧别且符合目标角色才可尝试分离；运输仍只允许现有合法单件。
+  这些局部组成只用于分离决策，不改变线上MIXED_MATERIAL类别或审核签名。
+- 保留侧独立使用三个不同图像帧，采集间隔至少100ms；侧别或数量改变重新计数。
+  等ACK时即使全局签名不变，左右分布改变也重新确认。动作接受后保持已选侧。
+- 动作接受才计数；同一堆重新分配任务不清零累计次数。第三轮后仍先审核，
+  合法则运输，非法才执行原双开/后退/mode47返中路径。无新增补退或侧移。
+- 收到真实F407故障后保留任务现场并锁住发送，故障位清零、失联、人工暂停或
+  context_pending都不能自动重发旧动作。人工排查、重新初始化下位机后，按R
+  重新配置并等待新状态/上下文。故障码5不能唯一说明FIFO溢出。
+
+夹紧角度仍由下位机决定：能确认保留侧单件合格为20度档，其余为10度档；
+同侧同档每轮减5度，换侧/换档不清总次数。上位机不推断实际夹角，不改写数量或类别。
+下位机弧线分离按12/16/20度目标、100/130/160mm前段上限、300mm总路径和
+60mm横向预算（预留5mm制动）执行，允许提前完成；上位机只等待mode35/mode30与新图像。
+
+### 已核对保留的流程与协议缺口
+
+伤员为injured_orange：23→49（每爪放松5度，150mm/s有效后退2秒）→23→50→22；
+mode49撤销旧证据并保留伤员角色，mode50保持第二轮pending，22/40缺pending的17秒
+看门狗仍有效。CORE闭爪前50mm推进、扫障独立路径、mode48、先STABLE后READY/VALID、
+线上非法签名、占位证据、危险处理、首件、投送超时和计数均不重写。
+
+FIFO算法与细分故障不在0x1A中；未虚构新二进制字段。当前上位机没有程序器文本IMU
+解析器，不新增另一路串口控制。外部诊断按字段名查看`ALG=FIFO_TS_TRAPZ`及
+IMU_FIFO的PEAK/OVERRUN/FAULTS/MAX_POLL_MS/TEMP_MC；DT_US是硬件样本间隔，
+MAX_POLL_MS是主循环读取间隔。CIRCLES/CAL为程序器文本命令，不是0x19指令。
+T265场地航向与F407 Location航向分属不同参考原点；0x1A不是原始IMU积分角。
+此前提到的动作独立超时、断流重同步、导航净进展判断和NormalRun停车后角速度确认
+仍是建议，本次不等待不存在的新回执或状态。
+
+### 部署记录与最少实车验收
+
+上位机重新编译`localization/build`的`t265_omni_localizer`和`t265_map/build`的
+`t265_map_builder`，退出旧入口再重启，以生成新runtime配置。两种入口可用
+`--actual-lower-firmware <已烧录提交> --actual-lower-mode NormalRun|MotionDebug|Gamepad`
+记录操作员确认的信息，默认unconfirmed；正式session和调试metadata记录上位机提交，
+这些字段不是UART烧录证明。正式比赛用NormalRun，桌面运动实验用MotionDebug。
+
+1. 前进、左移各一小段，确认实车与轮式参考方向一致；逆时针90度检查负TURN编码及匹配DONE。
+2. 单个橙色伤员检查23→49→23→50→22，后退只发生一次，第二轮用新帧，闭爪期间不重审。
+3. 分离动作重发不加次数；第三轮合法可运输，非法经mode47返中，中心新mode3/新视觉才再抓取。
+4. 从已有故障记录或受控维护流程验证提示和停发；故障位清零仍不续跑，重新初始化并R复位后重新握手。
+   不为验收人为制造FIFO溢出或修改运行保护。
+
+仅使用必要编译、语法和现有针对性检查，不新增测试程序，不跑无关整套回归。
+
+### 本次实际修改文件
+
+- 运动解算：`localization/src/fusion.cpp`、`localization/include/fusion.hpp`、
+  `localization/include/config.hpp`、`t265_map/src/t265_map_builder.cpp`。
+- 当前配置：`localization/config/localization.example.conf`、
+  `localization/config/t265_debug_offset_candidate.conf`、
+  `localization/config/t265_debug_offset_scale_candidate.conf`。
+- 调试控制：`localization/tools/f407_motion_protocol.py`、`localization/tools/t265_f407_motion_map.py`。
+- 比赛增量：`competition_rescue/state_machine.py`、`competition_rescue/run_competition_rescue.py`。
+- 会话记录：`rescue_map/field_model.py`、`rescue_map/map_app.py`。
+- 复用既有检查文件：`localization/tests/test_omni_localization.cpp`、
+  `localization/tools/test_f407_motion_protocol.py`、`competition_rescue/tests/test_state_machine.py`、
+  `competition_rescue/tests/test_runner.py`、`rescue_map/tests/test_map_app.py`。
+- 文档：本文件、`docs/t265_f407_center_debug.md`、`docs/t265_side_mount_baseline.md`、
+  `localization/README.md`、`t265_map/README.md`。
+
+## 既有审核机制
+
 上位机定位配置已按 MG310 霍尔版换算：70 mm 轮、13 线四倍频、减速比 20.409，对应
 
 ```ini
@@ -11,9 +107,12 @@ counts_per_wheel_revolution = 1061.268
 
 完整比赛协议已配套 mode49/mode50：mode49 半闭爪后退阶段只发送非 STABLE、frame=0、证据全零的 `CARGO_AUDIT`，保留可确定的角色标志，等待新鲜 mode23 并建立新的 frame floor；第二轮合法审核后在mode50持续发送同一 STABLE 审核，直到当前任务上下文的新鲜 mode22、闭爪和 `AUDIT_READY/AUDIT_VALID` 同时成立，才进入导航。上位机不向 mode49 发送运动或机构命令。
 
-F407 侧需要烧录与本协议匹配的固件：MG310 原始计数、55% 占空比上限和起步前馈，保留既有 PID（Kp=6、Ki=0.15、Kd=0、修正±450、积分±2500、MoveSpin 1.8）及 mode49/mode50 实现。上位机仓库不包含 F407 驱动源码，因此本次没有修改下位机文件；两边必须使用同一状态编号和上下文协议。
+F407 4071c71的PWM上限60%，速度PID为5/0.12/0，直行航向PID为2/0.005/0，
+视觉转向PD为0.45/0.0100。电池经保险丝直接给驱动供电；下位机按12V建模，无实时
+电压补偿，也未自动应用空载标定表。上位机不叠加这些PID，临时磨合脚本不集成进比赛。
 
-84b1777交接时核对的公开 F407 main 为 `d3913f4f1c80f0c06f3672831d4dac722ed62847`，当时尚未包含新配套。2026-10-10本次重新核对公开main已是 `255002509144aec510c560a042b29200a70f2ec2`，并只读核对其 `Main/Src/Task.c` 审核、占位及超时恢复实现。本次完整比赛增量以该提交的 **NormalRun** 固件配套；公开源码不能证明实机已烧录。
+历史84b1777交接时公开main为`d3913f4`，2026-10-10更新至`2550025`；当前配套基线
+已更新为上文4071c71的NormalRun，公开源码不能证明实机已烧录。
 
 审核在 mode23、mode48 回到140°且 CLAW_VISIBLE 后观察500ms稳定期，并建立新frame floor。相邻有效采样至少100ms，三帧总跨度至少200ms。普通/核心类别切换、数量、危险/未知/混装变化重计数；左右分布和track变化不单独改变语义。开局藏堆保持任意非空，mode43保持扫障非空。mode50使用已接受的第二轮合法结果等待闭爪完成，不因机械闭爪期间视觉变化重审；mode22或扫障mode40必须匹配当前上下文。
 

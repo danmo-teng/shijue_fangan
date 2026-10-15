@@ -386,6 +386,13 @@ double T265YawSynchronizer::latest_yaw_rad() const noexcept
     return samples_.empty() ? 0.0 : samples_.back().yaw_rad;
 }
 
+void three_wheel_translation(double m1, double m2, double m3,
+                             double &forward, double &left)
+{
+    forward = -(m1 - m2) / std::sqrt(3.0);
+    left = (m1 + m2 - 2.0 * m3) / 3.0;
+}
+
 OmniEncoderIntegrator::OmniEncoderIntegrator(const LocalizationConfig &config)
     : config_(config)
 {
@@ -450,8 +457,9 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     // M2 is the left wheel and M3 is the rear wheel. This is the full
     // three-wheel omni forward kinematics; common wheel rotation cancels from
     // both translation equations.
-    const double raw_forward = (wheel_m[0] - wheel_m[1]) / std::sqrt(3.0);
-    const double raw_left = (wheel_m[0] + wheel_m[1] - 2.0 * wheel_m[2]) / 3.0;
+    double raw_forward = 0.0;
+    double raw_left = 0.0;
+    three_wheel_translation(wheel_m[0], wheel_m[1], wheel_m[2], raw_forward, raw_left);
     const double correction = radians(config_.encoder_to_robot_yaw_deg);
     const double correction_cos = std::cos(correction);
     const double correction_sin = std::sin(correction);
@@ -461,7 +469,7 @@ bool OmniEncoderIntegrator::update(const EncoderFrame &frame,
     increment.field_yaw_valid = false;
     const double rotation_tangent_m = (wheel_m[0] + wheel_m[1] + wheel_m[2]) / 3.0;
     increment.yaw_rad = config_.wheel_center_radius_m > 0.0
-        ? rotation_tangent_m / config_.wheel_center_radius_m : 0.0;
+        ? -rotation_tangent_m / config_.wheel_center_radius_m : 0.0;
     increment.dt_s = dt;
     increment.forward_velocity_mps = increment.forward_m / dt;
     increment.left_velocity_mps = increment.left_m / dt;

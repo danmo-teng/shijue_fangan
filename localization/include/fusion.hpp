@@ -16,6 +16,10 @@ double radians(double degrees);
 double degrees(double radians_value);
 double wrap_angle(double radians_value);
 
+// F407 physical axes after per-wheel encoder signs and distance conversion.
+void three_wheel_translation(double m1, double m2, double m3,
+                             double &forward, double &left);
+
 struct Pose2d {
     double x_m = 0.0;
     double y_m = 0.0;

@@ -2,6 +2,8 @@
 """Protocol regression checks for the F407 UART motion-debug branch."""
 from __future__ import annotations
 
+import time
+
 from f407_motion_protocol import (
     FRAME_HEAD,
     FRAME_TAIL,
@@ -25,7 +27,7 @@ def inbound(message_type: int, sequence: int, payload: bytes) -> bytes:
 
 
 def main() -> None:
-    # Payloads match F407 76f69b1 vision.c and t265_map/scan_protocol.hpp.
+    # Payloads match F407 4071c71 vision.c and t265_map/scan_protocol.hpp.
     turn = motion_turn_frame(0, 90.0, 300)
     assert turn[2] == 0x19 and turn[4:12] == bytes.fromhex("02 09 03 84 00 00 05 2A")
     assert motion_turn_frame(1, -180.0)[6:8] == (-1800).to_bytes(2, "big", signed=True)
@@ -66,6 +68,50 @@ def main() -> None:
     malformed = inbound(MSG_MOTION_STATUS, 6, bytes((10, 99, 0, 2, 0, 0, 0, 0)))
     parser.feed(malformed + odom)
     assert parser.stats["malformed"] >= 1
+    from t265_f407_motion_map import MotionMapApp, DEBUG_COMMAND_LEFT_SIGN, DEBUG_COMMAND_TURN_SIGN
+    assert DEBUG_COMMAND_LEFT_SIGN == 1 and DEBUG_COMMAND_TURN_SIGN == -1
+    app = MotionMapApp.__new__(MotionMapApp)
+    app.active_test = "turn_and_return"
+    app.return_phase = "turn"
+    app.return_distance_mm = 1000
+    app.active_command_sequence = 7
+    app.active_command_opcode = MOTION_CMD_TURN_REL
+    app.active_command_sent_ns = time.monotonic_ns()
+    app.last_matching_status_ns = app.active_command_sent_ns
+    app.record_event = lambda *args: None
+    sent = []
+    app.send_move = lambda *args: (sent.append(args), 8)[1]
+    status = dict(command_sequence=7, command=MOTION_CMD_TURN_REL, state=2,
+                  timestamp_monotonic_ns=app.active_command_sent_ns - 1)
+    app.handle_motion_status(status)
+    assert not sent
+    status.update(timestamp_monotonic_ns=time.monotonic_ns(), command=MOTION_CMD_MOVE_DISTANCE)
+    app.handle_motion_status(status)
+    assert not sent
+    status.update(command=MOTION_CMD_TURN_REL, command_sequence=6)
+    app.handle_motion_status(status)
+    assert not sent
+    status.update(command_sequence=7, timestamp_monotonic_ns=time.monotonic_ns())
+    app.handle_motion_status(status)
+    assert sent == [(0.0, 1000)] and app.return_phase == "move"
+    for terminal in (3, 4):
+        app.active_test = "turn_and_return"
+        app.return_phase = "turn"
+        app.active_command_sequence = 7
+        status.update(state=terminal, timestamp_monotonic_ns=time.monotonic_ns())
+        app.handle_motion_status(status)
+        assert app.active_test is None and len(sent) == 1
+    app.active_test = "turn_and_return"
+    app.return_phase = "turn"
+    app.active_command_sequence = 7
+    app.active_command_sent_ns = app.last_matching_status_ns = time.monotonic_ns() - 2_000_000_000
+    status.update(state=2, timestamp_monotonic_ns=time.monotonic_ns())
+    app.handle_motion_status(status)
+    assert len(sent) == 1
+    app.localization_json = None
+    app.bridge = None
+    app.update_data()
+    assert app.active_test is None and app.return_phase is None
     print("F407 motion protocol PASS")
 
 

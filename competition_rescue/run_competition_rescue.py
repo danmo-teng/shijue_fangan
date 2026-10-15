@@ -1426,6 +1426,9 @@ class CompetitionPlanner:
         now: float,
     ) -> CompetitionOutput:
         self.protocol_vision = vision
+        if self.mission.stm_fault_waiting or (stm.fresh and stm.fault):
+            # A cleared bit or a pending ACK must not resume the retained task after a fault.
+            return self.mission.step(vision, pose, stm, now)
         if stm.fresh and stm.context_valid and stm.action_status & 1:
             self.protocol_accepted = stm
         if paused and self.pause_reason == "manual" and self.mission.state != CompetitionState.FAULT:

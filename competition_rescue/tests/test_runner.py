@@ -359,7 +359,21 @@ def test_detection_logging() -> None:
     assert record["detections"][0]["ground_xy_mm"] == [100.0, 200.0]
 
 
+def test_4071_fault_precedes_context_and_manual_pause() -> None:
+    planner = CompetitionPlanner.__new__(CompetitionPlanner)
+    planner.mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    planner.pause_reason = "manual"
+    planner.mission.state = CompetitionState.SEARCH
+    output = planner._output_for_cycle(VisionSnapshot(), PoseSnapshot(),
+                                      StmSnapshot(age_ms=0, fault_code=5), True, 1.0)
+    assert output.suppress_command_tx and output.command is None
+    output = planner._output_for_cycle(VisionSnapshot(), PoseSnapshot(),
+                                      StmSnapshot(age_ms=0, mode=3), False, 2.0)
+    assert output.suppress_command_tx and output.command is None
+
+
 def main() -> None:
+    test_4071_fault_precedes_context_and_manual_pause()
     test_suppressed_publish_preserves_command_file_and_sequence()
     test_relay_snapshot_parsing_and_abort_evidence()
     test_planner_stop_sends_bounded_abort_and_accepts_relay_ack()

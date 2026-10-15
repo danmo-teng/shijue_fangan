@@ -361,6 +361,15 @@ void write_metadata(const std::string &path, const Options &options,
                     const MetadataState &state,
                     bool fisheye_active)
 {
+    const auto axis_name = [](const double *axis) {
+        for (int i = 0; i < 3; ++i) {
+            if (std::fabs(axis[i]) > 0.5) return std::string(axis[i] > 0.0 ? "+" : "-") + "XYZ"[i];
+        }
+        return std::string("unknown");
+    };
+    const double *f = config.camera_robot_forward_axis;
+    const double *u = config.camera_robot_up_axis;
+    const double left_axis[] = {u[1]*f[2]-u[2]*f[1], u[2]*f[0]-u[0]*f[2], u[0]*f[1]-u[1]*f[0]};
     if (!ensure_directory(parent_directory(path))) {
         throw std::runtime_error("cannot create metadata directory: " + parent_directory(path));
     }
@@ -386,10 +395,10 @@ void write_metadata(const std::string &path, const Options &options,
         << "  \"camera_offset_forward_m\": " << config.camera_offset_forward_m << ",\n"
         << "  \"camera_offset_left_m\": " << config.camera_offset_left_m << ",\n"
         << "  \"installation_axes\": {\n"
-        << "    \"description\": \"T265 lens-up installation; axes are robot axes expressed in T265 Pose coordinates\",\n"
-        << "    \"robot_forward\": \"+X\",\n"
-        << "    \"robot_left\": \"-Y\",\n"
-        << "    \"robot_up\": \"-Z\",\n"
+        << "    \"description\": \"configured robot axes expressed in T265 Pose coordinates\",\n"
+        << "    \"robot_forward\": \"" << axis_name(f) << "\",\n"
+        << "    \"robot_left\": \"" << axis_name(left_axis) << "\",\n"
+        << "    \"robot_up\": \"" << axis_name(u) << "\",\n"
         << "    \"t265_native_x\": \"right\",\n"
         << "    \"t265_native_y\": \"up\",\n"
         << "    \"t265_native_z\": \"backward\"\n"
@@ -401,6 +410,8 @@ void write_metadata(const std::string &path, const Options &options,
         << "    \"enable_map_preservation\": false,\n"
         << "    \"fisheye_streams_active\": " << json_bool(fisheye_active) << "\n"
         << "  },\n"
+        << "  \"wheel_reference\": {\"kinematics\":\"F407 4071c71 physical forward/left\","
+           "\"yaw_source\":\"T265 gyro relative yaw, CCW positive, session origin, unwrapped\"},\n"
         << "  \"relocalization_event_count\": " << state.relocalization_events << ",\n"
         << "  \"static_nodes\": {\n"
         << "    \"scan_anchor_1\": " << json_bool(state.anchors.count(1) != 0 && state.anchors.at(1)) << ",\n"
@@ -500,15 +511,15 @@ public:
         constexpr double wheel_diameter_m = 0.070;
         constexpr double counts_per_revolution = 1061.268;
         constexpr double distance_per_count = kPi * wheel_diameter_m / counts_per_revolution;
-        constexpr double sqrt3 = 1.73205080756887729353;
         // F407 convention: M1=right, M2=left, M3=rear. All three raw
         // encoder signs are -1, matching localization.example.conf and the
         // current lower-side Location.c implementation.
         const double m1 = -static_cast<double>(result.delta_count[0]) * distance_per_count;
         const double m2 = -static_cast<double>(result.delta_count[1]) * distance_per_count;
         const double m3 = -static_cast<double>(result.delta_count[2]) * distance_per_count;
-        const double body_forward = (m1 - m2) / sqrt3;
-        const double body_left = (m1 + m2 - 2.0 * m3) / 3.0;
+        double body_forward = 0.0;
+        double body_left = 0.0;
+        omni::three_wheel_translation(m1, m2, m3, body_forward, body_left);
         result.body_forward_increment_m = body_forward;
         result.body_left_increment_m = body_left;
 

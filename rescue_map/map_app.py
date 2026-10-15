@@ -63,6 +63,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RDK X5 rescue-field selector and pose map")
     parser.add_argument("--zone", type=int, choices=range(1, 5), help="skip zone selection")
     parser.add_argument("--side", choices=("red", "blue"), help="skip side selection")
+    parser.add_argument("--actual-lower-firmware", default="unconfirmed",
+                        help="operator-confirmed flashed F407 commit, for session logging only")
+    parser.add_argument("--actual-lower-mode", default="unconfirmed",
+                        choices=("unconfirmed", "NormalRun", "Gamepad", "MotionDebug"))
     parser.add_argument("--opening-strategy", choices=("attack", "defense"), default="attack")
     parser.add_argument("--corner-offset-mm", type=float, default=DEFAULT_CORNER_OFFSET_M * 1000.0)
     parser.add_argument(
@@ -555,6 +559,8 @@ class RescueMapApp:
             self.t265_translation_scale_enabled,
             self.t265_translation_scale,
             opening_strategy=self.opening_strategy,
+            actual_lower_firmware=getattr(self.options, "actual_lower_firmware", "unconfirmed"),
+            actual_lower_mode=getattr(self.options, "actual_lower_mode", "unconfirmed"),
         )
         write_localization_config(
             PROJECT_ROOT / "localization/config/localization.example.conf",

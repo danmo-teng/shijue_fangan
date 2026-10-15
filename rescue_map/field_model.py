@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -290,6 +291,8 @@ def write_session(
     t265_translation_scale_enabled: bool = False,
     t265_translation_scale: float = DEFAULT_T265_TRANSLATION_SCALE,
     opening_strategy: str = "attack",
+    actual_lower_firmware: str = "unconfirmed",
+    actual_lower_mode: str = "unconfirmed",
 ) -> None:
     if opening_strategy not in {"attack", "defense"}:
         raise ValueError("opening strategy must be attack or defense")
@@ -315,7 +318,24 @@ def write_session(
         "t265_translation_scale_enabled": bool(t265_translation_scale_enabled),
         "t265_translation_scale": t265_translation_scale,
         "initial_pose": {"x_m": pose.x_m, "y_m": pose.y_m, "yaw_deg": pose.yaw_deg},
+        "expected_lower_firmware": "4071c71f0eab3a6a360b8e3d00815bdd6ad25236",
+        "expected_lower_mode": "NormalRun",
+        "actual_lower_firmware": actual_lower_firmware,
+        "actual_lower_mode": actual_lower_mode,
+        "lower_identity_source": "operator supplied; not reported by UART",
+        "heading_conventions": {
+            "pose": "T265, CCW positive, selected field start reference, wrapped -180..180 degrees",
+            "task_heading": "same T265 field heading normalized modulo 360",
+            "wheel_reference": "T265 gyro field heading; not independent F407 IMU yaw",
+            "f407_raw_imu": "not present in the competition status protocol",
+        },
     }
+    try:
+        data["upper_git_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1],
+            text=True, stderr=subprocess.DEVNULL, timeout=2).strip()
+    except (OSError, subprocess.SubprocessError):
+        data["upper_git_commit"] = "unavailable"
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

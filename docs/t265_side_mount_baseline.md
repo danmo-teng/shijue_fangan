@@ -15,7 +15,7 @@ camera_robot_up_axis = -y
 ```ini
 camera_offset_forward_m = -0.020
 camera_offset_left_m = -0.070
-encoder_to_robot_yaw_deg = 180.0
+encoder_to_robot_yaw_deg = 0.0
 t265_translation_scale_enabled = false
 t265_translation_scale = 1.000
 encoder_fusion_weight = 0.0
@@ -29,6 +29,8 @@ start_heading_offset_deg = 0.0
 不要复制桌面测试的中心起点或额外45°初始航向。
 
 正式默认仅T265，自动传入`--t265-only-output --enable-pose-jumping`。
+轮式参考在4071c71增量中改为下位机原生物理公式，移除旧180°符号补丁；
+详见`f407_mg310_competition_sync.md`。这不改变T265轴向、外参或最终定位。
 每个有效T265位姿经安装外参修正后直接作为`pose`输出，不经过EKF预测、
 观测混合或600mm创新拒绝门限。置信度为0时沿用最后有效位置，原失效判断保持。
 编码器继续接收、解算、绘制和记录，只作参考；轮式轨迹用三轮位移与T265航向，
@@ -48,12 +50,15 @@ git pull --ff-only origin codex/gamepad-teleop
 cmake -S localization -B localization/build -DCMAKE_BUILD_TYPE=Release \
   -DREALSENSE_ROOT=/home/sunrise/文档/ChatGPT/T265
 cmake --build localization/build --target t265_omni_localizer -j2
+cmake -S t265_map -B t265_map/build -DCMAKE_BUILD_TYPE=Release \
+  -DREALSENSE_ROOT=/home/sunrise/文档/ChatGPT/T265
+cmake --build t265_map/build --target t265_map_builder -j2
 ```
 
 双击桌面“智能救援完整比赛流程”，或运行`competition_rescue/run_competition_map.sh`。
 重新开始会话时自动生成`rescue_map/runtime/localization.conf`，不用改历史日志或手工编辑
-旧运行配置。本次上位机迁移不要求重新烧录下位机，也不修改现有任务状态机、速度、
-审核、投送计数及协议。
+旧运行配置。T265单源迁移本身不需要下位机改动；最新4071c71符号/故障适配则要求
+确认车辆实际固件与模式，不能根据仓库版本推定已经烧录。任务速度、投送计数及线上协议保持。
 
 ## 必要验证
 

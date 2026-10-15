@@ -21,6 +21,7 @@ from protocol import (  # noqa: E402
     CMD_RELEASE_LEFT,
     CMD_RELEASE_RIGHT,
     CMD_RETURN_CENTER,
+    CMD_TARGET_RIGHT,
     CMD_YIELD_BACKOFF,
 )
 from state_machine import (  # noqa: E402
@@ -1040,7 +1041,97 @@ def test_boundary_guard_points_back_into_field() -> None:
     )
 
 
+def test_4071_separation_evidence_and_fault_latch() -> None:
+    mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    mission.first_common_delivered = True
+    mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    mixed = CargoAudit(left_class="mixed_material", left_count=2, left_green_count=1,
+                       total_count=2, class_counts=(("green_supply", 1), ("core_black", 1)))
+    assert mission._side_is_disperse_candidate(mixed, "left")
+    assert not mission._audit_valid(mixed)
+    assert not mission._side_is_disperse_candidate(replace(mixed, class_counts=()), "left")
+    assert not mission._side_is_disperse_candidate(replace(mixed, unknown_present=True), "left")
+    assert not mission._side_is_disperse_candidate(replace(mixed, danger_present=True), "left")
+    mission._observe_disperse_side_vote(1, mixed, 1.0)
+    mission._observe_disperse_side_vote(1, mixed, 1.2)
+    mission._observe_disperse_side_vote(2, mixed, 1.05)
+    assert not mission._disperse_side_vote_result()[2]
+    mission._observe_disperse_side_vote(3, mixed, 1.1)
+    mission._observe_disperse_side_vote(4, mixed, 1.2)
+    assert mission._disperse_side_vote_result() == ("left", 2, True)
+    swapped = replace(mixed, left_class="", left_count=0, left_green_count=0,
+                      right_class="mixed_material", right_count=2, right_green_count=1)
+    assert mixed.signature == swapped.signature
+    mission._observe_disperse_side_vote(5, swapped, 1.21)
+    assert not mission._disperse_side_vote_result()[2]
+    mission.cluster_keep_side = "left"
+    mission.cluster_keep_side_count = 2
+    output = mission._start_disperse(mixed, stm(mode=37), 2.0)
+    assert output.command.opcode == CMD_DISPERSE_PILE and mission.disperse_attempts == 0
+    mission._count_separation_acceptance("left")
+    mission._count_separation_acceptance("left")
+    assert mission.disperse_attempts == 1
+    mission.cluster_keep_side = "right"
+    mission.cluster_keep_side_count = 2
+    output = mission._start_disperse(swapped, stm(mode=37), 2.1)
+    assert output.command.flags & CMD_TARGET_RIGHT
+    mission._count_separation_acceptance("right")
+    mission._count_separation_acceptance("right")
+    assert mission.disperse_attempts == 2 and mission.separation_side_attempts == 1
+    mission.separation_request_counted = False
+    mission._count_separation_acceptance("left")
+    assert mission.disperse_attempts == 3
+    legal = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+    assert mission._audit_valid(legal)  # The third result is still eligible for transport.
+    same_pile = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    same_pile.disperse_attempts = 2
+    same_pile.separation_keep_side = "left"
+    same_pile.separation_side_attempts = 2
+    target = cargo(1, "green_supply", 400, 450)
+    same_pile._choose_cluster_target = lambda vision: target
+    same_pile._same_cluster_target = lambda item: True
+    same_pile._cluster_approach_command = lambda vision: same_pile._hold()
+    same_pile._start_cluster_approach(VisionSnapshot(), stm(), 2.5)
+    assert same_pile.task_generation == 1 and same_pile.disperse_attempts == 2
+    assert same_pile.separation_keep_side == "left" and same_pile.separation_side_attempts == 2
+    mission.state = CompetitionState.SEARCH
+    output = mission.step(VisionSnapshot(), pose(), replace(stm(), fault_code=5), 3.0)
+    assert output.suppress_command_tx and output.command is None
+    assert "锁存" in output.message and mission.selected_batch is not None
+    for status in (stm(), stm(age_ms=1000)):
+        output = mission.step(VisionSnapshot(), pose(), status, 4.0)
+        assert output.suppress_command_tx and output.command is None
+
+
+def test_4071_injury_pending_and_missing_audit_exit() -> None:
+    mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    mission.first_common_delivered = True
+    mission._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+    vision = VisionSnapshot(frame_sequence=10)
+    output = mission._post_grab_half_close_output(vision, stm(mode=49), 1.0)
+    assert output.command.audit_vision_frame == 0
+    assert not output.command.audit.stable and output.command.audit.destination_injury
+    assert mission.pending_audit is None and mission.audit_recheck_frame_floor == 10
+    audit = CargoAudit(left_class="injured_orange", left_count=1, total_count=1, stable=True)
+    mission.audit_last_frame_sequence = 20
+    mission._begin_audit_confirmation(audit, mission._audit_payload(audit), True, "both", False,
+                                      "post_grab_valid", stm(mode=23), 2.0)
+    pending = mission.pending_audit
+    output = mission._audit_confirmation_output(VisionSnapshot(frame_sequence=21), stm(mode=50), 2.2)
+    assert mission.pending_audit is pending and output.command.opcode == CMD_CARGO_AUDIT
+    assert output.command.audit_vision_frame == 20
+    for mode in (22, 40, 50):
+        missing = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        missing.state = CompetitionState.POST_GRAB_AUDIT
+        first = missing.step(VisionSnapshot(), pose(), stm(mode=mode), 1.0)
+        assert first.reason == "missing_committed_audit"
+        timeout = missing.step(VisionSnapshot(), pose(), stm(mode=mode), 18.1)
+        assert timeout.command.opcode == CMD_ABORT
+
+
 def main() -> None:
+    test_4071_separation_evidence_and_fault_latch()
+    test_4071_injury_pending_and_missing_audit_exit()
     test_start_handshake_suppresses_task_frames_until_start_clear()
     test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions()
     test_search_recovery_follows_f407_modes_without_local_timeout()

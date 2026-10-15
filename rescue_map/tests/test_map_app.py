@@ -100,7 +100,12 @@ def main() -> None:
                 return self.returncode
 
         original_popen = map_app.subprocess.Popen
-        map_app.subprocess.Popen = lambda command, cwd: (launched.append(command), FakeProcess())[1]
+        def fake_popen(command, cwd=None, **kwargs):
+            if command[0] == "git":
+                return original_popen(command, cwd=cwd, **kwargs)
+            launched.append(command)
+            return FakeProcess()
+        map_app.subprocess.Popen = fake_popen
         try:
             app.options.launch_localization = True
             app.options.launch_vision = True

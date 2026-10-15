@@ -44,6 +44,7 @@ from f407_motion_protocol import (  # noqa: E402
     MOTION_CMD_MOVE_DISTANCE,
     MOTION_CMD_STOP,
     MOTION_CMD_TURN_REL,
+    MOTION_TURN_TIMEOUT_S,
     MOTION_STATE_DONE,
     MOTION_STATE_FAULT,
     MOTION_STATE_RUNNING,
@@ -66,14 +67,18 @@ START_HEADING_OFFSET_DEG = 45.0
 DEBUG_FORWARD_AXIS = "+x"  # Straight-motion field test reversed the old -x baseline.
 DEBUG_UP_AXIS = "-y"  # Raw gravity alignment and gyro/quaternion comparison agree on -Y up.
 DEBUG_COMMAND_FORWARD_SIGN = 1
-DEBUG_COMMAND_LEFT_SIGN = -1
+DEBUG_COMMAND_LEFT_SIGN = 1
 DEBUG_COMMAND_TURN_SIGN = -1
-DEBUG_ENCODER_TO_ROBOT_YAW_DEG = 180.0
+DEBUG_ENCODER_TO_ROBOT_YAW_DEG = 0.0
 DEBUG_CAMERA_OFFSET_FORWARD_M = -0.020
 DEBUG_CAMERA_OFFSET_LEFT_M = -0.070
-LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@036b5d11e52a51c8107575da069e95585b14c158 (MotionDebug)"
+LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@4071c71f0eab3a6a360b8e3d00815bdd6ad25236 (MotionDebug)"
+MOTION_STATUS_TIMEOUT_MS = 1000
 MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
-                       turn_angle_unit="signed 0.1 degree", move_arguments="signed forward/left mm")
+                       turn_angle_unit="signed 0.1 degree", move_arguments="physical forward/left mm",
+                       wheel_body_axes="F=-(m1-m2)/sqrt(3), L=(m1+m2-2*m3)/3; signed wheel metres",
+                       t265_heading="CCW positive, selected field start reference, wrapped -180..180 degrees",
+                       motion_status_heading="F407 Location heading, CCW positive, local reset reference, modulo 360; not raw IMU yaw")
 
 
 def read_json(path: Path | None) -> dict | None:
@@ -276,6 +281,9 @@ class MotionMapApp:
         self.raw_points: list[tuple[float, float]] = []
         self.active_test: str | None = None
         self.active_command_sequence: int | None = None
+        self.active_command_opcode: int | None = None
+        self.active_command_sent_ns = 0
+        self.last_matching_status_ns = 0
         self.return_phase: str | None = None
         self.return_distance_mm = 0
         self.distance_mm = 1000
@@ -541,6 +549,13 @@ class MotionMapApp:
                     self.last_status_timestamp = timestamp
                     self.motion_status = status
                     self.handle_motion_status(status)
+        if (self.active_test is not None and self.active_command_sequence is not None and
+                time.monotonic_ns() - self.last_matching_status_ns > MOTION_STATUS_TIMEOUT_MS * 1_000_000):
+            self.record_event(f"{self.active_test}_end_status_lost")
+            self.active_test = None
+            self.return_phase = None
+            self.active_command_sequence = None
+            self.message = "F407状态失联，已取消自动后续动作；当前机械动作状态未知"
 
     def record_event(self, name: str, details: dict | None = None) -> None:
         if self.events_path is None:
@@ -599,8 +614,12 @@ class MotionMapApp:
             return -1
         sequence = self.command_sequence & 0xFF
         self.command_sequence = (self.command_sequence + 1) & 0xFF
+        sent_ns = time.monotonic_ns()
         self.bridge.send(packet)
         self.active_command_sequence = sequence
+        self.active_command_opcode = packet[4]
+        self.active_command_sent_ns = sent_ns
+        self.last_matching_status_ns = sent_ns
         self.record_command(name, sequence, packet, description)
         return sequence
 
@@ -623,6 +642,13 @@ class MotionMapApp:
         result = self.send_packet(packet, "TURN_REL", f"相对转角 {angle_deg:+.1f}°，速度 {self.speed_mm_s} mm/s")
         if result >= 0:
             self.message = f"已发送 TURN_REL {angle_deg:+.1f}°，等待F407完成"
+            rate_ddeg_s = int.from_bytes(packet[10:12], "big")
+            if rate_ddeg_s > 0:
+                ideal_s = abs(int.from_bytes(packet[6:8], "big", signed=True)) / rate_ddeg_s
+                if ideal_s >= MOTION_TURN_TIMEOUT_S:
+                    self.message += f"；理想转动时间{ideal_s:.1f}s，可能超过下位机10s超时"
+                    self.record_event("turn_timeout_warning", {"ideal_duration_s": ideal_s,
+                                                               "firmware_timeout_s": MOTION_TURN_TIMEOUT_S})
         return result
 
     def send_move(self, direction_deg: float, distance_mm: int) -> int:
@@ -709,6 +735,14 @@ class MotionMapApp:
             return
         if int(status.get("command_sequence", -1)) != self.active_command_sequence:
             return
+        timestamp_ns = int(status.get("timestamp_monotonic_ns", 0))
+        if (int(status.get("command", -1)) != self.active_command_opcode or
+                timestamp_ns <= self.active_command_sent_ns or
+                self.status_age(status) > MOTION_STATUS_TIMEOUT_MS):
+            return
+        if time.monotonic_ns() - self.last_matching_status_ns > MOTION_STATUS_TIMEOUT_MS * 1_000_000:
+            return  # update_data cancels the chain; a late DONE cannot resume it.
+        self.last_matching_status_ns = timestamp_ns
         state = int(status.get("state", -1))
         if state == MOTION_STATE_DONE:
             if self.active_test == "turn_and_return" and self.return_phase == "turn":
@@ -843,7 +877,9 @@ class MotionMapApp:
             "pose_source": "t265_direct_with_camera_offset",
             "listen_and_control": True,
             "expected_lower_firmware": LOWER_FIRMWARE,
-            "actual_lower_firmware": "operator must confirm; UART does not report commit",
+            "actual_lower_firmware": self.options.actual_lower_firmware,
+            "actual_lower_mode": self.options.actual_lower_mode,
+            "lower_identity_source": "operator supplied; not reported by UART",
             "protocol": MOTION_PROTOCOL,
             "localizer_command": command,
             "files": {
@@ -987,6 +1023,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--serial")
+    parser.add_argument("--actual-lower-firmware", default="unconfirmed")
+    parser.add_argument("--actual-lower-mode", default="unconfirmed",
+                        choices=("unconfirmed", "NormalRun", "Gamepad", "MotionDebug"))
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
                         help="本轮测试配置；复制到独立日志目录，保留安装轴和偏置")
     parser.add_argument("--zone", type=int, choices=range(1, 5), default=4)

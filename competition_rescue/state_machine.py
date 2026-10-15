@@ -789,9 +789,10 @@ class CompetitionMission:
         self.cluster_keep_side_count = 0
         self.cluster_audit_active = False
         self.disperse_side_votes: deque[tuple[int, str | None, int]] = deque(
-            maxlen=1
+            maxlen=3
         )
         self.disperse_side_vote_last_frame_sequence: int | None = None
+        self.disperse_side_vote_last_sample_s: float | None = None
         self.target_last_seen_s: float | None = None
         self.target_last_center_px: tuple[int, int] | None = None
         self.target_last_area_px: int | None = None
@@ -2235,6 +2236,13 @@ class CompetitionMission:
                     stm.mode == STM_MODE_CLUSTER_CAPTURE_AUDIT
                 ) or
                 self.pending_audit_release_context == "recheck_empty_to_search" or
+                (not self.pending_audit_valid and
+                 self.pending_audit_release_context in {"cluster_capture", "disperse_reaudit"} and
+                 vision.capture_audit is not None and
+                 (vision.capture_audit.left_class, vision.capture_audit.left_count,
+                  vision.capture_audit.right_class, vision.capture_audit.right_count) !=
+                 (self.pending_audit.left_class, self.pending_audit.left_count,
+                  self.pending_audit.right_class, self.pending_audit.right_count)) or
                 (vision.capture_audit is not None and
                  self._audit_signature_for_state(
                      vision.capture_audit, self._audit_valid(vision.capture_audit)
@@ -2901,9 +2909,41 @@ class CompetitionMission:
             side_class in {"green_supply", "core_black"}
         )
 
+    def _side_is_disperse_candidate(self, audit: CargoAudit, side: str) -> bool:
+        """A side worth separating is not permission to transport its contents."""
+        if (self.selected_batch is None or side not in {"left", "right"} or
+                audit.danger_present or audit.unknown_present or
+                audit.total_count != audit.left_count + audit.right_count):
+            return False
+        category = audit.left_class if side == "left" else audit.right_class
+        count = audit.left_count if side == "left" else audit.right_count
+        green = audit.left_green_count if side == "left" else audit.right_green_count
+        invalid = audit.left_invalid if side == "left" else audit.right_invalid
+        if count <= 0 or invalid or category not in MATERIAL_CLASSES | {"mixed_material", "injured_orange"}:
+            return False
+        if category == "mixed_material":
+            # Local ROI evidence may guide separation, but never changes the wire signature.
+            counts = dict(audit.class_counts)
+            if (count < 2 or not 0 < green < count or
+                    sum(counts.values()) != audit.total_count or
+                    counts.get("green_supply", 0) < green or
+                    counts.get("core_black", 0) < count - green):
+                return False
+        if self.selected_batch.initial_stash:
+            return True
+        if not self.first_common_delivered:
+            return category == "green_supply" or (category == "mixed_material" and green > 0)
+        if self.selected_batch.destination == "injury":
+            return category == "injured_orange"
+        return category in MATERIAL_CLASSES | {"mixed_material"}
+
     def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
-        left_nonempty = audit.left_count > 0
-        right_nonempty = audit.right_count > 0
+        left_nonempty = self._side_is_disperse_candidate(audit, "left")
+        right_nonempty = self._side_is_disperse_candidate(audit, "right")
+        if left_nonempty != right_nonempty:
+            return "left" if left_nonempty else "right"
+        if not left_nonempty:
+            return None
         left_green = audit.left_green_count
         right_green = audit.right_green_count
         if left_green > 0 and right_green == 0:
@@ -2985,13 +3025,14 @@ class CompetitionMission:
     def _clear_disperse_side_votes(self) -> None:
         self.disperse_side_votes.clear()
         self.disperse_side_vote_last_frame_sequence = None
+        self.disperse_side_vote_last_sample_s = None
 
     def _observe_disperse_side_vote(
-        self, frame_sequence: int, audit: CargoAudit
+        self, frame_sequence: int, audit: CargoAudit, observed_s: float
     ) -> None:
         if (
             frame_sequence <= 0 or
-            frame_sequence == self.disperse_side_vote_last_frame_sequence
+            frame_sequence <= (self.disperse_side_vote_last_frame_sequence or 0)
         ):
             return
         self.disperse_side_vote_last_frame_sequence = frame_sequence
@@ -3003,12 +3044,22 @@ class CompetitionMission:
         if keep_count <= 0:
             keep_side = None
             keep_count = 0
+        if self.disperse_side_votes and (
+                self.disperse_side_votes[-1][1:] != (keep_side, keep_count) or
+                (self.disperse_side_vote_last_sample_s is not None and
+                 observed_s - self.disperse_side_vote_last_sample_s > self.settings.audit_evidence_timeout_s)):
+            self.disperse_side_votes.clear()
+            self.disperse_side_vote_last_sample_s = None
+        if (self.disperse_side_vote_last_sample_s is not None and
+                observed_s - self.disperse_side_vote_last_sample_s + 1e-6 < self.settings.audit_min_interframe_s):
+            return
+        self.disperse_side_vote_last_sample_s = observed_s
         self.disperse_side_votes.append(
             (frame_sequence, keep_side, keep_count)
         )
 
     def _disperse_side_vote_result(self) -> tuple[str | None, int, bool]:
-        if not self.disperse_side_votes:
+        if len(self.disperse_side_votes) < 3:
             return None, 0, False
         _, side, keep_count = self.disperse_side_votes[-1]
         if side is not None and keep_count > 0:
@@ -3167,7 +3218,7 @@ class CompetitionMission:
         if disperse_vote_context:
             if new_frame:
                 self._observe_disperse_side_vote(
-                    vision.frame_sequence, audit
+                    vision.frame_sequence, audit, observed_s
                 )
             keep_side, keep_count, vote_ready = (
                 self._disperse_side_vote_result()
@@ -3186,7 +3237,7 @@ class CompetitionMission:
                         CMD_VALID,
                         audit=unstable_payload,
                     ),
-                    f"等待frame floor后的新鲜非空夹内帧：{vote_summary}",
+                    f"等待保留侧连续三帧稳定（间隔至少100ms）：{vote_summary}",
                     self.selected_batch,
                     unstable,
                     "disperse_side_vote_wait",
@@ -4427,6 +4478,11 @@ class CompetitionMission:
                 self.selected_batch = batch
             else:
                 self._select_batch(batch)
+            if same_cluster:
+                # A replacement task/context for the same pile is not a new separation budget.
+                self.disperse_attempts = previous_attempts
+                self.separation_keep_side = previous_keep_side
+                self.separation_side_attempts = previous_side_attempts
             self._mark_target_seen(target, now)
             self.cluster_signature = (
                 self.cluster_id,
@@ -4610,21 +4666,11 @@ class CompetitionMission:
             return self._start_capture_abandon(audit, stm, now, third=True)
         if audit.danger_present:
             return self._start_danger_release(audit, stm, now)
-        if self.separation_keep_side is not None:
-            side = self.separation_keep_side
-            count = audit.left_count if side == "left" else audit.right_count
-            invalid = audit.left_invalid if side == "left" else audit.right_invalid
-            if count <= 0 or invalid:
-                return self._start_capture_abandon(audit, stm, now)
-            self.cluster_keep_side = side
-            self.cluster_keep_side_count = count
+        # Use this audit's stable side. The previous accepted side tracks the
+        # streak only; it cannot override a new side after mechanical completion.
         if self.cluster_keep_side is not None:
             side = self.cluster_keep_side
-            category = audit.left_class if side == "left" else audit.right_class
-            count = audit.left_count if side == "left" else audit.right_count
-            green = audit.left_green_count if side == "left" else audit.right_green_count
-            eligible = (green > 0 or category == "green_supply") if not self.first_common_delivered else category in (MATERIAL_CLASSES | {"injured_orange"})
-            if count <= 0 or not eligible:
+            if not self._side_is_disperse_candidate(audit, side):
                 return self._start_capture_abandon(audit, stm, now)
         self._set_state(CompetitionState.DISPERSE, now)
         self._arm_disperse(stm, self.cluster_keep_side)
@@ -5477,6 +5523,23 @@ class CompetitionMission:
                 tx_policy="pause",
                 reason="mission_finished_pause",
             )
+        if self.stm_fault_waiting or (stm.fresh and stm.fault):
+            if self.first_fault_code is None:
+                self.first_fault_code = stm.fault_code
+            event = "stm_fault_wait" if not self.stm_fault_waiting else ""
+            self.stm_fault_waiting = True
+            return CompetitionOutput(
+                self.state,
+                None,
+                f"F407锁存故障{self.first_fault_code}：停止发令；排查诊断并重新初始化下位机后，按R重新配置任务，不自动续跑",
+                self.selected_batch,
+                event=event,
+                suppress_command_tx=True,
+                suppression_reason="f407_fault_wait",
+                tx_policy="f407_fault_wait",
+                reason="f407_fault_wait",
+                expected_stm_modes=self.expected_stm_modes(),
+            )
         if not stm.fresh:
             if self.state == CompetitionState.WAIT_START:
                 return CompetitionOutput(
@@ -5498,25 +5561,6 @@ class CompetitionMission:
                 reason="stm_status_stale_pause",
                 expected_stm_modes=self.expected_stm_modes(),
             )
-        if stm.fault:
-            if self.first_fault_code is None:
-                self.first_fault_code = stm.fault_code
-            event = "stm_fault_wait" if not self.stm_fault_waiting else ""
-            self.stm_fault_waiting = True
-            return CompetitionOutput(
-                self.state,
-                None,
-                f"F407报告故障码{stm.fault_code}，保留任务状态等待下位机恢复",
-                self.selected_batch,
-                event=event,
-                suppress_command_tx=True,
-                suppression_reason="f407_fault_wait",
-                tx_policy="f407_fault_wait",
-                reason="f407_fault_wait",
-                expected_stm_modes=self.expected_stm_modes(),
-            )
-        self.stm_fault_waiting = False
-
         timeout_output = self._audit_wire_timeout_output(stm, now)
         if timeout_output is not None:
             return timeout_output
