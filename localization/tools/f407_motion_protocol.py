@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MotionDebug adapter for F407 4071c71 (unchanged 0x19/0x1A protocol)."""
+"""MotionDebug adapter for F407 87aaba2 (unchanged 0x19/0x1A protocol)."""
 from __future__ import annotations
 
 import math
@@ -18,6 +18,7 @@ MOTION_CMD_STOP = 0x00
 MOTION_CMD_TURN_REL = 0x02
 MOTION_CMD_MOVE_DISTANCE = 0x03  # MOVE_BODY; retain the map's function names.
 MOTION_CMD_MOVE_FIELD = 0x04
+MOTION_CMD_RESET_ODOM = 0x05
 MOTION_VALID = 0x01
 MOTION_KEEP_HEADING = 0x02
 MOTION_FIELD_FRAME = 0x04
@@ -47,6 +48,7 @@ COMMAND_NAMES = {
     MOTION_CMD_TURN_REL: "TURN_REL",
     MOTION_CMD_MOVE_DISTANCE: "MOVE_BODY",
     MOTION_CMD_MOVE_FIELD: "MOVE_FIELD",
+    MOTION_CMD_RESET_ODOM: "RESET_ODOM",
 }
 
 
@@ -79,6 +81,11 @@ def _speed(speed_mm_s: int) -> int:
 def motion_stop_frame(sequence: int) -> bytes:
     return build_frame(MSG_MOTION_COMMAND, sequence,
                        bytes((MOTION_CMD_STOP, MOTION_VALID | MOTION_ACK_REQUIRED)) + bytes(6))
+
+
+def motion_reset_frame(sequence: int) -> bytes:
+    return build_frame(MSG_MOTION_COMMAND, sequence,
+                       bytes((MOTION_CMD_RESET_ODOM, MOTION_VALID | MOTION_ACK_REQUIRED)) + bytes(6))
 
 
 def motion_turn_frame(sequence: int, angle_deg: float, speed_mm_s: int = 300) -> bytes:

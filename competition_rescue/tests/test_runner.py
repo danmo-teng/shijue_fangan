@@ -372,7 +372,79 @@ def test_4071_fault_precedes_context_and_manual_pause() -> None:
     assert output.suppress_command_tx and output.command is None
 
 
+def test_mode51_context_priority_and_separation_rejection() -> None:
+    from dataclasses import replace
+    from state_machine import CargoBatch
+    from protocol import CMD_CARGO_AUDIT, CMD_SIDE_VALID, CargoAuditPayload
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        log = JsonlLog(root / "events.jsonl")
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        p = CompetitionPlanner(m, root/'pose.json', root/'stm.json', root/'cmd.bin', root/'diag.json', log, 20)
+        p.protocol_task = p.protocol_task_cursor = 10
+        p.protocol_action = p.protocol_action_cursor = 20
+        old = CompetitionOutput(CompetitionState.DISPERSE, CommandRequest(CMD_DISPERSE_PILE, CMD_SIDE_VALID | 1), "pending")
+        p.protocol_last_output = old
+        m.state = CompetitionState.DISPERSE
+        m.disperse_command = old.command
+        m.disperse_context = "selective"
+        m.disperse_attempts = 1
+        m.stm_fault_waiting = True
+        s = StmSnapshot(mode=51, age_ms=0, context_valid=True, task_id=10, action_id=20,
+                        accepted_command=CMD_DISPERSE_PILE, action_status=1)
+        v = VisionSnapshot(frame_sequence=100, observed_monotonic_s=1.0)
+        out = p._output_for_cycle(v, PoseSnapshot(), s, False, 1.0)
+        assert out.command.opcode == CMD_HOLD and not m.stm_fault_waiting
+        assert m.recovery_wait_active and m.disperse_attempts == 2
+        assert p.protocol_last_output is None and m.selected_batch is not None
+        p._publish(out)
+        assert p.protocol_task == 10 and p.protocol_action == 20
+        # Even an external generation change cannot allocate a new task while the budget is live.
+        m.task_generation += 1
+        p._publish(CompetitionOutput(m.state, CommandRequest(CMD_CARGO_AUDIT, audit=CargoAuditPayload()), "audit"))
+        assert p.protocol_task == 10 and p.protocol_action == 21
+        assert m.disperse_attempts == 2
+        retry = replace(s, flags=1, camera_pitch_cdeg=14000, action_status=1 | 4, rejected_action_id=21)
+        out = p._output_for_cycle(replace(v, frame_sequence=101, observed_monotonic_s=1.2),
+                                  PoseSnapshot(), retry, False, 1.2)
+        assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit_vision_frame == 0
+        p._publish(out)
+        assert p.protocol_task == 10 and p.protocol_action == 22 and m.disperse_attempts == 2
+        # Fresh same-task rejection of an unaccepted ordinary action returns to a new frame floor.
+        m.recovery_wait_active = False
+        m.recovery_task_locked = False
+        m.state = CompetitionState.DISPERSE
+        m.disperse_command_accepted = False
+        p.protocol_last_output = old
+        p.protocol_action = p.protocol_action_cursor = 25
+        rejection = StmSnapshot(mode=37, flags=1, age_ms=0, camera_pitch_cdeg=14000,
+                                context_valid=True, task_id=10, action_id=24,
+                                accepted_command=CMD_CARGO_AUDIT, action_status=1 | 4, rejected_action_id=25)
+        assert p._reconcile_separation_rejection(v, replace(rejection, task_id=11), 2.0) is None
+        assert p._reconcile_separation_rejection(v, replace(rejection, rejected_action_id=23), 2.0) is None
+        m.disperse_command_accepted = True
+        assert p._reconcile_separation_rejection(v, rejection, 2.0) is None
+        m.disperse_command_accepted = False
+        out = p._output_for_cycle(v, PoseSnapshot(), rejection, False, 2.0)
+        assert out.command.opcode == CMD_CARGO_AUDIT and m.disperse_attempts == 2
+        assert m.audit_recheck_frame_floor == 100 and p.protocol_last_output is None
+        p._publish(out)
+        assert p.protocol_task == 10 and p.protocol_action == 26
+        p.protocol_action_cursor = 0xFFFF
+        p.protocol_action_key = None
+        p.protocol_accepted = replace(rejection, action_id=0xFFFF)
+        p._publish(out)
+        assert p.protocol_task == 11 and p.protocol_action == 0 and m.disperse_attempts == 2
+        p.protocol_action_cursor = 0xFFFF
+        p.protocol_action_key = None
+        p.protocol_accepted = replace(rejection, task_id=11, action_id=0xFFF0)
+        p._publish(out)
+        assert p.protocol_task == 11 and p.protocol_action == 0  # No unconfirmed task rollover.
+
+
 def main() -> None:
+    test_mode51_context_priority_and_separation_rejection()
     test_4071_fault_precedes_context_and_manual_pause()
     test_suppressed_publish_preserves_command_file_and_sequence()
     test_relay_snapshot_parsing_and_abort_evidence()

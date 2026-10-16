@@ -103,11 +103,13 @@ mapping、relocalization和map preservation在此调试路径只读取，不额�
 本工具配套代码提交为：
 
 ```text
-4071c71f0eab3a6a360b8e3d00815bdd6ad25236
+87aaba26f2c028680027b54df08d6ba825b047e9
 ```
 
 本轮按该提交的接口修正符号；旧实测记录未确认烧录版本，需用该固件复核前进和左移。
 实际烧录提交需操作员确认，不能把Git版本当作烧录证明。
+IMU采样恢复不代表旧角度自动找回；静止时通过既有下位机调试入口发送RESET建立局部参考，
+随后由操作者发起新测试，不自动续跑旧动作。上位机兼容RESET_ODOM回执，不增加新按键。
 如需从此公开提交部署，选择已有 **MotionDebug** 配置，重新编译并烧录
 `build/MotionDebug/WWW.elf`；不要烧录NormalRun或Gamepad产物。
 该配置通过 `APP_ACTIVE_MODE_OVERRIDE=APP_MODE_MOTION_DEBUG_TASK` 选择调试模式。

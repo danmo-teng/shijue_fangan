@@ -16,6 +16,7 @@ from f407_motion_protocol import (
     crc16_modbus,
     motion_move_frame,
     motion_stop_frame,
+    motion_reset_frame,
     motion_turn_frame,
     parse_motion_status,
 )
@@ -36,6 +37,7 @@ def main() -> None:
     assert left[4:12] == bytes.fromhex("03 0B 00 00 02 76 01 2C")
     assert motion_move_frame(4, 0.0, 740, 300)[4:12] == bytes.fromhex("03 0B 02 E4 00 00 01 2C")
     assert motion_stop_frame(5)[4:12] == bytes.fromhex("00 09 00 00 00 00 00 00")
+    assert motion_reset_frame(6)[4:12] == bytes.fromhex("05 09 00 00 00 00 00 00")
     for frame in (turn, left, motion_stop_frame(5)):
         assert len(frame) == 15
         assert crc16_modbus(frame[2:12]) == int.from_bytes(frame[12:14], "little")

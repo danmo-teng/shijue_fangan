@@ -33,6 +33,9 @@ constexpr std::uint8_t kPoseOdomFresh = 1u << 4;
 constexpr std::uint8_t kPoseInsideField = 1u << 5;
 constexpr std::uint8_t kPoseT265UpdateRejected = 1u << 6;
 
+std::uint8_t t265_pose_status(bool update_accepted, std::uint8_t tracker_confidence,
+                             bool source_fresh);
+
 struct EncoderFrame {
     std::uint8_t sequence = 0;
     std::uint16_t position[3] = {0, 0, 0};

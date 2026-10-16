@@ -72,7 +72,7 @@ DEBUG_COMMAND_TURN_SIGN = -1
 DEBUG_ENCODER_TO_ROBOT_YAW_DEG = 0.0
 DEBUG_CAMERA_OFFSET_FORWARD_M = -0.020
 DEBUG_CAMERA_OFFSET_LEFT_M = -0.070
-LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@4071c71f0eab3a6a360b8e3d00815bdd6ad25236 (MotionDebug)"
+LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@87aaba26f2c028680027b54df08d6ba825b047e9 (MotionDebug)"
 MOTION_STATUS_TIMEOUT_MS = 1000
 MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="physical forward/left mm",

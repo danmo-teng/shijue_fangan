@@ -56,6 +56,15 @@ std::array<std::uint8_t, kFrameSize> build_encoder_frame(const EncoderFrame &inp
     return frame;
 }
 
+std::uint8_t t265_pose_status(bool update_accepted, std::uint8_t tracker_confidence,
+                             bool source_fresh)
+{
+    if (!source_fresh || !update_accepted || tracker_confidence == 0) {
+        return kPoseT265UpdateRejected;
+    }
+    return kPoseValid | (tracker_confidence >= 2 ? kPoseT265Good : 0);
+}
+
 std::array<std::uint8_t, kFrameSize> build_fused_pose_frame(const FusedPoseFrame &input)
 {
     std::array<std::uint8_t, kFrameSize> frame{};

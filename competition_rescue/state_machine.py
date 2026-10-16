@@ -91,6 +91,7 @@ STM_MODE_CAPTURE_RETURN_WAIT = 47
 STM_MODE_TRANSPORT_AUDIT = 48
 STM_MODE_POST_GRAB_HALF_CLOSE = 49
 STM_MODE_POST_GRAB_REGRIP = 50
+STM_MODE_RECOVERY_WAIT = 51
 
 SAFE_CORRIDOR_CLEAR = "CLEAR"
 SAFE_CORRIDOR_BLOCKED = "BLOCKED"
@@ -428,6 +429,7 @@ class CompetitionOutput:
 class CompetitionState(str, Enum):
     WAIT_START = "WAIT_START"
     WAIT_SEARCH_RECOVERY = "WAIT_SEARCH_RECOVERY"
+    RECOVERY_WAIT = "RECOVERY_WAIT"
     INITIAL_OBSERVE = "INITIAL_OBSERVE"
     INITIAL_APPROACH = "INITIAL_APPROACH"
     CAPTURE_AUDIT = "CAPTURE_AUDIT"
@@ -821,6 +823,14 @@ class CompetitionMission:
         self.invalid_backoff_tx_baseline: int | None = None
         self.invalid_backoff_command_accepted = False
         self.stm_fault_waiting = False
+        self.recovery_wait_active = False
+        self.recovery_origin_state: CompetitionState | None = None
+        self.recovery_started_s = 0.0
+        self.recovery_reference_ready = False
+        self.recovery_command: CommandRequest | None = None
+        self.recovery_abandon_requested = False
+        self.recovery_interrupted_pickup = None
+        self.recovery_task_locked = False
 
         self.motion_watch_state: CompetitionState | None = None
         self.motion_watch_started_s: float | None = None
@@ -849,6 +859,7 @@ class CompetitionMission:
         self.carried_green_core_mixed = False
         self.confirmed_delivery_destination: str | None = None
         self.delivery_completion_basis = ""
+        self.delivery_counted_for_batch = False
         self.enter_tx_baseline: int | None = None
         self.enter_command_accepted = False
 
@@ -1056,6 +1067,8 @@ class CompetitionMission:
         return pose.valid and pose.age_ms <= 250.0
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.RECOVERY_WAIT:
+            return (STM_MODE_RECOVERY_WAIT,)
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_OBSERVE:
@@ -1256,10 +1269,11 @@ class CompetitionMission:
         self.post_grab_last_wire_mode = None
         self.audit_camera_key = None
         self.transport_audit_handoff_active = False
-        self.task_generation += 1
-        self.disperse_attempts = 0
-        self.separation_keep_side = None
-        self.separation_side_attempts = 0
+        if self.disperse_attempts == 0 and not self.recovery_task_locked:
+            self.task_generation += 1
+            self.delivery_counted_for_batch = False
+            self.separation_keep_side = None
+            self.separation_side_attempts = 0
         self.deferred_cluster_ids = frozenset()
         self.deferred_cluster_bbox = None
         self.deferred_cluster_class = None
@@ -1311,7 +1325,7 @@ class CompetitionMission:
 
     def _clear_cluster_context(self, *, reset_attempts: bool) -> None:
         self._clear_disperse_side_votes()
-        if reset_attempts:
+        if reset_attempts and self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.disperse_attempts = 0
             self.separation_keep_side = None
             self.separation_side_attempts = 0
@@ -1831,7 +1845,7 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
         ready = stm.fresh and stm.claw_visible and stm.camera_pitch_cdeg == 14000
-        if stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT}:
+        if stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT, STM_MODE_RECOVERY_WAIT}:
             key = (stm.mode, ready, self.audit_epoch)
             if key != self.audit_camera_key:
                 self.audit_camera_key = key
@@ -1898,6 +1912,8 @@ class CompetitionMission:
     def _audit_wire_timeout_output(
         self, stm: StmSnapshot, now: float, *, manual_paused: bool = False
     ) -> CompetitionOutput | None:
+        if stm.mode == STM_MODE_RECOVERY_WAIT or self.recovery_wait_active:
+            return None
         audit_modes = {
             STM_MODE_CAPTURE_AUDIT,
             STM_MODE_CLUSTER_CAPTURE_AUDIT,
@@ -2837,21 +2853,21 @@ class CompetitionMission:
                 return True
         return False
 
-    def _audit_valid(self, audit: CargoAudit) -> bool:
+    def _audit_valid(self, audit: CargoAudit, *, recovery: bool = False) -> bool:
         counts = Counter(self._manifest_for_audit(audit))
-        if self.selected_batch is None:
+        if self.selected_batch is None and not recovery:
             return False
         # Opening relocation is non-empty-pile handling, not formal sorting.
         # Match F407 STASH_NONEMPTY before count/category/side checks, both
         # before grabbing and in the mode23 post-grab audit.
-        if self.selected_batch.initial_stash:
+        if self.selected_batch is not None and self.selected_batch.initial_stash:
             return audit.total_count > 0
         if (audit.left_class == "mixed_material" or audit.right_class == "mixed_material" or
                 audit.left_count + audit.right_count != audit.total_count or
                 (audit.left_count == 0) != (audit.left_class in {"", "none"}) or
                 (audit.right_count == 0) != (audit.right_class in {"", "none"})):
             return False
-        if (self.safe_sweep_reaudit_active and
+        if (not recovery and self.safe_sweep_reaudit_active and
                 self._audit_destination(audit) != self._sweep_original_destination()):
             return False
         if (
@@ -3961,7 +3977,9 @@ class CompetitionMission:
         self._clear_cluster_context(reset_attempts=True)
         self._set_state(CompetitionState.TASK_COMPLETE, now)
         self.task_complete_initial_ack = stm.acknowledged_sequence
-        self.delivery_count += 1
+        if not self.delivery_counted_for_batch:
+            self.delivery_count += 1
+            self.delivery_counted_for_batch = True
         if (
             self.carried_has_green or
             (batch is not None and "green_supply" in batch.classes)
@@ -4443,6 +4461,11 @@ class CompetitionMission:
                     reason="cluster_target_unavailable",
                 )
             same_cluster = self._same_cluster_target(target)
+            if (self.disperse_attempts > 0 or self.recovery_task_locked) and not same_cluster:
+                self._begin_return(stm, now)
+                return CompetitionOutput(self.state, self._hold(),
+                                         "当前任务预算未返中心清理，先沿原任务返中心",
+                                         reason="separation_budget_return_required")
             previous_attempts = self.disperse_attempts if same_cluster else 0
             previous_keep_side = self.separation_keep_side if same_cluster else None
             previous_side_attempts = self.separation_side_attempts if same_cluster else 0
@@ -5495,6 +5518,158 @@ class CompetitionMission:
         x, y = candidate.center_px
         return CommandRequest(CMD_APPROACH_TARGET, self._side_flags(), x, y)
 
+    def _enter_recovery_wait(self, vision: VisionSnapshot, now: float) -> None:
+        if self.recovery_wait_active:
+            return
+        self.recovery_origin_state = self.state
+        self.recovery_started_s = now
+        if self.safe_sweep_pickup is not None:
+            self.recovery_interrupted_pickup = self.safe_sweep_pickup
+        self.recovery_wait_active = True
+        self.recovery_task_locked = True
+        self.recovery_reference_ready = False
+        self.recovery_command = None
+        self.recovery_abandon_requested = False
+        self.stm_fault_waiting = False
+        self.first_fault_code = None
+        self._invalidate_audit_evidence()
+        self.audit_wire_mode = None
+        self.audit_wire_mode_started_s = None
+        self.audit_wire_pause_started_s = None
+        self.audit_recheck_frame_floor = vision.frame_sequence
+        self.post_grab_audit_active = False
+        self.post_grab_half_close_active = False
+        self.post_grab_regrip_seen = False
+        self.transport_audit_handoff_active = False
+        self.safe_sweep_reaudit_active = False
+        self.safe_zone_exit_pending = False
+        self.enter_command_accepted = False
+        self._set_state(CompetitionState.RECOVERY_WAIT, now)
+
+    def _restart_recovery_audit(self, vision: VisionSnapshot, now: float) -> None:
+        self._invalidate_audit_evidence()
+        self.recovery_command = None
+        self.audit_epoch += 1
+        self.audit_camera_key = None
+        self.audit_recheck_frame_floor = vision.frame_sequence
+        self._set_state(CompetitionState.RECOVERY_WAIT, now)
+
+    def _recovery_wait_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+        *, manual_paused: bool = False,
+    ) -> CompetitionOutput:
+        first = not self.recovery_wait_active
+        was_fault = self.stm_fault_waiting
+        self._enter_recovery_wait(vision, now)
+        if was_fault:
+            self._restart_recovery_audit(vision, now)
+            self.recovery_reference_ready = False
+        self.stm_fault_waiting = False
+        self.first_fault_code = None
+        origin = self.recovery_origin_state.value if self.recovery_origin_state else "unknown"
+        waiting = f"mode51可恢复等待{max(0.0, now-self.recovery_started_s):.0f}s，原阶段{origin}"
+        if manual_paused:
+            return CompetitionOutput(self.state, self._pause(), waiting + "；人工暂停",
+                                     self.selected_batch, reason="recovery_manual_pause")
+        if not stm.context_valid:
+            return CompetitionOutput(self.state, None, waiting + "；等待接受上下文",
+                                     self.selected_batch, suppress_command_tx=True,
+                                     suppression_reason="recovery_context_missing", reason="recovery_context_missing")
+        if not stm.claw_visible or stm.camera_pitch_cdeg != 14000:
+            if self.recovery_reference_ready or self.recovery_command is not None:
+                self._restart_recovery_audit(vision, now)
+            self.recovery_reference_ready = False
+            return CompetitionOutput(self.state, self._hold(), waiting + "；等待下位机确认新参考",
+                                     self.selected_batch, event="recovery_wait_enter" if first else "",
+                                     reason="recovery_reference_wait")
+        if not self.recovery_reference_ready:
+            self.recovery_reference_ready = True
+            self._restart_recovery_audit(vision, now)
+        if self.recovery_command is not None:
+            if self.recovery_command.opcode == CMD_RETURN_CENTER:
+                return self._return_center_output(pose, now, "恢复审核已确认空爪，沿原任务返中心")
+            return CompetitionOutput(self.state, self.recovery_command,
+                                     "等待恢复审核后的新动作被接受，不重启旧动作", self.selected_batch,
+                                     reason="recovery_action_pending")
+        if vision.observed_monotonic_s is None:
+            self._invalidate_audit_evidence()
+            return self._audit_placeholder("recovery_capture_timestamp_missing", wire_mode=STM_MODE_RECOVERY_WAIT)
+        observation = self._audit_observation_wait(vision, stm, now)
+        if observation is not None:
+            return observation
+        if vision.frame_sequence <= (self.audit_recheck_frame_floor or 0):
+            return self._audit_placeholder("recovery_new_frame_floor", wire_mode=STM_MODE_RECOVERY_WAIT)
+        audit = vision.capture_audit
+        assert audit is not None
+        manifest = self._manifest_for_audit(audit)
+        stash = bool(self.selected_batch and self.selected_batch.initial_stash)
+        destination = (self.selected_batch.destination if stash else
+                       "injury" if manifest == ("injured_orange",) else "material")
+        payload = audit.to_protocol(initial_stash=stash, destination=destination, audit_id=self.audit_id)
+        valid = self._audit_valid(audit, recovery=True)
+        signature = self._audit_signature_for_state(audit, valid, payload)
+        previously_published = self.pending_audit is not None and self.pending_audit_signature == signature
+        observed_s = vision.observed_monotonic_s if vision.observed_monotonic_s is not None else now
+        if vision.frame_sequence > (self.audit_last_frame_sequence or 0):
+            self._record_audit_frame(signature, vision.frame_sequence, observed_s)
+            self.audit_id = (self.audit_id + 1) & 0xFF
+        stable = self.audit_hits >= 3 and self._audit_stability_span_sufficient(observed_s)
+        audit = replace(audit, stable=stable)
+        payload = replace(payload, stable=stable, audit_id=self.audit_id)
+        if not stable:
+            self._clear_pending_audit()
+        else:
+            self.pending_audit = audit
+            self.pending_audit_payload = payload
+            self.pending_audit_valid = valid
+            self.pending_audit_signature = signature
+            self.pending_audit_frame_sequence = self.audit_last_frame_sequence
+            self.pending_audit_observed_s = observed_s
+            self.pending_audit_release_context = "recovery_wait"
+        confirmed = (stable and previously_published and stm.context_matches and
+                     stm.accepted_command == CMD_CARGO_AUDIT and bool(stm.action_status & 1) and
+                     stm.audit_ready and (stm.audit_valid if valid else not stm.audit_valid))
+        empty = (audit.total_count == audit.left_count == audit.right_count == 0 and
+                 audit.left_class in {"", "none"} and audit.right_class in {"", "none"} and
+                 not audit.danger_present and not audit.unknown_present and not audit.injury_mixed)
+        if confirmed and valid:
+            ids = tuple(i for i in (audit.left_stable_track_id, audit.right_stable_track_id) if i is not None)
+            self.selected_batch = CargoBatch(ids, manifest, destination, stash, audit.total_count)
+            self._clear_pending_audit()
+            self._set_state(CompetitionState.GRAB, now)
+            self.grab_initial_ack = stm.acknowledged_sequence
+            self.recovery_command = CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags())
+            return CompetitionOutput(self.state, self.recovery_command,
+                                     "恢复审核合法，重新闭爪后进入mode23复核", self.selected_batch,
+                                     event="recovery_audit_legal_regrab", reason="recovery_regrab")
+        if confirmed and empty:
+            self._clear_pending_audit()
+            self._clear_selected_batch()
+            self._clear_carried_manifest()
+            self._begin_return(stm, now)
+            self.recovery_command = CommandRequest(CMD_RETURN_CENTER, self._side_flags())
+            return replace(self._return_center_output(pose, now, "恢复审核确认空爪，返回中心"),
+                           event="recovery_audit_empty_return", reason="recovery_empty_return")
+        if confirmed and not valid and not empty and self.recovery_abandon_requested:
+            self._clear_pending_audit()
+            self.invalid_release_side = "both"
+            self.invalid_release_context = "recovery_abandon"
+            self.invalid_release_final = True
+            self._set_state(CompetitionState.INVALID_RELEASE, now)
+            self._arm_invalid_release(stm, now)
+            self.recovery_command = CommandRequest(CMD_RELEASE_BOTH, self._side_flags())
+            return CompetitionOutput(self.state, self.recovery_command,
+                                     "已明确请求放弃恢复载荷，双开后等待mode47返中心", self.selected_batch,
+                                     event="recovery_abandon_requested", reason="recovery_release_both")
+        return CompetitionOutput(
+            self.state, CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=payload,
+                                       audit_vision_frame=self.audit_last_frame_sequence or 0),
+            waiting + ("；非法非空，保留载荷继续观察，放弃须明确请求" if confirmed else
+                       f"；新审核{self.audit_hits}/3，等待STABLE/READY/VALID握手"),
+            self.selected_batch, audit, reason="recovery_audit_wait",
+            tx_policy="audit_stable_publish" if stable else "audit_unstable_publish",
+        )
+
     def step(
         self,
         vision: VisionSnapshot,
@@ -5502,6 +5677,18 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
+        if (stm.fresh and stm.mode == STM_MODE_RECOVERY_WAIT and not stm.fault and
+                self.state not in {CompetitionState.FAULT, CompetitionState.FINISHED}):
+            return self._recovery_wait_output(vision, pose, stm, now)
+        if self.recovery_wait_active and not stm.fault:
+            accepted = (stm.fresh and stm.context_valid and stm.context_matches and
+                        self.recovery_command is not None and
+                        stm.accepted_command == self.recovery_command.opcode and bool(stm.action_status & 1))
+            if not accepted:
+                return CompetitionOutput(self.state, self._hold(), "恢复等待：尚未收到新动作的实际状态交接",
+                                         self.selected_batch, reason="recovery_handoff_wait")
+            self.recovery_wait_active = False
+            self.recovery_command = None
         if self.state_started_s == 0.0:
             self.state_started_s = now
         self._update_vision_frame_period(vision)
@@ -5745,6 +5932,9 @@ class CompetitionMission:
             return self._transport_audit_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.SEARCH:
+            if self.disperse_attempts > 0 or self.recovery_task_locked:
+                self._begin_return(stm, now)
+                return self._return_center_output(pose, now, "旧任务预算待清理，先返中心再寻找")
             if self.settings.initial_stash_enabled and not self.initial_stash_done:
                 self._clear_search_recovery_context(vision, clear_carried=True)
                 self._set_state(CompetitionState.INITIAL_OBSERVE, now)
@@ -6380,6 +6570,12 @@ class CompetitionMission:
                 stm.mode == STM_MODE_SEARCH and
                 self.return_command_accepted
             ):
+                self.disperse_attempts = 0
+                self.separation_keep_side = None
+                self.separation_side_attempts = 0
+                self.separation_request_counted = False
+                self.recovery_task_locked = False
+                self._clear_cluster_context(reset_attempts=True)
                 self._set_state(CompetitionState.SEARCH, now)
                 self.return_search_mode_seen = True
                 self.return_search_frame_floor = (

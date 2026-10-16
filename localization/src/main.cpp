@@ -1206,6 +1206,8 @@ int main(int argc, char **argv)
         bool map_confidence_stable = false;
         auto map_confidence_stable_start = map_wait_start;
         auto last_pose_frame_time = map_wait_start;
+        bool have_pose_frame_number = false;
+        unsigned long long last_pose_frame_number = 0;
         omni::T265RawPose previous_debug_pose;
         bool have_previous_debug_pose = false;
         auto fail_map_startup = [&](bool frame_timeout, double wait_ms,
@@ -1290,6 +1292,17 @@ int main(int argc, char **argv)
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
+            const auto frame_number = pose_frame.get_frame_number();
+            if (have_pose_frame_number && frame_number == last_pose_frame_number) continue;
+            last_pose_frame_number = frame_number;
+            have_pose_frame_number = true;
+            const auto timestamp_domain = pose_frame.get_frame_timestamp_domain();
+            const bool host_clock_timestamp = timestamp_domain == RS2_TIMESTAMP_DOMAIN_GLOBAL_TIME ||
+                                              timestamp_domain == RS2_TIMESTAMP_DOMAIN_SYSTEM_TIME;
+            const double host_time_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            const double capture_age_ms = host_clock_timestamp
+                ? host_time_ms - pose_frame.get_timestamp() : std::numeric_limits<double>::infinity();
             const rs2_pose pose = pose_frame.get_pose_data();
             const auto t265_received = std::chrono::steady_clock::now();
             last_pose_frame_time = t265_received;
@@ -1691,14 +1704,17 @@ int main(int argc, char **argv)
                                            wheel_gate == "corner_obstacle";
                 const bool inside_field = std::fabs(fused.x_m) <= config.field_half_m &&
                                           std::fabs(fused.y_m) <= config.field_half_m;
-                if (latest_t265.tracker_confidence > 0) tx.status |= omni::kPoseValid;
-                if (latest_t265.tracker_confidence >= 2) tx.status |= omni::kPoseT265Good;
+                const double processing_age_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - t265_received).count();
+                const bool source_fresh = std::isfinite(capture_age_ms) && capture_age_ms >= -50.0 &&
+                                          capture_age_ms + processing_age_ms <= 250.0;
+                tx.status = omni::t265_pose_status(t265_update_accepted,
+                                                   latest_t265.tracker_confidence, source_fresh);
                 if (uart_fresh && config.encoder_fusion_weight > 0.0 &&
                     wheel_gate == "accepted") tx.status |= omni::kPoseWheelActive;
                 if (obstacle_gate) tx.status |= omni::kPoseObstacleGate;
                 if (uart_fresh) tx.status |= omni::kPoseOdomFresh;
                 if (inside_field) tx.status |= omni::kPoseInsideField;
-                if (!t265_update_accepted) tx.status |= omni::kPoseT265UpdateRejected;
                 const unsigned sigma_cm = std::min<unsigned>(
                     15u, static_cast<unsigned>(std::lround(filter.position_sigma_m() * 100.0)));
                 tx.confidence_and_sigma = static_cast<std::uint8_t>(

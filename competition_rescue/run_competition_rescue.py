@@ -60,6 +60,7 @@ from protocol import (  # noqa: E402
     CMD_RELEASE_RIGHT,
     CMD_RELEASE_BOTH,
     CMD_RETURN_CENTER,
+    CMD_TARGET_RIGHT,
     command_context_frame,
 )
 from capture_roi import (  # noqa: E402
@@ -84,6 +85,7 @@ from state_machine import (  # noqa: E402
     TrackedCargo,
     VisionSnapshot,
     STM_MODE_TRANSPORT_AUDIT,
+    STM_MODE_RECOVERY_WAIT,
     cargo_in_front_region,
 )
 
@@ -1242,8 +1244,9 @@ class CompetitionPlanner:
         overlay = command.opcode in {CMD_HOLD, CMD_PAUSE}
         if not overlay and self.protocol_task_generation != self.mission.task_generation:
             self.protocol_task_generation = self.mission.task_generation
-            self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
-            self.protocol_task = self.protocol_task_cursor
+            if self.mission.disperse_attempts == 0 and not self.mission.recovery_task_locked:
+                self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
+                self.protocol_task = self.protocol_task_cursor
             self.protocol_action_key = None
         # HOLD/PAUSE suspend the current action; they do not allocate a new
         # mechanical epoch. Dynamic coordinates and audit IDs are not keys.
@@ -1262,7 +1265,9 @@ class CompetitionPlanner:
             if key != self.protocol_action_key:
                 self.protocol_action_cursor = (self.protocol_action_cursor + 1) & 0xFFFF
                 self.protocol_action = self.protocol_action_cursor
-                if self.protocol_action == 0:
+                if (self.protocol_action == 0 and self.protocol_accepted is not None and
+                        self.protocol_accepted.task_id == self.protocol_task and
+                        self.protocol_accepted.action_id == 0xFFFF):
                     self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
                     self.protocol_task = self.protocol_task_cursor
                 self.protocol_action_key = key
@@ -1300,8 +1305,13 @@ class CompetitionPlanner:
         """Cancel an unaccepted request without reusing its allocated IDs."""
         owner = self.protocol_accepted
         if owner is not None:
+            same_task = self.protocol_task == owner.task_id
             self.protocol_task = owner.task_id
             self.protocol_action = owner.action_id
+            self.protocol_task_cursor = owner.task_id
+            delta = (self.protocol_action_cursor - owner.action_id) & 0xFFFF
+            if not same_task or delta >= 0x8000:
+                self.protocol_action_cursor = owner.action_id
         self.protocol_task_generation = self.mission.task_generation
         self.protocol_action_key = None
         self.protocol_source_stamp = None
@@ -1417,6 +1427,32 @@ class CompetitionPlanner:
             message="下位机明确拒绝当前扫障请求，按实际模式恢复目标查找或新帧审核",
         )
 
+    def _reconcile_separation_rejection(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        pending = self.protocol_last_output.command if self.protocol_last_output is not None else None
+        if not (pending is not None and pending.opcode in {
+                CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT, CMD_RELEASE_BOTH} and
+                stm.fresh and stm.context_valid and stm.action_status & 4 and
+                stm.task_id == self.protocol_task and stm.rejected_action_id == self.protocol_action):
+            return None
+        accepted = (stm.action_id == self.protocol_action and stm.accepted_command == pending.opcode and
+                    bool(stm.action_status & 1))
+        if (accepted or self.mission.disperse_command_accepted or
+                self.mission.invalid_release_command_accepted):
+            return None
+        self._adopt_recovery_context()
+        current = replace(stm, context_matches=True)
+        if stm.mode == 23:
+            self.mission._begin_post_grab_audit(vision, now)
+        else:
+            self.mission._begin_capture_audit(
+                vision, now, cluster_active=stm.mode in {37, 38}, recheck_pending=True,
+                recheck_context="disperse_selective")
+        return replace(self.mission._audit_output(vision, current, now),
+                       event="separation_request_rejected", reason="separation_reobserve_after_reject",
+                       message="分离/释放请求明确拒绝，不计次数，撤销等待并用新帧重新审核")
+
     def _output_for_cycle(
         self,
         vision: VisionSnapshot,
@@ -1426,6 +1462,41 @@ class CompetitionPlanner:
         now: float,
     ) -> CompetitionOutput:
         self.protocol_vision = vision
+        if (stm.fresh and stm.mode == STM_MODE_RECOVERY_WAIT and not stm.fault and
+                self.mission.state not in {CompetitionState.FAULT, CompetitionState.FINISHED}):
+            if stm.context_valid and stm.action_status & 1:
+                self.protocol_accepted = stm
+            if not self.mission.recovery_wait_active:
+                # An accepted separation may have faulted before its normal ACK was observed.
+                if (stm.context_valid and stm.task_id == self.protocol_task and
+                        stm.action_id == self.protocol_action and stm.action_status & 1):
+                    if (self.mission.state == CompetitionState.DISPERSE and
+                            self.mission.disperse_context == "selective" and
+                            self.mission.disperse_command is not None and
+                            stm.accepted_command == CMD_DISPERSE_PILE):
+                        self.mission._count_separation_acceptance(
+                            "right" if self.mission.disperse_command.flags & CMD_TARGET_RIGHT else "left")
+                    elif (self.mission.state == CompetitionState.INVALID_RELEASE and
+                          self.mission.invalid_release_context == "single_side_then_reaudit" and
+                          stm.accepted_command in {CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT}):
+                        self.mission._count_separation_acceptance(
+                            "right" if stm.accepted_command == CMD_RELEASE_LEFT else "left")
+                self._adopt_recovery_context()
+                self.command_path.unlink(missing_ok=True)
+                self.mission._enter_recovery_wait(vision, now)
+            if (stm.context_valid and stm.task_id == self.protocol_task and stm.action_status & 4 and
+                    stm.rejected_action_id == self.protocol_action and
+                    not (stm.action_id == self.protocol_action and stm.action_status & 1 and
+                         stm.accepted_command != CMD_CARGO_AUDIT)):
+                self._adopt_recovery_context()
+                self.mission._restart_recovery_audit(vision, now)
+            matches = (stm.context_valid and stm.task_id == self.protocol_task and
+                       stm.action_id == self.protocol_action)
+            recovery_vision = (replace(vision, capture_audit=None, capture_observation_valid=False)
+                               if paused and self.pause_reason != "manual" else vision)
+            return self.mission._recovery_wait_output(
+                recovery_vision, pose, replace(stm, context_matches=matches), now,
+                manual_paused=paused and self.pause_reason == "manual")
         if self.mission.stm_fault_waiting or (stm.fresh and stm.fault):
             # A cleared bit or a pending ACK must not resume the retained task after a fault.
             return self.mission.step(vision, pose, stm, now)
@@ -1437,6 +1508,10 @@ class CompetitionPlanner:
                 self.mission.state, CommandRequest(CMD_PAUSE),
                 "人工PAUSE，冻结审核握手期限直到恢复", tx_policy="pause", reason="manual_pause",
             )
+        if self.mission.recovery_wait_active:
+            matches = (stm.context_valid and stm.task_id == self.protocol_task and
+                       stm.action_id == self.protocol_action)
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         # Recovery is an observation from the MCU, not an ACK of the last
         # requested action. Handle it before context_pending/camera pause.
         if self._is_recovery_observation(stm):
@@ -1473,6 +1548,9 @@ class CompetitionPlanner:
         if reconciled is not None:
             return reconciled
         reconciled = self._reconcile_sweep_rejection(vision, pose, stm, now)
+        if reconciled is not None:
+            return reconciled
+        reconciled = self._reconcile_separation_rejection(vision, stm, now)
         if reconciled is not None:
             return reconciled
         if (stm.fresh and stm.mode in {22, 40, 50} and
@@ -1598,6 +1676,19 @@ class CompetitionPlanner:
             "detour_command_accepted": self.mission.detour_command_accepted,
             "safe_zone_exit_pending": self.mission.safe_zone_exit_pending,
             "stm_fault_waiting": self.mission.stm_fault_waiting,
+            "recovery_wait_active": self.mission.recovery_wait_active,
+            "recovery_origin_state": (self.mission.recovery_origin_state.value
+                                      if self.mission.recovery_origin_state else None),
+            "recovery_reference_ready": self.mission.recovery_reference_ready,
+            "recovery_task_locked": self.mission.recovery_task_locked,
+            "recovery_abandon_requested": self.mission.recovery_abandon_requested,
+            "recovery_reason": "F407 mode51; detailed cause is not carried by 0x17" if self.mission.recovery_wait_active else "",
+            "recovery_interrupted_pickup": (
+                {"target_id": self.mission.recovery_interrupted_pickup.target_id,
+                 "target_class": self.mission.recovery_interrupted_pickup.target_class,
+                 "target_bbox": self.mission.recovery_interrupted_pickup.target_bbox,
+                 "original_ids": sorted(self.mission.recovery_interrupted_pickup.original_ids)}
+                if self.mission.recovery_interrupted_pickup is not None else None),
             "delivery_outside_seen": self.mission.delivery_outside_seen,
             "delivery_inside_hits": self.mission.delivery_inside_hits,
             "delivery_window_frames": len(self.mission.delivery_window),

@@ -1092,7 +1092,7 @@ def test_4071_separation_evidence_and_fault_latch() -> None:
     same_pile._same_cluster_target = lambda item: True
     same_pile._cluster_approach_command = lambda vision: same_pile._hold()
     same_pile._start_cluster_approach(VisionSnapshot(), stm(), 2.5)
-    assert same_pile.task_generation == 1 and same_pile.disperse_attempts == 2
+    assert same_pile.task_generation == 0 and same_pile.disperse_attempts == 2
     assert same_pile.separation_keep_side == "left" and same_pile.separation_side_attempts == 2
     mission.state = CompetitionState.SEARCH
     output = mission.step(VisionSnapshot(), pose(), replace(stm(), fault_code=5), 3.0)
@@ -1129,7 +1129,71 @@ def test_4071_injury_pending_and_missing_audit_exit() -> None:
         assert timeout.command.opcode == CMD_ABORT
 
 
+def test_mode51_reference_audit_exits_and_budget() -> None:
+    from protocol import CMD_PAUSE
+    def setup():
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        m.state = CompetitionState.NAVIGATE
+        m.disperse_attempts = 2
+        m.delivery_count = 4
+        m.stash_has_cargo = True
+        m.stm_fault_waiting = True
+        return m
+    def status(flags=0, command=CMD_CARGO_AUDIT, mode=51):
+        return StmSnapshot(mode=mode, flags=flags, age_ms=0, camera_pitch_cdeg=14000,
+                           context_valid=True, context_matches=True, task_id=10, action_id=20,
+                           accepted_command=command, action_status=1)
+    def observe(audit, frame, now):
+        return VisionSnapshot(capture_audit=audit, frame_sequence=frame, observed_monotonic_s=now,
+                              capture_observation_valid=True)
+    def stable_audit(m, audit):
+        first = m.step(observe(audit, 1, 1.0), pose(), status(), 1.0)
+        assert first.command.opcode == CMD_HOLD and not m.stm_fault_waiting
+        assert m.delivery_count == 4 and m.stash_has_cargo and m.disperse_attempts == 2
+        paused = m._recovery_wait_output(observe(audit, 2, 1.1), pose(), status(1), 1.1, manual_paused=True)
+        assert paused.command.opcode == CMD_PAUSE
+        m.step(observe(audit, 3, 1.2), pose(), status(1), 1.2)
+        for frame, now in [(4, 1.8), (5, 1.91), (6, 2.02)]:
+            out = m.step(observe(audit, frame, now), pose(), status(1), now)
+        assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.stable
+        assert not status(1).audit_ready  # STABLE was sent before READY.
+        duplicate = m.step(observe(audit, 6, 2.02), pose(), status(1), 2.03)
+        assert m.audit_hits == 3 and duplicate.command.audit.stable
+        return m
+    single = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+    legal = stable_audit(setup(), single)
+    out = legal.step(observe(single, 6, 2.02), pose(), status(1 | 64 | 16), 2.04)
+    assert out.command.opcode == CMD_GRAB_CONFIRMED and legal.disperse_attempts == 2
+    legal.step(observe(single, 7, 2.1), pose(), status(3, CMD_GRAB_CONFIRMED, 23), 2.1)
+    assert not legal.recovery_wait_active and legal.post_grab_audit_active
+    assert legal.delivery_count == 4
+    empty = stable_audit(setup(), CargoAudit())
+    out = empty.step(observe(CargoAudit(), 6, 2.02), pose(), status(1 | 64), 2.04)
+    assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a > 0
+    empty.deferred_cluster_class = "green_supply"
+    out = empty.step(observe(CargoAudit(), 7, 2.2), pose(), status(0, CMD_RETURN_CENTER, 17), 2.2)
+    assert empty.disperse_attempts == 2
+    out = empty.step(observe(CargoAudit(), 8, 2.3), pose(), status(0, CMD_RETURN_CENTER, 3), 2.3)
+    assert empty.disperse_attempts == 0 and not empty.recovery_task_locked
+    assert empty.deferred_cluster_class == "green_supply" and empty.delivery_count == 4
+    invalid_audit = CargoAudit(left_class="green_supply", left_count=2, left_green_count=2, total_count=2)
+    invalid = stable_audit(setup(), invalid_audit)
+    out = invalid.step(observe(invalid_audit, 6, 2.02), pose(), status(1 | 64), 2.04)
+    assert out.command.opcode == CMD_CARGO_AUDIT and invalid.state == CompetitionState.RECOVERY_WAIT
+    absent = invalid.step(observe(None, 7, 40.0), pose(), status(1), 40.0)
+    assert absent.command.opcode == CMD_CARGO_AUDIT and absent.command.audit_vision_frame == 0
+    assert invalid.state != CompetitionState.FAULT and invalid.disperse_attempts == 2
+    for frame, now in [(8, 40.1), (9, 40.21), (10, 40.32)]:
+        invalid.step(observe(invalid_audit, frame, now), pose(), status(1), now)
+    invalid.recovery_abandon_requested = True
+    out = invalid.step(observe(invalid_audit, 10, 40.32), pose(), status(1 | 64), 40.33)
+    assert out.command.opcode == CMD_RELEASE_BOTH and invalid.delivery_count == 4
+
+
 def main() -> None:
+    test_mode51_reference_audit_exits_and_budget()
     test_4071_separation_evidence_and_fault_latch()
     test_4071_injury_pending_and_missing_audit_exit()
     test_start_handshake_suppresses_task_frames_until_start_clear()

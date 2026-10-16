@@ -70,6 +70,12 @@ omni::T265RawPose lens_up_pose(double yaw_deg, double timestamp_s = 0.0,
 
 void test_protocol()
 {
+    check(omni::t265_pose_status(true, 2, true) == (omni::kPoseValid | omni::kPoseT265Good),
+          "fresh accepted confidence-2 T265 pose can establish a recovery reference");
+    check(omni::t265_pose_status(true, 3, false) == omni::kPoseT265UpdateRejected &&
+          omni::t265_pose_status(false, 3, true) == omni::kPoseT265UpdateRejected &&
+          omni::t265_pose_status(true, 0, true) == omni::kPoseT265UpdateRejected,
+          "stale, rejected or lost T265 samples cannot advertise VALID/GOOD");
     omni::EncoderFrame expected;
     expected.sequence = 0xfe;
     expected.position[0] = 0x1234;
