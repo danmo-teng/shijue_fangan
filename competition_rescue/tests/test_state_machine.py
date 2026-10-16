@@ -1052,6 +1052,29 @@ def test_4071_separation_evidence_and_fault_latch() -> None:
     assert not mission._side_is_disperse_candidate(replace(mixed, class_counts=()), "left")
     assert not mission._side_is_disperse_candidate(replace(mixed, unknown_present=True), "left")
     assert not mission._side_is_disperse_candidate(replace(mixed, danger_present=True), "left")
+    vote_mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    vote_mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    greens = CargoAudit(left_class="green_supply", right_class="green_supply",
+                        left_count=2, right_count=1, left_green_count=2, right_green_count=1, total_count=3)
+    assert vote_mission._preferred_keep_side(greens) == "left"
+    vote_mission.separation_keep_side = "right"
+    tied = replace(greens, left_count=1, left_green_count=1, total_count=2)
+    assert vote_mission._preferred_keep_side(tied) == "right"
+    assert not vote_mission._should_first_green_bump(greens)
+    vote_mission._observe_disperse_side_vote(1, greens, 1.0)
+    vote_mission._observe_disperse_side_vote(2, greens, 1.09)
+    assert not vote_mission._disperse_side_vote_result()[2]
+    vote_mission._observe_disperse_side_vote(3, greens, 1.1)
+    assert vote_mission._disperse_side_vote_result()[2]
+    changed = replace(greens, right_class="core_black", right_green_count=0)
+    vote_mission._observe_disperse_side_vote(4, changed, 1.2)
+    assert not vote_mission._disperse_side_vote_result()[2]
+    vote_mission.cluster_keep_side = "left"
+    vote_mission.cluster_keep_side_count = 0
+    curved = vote_mission._start_disperse(greens, stm(mode=37), 1.3)
+    from protocol import CMD_SIDE_VALID, CMD_FIRST_GREEN_BUMP
+    assert curved.command.flags & CMD_SIDE_VALID and not curved.command.flags & CMD_FIRST_GREEN_BUMP
+    assert vote_mission.cluster_keep_side_count == 2
     mission._observe_disperse_side_vote(1, mixed, 1.0)
     mission._observe_disperse_side_vote(1, mixed, 1.2)
     mission._observe_disperse_side_vote(2, mixed, 1.05)

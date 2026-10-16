@@ -359,6 +359,48 @@ def test_detection_logging() -> None:
     assert record["detections"][0]["ground_xy_mm"] == [100.0, 200.0]
 
 
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import TrackedCargo, CargoBatch
+    polygon = ((100, 100), (1100, 100), (1100, 900), (100, 900))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    items = (
+        TrackedCargo(1, "green_supply", .9, (200, 200, 40, 40)),
+        TrackedCargo(2, "green_supply", .9, (700, 200, 40, 40)),
+        TrackedCargo(3, "core_black", .9, (50, 300, 100, 40)),
+        TrackedCargo(4, "injured_orange", .9, (0, 400, 150, 40)),
+    )
+    with patch.object(runner_module, "tracked_cargo", return_value=items):
+        view = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+            StmSnapshot(mode=38, flags=1, age_ms=0, camera_pitch_cdeg=14000), mission, 1,
+            capture_rois=rois, observed_s=1.0)
+        assert view.capture_observation_valid and view.capture_audit.total_count == 2
+        assert len([d for d in view.roi_decisions if not d["included"]]) == 2
+        dark = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+            StmSnapshot(mode=38, flags=1, age_ms=0, camera_pitch_cdeg=14000), mission, 2,
+            capture_rois=rois, capture_quality_reason="capture_image_black", observed_s=1.1)
+        assert dark.capture_audit is None
+    mixed = runner_module.audit_from_cargo((items[0], items[3]), side_by_track={1:"left",4:"left"})
+    assert mixed.left_class == "unknown" and mixed.injury_mixed and not mixed.unknown_present
+    assert mission._side_is_disperse_candidate(mixed, "left") and not mission._audit_valid(mixed)
+    assert not mission._should_first_green_bump(mixed)
+    planner = CompetitionPlanner.__new__(CompetitionPlanner)
+    planner.mission = mission
+    planner.protocol_task, planner.protocol_action = 1, 2
+    with tempfile.TemporaryDirectory() as directory:
+        planner.events_log = JsonlLog(Path(directory) / "events.jsonl")
+        output = CompetitionOutput(CompetitionState.CAPTURE_AUDIT, mission._hold(), "wait")
+        status = StmSnapshot(mode=38, age_ms=0, context_valid=True, task_id=1,
+                             action_status=4, rejected_action_id=2)
+        planner._log_capture_decision(output, view, status, 2.0, 1, 2)
+        planner._log_capture_decision(output, view, status, 2.1, 1, 2)
+        records = planner.events_log.path.read_text().splitlines()
+        assert len(records) == 1 and json.loads(records[0])['matched_rejection']
+
+
 def test_4071_fault_precedes_context_and_manual_pause() -> None:
     planner = CompetitionPlanner.__new__(CompetitionPlanner)
     planner.mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))

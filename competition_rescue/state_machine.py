@@ -258,6 +258,8 @@ class CargoAudit:
     right_stable_track_id: int | None = None
     # Full ROI class counts, independent of left/right assignment and tracks.
     class_counts: tuple[tuple[str, int], ...] = ()
+    left_class_counts: tuple[tuple[str, int], ...] = ()
+    right_class_counts: tuple[tuple[str, int], ...] = ()
 
     @property
     def signature(self) -> tuple:
@@ -333,6 +335,8 @@ class VisionSnapshot:
     safe_sweep_capture_audit: CargoAudit | None = None
     safe_sweep_observation_valid: bool | None = None
     safe_sweep_observation_reason: str = ""
+    roi_decisions: tuple[dict, ...] = ()
+    roi_elapsed_ms: float = 0.0
     safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
 
 
@@ -777,6 +781,7 @@ class CompetitionMission:
         self.disperse_side_votes: deque[tuple[int, str | None, int]] = deque(
             maxlen=2
         )
+        self.disperse_side_vote_signature: tuple | None = None
         self.disperse_side_vote_last_frame_sequence: int | None = None
         self.disperse_side_vote_last_sample_s: float | None = None
         self.target_last_seen_s: float | None = None
@@ -1681,6 +1686,7 @@ class CompetitionMission:
         keep_side: str | None,
         *,
         first_green_bump: bool = False,
+        keep_count: int = 0,
     ) -> None:
         self.separation_request_epoch += 1
         self.separation_request_counted = False
@@ -1697,9 +1703,10 @@ class CompetitionMission:
             self.disperse_command_accepted = False
             self.disperse_expected_done_mode = STM_MODE_SEARCH
             return
-        if keep_side is not None and self.cluster_keep_side_count <= 0:
+        if keep_count <= 0:
             keep_side = None
-            self.cluster_keep_side = None
+        self.cluster_keep_side = keep_side
+        self.cluster_keep_side_count = keep_count if keep_side is not None else 0
         flags = self._side_flags()
         if keep_side is not None:
             flags |= CMD_SIDE_VALID
@@ -2216,9 +2223,13 @@ class CompetitionMission:
                  self.pending_audit_release_context in {"cluster_capture", "disperse_reaudit"} and
                  vision.capture_audit is not None and
                  (vision.capture_audit.left_class, vision.capture_audit.left_count,
-                  vision.capture_audit.right_class, vision.capture_audit.right_count) !=
+                  vision.capture_audit.right_class, vision.capture_audit.right_count,
+                  vision.capture_audit.left_green_count, vision.capture_audit.right_green_count,
+                  vision.capture_audit.left_class_counts, vision.capture_audit.right_class_counts) !=
                  (self.pending_audit.left_class, self.pending_audit.left_count,
-                  self.pending_audit.right_class, self.pending_audit.right_count)) or
+                  self.pending_audit.right_class, self.pending_audit.right_count,
+                  self.pending_audit.left_green_count, self.pending_audit.right_green_count,
+                  self.pending_audit.left_class_counts, self.pending_audit.right_class_counts)) or
                 (vision.capture_audit is not None and
                  self._audit_signature_for_state(
                      vision.capture_audit, self._audit_valid(vision.capture_audit)
@@ -2898,7 +2909,21 @@ class CompetitionMission:
         count = audit.left_count if side == "left" else audit.right_count
         green = audit.left_green_count if side == "left" else audit.right_green_count
         invalid = audit.left_invalid if side == "left" else audit.right_invalid
-        if count <= 0 or invalid or category not in MATERIAL_CLASSES | {"mixed_material", "injured_orange"}:
+        composition = dict(audit.left_class_counts if side == "left" else audit.right_class_counts)
+        known_mixture = (
+            category == "unknown" and count > 1 and
+            sum(composition.values()) == count and
+            set(composition) <= {"green_supply", "core_black", "injured_orange"} and
+            all(value > 0 for value in composition.values()) and
+            composition.get("green_supply", 0) == green
+        )
+        if count <= 0 or ((invalid or category == "unknown") and not known_mixture):
+            return False
+        if known_mixture:
+            if self.selected_batch.destination == "injury":
+                return self.first_common_delivered and composition.get("injured_orange", 0) > 0
+            return green > 0
+        if category not in MATERIAL_CLASSES | {"mixed_material", "injured_orange"}:
             return False
         if category == "mixed_material":
             # Local ROI evidence may guide separation, but never changes the wire signature.
@@ -2929,18 +2954,20 @@ class CompetitionMission:
             return "left"
         if right_green > 0 and left_green == 0:
             return "right"
-        if left_green > 0 and right_green > 0:
-            if left_green != right_green:
-                return "left" if left_green < right_green else "right"
-            return "left"
-        if left_nonempty:
-            return "left"
-        if right_nonempty:
-            return "right"
-        return None
+        if left_green != right_green:
+            return "left" if left_green > right_green else "right"
+        locked = self.cluster_keep_side or self.separation_keep_side
+        if locked in {"left", "right"}:
+            return locked
+        left_other = audit.left_count - left_green
+        right_other = audit.right_count - right_green
+        if left_other != right_other:
+            return "left" if left_other < right_other else "right"
+        return "left"
 
     def _should_first_green_bump(self, audit: CargoAudit) -> bool:
         if (
+            self._preferred_keep_side(audit) is not None or
             self.first_common_delivered or
             self.first_green_bump_used or
             self.disperse_attempts > 0 or
@@ -3003,6 +3030,7 @@ class CompetitionMission:
 
     def _clear_disperse_side_votes(self) -> None:
         self.disperse_side_votes.clear()
+        self.disperse_side_vote_signature = None
         self.disperse_side_vote_last_frame_sequence = None
         self.disperse_side_vote_last_sample_s = None
 
@@ -3015,6 +3043,11 @@ class CompetitionMission:
         ):
             return
         self.disperse_side_vote_last_frame_sequence = frame_sequence
+        signature = self._audit_signature_for_state(audit, self._audit_valid(audit))
+        if signature != self.disperse_side_vote_signature:
+            self.disperse_side_votes.clear()
+            self.disperse_side_vote_last_sample_s = None
+        self.disperse_side_vote_signature = signature
         keep_side = self._preferred_keep_side(audit)
         keep_count = {
             "left": audit.left_count,
@@ -4664,8 +4697,12 @@ class CompetitionMission:
             side = self.cluster_keep_side
             if not self._side_is_disperse_candidate(audit, side):
                 return self._start_capture_abandon(audit, stm, now)
+        self.cluster_keep_side_count = (
+            audit.left_count if self.cluster_keep_side == "left" else
+            audit.right_count if self.cluster_keep_side == "right" else 0
+        )
         self._set_state(CompetitionState.DISPERSE, now)
-        self._arm_disperse(stm, self.cluster_keep_side)
+        self._arm_disperse(stm, self.cluster_keep_side, keep_count=self.cluster_keep_side_count)
         return CompetitionOutput(
             self.state,
             self.disperse_command,

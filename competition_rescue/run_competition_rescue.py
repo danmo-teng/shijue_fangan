@@ -390,6 +390,8 @@ def audit_from_cargo(
     )
     return CargoAudit(
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
+        left_class_counts=tuple(sorted(Counter(item.class_name for item in left).items())),
+        right_class_counts=tuple(sorted(Counter(item.class_name for item in right).items())),
         left_class=left_name,
         right_class=right_name,
         left_count=len(left),
@@ -402,7 +404,7 @@ def audit_from_cargo(
         ),
         total_count=len(visible),
         danger_present=has_danger,
-        unknown_present="unknown" in all_names,
+        unknown_present=bool(all_names - {"green_supply", "core_black", "injured_orange", "danger_cyan"}) or bool(unassigned),
         injury_mixed=injury_mixed,
         left_invalid=left_invalid,
         right_invalid=right_invalid,
@@ -617,6 +619,7 @@ def make_vision_snapshot(
     rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )
+    roi_started = time.monotonic()
     capture_items: list[TrackedCargo] = []
     capture_side_by_track: dict[int, str] = {}
     capture_enabled = (
@@ -629,32 +632,30 @@ def make_vision_snapshot(
     image_observation_valid = capture_observation_valid
     image_quality_reason = capture_quality_reason
     target_quality: dict[int, str] = {}
+    roi_decisions = []
     if capture_enabled:
         for item in tracked_cargo(tracks, None):
             if not item.visible:
                 continue
             x, y, width, height = item.bbox
-            if (
-                x <= 0 or y <= 0 or
-                x + width >= IMAGE_WIDTH - 1 or
-                y + height >= IMAGE_HEIGHT - 1
-            ) and bbox_capture_roi_overlap_ratio(item.bbox, rois.overall) > 0.0:
+            overlap = bbox_capture_roi_overlap_ratio(item.bbox, rois.overall)
+            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60)
+            truncated = (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
+                         y + height >= IMAGE_HEIGHT - 1)
+            reason = "included" if included else (
+                "claw_target_truncated_outside_roi" if truncated else "outside_capture_roi")
+            roi_decisions.append({"track_id": item.track_id, "class": item.class_name,
+                                  "overlap": overlap, "included": included, "reason": reason})
+            if not included:
+                continue
+            # Only a qualifying in-claw truncated object affects load quality.
+            # Outside/partial ROI detections cannot veto other clear objects.
+            if truncated:
                 capture_observation_valid = False
                 capture_quality_reason = "claw_target_truncated"
                 target_quality[item.track_id] = capture_quality_reason
-            # Keep the ROI/edge checks, but use the same moderate inclusion
-            # threshold for green cargo as for the other transport classes.
+                roi_decisions[-1]["reason"] = capture_quality_reason
             capture_overlap = 0.60
-            if not bbox_in_capture_roi(
-                item.bbox,
-                rois.overall,
-                minimum_overlap_ratio=capture_overlap,
-            ):
-                if bbox_capture_roi_overlap_ratio(item.bbox, rois.overall) >= 0.20:
-                    capture_observation_valid = False
-                    capture_quality_reason = "claw_target_partial_roi"
-                    target_quality[item.track_id] = capture_quality_reason
-                continue
             capture_items.append(item)
             capture_side = capture_side_for_bbox(
                 item.bbox,
@@ -673,6 +674,7 @@ def make_vision_snapshot(
                 capture_quality_reason = "claw_targets_occluded"
                 target_quality[item.track_id] = capture_quality_reason
                 target_quality[other.track_id] = capture_quality_reason
+    roi_elapsed_ms = (time.monotonic() - roi_started) * 1000.0
     selected = mission.selected_batch
     if selected is not None and selected.initial_stash and capture and image_observation_valid:
         # A detected nonempty pile is enough for opening relocation. Object
@@ -814,6 +816,8 @@ def make_vision_snapshot(
         carried_bbox_reference,
     )
     return VisionSnapshot(
+        roi_decisions=tuple(roi_decisions),
+        roi_elapsed_ms=roi_elapsed_ms,
         frame_sequence=frame_sequence,
         observed_monotonic_s=time.monotonic() if observed_s is None else observed_s,
         cargo=cargo,
@@ -1892,6 +1896,45 @@ class CompetitionPlanner:
             "command": command,
         })
 
+    def _log_capture_decision(self, output, vision, stm, now: float, pending_task: int, pending_action: int) -> None:
+        audit = output.audit or vision.capture_audit or self.mission.pending_audit
+        wire = output.command.audit if output.command else None
+        signature = wire.semantic_signature if wire else (
+            self.mission._audit_payload(audit).semantic_signature if audit else None)
+        roi_reasons = tuple((item["class"], item["included"], item["reason"])
+                            for item in vision.roi_decisions)
+        matched_rejection = bool(stm.fresh and stm.context_valid and bool(stm.action_status & 4) and
+                                 stm.task_id == pending_task and
+                                 stm.rejected_action_id == pending_action)
+        key = (output.state, output.reason, signature, roi_reasons,
+               self.mission.cluster_keep_side, self.mission.disperse_context,
+               self.mission.disperse_attempts, matched_rejection,
+               audit.left_class_counts if audit else (), audit.right_class_counts if audit else (),
+               bool(wire and wire.stable))
+        if (key == getattr(self, "last_capture_log_key", None) or
+                now - getattr(self, "last_capture_log_s", -math.inf) < 0.5):
+            return
+        self.last_capture_log_key, self.last_capture_log_s = key, now
+        self.events_log.write("capture_decision", {
+            "state": output.state.value, "reason": output.reason,
+            "frame": vision.frame_sequence, "observed_monotonic_s": vision.observed_monotonic_s,
+            "camera_pitch_cdeg": stm.camera_pitch_cdeg, "stm_age_ms": stm.age_ms,
+            "roi": vision.roi_decisions, "observation_valid": vision.capture_observation_valid,
+            "observation_reason": vision.capture_observation_reason,
+            "left_composition": audit.left_class_counts if audit else (),
+            "right_composition": audit.right_class_counts if audit else (),
+            "left_green": audit.left_green_count if audit else 0,
+            "right_green": audit.right_green_count if audit else 0,
+            "wire_signature": signature, "audit_hits": self.mission.audit_hits,
+            "stable": bool(wire and wire.stable), "keep_side": self.mission.cluster_keep_side,
+            "keep_count": self.mission.cluster_keep_side_count,
+            "separation_branch": self.mission.disperse_context,
+            "separation_attempts": self.mission.disperse_attempts,
+            "task_id": self.protocol_task, "action_id": self.protocol_action,
+            "rejected_action_id": stm.rejected_action_id, "matched_rejection": matched_rejection,
+            "request_task_id": pending_task, "request_action_id": pending_action,
+        })
+
     def _run(self) -> None:
         try:
             while self.running:
@@ -1901,6 +1944,7 @@ class CompetitionPlanner:
                 with self.lock:
                     vision = self.latest_vision
                     paused = self.paused
+                pending_task, pending_action = self.protocol_task, self.protocol_action
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
                 self._update_grab_waitnav_diagnostic(
                     output, pose, stm, started
@@ -1909,6 +1953,7 @@ class CompetitionPlanner:
                     output, vision, pose, stm, started
                 )
                 self._log_command_tx_suppression(output)
+                self._log_capture_decision(output, vision, stm, started, pending_task, pending_action)
                 self._publish(output)
                 state_changed = output.state != self.last_state
                 if state_changed:
@@ -1918,7 +1963,10 @@ class CompetitionPlanner:
                         "message": output.message,
                     })
                     self.last_state = output.state
-                if output.event:
+                event_key = (output.state, output.event, output.reason)
+                if output.event and (state_changed or event_key != getattr(self, "last_output_event_key", None) or
+                                     started - getattr(self, "last_output_event_s", -math.inf) >= 2.0):
+                    self.last_output_event_key, self.last_output_event_s = event_key, started
                     event_data = {
                         "state": output.state.value,
                         "message": output.message,
@@ -2324,6 +2372,8 @@ def main() -> int:
     started = time.monotonic()
     camera_recovery_pending = False
     next_camera_retry = started + 1.0
+    display_elapsed_ms = 0.0
+    log_write_elapsed_ms = 0.0
     next_detection_log = started
 
     def stop(received_signal, _frame):
@@ -2500,7 +2550,9 @@ def main() -> int:
                     "action": "keep_task_alive_and_hold",
                 })
                 continue
+            fetch_started = time.monotonic()
             packet = camera.latest()
+            fetch_ms = (time.monotonic() - fetch_started) * 1000.0
             if packet is not None:
                 if packet.frame_id != last_packet_id:
                     last_packet_id = packet.frame_id
@@ -2532,6 +2584,7 @@ def main() -> int:
                             )
                     else:
                         detections, timing = detector.infer(packet.image)
+                    snapshot_started = time.monotonic()
                     # Display exactly the image that produced latest_vision,
                     # not a newer camera frame underneath older ROI/results.
                     latest_image = packet.image.copy()
@@ -2591,8 +2644,14 @@ def main() -> int:
                             latest_vision.carried_reference_bboxes
                         )
                     planner.set_vision(latest_vision)
+                    timing.update({"fetch": fetch_ms, "roi": latest_vision.roi_elapsed_ms,
+                                   "snapshot": (time.monotonic() - snapshot_started) * 1000.0,
+                                   "capture_to_publish": (time.monotonic() - latest_vision.observed_monotonic_s) * 1000.0,
+                                   "previous_display": display_elapsed_ms,
+                                   "previous_log_write": log_write_elapsed_ms})
                     log_now = time.monotonic()
                     if log_now >= next_detection_log:
+                        log_write_started = time.monotonic()
                         detection_log.write(
                             "frame",
                             detection_log_record(
@@ -2602,6 +2661,7 @@ def main() -> int:
                                 latest_vision.cargo,
                             ),
                         )
+                        log_write_elapsed_ms = (time.monotonic() - log_write_started) * 1000.0
                         next_detection_log = log_now + 1.0 / args.detection_log_fps
                     inference_frames += 1
                     inference_total += 1
@@ -2612,6 +2672,7 @@ def main() -> int:
             else:
                 current_fps = inference_frames / max(now - fps_started, 1e-6)
             if display_enabled and now >= display_next:
+                display_started = time.monotonic()
                 display_next = now + 1.0 / args.display_fps
                 output, pose, current_stm = planner.snapshot()
                 if latest_image is None:
@@ -2635,6 +2696,7 @@ def main() -> int:
                     )
                     cv2.imshow(WINDOW_NAME, shown)
                     key = cv2.waitKey(1) & 0xFF
+                    display_elapsed_ms = (time.monotonic() - display_started) * 1000.0
                     if key in (ord("q"), ord("Q")):
                         exit_reason = "user_q"
                         running = False
