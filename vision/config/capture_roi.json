@@ -3,7 +3,7 @@
   "image_width": 1280,
   "image_height": 1024,
   "point_semantics": "bbox_bottom_center_and_overlap_ratio",
-  "minimum_overlap_ratio": 0.8,
+  "minimum_overlap_ratio": 0.6,
   "polygon_px": [
     [
       929,

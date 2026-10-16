@@ -39,7 +39,7 @@ CMD_RETURN_CENTER = 0x08
 CMD_APPROACH_TARGET = 0x09
 CMD_HOLD = 0x0A
 CMD_YIELD_BACKOFF = 0x0B
-CMD_ESCAPE_MANEUVER = 0x0C
+CMD_ESCAPE_MANEUVER = 0x0C  # Retired; reserved for historical logs, never send.
 CMD_RELEASE_LEFT = 0x0D
 CMD_RELEASE_RIGHT = 0x0E
 CMD_RELEASE_BOTH = 0x0F
@@ -338,20 +338,6 @@ def yield_backoff_frame(sequence: int, distance_m: float) -> bytes:
         CMD_VALID,
         -max(0, min(32767, round(distance_m * 1000.0))),
         0,
-    )
-
-
-def escape_maneuver_frame(
-    sequence: int,
-    spin_deg: int,
-    lateral_m: float,
-) -> bytes:
-    return mission_frame(
-        sequence,
-        CMD_ESCAPE_MANEUVER,
-        CMD_VALID,
-        max(-32768, min(32767, int(spin_deg))),
-        max(-32768, min(32767, round(lateral_m * 1000.0))),
     )
 
 

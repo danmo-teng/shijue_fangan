@@ -980,25 +980,25 @@ def test_return_center_sends_zero_until_search() -> None:
     mission = CompetitionMission(
         CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)
     )
-    mission._set_state(CompetitionState.RETURN_CENTER, 0.0)
-    output = mission.step(
-        VisionSnapshot(), PoseSnapshot(True, 0.60, 0.0, 180.0, 5.0),
-        StmSnapshot(17, 0, 5.0, 0, 0), 0.1,
-    )
-    assert output.state == CompetitionState.RETURN_CENTER
-    assert output.command and output.command.opcode == CMD_RETURN_CENTER
-    assert output.command.arg_a == 600
-    output = mission.step(
-        VisionSnapshot(), PoseSnapshot(True, 0.01, 0.0, 180.0, 5.0),
-        StmSnapshot(17, 0, 5.0, 0, 0), 0.2,
-    )
-    assert output.state == CompetitionState.RETURN_CENTER
+    initial = StmSnapshot(mode=17, age_ms=0, context_valid=True,
+                          context_matches=True, task_id=1, action_id=2,
+                          accepted_command=CMD_RETURN_CENTER, action_status=1)
+    mission._begin_return(initial, 0.0)
+    output = mission.step(VisionSnapshot(), pose(0.60, 0.0), initial, 0.1)
+    assert output.command and output.command.arg_a == 600
+    output = mission.step(VisionSnapshot(), pose(0.08, 0.0), initial, 0.2)
     assert output.command and output.command.arg_a == 0
-    output = mission.step(
-        VisionSnapshot(), PoseSnapshot(True, 0.0, 0.0, 180.0, 5.0),
-        StmSnapshot(3, 0, 5.0, 0, 0), 0.3,
-    )
+    # Jitter across the center and outside the arrival radius cannot restart RETURN.
+    output = mission.step(VisionSnapshot(), pose(-0.12, 0.0), initial, 0.3)
+    assert output.command and output.command.arg_a == 0
+    assert output.command.aux == 13500
+    output = mission.step(VisionSnapshot(), pose(), replace(initial, mode=3, age_ms=1000), 0.4)
+    assert mission.state == CompetitionState.RETURN_CENTER
+    output = mission.step(VisionSnapshot(), pose(), replace(initial, mode=3), 0.5)
     assert output.state == CompetitionState.SEARCH
+    assert output.command.opcode == CMD_HOLD
+    mission._begin_return(initial, 0.6)
+    assert not mission.return_arrival_latched
 
 
 def test_delivery_requires_outside_to_inside_transition() -> None:
@@ -1057,7 +1057,6 @@ def test_4071_separation_evidence_and_fault_latch() -> None:
     mission._observe_disperse_side_vote(2, mixed, 1.05)
     assert not mission._disperse_side_vote_result()[2]
     mission._observe_disperse_side_vote(3, mixed, 1.1)
-    mission._observe_disperse_side_vote(4, mixed, 1.2)
     assert mission._disperse_side_vote_result() == ("left", 2, True)
     swapped = replace(mixed, left_class="", left_count=0, left_green_count=0,
                       right_class="mixed_material", right_count=2, right_green_count=1)
@@ -1078,11 +1077,11 @@ def test_4071_separation_evidence_and_fault_latch() -> None:
     mission._count_separation_acceptance("right")
     mission._count_separation_acceptance("right")
     assert mission.disperse_attempts == 2 and mission.separation_side_attempts == 1
-    mission.separation_request_counted = False
-    mission._count_separation_acceptance("left")
-    assert mission.disperse_attempts == 3
+    output = mission._start_disperse(swapped, stm(mode=37), 2.2)
+    assert output.command.opcode == CMD_RELEASE_BOTH
+    assert mission.disperse_attempts == 2
     legal = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
-    assert mission._audit_valid(legal)  # The third result is still eligible for transport.
+    assert mission._audit_valid(legal)  # A legal result after the second attempt remains eligible for transport.
     same_pile = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     same_pile.disperse_attempts = 2
     same_pile.separation_keep_side = "left"
@@ -1155,12 +1154,12 @@ def test_mode51_reference_audit_exits_and_budget() -> None:
         paused = m._recovery_wait_output(observe(audit, 2, 1.1), pose(), status(1), 1.1, manual_paused=True)
         assert paused.command.opcode == CMD_PAUSE
         m.step(observe(audit, 3, 1.2), pose(), status(1), 1.2)
-        for frame, now in [(4, 1.8), (5, 1.91), (6, 2.02)]:
+        for frame, now in [(4, 1.8), (5, 1.91)]:
             out = m.step(observe(audit, frame, now), pose(), status(1), now)
         assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.stable
         assert not status(1).audit_ready  # STABLE was sent before READY.
-        duplicate = m.step(observe(audit, 6, 2.02), pose(), status(1), 2.03)
-        assert m.audit_hits == 3 and duplicate.command.audit.stable
+        duplicate = m.step(observe(audit, 5, 1.91), pose(), status(1), 2.03)
+        assert m.audit_hits == 2 and duplicate.command.audit.stable
         return m
     single = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
     legal = stable_audit(setup(), single)

@@ -642,11 +642,9 @@ def make_vision_snapshot(
                 capture_observation_valid = False
                 capture_quality_reason = "claw_target_truncated"
                 target_quality[item.track_id] = capture_quality_reason
-            capture_overlap = (
-                0.60
-                if stm.mode == STM_MODE_TRANSPORT_AUDIT or item.class_name in {"core_black", "injured_orange"}
-                else 0.80
-            )
+            # Keep the ROI/edge checks, but use the same moderate inclusion
+            # threshold for green cargo as for the other transport classes.
+            capture_overlap = 0.60
             if not bbox_in_capture_roi(
                 item.bbox,
                 rois.overall,
@@ -669,8 +667,8 @@ def make_vision_snapshot(
     capture = tuple(capture_items)
     for index, item in enumerate(capture):
         for other in capture[index + 1:]:
-            if (bbox_overlap_ratio(item.bbox, other.bbox) >= 0.60 or
-                    bbox_overlap_ratio(other.bbox, item.bbox) >= 0.60):
+            if (bbox_overlap_ratio(item.bbox, other.bbox) >= 0.85 or
+                    bbox_overlap_ratio(other.bbox, item.bbox) >= 0.85):
                 capture_observation_valid = False
                 capture_quality_reason = "claw_targets_occluded"
                 target_quality[item.track_id] = capture_quality_reason
@@ -1645,7 +1643,6 @@ class CompetitionPlanner:
             "message": output.message,
             "event": output.event,
             "motion_expected": output.motion_expected,
-            "stuck_phase": output.stuck_phase,
             "command_tx_suppressed": output.suppress_command_tx,
             "suppression_reason": output.suppression_reason,
             "upper_state": output.state.value,
@@ -1674,7 +1671,6 @@ class CompetitionPlanner:
             "detour_execution_seen": self.mission.detour_execution_seen,
             "detour_tx_baseline": self.mission.detour_tx_baseline,
             "detour_command_accepted": self.mission.detour_command_accepted,
-            "safe_zone_exit_pending": self.mission.safe_zone_exit_pending,
             "stm_fault_waiting": self.mission.stm_fault_waiting,
             "recovery_wait_active": self.mission.recovery_wait_active,
             "recovery_origin_state": (self.mission.recovery_origin_state.value

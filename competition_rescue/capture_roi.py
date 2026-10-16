@@ -124,7 +124,7 @@ def save_capture_rois(path: Path, rois: CaptureRois) -> None:
         "image_width": IMAGE_WIDTH,
         "image_height": IMAGE_HEIGHT,
         "point_semantics": "bbox_bottom_center_and_overlap_ratio",
-        "minimum_overlap_ratio": 0.80,
+        "minimum_overlap_ratio": 0.60,
         "polygon_px": [[x, y] for x, y in overall],
         "left_polygon_px": [[x, y] for x, y in left],
         "right_polygon_px": [[x, y] for x, y in right],
@@ -157,7 +157,7 @@ def bbox_capture_roi_overlap_ratio(
 def bbox_overlaps_capture_roi(
     bbox: tuple[int, int, int, int],
     polygon: tuple[tuple[int, int], ...],
-    minimum_ratio: float = 0.80,
+    minimum_ratio: float = 0.60,
 ) -> bool:
     return bbox_capture_roi_overlap_ratio(bbox, polygon) > minimum_ratio
 
@@ -182,7 +182,7 @@ def capture_side_for_bbox(
     rois: CaptureRois,
     *,
     require_full_overlap: bool = False,
-    minimum_overlap_ratio: float = 0.80,
+    minimum_overlap_ratio: float = 0.60,
 ) -> str | None:
     if not bbox_in_capture_roi(
         bbox,
@@ -206,7 +206,7 @@ def bbox_in_capture_roi(
     polygon: tuple[tuple[int, int], ...],
     *,
     require_full_overlap: bool = False,
-    minimum_overlap_ratio: float = 0.80,
+    minimum_overlap_ratio: float = 0.60,
 ) -> bool:
     required_ratio = 1.0 if require_full_overlap else minimum_overlap_ratio
     return (
