@@ -1,5 +1,22 @@
 # F407 MG310 与完整比赛上位机同步
 
+## 2026-10-17：cef1d9c 初次空爪慢爬、普通多件分离及日志隔离
+
+上位机基于c84d77e增量修改，配套下位机功能提交`cef1d9ccc5bac3d4106fcce418899aad6ec61c63`。
+交接文件`docs/UPPER_C84D77E_CEF1D9C_SYNC_20261017.md`在下位机后续文档提交中，已读取核对；没有回套旧补丁。
+
+- capture_decision只对当前命令自带payload记录线上签名，否则为null并保留raw_audit；不调用依赖selected_batch的编码函数。合法命令先发布，诊断异常局部隔离，diagnostic_error_count累加、错误提示每2秒限频，真正规划/发布异常仍保留原处理。
+- 初次mode21/38真实纯空爪（非抓后/分离复核、尚未实际分离）保持CAPTURE_AUDIT，发送不同新帧及两帧STABLE，不创建recheck_empty_to_search。F407普通/聚集慢爬均200mm/s、同目标累计最多300mm；上位机不计时推算行程或重发APP重置额度。发现物块后正常审核，原15/17秒出口保持。
+- 普通mode21多件且有可靠候选时参与现有两帧侧票，走disperse_reaudit非聚集握手，READY之后发SIDE_VALID曲线分离；不等待mode37。绿色最多侧、侧票签名、pending组成检查及keep_count保留。
+- mode21/35/37/38中，具有不同track、不同框、至少两次检测命中的已知未截断目标，可保留真实多件重叠审核；最终动作仍要求不同采集帧、间隔100ms及READY。mode23/45/48、未知、未确认目标及截断仍限制；截断缺陷优先于重叠，不被覆盖。INITIAL_STASH真实非空及mode43角色保留。
+- 单帧复用ROI比例和overall纳入结果；诊断JSON使用实际事件变化/周期判据，不再被重复output.event每周期触发。原ROI明细、采集时间、阶段耗时保留。
+
+保留两帧、两次分离、10°夹紧、橙色23→49→23→50→22、mode48/51、缺pending出口、投送计数、TASK_COMPLETE、T265外参/纯定位及串口配对。125/130°无新增等待，140°250ms准备保持；核心额外50mm仍180mm/s，轮速/航向/视觉PID不改。
+
+实际修改文件：competition_rescue/{run_competition_rescue.py,state_machine.py,capture_roi.py,README.md,tests/test_runner.py,tests/test_state_machine.py}、rescue_map/field_model.py及本文。必要检查复用原测试文件，覆盖空批次日志/写盘异常不中断发布、初次空爪、普通混合侧曲线、分阶段重叠及截断优先级、伤员pending与mode51；没有新测试程序或实车动作。
+
+部署：停止旧上位机进程，更新codex/gamepad-teleop后从原桌面比赛入口重启加载ROI；无需重编译定位程序。下位机烧录cef1d9c或包含其功能的后续版本的NormalRun（build/NormalRun/WWW.elf）。expected_lower_firmware只是配套基线，实际烧录提交/模式仍须操作者确认，编译成功不代表已烧录。原日志和用户文件保留。
+
 ## 2026-10-16：4385b0d ROI与曲线分离增量
 
 上位机以`81879e0`为基线；核对下位机`4385b0d66bd305b1f4a16b3ae89982e178a049d1`的

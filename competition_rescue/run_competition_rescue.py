@@ -639,7 +639,7 @@ def make_vision_snapshot(
                 continue
             x, y, width, height = item.bbox
             overlap = bbox_capture_roi_overlap_ratio(item.bbox, rois.overall)
-            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60)
+            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60, overlap_ratio=overlap)
             truncated = (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
                          y + height >= IMAGE_HEIGHT - 1)
             reason = "included" if included else (
@@ -661,6 +661,7 @@ def make_vision_snapshot(
                 item.bbox,
                 rois,
                 minimum_overlap_ratio=capture_overlap,
+                overall_included=included,
             )
             capture_side_by_track[item.track_id] = capture_side or (
                 "left" if item.center_px[0] <= IMAGE_WIDTH // 2 else "right"
@@ -670,10 +671,21 @@ def make_vision_snapshot(
         for other in capture[index + 1:]:
             if (bbox_overlap_ratio(item.bbox, other.bbox) >= 0.85 or
                     bbox_overlap_ratio(other.bbox, item.bbox) >= 0.85):
+                known_pair = (
+                    stm.mode in {21, 35, 37, 38} and
+                    item.track_id != other.track_id and item.bbox != other.bbox and
+                    item.hits >= 2 and other.hits >= 2 and
+                    item.class_name in {"green_supply", "core_black", "injured_orange"} and
+                    other.class_name in {"green_supply", "core_black", "injured_orange"} and
+                    not target_quality.get(item.track_id) and not target_quality.get(other.track_id)
+                )
+                if known_pair:
+                    continue  # Real multi-object evidence; the two-frame audit still gates actions.
                 capture_observation_valid = False
-                capture_quality_reason = "claw_targets_occluded"
-                target_quality[item.track_id] = capture_quality_reason
-                target_quality[other.track_id] = capture_quality_reason
+                if capture_quality_reason != "claw_target_truncated":
+                    capture_quality_reason = "claw_targets_occluded"
+                target_quality.setdefault(item.track_id, "claw_targets_occluded")
+                target_quality.setdefault(other.track_id, "claw_targets_occluded")
     roi_elapsed_ms = (time.monotonic() - roi_started) * 1000.0
     selected = mission.selected_batch
     if selected is not None and selected.initial_stash and capture and image_observation_valid:
@@ -1633,6 +1645,7 @@ class CompetitionPlanner:
             "audit": None if output.command.audit is None else asdict(output.command.audit),
         }
         write_atomic_json(self.diagnostics_path, {
+            "diagnostic_error_count": getattr(self, "diagnostic_error_count", 0),
             "schema_version": 1,
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "protocol_context": {
@@ -1896,11 +1909,25 @@ class CompetitionPlanner:
             "command": command,
         })
 
+    def _record_diagnostic_error(self, error: Exception, now: float) -> None:
+        self.diagnostic_error_count = getattr(self, "diagnostic_error_count", 0) + 1
+        if now - getattr(self, "last_diagnostic_error_s", -math.inf) >= 2.0:
+            self.last_diagnostic_error_s = now
+            try:
+                print(f"diagnostic_error count={self.diagnostic_error_count}: {error}", file=sys.stderr)
+            except Exception:
+                pass  # Failure to report diagnostics must not stop control.
+
     def _log_capture_decision(self, output, vision, stm, now: float, pending_task: int, pending_action: int) -> None:
+        try:
+            self._write_capture_decision(output, vision, stm, now, pending_task, pending_action)
+        except Exception as error:
+            self._record_diagnostic_error(error, now)
+
+    def _write_capture_decision(self, output, vision, stm, now: float, pending_task: int, pending_action: int) -> None:
         audit = output.audit or vision.capture_audit or self.mission.pending_audit
         wire = output.command.audit if output.command else None
-        signature = wire.semantic_signature if wire else (
-            self.mission._audit_payload(audit).semantic_signature if audit else None)
+        signature = wire.semantic_signature if wire else None
         roi_reasons = tuple((item["class"], item["included"], item["reason"])
                             for item in vision.roi_decisions)
         matched_rejection = bool(stm.fresh and stm.context_valid and bool(stm.action_status & 4) and
@@ -1925,6 +1952,7 @@ class CompetitionPlanner:
             "right_composition": audit.right_class_counts if audit else (),
             "left_green": audit.left_green_count if audit else 0,
             "right_green": audit.right_green_count if audit else 0,
+            "raw_audit": asdict(audit) if audit else None,
             "wire_signature": signature, "audit_hits": self.mission.audit_hits,
             "stable": bool(wire and wire.stable), "keep_side": self.mission.cluster_keep_side,
             "keep_count": self.mission.cluster_keep_side_count,
@@ -1946,120 +1974,124 @@ class CompetitionPlanner:
                     paused = self.paused
                 pending_task, pending_action = self.protocol_task, self.protocol_action
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
-                self._update_grab_waitnav_diagnostic(
-                    output, pose, stm, started
-                )
-                self._update_safe_sweep_diagnostic(
-                    output, vision, pose, stm, started
-                )
-                self._log_command_tx_suppression(output)
-                self._log_capture_decision(output, vision, stm, started, pending_task, pending_action)
                 self._publish(output)
-                state_changed = output.state != self.last_state
-                if state_changed:
-                    self.events_log.write("state_changed", {
-                        "from": self.last_state.value,
-                        "to": output.state.value,
-                        "message": output.message,
-                    })
-                    self.last_state = output.state
-                event_key = (output.state, output.event, output.reason)
-                if output.event and (state_changed or event_key != getattr(self, "last_output_event_key", None) or
-                                     started - getattr(self, "last_output_event_s", -math.inf) >= 2.0):
-                    self.last_output_event_key, self.last_output_event_s = event_key, started
-                    event_data = {
-                        "state": output.state.value,
-                        "message": output.message,
-                    }
-                    if output.event == "initial_stash_state_anomaly":
-                        event_data.update({
-                            "invalid_state": "SEARCH",
-                            "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
-                            "initial_stash_done": self.mission.initial_stash_done,
-                        })
-                    audit_snapshot = (
-                        output.audit or
-                        self.mission.pending_audit or
-                        vision.capture_audit
+                try:
+                    self._update_grab_waitnav_diagnostic(
+                        output, pose, stm, started
                     )
-                    wire_audit = (
-                        output.command.audit
-                        if output.command is not None else None
+                    self._update_safe_sweep_diagnostic(
+                        output, vision, pose, stm, started
                     )
-                    if audit_snapshot is not None or wire_audit is not None:
-                        left_count = (
-                            audit_snapshot.left_count
-                            if audit_snapshot is not None else
-                            wire_audit.left_count
-                        )
-                        right_count = (
-                            audit_snapshot.right_count
-                            if audit_snapshot is not None else
-                            wire_audit.right_count
-                        )
-                        total_count = (
-                            audit_snapshot.total_count
-                            if audit_snapshot is not None else
-                            wire_audit.total_count
-                        )
-                        event_data.update({
-                            "vision_frame_sequence": vision.frame_sequence,
-                            "audit_id": (
-                                None if wire_audit is None else wire_audit.audit_id
-                            ),
-                            "selected_target_class": (
-                                self.mission.cluster_target_class or
-                                self.mission.target_last_class
-                            ),
-                            "audit_left_count": left_count,
-                            "audit_right_count": right_count,
-                            "audit_left_green_count": (
-                                None
-                                if audit_snapshot is None else
-                                audit_snapshot.left_green_count
-                            ),
-                            "audit_right_green_count": (
-                                None
-                                if audit_snapshot is None else
-                                audit_snapshot.right_green_count
-                            ),
-                            "audit_unassigned_count": max(
-                                0, total_count - left_count - right_count
-                            ),
-                            "audit_total_count": total_count,
-                            "audit_stable": (
-                                wire_audit.stable
-                                if wire_audit is not None else
-                                audit_snapshot.stable
-                            ),
+                    self._log_command_tx_suppression(output)
+                    self._log_capture_decision(output, vision, stm, started, pending_task, pending_action)
+                    state_changed = output.state != self.last_state
+                    if state_changed:
+                        self.events_log.write("state_changed", {
+                            "from": self.last_state.value,
+                            "to": output.state.value,
+                            "message": output.message,
                         })
-                    if output.event in {
-                        "safe_zone_staging_arrived",
-                        "staging_camera_firmware_mismatch",
-                    }:
-                        event_data.update({
-                            "upper_state": output.state.value,
-                            "last_tx_opcode": stm.relay_last_mission_command,
-                            "last_tx_seq": stm.relay_last_mission_sequence,
-                            "relay_tx_frames": stm.relay_mission_tx_frames,
-                            "relay_last_payload": list(
-                                stm.relay_last_mission_payload
-                            ),
-                            "stm_mode": stm.mode,
-                            "stm_ack": stm.acknowledged_sequence,
-                            "distance_done": stm.distance_done,
-                            "gripper_closed": stm.gripper_closed,
-                            "camera_pitch_cdeg": stm.camera_pitch_cdeg,
-                        })
-                    self.events_log.write(output.event, event_data)
-                diagnostics_now = time.monotonic()
-                if (
-                    state_changed or
-                    output.event or
-                    diagnostics_now - self.last_diagnostics_s >= self.diagnostics_period_s
-                ):
-                    self._diagnostics(output, pose, stm, vision, now=started)
-                    self.last_diagnostics_s = diagnostics_now
+                        self.last_state = output.state
+                    event_key = (output.state, output.event, output.reason)
+                    event_logged = bool(output.event and (state_changed or event_key != getattr(self, "last_output_event_key", None) or
+                                         started - getattr(self, "last_output_event_s", -math.inf) >= 2.0))
+                    if event_logged:
+                        self.last_output_event_key, self.last_output_event_s = event_key, started
+                        event_data = {
+                            "state": output.state.value,
+                            "message": output.message,
+                        }
+                        if output.event == "initial_stash_state_anomaly":
+                            event_data.update({
+                                "invalid_state": "SEARCH",
+                                "initial_stash_enabled": self.mission.settings.initial_stash_enabled,
+                                "initial_stash_done": self.mission.initial_stash_done,
+                            })
+                        audit_snapshot = (
+                            output.audit or
+                            self.mission.pending_audit or
+                            vision.capture_audit
+                        )
+                        wire_audit = (
+                            output.command.audit
+                            if output.command is not None else None
+                        )
+                        if audit_snapshot is not None or wire_audit is not None:
+                            left_count = (
+                                audit_snapshot.left_count
+                                if audit_snapshot is not None else
+                                wire_audit.left_count
+                            )
+                            right_count = (
+                                audit_snapshot.right_count
+                                if audit_snapshot is not None else
+                                wire_audit.right_count
+                            )
+                            total_count = (
+                                audit_snapshot.total_count
+                                if audit_snapshot is not None else
+                                wire_audit.total_count
+                            )
+                            event_data.update({
+                                "vision_frame_sequence": vision.frame_sequence,
+                                "audit_id": (
+                                    None if wire_audit is None else wire_audit.audit_id
+                                ),
+                                "selected_target_class": (
+                                    self.mission.cluster_target_class or
+                                    self.mission.target_last_class
+                                ),
+                                "audit_left_count": left_count,
+                                "audit_right_count": right_count,
+                                "audit_left_green_count": (
+                                    None
+                                    if audit_snapshot is None else
+                                    audit_snapshot.left_green_count
+                                ),
+                                "audit_right_green_count": (
+                                    None
+                                    if audit_snapshot is None else
+                                    audit_snapshot.right_green_count
+                                ),
+                                "audit_unassigned_count": max(
+                                    0, total_count - left_count - right_count
+                                ),
+                                "audit_total_count": total_count,
+                                "audit_stable": (
+                                    wire_audit.stable
+                                    if wire_audit is not None else
+                                    audit_snapshot.stable
+                                ),
+                            })
+                        if output.event in {
+                            "safe_zone_staging_arrived",
+                            "staging_camera_firmware_mismatch",
+                        }:
+                            event_data.update({
+                                "upper_state": output.state.value,
+                                "last_tx_opcode": stm.relay_last_mission_command,
+                                "last_tx_seq": stm.relay_last_mission_sequence,
+                                "relay_tx_frames": stm.relay_mission_tx_frames,
+                                "relay_last_payload": list(
+                                    stm.relay_last_mission_payload
+                                ),
+                                "stm_mode": stm.mode,
+                                "stm_ack": stm.acknowledged_sequence,
+                                "distance_done": stm.distance_done,
+                                "gripper_closed": stm.gripper_closed,
+                                "camera_pitch_cdeg": stm.camera_pitch_cdeg,
+                            })
+                        self.events_log.write(output.event, event_data)
+                    diagnostics_now = time.monotonic()
+                    if (
+                        state_changed or
+                        event_logged or
+                        diagnostics_now - self.last_diagnostics_s >= self.diagnostics_period_s
+                    ):
+                        self._diagnostics(output, pose, stm, vision, now=started)
+                        self.last_diagnostics_s = diagnostics_now
+                except Exception as error:
+                    self._record_diagnostic_error(error, started)
                 with self.lock:
                     self.latest_output = output
                     self.latest_pose = pose

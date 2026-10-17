@@ -1042,6 +1042,39 @@ def test_boundary_guard_points_back_into_field() -> None:
 
 
 def test_4071_separation_evidence_and_fault_latch() -> None:
+    for mode in (21, 38):
+        initial = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        initial._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        initial.state = CompetitionState.CAPTURE_AUDIT
+        status = replace(stm(mode=mode, flags=1), camera_pitch_cdeg=14000)
+        for frame, timestamp in ((1, 1.0), (2, 1.11)):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=timestamp,
+                                  capture_audit=CargoAudit(), capture_observation_valid=True)
+            out = initial._audit_output(view, status, timestamp)
+        assert out.reason == "capture_empty_approach" and out.command.audit.stable
+        assert initial.pending_audit is None and initial.state == CompetitionState.CAPTURE_AUDIT
+        duplicate = initial._audit_output(view, status, 1.12)
+        assert duplicate.command.audit.stable and initial.audit_hits == 2
+    ordinary = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    ordinary._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    ordinary.state = CompetitionState.CAPTURE_AUDIT
+    mixed_observation = CargoAudit(left_class="unknown", left_count=2, left_green_count=1,
+        left_invalid=True, injury_mixed=True, total_count=2,
+        class_counts=(("green_supply", 1), ("injured_orange", 1)),
+        left_class_counts=(("green_supply", 1), ("injured_orange", 1)))
+    status = replace(stm(mode=21, flags=1), camera_pitch_cdeg=14000)
+    for frame, timestamp in ((1, 1.0), (2, 1.11)):
+        view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=timestamp,
+                              capture_audit=mixed_observation, capture_observation_valid=True)
+        out = ordinary._audit_output(view, status, timestamp)
+    assert ordinary.pending_audit_release_context == "disperse_reaudit"
+    assert not ordinary.cluster_audit_active and out.command.audit.stable
+    acknowledged = replace(relay_stm(out, mode=21, flags=65), camera_pitch_cdeg=14000,
+                           context_valid=True, context_matches=True,
+                           accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    out = ordinary._audit_confirmation_output(view, acknowledged, 1.12)
+    from protocol import CMD_SIDE_VALID
+    assert out.command.opcode == CMD_DISPERSE_PILE and out.command.flags & CMD_SIDE_VALID
     mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     mission.first_common_delivered = True
     mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))

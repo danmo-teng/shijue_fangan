@@ -400,6 +400,52 @@ def test_detection_logging() -> None:
         records = planner.events_log.path.read_text().splitlines()
         assert len(records) == 1 and json.loads(records[0])['matched_rejection']
 
+        mission.selected_batch = None
+        planner._log_capture_decision(output, view, status, 3.0, 1, 2)
+        assert json.loads(records[0])["wire_signature"] is None
+        assert json.loads(records[0])["raw_audit"]["total_count"] == 2
+        with patch.object(planner.events_log, "write", side_effect=OSError("test diagnostic write failure")):
+            planner.last_capture_log_key = None
+            planner._log_capture_decision(output, view, status, 4.0, 1, 2)
+        assert planner.diagnostic_error_count == 1
+    planner.running, planner.error = True, None
+    planner.pose_path, planner.stm_path = Path("unused_pose"), Path("unused_stm")
+    planner.lock = threading.Lock()
+    planner.latest_vision, planner.paused, planner.period_s = view, False, 0.001
+    published = []
+    def publish(_output):
+        published.append(_output)
+        if len(published) == 2:
+            planner.running = False
+    with patch.object(runner_module, "load_pose", return_value=PoseSnapshot()), \
+         patch.object(runner_module, "load_stm", return_value=status), \
+         patch.object(planner, "_output_for_cycle", return_value=output), \
+         patch.object(planner, "_publish", side_effect=publish), \
+         patch.object(planner, "_update_grab_waitnav_diagnostic", side_effect=OSError("test diagnostic failure")):
+        planner._run()
+    assert len(published) == 2 and planner.error is None
+    from dataclasses import replace
+    overlap_items = (replace(items[0], bbox=(200, 200, 100, 100), hits=2),
+                     replace(items[1], class_name="injured_orange", bbox=(205, 205, 100, 100), hits=2))
+    with patch.object(runner_module, "tracked_cargo", return_value=overlap_items):
+        for mode in (21, 38, 35, 23, 45, 48):
+            result = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+                StmSnapshot(mode=mode, flags=1, age_ms=0, camera_pitch_cdeg=14000), mission, 3,
+                capture_rois=rois, observed_s=1.2)
+            if mode in (21, 38, 35):
+                assert result.capture_audit.total_count == 2
+            else:
+                assert result.capture_audit is None
+    edge_rois = CaptureRois(((0, 0), (1279, 0), (1279, 1023), (0, 1023)),
+                           rois.left, rois.right)
+    edge_items = (replace(overlap_items[0], bbox=(0, 200, 100, 100)),
+                  replace(overlap_items[1], bbox=(5, 205, 100, 100)))
+    with patch.object(runner_module, "tracked_cargo", return_value=edge_items):
+        result = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+            StmSnapshot(mode=38, flags=1, age_ms=0, camera_pitch_cdeg=14000), mission, 4,
+            capture_rois=edge_rois, observed_s=1.3)
+        assert result.capture_audit is None and result.capture_observation_reason == "claw_target_truncated"
+
 
 def test_4071_fault_precedes_context_and_manual_pause() -> None:
     planner = CompetitionPlanner.__new__(CompetitionPlanner)

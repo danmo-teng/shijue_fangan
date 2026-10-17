@@ -3204,6 +3204,29 @@ class CompetitionMission:
                 self._audit_stability_span_sufficient(observed_s)
             ),
         )
+        initial_empty = (
+            stm.mode in {STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT} and
+            not self.post_grab_audit_active and not self.cargo_recheck_pending and
+            self.disperse_attempts == 0 and
+            audit.total_count == audit.left_count == audit.right_count == 0 and
+            audit.left_class in {"", "none"} and audit.right_class in {"", "none"} and
+            not (audit.danger_present or audit.unknown_present or audit.injury_mixed)
+        )
+        if initial_empty:
+            stable = replace(stable, stable=(self.audit_hits >= max(2, required_audit_frames) and
+                                            self._audit_stability_span_sufficient(observed_s)))
+            return CompetitionOutput(
+                self.state, CommandRequest(CMD_CARGO_AUDIT, CMD_VALID,
+                    audit=self._audit_payload(stable), audit_vision_frame=vision.frame_sequence),
+                "初次空爪继续真实审核，F407控制200mm/s及同目标300mm额度",
+                self.selected_batch, stable, reason="capture_empty_approach",
+                tx_policy="audit_stable_publish" if stable.stable else "audit_unstable_publish",
+            )
+        normal_multi_candidate = (
+            stm.mode == STM_MODE_CAPTURE_AUDIT and not self.post_grab_audit_active and
+            not self.cargo_recheck_pending and not audit_valid and audit.total_count > 1 and
+            self._preferred_keep_side(audit) is not None
+        )
         if stable.stable and audit.total_count == 0:
             self._begin_audit_confirmation(
                 stable, self._audit_payload(stable), False, "both", False,
@@ -3221,7 +3244,7 @@ class CompetitionMission:
         disperse_vote_context = (
             not audit_valid and
             (
-                self.cluster_audit_active or
+                normal_multi_candidate or self.cluster_audit_active or
                 self.cargo_recheck_context in {
                     "disperse_observe",
                     "disperse_selective",
@@ -3303,7 +3326,7 @@ class CompetitionMission:
                     now,
                 )
                 return self._audit_confirmation_output(vision, stm, now)
-            if self.cargo_recheck_context in {
+            if normal_multi_candidate or self.cargo_recheck_context in {
                 "disperse_observe",
                 "disperse_selective",
                 "single_side",
