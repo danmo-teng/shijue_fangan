@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = ROOT / "models" / "best_bayese_320x320_nv12.bin"
 DEFAULT_LABELS = ROOT / "config" / "yolo_labels.txt"
 DEFAULT_OUTPUT = ROOT / "runtime_result.json"
-DEFAULT_YOLO_SCORE_THRESHOLD = 0.30
+DEFAULT_YOLO_SCORE_THRESHOLD = 0.20
 LABEL_ALIASES = {
     "conmon": "green_supply",  # Preserve the class spelling stored in the checkpoint.
     "common": "green_supply",
@@ -328,7 +328,7 @@ class X5YoloV8:
             scores = class_scores[np.arange(len(class_scores)), class_ids]
             if scores.min(initial=0.0) < 0.0 or scores.max(initial=1.0) > 1.0:
                 scores = sigmoid(scores)
-            # The confidence gate is inclusive: detections at 0.30 and above
+            # The confidence gate is inclusive: detections at the configured threshold and above
             # are retained (subject only to class-wise NMS below).
             selected = np.flatnonzero(scores >= self.score_threshold)
             if selected.size:

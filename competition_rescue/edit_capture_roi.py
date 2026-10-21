@@ -42,7 +42,7 @@ from run_yolo_x5 import (  # noqa: E402
 WINDOW_NAME = "capture_roi_editor"
 DISPLAY_WIDTH = 960
 DISPLAY_HEIGHT = 768
-GREEN_SUPPLY_SCORE_THRESHOLD = 0.50
+GREEN_SUPPLY_SCORE_THRESHOLD = DEFAULT_YOLO_SCORE_THRESHOLD
 
 
 def arguments() -> argparse.Namespace:

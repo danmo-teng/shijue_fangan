@@ -21,11 +21,11 @@ def main() -> int:
     if not 2 <= args.bands <= 12:
         parser.error("--bands须为2..12")
     import cv2
-    from run_yolo_x5 import X5YoloV8, load_labels, DEFAULT_LABELS
+    from run_yolo_x5 import X5YoloV8, load_labels, DEFAULT_LABELS, DEFAULT_YOLO_SCORE_THRESHOLD
     from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
     from rescue_vision.vision_protocol import IMAGE_WIDTH, IMAGE_HEIGHT
 
-    detector = X5YoloV8(args.model, load_labels(DEFAULT_LABELS), .30, .45, 0, [0])
+    detector = X5YoloV8(args.model, load_labels(DEFAULT_LABELS), DEFAULT_YOLO_SCORE_THRESHOLD, .45, 0, [0])
     camera = LatestFrameCamera(resolve_camera_device(args.device), IMAGE_WIDTH, IMAGE_HEIGHT, 180,
                                decoder="jpu", decode_fps=15, output_format="bgr")
     boundaries = [round(i * IMAGE_HEIGHT / args.bands) for i in range(args.bands + 1)]
@@ -54,8 +54,7 @@ def main() -> int:
                 frame = packet.image.copy()
                 found, _ = detector.infer(frame)
                 detections = [d for d in found if d.class_name in {
-                    "green_supply", "core_black", "injured_orange", "danger_cyan"}
-                    and (d.class_name != "green_supply" or d.confidence >= .50)]
+                    "green_supply", "core_black", "injured_orange", "danger_cyan"}]
             if frame is None:
                 if cv2.waitKey(20) & 0xFF in (ord("q"), 27):
                     break

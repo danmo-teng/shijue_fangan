@@ -286,7 +286,7 @@ class TraditionalDetector:
                     )
                     if candidate is None:
                         continue
-                    threshold = float(variant.get("score_min", 0.65))
+                    threshold = float(variant.get("score_min", 0.20))
                     if not candidate.reject_reason and candidate.score >= threshold:
                         accepted.append(candidate)
                     elif collect_rejected:
@@ -475,7 +475,7 @@ class TraditionalDetector:
                 )
                 if candidate is None:
                     continue
-                threshold = float(variant.get("score_min", 0.65))
+                threshold = float(variant.get("score_min", 0.20))
                 if not candidate.reject_reason and candidate.score >= threshold:
                     refined.append(candidate)
                     break

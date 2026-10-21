@@ -92,7 +92,7 @@ from state_machine import (  # noqa: E402
 
 
 TERMINATION_ABORT_TIMEOUT_S = 1.0
-GREEN_SUPPLY_SCORE_THRESHOLD = 0.50
+GREEN_SUPPLY_SCORE_THRESHOLD = DEFAULT_YOLO_SCORE_THRESHOLD
 
 
 def arguments() -> argparse.Namespace:

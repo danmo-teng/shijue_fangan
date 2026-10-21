@@ -156,7 +156,7 @@
         "shape": 0.25,
         "size": 0.2
       },
-      "score_min": 0.65,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 3,
         "max_misses": 5,
@@ -229,7 +229,7 @@
             "shape": 0.25,
             "size": 0.2
           },
-          "score_min": 0.65,
+          "score_min": 0.2,
           "confirmation": {
             "min_hits": 3,
             "max_misses": 5,
@@ -303,7 +303,7 @@
             "shape": 0.25,
             "size": 0.2
           },
-          "score_min": 0.65,
+          "score_min": 0.2,
           "confirmation": {
             "min_hits": 3,
             "max_misses": 5,
@@ -377,7 +377,7 @@
             "shape": 0.25,
             "size": 0.2
           },
-          "score_min": 0.65,
+          "score_min": 0.2,
           "confirmation": {
             "min_hits": 3,
             "max_misses": 5,
@@ -451,7 +451,7 @@
             "shape": 0.25,
             "size": 0.2
           },
-          "score_min": 0.65,
+          "score_min": 0.2,
           "confirmation": {
             "min_hits": 3,
             "max_misses": 5,
@@ -525,7 +525,7 @@
         "shape": 0.2,
         "size": 0.18
       },
-      "score_min": 0.52,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 2,
         "max_misses": 7,
@@ -596,7 +596,7 @@
         "shape": 0.3,
         "size": 0.22
       },
-      "score_min": 0.67,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 3,
         "max_misses": 5,
@@ -674,7 +674,7 @@
         "shape": 0.38,
         "size": 0.2
       },
-      "score_min": 0.68,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 5,
         "max_misses": 4,
@@ -745,7 +745,7 @@
         "shape": 0.25,
         "size": 0.2
       },
-      "score_min": 0.62,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 3,
         "max_misses": 10,
@@ -816,7 +816,7 @@
         "shape": 0.25,
         "size": 0.2
       },
-      "score_min": 0.62,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 3,
         "max_misses": 10,
@@ -887,7 +887,7 @@
         "shape": 0.29,
         "size": 0.15
       },
-      "score_min": 0.6,
+      "score_min": 0.2,
       "confirmation": {
         "min_hits": 3,
         "max_misses": 10,
