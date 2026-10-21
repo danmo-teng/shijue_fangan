@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=物资测距标定
+Comment=显示物资中心坐标和距离分区，记录105度及120度实测标定
+Exec=/home/sunrise/RDK_X5/shijue_fangan/vision/calibrate_range_launcher.sh
+Icon=applications-engineering
+Terminal=true
+StartupNotify=true
+Categories=Utility;Development;
