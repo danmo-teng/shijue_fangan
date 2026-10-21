@@ -26,8 +26,8 @@ def main() -> int:
     from rescue_vision.vision_protocol import IMAGE_WIDTH, IMAGE_HEIGHT
 
     detector = X5YoloV8(args.model, load_labels(DEFAULT_LABELS), .30, .45, 0, [0])
-    camera = LatestFrameCamera(resolve_camera_device(args.device), IMAGE_WIDTH, IMAGE_HEIGHT, 30,
-                               decoder="software", decode_fps=15, output_format="bgr")
+    camera = LatestFrameCamera(resolve_camera_device(args.device), IMAGE_WIDTH, IMAGE_HEIGHT, 180,
+                               decoder="jpu", decode_fps=15, output_format="bgr")
     boundaries = [round(i * IMAGE_HEIGHT / args.bands) for i in range(args.bands + 1)]
     bands = [{"band": i + 1, "y_min": boundaries[i], "y_max": boundaries[i + 1]}
              for i in range(args.bands)]
@@ -42,8 +42,8 @@ def main() -> int:
     print("请先停止比赛进程，固定相机为105°或120°。1/2仅切换记录标签，不控制舵机。")
     print("默认6个横向区域，坐标按原始1280×1024记录；空格冻结，S保存截图/中心点，Q退出。")
     print("请记录每个区域车体到夹爪入口的实际应走距离及预留补进余量，不以相机斜距代替。")
-    camera.start()
     try:
+        camera.start()
         while True:
             error = camera.check_error()
             if error is not None:
