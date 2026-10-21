@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 
 from rescue_vision.camera import LatestFrameCamera, resolve_camera_device  # noqa: E402
 from rescue_vision.config import load_config, require_native_resolution  # noqa: E402
-from rescue_vision.localizer import GroundLocalizer  # noqa: E402
+from rescue_vision.localizer import GroundLocalizer, ApproachRangeCalibration  # noqa: E402
 from rescue_vision.models import Detection, TrackState  # noqa: E402
 from rescue_vision.mission_protocol import write_command_frame  # noqa: E402
 from rescue_vision.tracker import MultiFrameTracker  # noqa: E402
@@ -54,6 +54,7 @@ from protocol import (  # noqa: E402
     CMD_NAVIGATE_WAYPOINT,
     CMD_PAUSE,
     CMD_APPROACH_TARGET,
+    CMD_APPROACH_RANGE,
     CMD_CARGO_AUDIT,
     CMD_DISPERSE_PILE,
     CMD_RELEASE_LEFT,
@@ -614,6 +615,7 @@ def make_vision_snapshot(
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
     capture_quality_reason: str = "",
     observed_s: float | None = None,
+    range_calibration: ApproachRangeCalibration | None = None,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     rois = capture_rois or load_capture_rois(
@@ -827,7 +829,19 @@ def make_vision_snapshot(
         mission.carried_total_count,
         carried_bbox_reference,
     )
+    range_distances = []
+    range_reason = "range_calibration_missing"
+    if range_calibration is not None and stm.fresh and stm.camera_pitch_cdeg in {10500, 12000} and not image_quality_reason:
+        for item in cargo:
+            if item.visible:
+                distance, reason = range_calibration.distance(stm.camera_pitch_cdeg, item.center_px,
+                                                             (IMAGE_WIDTH, IMAGE_HEIGHT))
+                range_reason = reason
+                if distance is not None:
+                    range_distances.append((item.track_id, distance))
     return VisionSnapshot(
+        range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
+        range_reason=range_reason,
         roi_decisions=tuple(roi_decisions),
         roi_elapsed_ms=roi_elapsed_ms,
         frame_sequence=frame_sequence,
@@ -1274,7 +1288,8 @@ class CompetitionPlanner:
             if command.opcode in {CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT, CMD_RELEASE_BOTH}
             else None
         )
-        key = (command.opcode, command.flags, audit_role, separation_epoch)
+        range_epoch = self.mission.range_epoch if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE else None
+        key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
         if not overlay or (self.protocol_accepted is None and self.protocol_action_key is None):
             if key != self.protocol_action_key:
                 self.protocol_action_cursor = (self.protocol_action_cursor + 1) & 0xFFFF
@@ -1287,7 +1302,9 @@ class CompetitionPlanner:
                 self.protocol_action_key = key
                 self.protocol_source_stamp = None
                 self.protocol_vision_frame = 0
-        if command.opcode == CMD_APPROACH_TARGET:
+        if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
+            self.protocol_vision_frame = command.source_vision_frame or 0
+        elif command.opcode == CMD_APPROACH_TARGET:
             stamp = (
                 pickup.last_seen_s if pickup is not None else
                 self.mission.cluster_command_observed_s
@@ -1457,6 +1474,9 @@ class CompetitionPlanner:
             return None
         self._adopt_recovery_context()
         current = replace(stm, context_matches=True)
+        if stm.mode == 48:
+            self.mission.transport_separation_active = False
+            return self.mission._begin_transport_audit(vision, load_pose(self.pose_path), current, now)
         if stm.mode == 23:
             self.mission._begin_post_grab_audit(vision, now)
         else:
@@ -1526,6 +1546,17 @@ class CompetitionPlanner:
             matches = (stm.context_valid and stm.task_id == self.protocol_task and
                        stm.action_id == self.protocol_action)
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (stm.fresh and not stm.fault and stm.mode in {52, 53} and
+                self.mission.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
+                                       CompetitionState.CLUSTER_APPROACH}):
+            if (stm.context_valid and stm.task_id == self.protocol_task and stm.action_status & 4 and
+                    stm.rejected_action_id == self.protocol_action and stm.mode == 52 and
+                    not (stm.action_id == self.protocol_action and stm.action_status & 1 and
+                         stm.accepted_command == CMD_APPROACH_TARGET)):
+                self._adopt_recovery_context()
+                self.mission._clear_range_approach()
+            ranged_vision = replace(vision, range_distances=()) if paused else vision
+            return self.mission._range_approach_output(ranged_vision, stm, now)
         # Recovery is an observation from the MCU, not an ACK of the last
         # requested action. Handle it before context_pending/camera pause.
         if self._is_recovery_observation(stm):
@@ -1646,6 +1677,10 @@ class CompetitionPlanner:
         }
         write_atomic_json(self.diagnostics_path, {
             "diagnostic_error_count": getattr(self, "diagnostic_error_count", 0),
+            "approach_range": {"pitch_cdeg": self.mission.range_pitch_cdeg,
+                               "epoch": self.mission.range_epoch, "reason": vision.range_reason,
+                               "source_frame": (self.mission.range_command.source_vision_frame if self.mission.range_command else None),
+                               "distance_mm": (self.mission.range_command.arg_a if self.mission.range_command else None)},
             "schema_version": 1,
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "protocol_context": {
@@ -2280,6 +2315,7 @@ def main() -> int:
         raise
 
     config = load_config(args.config)
+    range_calibration = ApproachRangeCalibration.load(VISION_ROOT / "config/approach_range.json")
     capture_rois = load_capture_rois(args.capture_roi)
     args.homography = args.homography.resolve()
     homography_metadata = args.homography.with_suffix(
@@ -2668,6 +2704,7 @@ def main() -> int:
                             args.capture_roi.is_file(),
                         ),
                         observed_s=packet.published_ns / 1_000_000_000.0,
+                        range_calibration=range_calibration,
                     )
                     if not mission.carried_manifest:
                         recent_carried_bboxes = ()

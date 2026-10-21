@@ -318,7 +318,7 @@ def write_session(
         "t265_translation_scale_enabled": bool(t265_translation_scale_enabled),
         "t265_translation_scale": t265_translation_scale,
         "initial_pose": {"x_m": pose.x_m, "y_m": pose.y_m, "yaw_deg": pose.yaw_deg},
-        "expected_lower_firmware": "cef1d9ccc5bac3d4106fcce418899aad6ec61c63",
+        "expected_lower_firmware": "777acadbd0e0c70f8830d21a5b767162e43ed2dc",
         "expected_lower_mode": "NormalRun",
         "actual_lower_firmware": actual_lower_firmware,
         "actual_lower_mode": actual_lower_mode,

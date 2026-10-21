@@ -1247,7 +1247,83 @@ def test_mode51_reference_audit_exits_and_budget() -> None:
     assert out.command.opcode == CMD_RELEASE_BOTH and invalid.delivery_count == 4
 
 
+def test_range_cumulative_and_transport_sort() -> None:
+    from protocol import CMD_APPROACH_RANGE, CMD_SIDE_VALID, CMD_STAGE_ONLY, CMD_DRIVE_STRAIGHT, CMD_USE_FINAL_HEADING
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    m.state = CompetitionState.APPROACH
+    target = cargo(1, "green_supply", 600, 500)
+    status = replace(stm(mode=52), camera_pitch_cdeg=10500)
+    view = VisionSnapshot(frame_sequence=1, observed_monotonic_s=1.0, cargo=(target,),
+                          range_pitch_cdeg=10500, range_distances=((1, 650),))
+    assert m._range_approach_output(view, status, 1.0).command.opcode == CMD_HOLD
+    request = m._range_approach_output(replace(view, frame_sequence=2, observed_monotonic_s=1.1), status, 1.1)
+    assert request.command.flags & CMD_APPROACH_RANGE and request.command.arg_a == 650
+    assert request.command.source_vision_frame == 2
+    repeated = m._range_approach_output(replace(view, frame_sequence=3, range_distances=((1, 100),)), replace(status, mode=53), 1.2)
+    assert repeated.command == request.command
+    m._clear_range_approach()
+    m.state = CompetitionState.CAPTURE_AUDIT
+    status = replace(stm(mode=21, flags=1), camera_pitch_cdeg=14000)
+    audit = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+    v1 = VisionSnapshot(frame_sequence=10, observed_monotonic_s=2.0, capture_audit=audit)
+    m._audit_output(v1, status, 2.0)
+    absent = replace(v1, frame_sequence=11, observed_monotonic_s=2.05, capture_audit=None, capture_observation_valid=False)
+    out = m._audit_output(absent, status, 2.05)
+    assert not out.command.audit.stable and m.audit_hits == 1
+    assert not m._audit_output(v1, status, 2.06).command.audit.stable
+    out = m._audit_output(replace(v1, frame_sequence=12, observed_monotonic_s=2.12), status, 2.12)
+    assert out.command.audit.stable and m.pending_audit is not None
+    m._audit_confirmation_output(replace(absent, frame_sequence=13, observed_monotonic_s=2.15), status, 2.15)
+    assert m.pending_audit is None and m.audit_hits == 2
+    assert not m._audit_output(replace(v1, frame_sequence=12, observed_monotonic_s=2.12), status, 2.16).command.audit.stable
+    renewed = m._audit_output(replace(v1, frame_sequence=14, observed_monotonic_s=2.30), status, 2.30)
+    assert renewed.command.audit.stable and renewed.command.audit_vision_frame == 14
+    m._audit_confirmation_output(replace(absent, frame_sequence=15, observed_monotonic_s=2.85), status, 2.85)
+    renewed = m._audit_output(replace(v1, frame_sequence=16, observed_monotonic_s=2.90), status, 2.90)
+    assert not renewed.command.audit.stable and m.audit_hits == 1
+    # Transport keeps budget, commands a curve, then waits for a NEW capture audit.
+    t = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    t.first_common_delivered = True
+    t._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    t._latch_carried_manifest(audit)
+    multi = replace(audit, left_count=2, left_green_count=2, total_count=2)
+    status48 = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000)
+    t._begin_transport_audit(VisionSnapshot(frame_sequence=1), pose(), status48, 3.0)
+    for frame, now in ((2,3.3),(3,3.41)):
+        view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now, capture_audit=multi)
+        out = t._transport_audit_output(view, pose(), status48, now)
+    ack = replace(relay_stm(out, mode=48, flags=67), camera_pitch_cdeg=14000,
+                  context_valid=True, context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    curve = t._transport_audit_output(view, pose(), ack, 3.42)
+    assert curve.command.opcode == CMD_DISPERSE_PILE and curve.command.flags & CMD_SIDE_VALID
+    assert t.transport_separation_active and t.pending_audit is None
+    accepted = replace(relay_stm(curve, mode=25, flags=3), camera_pitch_cdeg=14000,
+                       context_valid=True, context_matches=True, accepted_command=CMD_DISPERSE_PILE, action_status=1)
+    assert t._disperse_output(view, accepted, 3.5).command == curve.command
+    assert t.disperse_attempts == 1
+    after = t._disperse_output(replace(view, frame_sequence=4), replace(accepted, mode=35), 4.0)
+    assert after.command.opcode == CMD_CARGO_AUDIT and t.disperse_attempts == 1
+    # Same destination but physically wrong half must produce a new straight STAGE NAV.
+    t = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    t.first_common_delivered = True
+    t._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    t._latch_carried_manifest(audit)
+    tx, ty = t._target_point()
+    wrong = pose(-tx, ty)
+    t._begin_transport_audit(VisionSnapshot(frame_sequence=1), wrong, status48, 5.0)
+    for frame, now in ((2,5.3),(3,5.41)):
+        view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now, capture_audit=audit)
+        out = t._transport_audit_output(view, wrong, status48, now)
+    ack = replace(relay_stm(out, mode=48, flags=83), camera_pitch_cdeg=14000,
+                  context_valid=True, context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    nav = t._transport_audit_output(view, wrong, ack, 5.42)
+    assert nav.command.opcode == CMD_NAVIGATE_WAYPOINT
+    assert nav.command.flags & (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING) == (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING)
+
+
 def main() -> None:
+    test_range_cumulative_and_transport_sort()
     test_mode51_reference_audit_exits_and_budget()
     test_4071_separation_evidence_and_fault_latch()
     test_4071_injury_pending_and_missing_audit_exit()

@@ -55,6 +55,7 @@ CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
 CMD_CLUSTER_TARGET = 1 << 5
 CMD_FIRST_GREEN_BUMP = 1 << 5
+CMD_APPROACH_RANGE = 1 << 6
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
@@ -132,7 +133,13 @@ def mission_frame(
         CMD_DISPERSE_PILE,
     }:
         raise ValueError("bit5 is only valid for APPROACH_TARGET or DISPERSE_PILE")
+    if command == CMD_APPROACH_TARGET and flags & CMD_APPROACH_RANGE:
+        allowed = CMD_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
+        if (flags & ~allowed or flags & (CMD_VALID | CMD_DISTANCE_VALID) != (CMD_VALID | CMD_DISTANCE_VALID) or
+                not 0 <= arg_a <= 2500 or arg_b not in {10500, 12000} or aux_cdeg != 0):
+            raise ValueError("invalid fixed-pitch approach range request")
     if flags & CMD_STAGE_ONLY and command not in {
+        CMD_APPROACH_TARGET,
         CMD_NAVIGATE_WAYPOINT,
         CMD_ALIGN_SAFE_ZONE,
         CMD_ENTER_SAFE_ZONE,

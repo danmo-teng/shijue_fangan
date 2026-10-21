@@ -19,6 +19,19 @@ from protocol import (  # noqa: E402
 
 
 def main() -> None:
+    from protocol import CMD_APPROACH_TARGET, CMD_APPROACH_RANGE, CMD_DISTANCE_VALID, CMD_RED_SIDE, CMD_CLUSTER_TARGET
+    flags = CMD_VALID | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET
+    for distance in (0, 2500):
+        request = mission_frame(3, CMD_APPROACH_TARGET, flags, distance, 10500, 0)
+        assert int.from_bytes(request[6:8], "big") == distance
+        assert int.from_bytes(request[8:10], "big") == 10500 and request[10:12] == b"\0\0"
+    for distance, pitch, extra in ((-1,10500,0),(2501,12000,0),(100,14000,0),(100,10500,2)):
+        try:
+            mission_frame(3, CMD_APPROACH_TARGET, flags | extra, distance, pitch, 0)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid range request accepted")
     packet = mission_frame(7, CMD_CARGO_AUDIT, CMD_VALID, 1, 6, 0x1234)
     assert len(packet) == FRAME_SIZE
     assert packet[:4] == bytes((0xA3, 0xB3, 0x18, 7))

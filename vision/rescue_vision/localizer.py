@@ -90,3 +90,42 @@ class GroundLocalizer:
             if stored != tuple(map(int, expected_resolution)):
                 return GroundLocalizer()
         return GroundLocalizer(np.loadtxt(str(target), dtype=np.float64))
+
+
+class ApproachRangeCalibration:
+    """Measured centre-Y bands at a fixed camera pitch; never uses homography."""
+
+    def __init__(self, data: dict | None = None) -> None:
+        self.data = data or {}
+
+    @classmethod
+    def load(cls, path: str | Path) -> "ApproachRangeCalibration":
+        try:
+            return cls(json.loads(Path(path).read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return cls()
+
+    def distance(self, pitch: int, point: tuple[float, float], resolution: tuple[int, int]) -> tuple[int | None, str]:
+        try:
+            entry = self.data["angles"][str(pitch)]
+            if (pitch not in {10500, 12000} or entry["measured"] is not True or
+                    (entry["width"], entry["height"]) != resolution or
+                    entry["pixel_reference"] != "bbox_center" or
+                    entry["distance_reference"] != "measured_chassis_travel_to_claw_entry" or
+                    not entry["camera_mount"]):
+                return None, "range_calibration_metadata_invalid"
+            x, y = point
+            if not (0 <= x < resolution[0] and 0 <= y < resolution[1]):
+                return None, "range_pixel_outside_image"
+            bands = entry["bands"]
+            previous = 0
+            for band in sorted(bands, key=lambda b: b["y_min"]):
+                low, high, distance = band["y_min"], band["y_max"], band["advance_mm"]
+                if not (previous <= low < high <= resolution[1] and
+                        type(distance) is int and 0 <= distance <= 2500):
+                    return None, "range_calibration_bands_invalid"
+                previous = high
+            matches = [b["advance_mm"] for b in bands if b["y_min"] <= y < b["y_max"]]
+            return (matches[0], "range_measured") if len(matches) == 1 else (None, "range_band_unmeasured")
+        except (KeyError, TypeError, ValueError):
+            return None, "range_calibration_missing"

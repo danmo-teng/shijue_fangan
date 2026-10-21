@@ -1,5 +1,46 @@
 # F407 MG310 与完整比赛上位机同步
 
+## 2026-10-21：777acad 定距接近、累计两帧与运输分离续送
+
+以9d5e021增量适配`777acadbd0e0c70f8830d21a5b767162e43ed2dc`的UPPER_RANGE_SORT_HANDOFF_20261019.md；没有覆盖旧成果。
+用户追加授权了独立测距标定画面程序；没有新增自动测试程序，必要检查扩展既有测试文件。
+
+- 搜索120°/105°由下位机执行。普通/聚集mode52优先于context_pending处理，收到该状态后记录采集时间/帧号下限；只有之后的新图及当前角度实测分段有效才发请求。像素APP及扫障42/44保持各自语义。
+- COMMAND=9，VALID|APPROACH_RANGE(bit6)|DISTANCE_VALID(bit4)|阵营及原CLUSTER_TARGET；距离0..2500mm、俯仰10500/12000、aux=0。同task只分配一次新action，接受后包括mode53/视觉缺失时重发原距离、角度、动作与来源帧，不当剩余距离发送。人工PAUSE保留；24/3恢复先于旧命令等待处理。
+- 对准后测距按用户指定的目标中心Y分段，不用旧单应矩阵。105°/120°独立表并校验分辨率、相机安装描述、零点含义。表中advance_mm为实测车体应走距离，已扣除夹爪入口偏移和预留补进余量。未标定/越界/缺图不发送0mm；只有实测0才合法。
+- 140°准备之后补进为200mm/s、最多200mm，由下位机控制。无上位机计时估算行程或重复APP重置额度。
+- 无观察撤销STABLE/pending授权，保留同阶段500ms内样本和侧票；必须再收到新图才能恢复授权。有效帧采集间隔至少100ms；矛盾签名、相机阶段改变及机械分离重置。扫障和mode51同样撤销授权，50已提交闭爪结果仍保留。
+- mode48合法审核还必须用新鲜位姿核对实际目标半区；错误半区通过完整方向flags的STAGE NAV先转向再直行，重新48/ALIGN。mode48可靠非法非空走带侧DISPERSE，清旧pending、投送框和投送视觉证据；同task/预算保留。35后新审核21→合法GRAB→23复审→22→重新导航实际载荷预备点→48→ALIGN→ENTER，不复用旧ENTER。
+- DISPERSE等待保持同一命令/flags，不替换为扫障式HOLD。两次分离、额外夹紧10°，本地60mm直退及30°/45°曲线以实际完成状态为准；上位机不另发角度或横移。
+
+保留橙色49/23/50/22、扫障角色、单件/首件、mode48/51、缺pending出口、投送计数/TASK_COMPLETE、T265侧装外参与纯定位、原始编码器、PID及15字节同SEQ配对。没有新增通用ESCAPE或永久故障策略。
+
+### 标定画面与数据录入
+
+先停止比赛程序，避免占用同一摄像头；让下位机/人工将视觉相机固定在105°，运行：
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan
+python3 vision/calibrate_range_view.py --pitch 105 --bands 6
+```
+
+空格冻结，S存带框/中心坐标/分区线的截图及JSON，Q退出。原图尺寸1280×1024，分区由上到下编号；可用--bands改变分段数。1/2仅切换记录角度标签，不控制舵机；标签不作为已测角度的证明。120°单独固定后记录。结果存vision/captures/range_calibration，不自动写入正式标定。
+
+逐区记录Y_MIN、Y_MAX和ADVANCE_MM（从当前车体位置到夹爪入口前保留补进余量所需的实际前进距离）。将实测值通过已有标定入口录入：
+
+```text
+python3 vision/calibrate_ground.py --range-pitch 105 --range-camera-mount "本次相机安装及测量零点描述" --range-band Y_MIN:Y_MAX:ADVANCE_MM [--range-band ...]
+```
+
+这是参数格式，不含示例假距离。120°另执行一次；默认两角度保存同一vision/config/approach_range.json，按角度隔离。表中保存像素基准bbox_center、分辨率和measured_chassis_travel_to_claw_entry零点，不采用相机斜距。重启上位机加载该表。仓库目前没有实测值，没有生成或提交伪标定文件。
+
+### 必要检查及部署
+
+复用原test_protocol.py验证编码边界；原test_state_machine.py验证52/53锁定、缺图累计/旧图不能恢复、mode48分离同预算及错误半区重导航；原test_runner.py验证同SEQ、同task新action一次、52/53重发不更新载荷及标定隔离。另做Python语法及标定画面--help检查。没有开启相机/BPU实跑，没有烧录或实车验证。
+
+改动文件：competition_rescue/{protocol.py,state_machine.py,run_competition_rescue.py,README.md,tests/test_protocol.py,tests/test_state_machine.py,tests/test_runner.py}；vision/{calibrate_ground.py,calibrate_range_view.py,rescue_vision/localizer.py}；rescue_map/field_model.py；本文。
+上位机更新codex/gamepad-teleop并在两角度实测表有效后重启原比赛入口；本轮不需重编译定位程序。F407使用777acad的NormalRun，烧录build/NormalRun/WWW.elf。expected_lower_firmware更新为功能基线，actual仍未确认。两端软件和实测标定必须一起部署；只更新软件、没有距离表时mode52不会盲走。
+
 ## 2026-10-17：cef1d9c 初次空爪慢爬、普通多件分离及日志隔离
 
 上位机基于c84d77e增量修改，配套下位机功能提交`cef1d9ccc5bac3d4106fcce418899aad6ec61c63`。

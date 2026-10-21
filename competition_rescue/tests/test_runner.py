@@ -447,6 +447,53 @@ def test_detection_logging() -> None:
         assert result.capture_audit is None and result.capture_observation_reason == "claw_target_truncated"
 
 
+def test_range_context_and_calibration() -> None:
+    from dataclasses import replace
+    from state_machine import CargoBatch, TrackedCargo
+    from protocol import CMD_APPROACH_RANGE
+    from rescue_vision.localizer import ApproachRangeCalibration
+    calibration = ApproachRangeCalibration({"angles": {"10500": {
+        "measured": True, "width": 1280, "height": 1024, "pixel_reference": "bbox_center",
+        "camera_mount": "test fixture only", "distance_reference": "measured_chassis_travel_to_claw_entry",
+        "bands": [{"y_min": 0, "y_max": 600, "advance_mm": 700},
+                  {"y_min": 600, "y_max": 1024, "advance_mm": 0}],
+    }}})
+    assert calibration.distance(10500, (640, 500), (1280,1024))[0] == 700
+    assert calibration.distance(10500, (640, 700), (1280,1024))[0] == 0
+    assert calibration.distance(12000, (640, 500), (1280,1024))[0] is None
+    assert calibration.distance(10500, (640, 500), (640,512))[0] is None
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        mission.state = CompetitionState.APPROACH
+        planner = CompetitionPlanner(mission, root / "pose", root / "stm", root / "command",
+                                     root / "diagnostic", JsonlLog(root / "events"), 50)
+        target = TrackedCargo(1, "green_supply", .9, (600,500,40,40), hits=3)
+        view = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1.0, cargo=(target,),
+                              range_pitch_cdeg=10500, range_distances=((1,700),))
+        planner.protocol_vision = view
+        planner._publish(CompetitionOutput(mission.state, CommandRequest(CMD_APPROACH_TARGET, 9, 620,520), "align"))
+        pixel_action = planner.protocol_action
+        status = StmSnapshot(mode=52, age_ms=0, camera_pitch_cdeg=10500, context_valid=True,
+                             task_id=planner.protocol_task, action_id=pixel_action,
+                             accepted_command=CMD_APPROACH_TARGET, action_status=1)
+        planner._output_for_cycle(view, PoseSnapshot(), status, False, 1.0)
+        view = replace(view, frame_sequence=11, observed_monotonic_s=1.1)
+        request = planner._output_for_cycle(view, PoseSnapshot(), status, False, 1.1)
+        planner._publish(request)
+        action = planner.protocol_action
+        assert action != pixel_action and request.command.flags & CMD_APPROACH_RANGE
+        packet = planner.command_path.read_bytes()
+        assert len(packet) == 30 and packet[3] == packet[18]
+        assert int.from_bytes(packet[8:12], "big") == 11
+        for mode in (52,53):
+            later = planner._output_for_cycle(replace(view, frame_sequence=12, range_distances=((1,100),)),
+                                              PoseSnapshot(), replace(status, mode=mode), False, 1.2)
+            planner._publish(later)
+            assert planner.protocol_action == action and later.command == request.command
+
+
 def test_4071_fault_precedes_context_and_manual_pause() -> None:
     planner = CompetitionPlanner.__new__(CompetitionPlanner)
     planner.mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
@@ -542,4 +589,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    test_range_context_and_calibration()
     main()

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import time
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import numpy as np
 
 from rescue_vision.camera import LatestFrameCamera
 from rescue_vision.config import load_config, require_native_resolution
-from rescue_vision.localizer import GroundLocalizer
+from rescue_vision.localizer import GroundLocalizer, ApproachRangeCalibration
 
 
 def main() -> int:
@@ -22,6 +23,11 @@ def main() -> int:
     parser.add_argument("--camera-fps", type=int)
     parser.add_argument("--config", default=str(root / "config" / "rescue_vision.json"))
     parser.add_argument("--output", default=str(root / "config" / "homography.txt"))
+    parser.add_argument("--range-pitch", type=int, choices=(105, 120))
+    parser.add_argument("--range-band", action="append", default=[], metavar="Y_MIN:Y_MAX:ADVANCE_MM",
+                        help="实测目标中心Y分段→车体应走距离，已扣除夹爪入口及保留余量")
+    parser.add_argument("--range-camera-mount", help="本次测量的相机安装位置/零点描述")
+    parser.add_argument("--range-output", default=str(root / "config" / "approach_range.json"))
     args = parser.parse_args()
     config = load_config(args.config)
     camera_config = config.get("camera", {})
@@ -29,6 +35,32 @@ def main() -> int:
     height = int(args.height or camera_config.get("height", 720))
     require_native_resolution(width, height)
     camera_fps = int(args.camera_fps or camera_config.get("fps", 180))
+    if args.range_pitch is not None:
+        if not args.range_band or not args.range_camera_mount:
+            parser.error("分段标定必须提供实测--range-band及--range-camera-mount，不生成猜测距离")
+        try:
+            if any(len(value.split(":")) != 3 for value in args.range_band):
+                raise ValueError("每个分段必须恰好为Y_MIN:Y_MAX:ADVANCE_MM")
+            bands = [dict(zip(("y_min", "y_max", "advance_mm"), map(int, v.split(":")))) for v in args.range_band]
+            data = ApproachRangeCalibration.load(args.range_output).data
+            data.setdefault("angles", {})[str(args.range_pitch * 100)] = {
+                "measured": True, "width": width, "height": height,
+                "pixel_reference": "bbox_center", "camera_mount": args.range_camera_mount,
+                "distance_reference": "measured_chassis_travel_to_claw_entry", "bands": bands,
+            }
+            calibration = ApproachRangeCalibration(data)
+            for band in bands:
+                distance, reason = calibration.distance(args.range_pitch * 100,
+                    (width / 2, (band["y_min"] + band["y_max"]) / 2), (width, height))
+                if distance is None:
+                    raise ValueError(reason)
+            target = Path(args.range_output)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(f"{args.range_pitch}°实测分段已保存：{target}；另一角度单独标定，重启比赛加载")
+            return 0
+        except (ValueError, KeyError, TypeError) as error:
+            parser.error(str(error))
     ground_points = [tuple(point) for point in config["calibration_ground_points_mm"]]
     clicked: list[tuple[float, float]] = []
     frozen = None

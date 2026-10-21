@@ -1,5 +1,19 @@
 # 智能救援完整比赛流程（独立程序）
 
+2026-10-21当前适配基线：上位机从9d5e021增量适配F407 `777acad`。搜索120°/105°，固定角对准→mode52新图实测分段测距→同task新action定距→mode53原请求重发→140°观察及最多200mm补进。无105°/120°实测表时不会发送距离请求；必须先完成两角度测量再投入正常比赛。
+
+测量画面（先关闭比赛，摄像头由下位机固定到对应角度）：
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan
+python3 vision/calibrate_range_view.py --pitch 105 --bands 6
+```
+
+画面显示原始1280×1024坐标、目标中心十字、识别类别和B1..B6横向区域。空格冻结；S保存截图/JSON到vision/captures/range_calibration；1/2切换105°/120°记录标签；Q退出。角度键不驱动舵机，程序没有串口/运动输出，不启动比赛。请分别记录各区域的Y范围及车体实际应走毫米数（包括夹爪入口偏移和保留补进余量）；记录不是正式标定表，不自动猜测距离。
+
+已有vision/calibrate_ground.py新增--range-pitch、可重复--range-band Y_MIN:Y_MAX:ADVANCE_MM、--range-camera-mount参数，用于录入已测数据；默认保存vision/config/approach_range.json。两个角度分别录入，未测区域保持不可用；该入口不复用旧homography。详见同步文档顶部。
+
+
 2026-10-17当前配套基线为下位机`cef1d9c`（NormalRun），上位机从`c84d77e`增量修复。初次mode21/38纯空爪保持真实审核，由下位机200mm/s限距慢爬，累计最多300mm；核心额外50mm前移仍180mm/s。普通多物块可走mode21原有分离握手，不伪装聚集mode37/38。已知未截断独立重叠目标仅在分离观察阶段形成真实多件审核，正式运输质量门槛保持。命令先发布、诊断局部隔离；无线上payload时wire_signature为null，诊断异常仅计数并限频提示。以下带日期说明作为历史参考，当前部署以本段及同步文档顶部为准。
 
 
