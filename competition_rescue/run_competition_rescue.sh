@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "${script_dir}/.." && pwd)"
 localizer="${project_dir}/localization/build/t265_omni_localizer"
-vision_model="${project_dir}/vision/models/best_bayese_320x320_nv12.bin"
+vision_model="${project_dir}/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin"
 
 if ! python3 -c 'import cv2, numpy; from PIL import Image, ImageDraw, ImageFont' >/dev/null 2>&1; then
     echo "缺少Python依赖：需要OpenCV、NumPy和Pillow。" >&2

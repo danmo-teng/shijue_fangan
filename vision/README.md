@@ -389,3 +389,11 @@ python3 vision/benchmark_yolo26_x5.py --no-display
 - 官方导出头：https://github.com/D-Robotics/rdk_model_zoo/blob/rdk_x5/samples/vision/ultralytics_yolo26/conversion/onnx_export/export_yolo26_detect_bpu.py
 - 官方hbm_runtime API：https://developer.d-robotics.cc/rdk_doc/en/Basic_Application/multi_media_sp_dev_api/RDK_X5/pydev_multimedia_api_x5/ai-python-api/
 参考源码读取版本4f378d74fcf3507ba1336a14f5bf66bfecab2990；单核BPU不能因多Python线程变成并行多核。
+
+
+### 2026-10-26：正式比赛已迁移YOLO26
+
+在独立测速之后，用户要求将模型接入正式比赛，现已完成。公共实现位于rescue_vision/yolo26.py，独立测速与正式比赛共用同一LTRB/NMS实现；正式比赛通过rescue_vision/yolo26_pipeline.py异步推理，3个共享图像槽保持图像与结果对应，原始采集时间不改。
+正式入口的两个shell依赖检查和runner默认模型都指向新640模型，文件随本次正式部署提交。旧320文件保留，不改变传统识别及其它工具。
+本次实际正式runner视觉链路（含跟踪、ROI、规划、显示和日志）在隔离控制文件下复测75秒，69个完整测量窗口平均41.84FPS、最低35FPS；未向车辆发送命令。详见competition_rescue/README.md及vision/captures/competition_yolo26_validation/20261026_210715/performance_summary.json。
+上文“尚未替换正式比赛”的说明仅指独立测速阶段。

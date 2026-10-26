@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "${script_dir}/.." && pwd)"
 localizer="${project_dir}/localization/build/t265_omni_localizer"
-vision_model="${project_dir}/vision/models/best_bayese_320x320_nv12.bin"
+vision_model="${project_dir}/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin"
 
 if [[ ! -x "${localizer}" || ! -f "${vision_model}" ]]; then
     echo "完整比赛流程依赖缺失：请确认定位程序和YOLO模型已部署。" >&2

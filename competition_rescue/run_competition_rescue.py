@@ -12,6 +12,9 @@ import argparse
 from collections import Counter
 from dataclasses import asdict, replace
 import json
+import hashlib
+import queue
+from functools import lru_cache
 import math
 import re
 import secrets
@@ -39,12 +42,12 @@ from rescue_vision.models import Detection, TrackState  # noqa: E402
 from rescue_vision.mission_protocol import write_command_frame  # noqa: E402
 from rescue_vision.tracker import MultiFrameTracker  # noqa: E402
 from rescue_vision.vision_protocol import IMAGE_HEIGHT, IMAGE_WIDTH, config_frame  # noqa: E402
+from rescue_vision.yolo26 import DEFAULT_MODEL
+from rescue_vision.yolo26_pipeline import Yolo26Pipeline
 from rescue_vision.vse import VseScaler  # noqa: E402
 from run_yolo_x5 import (  # noqa: E402
     DEFAULT_LABELS,
-    DEFAULT_MODEL,
     DEFAULT_YOLO_SCORE_THRESHOLD,
-    X5YoloV8,
     load_labels,
 )
 
@@ -110,7 +113,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--score-thres", type=float, default=DEFAULT_YOLO_SCORE_THRESHOLD)
     parser.add_argument("--nms-thres", type=float, default=0.45)
     parser.add_argument("--priority", type=int, default=0)
-    parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0, 1])
+    parser.add_argument("--bpu-cores", type=int, nargs="+", default=[0])
     parser.add_argument("--startup-timeout", type=float, default=60.0)
     parser.add_argument("--session", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/session.json")
     parser.add_argument("--pose", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/localization_result.json")
@@ -574,6 +577,13 @@ def safe_zone_push_corridor(
     return polygon, obstacle, None, SAFE_CORRIDOR_BLOCKED
 
 
+@lru_cache(maxsize=8)
+def capture_quality_mask(polygon):
+    mask = np.zeros((IMAGE_HEIGHT // 8, IMAGE_WIDTH // 8), np.uint8)
+    cv2.fillPoly(mask, [np.asarray(polygon, np.int32) // 8], 1)
+    return mask.astype(bool)
+
+
 def capture_image_quality(image, pixel_format: str, rois: CaptureRois,
                           calibrated: bool) -> str:
     """Reject measurable incomplete/covered views; valid empty is a real image."""
@@ -589,10 +599,7 @@ def capture_image_quality(image, pixel_format: str, rois: CaptureRois,
         return "capture_roi_incomplete"
     gray = (image[:IMAGE_HEIGHT] if pixel_format == "nv12"
             else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
-    mask = np.zeros((IMAGE_HEIGHT // 8, IMAGE_WIDTH // 8), np.uint8)
-    polygon = np.asarray(rois.overall, np.int32) // 8
-    cv2.fillPoly(mask, [polygon], 1)
-    pixels = gray[::8, ::8][mask.astype(bool)]
+    pixels = gray[::8, ::8][capture_quality_mask(rois.overall)]
     if pixels.size == 0:
         return "capture_roi_incomplete"
     if (float(pixels.std()) < 2.0 or
@@ -2258,6 +2265,49 @@ def draw_overlay(
     return view
 
 
+def competition_display_worker(frames, messages, stop, render_ms, window_mode, capture_rois):
+    """GUI owns no planner or UART; display work cannot stall vision publication."""
+    cv2.setNumThreads(1)
+    try:
+        _, output_size = configure_display_window(window_mode)
+        messages.put(("display_started", {"window_mode": window_mode, "width": output_size[0],
+                                          "height": output_size[1], "screen": list(display_size())}))
+        while not stop.is_set():
+            try:
+                image, pixel_format, vision, output, pose, stm, fps = frames.get(timeout=.03)
+            except queue.Empty:
+                image = None
+            if image is not None:
+                begin = time.monotonic()
+                bgr = cv2.cvtColor(image, cv2.COLOR_YUV2BGR_NV12) if pixel_format == "nv12" else image
+                shown = draw_overlay(bgr, vision, output, pose, stm, fps, output_size, capture_rois)
+                cv2.imshow(WINDOW_NAME, shown)
+                render_ms.value = (time.monotonic() - begin) * 1000
+            key = cv2.waitKey(1) & 0xFF
+            if key in (ord("q"), ord("Q")):
+                messages.put(("quit", {}))
+                break
+            if key in (ord("r"), ord("R")):
+                messages.put(("reset", {}))
+            elif key == 27:
+                messages.put(("display_escape_ignored", {"window_mode": window_mode}))
+                if window_mode == "fullscreen":
+                    window_mode = "normal"
+                    _, output_size = configure_display_window(window_mode, create=False)
+            elif key in (ord("f"), ord("F")):
+                window_mode = "fullscreen" if window_mode == "normal" else "normal"
+                _, output_size = configure_display_window(window_mode, create=False)
+                messages.put(("display_mode_changed", {"window_mode": window_mode,
+                                                       "width":output_size[0], "height":output_size[1]}))
+            if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                messages.put(("display_closed", {"action":"continue_task_without_window"}))
+                break
+    except Exception as error:
+        messages.put(("display_disabled", {"reason":"display_process_error", "error":str(error)}))
+    finally:
+        cv2.destroyAllWindows()
+
+
 def validate_args(args: argparse.Namespace) -> None:
     require_native_resolution(IMAGE_WIDTH, IMAGE_HEIGHT)
     if not 0.0 < args.score_thres < 1.0 or not 0.0 < args.nms_thres < 1.0:
@@ -2280,6 +2330,7 @@ def validate_args(args: argparse.Namespace) -> None:
 def main() -> int:
     args = arguments()
     validate_args(args)
+    cv2.setNumThreads(1)  # Match measured X5 settings; avoid competing OpenCV worker pools.
     session = load_json(args.session)
     if not session or session.get("side") not in {"red", "blue"}:
         raise RuntimeError(f"请先在完整比赛地图窗口选择出发区和红蓝方：{args.session}")
@@ -2338,38 +2389,17 @@ def main() -> int:
     }
     print(json.dumps(homography_diagnostics, ensure_ascii=False))
     events.write("optional_homography_status", homography_diagnostics)
-    scaler: VseScaler | None = None
+    if args.preprocess == "vse" and args.decoder != "jpu":
+        raise ValueError("VSE NV12路径要求--decoder jpu")
     try:
-        detector = X5YoloV8(
-            args.model,
-            load_labels(args.labels),
-            args.score_thres,
-            args.nms_thres,
-            args.priority,
-            args.bpu_cores,
-        )
-        use_vse = args.preprocess in {"auto", "vse"} and args.decoder == "jpu"
-        if args.preprocess == "vse" and args.decoder != "jpu":
-            raise ValueError("VSE NV12路径要求--decoder jpu")
-        if use_vse:
-            scale = min(detector.input_width / IMAGE_WIDTH, detector.input_height / IMAGE_HEIGHT)
-            content_width = max(2, int(round(IMAGE_WIDTH * scale)) // 2 * 2)
-            content_height = max(2, int(round(IMAGE_HEIGHT * scale)) // 2 * 2)
-            try:
-                scaler = VseScaler(IMAGE_WIDTH, IMAGE_HEIGHT, content_width, content_height)
-            except Exception as error:
-                if args.preprocess == "vse":
-                    raise
-                print(f"警告：VSE初始化失败，回退CPU预处理：{error}")
+        detector = Yolo26Pipeline(args.model, load_labels(args.labels), args.score_thres,
+                                  args.nms_thres, args.priority, args.bpu_cores,
+                                  args.preprocess if args.decoder == "jpu" else "cpu")
     except Exception as error:
-        events.write("fatal_exception", {
-            "error_type": type(error).__name__,
-            "error": str(error),
-            "traceback": traceback.format_exc(),
-        })
-        if scaler is not None:
-            scaler.close()
+        events.write("fatal_exception", {"error_type":type(error).__name__, "error":str(error),
+                                          "traceback":traceback.format_exc()})
         raise
+    scaler = None  # VSE is owned by the inference worker, never shared between processes.
 
     mission = CompetitionMission(CompetitionSettings(
         side=side,
@@ -2397,6 +2427,11 @@ def main() -> int:
             write_command_frame(args.command_file, config_frame(sequence, 0x11 if red_side else 0x12, start_zone))
             time.sleep(0.04)
         events.write("competition_started", {
+            "model": str(args.model), "model_family": "YOLO26",
+            "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
+            "model_input_wh": [detector.input_width, detector.input_height],
+            "model_output_shapes": detector.shapes,
+            "initial_preprocess_backend": detector.preprocess,
             "side": side,
             "start_zone": start_zone,
             "initial_stash_enabled": not args.disable_initial_stash,
@@ -2427,16 +2462,16 @@ def main() -> int:
             "traceback": traceback.format_exc(),
         })
         planner.stop("setup_exception")
+        detector.close()
         raise
     camera_decoder = args.decoder
-    camera_output_format = "nv12" if scaler is not None else "bgr"
+    camera_output_format = "nv12" if args.decoder == "jpu" else "bgr"
     camera: LatestFrameCamera | None = None
     running = True
     exit_reason = "setup_complete"
-    window_created = False
+    display_process = display_frames = display_messages = display_stop = display_render_ms = None
     display_enabled = not args.no_display
     active_window_mode = args.window_mode
-    display_output_size = NORMAL_WINDOW_SIZE
     started = time.monotonic()
     camera_recovery_pending = False
     next_camera_retry = started + 1.0
@@ -2461,6 +2496,9 @@ def main() -> int:
     fps_started = started
     inference_frames = 0
     inference_total = 0
+    vision_performance_started = None
+    vision_performance_bins = []
+    vision_performance_last = None
     display_next = started
     next_vision = started
     camera_restarts = 0
@@ -2506,26 +2544,56 @@ def main() -> int:
                 "recovery": "hold_and_retry",
             })
         if display_enabled:
+            import multiprocessing as mp
+            context = mp.get_context("spawn")
+            display_frames, display_messages = context.Queue(1), context.Queue()
+            display_stop = context.Event()
+            display_render_ms = context.Value("d", 0.0)
+            display_process = context.Process(target=competition_display_worker,
+                args=(display_frames, display_messages, display_stop, display_render_ms,
+                      active_window_mode, capture_rois), daemon=True)
             try:
-                _, display_output_size = configure_display_window(active_window_mode)
-                window_created = True
-                events.write("display_started", {
-                    "window_mode": active_window_mode,
-                    "width": display_output_size[0],
-                    "height": display_output_size[1],
-                    "screen": list(display_size()),
-                })
-            except cv2.error as error:
+                display_process.start()
+            except Exception as error:
                 display_enabled = False
-                events.write("display_disabled", {
-                    "reason": "window_init_failed",
-                    "error": str(error),
-                })
+                display_process = None
+                display_frames.close()
+                display_messages.close()
+                display_frames = display_messages = None
+                events.write("display_disabled", {"reason":"window_process_start_failed", "error":str(error)})
 
         while running:
             if planner.error is not None:
                 raise RuntimeError(f"比赛规划线程退出：{planner.error}")
             now = time.monotonic()
+            if display_messages is not None:
+                while True:
+                    try:
+                        event, details = display_messages.get_nowait()
+                    except queue.Empty:
+                        break
+                    if event == "quit":
+                        exit_reason, running = "user_q", False
+                    elif event == "reset":
+                        if args.reset_request is not None and args.reset_session_token:
+                            try:
+                                write_atomic_json(args.reset_request, {"session_token":args.reset_session_token,
+                                                                      "timestamp_monotonic_ns":time.monotonic_ns()})
+                                events.write("session_reset_forwarded", {"source":"vision_window"})
+                                exit_reason, running = "user_reset", False
+                            except OSError as error:
+                                events.write("session_reset_forward_failed", {"error":str(error)})
+                        else:
+                            events.write("session_reset_unavailable", {"reason":"runner_not_owned_by_startup_window"})
+                    else:
+                        events.write(event, details)
+                        if event in {"display_closed", "display_disabled"}:
+                            display_enabled = False
+                if display_enabled and not display_process.is_alive():
+                    display_enabled = False
+                    events.write("display_disabled", {"reason":"display_process_exited", "action":"continue_task_without_window"})
+            if not running:
+                break
             if args.duration > 0.0 and now - started >= args.duration:
                 exit_reason = "duration"
                 break
@@ -2552,6 +2620,7 @@ def main() -> int:
                         planner.set_paused(False, reason="camera_recovery")
                         last_packet_id = 0
                         last_inference_id = 0
+                        detector.reset()
                         next_vision = now
                         events.write("camera_recovery_restored", {
                             "decoder": camera_decoder,
@@ -2599,6 +2668,7 @@ def main() -> int:
                         raise
                     last_packet_id = 0
                     last_inference_id = 0
+                    detector.reset()
                     next_vision = now
                     events.write("camera_restarted", {
                         "decoder": camera_decoder,
@@ -2621,207 +2691,117 @@ def main() -> int:
             fetch_started = time.monotonic()
             packet = camera.latest()
             fetch_ms = (time.monotonic() - fetch_started) * 1000.0
-            if packet is not None:
-                if packet.frame_id != last_packet_id:
-                    last_packet_id = packet.frame_id
-                if packet.frame_id != last_inference_id and now >= next_vision:
-                    next_vision = now + 1.0 / args.vision_fps
-                    last_inference_id = packet.frame_id
-                    if packet.pixel_format == "nv12":
-                        if scaler is not None:
-                            try:
-                                detections, timing = detector.infer_nv12(
-                                    packet.image, IMAGE_WIDTH, IMAGE_HEIGHT, scaler
-                                )
-                            except RuntimeError as error:
-                                if args.preprocess != "auto" or "VSE缩放失败" not in str(error):
-                                    raise
-                                events.write("vse_runtime_cpu_fallback", {
-                                    "error": str(error),
-                                    "frame_sequence": packet.frame_id,
-                                    "action": "continue_inference_with_cpu",
-                                })
-                                scaler.close()
-                                scaler = None
-                                detections, timing = detector.infer(
-                                    cv2.cvtColor(packet.image, cv2.COLOR_YUV2BGR_NV12)
-                                )
-                        else:
-                            detections, timing = detector.infer(
-                                cv2.cvtColor(packet.image, cv2.COLOR_YUV2BGR_NV12)
-                            )
-                    else:
-                        detections, timing = detector.infer(packet.image)
-                    snapshot_started = time.monotonic()
-                    # Display exactly the image that produced latest_vision,
-                    # not a newer camera frame underneath older ROI/results.
-                    latest_image = packet.image.copy()
-                    latest_pixel_format = packet.pixel_format
-                    vision_sequence += 1
-                    low_conf_green_seen = any(
-                        item.class_name == "green_supply" and
-                        float(item.confidence) < GREEN_SUPPLY_SCORE_THRESHOLD
-                        for item in detections
+            if packet is not None and packet.frame_id != last_inference_id and now >= next_vision:
+                next_vision = now + 1.0 / args.vision_fps
+                last_inference_id = packet.frame_id
+                detector.submit(packet)
+            result = detector.receive()
+            if result is not None:
+                packet, detections, timing = result
+                snapshot_started = time.monotonic()
+                # Display exactly the image that produced latest_vision,
+                # not a newer camera frame underneath older ROI/results.
+                latest_image = packet.image  # Camera publishes an owned immutable copy.
+                latest_pixel_format = packet.pixel_format
+                vision_sequence += 1
+                low_conf_green_seen = any(
+                    item.class_name == "green_supply" and
+                    float(item.confidence) < GREEN_SUPPLY_SCORE_THRESHOLD
+                    for item in detections
+                )
+                detections = [
+                    item for item in detections
+                    if item.class_name != "green_supply" or
+                    float(item.confidence) >= GREEN_SUPPLY_SCORE_THRESHOLD
+                ]
+                detection_objects = [make_detection(item, localizer) for item in detections]
+                tracks = tracker.update(detection_objects)
+                stm = load_stm(args.stm_status)
+                safe_class = "safe_red" if side == "red" else "safe_blue"
+                detected_safe_bbox = safe_bbox_from_detections(detections, safe_class)
+                if detected_safe_bbox is not None:
+                    recent_safe_bbox = detected_safe_bbox
+                    safe_zone_missing_frames = 0
+                    safe_bbox = detected_safe_bbox
+                    safe_zone_filter_blocked = False
+                elif recent_safe_bbox is not None and safe_zone_missing_frames < 2:
+                    safe_zone_missing_frames += 1
+                    safe_bbox = recent_safe_bbox
+                    safe_zone_filter_blocked = True
+                else:
+                    recent_safe_bbox = None
+                    safe_zone_missing_frames = 3
+                    safe_bbox = None
+                    safe_zone_filter_blocked = False
+                latest_vision = make_vision_snapshot(
+                    detections,
+                    tracks,
+                    localizer,
+                    safe_bbox,
+                    stm,
+                    mission,
+                    vision_sequence,
+                    safe_zone_filter_blocked,
+                    capture_rois,
+                    low_conf_green_seen,
+                    recent_carried_bboxes,
+                    capture_quality_reason=capture_image_quality(
+                        packet.image, packet.pixel_format, capture_rois,
+                        args.capture_roi.is_file(),
+                    ),
+                    observed_s=packet.published_ns / 1_000_000_000.0,
+                    range_calibration=range_calibration,
+                )
+                if not mission.carried_manifest:
+                    recent_carried_bboxes = ()
+                elif latest_vision.carried_reference_bboxes:
+                    recent_carried_bboxes = (
+                        latest_vision.carried_reference_bboxes
                     )
-                    detections = [
-                        item for item in detections
-                        if item.class_name != "green_supply" or
-                        float(item.confidence) >= GREEN_SUPPLY_SCORE_THRESHOLD
-                    ]
-                    detection_objects = [make_detection(item, localizer) for item in detections]
-                    tracks = tracker.update(detection_objects)
-                    stm = load_stm(args.stm_status)
-                    safe_class = "safe_red" if side == "red" else "safe_blue"
-                    detected_safe_bbox = safe_bbox_from_detections(detections, safe_class)
-                    if detected_safe_bbox is not None:
-                        recent_safe_bbox = detected_safe_bbox
-                        safe_zone_missing_frames = 0
-                        safe_bbox = detected_safe_bbox
-                        safe_zone_filter_blocked = False
-                    elif recent_safe_bbox is not None and safe_zone_missing_frames < 2:
-                        safe_zone_missing_frames += 1
-                        safe_bbox = recent_safe_bbox
-                        safe_zone_filter_blocked = True
-                    else:
-                        recent_safe_bbox = None
-                        safe_zone_missing_frames = 3
-                        safe_bbox = None
-                        safe_zone_filter_blocked = False
-                    latest_vision = make_vision_snapshot(
-                        detections,
-                        tracks,
-                        localizer,
-                        safe_bbox,
-                        stm,
-                        mission,
-                        vision_sequence,
-                        safe_zone_filter_blocked,
-                        capture_rois,
-                        low_conf_green_seen,
-                        recent_carried_bboxes,
-                        capture_quality_reason=capture_image_quality(
-                            packet.image, packet.pixel_format, capture_rois,
-                            args.capture_roi.is_file(),
+                planner.set_vision(latest_vision)
+                vision_performance_last = time.monotonic()
+                if vision_performance_started is None:
+                    vision_performance_started = vision_performance_last
+                bucket = int(vision_performance_last - vision_performance_started)
+                while len(vision_performance_bins) <= bucket:
+                    vision_performance_bins.append(0)
+                vision_performance_bins[bucket] += 1
+                timing.update({"fetch": fetch_ms, "roi": latest_vision.roi_elapsed_ms,
+                               "snapshot": (time.monotonic() - snapshot_started) * 1000.0,
+                               "capture_to_publish": (time.monotonic() - latest_vision.observed_monotonic_s) * 1000.0,
+                               "previous_display": display_elapsed_ms,
+                               "previous_log_write": log_write_elapsed_ms})
+                log_now = time.monotonic()
+                if log_now >= next_detection_log:
+                    log_write_started = time.monotonic()
+                    detection_log.write(
+                        "frame",
+                        detection_log_record(
+                            vision_sequence,
+                            timing,
+                            detection_objects,
+                            latest_vision.cargo,
                         ),
-                        observed_s=packet.published_ns / 1_000_000_000.0,
-                        range_calibration=range_calibration,
                     )
-                    if not mission.carried_manifest:
-                        recent_carried_bboxes = ()
-                    elif latest_vision.carried_reference_bboxes:
-                        recent_carried_bboxes = (
-                            latest_vision.carried_reference_bboxes
-                        )
-                    planner.set_vision(latest_vision)
-                    timing.update({"fetch": fetch_ms, "roi": latest_vision.roi_elapsed_ms,
-                                   "snapshot": (time.monotonic() - snapshot_started) * 1000.0,
-                                   "capture_to_publish": (time.monotonic() - latest_vision.observed_monotonic_s) * 1000.0,
-                                   "previous_display": display_elapsed_ms,
-                                   "previous_log_write": log_write_elapsed_ms})
-                    log_now = time.monotonic()
-                    if log_now >= next_detection_log:
-                        log_write_started = time.monotonic()
-                        detection_log.write(
-                            "frame",
-                            detection_log_record(
-                                vision_sequence,
-                                timing,
-                                detection_objects,
-                                latest_vision.cargo,
-                            ),
-                        )
-                        log_write_elapsed_ms = (time.monotonic() - log_write_started) * 1000.0
-                        next_detection_log = log_now + 1.0 / args.detection_log_fps
-                    inference_frames += 1
-                    inference_total += 1
+                    log_write_elapsed_ms = (time.monotonic() - log_write_started) * 1000.0
+                    next_detection_log = log_now + 1.0 / args.detection_log_fps
+                inference_frames += 1
+                inference_total += 1
             if now - fps_started >= 1.0:
                 current_fps = inference_frames / max(now - fps_started, 1e-6)
                 inference_frames = 0
                 fps_started = now
             else:
                 current_fps = inference_frames / max(now - fps_started, 1e-6)
-            if display_enabled and now >= display_next:
-                display_started = time.monotonic()
+            if display_enabled and now >= display_next and latest_image is not None:
                 display_next = now + 1.0 / args.display_fps
                 output, pose, current_stm = planner.snapshot()
-                if latest_image is None:
-                    latest_image = np.zeros(
-                        (IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8
-                    )
-                shown_image = (
-                    cv2.cvtColor(latest_image, cv2.COLOR_YUV2BGR_NV12)
-                    if latest_pixel_format == "nv12" else latest_image
-                )
                 try:
-                    shown = draw_overlay(
-                        shown_image,
-                        latest_vision,
-                        output,
-                        pose,
-                        current_stm,
-                        current_fps,
-                        display_output_size,
-                        capture_rois,
-                    )
-                    cv2.imshow(WINDOW_NAME, shown)
-                    key = cv2.waitKey(1) & 0xFF
-                    display_elapsed_ms = (time.monotonic() - display_started) * 1000.0
-                    if key in (ord("q"), ord("Q")):
-                        exit_reason = "user_q"
-                        running = False
-                    elif key in (ord("r"), ord("R")):
-                        if args.reset_request is not None and args.reset_session_token:
-                            try:
-                                write_atomic_json(args.reset_request, {
-                                    "session_token": args.reset_session_token,
-                                    "timestamp_monotonic_ns": time.monotonic_ns(),
-                                })
-                                events.write("session_reset_forwarded", {
-                                    "source": "vision_window",
-                                })
-                                exit_reason = "user_reset"
-                                running = False
-                            except OSError as error:
-                                events.write("session_reset_forward_failed", {
-                                    "error": str(error),
-                                })
-                        else:
-                            events.write("session_reset_unavailable", {
-                                "reason": "runner_not_owned_by_startup_window",
-                            })
-                    elif key == 27:
-                        events.write("display_escape_ignored", {
-                            "window_mode": active_window_mode,
-                        })
-                        if active_window_mode == "fullscreen":
-                            active_window_mode = "normal"
-                            _, display_output_size = configure_display_window(
-                                active_window_mode, create=False
-                            )
-                    elif key in (ord("f"), ord("F")):
-                        active_window_mode = (
-                            "fullscreen" if active_window_mode == "normal" else "normal"
-                        )
-                        _, display_output_size = configure_display_window(
-                            active_window_mode, create=False
-                        )
-                        events.write("display_mode_changed", {
-                            "window_mode": active_window_mode,
-                            "width": display_output_size[0],
-                            "height": display_output_size[1],
-                        })
-                    visible = cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE)
-                    if visible < 1:
-                        display_enabled = False
-                        events.write("display_closed", {
-                            "action": "continue_task_without_window",
-                        })
-                except cv2.error as error:
-                    display_enabled = False
-                    events.write("display_disabled", {
-                        "reason": "display_runtime_error",
-                        "error": str(error),
-                    })
+                    display_frames.put_nowait((latest_image, latest_pixel_format, latest_vision,
+                                               output, pose, current_stm, current_fps))
+                except queue.Full:
+                    pass  # Skip preview frames, never block inference or mission control.
+                display_elapsed_ms = display_render_ms.value
             time.sleep(0.0005)
         if exit_reason == "setup_complete":
             exit_reason = "loop_stopped"
@@ -2838,15 +2818,31 @@ def main() -> int:
         raise
     finally:
         planner.stop(exit_reason)
+        detector.close()
         if camera is not None:
             camera.stop()
         if scaler is not None:
             scaler.close()
-        if window_created:
-            try:
-                cv2.destroyWindow(WINDOW_NAME)
-            except cv2.error:
-                pass
+        if display_process is not None:
+            display_stop.set()
+            display_process.join(3)
+            if display_process.is_alive():
+                display_process.terminate()
+                display_process.join()
+            display_frames.cancel_join_thread()
+            display_frames.close()
+            display_messages.close()
+        completed_windows = vision_performance_bins[:-1]
+        measured = completed_windows[5:]
+        events.write("vision_performance", {
+            "model": str(args.model), "model_family": "YOLO26", "warmup_seconds": 5,
+            "metric": "unique frames after tracking/ROI and planner.set_vision",
+            "fps_1s_including_warmup": completed_windows,
+            "measurement_seconds": len(measured), "frames_after_warmup": sum(measured),
+            "mean_fps": sum(measured)/len(measured) if measured else None,
+            "min_fps_1s": min(measured) if measured else None,
+            "stable_30fps": bool(len(measured) >= 30 and min(measured) >= 30),
+        })
         events.write("competition_stopped", {
             "state": mission.state.value,
             "delivery_count": mission.delivery_count,

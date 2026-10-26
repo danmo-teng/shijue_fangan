@@ -24,70 +24,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent
 
 
-class Detector:
-    def __init__(self, model, labels, threshold, nms):
-        import hbm_runtime
-        from run_yolo_x5 import load_labels
-        self.labels = load_labels(labels)
-        self.threshold, self.nms = threshold, nms
-        self.runtime = hbm_runtime.HB_HBMRuntime(str(model))
-        self.name = self.runtime.model_names[0]
-        self.input = self.runtime.input_names[self.name][0]
-        shape = self.runtime.input_shapes[self.name][self.input]
-        if tuple(shape) != (1, 3, 640, 640):
-            raise ValueError(f'Expected 1x3x640x640, got {shape}')
-        self.runtime.set_scheduling_params(priority={self.name: 0}, bpu_cores={self.name: [0]})
-        self.shapes = self.runtime.output_shapes[self.name]
-        self.quants = self.runtime.output_quants[self.name]
-        self.layers = []
-        for size in (80, 40, 20):
-            classes = [n for n, s in self.shapes.items() if tuple(s) == (1, size, size, len(self.labels))]
-            boxes = [n for n, s in self.shapes.items() if tuple(s) == (1, size, size, 4)]
-            if len(classes) != 1 or len(boxes) != 1:
-                raise ValueError(f'Unsupported YOLO26 outputs/labels: {self.shapes}')
-            y, x = np.mgrid[:size, :size]
-            anchors = np.column_stack((x.ravel(), y.ravel())).astype(np.float32) + .5
-            self.layers.append((classes[0], boxes[0], 640 // size, anchors))
-        self.logit_threshold = math.log(threshold / (1 - threshold))
-
-    def run(self, tensor):
-        return self.runtime.run({self.name: {self.input: tensor}})[self.name]
-
-    def decode(self, outputs):
-        from run_yolo_x5 import dequantize, sigmoid
-        candidates = []
-        for cn, bn, stride, anchors in self.layers:
-            cls = np.asarray(outputs[cn])
-            # hbm_runtime normally returns already-dequantized float32.
-            if not np.issubdtype(cls.dtype, np.floating):
-                cls = dequantize(cls, self.quants[cn])
-            cls = cls.reshape(-1, len(self.labels))
-            scores = cls.max(axis=1)
-            selected = np.flatnonzero(scores >= self.logit_threshold)
-            if not selected.size:
-                continue
-            box = np.asarray(outputs[bn]).reshape(-1, 4)[selected]
-            if not np.issubdtype(box.dtype, np.floating):
-                box = dequantize(box, self.quants[bn])
-            grid = anchors[selected]
-            xyxy = np.concatenate((grid - box[:, :2], grid + box[:, 2:]), axis=1) * stride
-            xyxy = np.clip(xyxy, 0, 639)
-            valid = (xyxy[:, 2] > xyxy[:, 0]) & (xyxy[:, 3] > xyxy[:, 1])
-            candidates.append(np.column_stack((xyxy[valid], sigmoid(scores[selected][valid]),
-                                               cls[selected][valid].argmax(axis=1))))
-        if not candidates:
-            return np.empty((0, 6), np.float32)
-        dets = np.concatenate(candidates)
-        kept = []
-        for category in np.unique(dets[:, 5]):
-            ids = np.flatnonzero(dets[:, 5] == category)
-            boxes = dets[ids, :4].copy()
-            boxes[:, 2:] -= boxes[:, :2]
-            # Native OpenCV NMS avoids Python's per-box IoU loop; retain all candidates.
-            indices = cv2.dnn.NMSBoxes(boxes.tolist(), dets[ids, 4].tolist(), 0.0, self.nms)
-            if len(indices):
-                kept.extend(ids[np.asarray(indices).reshape(-1)].tolist())
-        return dets[kept]
+from rescue_vision.yolo26 import X5Yolo26 as Detector
 
 
 def display_process(pixels, boxes, info, guard, quit_event, labels, fps, measure_start, deadline, directory):
