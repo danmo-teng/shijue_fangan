@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=YOLO26-640实时测速
+Comment=YOLO26真实相机识别测速，预热5秒、测量60秒
+Exec=/home/sunrise/RDK_X5/shijue_fangan/vision/benchmark_yolo26_launcher.sh
+Icon=applications-engineering
+Terminal=true
+StartupNotify=true
+Categories=Development;

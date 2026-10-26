@@ -324,3 +324,68 @@ python3 -m py_compile run_editor.py run_detector.py calibrate_ground.py rescue_v
 ```
 
 合成测试通过只说明代码和基本颜色规则正常；现场阈值仍需使用真实材料校准。
+
+
+## YOLO26n 640×640 实时测速（2026-10-26）
+
+独立程序 `benchmark_yolo26_x5.py`，不修改比赛使用的YOLOv8模型/后处理，不启动比赛，不读写UART。
+默认模型为 `yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin`，文件由用户提供、不纳入本次代码提交。
+已读取实际模型：NV12输入1×3×640×640，三层80/40/20，各为6通道分类logits及4通道LTRB；不能套64通道DFL解码。
+用户已确认类别顺序仍为conmon、kernel、risk、wound、safe_blue、safe_red。默认置信度0.2，NMS IoU 0.45。
+
+启动（先关闭其他占用摄像头的程序）：
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan
+python3 vision/benchmark_yolo26_x5.py
+```
+
+本机桌面有“YOLO26-640实时测速”。默认预热5秒、正式测量60秒，Q退出。`--duration 0`持续显示，退出后仍保存统计。
+默认使用1280×1024 MJPEG 180fps摄像头、JPU解码上限60fps、VSE缩放到640×512再NV12补边到640×640；缩放/补边保持比例。
+VSE不可用时auto模式明确提示并记录CPU回退；`--preprocess vse`要求硬件缩放成功。
+
+默认优化配置：采集/JPU独立线程＋单个预处理/推理/后处理工作线程＋共享内存独立显示进程，窗口刷新上限40fps。
+这样避免BPU Python调用与GUI争用GIL；不直接假设增加更多Python线程会加速。
+`--pipeline threaded`可开启额外预处理线程，队列容量1、只保留最新图；多线程对照实测吞吐略高，但延迟和抖动也更大。
+预计算三层网格、先筛logits再解码少量框、OpenCV原生分类别NMS、禁用OpenCV多线程池争用。
+未提高置信度、删除类别、减少模型输入尺寸或截断候选数量来制造高FPS。
+
+可运行对照：
+
+```bash
+python3 vision/benchmark_yolo26_x5.py --pipeline threaded --decode-fps 90 --display-fps 60
+python3 vision/benchmark_yolo26_x5.py --no-display
+```
+
+日志按运行目录保存在 `vision/captures/yolo26_benchmark/`：
+- metadata.json：模型/脚本SHA256、输入输出形状、标签、实际预处理方式及全部参数。
+- frames.csv：每张唯一新图的帧号、采集/完成时刻、预处理/BPU/后处理/总时延、检测数量。
+- summary.json：平均识别FPS、每秒FPS及最低值、阶段P50/P95/P99、真实显示新帧数量、丢帧、错误。
+- display.json、last_preview.jpg：显示时序与最后一帧带框画面。
+
+判定标准：排除预热，至少测量30秒，无运行错误，所有完整1秒窗口完成识别的新帧数均≥30，才记stable_30fps=true。
+重复刷新同一画面不计识别/显示新帧。短测试和静态图片回放不会被标记为相机实时验证。
+`--replay-dir`仅用于图片回放，summary.source明确标为replay，不代表相机性能。
+“每秒≥30”不等于每一帧都在33.3ms以内；日志另记延迟和最大结果间隔。
+
+本机真实摄像头+BPU、现场物资画面实测（没有用重复静态图片代替摄像头）：
+
+| 配置 | 时长 | 识别均值 | 最低1秒识别FPS | 显示均值 | 判定 |
+|---|---:|---:|---:|---:|---|
+| 原三工作线程、同进程GUI（初稿） | 60s | 44.15 | 32 | 20.45 | 识别通过，显示较慢 |
+| 精简计算线程、同进程GUI（中间版） | 60s | 48.50 | 32 | 22.15 | 识别通过，显示较慢 |
+| 额外预处理线程、独立GUI，90/60fps上限 | 60s | 45.32 | 26 | 34.57 | 有1秒低于30，未通过 |
+| 最终默认计算配置、独立GUI，60/40fps上限 | 60s | 39.72 | 35 | 34.67 | 识别通过 |
+| 同配置、显示上限60fps | 35s | 39.43 | 30 | 34.86 | 未明显改善，默认保留40fps显示上限 |
+
+最终默认配置完整记录：`vision/captures/yolo26_benchmark/20261026_203227_623318_serial/`。
+该轮BPU推理P50/P95为14.31/15.62ms，采集到结果P50/P95为45.59/51.52ms，零运行错误。
+显示最低1秒为27，显示平均34.67不代表显示每秒都≥30；识别最低35与显示指标分别统计。
+上述结论限定本次场景与运行负载；拥挤场景、温度或其它进程负载变化应看本程序新测日志，不能承诺长期硬实时。
+本次没有把新模型替换进正式比赛流程。
+
+参考（实际输出形状已用hbm_runtime核对）：
+- 官方YOLO26解码/部署：https://github.com/D-Robotics/rdk_model_zoo/blob/rdk_x5/samples/vision/ultralytics_yolo26/runtime/python/yolo26_det.py
+- 官方导出头：https://github.com/D-Robotics/rdk_model_zoo/blob/rdk_x5/samples/vision/ultralytics_yolo26/conversion/onnx_export/export_yolo26_detect_bpu.py
+- 官方hbm_runtime API：https://developer.d-robotics.cc/rdk_doc/en/Basic_Application/multi_media_sp_dev_api/RDK_X5/pydev_multimedia_api_x5/ai-python-api/
+参考源码读取版本4f378d74fcf3507ba1336a14f5bf66bfecab2990；单核BPU不能因多Python线程变成并行多核。
