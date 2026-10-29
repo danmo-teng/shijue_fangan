@@ -1,5 +1,108 @@
 # T265/F407 中心起点定位调试
 
+## 2026-10-29：新竖装外参候选（仅调试，尚未实车确认）
+
+本节覆盖下文历史桌面默认外参/覆盖规则；正式比赛的模板、四角起点和
+135/45/225/315°航向保持原值，必须在本阶段实测确认后另行同步。
+本轮不接雷达、主yaw或官方轮速输入，不改变比赛状态机、mode51及UART任务配对。
+
+用户本对话确认：T265仍竖装；自身绕车体竖直轴俯视顺时针30°；测量点为SDK
+定位中心，已考虑厚度。车中心到定位中心69.221mm，右后、与正后方夹角60°：
+`forward=-0.0346105m, left=-0.0599471445m`。没有额外叠加SDK内部IMU偏移。
+这些是测量初值，不是已通过精度验收的标定。
+
+配置轴表示车体轴在T265 Pose坐标中的分量，`R_pose_body`以forward/left/up为列。
+旧前向+x、上向-y，左向由`up × forward`得到+z。相机自身顺时针转30°后，
+同一车体前向在新相机坐标中为`(cos30,0,sin30)`；候选左向为
+`(-sin30,0,cos30)`，上向仍为`(0,-1,0)`，不是改地图初始航向。
+SDK世界坐标的+y指向天空；静置水平时应检查`up_world≈(0,1,0)`。
+这能核查竖装与重力对齐，不能仅凭数学计算宣称实物轴向已验证。
+
+解析器继续接受±x/±y/±z，并增量接受三个逗号分隔分量，先归一化，再拒绝
+非有限、零向量或不正交的forward/up；允许`0.8660254,0,0.5`这样的舍入值。
+独立候选配置为`localization/config/t265_debug_new_mount_candidate.conf`。
+桌面默认读取该文件；显式`--config`时尊重所选文件的轴与偏置，已去掉旧硬编码覆盖。
+只保留调试专用中心起点、原45°显示初始偏移，并强制比例禁用/1.000、轮式融合权重0、
+导航距离补偿关闭。T265单源与pose jumping继续启用。
+
+投影先通过完整四元数旋转车体轴与已知平面杆臂：
+`r_world=R(q) R_pose_body [forward,left,0]`，
+`delta_center=delta_camera-(r_world-r_world_start)`；
+速度使用同一采样的`v_center=v_camera-omega_world×r_world`，再投影到车体轴。
+只对最终位置取水平地图分量，保留完整姿态；不将每个体轴分别压平后代替完整旋转。
+未提供竖直杆臂测量值，以上不声称已标定竖直偏移；本轮按给定平面偏置处理。
+
+### 启动与人工实测
+
+先确认实际已烧录提交和MotionDebug模式。UART状态不能证明烧录提交；
+`expected_lower_firmware`仍只是配套功能参考。默认未确认时入口只接收，运动按钮不发命令。
+停止其他占用UART/T265的入口后，将实际提交写入`F407_COMMIT`，通过原入口启动：
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan
+cmake --build localization/build --target t265_omni_localizer -j2
+: "${F407_COMMIT:?请先将F407_COMMIT设为实际已烧录提交}"
+localization/tools/desktop_launcher.sh \
+  --actual-lower-firmware "$F407_COMMIT" --actual-lower-mode MotionDebug \
+  --reference-description '填写车中心卷尺零点、地面直线及角度基准布置'
+```
+
+保持场地和速度一致，先静置记录重力轴/漂移，再按以下顺序逐段人工触发；
+每段都在地面标记车体旋转中心和朝向，独立量起止点。不要用相机外壳点代替车中心。
+
+1. 距离1000mm，V前进→B后退；再B后退→V前进，各段停稳后测量。
+2. L左移→H右移；再H右移→L左移，同样逐段记录，保留返程闭合差。
+3. O/P/0分别正向90/180/360°；1/2/3分别反向90/180/360°。
+   正向为车体俯视逆时针；线上TURN仍按既有符号取反。每段独立检查实际地面角度，
+   用完整圈数记录±360°，不要把整圈写成0°，也不要用“经过90°”的样本冒充停稳终点。
+4. DONE只结束命令等待。人工确认静止后按M标记；按G在原窗口输入
+   `前向毫米,左向毫米,有符号转角度`，未知填`?`，回车保存，Esc取消输入。
+   位移沿该动作开始时的车体前/左轴测量。例如只测转角时前两项填`?`。
+   `--reference-description`必须记录真实基准，示意文字不能冒充实测布置。
+   停稳、测量和录入完毕再开始下一段；基准变化时另开会话。
+
+现有Y转向返航仍可用，但不是独立卷尺基准，不用于本轮自动定距精度判定。
+操作者确认固件后，所有动作仍由用户按钮/键盘触发；本阶段实施过程中没有自动发车。
+
+### 日志与报告接口
+
+日志直接保存在RDK的`rescue_map/runtime/history/t265_f407_motion_map/`，每会话独立目录：
+
+- `t265_raw_pose.csv`：每个新SDK Pose的帧号、原始采集时间及时间域、接收单调时间、
+  可判断时的采集年龄、三维位置/速度/角速度、完整四元数和双confidence。
+  这条日志在置信度与启动门禁之前保存；未知时钟域的年龄为inf，不能视为已对时。
+- `localization_debug.csv`：原相机轨迹与修正车中心、完整姿态、未展开/累计航向、
+  原始编码器及轮式参考；追加帧号、时间域、采集年龄、接收时间和up_world。
+- 原`localization_events.jsonl`继续记录跳变、丢帧、SDK选项回读与定位事件。
+- `commands.jsonl`、`f407_motion_status.jsonl`、`uart_rx.jsonl`保留指令/回执及原始串口。
+  `events.jsonl`用test_id对应动作起止、请求参数、定位快照、人工停稳点和录入。
+- `ground_truth.jsonl`只保存操作者独立实测，未知项为null；指令目标不会填成真值。
+- `analysis.json`逐动作给出T265减实测、实际运动减指令两组差值与confidence/样本年龄。
+  无实测时不生成精度结论；`accuracy_verified=false`。不再拟合轮式比例，原全程角度
+  穿越统计改名为`angle_crossings_not_settled_measurements`，仅供诊断。
+
+`--raw-pose-csv FILE`为现有localizer新增的可选诊断接口，不启动额外设备。
+RDK只保留最近五次明确归属本模块且完整保存的会话：新会话日志/分析/停止事件保存后
+写完成标记，再清理超出的旧会话，当前会话计入五次且始终保护。
+历史会话须有本模块metadata和末尾session_stopped事件才能判完整；无法确认、活动、
+含未知用户文件/子目录或符号链接的目录跳过。只删除已知模块日志文件，不递归清目录；
+不会触及其他模块日志、模型、标定、代码、vision/456或雷达与融合资料。
+
+### 本阶段验证边界
+
+复用`test_omni_localization`和`test_f407_motion_protocol.py`，只扩展已有检查。
+新几何案例是合成四向/往返、正反90/180/360°、倾斜姿态及完整杆臂速度检查；
+Python用临时目录检查入口不覆盖外参、反向操作、真值录入/误差拆分及日志清理边界。
+它们不能证明新安装的真实重力、轴向、尺度、杆臂误差、跟踪漂移或下位机动作精度。
+实际固件/模式和上述实车测量仍待用户确认完成；不因此同步正式比赛外参。
+本次实际执行：localizer与test_omni_localization编译成功；
+ctest仅运行omni_localization_tests，1/1通过；原MotionDebug Python检查通过；
+两个入口--help、Python语法和git diff --check通过；原地图无硬件渲染通过。
+未打开T265/UART、未启动比赛、未发送实车指令，也没有清理任何已有运行会话。
+
+坐标依据：[librealsense v2.50.0 T265 Sensor origin and coordinate system](https://github.com/IntelRealSense/librealsense/blob/v2.50.0/doc/t265.md#sensor-origin-and-coordinate-system)。
+
+
 桌面 `T265-F407-调试地图.desktop` 运行
 `localization/tools/desktop_launcher.sh` → `t265_f407_motion_map.py`。
 本入口的地图与实际定位日志初始位置都为 `(0,0)`；本轮配置使用

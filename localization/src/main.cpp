@@ -42,6 +42,7 @@ struct Options {
     std::string serial;
     std::string output_path = "localization_result.json";
     std::string csv_path;
+    std::string raw_pose_csv_path;
     std::string command_file_path;
     std::string stm_status_output_path;
     std::string t265_map_path;
@@ -148,6 +149,7 @@ void usage(const char *program)
         << "  --serial SERIAL     select T265 serial\n"
         << "  --output FILE       atomic JSON output\n"
         << "  --csv FILE          full-rate T265/odometry diagnostic CSV log\n"
+        << "  --raw-pose-csv FILE  retain all received SDK Pose samples, including confidence=0\n"
         << "  --command-file FILE relay new valid TYPE 0x11/0x12/0x18 frames\n"
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --t265-map FILE     import a T265 localization map before start\n"
@@ -189,6 +191,8 @@ Options parse_options(int argc, char **argv)
             options.output_path = value("--output");
         } else if (argument == "--csv") {
             options.csv_path = value("--csv");
+        } else if (argument == "--raw-pose-csv") {
+            options.raw_pose_csv_path = value("--raw-pose-csv");
         } else if (argument == "--command-file") {
             options.command_file_path = value("--command-file");
         } else if (argument == "--stm-status") {
@@ -640,7 +644,9 @@ void write_atomic_json(const std::string &path,
          << ", \"forward_world\": [" << t265.forward_world[0] << ", "
          << t265.forward_world[1] << ", " << t265.forward_world[2] << "]"
          << ", \"left_world\": [" << t265.left_world[0] << ", "
-         << t265.left_world[1] << ", " << t265.left_world[2] << "]},\n"
+         << t265.left_world[1] << ", " << t265.left_world[2] << "]"
+         << ", \"up_world\": [" << t265.up_world[0] << ", "
+         << t265.up_world[1] << ", " << t265.up_world[2] << "]},\n"
          << "  \"wheel\": {\"gate\": \"" << wheel_gate
          << "\", \"uart_fresh\": " << (uart_fresh ? "true" : "false")
          << ", \"fusion_weight\": " << encoder_fusion_weight
@@ -1036,9 +1042,20 @@ int main(int argc, char **argv)
                    "navigation_distance_compensation_enabled,"
                    "navigation_command,"
                    "navigation_remaining_mm,navigation_heading_cdeg,"
-                   "navigation_wheel_progress_m,navigation_distance_compensation_m\n";
+                   "navigation_wheel_progress_m,navigation_distance_compensation_m,pose_frame_number,pose_timestamp_domain,capture_age_ms,receive_monotonic_ns,up_world_x,up_world_y,up_world_z\n";
         }
 
+        // Optional diagnostic stream precedes confidence/startup gating, so
+        // lost tracking and initial invalid samples are retained verbatim.
+        std::ofstream raw_pose_csv;
+        std::uint64_t raw_pose_rows = 0;
+        if (!options.raw_pose_csv_path.empty()) {
+            raw_pose_csv.open(options.raw_pose_csv_path);
+            if (!raw_pose_csv) throw std::runtime_error("cannot open raw pose CSV");
+            raw_pose_csv << "receive_monotonic_ns,frame_number,capture_timestamp_ms,timestamp_domain,capture_age_ms,"
+                            "tx_m,ty_m,tz_m,vx_mps,vy_mps,vz_mps,qx,qy,qz,qw,"
+                            "wx_radps,wy_radps,wz_radps,tracker_confidence,mapper_confidence\n";
+        }
         EventLog event_log(options.events_path);
         T265MapStatus t265_map;
         t265_map.enabled = !options.t265_map_path.empty();
@@ -1334,6 +1351,19 @@ int main(int argc, char **argv)
             raw.timestamp_s = pose_frame.get_timestamp() * 0.001;
             raw.tracker_confidence = pose.tracker_confidence;
             raw.mapper_confidence = pose.mapper_confidence;
+            if (raw_pose_csv) {
+                raw_pose_csv << std::setprecision(17)
+                    << std::chrono::duration_cast<std::chrono::nanoseconds>(t265_received.time_since_epoch()).count()
+                    << ',' << frame_number << ',' << pose_frame.get_timestamp() << ','
+                    << static_cast<int>(timestamp_domain) << ',' << capture_age_ms;
+                for (double v : raw.translation_m) raw_pose_csv << ',' << v;
+                for (double v : raw.velocity_mps) raw_pose_csv << ',' << v;
+                for (double v : raw.rotation_xyzw) raw_pose_csv << ',' << v;
+                for (double v : raw.angular_velocity_radps) raw_pose_csv << ',' << v;
+                raw_pose_csv << ',' << static_cast<unsigned>(raw.tracker_confidence)
+                             << ',' << static_cast<unsigned>(raw.mapper_confidence) << '\n';
+                if ((++raw_pose_rows % 20u) == 0u) raw_pose_csv.flush();
+            }
             if (options.pose_jumping_override >= 0) {
                 if (have_previous_debug_pose) {
                     const double dt = raw.timestamp_s - previous_debug_pose.timestamp_s;
@@ -1864,7 +1894,11 @@ int main(int argc, char **argv)
                     << active_navigation_remaining_mm << ','
                     << active_navigation_heading_cdeg << ','
                     << navigation_wheel_progress_m << ','
-                    << navigation_wheel_progress_m << '\n';
+                    << navigation_wheel_progress_m << ',' << frame_number << ','
+                    << static_cast<int>(timestamp_domain) << ',' << capture_age_ms << ','
+                    << std::chrono::duration_cast<std::chrono::nanoseconds>(t265_received.time_since_epoch()).count() << ','
+                    << latest_t265.up_world[0] << ',' << latest_t265.up_world[1] << ','
+                    << latest_t265.up_world[2] << '\n';
                 if ((++csv_rows % 20u) == 0u) csv.flush();
             }
             if (options.output_rate_hz > 0.0 && now < next_output) continue;

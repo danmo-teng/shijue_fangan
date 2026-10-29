@@ -54,6 +54,7 @@ struct T265FieldPose {
     double travel_from_origin_m = 0.0;
     double forward_world[3] = {0.0, 0.0, -1.0};
     double left_world[3] = {-1.0, 0.0, 0.0};
+    double up_world[3] = {0.0, 1.0, 0.0};
     double raw_chassis_yaw_rad = 0.0;
     double relative_yaw_rad = 0.0;
     double yaw_rate_radps = 0.0;
@@ -79,6 +80,7 @@ private:
     LocalizationConfig config_;
     bool initialized_ = false;
     double position_origin_m_[3] = {0.0, 0.0, 0.0};
+    double lever_origin_world_m_[3] = {0.0, 0.0, 0.0};
     double forward_world_origin_[3] = {0.0, 0.0, -1.0};
     double left_world_origin_[3] = {-1.0, 0.0, 0.0};
     double yaw_origin_rad_ = 0.0;

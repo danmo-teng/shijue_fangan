@@ -28,6 +28,9 @@ struct LocalizationConfig {
     // disabled during normal operation; the value is for A/B calibration.
     bool t265_translation_scale_enabled = false;
     double t265_translation_scale = 1.0;
+    // Columns of R_pose_body: forward, left=up x forward, up. Config accepts
+    // legacy signed axes or comma-separated direction vectors; units radians
+    // are not involved in this representation.
     double camera_robot_forward_axis[3] = {1.0, 0.0, 0.0};
     double camera_robot_up_axis[3] = {0.0, -1.0, 0.0};
 

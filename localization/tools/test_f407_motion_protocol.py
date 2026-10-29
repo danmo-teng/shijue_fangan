@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import time
+import json
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
 
 from f407_motion_protocol import (
     FRAME_HEAD,
@@ -114,6 +118,74 @@ def main() -> None:
     app.bridge = None
     app.update_data()
     assert app.active_test is None and app.return_phase is None
+    # Exercise the same desktop entry's candidate/config and controls without
+    # opening hardware, and the deletion boundary only in a temporary root.
+    from t265_f407_motion_map import DEFAULT_CONFIG, prune_completed_sessions
+    from t265_f407_debug import write_debug_config, action_measurements
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        config = root / "localization.conf"
+        write_debug_config(DEFAULT_CONFIG, config, start_zone=4, center_origin=True,
+                           start_heading_offset_deg=45, unit_translation_scale=True)
+        text = config.read_text()
+        assert "camera_robot_forward_axis = 0.8660254,0,0.5" in text
+        assert "camera_offset_forward_m = -0.0346105" in text
+        assert "start_center_m = 0.0" in text and "t265_translation_scale_enabled = false" in text
+        app.options = SimpleNamespace(actual_lower_mode="unconfirmed", actual_lower_firmware="unconfirmed",
+                                      reference_description="test tape zero and ground angle line")
+        assert not app.motion_identity_confirmed()
+        app.options.actual_lower_mode = "MotionDebug"
+        app.options.actual_lower_firmware = "777acad"
+        assert app.motion_identity_confirmed()
+        app.measurement_buffer = None
+        app.distance_mm = 1000
+        moves, turns = [], []
+        app.toggle_test = lambda name, action: action()
+        app.send_move = lambda *args: moves.append(args)
+        app.send_turn = lambda angle: turns.append(angle)
+        for key in "bh123": app.handle_key(ord(key))
+        assert moves == [(180.,1000),(270.,1000)] and turns == [-90.,-180.,-360.]
+        app.run_dir, app.test_id, app.active_test = root, 1, None
+        app.active_test_parameters = {"direction_deg_target":0,"distance_mm_target":1000}
+        app.localization, app.motion_status = {}, {}
+        app.save_ground_truth("988,2,?")
+        measurement = json.loads((root/"ground_truth.jsonl").read_text())
+        assert measurement["forward_mm"] == 988 and measurement["turn_deg_unwrapped"] is None
+        try:
+            app.save_ground_truth("nan,0,0")
+            assert False, "nonfinite ground reference accepted"
+        except ValueError:
+            pass
+        measurement.update(timestamp_monotonic_ns=300)
+        (root/"ground_truth.jsonl").write_text(json.dumps(measurement)+"\n")
+        (root/"events.jsonl").write_text(json.dumps({"test_id":1,"event":"forward_start",
+                                                   "timestamp_monotonic_ns":100})+"\n")
+        rows = [dict(timestamp_monotonic_ns="100",t265_x_m="0",t265_y_m="0",
+                     t265_yaw_deg="0",relative_yaw_deg="0",tracker_confidence="3"),
+                dict(timestamp_monotonic_ns="300",t265_x_m=".99",t265_y_m=".002",
+                     t265_yaw_deg="0",relative_yaw_deg="0",tracker_confidence="3")]
+        report=action_measurements(root/"localization_debug.csv",rows)[0]
+        assert abs(report["t265_minus_measurement"]["forward_mm"]-2)<1e-9
+        assert report["physical_motion_minus_command"]["forward_mm"] == -12
+        sessions=[]
+        for i in range(8):
+            path=root/f"20261029_00000{i}_interactive"
+            path.mkdir()
+            (path/"metadata.json").write_text(json.dumps({"mode":"interactive_f407_motion_debug"}))
+            (path/"session_complete.json").write_text(json.dumps({"owner":"t265_f407_motion_map",
+                                                                    "complete":True,"session_index":i}))
+            sessions.append(path)
+        # User additions and incomplete sessions are outside automatic deletion.
+        (sessions[0]/"用户笔记.txt").write_text("preserve")
+        (sessions[1]/"session_complete.json").unlink()
+        assert prune_completed_sessions(root,sessions[-1]) == [sessions[2].name]
+        assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+        assert not sessions[2].exists()
+        # A legacy session needs an explicit terminal event, not just a folder name.
+        (sessions[1]/"events.jsonl").write_text(json.dumps({"event":"session_stopped"})+"\n")
+        assert prune_completed_sessions(root,sessions[-1]) == [sessions[1].name]
+        assert prune_completed_sessions(root,sessions[0]) == [sessions[3].name]
+        assert (sessions[0]/"用户笔记.txt").read_text() == "preserve"
     print("F407 motion protocol PASS")
 
 

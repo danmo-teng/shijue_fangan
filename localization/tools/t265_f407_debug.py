@@ -109,7 +109,8 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
                        camera_robot_up_axis: str | None = None,
                        encoder_to_robot_yaw_deg: float | None = None,
                        camera_offset_forward_m: float | None = None,
-                       camera_offset_left_m: float | None = None) -> None:
+                       camera_offset_left_m: float | None = None,
+                       unit_translation_scale: bool = False) -> None:
     """Keep wheel samples enabled while making their EKF weight exactly zero."""
     lines = source.read_text(encoding="utf-8").splitlines()
     replacements = {
@@ -119,6 +120,9 @@ def write_debug_config(source: Path, target: Path, start_zone: int | None = None
         "startup_wheel_disable_distance_m": "startup_wheel_disable_distance_m = 0.0",
         "corner_exclusion_inner_m": "corner_exclusion_inner_m = 2.0",
     }
+    if unit_translation_scale:
+        replacements.update(t265_translation_scale_enabled="t265_translation_scale_enabled = false",
+                            t265_translation_scale="t265_translation_scale = 1.000")
     if start_zone is not None:
         if start_zone not in (1, 2, 3, 4):
             raise ValueError("start_zone must be in 1..4")
@@ -338,8 +342,61 @@ def fit_wheel_to_t265(rows: list[dict[str, str]], max_yaw_deg: float | None) -> 
     }
 
 
+def action_measurements(csv_path: Path, rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Compare settled operator measurements per action; never infer ground truth.
+
+    Coordinates of displacement measurements are the body's axes at action
+    start. Relative yaw is unwrapped, so +/-360 does not collapse to zero.
+    """
+    path = csv_path.parent / "ground_truth.jsonl"
+    if not path.is_file():
+        return []
+    starts = {e.get("test_id"): e for e in read_events(csv_path)
+              if e.get("event", "").endswith("_start") and e.get("test_id", 0) > 0}
+    result = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        measurement = json.loads(line)
+        start = starts.get(measurement.get("test_id"))
+        if start is None:
+            continue
+        first_ns = start["timestamp_monotonic_ns"]
+        last_ns = measurement["timestamp_monotonic_ns"]
+        before = [r for r in rows if integer(r,"timestamp_monotonic_ns") <= first_ns]
+        end = [r for r in rows if integer(r,"timestamp_monotonic_ns") <= last_ns]
+        if not before or not end:
+            continue
+        a, b = before[-1], end[-1]
+        yaw = math.radians(number(a,"t265_yaw_deg"))
+        dx = number(b,"t265_x_m")-number(a,"t265_x_m")
+        dy = number(b,"t265_y_m")-number(a,"t265_y_m")
+        estimate = {"forward_mm": 1000*(math.cos(yaw)*dx+math.sin(yaw)*dy),
+                    "left_mm": 1000*(-math.sin(yaw)*dx+math.cos(yaw)*dy),
+                    "turn_deg_unwrapped": number(b,"relative_yaw_deg")-number(a,"relative_yaw_deg")}
+        params = measurement.get("test_parameters", {})
+        target = {"turn_deg_unwrapped": params.get("turn_deg_target")}
+        if "direction_deg_target" in params:
+            direction = math.radians(params["direction_deg_target"])
+            target.update(forward_mm=params["distance_mm_target"]*math.cos(direction),
+                          left_mm=params["distance_mm_target"]*math.sin(direction))
+        samples = [r for r in rows if first_ns <= integer(r,"timestamp_monotonic_ns") <= last_ns]
+        errors = {k: finite(v-measurement[k]) for k,v in estimate.items() if measurement.get(k) is not None}
+        action_errors = {k: measurement[k]-v for k,v in target.items()
+                         if v is not None and measurement.get(k) is not None}
+        result.append({"test_id": measurement["test_id"], "reference": measurement.get("reference"),
+            "start_sample_ns": integer(a,"timestamp_monotonic_ns"),
+            "end_sample_ns": integer(b,"timestamp_monotonic_ns"),
+            "start_sample_age_ms": (first_ns-integer(a,"timestamp_monotonic_ns"))/1e6,
+            "end_sample_age_ms": (last_ns-integer(b,"timestamp_monotonic_ns"))/1e6,
+            "target_not_truth": target, "independent_measurement": measurement,
+            "t265_centre_delta": estimate, "t265_minus_measurement": errors,
+            "physical_motion_minus_command": action_errors,
+            "minimum_tracker_confidence": min((integer(r,"tracker_confidence") for r in samples), default=None),
+            "interpretation": "operator-reference comparison, not automatic accuracy acceptance; inspect drift/jumps and reference uncertainty"})
+    return result
+
+
 def analyze(csv_path: Path, output_path: Path | None, trial: str,
-            offset_forward: float, offset_left: float) -> dict[str, Any]:
+            offset_forward: float, offset_left: float, *, fit_wheel: bool = True) -> dict[str, Any]:
     rows = read_rows(csv_path)
     if not rows:
         raise RuntimeError(f"CSV没有数据：{csv_path}")
@@ -382,7 +439,9 @@ def analyze(csv_path: Path, output_path: Path | None, trial: str,
             "t265_travel_m": number(last, "t265_travel_m"),
             "wheel_odom_travel_m": number(last, "odom_travel_m"),
         },
-        "wheel_to_t265_fit": fit_wheel_to_t265(rows, selected_yaw_limit),
+        "wheel_to_t265_fit": (fit_wheel_to_t265(rows, selected_yaw_limit) if fit_wheel
+                              else {"available": False, "reason": "mount_validation_no_scale_fit"}),
+        "action_measurements": action_measurements(csv_path, rows),
         "interface_observation": {
             "valid_encoder_updates": sum(
                 1 for row in rows if integer(row, "wheel_update_this_pose") == 1

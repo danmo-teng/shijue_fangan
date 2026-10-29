@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
+#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -259,6 +261,101 @@ void test_kinematics()
           near(omni::weighted_t265_sigma_multiplier(12.0, 0.25), 1.6875) &&
           near(omni::weighted_t265_sigma_multiplier(12.0, 1.0), 12.0),
           "encoder weight continuously controls navigation T265 weakening");
+}
+
+void test_new_mount()
+{
+    char filename[] = "/tmp/t265-axis-config-XXXXXX";
+    const int fd = mkstemp(filename);
+    check(fd >= 0, "create isolated axis-config fixture");
+    if (fd < 0) return;
+    close(fd);
+    auto parse = [&](const char *forward, const char *up) {
+        std::ofstream file(filename);
+        file << "camera_robot_forward_axis = " << forward << '\n'
+             << "camera_robot_up_axis = " << up << '\n';
+        file.close();
+        return omni::load_config(filename);
+    };
+    const auto old = parse("+x", "-y");
+    check(near(old.camera_robot_forward_axis[0], 1), "legacy signed axes still parse");
+    auto config = parse("0.8660254,0,0.5", "0,-1,0");
+    check(near(config.camera_robot_forward_axis[0], std::sqrt(3.0)/2, 1e-8),
+          "rounded vector direction cosines normalized");
+    for (const char *bad : {"0,0,0", "nan,0,1", "inf,0,1", "1,0", "1,0,0,", "1,0,0,1"}) {
+        bool rejected = false;
+        try { parse(bad, "-y"); } catch (const std::exception &) { rejected = true; }
+        check(rejected, "invalid axis vectors rejected");
+    }
+    bool rejected = false;
+    try { parse("1,1,0", "-y"); } catch (const std::exception &) { rejected = true; }
+    check(rejected, "nonorthogonal mounting axes rejected");
+    unlink(filename);
+    config.start_zone = 4;
+    config.start_center_m = 0;
+    config.start_heading_offset_deg = 45;
+    config.camera_offset_forward_m = -0.0346105;
+    config.camera_offset_left_m = -0.0599471445;
+    const double *f = config.camera_robot_forward_axis;
+    const double *u = config.camera_robot_up_axis;
+    const double l[3] = {u[1]*f[2]-u[2]*f[1], u[2]*f[0]-u[0]*f[2], u[0]*f[1]-u[1]*f[0]};
+    const TestQuaternion mount = multiply(axis_angle(1,0,0,180), axis_angle(0,1,0,30));
+    auto rotate = [](const TestQuaternion &q, const double v[3], double out[3]) {
+        const auto r = multiply(multiply(q, {v[0],v[1],v[2],0}), {-q.x,-q.y,-q.z,q.w});
+        out[0]=r.x; out[1]=r.y; out[2]=r.z;
+    };
+    const double lever[3] = {f[0]*config.camera_offset_forward_m+l[0]*config.camera_offset_left_m,
+        f[1]*config.camera_offset_forward_m+l[1]*config.camera_offset_left_m,
+        f[2]*config.camera_offset_forward_m+l[2]*config.camera_offset_left_m};
+    double initial_lever[3]; rotate(mount, lever, initial_lever);
+    auto sample = [&](TestQuaternion q, double df, double dl, double t) {
+        omni::T265RawPose raw;
+        raw.rotation_xyzw[0]=q.x; raw.rotation_xyzw[1]=q.y;
+        raw.rotation_xyzw[2]=q.z; raw.rotation_xyzw[3]=q.w;
+        double r[3]; rotate(q, lever, r);
+        for (int i=0;i<3;++i) raw.translation_m[i]=r[i]-initial_lever[i];
+        raw.translation_m[0]+=df; raw.translation_m[2]-=dl;
+        raw.timestamp_s=t; raw.tracker_confidence=3;
+        return raw;
+    };
+    // Independent 1m cardinal motions: mounting yaw is not a map-heading offset.
+    for (auto d : {std::pair<double,double>{1,0}, {-1,0}, {0,1}, {0,-1}}) {
+        omni::T265FieldProjector p(config);
+        auto origin=p.project(sample(mount,0,0,0));
+        check(near(origin.up_world[1],1,1e-8), "vertical -Y mount maps to SDK gravity-up +Y");
+        auto moved=p.project(sample(mount,d.first,d.second,1));
+        check(near(moved.pose.x_m,d.first,1e-8) && near(moved.pose.y_m,d.second,1e-8),
+              "new mount cardinal displacement uses rotation extrinsic");
+        auto returned=p.project(sample(mount,0,0,2));
+        check(std::hypot(returned.pose.x_m,returned.pose.y_m)<1e-8, "cardinal return closes at centre");
+    }
+    for (int sign : {-1,1}) {
+        omni::T265FieldProjector p(config);
+        p.project(sample(mount,0,0,0));
+        for (int angle=10;angle<=360;angle+=10) {
+            const auto q=multiply(axis_angle(0,1,0,sign*angle),mount);
+            auto r=p.project(sample(q,0,0,angle*.01));
+            check(std::hypot(r.pose.x_m,r.pose.y_m)<1e-8, "new lever arm removes rotation arc once");
+            check(near(omni::degrees(r.relative_yaw_rad),sign*angle,1e-6),
+                  "both directions retain unwrapped 90/180/360 degree turns");
+        }
+    }
+    // Roll/pitch plus changing 3D angular rate must not create centre motion.
+    omni::T265FieldProjector p(config);
+    p.project(sample(mount,0,0,0));
+    const auto q=multiply(multiply(axis_angle(0,0,1,25),axis_angle(0,1,0,55)),mount);
+    auto tilted=sample(q,.4,-.2,1);
+    double r[3],fw[3],lw[3]; rotate(q,lever,r); rotate(q,f,fw); rotate(q,l,lw);
+    const double w[3]={.7,-.4,.3};
+    const double spin[3]={w[1]*r[2]-w[2]*r[1],w[2]*r[0]-w[0]*r[2],w[0]*r[1]-w[1]*r[0]};
+    for (int i=0;i<3;++i) {
+        tilted.angular_velocity_radps[i]=w[i];
+        tilted.velocity_mps[i]=.3*fw[i]-.2*lw[i]+spin[i];
+    }
+    auto out=p.project(tilted);
+    check(near(out.pose.x_m,.4,1e-8) && near(out.pose.y_m,-.2,1e-8), "full attitude removes tilted lever arm");
+    check(near(out.body_forward_velocity_mps,.3,1e-8) && near(out.body_left_velocity_mps,-.2,1e-8),
+          "instantaneous omega cross lever velocity compensation uses full rotation");
 }
 
 void test_projection_gate_and_filter()
@@ -672,6 +769,7 @@ int main()
 {
     test_protocol();
     test_kinematics();
+    test_new_mount();
     test_projection_gate_and_filter();
     test_t265_yaw_time_sync();
     if (failures != 0) {

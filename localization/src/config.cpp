@@ -79,10 +79,28 @@ void axis_vector(const std::string &text, const std::string &key,
             std::tolower(static_cast<unsigned char>(c))));
     }
     const auto found = axes.find(normalized);
-    if (found == axes.end()) {
-        throw std::runtime_error(key + " must be one of +/-x, +/-y, +/-z");
+    if (found != axes.end()) {
+        std::copy(found->second.begin(), found->second.end(), output);
+        return;
     }
-    std::copy(found->second.begin(), found->second.end(), output);
+    // Also accept a measured body axis expressed in T265 coordinates.
+    // Normalization permits rounded direction cosines; validation below still
+    // rejects nonorthogonal forward/up pairs (never silently Gram-Schmidt).
+    std::istringstream parts(text);
+    std::string component;
+    double norm = 0.0;
+    for (int i = 0; i < 3; ++i) {
+        if (!std::getline(parts, component, ',')) {
+            throw std::runtime_error(key + " requires +/-x,y,z or three comma-separated components");
+        }
+        output[i] = number(trim(component), key);
+        norm += output[i] * output[i];
+    }
+    if (std::getline(parts, component, ',') || text.back() == ',' ||
+        !std::isfinite(norm) || norm < 1e-18) {
+        throw std::runtime_error(key + " requires a finite nonzero 3D direction");
+    }
+    for (int i = 0; i < 3; ++i) output[i] /= std::sqrt(norm);
 }
 
 }  // namespace
@@ -226,7 +244,10 @@ void validate_config(const LocalizationConfig &c)
         up_norm += c.camera_robot_up_axis[i] * c.camera_robot_up_axis[i];
         dot += c.camera_robot_forward_axis[i] * c.camera_robot_up_axis[i];
     }
-    if (std::fabs(forward_norm - 1.0) > 1e-9 ||
+    if (!std::isfinite(c.camera_offset_forward_m) ||
+        !std::isfinite(c.camera_offset_left_m) ||
+        !std::isfinite(forward_norm) || !std::isfinite(up_norm) || !std::isfinite(dot) ||
+        std::fabs(forward_norm - 1.0) > 1e-9 ||
         std::fabs(up_norm - 1.0) > 1e-9 || std::fabs(dot) > 1e-9) {
         throw std::runtime_error("camera robot forward/up axes must be orthogonal unit axes");
     }

@@ -120,11 +120,18 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     // Robot body axes are right-handed: forward x left = up, hence
     // left = up x forward. Config vectors are robot axes expressed in T265.
     const Vec3 left_camera = cross(up_camera, forward_camera);
-    const Vec3 forward_world = normalized_ground_xz(
-        rotate_by_quaternion(raw.rotation_xyzw, forward_camera));
-    const Vec3 left_world = normalized_ground_xz(
-        rotate_by_quaternion(raw.rotation_xyzw, left_camera));
+    const Vec3 forward_world = rotate_by_quaternion(raw.rotation_xyzw, forward_camera);
+    const Vec3 left_world = rotate_by_quaternion(raw.rotation_xyzw, left_camera);
     const Vec3 up_world = rotate_by_quaternion(raw.rotation_xyzw, up_camera);
+    const Vec3 horizontal_forward = normalized_ground_xz(forward_world);
+    const Vec3 horizontal_left = cross(Vec3{0.0, 1.0, 0.0}, horizontal_forward);
+    const double r0f = config_.camera_offset_forward_m;
+    const double r0l = config_.camera_offset_left_m;
+    // r is body-centre -> SDK tracking centre, not an IMU offset. Apply R(q)
+    // once, retaining roll/pitch rather than replacing it with planar yaw.
+    const Vec3 lever_world{r0f * forward_world.x + r0l * left_world.x,
+                          r0f * forward_world.y + r0l * left_world.y,
+                          r0f * forward_world.z + r0l * left_world.z};
     const Vec3 angular_velocity{raw.angular_velocity_radps[0],
                                 raw.angular_velocity_radps[1],
                                 raw.angular_velocity_radps[2]};
@@ -142,12 +149,15 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
         for (int i = 0; i < 3; ++i) {
             position_origin_m_[i] = raw.translation_m[i];
         }
-        forward_world_origin_[0] = forward_world.x;
-        forward_world_origin_[1] = forward_world.y;
-        forward_world_origin_[2] = forward_world.z;
-        left_world_origin_[0] = left_world.x;
-        left_world_origin_[1] = left_world.y;
-        left_world_origin_[2] = left_world.z;
+        lever_origin_world_m_[0] = lever_world.x;
+        lever_origin_world_m_[1] = lever_world.y;
+        lever_origin_world_m_[2] = lever_world.z;
+        forward_world_origin_[0] = horizontal_forward.x;
+        forward_world_origin_[1] = horizontal_forward.y;
+        forward_world_origin_[2] = horizontal_forward.z;
+        left_world_origin_[0] = horizontal_left.x;
+        left_world_origin_[1] = horizontal_left.y;
+        left_world_origin_[2] = horizontal_left.z;
         yaw_origin_rad_ = raw_yaw;
         previous_raw_yaw_rad_ = raw_yaw;
         previous_timestamp_s_ = raw.timestamp_s;
@@ -205,18 +215,12 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     const double camera_initial_left = dot(delta, initial_left);
     const double dh = accumulated_relative_yaw_rad_;
 
-    // Convert camera-origin motion to robot-centre motion using the configured
-    // planar lever arm from robot centre to T265 tracking origin.
-    const double cy = std::cos(dh);
-    const double sy = std::sin(dh);
-    const double r0f = config_.camera_offset_forward_m;
-    const double r0l = config_.camera_offset_left_m;
-    const double rotated_rf = cy * r0f - sy * r0l;
-    const double rotated_rl = sy * r0f + cy * r0l;
-    const double unscaled_robot_initial_forward =
-        camera_initial_forward - (rotated_rf - r0f);
-    const double unscaled_robot_initial_left =
-        camera_initial_left - (rotated_rl - r0l);
+    const Vec3 centre_delta{
+        delta.x - (lever_world.x - lever_origin_world_m_[0]),
+        delta.y - (lever_world.y - lever_origin_world_m_[1]),
+        delta.z - (lever_world.z - lever_origin_world_m_[2])};
+    const double unscaled_robot_initial_forward = dot(centre_delta, initial_forward);
+    const double unscaled_robot_initial_left = dot(centre_delta, initial_left);
     const double translation_scale = config_.t265_translation_scale_enabled
         ? config_.t265_translation_scale : 1.0;
     const double robot_initial_forward = translation_scale *
@@ -229,12 +233,16 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     T265FieldPose result;
     result.camera_offset_forward_m = r0f;
     result.camera_offset_left_m = r0l;
+    const Vec3 initial_lever{lever_origin_world_m_[0], lever_origin_world_m_[1],
+                              lever_origin_world_m_[2]};
+    const double initial_rf = dot(initial_lever, initial_forward);
+    const double initial_rl = dot(initial_lever, initial_left);
     result.tracking_origin_pose.x_m = start_pose_.x_m +
-        cs * (r0f + camera_initial_forward) -
-        ss * (r0l + camera_initial_left);
+        cs * (initial_rf + camera_initial_forward) -
+        ss * (initial_rl + camera_initial_left);
     result.tracking_origin_pose.y_m = start_pose_.y_m +
-        ss * (r0f + camera_initial_forward) +
-        cs * (r0l + camera_initial_left);
+        ss * (initial_rf + camera_initial_forward) +
+        cs * (initial_rl + camera_initial_left);
     result.tracking_origin_pose.yaw_rad = wrap_angle(start_pose_.yaw_rad + dh);
     result.tracking_origin_delta_forward_m = camera_initial_forward;
     result.tracking_origin_delta_left_m = camera_initial_left;
@@ -252,12 +260,14 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     result.travel_from_origin_m = std::hypot(robot_initial_forward, robot_initial_left);
 
     const Vec3 velocity{raw.velocity_mps[0], raw.velocity_mps[1], raw.velocity_mps[2]};
-    const double camera_vf = dot(velocity, forward_world);
-    const double camera_vl = dot(velocity, left_world);
-    const double omega = gyro_rate_valid
-        ? filtered_gyro_yaw_rate_radps_ : filtered_yaw_rate_radps_;
-    const double unscaled_body_forward_velocity = camera_vf + omega * r0l;
-    const double unscaled_body_left_velocity = camera_vl - omega * r0f;
+    // v_camera = v_centre + omega_world x r_world. Use the same sample's
+    // unfiltered 3D angular velocity; filtering only one yaw component leaves
+    // false centre motion during angular acceleration or body tilt.
+    const Vec3 spin = cross(angular_velocity, lever_world);
+    const Vec3 centre_velocity{velocity.x - spin.x, velocity.y - spin.y,
+                               velocity.z - spin.z};
+    const double unscaled_body_forward_velocity = dot(centre_velocity, forward_world);
+    const double unscaled_body_left_velocity = dot(centre_velocity, left_world);
     result.body_forward_velocity_mps = translation_scale *
         unscaled_body_forward_velocity;
     result.body_left_velocity_mps = translation_scale *
@@ -268,6 +278,9 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
     result.left_world[0] = left_world.x;
     result.left_world[1] = left_world.y;
     result.left_world[2] = left_world.z;
+    result.up_world[0] = up_world.x;
+    result.up_world[1] = up_world.y;
+    result.up_world[2] = up_world.z;
     result.raw_chassis_yaw_rad = raw_yaw;
     result.relative_yaw_rad = accumulated_relative_yaw_rad_;
     result.yaw_rate_radps = filtered_yaw_rate_radps_;
