@@ -2,8 +2,8 @@
 Version=1.0
 Type=Application
 Name=T265-F407运动定位调试
-Comment=查看T265、三轮里程计并主动发送F407调试命令
-Exec=/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh
+Comment=F405 NormalDebug运动测试；启动不运动，点击按钮发送；固件版本未由串口读回
+Exec=/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG
 Icon=applications-engineering
 Terminal=true
 StartupNotify=true

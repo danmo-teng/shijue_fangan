@@ -368,7 +368,8 @@ class MotionMapApp:
         cv2.rectangle(canvas, (900, 0), (LOGICAL_WIDTH, LOGICAL_HEIGHT), (26, 27, 30), -1)
         text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
         running = self.localizer is not None and self.localizer.poll() is None
-        text.add("定位进程运行中" if running else "定位进程未运行", (x0, 68), 16,
+        service_text = "测试已启用" if self.motion_identity_confirmed() else "仅监听"
+        text.add(("定位运行" if running else "定位未运行") + " / " + service_text, (x0, 68), 16,
                  (50, 220, 65) if running else (50, 80, 230), True)
         text.add(f"测试起点：(0,0)  初始航向 {start_pose(self.zone)[2]:.0f}°", (x0, 96), 15, (220, 220, 220))
         forward = self.session_config.get("camera_robot_forward_axis", "?")
@@ -679,7 +680,7 @@ class MotionMapApp:
 
     def toggle_test(self, name: str, action) -> None:
         if not self.motion_identity_confirmed():
-            self.message = "启动参数须确认实际NormalDebug/MOTIONDEBUG服务及固件"
+            self.message = "仅监听：需确认NormalDebug/MOTIONDEBUG；已知固件须与合同相符"
             return
         if self.active_test == name:
             self.record_event(f"{name}_end_manual")
@@ -700,9 +701,15 @@ class MotionMapApp:
 
     def motion_identity_confirmed(self) -> bool:
         value = self.options.actual_lower_firmware.strip().lower()
+        # UART4 cannot attest a firmware commit. Requiring an unattestable
+        # hash blocked the desktop even after the operator confirmed the test
+        # service. Keep unknown firmware explicitly unknown; reject a known
+        # incompatible commit instead of silently treating it as this contract.
+        firmware_compatible = (value in {"", "unconfirmed", "unknown"} or
+            (re.fullmatch(r"[0-9a-f]{7,40}",value) is not None and IMPLEMENTATION_COMMIT.startswith(value)))
         return (self.options.actual_lower_mode == "NormalDebug" and
                 self.options.actual_lower_service == "MOTIONDEBUG" and
-                re.fullmatch(r"[0-9a-f]{7,40}",value) is not None and IMPLEMENTATION_COMMIT.startswith(value))
+                firmware_compatible)
 
     def save_ground_truth(self, text: str) -> None:
         """Signed, independently measured displacement/turn for the current test.
@@ -943,7 +950,9 @@ class MotionMapApp:
             "actual_lower_service": self.options.actual_lower_service,
             "actual_lower_firmware": self.options.actual_lower_firmware,
             "actual_lower_mode": self.options.actual_lower_mode,
-            "lower_identity_source": "operator supplied; not reported by UART",
+            "lower_identity_source": "operator-confirmed mode/service profile; firmware commit not reported by UART",
+            "firmware_commit_attested_by_uart": False,
+            "motion_enable_policy": "confirmed NormalDebug/MOTIONDEBUG service; unknown firmware retained as unknown; known mismatched commit rejected",
             "mount_status": "candidate_not_physically_validated",
             "reference_description": self.options.reference_description,
             "ground_truth_policy": "command target and DONE are not ground truth; operator measures signed displacement/turn after settling",

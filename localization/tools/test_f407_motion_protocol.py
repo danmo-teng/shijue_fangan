@@ -181,6 +181,19 @@ def main() -> None:
         app.options.actual_lower_service = "MOTIONDEBUG"
         app.options.actual_lower_firmware = "14157e6"
         assert app.motion_identity_confirmed()
+        app.options.actual_lower_firmware = "unconfirmed"
+        assert app.motion_identity_confirmed()  # UART4 has no firmware-commit query.
+        app.options.actual_lower_firmware = "a54ee465"
+        assert not app.motion_identity_confirmed()  # Document commit is not firmware implementation.
+        import shlex
+        from unittest.mock import patch
+        from t265_f407_motion_map import arguments
+        entry=Path(__file__).with_name("t265-f407-debug.desktop").read_text()
+        command=shlex.split(next(line[5:] for line in entry.splitlines() if line.startswith("Exec=")))
+        with patch("sys.argv",["t265_f407_motion_map.py",*command[1:]]):
+            app.options=arguments()
+        assert app.motion_identity_confirmed() and app.options.actual_lower_firmware == "unconfirmed"
+        app.options.reference_description="test tape zero and ground angle line"
         app.measurement_buffer = None
         app.distance_mm = 1000
         moves, turns = [], []

@@ -1,5 +1,47 @@
 # T265/F407 中心起点定位调试
 
+## 2026-10-30：桌面按钮未发送的修复与架空接口实测
+
+用户反馈点击测试无响应，核对20261030_202942_interactive会话发现：
+actual_lower_service=unconfirmed、actual_lower_firmware=unconfirmed、listen_and_control=false，
+没有动作发送记录。上一版桌面Exec没有传入服务确认参数，且软件过度要求无法从UART4读回的
+完整固件提交号，导致按钮被本地拦截；当时串口0x15/0x1F/0x1A接收正常。
+
+本轮依据用户已确认的F405 NormalDebug与架空测试授权，更新原桌面入口：
+Exec传入NormalDebug/MOTIONDEBUG操作者测试配置，启动不运动，点击按钮才发送。
+允许固件提交号保持unconfirmed，并明确记录无法由UART4认证；expected不写进actual。
+若操作者填写了已知但与14157e6合同不兼容的提交，仍拒绝动作并要求先核对。
+直接不带服务配置运行Python时仍为仅监听；界面顶部显示“测试已启用”或“仅监听”。
+这不是新增身份查询，也不能保证未来换板/重新烧录后的运行服务仍未改变。
+
+实际安装更新：运行现有install_desktop_launcher.sh，已更新
+/home/sunrise/桌面/T265-F407-调试地图.desktop；原文件名和入口保留。
+不要求用户把expected提交号填成已确认actual才能操作。
+
+用户确认车已架空后，本轮使用现有ChassisTestClient连接真实/dev/ttyS1，
+执行一次STOP、50mm/100mm/s定距、最后STOP，没有执行整套往返或陀螺定角：
+
+| 请求 | 线上SEQ | 实际回执 |
+| --- | ---: | --- |
+| STOP | 103 | 匹配STOPPED，fault=0 |
+| move_body(+50,0,100) | 104 | 见RUNNING后匹配DONE，progress=50，fault=0 |
+| STOP | 105 | 匹配STOPPED，fault=0 |
+
+原始计数差为[+216,-246,0]，符合前进计数符号；收到0x15/0x1F各70帧、0x1A 13帧，
+CRC错误和对应序号缺口均为0。已关闭客户端释放串口；末次状态为STOPPED。
+原始字节、动作与回执保存在
+rescue_map/runtime/history/t265_f407_motion_map/20261030_203626_interactive/，
+analysis.json为摘要，metadata明确raised_chassis_uart_only及实际固件未确认。
+本次完整测试会话纳入同模块五次留存；没有删除已有会话或用户文件。
+
+这些结果确认该次实际请求/回执和编码器反馈有效，不能证明地面走了50mm、物理急停时延、
+T265距离精度或车身转角精度。架空时轮子转动不等于车身转动，所以未以定角动作等待gyro到角，
+也没有把同一gyro或DONE进度当独立真值。
+
+改动为桌面模板、地图服务启用条件、原测试脚本与本文；原检查含桌面Exec参数解析通过，
+重开原桌面入口后即可点击测试。正式比赛路径、T265候选、比例及用户文件不改。
+
+
 ## 2026-10-30：沿用7e25a81的新安装外参复核
 
 复核时当前分支为bbf747c。与7e25a81比较，定位投影源码、配置解析器与新安装候选配置
