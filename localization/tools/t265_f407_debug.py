@@ -351,7 +351,8 @@ def action_measurements(csv_path: Path, rows: list[dict[str, str]]) -> list[dict
     path = csv_path.parent / "ground_truth.jsonl"
     if not path.is_file():
         return []
-    starts = {e.get("test_id"): e for e in read_events(csv_path)
+    events = read_events(csv_path)
+    starts = {e.get("test_id"): e for e in events
               if e.get("event", "").endswith("_start") and e.get("test_id", 0) > 0}
     result = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -360,9 +361,30 @@ def action_measurements(csv_path: Path, rows: list[dict[str, str]]) -> list[dict
         if start is None:
             continue
         first_ns = start["timestamp_monotonic_ns"]
-        last_ns = measurement["timestamp_monotonic_ns"]
-        before = [r for r in rows if integer(r,"timestamp_monotonic_ns") <= first_ns]
-        end = [r for r in rows if integer(r,"timestamp_monotonic_ns") <= last_ns]
+        entry_ns = measurement["timestamp_monotonic_ns"]
+        last_ns = measurement.get("measurement_end_monotonic_ns")
+        endpoint = measurement.get("endpoint_reference", "legacy_input_time_no_settled_mark")
+        end_snapshot = measurement.get("localization",{})
+        if last_ns is None:
+            markers = [e for e in events if e.get("event") == "manual_settled_reference_mark" and
+                       e.get("test_id") == measurement["test_id"] and first_ns <= e["timestamp_monotonic_ns"] <= entry_ns]
+            if markers:
+                marker = markers[-1]
+                last_ns = marker["timestamp_monotonic_ns"]
+                end_snapshot = marker.get("localization",{})
+                endpoint = "recovered_existing_M_mark"
+            else:
+                last_ns = entry_ns
+        start_sample_ns = start.get("localization",{}).get("timestamp_monotonic_ns",first_ns)
+        end_sample_ns = end_snapshot.get("timestamp_monotonic_ns",last_ns)
+        if not first_ns <= last_ns <= entry_ns:
+            continue
+        if not isinstance(start_sample_ns,int) or not 0 < start_sample_ns <= first_ns:
+            start_sample_ns = first_ns
+        if not isinstance(end_sample_ns,int) or not 0 < end_sample_ns <= last_ns:
+            end_sample_ns = last_ns
+        before = [r for r in rows if integer(r,"timestamp_monotonic_ns") <= start_sample_ns]
+        end = [r for r in rows if integer(r,"timestamp_monotonic_ns") <= end_sample_ns]
         if not before or not end:
             continue
         a, b = before[-1], end[-1]
@@ -382,7 +404,14 @@ def action_measurements(csv_path: Path, rows: list[dict[str, str]]) -> list[dict
         errors = {k: finite(v-measurement[k]) for k,v in estimate.items() if measurement.get(k) is not None}
         action_errors = {k: measurement[k]-v for k,v in target.items()
                          if v is not None and measurement.get(k) is not None}
+        raw_dx = number(b,"tracking_origin_x_m")-number(a,"tracking_origin_x_m")
+        raw_dy = number(b,"tracking_origin_y_m")-number(a,"tracking_origin_y_m")
+        raw_delta = {"forward_mm":finite(1000*(math.cos(yaw)*raw_dx+math.sin(yaw)*raw_dy)),
+                     "left_mm":finite(1000*(-math.sin(yaw)*raw_dx+math.cos(yaw)*raw_dy))}
         result.append({"test_id": measurement["test_id"], "reference": measurement.get("reference"),
+            "measurement_entry_ns": entry_ns, "measurement_end_ns": last_ns,
+            "endpoint_reference": endpoint,
+            "raw_tracking_origin_delta": raw_delta,
             "start_sample_ns": integer(a,"timestamp_monotonic_ns"),
             "end_sample_ns": integer(b,"timestamp_monotonic_ns"),
             "start_sample_age_ms": (first_ns-integer(a,"timestamp_monotonic_ns"))/1e6,

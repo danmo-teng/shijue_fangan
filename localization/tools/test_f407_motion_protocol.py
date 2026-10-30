@@ -191,16 +191,30 @@ def main() -> None:
         assert moves == [(180.,1000),(270.,1000)] and turns == [-90.,-180.,-360.]
         app.run_dir, app.test_id, app.active_test = root, 1, None
         app.active_test_parameters = {"direction_deg_target":0,"distance_mm_target":1000}
-        app.localization, app.motion_status = {}, {}
+        app.localization = dict(timestamp_monotonic_ns=time.monotonic_ns(),quality="GOOD",
+                                t265={"tracker_confidence":3},pose={"x_m":.99,"y_m":.002,"yaw_deg":0})
+        app.motion_status = {}
+        app.settled_reference_mark = None
+        try:
+            app.save_ground_truth("988,2,?")
+            assert False,"unmarked endpoint accepted"
+        except ValueError:
+            pass
+        app.mark_settled_reference()
+        app.localization["pose"]["x_m"] = 1.2  # Later drift/handling must not change the frozen endpoint.
         app.save_ground_truth("988,2,?")
         measurement = json.loads((root/"ground_truth.jsonl").read_text())
         assert measurement["forward_mm"] == 988 and measurement["turn_deg_unwrapped"] is None
+        assert measurement["localization"]["pose"]["x_m"] == .99
         try:
             app.save_ground_truth("nan,0,0")
             assert False, "nonfinite ground reference accepted"
         except ValueError:
             pass
         measurement.update(timestamp_monotonic_ns=300)
+        measurement.pop("measurement_end_monotonic_ns")
+        measurement.pop("endpoint_reference")
+        measurement["localization"] = {}
         (root/"ground_truth.jsonl").write_text(json.dumps(measurement)+"\n")
         (root/"events.jsonl").write_text(json.dumps({"test_id":1,"event":"forward_start",
                                                    "timestamp_monotonic_ns":100})+"\n")
@@ -211,6 +225,22 @@ def main() -> None:
         report=action_measurements(root/"localization_debug.csv",rows)[0]
         assert abs(report["t265_minus_measurement"]["forward_mm"]-2)<1e-9
         assert report["physical_motion_minus_command"]["forward_mm"] == -12
+        assert report["endpoint_reference"] == "legacy_input_time_no_settled_mark"
+        measurement.update(timestamp_monotonic_ns=500,measurement_end_monotonic_ns=300,
+                           endpoint_reference="operator_settled_M_mark",localization={"timestamp_monotonic_ns":300})
+        rows.append(dict(timestamp_monotonic_ns="400",t265_x_m="1.2",t265_y_m=".002",
+                         t265_yaw_deg="0",relative_yaw_deg="0",tracker_confidence="3"))
+        (root/"ground_truth.jsonl").write_text(json.dumps(measurement)+"\n")
+        marked=action_measurements(root/"localization_debug.csv",rows)[0]
+        assert marked["measurement_entry_ns"] == 500 and marked["end_sample_ns"] == 300
+        assert abs(marked["t265_minus_measurement"]["forward_mm"]-2)<1e-9
+        # Recover existing M events without rewriting old user measurements.
+        measurement.pop("measurement_end_monotonic_ns");measurement.pop("endpoint_reference")
+        (root/"ground_truth.jsonl").write_text(json.dumps(measurement)+"\n")
+        with (root/"events.jsonl").open("a") as stream:
+            stream.write(json.dumps(dict(test_id=1,event="manual_settled_reference_mark",timestamp_monotonic_ns=300,
+                                         localization={"timestamp_monotonic_ns":300}))+"\n")
+        assert action_measurements(root/"localization_debug.csv",rows)[0]["end_sample_ns"] == 300
         sessions=[]
         for i in range(8):
             path=root/f"20261029_00000{i}_interactive"

@@ -7,6 +7,7 @@ raw counts and F405 host cross-checks stay in this test path. No wheel injection
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import os
@@ -248,6 +249,7 @@ class MotionMapApp:
         self.active_test_parameters: dict = {}
         self.session_config: dict[str, str] = {}
         self.measurement_buffer: str | None = None
+        self.settled_reference_mark: dict | None = None
         self.session_index = 0
         self.logging_failed = False
 
@@ -691,6 +693,7 @@ class MotionMapApp:
         self.active_test = name
         self.return_phase = None
         self.test_id += 1
+        self.settled_reference_mark = None
         self.active_test_parameters = {"name":name,"distance_mm":self.distance_mm,"speed_mm_s":self.speed_mm_s}
         self.record_event(f"{name}_start")
         action()
@@ -707,6 +710,9 @@ class MotionMapApp:
         """
         if self.active_test is not None or self.test_id <= 0:
             raise ValueError("先结束动作，停稳后再录入卷尺/地面角度测量")
+        marker = self.settled_reference_mark
+        if marker is None or marker["test_id"] != self.test_id:
+            raise ValueError("请先人工确认停稳并按M冻结终点，再用G录入实测值")
         parts = text.split(",")
         if len(parts) != 3:
             raise ValueError("格式为前向mm,左向mm,转角deg；未知填?")
@@ -716,14 +722,36 @@ class MotionMapApp:
         if not self.options.reference_description.strip():
             raise ValueError("启动时用--reference-description记录卷尺零点和地面角度基准")
         document = {"test_id": self.test_id, "timestamp_monotonic_ns": time.monotonic_ns(),
+            "measurement_end_monotonic_ns": marker["timestamp_monotonic_ns"],
+            "endpoint_reference": "operator_settled_M_mark",
             "source": "operator_tape_and_ground_reference", "reference": self.options.reference_description,
             "forward_mm": values[0], "left_mm": values[1], "turn_deg_unwrapped": values[2],
             "test_parameters": self.active_test_parameters,
-            "localization": self.localization, "motion_status": self.motion_status}
+            "localization": copy.deepcopy(marker["localization"]),
+            "motion_status": copy.deepcopy(marker["motion_status"])}
         with (self.run_dir / "ground_truth.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(document, ensure_ascii=False) + "\n")
         self.record_event("ground_truth_recorded", document)
         self.message = f"已保存实验{self.test_id}的独立实测值"
+
+    def mark_settled_reference(self) -> None:
+        """Freeze the existing manual M marker before measuring/typing.
+        The operator declares settling; no motion ACK/gyro value proves it.
+        """
+        if (self.test_id <= 0 or self.active_test is not None or
+                (self.bridge is not None and self.bridge.pending is not None)):
+            raise ValueError("先结束本段动作，再人工确认停稳并标记")
+        now = time.monotonic_ns()
+        stamp = self.localization.get("timestamp_monotonic_ns", 0)
+        if (not stamp or not 0 <= now-stamp <= 250_000_000 or
+                self.localization.get("quality") == "LOST" or
+                self.localization.get("t265",{}).get("tracker_confidence",0) <= 0):
+            raise ValueError("T265缺少新鲜有效位姿，未冻结终点")
+        self.settled_reference_mark = dict(test_id=self.test_id,timestamp_monotonic_ns=now,
+            source="operator_declared_settled_not_controller_or_gyro_truth",
+            localization=copy.deepcopy(self.localization), motion_status=copy.deepcopy(self.motion_status))
+        self.record_event("manual_settled_reference_mark", self.settled_reference_mark)
+        self.message = f"已冻结实验{self.test_id}终点；现在测量，再G录入"
 
     def start_forward(self) -> None:
         self.send_move(0.0, self.distance_mm)
@@ -1079,8 +1107,10 @@ class MotionMapApp:
             angle = {ord("1"): -90.0, ord("2"): -180.0, ord("3"): -360.0}[key]
             self.toggle_test(f"rotate_{int(angle)}deg", lambda: self.send_turn(angle))
         elif key in (ord("m"), ord("M")):
-            self.record_event("manual_settled_reference_mark")
-            self.message = f"已记录实验{self.test_id}人工停稳基准点"
+            try:
+                self.mark_settled_reference()
+            except ValueError as error:
+                self.message = str(error)
         elif key in (ord("g"), ord("G")):
             if self.active_test is None and self.test_id > 0:
                 self.measurement_buffer = ""
