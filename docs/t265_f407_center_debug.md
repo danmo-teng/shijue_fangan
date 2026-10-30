@@ -1,5 +1,113 @@
 # T265/F407 中心起点定位调试
 
+## 2026-10-30：F405 NormalDebug测试接口适配
+
+本节覆盖下文旧F407/MotionDebug控制、轮式参考和启动说明。原桌面入口和
+新T265候选外参保留，正式比赛入口、默认正式定位配置和比赛状态机没有改动。
+未应用融合补丁，未接雷达、主yaw定位或官方轮速注入，没有执行实车动作。
+
+接口依据固定为下位机固件实现`14157e6bf2600ff0480b133ab763298e12ce400b`，
+文档提交`a54ee465bf6ac7c35dc6236c61ee580e71fbcfc0`。
+[完整合同](https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/a54ee465bf6ac7c35dc6236c61ee580e71fbcfc0/docs/F405_NORMALDEBUG_CONTRACT_20261030.md)
+及原始示例JSON的副本保存在`localization/tools/contracts/`。
+文档修订号1不是线上协议版本；历史烧录/发送计数不作为当前实机身份。
+
+### 本轮修改与公共接口
+
+- `localization/tools/f405_test_client.py`：共用底盘测试客户端，独占UART；
+  提供`move_body(forward_mm,left_mm,speed_mm_s)`、`turn_ccw(angle_deg,rate_deg_s)`、
+  `stop()`、`reset_reference(stationary_confirmed=True)`、`telemetry(callback)`。
+  订阅返回取消订阅函数；订阅者复用同一个实例，不再打开UART。
+- `move_spin_angle(speed_mm_s,direction_deg,turn_deg,max_rate_dps)`与
+  `query_capabilities()`明确抛出UnsupportedCapability，不发送字节。
+  `capabilities()`只返回冻结源码合同的能力清单，标注来源，不是板端查询结果。
+  当前没有版本化实测前/左车速帧、线上boot/reference epoch或可靠大动作ID。
+- `f407_motion_protocol.py`保留历史helper兼容，新增F405专用向量/转角编码及0x1F解析。
+  地图只调用新客户端。应用前/左/逆时针为正；仅协议编码对旧TURN角度取负，
+  转速直接以度/秒传入，取消旧轮缘mm/s与130mm半径的UI转速换算。
+  TURN回执进度单独转为应用CCW度，原始gyro不反号。
+- `t265_f407_motion_map.py`继续复用原地图、T265进程、人工实测记录与日志留存。
+  T265子进程改为无UART并显式ignore-encoders，旧F407轮式公式不再进入测试参考。
+  正式localizer代码及正式配置不修改。新文件均为测试路径或文档。
+
+当前UART4支持0x19请求、0x1A状态、0x15原始计数、0x1F真实gyro。
+0x1A没有IMU健康位，Location heading=0还可能表示无效；只按实际字段记录。
+0x15与0x1F独立SEQ，不按相同SEQ配对；同一0x1F中的yaw/rate也不是同一传感器采样时刻。
+无效gyro仍记录，重复有效包不刷新新鲜度；源age加主机接收年龄到150ms后显示过期。
+它没有包含UART/滤波未知延迟，不因此宣布具备算法级采样时间资格。
+
+### F405轮式复算与显示
+
+先做16位计数模差，反馈轮位移仅翻转一次：`di=-pi*0.070/1061.268*raw_delta_i`；
+`F=(d2-d1)/sqrt(3)`，`L=(2*d3-d1-d2)/3`。三轮顺序右前/左前/后轮。
+与旧板相比横向符号相反；没有为此修改T265轴或地图初始航向。
+
+原始计数始终显示/记录；下位机实测前/左速度明确显示“未提供”，不以0、目标或
+上位机复算代替。上位机速度用计数差除以主机接收间隔，明确标为估算，
+不使用SEQ差乘10ms伪造采样间隔。同一read批次只复算一次，原始字节和逐帧计数仍保留。
+重复、明显乱序、半计数范围歧义、reset/非法标志、超过250ms接收间隔会使该估算不可用并重建基准。
+零计数变化可是真实静止，不能仅据此宣布冻结。
+
+紫色参考仅用复算增量和最近T265航向画诊断轨迹，时序未标定，不是独立真值，
+也不送入T265或地图橙色定位。断流/数据不可用明确显示无效；完整原始记录留在日志。
+原localizer CSV仍有历史轮式列，但本轮无UART，所以报告将这些轮式比较值置null，
+不能把全零列当作有效车轮轨迹。F405复算值以chassis_telemetry.jsonl为准。
+
+### 动作身份、回执与停止
+
+每个客户端有host_session_id，每动作有主机唯一host_action_id；线上仍仅8位SEQ/opcode。
+记录请求/回执的单调接收时间、主机reference epoch，MCU epoch与采样tick均为null。
+SEQ短时间避免复用，并避开最近回执/当前动作SEQ；显式STOP优先于普通复用等待。
+只关联发送后、SEQ/opcode匹配且状态序号可接受的回执；同一时刻仅一动作。
+STOP可取消当前动作，必须等匹配STOPPED才能提交下一动作；不把HOLD当暂停。
+
+超过接收/动作时限会结束主机等待、记录机械状态未知并取消自动后段，
+不自动重连、重发、STOP或重新归零。后续运动需人工STOP并等匹配回执；
+这是可恢复的动作交接状态，没有新增永久故障锁存。STOPPED/DONE不证明物理已停稳。
+RESET按钮/R键的文字明确要求操作者先确认停稳，命令只重建下位机Location参考；
+不清原始轮计数、gyro或T265，不是安全区自动分段清零。
+旧Y转向返航只有匹配终态且见过本动作RUNNING才续发后段；只有直接DONE时结束等待并取消自动后段。
+
+**缺少线上boot epoch/nonce，以上只能降低误认，无法严格排除重启前或SEQ回绕后的迟到回执。**
+日志的correlation与stale_reply_exclusion_guaranteed=false保留这一限制。
+后续要补齐的下位机接口见[f405_normaldebug_interface_followup.md](f405_normaldebug_interface_followup.md)，
+本轮没有修改下位机或分配新TYPE/opcode。
+
+### 启动及本轮验证
+
+保持原桌面“T265-F407运动定位调试”入口名称；默认只监听、显示和记录。
+操作前须由操作者确认实际提交、NormalDebug及SERVICE=MOTIONDEBUG；仅MODE=5不足以区分比赛服务。
+当前合同只审核14157e6，其他功能版本需要先核对合同，不能用纯文档a54ee465当固件版本。
+
+```bash
+cd /home/sunrise/RDK_X5/shijue_fangan
+# 仅当操作者确认现在板上仍是该实现和运动服务时，填写以下实际身份：
+localization/tools/desktop_launcher.sh \
+  --actual-lower-firmware 14157e6bf2600ff0480b133ab763298e12ce400b \
+  --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG \
+  --reference-description '填写本次卷尺零点和地面角度基准'
+```
+
+不带实际身份确认参数也可监听，但不发运动。没有能力探测包、程序器文本探测或启动运动。
+原四向、正反90/180/360°、M停稳标记、G实测录入均保留。
+转动默认60°/s，`[`/`]`调节角速度，U/J只调平移速度；S停车，R人工确认停稳后重设参考。
+客户端close()本身不发字节；原地图在有过实际发送的会话退出时仍请求一次STOP并记录结果。
+停止其他占用同一底盘UART的程序；互斥打开检查拒绝第二个测试客户端。
+未来若多验证程序需同时运行，应复用同一owner的订阅，不建立第二个物理串口读取者。
+
+日志仍在RDK原会话目录，最近五次完整会话策略覆盖新增
+`chassis_telemetry.jsonl`、`chassis_actions.jsonl`、`imu_telemetry.jsonl`。
+保留当前会话、用户文件、模型与标定；本轮没有清理已有日志。
+
+只扩展原`test_f407_motion_protocol.py`：合同hex逐字节、参数边界、F405方向与回绕、
+接收间隔与批次合并、0x1F符号/status/重复、单动作与STOP等待、错配/迟到回执、
+超时不重发、RESET保留gyro、unsupported无发送，以及本地PTY单owner/收发检查。
+原测试脚本、Python语法、入口help、地图无硬件渲染及git diff --check通过。
+保留原始UART历史的离线回放解析到0x15/0x1F各3282帧、0x1A 547帧，CRC/序号缺口为0。
+这些都是离线/本地PTY检查，没有连接实车UART/T265，没有发送实车动作，
+不等于当前固件身份、电气停止时延、定距/定角精度或传感器算法验收。本轮不进入融合算法验证。
+
+
 ## 2026-10-29：新竖装外参候选（仅调试，尚未实车确认）
 
 本节覆盖下文历史桌面默认外参/覆盖规则；正式比赛的模板、四角起点和

@@ -1,0 +1,196 @@
+{
+  "description": "Encoding examples only; no packets sent, no hardware actions.",
+  "implementation_commit": "14157e6bf2600ff0480b133ab763298e12ce400b",
+  "examples": [
+    {
+      "name": "move_body_forward_500mm_400mm_s",
+      "kind": "synthetic_not_sent",
+      "direction": "host_to_f405",
+      "type": "0x19",
+      "sequence": 49,
+      "hex": "A3 B3 19 31 03 0B 01 F4 00 00 01 90 B3 01 C3",
+      "fields": {
+        "opcode": 3,
+        "flags": 11,
+        "arg1_mm": 500,
+        "arg2_mm": 0,
+        "speed_mm_s": 400
+      }
+    },
+    {
+      "name": "move_body_left_300mm_400mm_s",
+      "kind": "synthetic_not_sent",
+      "direction": "host_to_f405",
+      "type": "0x19",
+      "sequence": 50,
+      "hex": "A3 B3 19 32 03 0B 00 00 01 2C 01 90 D7 C0 C3",
+      "fields": {
+        "opcode": 3,
+        "flags": 11,
+        "arg1_mm": 0,
+        "arg2_mm": 300,
+        "speed_mm_s": 400
+      }
+    },
+    {
+      "name": "turn_ccw_90deg_60deg_s",
+      "kind": "synthetic_not_sent",
+      "direction": "host_to_f405",
+      "type": "0x19",
+      "sequence": 51,
+      "hex": "A3 B3 19 33 02 09 FC 7C 00 00 02 58 BC F9 C3",
+      "fields": {
+        "opcode": 2,
+        "flags": 9,
+        "arg1_ddeg": -900,
+        "arg2": 0,
+        "speed_ddeg_s": 600,
+        "application_ccw_deg": 90
+      }
+    },
+    {
+      "name": "stop",
+      "kind": "synthetic_not_sent",
+      "direction": "host_to_f405",
+      "type": "0x19",
+      "sequence": 52,
+      "hex": "A3 B3 19 34 00 09 00 00 00 00 00 00 5E 7C C3",
+      "fields": {
+        "opcode": 0,
+        "flags": 9,
+        "arg1": 0,
+        "arg2": 0,
+        "speed": 0
+      }
+    },
+    {
+      "name": "reset_reference",
+      "kind": "synthetic_not_sent",
+      "direction": "host_to_f405",
+      "type": "0x19",
+      "sequence": 53,
+      "hex": "A3 B3 19 35 05 09 00 00 00 00 00 00 93 D3 C3",
+      "fields": {
+        "opcode": 5,
+        "flags": 9,
+        "arg1": 0,
+        "arg2": 0,
+        "speed": 0
+      }
+    },
+    {
+      "name": "odometry_forward_raw_delta_example",
+      "kind": "synthetic_not_sent",
+      "direction": "f405_to_host",
+      "type": "0x15",
+      "sequence": 128,
+      "hex": "A3 B3 15 80 00 0A FF F6 00 00 0A 07 31 3C C3",
+      "fields": {
+        "raw_low16": [
+          10,
+          65526,
+          0
+        ],
+        "sample_period_ms": 10,
+        "status": 7,
+        "assumed_previous_raw_low16": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "imu_negative_multiturn",
+      "kind": "synthetic_not_sent",
+      "direction": "f405_to_host",
+      "type": "0x1F",
+      "sequence": 7,
+      "hex": "A3 B3 1F 07 FF F5 03 05 FB 50 01 03 31 0E C3",
+      "fields": {
+        "yaw_mdeg": -720123,
+        "rate_ddeg_s": -1200,
+        "age_ms": 1,
+        "status": 3
+      }
+    },
+    {
+      "name": "imu_ccw_positive",
+      "kind": "synthetic_not_sent",
+      "direction": "f405_to_host",
+      "type": "0x1F",
+      "sequence": 8,
+      "hex": "A3 B3 1F 08 00 01 5F 90 01 2C 01 03 7B B4 C3",
+      "fields": {
+        "yaw_mdeg": 90000,
+        "rate_ddeg_s": 300,
+        "age_ms": 1,
+        "status": 3
+      }
+    },
+    {
+      "name": "turn_ccw_done",
+      "kind": "synthetic_not_sent",
+      "direction": "f405_to_host",
+      "type": "0x1A",
+      "sequence": 145,
+      "hex": "A3 B3 1A 91 33 02 00 02 FC 7C 30 39 CC BF C3",
+      "fields": {
+        "acknowledged_command_sequence": 51,
+        "state": 2,
+        "fault": 0,
+        "command": 2,
+        "progress_ddeg": -900,
+        "heading_cdeg": 12345
+      }
+    },
+    {
+      "name": "stop_ack",
+      "kind": "synthetic_not_sent",
+      "direction": "f405_to_host",
+      "type": "0x1A",
+      "sequence": 146,
+      "hex": "A3 B3 1A 92 34 04 00 00 00 00 30 39 77 E1 C3",
+      "fields": {
+        "acknowledged_command_sequence": 52,
+        "state": 4,
+        "fault": 0,
+        "command": 0,
+        "progress": 0,
+        "heading_cdeg": 12345
+      }
+    },
+    {
+      "name": "capability_query",
+      "implemented": false,
+      "type": null,
+      "opcode": null,
+      "hex": null,
+      "reason": "No UART4 capability query request or response exists."
+    },
+    {
+      "name": "versioned_body_velocity_telemetry",
+      "implemented": false,
+      "type": null,
+      "version_field": null,
+      "hex": null,
+      "reason": "No versioned body velocity telemetry exists."
+    },
+    {
+      "name": "move_spin_angle",
+      "implemented": false,
+      "type": null,
+      "opcode": null,
+      "hex": null,
+      "reason": "Internal C API exists but has no UART4 opcode or paired-frame contract."
+    },
+    {
+      "name": "console_version_query",
+      "kind": "synthetic_not_sent",
+      "transport": "USART1_text_not_UART4_binary",
+      "request_text": "VER\\r\\n",
+      "hex": "56 45 52 0D 0A",
+      "crc": null
+    }
+  ]
+}

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""MotionDebug adapter for F407 87aaba2 (unchanged 0x19/0x1A protocol)."""
+"""Legacy 0x19/0x1A helpers plus the confirmed F405 0x1F receive contract.
+
+Versioned F405 capabilities/body-speed/combined-action frames require the new
+NormalDebug test contract; they are not inferred from this legacy adapter.
+"""
 from __future__ import annotations
 
 import math
+import time
 from typing import Callable
 
 
@@ -13,6 +18,8 @@ PAYLOAD_SIZE = 8
 MSG_ODOM = 0x15
 MSG_MOTION_COMMAND = 0x19
 MSG_MOTION_STATUS = 0x1A
+MSG_IMU = 0x1F
+IMU_STALE_MS = 150
 
 MOTION_CMD_STOP = 0x00
 MOTION_CMD_TURN_REL = 0x02
@@ -123,12 +130,40 @@ def motion_move_frame(sequence: int, direction_deg: float, distance_mm: int,
     return build_frame(MSG_MOTION_COMMAND, sequence, payload)
 
 
+def move_body_frame(sequence: int, forward_mm: int, left_mm: int,
+                    speed_mm_s: int = 300) -> bytes:
+    """F405 contract: floor-fixed vector latched in the initial body frame."""
+    if (type(forward_mm) is not int or type(left_mm) is not int or
+            not 0 < math.hypot(forward_mm, left_mm) <= MOTION_MAX_DISTANCE_MM):
+        raise ValueError("integer forward/left vector must have length in 1..10000 mm")
+    if type(speed_mm_s) is not int:
+        raise ValueError("integer translation speed in mm/s required")
+    payload = bytes((MOTION_CMD_MOVE_DISTANCE, 0x0B))
+    payload += forward_mm.to_bytes(2, "big", signed=True) + left_mm.to_bytes(2, "big", signed=True)
+    payload += _speed(speed_mm_s).to_bytes(2, "big")
+    return build_frame(MSG_MOTION_COMMAND, sequence, payload)
+
+
+def turn_ccw_frame(sequence: int, angle_deg: float, rate_deg_s: float = 60.0) -> bytes:
+    """Application CCW positive; only the legacy command angle is negated.
+    Angular speed is degrees/sec, never a wheel-tangent mm/sec conversion.
+    """
+    if not math.isfinite(angle_deg) or not -360 <= angle_deg <= 360 or round(angle_deg*10) == 0:
+        raise ValueError("nonzero turn in [-360,360] degrees required")
+    if not math.isfinite(rate_deg_s) or not 0 <= rate_deg_s <= 360 or (rate_deg_s > 0 and round(rate_deg_s*10) == 0):
+        raise ValueError("angular speed must be 0/default or 0.1..360 degrees/sec")
+    payload = bytes((MOTION_CMD_TURN_REL, 0x09))
+    payload += (-round(angle_deg*10)).to_bytes(2, "big", signed=True) + bytes(2)
+    payload += round(rate_deg_s*10).to_bytes(2, "big")
+    return build_frame(MSG_MOTION_COMMAND, sequence, payload)
+
+
 def parse_frame(frame: bytes) -> tuple[int, int, bytes]:
     if len(frame) != FRAME_SIZE or frame[:2] != FRAME_HEAD or frame[-1] != FRAME_TAIL:
         raise ValueError("invalid frame envelope")
     if crc16_modbus(frame[2:12]) != int.from_bytes(frame[12:14], "little"):
         raise ValueError("invalid frame CRC")
-    if frame[2] not in (MSG_ODOM, MSG_MOTION_STATUS):
+    if frame[2] not in (MSG_ODOM, MSG_MOTION_STATUS, MSG_IMU):
         raise ValueError("unexpected F407 frame type")
     return frame[2], frame[3], frame[4:12]
 
@@ -171,13 +206,53 @@ def parse_motion_status(frame: bytes) -> dict[str, int | bool | str]:
     }
 
 
+def parse_imu(frame: bytes) -> dict:
+    """Current F405 0x1F; native IMU CCW-positive, independently sequenced.
+
+    P6 is packaging age, NOT a capture tick. No MCU epoch/capture timestamp
+    exists in this frame. Do not infer either from SEQ or pair it with 0x15.
+    """
+    message_type, sequence, payload = parse_frame(frame)
+    if message_type != MSG_IMU:
+        raise ValueError("not an IMU frame")
+    yaw = int.from_bytes(payload[:4], "big", signed=True)
+    rate = int.from_bytes(payload[4:6], "big", signed=True)
+    age, status = payload[6:]
+    return {"sequence": sequence, "yaw_mdeg": yaw, "yaw_deg": yaw / 1000.0,
+            "rate_ddeg_s": rate, "yaw_rate_deg_s": rate / 10.0,
+            "age_ms": age, "status": status,
+            "wire_valid": status == 0x03 and age < IMU_STALE_MS,
+            "ready": bool(status & 0x02), "recovering": bool(status & 0x04),
+            "uncertain": bool(status & 0x08), "stale": bool(status & 0x10),
+            "yaw_clamped": bool(status & 0x20), "rate_clamped": bool(status & 0x40),
+            "reserved_bits": status & 0x80,
+            "capture_monotonic_ns": None, "mcu_epoch": None,
+            "capture_time_qualified": False, "yaw_rate_same_sampling_time": False,
+            "heading_reference": "native_local_unaligned_ccw_positive"}
+
+
+def imu_is_fresh(sample: dict | None, now_ns: int) -> bool:
+    """Display validity only; unknown UART/filter latency is not calibrated.
+    A repeated packet must not refresh timestamp_monotonic_ns.
+    """
+    if sample is None or not sample.get("wire_valid"):
+        return False
+    received = sample.get("timestamp_monotonic_ns")
+    if received is None or now_ns < received:
+        return False
+    return sample["age_ms"] + (now_ns - received) / 1e6 < IMU_STALE_MS
+
+
 class StreamParser:
     """Byte-stream parser for mixed F407 ODOM and motion-status frames."""
 
     def __init__(self, on_odom: Callable[[dict[str, int]], None] | None = None,
-                 on_motion_status: Callable[[dict[str, int | bool | str]], None] | None = None) -> None:
+                 on_motion_status: Callable[[dict[str, int | bool | str]], None] | None = None,
+                 on_imu: Callable[[dict], None] | None = None) -> None:
         self.on_odom = on_odom
         self.on_motion_status = on_motion_status
+        self.on_imu = on_imu
+        self.latest_imu: dict | None = None
         self.buffer = bytearray()
         self.latest_status: dict[str, int | bool | str] | None = None
         self.stats = {
@@ -189,11 +264,17 @@ class StreamParser:
             "malformed": 0,
             "odom_sequence_gaps": 0,
             "status_sequence_gaps": 0,
+            "imu_frames": 0,
+            "imu_sequence_gaps": 0,
+            "imu_duplicates": 0,
+            "imu_out_of_order": 0,
         }
         self._last_odom_sequence: int | None = None
         self._last_status_sequence: int | None = None
+        self._last_imu_sequence: int | None = None
 
-    def feed(self, data: bytes) -> None:
+    def feed(self, data: bytes, receive_ns: int | None = None) -> None:
+        receive_ns = time.monotonic_ns() if receive_ns is None else receive_ns
         self.stats["bytes"] += len(data)
         self.buffer.extend(data)
         while True:
@@ -220,12 +301,13 @@ class StreamParser:
                 continue
             del self.buffer[:FRAME_SIZE]
             try:
-                decoded = (parse_odometry(candidate) if message_type == MSG_ODOM
-                           else parse_motion_status(candidate))
+                decoded = {MSG_ODOM: parse_odometry, MSG_MOTION_STATUS: parse_motion_status,
+                           MSG_IMU: parse_imu}[message_type](candidate)
             except ValueError:
                 self.stats["malformed"] += 1
                 continue
             self.stats["frames"] += 1
+            decoded["timestamp_monotonic_ns"] = receive_ns
             if message_type == MSG_ODOM:
                 if self._last_odom_sequence is not None:
                     gap = (sequence - self._last_odom_sequence) & 0xFF
@@ -235,7 +317,7 @@ class StreamParser:
                 self.stats["odom_frames"] += 1
                 if self.on_odom is not None:
                     self.on_odom(decoded)
-            else:
+            elif message_type == MSG_MOTION_STATUS:
                 if self._last_status_sequence is not None:
                     gap = (sequence - self._last_status_sequence) & 0xFF
                     if gap > 1:
@@ -245,3 +327,23 @@ class StreamParser:
                 self.latest_status = decoded
                 if self.on_motion_status is not None:
                     self.on_motion_status(self.latest_status)
+            else:
+                self.stats["imu_frames"] += 1
+                if self._last_imu_sequence is not None:
+                    gap = (sequence - self._last_imu_sequence) & 0xFF
+                    if gap == 0:
+                        self.stats["imu_duplicates"] += 1
+                        if not decoded["wire_valid"]:
+                            decoded["unique_sample"] = False
+                            self.latest_imu = decoded
+                            if self.on_imu is not None:
+                                self.on_imu(decoded)
+                        continue
+                    if gap > 127:
+                        self.stats["imu_out_of_order"] += 1
+                        continue
+                    self.stats["imu_sequence_gaps"] += gap - 1
+                self._last_imu_sequence = sequence
+                self.latest_imu = decoded
+                if self.on_imu is not None:
+                    self.on_imu(decoded)

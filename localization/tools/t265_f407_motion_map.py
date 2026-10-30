@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Interactive calibration map using the existing F407 MotionDebug protocol.
+"""Existing desktop map adapted to the audited F405 NormalDebug contract.
 
-The F407 motion-debug branch has a different protocol from the competition
-task firmware: TYPE=0x19 is a one-shot motion command and TYPE=0x1A is the
-motion status.  This program owns the real F407 UART, forwards its ODOM bytes
-through a pseudo-terminal to the existing T265 localizer, and keeps the full
-T265/encoder CSV in the same run directory.
+ChassisTestClient is the only UART owner. The T265-only child receives no UART;
+raw counts and F405 host cross-checks stay in this test path. No wheel injection.
 """
 from __future__ import annotations
 
@@ -13,12 +10,10 @@ import argparse
 import json
 import math
 import os
-import pty
 import re
 import signal
 import subprocess
 import sys
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -42,20 +37,14 @@ if str(TOOLS_ROOT) not in sys.path:
 
 from f407_motion_protocol import (  # noqa: E402
     COMMAND_NAMES,
-    MOTION_CMD_MOVE_DISTANCE,
-    MOTION_CMD_STOP,
     MOTION_CMD_TURN_REL,
-    MOTION_TURN_TIMEOUT_S,
     MOTION_STATE_DONE,
     MOTION_STATE_FAULT,
-    MOTION_STATE_RUNNING,
     MOTION_STATE_STOPPED,
     STATE_NAMES,
-    StreamParser,
-    motion_move_frame,
-    motion_stop_frame,
-    motion_turn_frame,
+    imu_is_fresh,
 )
+from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
 
 
@@ -68,13 +57,13 @@ START_HEADING_OFFSET_DEG = 45.0
 DEBUG_COMMAND_FORWARD_SIGN = 1
 DEBUG_COMMAND_LEFT_SIGN = 1
 DEBUG_COMMAND_TURN_SIGN = -1
-LOWER_FIRMWARE = "kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot@87aaba26f2c028680027b54df08d6ba825b047e9 (MotionDebug)"
+LOWER_FIRMWARE = IMPLEMENTATION_COMMIT
 MOTION_STATUS_TIMEOUT_MS = 1000
-MOTION_PROTOCOL = dict(PROTOCOL, motion_command_type="0x19", motion_status_type="0x1A",
+MOTION_PROTOCOL = dict(PROTOCOL, uart="RDK /dev/ttyS1 to F405 UART4/JP506", board="F405_ROBO", motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="physical forward/left mm",
-                       wheel_body_axes="F=-(m1-m2)/sqrt(3), L=(m1+m2-2*m3)/3; signed wheel metres",
+                       wheel_body_axes="F=(u2-u1)/sqrt(3), L=(2*u3-u1-u2)/3; ui=-K*raw_delta_i/dt; receive interval estimate only",
                        t265_heading="CCW positive, selected field start reference, wrapped -180..180 degrees",
-                       motion_status_heading="F407 Location heading, CCW positive, local reset reference, modulo 360; not raw IMU yaw")
+                       motion_status_heading="F405 Location heading CCW/local, 0 also means unavailable; no health bits on 0x1A")
 
 
 def read_json(path: Path | None) -> dict | None:
@@ -109,7 +98,8 @@ def wrap_degrees(value: float) -> float:
 SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_result.json",
     "localization_debug.csv", "t265_raw_pose.csv", "localization_events.jsonl", "localizer.log",
     "f407_motion_status.json", "f407_motion_status.jsonl", "uart_rx.jsonl", "events.jsonl",
-    "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json"})
+    "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json",
+    "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl"})
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
@@ -131,7 +121,7 @@ def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[s
         marker = read_json(path / "session_complete.json")
         metadata = read_json(path / "metadata.json")
         if (not metadata or
-                metadata.get("mode") != "interactive_f407_motion_debug"):
+                metadata.get("mode") not in {"interactive_f407_motion_debug", "interactive_f405_normaldebug"}):
             continue
         if marker:
             if marker.get("owner") != "t265_f407_motion_map" or marker.get("complete") is not True:
@@ -204,115 +194,8 @@ class TextPainter:
         return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
 
 
-class F407SerialBridge:
-    """Read the real UART, parse motion telemetry, and feed ODOM to localizer."""
-
-    def __init__(self, device: str, baud: int, status_path: Path,
-                 status_log_path: Path) -> None:
-        self.device = device
-        self.baud = baud
-        self.status_path = status_path
-        self.status_log_path = status_log_path
-        self.master_fd, self.slave_fd = pty.openpty()
-        os.set_blocking(self.master_fd, False)
-        self.slave_path = os.ttyname(self.slave_fd)
-        self.serial: serial.Serial | None = None
-        self.parser = StreamParser(on_motion_status=self._on_motion_status)
-        self.latest_status: dict | None = None
-        self.latest_status_timestamp_ns = 0
-        self.lock = threading.Lock()
-        self.stop_event = threading.Event()
-        self.thread: threading.Thread | None = None
-        self.rx_log = None
-        self.log_error: str | None = None
-
-    def _on_motion_status(self, status: dict) -> None:
-        timestamp_ns = time.monotonic_ns()
-        document = dict(status)
-        document["timestamp_monotonic_ns"] = timestamp_ns
-        with self.lock:
-            self.latest_status = document
-            self.latest_status_timestamp_ns = timestamp_ns
-        temporary = self.status_path.with_suffix(self.status_path.suffix + ".tmp")
-        try:
-            temporary.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n",
-                                 encoding="utf-8")
-            temporary.replace(self.status_path)
-            with self.status_log_path.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps(document, ensure_ascii=False) + "\n")
-        except OSError as error:
-            self.log_error = str(error)
-
-    def _forward_to_pty(self, data: bytes) -> None:
-        try:
-            os.write(self.master_fd, data)
-        except (BlockingIOError, OSError):
-            # The localizer may still be booting. Never let a full pseudo-
-            # terminal buffer stop reading the real F407 UART.
-            return
-
-    def _read_loop(self) -> None:
-        assert self.serial is not None
-        while not self.stop_event.is_set():
-            try:
-                data = self.serial.read(512)
-            except serial.SerialException:
-                return
-            if not data:
-                continue
-            # Retain the complete receive stream even if T265 never boots or
-            # a frame fails CRC/decoding. Host monotonic time aligns it to CSV.
-            if self.rx_log is not None:
-                try:
-                    self.rx_log.write(json.dumps({
-                        "timestamp_monotonic_ns": time.monotonic_ns(),
-                        "data_hex": data.hex(),
-                    }) + "\n")
-                except OSError as error:
-                    self.log_error = str(error)
-            self.parser.feed(data)
-            self._forward_to_pty(data)
-
-    def start(self) -> None:
-        self.rx_log = (self.status_path.parent / "uart_rx.jsonl").open(
-            "a", encoding="utf-8", buffering=1)
-        self.serial = serial.Serial(
-            self.device, self.baud, timeout=0.05, write_timeout=0.20
-        )
-        self.thread = threading.Thread(target=self._read_loop,
-                                       name="f407-motion-uart", daemon=True)
-        self.thread.start()
-
-    def send(self, packet: bytes) -> None:
-        with self.lock:
-            if self.serial is None:
-                raise RuntimeError("F407串口尚未打开")
-            try:
-                self.serial.write(packet)
-                self.serial.flush()
-            except serial.SerialException as error:
-                raise RuntimeError(f"F407串口发送失败：{error}") from error
-
-    def status_snapshot(self) -> tuple[dict | None, dict]:
-        with self.lock:
-            return self.latest_status, dict(self.parser.stats)
-
-    def stop(self) -> None:
-        self.stop_event.set()
-        if self.thread is not None:
-            self.thread.join(timeout=1.0)
-        if self.serial is not None:
-            self.serial.close()
-        self.thread = None
-        self.serial = None
-        if self.rx_log is not None:
-            self.rx_log.close()
-            self.rx_log = None
-        for fd in (self.master_fd, self.slave_fd):
-            try:
-                os.close(fd)
-            except OSError:
-                pass
+# Historical class name retained for existing imports; there is one UART owner.
+F407SerialBridge = ChassisTestClient
 
 
 class MotionMapApp:
@@ -343,6 +226,7 @@ class MotionMapApp:
         self.last_status_timestamp = 0
         self.localization: dict = {}
         self.motion_status: dict = {}
+        self.imu_telemetry: dict | None = None
         self.t265_points: list[tuple[float, float]] = []
         self.odom_points: list[tuple[float, float]] = []
         self.raw_points: list[tuple[float, float]] = []
@@ -355,6 +239,11 @@ class MotionMapApp:
         self.return_distance_mm = 0
         self.distance_mm = 1000
         self.speed_mm_s = 300
+        self.turn_rate_deg_s = 60
+        self.active_host_action_id = None
+        self.latest_wheel_reference = None
+        self.wheel_reference_pose = None
+        self.wheel_reference_valid = False
         self.test_id = 0
         self.active_test_parameters: dict = {}
         self.session_config: dict[str, str] = {}
@@ -446,6 +335,8 @@ class MotionMapApp:
         cv2.circle(canvas, center, 19, (20, 150, 245), 3, cv2.LINE_AA)
         cv2.arrowedLine(canvas, center, tip, (20, 150, 245), 5, cv2.LINE_AA, tipLength=0.30)
         odom = self.localization.get("wheel_odom", {})
+        if not odom.get("available",False):
+            odom = {}
         try:
             ox, oy = float(odom["x_m"]), float(odom["y_m"])
             odom_center = self.world_to_pixel(ox, oy)
@@ -473,7 +364,7 @@ class MotionMapApp:
     def draw_panel(self, canvas: np.ndarray, text: TextPainter) -> None:
         x0 = 920
         cv2.rectangle(canvas, (900, 0), (LOGICAL_WIDTH, LOGICAL_HEIGHT), (26, 27, 30), -1)
-        text.add("T265/F407 运动调试", (x0, 12), 22, (245, 245, 245), True)
+        text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
         running = self.localizer is not None and self.localizer.poll() is None
         text.add("定位进程运行中" if running else "定位进程未运行", (x0, 68), 16,
                  (50, 220, 65) if running else (50, 80, 230), True)
@@ -493,44 +384,52 @@ class MotionMapApp:
         except (KeyError, TypeError, ValueError):
             text.add("T265：等待数据", (x0, 190), 17, (170, 170, 175))
         odom = self.localization.get("wheel_odom", {})
+        if not odom.get("available",False):
+            odom = {}
         try:
-            text.add(f"轮式中心：{float(odom['x_m']):+.3f} / {float(odom['y_m']):+.3f} m",
+            text.add(f"复算参考：{float(odom['x_m']):+.3f} / {float(odom['y_m']):+.3f} m",
                      (x0, 240), 16, (220, 80, 220), True)
         except (KeyError, TypeError, ValueError):
-            text.add("轮式中心：等待F407编码器", (x0, 240), 16, (180, 130, 180), True)
-        comparison = self.localization.get("comparison", {})
-        error_m = comparison.get("t265_vs_wheel_odom_distance_m")
-        comparison_text = "T265-轮式：等待数据" if error_m is None else f"T265-轮式：{float(error_m):.3f} m"
+            text.add("复算参考：无有效数据", (x0, 240), 16, (180, 130, 180), True)
+        comparison_text = "下位机实测前/左车速：未提供"
         text.add(comparison_text,
                  (x0, 266), 16, (0, 205, 220))
-        t265 = self.localization.get("t265", {})
-        text.add(f"raw偏置：{float(t265.get('camera_offset_forward_m', 0.0)):+.4f} / {float(t265.get('camera_offset_left_m', 0.0)):+.4f} m",
-                 (x0, 292), 15, (50, 170, 80))
-        text.add(f"raw增量：{float(t265.get('tracking_origin_delta_forward_m', 0.0)):+.3f} / {float(t265.get('tracking_origin_delta_left_m', 0.0)):+.3f} m",
-                 (x0, 316), 15, (50, 170, 80))
+        wheel = self.latest_wheel_reference
+        text.add(f"raw计数：{wheel['raw_counts']}" if wheel else "raw计数：待收0x15", (x0,292),14,(50,170,80))
+        estimate = (f"上位机复算 F/L={wheel['forward_mps']:+.3f}/{wheel['left_mps']:+.3f}m/s" if
+                    wheel and wheel["valid"] and time.monotonic_ns()-wheel["receive_monotonic_ns"] <= 250_000_000 else "上位机复算 F/L：不可用/过期")
+        text.add(estimate,(x0,316),14,(50,170,80))
 
         status = self.motion_status
         state = int(status.get("state", 0)) if status else 0
         command = int(status.get("command", 0)) if status else 0
         fault = int(status.get("fault", 0)) if status else 0
         status_age = self.status_age(status)
-        status_text = (f"F407：{STATE_NAMES.get(state, 'UNKNOWN')} / {COMMAND_NAMES.get(command, 'UNKNOWN')} age={status_age:.0f}ms"
-                       if status else "F407：等待0x1A运动状态")
+        unit = "ddeg" if command == MOTION_CMD_TURN_REL else "mm"
+        status_text = (f"F405 {STATE_NAMES.get(state, 'UNKNOWN')} {COMMAND_NAMES.get(command, 'UNKNOWN')} p={status.get('progress',0)}{unit} f={fault}"
+                       if status else "F405：等待0x1A运动状态")
+        if status is not None and status_age > MOTION_STATUS_TIMEOUT_MS:
+            status_text += " 过期"
         text.add(status_text,
                  (x0, 350), 15, (245, 215, 150), True)
         unit = "0.1°" if command == MOTION_CMD_TURN_REL else "mm"
         heading = float(status.get("heading_cdeg", 0)) * 0.01
         progress_text = (f"进度={int(status.get('progress', 0))}{unit}  故障={fault}  IMU={heading:.1f}°"
                          if status else "运动进度及IMU航向：等待数据")
+        imu = self.imu_telemetry
+        if imu is not None:
+            progress_text = f"1F yaw={imu['yaw_deg']:+.2f}° rate={imu['yaw_rate_deg_s']:+.1f}°/s"
         text.add(progress_text,
                  (x0, 374), 15, (245, 215, 150))
         stats = self.bridge.status_snapshot()[1] if self.bridge else {}
-        text.add(f"F407帧：ODOM={stats.get('odom_frames', 0)} STATUS={stats.get('motion_status_frames', 0)}",
+        text.add(f"帧 ODOM={stats.get('odom_frames', 0)} IMU={stats.get('imu_frames', 0)} STATUS={stats.get('motion_status_frames', 0)}",
                  (x0, 400), 14, (190, 190, 200))
-        text.add(f"CRC={stats.get('crc_errors', 0)} 丢帧={stats.get('odom_sequence_gaps', 0)}/{stats.get('status_sequence_gaps', 0)}",
+        health = (f" 1F={imu['status']:02X} age={imu['age_ms']}ms " +
+                  ("新鲜" if imu_is_fresh(imu, time.monotonic_ns()) else "无效/过期")) if imu else " 1F待收"
+        text.add(f"CRC={stats.get('crc_errors', 0)}" + health,
                  (x0, 423), 14, (190, 190, 200))
 
-        text.add(f"参数：距离 {self.distance_mm} mm / 速度 {self.speed_mm_s} mm/s", (x0, 448), 16, (245, 245, 245), True)
+        text.add(f"距离{self.distance_mm}mm / {self.speed_mm_s}mm/s / 转速{self.turn_rate_deg_s}°/s", (x0, 448), 16, (245, 245, 245), True)
         self.button(canvas, text, "dminus", "距离-100", (x0, 480, x0 + 78, 514))
         self.button(canvas, text, "dplus", "距离+100", (x0 + 84, 480, x0 + 162, 514))
         self.button(canvas, text, "sminus", "速度-50", (x0 + 168, 480, x0 + 246, 514))
@@ -550,8 +449,9 @@ class MotionMapApp:
                                             ("lateral", "左移"), ("right", "右移"))):
             self.button(canvas, text, name, label, (x0 + col * 84, 672, x0 + col * 84 + 78, 704),
                         self.active_test == name, (55, 110, 80))
-        self.button(canvas, text, "returntest", "转向返航（非卷尺基准）", (x0, 711, x0 + 330, 741),
+        self.button(canvas, text, "returntest", "转向返航", (x0, 711, x0 + 152, 741),
                     self.active_test == "turn_and_return", (55, 100, 135))
+        self.button(canvas,text,"resetreference","已停稳：重设参考",(x0+160,711,x0+330,741))
         command = self.last_sent_command
         text.add(f"最近发送：{command['name']} seq={command['sequence']}" if command else "最近发送：无",
                  (x0, 765), 15, (245, 215, 150))
@@ -560,9 +460,9 @@ class MotionMapApp:
         text.add(f"实验{self.test_id}：{self.active_test or '无'} / {self.return_phase or ''}",
                  (x0, 814), 16, (0, 215, 255), True)
         text.add("V/B前后 L/H左右 O/P/0正转 1/2/3反转", (x0, 843), 13, (175, 175, 180))
-        text.add("I/K距离±100 ,/.±10 U/J速度 S停车 Q退出", (x0, 865), 13, (175, 175, 180))
+        text.add("I/K距离±100 ,/.±10 U/J速度 [/]转速", (x0, 865), 13, (175, 175, 180))
         text.add("M记录停稳点；G录入独立实测；Y转向返航", (x0, 887), 13, (175, 175, 180))
-        text.add("指令目标和DONE不代表实测距离/转角", (x0, 909), 13, (175, 175, 180))
+        text.add("组合/能力查询未提供；S停车 R停稳后重设", (x0, 909), 13, (175, 175, 180))
         text.add(f"日志：{self.run_dir.name if self.run_dir else '未启动'}", (x0, 931), 12, (175, 175, 180))
         if self.measurement_buffer is not None:
             text.add(f"测量 f,l,deg: {self.measurement_buffer}_", (x0, 954), 14, (100, 240, 240))
@@ -615,27 +515,57 @@ class MotionMapApp:
                 if timestamp != self.last_json_timestamp:
                     self.last_json_timestamp = timestamp
                     self.localization = data
-                    self.append_point(self.t265_points, data.get("pose", {}).get("x_m"), data.get("pose", {}).get("y_m"))
-                    self.append_point(self.odom_points, data.get("wheel_odom", {}).get("x_m"), data.get("wheel_odom", {}).get("y_m"))
-                    tracking = data.get("t265", {}).get("tracking_origin", {})
-                    self.append_point(self.raw_points, tracking.get("x_m"), tracking.get("y_m"))
+                    self.append_point(self.t265_points,data.get("pose",{}).get("x_m"),data.get("pose",{}).get("y_m"))
+                    tracking = data.get("t265",{}).get("tracking_origin",{})
+                    self.append_point(self.raw_points,tracking.get("x_m"),tracking.get("y_m"))
         if self.bridge is not None:
+            self.bridge.poll()
+            self.imu_telemetry = self.bridge.imu_snapshot()
             if self.bridge.log_error is not None:
                 self.message = f"测试日志保存失败：{self.bridge.log_error}"
             status, _ = self.bridge.status_snapshot()
             if status is not None:
-                timestamp = int(status.get("timestamp_monotonic_ns", 0))
-                if timestamp != self.last_status_timestamp:
-                    self.last_status_timestamp = timestamp
-                    self.motion_status = status
-                    self.handle_motion_status(status)
-        if (self.active_test is not None and self.active_command_sequence is not None and
-                time.monotonic_ns() - self.last_matching_status_ns > MOTION_STATUS_TIMEOUT_MS * 1_000_000):
-            self.record_event(f"{self.active_test}_end_status_lost")
-            self.active_test = None
-            self.return_phase = None
-            self.active_command_sequence = None
-            self.message = "F407状态失联，已取消自动后续动作；当前机械动作状态未知"
+                self.motion_status = status
+            for result in self.bridge.drain_action_results():
+                if result["host_action_id"] != self.active_host_action_id:
+                    continue
+                self.record_event("chassis_action_result", result)
+                if result.get("status") is not None:
+                    self.handle_motion_status(result["status"])
+                else:
+                    self.active_test = None
+                    self.return_phase = None
+                    self.active_command_sequence = None
+                    self.message = "动作状态未知，未续发；人工STOP并确认回执后再操作"
+            for sample in self.bridge.drain_wheel_increments():
+                self.latest_wheel_reference = sample
+                if not sample["valid"]:
+                    self.wheel_reference_valid = False
+                    self.wheel_reference_pose = None
+                    continue
+                pose = self.localization.get("pose",{})
+                if (not all(k in pose for k in ("x_m","y_m","yaw_deg")) or
+                        time.monotonic_ns()-self.localization.get("timestamp_monotonic_ns",0) > 500_000_000 or
+                        self.localization.get("quality") == "LOST"):
+                    self.wheel_reference_valid = False
+                    self.wheel_reference_pose = None
+                    continue
+                if self.wheel_reference_pose is None:
+                    self.wheel_reference_pose = dict(pose)
+                # Diagnostic drawing only: latest T265 heading, not a qualified
+                # simultaneous yaw sample, and never an input to T265/output pose.
+                yaw = math.radians(pose["yaw_deg"])
+                f,l = sample["forward_delta_m"],sample["left_delta_m"]
+                self.wheel_reference_pose["x_m"] += math.cos(yaw)*f-math.sin(yaw)*l
+                self.wheel_reference_pose["y_m"] += math.sin(yaw)*f+math.cos(yaw)*l
+                self.wheel_reference_pose["yaw_deg"] = pose["yaw_deg"]
+                self.wheel_reference_valid = True
+                self.append_point(self.odom_points,self.wheel_reference_pose["x_m"],self.wheel_reference_pose["y_m"])
+        if (self.latest_wheel_reference is not None and
+                time.monotonic_ns()-self.latest_wheel_reference["receive_monotonic_ns"] > 250_000_000):
+            self.wheel_reference_valid = False
+        self.localization["wheel_odom"] = dict(self.wheel_reference_pose or {},available=self.wheel_reference_valid,
+            source="host_f405_counts_latest_t265_heading_diagnostic_only")
 
     def record_event(self, name: str, details: dict | None = None) -> bool:
         if self.events_path is None:
@@ -646,6 +576,7 @@ class MotionMapApp:
             "event": name,
             "details": details or {},
             "test_id": self.test_id,
+            "host_action_id": self.active_host_action_id,
             "test_parameters": dict(self.active_test_parameters),
             "localization": {
                 "timestamp_monotonic_ns": self.localization.get("timestamp_monotonic_ns"),
@@ -654,6 +585,7 @@ class MotionMapApp:
                 "wheel_odom": self.localization.get("wheel_odom", {}),
             },
             "motion_status": self.motion_status,
+            "imu_native_unaligned": self.imu_telemetry,
         }
         try:
             with self.events_path.open("a", encoding="utf-8") as stream:
@@ -677,6 +609,7 @@ class MotionMapApp:
                 "description": description,
                 "frame_hex": packet.hex(" ").upper(),
                 "test_id": self.test_id,
+                "host_action_id": self.active_host_action_id,
                 "test_parameters": dict(self.active_test_parameters),
                 "wire": {
                     "type": packet[2], "opcode": packet[4], "flags": packet[5],
@@ -691,79 +624,60 @@ class MotionMapApp:
             except OSError:
                 self.logging_failed = True
 
-    def send_packet(self, packet: bytes, name: str, description: str) -> int:
-        if packet[4] != MOTION_CMD_STOP and not self.motion_identity_confirmed():
-            self.message = "未确认实际固件和MotionDebug模式，未发送运动指令"
-            return -1
+    def _submit_action(self, operation, description: str) -> int:
         if self.bridge is None:
-            self.message = "F407串口尚未连接"
+            self.message = "底盘测试客户端尚未连接"
             return -1
-        sequence = self.command_sequence & 0xFF
-        self.command_sequence = (self.command_sequence + 1) & 0xFF
-        sent_ns = time.monotonic_ns()
-        self.bridge.send(packet)
-        self.active_command_sequence = sequence
-        self.active_command_opcode = packet[4]
-        self.active_command_sent_ns = sent_ns
-        self.last_matching_status_ns = sent_ns
-        self.record_command(name, sequence, packet, description)
-        return sequence
+        try:
+            action = operation()
+        except (RuntimeError, ValueError, serial.SerialException) as error:
+            self.message = str(error)
+            self.record_event("chassis_request_not_sent", {"reason": str(error)})
+            self.active_test = None
+            self.return_phase = None
+            return -1
+        self.active_host_action_id = action["host_action_id"]
+        self.active_command_sequence = action["wire_sequence"]
+        self.active_command_opcode = action["opcode"]
+        self.active_command_sent_ns = action["sent_ns"]
+        self.last_matching_status_ns = action["sent_ns"]
+        self.record_command(action["name"], action["wire_sequence"], bytes.fromhex(action["packet_hex"]), description)
+        self.record_event("chassis_action_submitted", action)
+        self.message = f"已请求 {action['name']} seq={action['wire_sequence']}，等待匹配回执"
+        return action["wire_sequence"]
 
     def send_stop(self, reason: str = "手动STOP") -> None:
-        sequence = self.send_packet(
-            motion_stop_frame(self.command_sequence & 0xFF), "STOP", reason
-        )
+        if self.bridge is None:
+            return
+        sequence = self._submit_action(self.bridge.stop, reason)
         if sequence >= 0:
-            self.active_command_sequence = None
-            self.message = f"已发送 STOP（seq={sequence}）"
+            self.message = f"STOP已请求 seq={sequence}，等待匹配STOPPED；不代表已停稳"
 
     def send_turn(self, angle_deg: float) -> int:
-        self.active_test_parameters.update(turn_deg_target=angle_deg)
-        sequence = self.command_sequence & 0xFF
-        wire_angle_deg = angle_deg * DEBUG_COMMAND_TURN_SIGN
-        packet = motion_turn_frame(sequence, wire_angle_deg, self.speed_mm_s)
-        self.record_event("turn_requested", {"angle_deg": angle_deg,
-                                             "wire_angle_deg": wire_angle_deg,
-                                             "turn_command_sign": DEBUG_COMMAND_TURN_SIGN,
-                                             "wheel_tangent_speed_mm_s": self.speed_mm_s})
-        result = self.send_packet(packet, "TURN_REL", f"相对转角 {angle_deg:+.1f}°，速度 {self.speed_mm_s} mm/s")
-        if result >= 0:
-            self.message = f"已发送 TURN_REL {angle_deg:+.1f}°，等待F407完成"
-            rate_ddeg_s = int.from_bytes(packet[10:12], "big")
-            if rate_ddeg_s > 0:
-                ideal_s = abs(int.from_bytes(packet[6:8], "big", signed=True)) / rate_ddeg_s
-                if ideal_s >= MOTION_TURN_TIMEOUT_S:
-                    self.message += f"；理想转动时间{ideal_s:.1f}s，可能超过下位机10s超时"
-                    self.record_event("turn_timeout_warning", {"ideal_duration_s": ideal_s,
-                                                               "firmware_timeout_s": MOTION_TURN_TIMEOUT_S})
-        return result
+        self.active_test_parameters.update(turn_deg_target=angle_deg, rate_deg_s=self.turn_rate_deg_s)
+        self.record_event("turn_requested", {"application_ccw_deg":angle_deg,
+                                             "rate_deg_s":self.turn_rate_deg_s})
+        return self._submit_action(lambda:self.bridge.turn_ccw(angle_deg,self.turn_rate_deg_s),
+                                   f"逆时针 {angle_deg:+.1f}°，角速度上限 {self.turn_rate_deg_s}°/s")
 
     def send_move(self, direction_deg: float, distance_mm: int) -> int:
-        self.active_test_parameters.update(direction_deg_target=direction_deg, distance_mm_target=distance_mm)
-        sequence = self.command_sequence & 0xFF
-        # Apply the observed command signs independently; never rotate the
-        # T265 reference to compensate a changed firmware/motor convention.
-        direction_rad = math.radians(direction_deg)
-        wire_direction_deg = math.degrees(math.atan2(
-            DEBUG_COMMAND_LEFT_SIGN * math.sin(direction_rad),
-            DEBUG_COMMAND_FORWARD_SIGN * math.cos(direction_rad))) % 360.0
-        packet = motion_move_frame(sequence, wire_direction_deg, distance_mm,
-                                   self.speed_mm_s, field_frame=False)
-        self.record_event("move_requested", {"direction_deg": direction_deg,
-                                             "wire_direction_deg": wire_direction_deg,
-                                             "forward_command_sign": DEBUG_COMMAND_FORWARD_SIGN,
-                                             "left_command_sign": DEBUG_COMMAND_LEFT_SIGN,
-                                             "distance_mm": distance_mm,
-                                             "speed_mm_s": self.speed_mm_s})
-        result = self.send_packet(packet, "MOVE_BODY",
-                                  f"相对方向 {direction_deg:.1f}°，距离 {distance_mm} mm，速度 {self.speed_mm_s} mm/s")
-        if result >= 0:
-            self.message = f"已发送 MOVE_DISTANCE {direction_deg:.1f}°/{distance_mm} mm"
-        return result
+        self.active_test_parameters.update(direction_deg_target=direction_deg,distance_mm_target=distance_mm)
+        a = math.radians(direction_deg)
+        forward, left = round(distance_mm*math.cos(a)), round(distance_mm*math.sin(a))
+        self.record_event("move_requested", {"forward_mm":forward,"left_mm":left,"speed_mm_s":self.speed_mm_s})
+        return self._submit_action(lambda:self.bridge.move_body(forward,left,self.speed_mm_s),
+                                   f"前{forward:+d}/左{left:+d}mm，速度{self.speed_mm_s}mm/s")
+
+    def reset_reference(self) -> None:
+        if not self.motion_identity_confirmed():
+            self.message = "先确认实际F405运动测试服务及固件"
+            return
+        self._submit_action(lambda:self.bridge.reset_reference(stationary_confirmed=True),
+                            "操作者确认停稳后重建下位机Location参考；不重置T265或原始gyro")
 
     def toggle_test(self, name: str, action) -> None:
         if not self.motion_identity_confirmed():
-            self.message = "请用启动参数记录实际固件提交及MotionDebug模式，再操作"
+            self.message = "启动参数须确认实际NormalDebug/MOTIONDEBUG服务及固件"
             return
         if self.active_test == name:
             self.record_event(f"{name}_end_manual")
@@ -771,20 +685,21 @@ class MotionMapApp:
             self.return_phase = None
             self.send_stop("实验按钮再次点击，中止当前动作")
             return
-        if self.active_test is not None:
-            self.record_event(f"{self.active_test}_end_aborted")
-            self.send_stop("切换实验，中止上一动作")
+        if self.bridge is not None and (self.bridge.pending is not None or self.bridge.needs_stop_ack):
+            self.message = "请先结束当前动作；需要取消时STOP并等待匹配回执"
+            return
         self.active_test = name
         self.return_phase = None
         self.test_id += 1
-        self.active_test_parameters = {"name": name, "distance_mm": self.distance_mm,
-                                       "speed_mm_s": self.speed_mm_s}
+        self.active_test_parameters = {"name":name,"distance_mm":self.distance_mm,"speed_mm_s":self.speed_mm_s}
         self.record_event(f"{name}_start")
         action()
 
     def motion_identity_confirmed(self) -> bool:
-        return (self.options.actual_lower_mode == "MotionDebug" and
-                self.options.actual_lower_firmware.strip().lower() not in {"", "unconfirmed", "unknown"})
+        value = self.options.actual_lower_firmware.strip().lower()
+        return (self.options.actual_lower_mode == "NormalDebug" and
+                self.options.actual_lower_service == "MOTIONDEBUG" and
+                re.fullmatch(r"[0-9a-f]{7,40}",value) is not None and IMPLEMENTATION_COMMIT.startswith(value))
 
     def save_ground_truth(self, text: str) -> None:
         """Signed, independently measured displacement/turn for the current test.
@@ -850,36 +765,34 @@ class MotionMapApp:
         self.send_turn(turn)
 
     def handle_motion_status(self, status: dict) -> None:
-        if self.active_test is None or self.active_command_sequence is None:
-            return
-        if int(status.get("command_sequence", -1)) != self.active_command_sequence:
-            return
-        timestamp_ns = int(status.get("timestamp_monotonic_ns", 0))
-        if (int(status.get("command", -1)) != self.active_command_opcode or
-                timestamp_ns <= self.active_command_sent_ns or
+        if (self.active_command_sequence is None or not status.get("correlated") or
+                status.get("host_action_id") != self.active_host_action_id or
+                status.get("command_sequence") != self.active_command_sequence or
+                status.get("command") != self.active_command_opcode or
+                status.get("timestamp_monotonic_ns",0) <= self.active_command_sent_ns or
                 self.status_age(status) > MOTION_STATUS_TIMEOUT_MS):
             return
-        if time.monotonic_ns() - self.last_matching_status_ns > MOTION_STATUS_TIMEOUT_MS * 1_000_000:
-            return  # update_data cancels the chain; a late DONE cannot resume it.
-        self.last_matching_status_ns = timestamp_ns
-        state = int(status.get("state", -1))
-        if state == MOTION_STATE_DONE:
+        state = status["state"]
+        if state == MOTION_STATE_DONE and not status.get("fault"):
             if self.active_test == "turn_and_return" and self.return_phase == "turn":
-                self.record_event("turn_and_return_turn_done")
-                self.return_phase = "move"
-                self.active_command_sequence = self.send_move(0.0, self.return_distance_mm)
-                return
-            self.record_event(f"{self.active_test}_end_done")
-            self.message = f"实验 {self.active_test} 完成"
-            self.active_test = None
-            self.return_phase = None
-            self.active_command_sequence = None
-        elif state in (MOTION_STATE_FAULT, MOTION_STATE_STOPPED):
-            self.record_event(f"{self.active_test}_end_{STATE_NAMES.get(state, 'unknown').lower()}")
-            self.message = f"实验 {self.active_test} 结束：{STATE_NAMES.get(state, 'UNKNOWN')}"
-            self.active_test = None
-            self.return_phase = None
-            self.active_command_sequence = None
+                if status.get("running_seen"):
+                    self.record_event("turn_and_return_turn_done")
+                    self.return_phase = "move"
+                    self.send_move(0.0,self.return_distance_mm)
+                    return
+                self.message = "仅收到终态，缺RUNNING证据，已取消自动返航后段"
+            else:
+                self.message = "收到匹配DONE；指令完成不等于地面精度或已停稳"
+        elif state == MOTION_STATE_STOPPED and not status.get("fault"):
+            self.message = "收到匹配STOPPED；仍需人工确认车身停稳"
+        elif state == MOTION_STATE_FAULT or status.get("fault"):
+            self.message = f"下位机报告FAULT={status.get('fault')}，本动作结束"
+        else:
+            return
+        self.record_event(f"{self.active_test or 'manual'}_end_status", {"status":status})
+        self.active_test = None
+        self.return_phase = None
+        self.active_command_sequence = None
 
     def select_at(self, x: int, y: int) -> None:
         for name, (x0, y0, x1, y1) in self.hitboxes.items():
@@ -897,6 +810,8 @@ class MotionMapApp:
             elif name in {"forward", "backward", "lateral", "right"}:
                 direction = {"forward": 0, "backward": 180, "lateral": 90, "right": 270}[name]
                 self.toggle_test(name, lambda: self.send_move(direction, self.distance_mm))
+            elif name == "resetreference":
+                self.reset_reference()
             elif name == "returntest":
                 self.toggle_test("turn_and_return", self.start_return)
             elif name == "dminus":
@@ -945,6 +860,7 @@ class MotionMapApp:
             self.options.uart, self.options.baud,
             self.motion_status_path, status_log,
         )
+        self.bridge.identity_confirmed = self.motion_identity_confirmed()
         self.bridge.start()
         localizer_log_path = self.run_dir / "localizer.log"
         self.localizer_log = localizer_log_path.open("w", encoding="utf-8")
@@ -959,8 +875,8 @@ class MotionMapApp:
             "--t265-only-output",
             "--rate", "20",
             "--tx-rate", "0",
-            "--uart", self.bridge.slave_path,
-            "--baud", str(self.options.baud),
+            "--ignore-encoders",  # UART belongs solely to ChassisTestClient.
+
         ]
         if self.options.serial:
             command += ["--serial", self.options.serial]
@@ -973,7 +889,7 @@ class MotionMapApp:
             "schema_version": 3,
             "created_local": datetime.now().astimezone().isoformat(timespec="seconds"),
             "timestamp_monotonic_ns": time.monotonic_ns(),
-            "mode": "interactive_f407_motion_debug",
+            "mode": "interactive_f405_normaldebug",
             "zone": self.zone,
             "initial_pose": {"x_m": 0.0, "y_m": 0.0, "yaw_deg": start_pose(self.zone)[2]},
             "source_config": str(self.options.config),
@@ -985,8 +901,18 @@ class MotionMapApp:
             "disable_pose_jumping_requested": False,
             "enable_pose_jumping_requested": True,
             "pose_source": "t265_direct_with_camera_offset",
-            "listen_and_control": True,
+            "listen_and_control": self.motion_identity_confirmed(),
+            "host_chassis_session_id": self.bridge.host_session_id,
+            "mcu_boot_epoch": None,
             "expected_lower_firmware": LOWER_FIRMWARE,
+            "expected_lower_mode": "NormalDebug",
+            "expected_lower_service": "MOTIONDEBUG",
+            "contract_document_commit": DOCUMENT_COMMIT,
+            "capabilities": self.bridge.capabilities(),
+            "historical_flash_evidence_is_current_identity": False,
+            "lower_measured_body_velocity": "not_provided_on_UART4",
+            "wheel_reference": "host_count_recompute_receive_time_and_latest_T265_heading; diagnostic only",
+            "actual_lower_service": self.options.actual_lower_service,
             "actual_lower_firmware": self.options.actual_lower_firmware,
             "actual_lower_mode": self.options.actual_lower_mode,
             "lower_identity_source": "operator supplied; not reported by UART",
@@ -999,6 +925,9 @@ class MotionMapApp:
                 "localization_csv": "localization_debug.csv",
                 "raw_pose_csv": "t265_raw_pose.csv",
                 "ground_truth": "ground_truth.jsonl",
+                "imu_telemetry": "imu_telemetry.jsonl",
+                "chassis_telemetry": "chassis_telemetry.jsonl",
+                "chassis_actions": "chassis_actions.jsonl",
                 "localization_events": "localization_events.jsonl",
                 "localization_json": self.localization_json.name,
                 "motion_status": self.motion_status_path.name,
@@ -1021,7 +950,7 @@ class MotionMapApp:
         (self.run_dir / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-        self.message = "已启动：等待F407 ODOM和运动状态"
+        self.message = "已启动：监听F405；动作须人工触发"
         self.record_event("session_started", {"initial_pose": metadata["initial_pose"]})
         print(f"测试日志目录：{self.run_dir}", flush=True)
 
@@ -1055,7 +984,8 @@ class MotionMapApp:
             self.localizer_log.close()
             self.localizer_log = None
         if self.bridge is not None:
-            self.bridge.stop()
+            self.bridge.close()
+            logs_ok = logs_ok and self.bridge.log_error is None
             self.bridge = None
         if self.run_dir is not None:
             csv_path = self.run_dir / "localization_debug.csv"
@@ -1067,6 +997,11 @@ class MotionMapApp:
                                      fit_wheel=False)
                     result["angle_crossings_not_settled_measurements"] = result.pop("rotation_check")
                     result["protocol"] = MOTION_PROTOCOL
+                    result["child_wheel_reference_available"] = False
+                    result["wheel_reference_source"] = "chassis_telemetry.jsonl: host recomputation; not lower-published velocity"
+                    for key in list(result.get("trajectory",{})):
+                        if "wheel" in key:
+                            result["trajectory"][key] = None
                     result["effective_config"] = self.session_config
                     result["accuracy_verified"] = False
                     result["validation_scope"] = "trajectory diagnostics only; review test_id events and independent ground_truth.jsonl"
@@ -1152,6 +1087,12 @@ class MotionMapApp:
                 self.message = "输入前向mm,左向mm,转角deg；未知?；回车保存/Esc取消"
             else:
                 self.message = "先结束动作，再人工确认停稳并测量"
+        elif key in (ord("r"), ord("R")):
+            self.reset_reference()
+        elif key == ord("["):
+            self.turn_rate_deg_s = max(10,self.turn_rate_deg_s-10)
+        elif key == ord("]"):
+            self.turn_rate_deg_s = min(360,self.turn_rate_deg_s+10)
         elif key in (ord("y"), ord("Y")):
             self.toggle_test("turn_and_return", self.start_return)
         elif key in (ord("f"), ord("F")):
@@ -1187,15 +1128,17 @@ class MotionMapApp:
 
 
 def arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="F407运动调试分支/T265简洁实验地图")
+    parser = argparse.ArgumentParser(description="F405 NormalDebug / T265实验地图（保留原桌面入口）")
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--serial")
     parser.add_argument("--reference-description", default="",
                         help="本轮卷尺零点、车中心标记及地面角度基准；G键录入实测前必填")
     parser.add_argument("--actual-lower-firmware", default="unconfirmed")
-    parser.add_argument("--actual-lower-mode", default="unconfirmed",
-                        choices=("unconfirmed", "NormalRun", "Gamepad", "MotionDebug"))
+    parser.add_argument("--actual-lower-service", default="unconfirmed",
+                        choices=("unconfirmed", "MOTIONDEBUG", "RESCUE_TASK"))
+    parser.add_argument("--actual-lower-mode", default="NormalDebug",
+                        choices=("unconfirmed", "NormalRun", "Gamepad", "MotionDebug", "NormalDebug"))
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
                         help="本轮测试配置；复制到独立日志目录，保留安装轴和偏置")
     parser.add_argument("--zone", type=int, choices=range(1, 5), default=4)

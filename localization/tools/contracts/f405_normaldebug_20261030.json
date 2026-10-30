@@ -1,0 +1,414 @@
+{
+  "contract_document_revision": 1,
+  "document_revision_is_not_a_wire_version": true,
+  "exported_at_local_date": "2026-10-30",
+  "firmware": {
+    "repository": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot",
+    "branch": "main",
+    "audited_implementation_commit": "14157e6bf2600ff0480b133ab763298e12ce400b",
+    "remote_main_verified_at_export": "14157e6bf2600ff0480b133ab763298e12ce400b",
+    "board": "F405_ROBO",
+    "mcu": "STM32F405RGT6",
+    "preset": "NormalDebug",
+    "compile_switches": {
+      "APP_ACTIVE_MODE_OVERRIDE": "APP_MODE_NORMAL_DEBUG",
+      "APP_NORMALDEBUG_MOTION_TEST": "ON",
+      "APP_BOARD": "F405_ROBO",
+      "APP_ACTIVE_MODE": 5,
+      "APP_ENABLE_MOTION_DEBUG_TASK": 1,
+      "APP_ENABLE_TASK": 0
+    },
+    "wire_firmware_identifier": null,
+    "uncommitted_at_audit": [
+      {
+        "path": "Main/Src/Task.c",
+        "change": "two whitespace-only added lines; no semantic change"
+      },
+      {
+        "path": ".idea/vcs.xml",
+        "change": "IDE repository mappings"
+      },
+      {
+        "path": "tmp/",
+        "change": "untracked local reference repositories and artifacts; not exported"
+      }
+    ]
+  },
+  "upper_client_scope": {
+    "repository_path": "/home/sunrise/RDK_X5/shijue_fangan",
+    "branch": "codex/gamepad-teleop",
+    "baseline_commit": "7e25a8104794e36af36167a638a5cc7d0a4e68f7",
+    "formal_competition_paths_change": false,
+    "rdk_working_tree_accessed": false
+  },
+  "hardware_actions_this_export": [],
+  "runtime_identity": {
+    "live_reconfirmed_this_export": false,
+    "last_successful_flash_source_commit": "14157e6bf2600ff0480b133ab763298e12ce400b",
+    "historical_observation_log": "build/imu_100hz_flash_20261029_214719.log",
+    "last_observed_build_string": "Oct 29 2026 20:48:06",
+    "service": "MOTIONDEBUG",
+    "mode": 5,
+    "full_commit_embedded_in_firmware": false,
+    "readback_commit_attestation_available": false
+  },
+  "transport": {
+    "port": "UART4",
+    "connector": "JP506",
+    "tx": "PC10",
+    "rx": "PC11",
+    "baud": 115200,
+    "bits": "8N1",
+    "frame_bytes": 15,
+    "header": [
+      163,
+      179
+    ],
+    "tail": 195,
+    "payload_offset": 4,
+    "payload_bytes": 8,
+    "payload_multibyte_endian": "big",
+    "crc": {
+      "algorithm": "CRC-16/MODBUS",
+      "initial": 65535,
+      "polynomial": 40961,
+      "input_offset": 2,
+      "input_bytes": 10,
+      "wire_order": "little"
+    }
+  },
+  "capability_query": {
+    "implemented": false,
+    "request_type": null,
+    "opcode": null,
+    "response_type": null,
+    "wire_version": null,
+    "feature_bits": null,
+    "nonce": false,
+    "boot_epoch": false,
+    "board_identity_over_uart4": false,
+    "unsupported_reply": "none; invalid or unsupported requests do not receive a correlated negative acknowledgment"
+  },
+  "controls": {
+    "move_body": {
+      "implemented": true,
+      "type": 25,
+      "opcode": 3,
+      "flags": 11,
+      "axes": "arg1 forward mm, arg2 left mm",
+      "argument_type": "int16 BE",
+      "distance_norm_max_mm": 10000,
+      "speed_type": "uint16 BE",
+      "speed_units": "mm/s",
+      "speed_range": [
+        50,
+        700
+      ],
+      "speed_zero_default_mm_s": {
+        "pure_forward_reverse": 500,
+        "with_lateral": 300
+      },
+      "translation_frame": "body frame latched at start, fixed on the floor"
+    },
+    "turn_ccw": {
+      "implemented": true,
+      "type": 25,
+      "opcode": 2,
+      "flags": 9,
+      "arg1_wire": "-round(application_ccw_degrees * 10)",
+      "arg2_wire": 0,
+      "speed_wire": "round(max_degrees_per_second * 10)",
+      "effective_turn_range_deg": [
+        -360,
+        360
+      ],
+      "nonzero_angle": true,
+      "wire_rate_range_ddeg_s": [
+        0,
+        3600
+      ],
+      "speed_zero_default_wheel_mm_s": 250,
+      "positive_wire_angle_is": "clockwise",
+      "positive_gyro_is": "counterclockwise"
+    },
+    "move_field": {
+      "implemented": true,
+      "type": 25,
+      "opcode": 4,
+      "flags": 13,
+      "args": "relative displacement in local Location field XY, mm; not absolute destination"
+    },
+    "move_spin_angle": {
+      "uart_implemented": false,
+      "type": null,
+      "opcode": null,
+      "raw_hex": null,
+      "internal_api": "Motor_MoveSpinAngle(speed_mm_s, direction_deg, turn_deg, max_rate_dps)",
+      "internal_translation_frame": "floor-fixed line defined by initial body heading plus direction_deg",
+      "internal_done": "turn-angle error and settling; no distance goal",
+      "internal_pause_resume_contract": false
+    },
+    "stop": {
+      "implemented": true,
+      "type": 25,
+      "opcode": 0,
+      "flags": 9,
+      "args": [
+        0,
+        0,
+        0
+      ],
+      "ack_state": 4,
+      "fresh_sequence_required": true
+    },
+    "reset_reference": {
+      "implemented": true,
+      "type": 25,
+      "opcode": 5,
+      "flags": 9,
+      "args": [
+        0,
+        0,
+        0
+      ],
+      "ack_state": 2,
+      "resets": [
+        "active motion",
+        "Location XY",
+        "Location path",
+        "Location heading",
+        "heading controller state"
+      ],
+      "preserves": [
+        "raw encoder cumulative counters",
+        "raw IMU yaw origin",
+        "sensor sample count",
+        "protocol transmit sequences",
+        "Vision session state"
+      ],
+      "wire_reference_epoch": false
+    },
+    "pause_resume": {
+      "implemented": false,
+      "hold_is_cancel_not_pause": true
+    }
+  },
+  "telemetry": [
+    {
+      "type": 21,
+      "name": "raw_wheel_counts",
+      "rate_hz_nominal": 100,
+      "on_wire_version": null,
+      "fields": [
+        {
+          "p": "0..1",
+          "name": "right_front_raw_low16",
+          "type": "uint16 BE"
+        },
+        {
+          "p": "2..3",
+          "name": "left_front_raw_low16",
+          "type": "uint16 BE"
+        },
+        {
+          "p": "4..5",
+          "name": "rear_raw_low16",
+          "type": "uint16 BE"
+        },
+        {
+          "p": "6",
+          "name": "nominal_sample_period_ms",
+          "type": "uint8",
+          "value": 10
+        },
+        {
+          "p": "7",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "sampling_tick": null,
+      "boot_epoch": null,
+      "reference_epoch": null,
+      "odometry_valid_bits": "bits 0..2 are currently always set; bit3 only first queued frame after Robot init; no runtime encoder fault bit is generated"
+    },
+    {
+      "type": 31,
+      "name": "gyro_yaw_and_rate",
+      "rate_hz_nominal": 100,
+      "on_wire_version": null,
+      "fields": [
+        {
+          "p": "0..3",
+          "name": "yaw_mdeg",
+          "type": "int32 BE",
+          "units": "0.001 deg",
+          "positive": "CCW"
+        },
+        {
+          "p": "4..5",
+          "name": "rate_ddeg_s",
+          "type": "int16 BE",
+          "units": "0.1 deg/s",
+          "positive": "CCW"
+        },
+        {
+          "p": "6",
+          "name": "age_ms",
+          "type": "uint8",
+          "saturated_at": 255,
+          "meaning": "max of latest yaw and latest rate ages at snapshot"
+        },
+        {
+          "p": "7",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "flags": {
+        "VALID": 1,
+        "READY": 2,
+        "RECOVERING": 4,
+        "UNCERTAIN": 8,
+        "STALE": 16,
+        "YAW_CLAMPED": 32,
+        "RATE_CLAMPED": 64
+      },
+      "stale_ms": 150,
+      "sampling_tick": null,
+      "boot_epoch": null,
+      "sequence_independent_of_odom": true,
+      "same_sensor_sample_for_yaw_and_rate": false
+    },
+    {
+      "type": 26,
+      "name": "motion_status",
+      "rate_hz_nominal": 20,
+      "on_wire_version": null,
+      "fields": [
+        {
+          "p": "0",
+          "name": "acknowledged_command_sequence",
+          "type": "uint8"
+        },
+        {
+          "p": "1",
+          "name": "state",
+          "type": "uint8"
+        },
+        {
+          "p": "2",
+          "name": "fault",
+          "type": "uint8"
+        },
+        {
+          "p": "3",
+          "name": "command",
+          "type": "uint8"
+        },
+        {
+          "p": "4..5",
+          "name": "progress",
+          "type": "int16 BE",
+          "units": "mm for move; 0.1 deg wire turn direction for turn"
+        },
+        {
+          "p": "6..7",
+          "name": "Location heading",
+          "type": "uint16 BE",
+          "units": "0.01 deg",
+          "invalid_value_ambiguity": "zero also returned if Location pose invalid"
+        }
+      ],
+      "health_bits_serialized": false,
+      "action_id_64bit": null,
+      "source_field_serialized": false
+    }
+  ],
+  "measured_body_velocity_telemetry": {
+    "implemented": false,
+    "type": null,
+    "wire_version": null,
+    "lower_forward_left_yaw_rate_snapshot_available": false,
+    "wheel_feedback_text_console_only": true,
+    "do_not_substitute_targets_or_host_estimates_for_lower_feedback": true
+  },
+  "kinematics": {
+    "wheel_order": [
+      "right_front_W1_JP303",
+      "left_front_W2_JP301",
+      "rear_W3_JP302"
+    ],
+    "encoder_feedback_signs": [
+      -1,
+      -1,
+      -1
+    ],
+    "motor_signs": [
+      1,
+      1,
+      1
+    ],
+    "counts_per_wheel_rev": 1061.268,
+    "wheel_diameter_mm": 70,
+    "mm_per_raw_count": 0.2072157888029089,
+    "control_interval_s": 0.01,
+    "forward_sign": -1,
+    "lateral_api_sign": 1,
+    "imu_yaw_sign": 1,
+    "heading_output_sign": -1,
+    "model_yaw_radius_mm": 130,
+    "formula_from_feedback_mm_s": {
+      "forward": "(u2-u1)/sqrt(3)",
+      "left": "(2*u3-u1-u2)/3",
+      "encoder_model_yaw_ccw_rad_s": "-(u1+u2+u3)/(3*130)"
+    },
+    "feedback_from_raw": "ui = -(pi*70/1061.268) * signed_raw_delta_i / actual_interval_s",
+    "raw_delta_expected_signs": {
+      "forward": [
+        1,
+        -1,
+        0
+      ],
+      "left": [
+        1,
+        1,
+        -1
+      ],
+      "ccw": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "identity_limits": {
+    "boot_epoch": false,
+    "reference_reset_epoch": false,
+    "monotonic_action_id": false,
+    "query_nonce": false,
+    "telemetry_sampling_tick": false,
+    "sequence_bits": 8,
+    "sequence_wrap": 256,
+    "same_sequence_rejected": "only equality to last received motion sequence",
+    "older_different_sequence_replay_protected": false,
+    "status_match_fields": [
+      "P0 command sequence",
+      "P3 opcode"
+    ],
+    "stale_reply_exclusion_guaranteed": false
+  },
+  "sources": {
+    "vision_constants": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Inc/vision.h",
+    "motion_parser": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/vision.c#L385",
+    "motion_dispatch": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/Debug.c#L603",
+    "telemetry": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/Robot.c#L527",
+    "mixer": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/motor.c#L416",
+    "odometry": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/Location.c#L150",
+    "encoder": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Boards/F405/Src/encoder_f405.c",
+    "spin_internal": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/motor.c#L2489",
+    "console_identity": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/Main/Src/WheelCheck.c#L489",
+    "build_presets": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/14157e6bf2600ff0480b133ab763298e12ce400b/CMakePresets.json"
+  },
+  "critical_legacy_helper_limit": "tools/vision_protocol.py IMU helpers match 0x1F, but its legacy motion types/opcodes and odometry_body_velocity mapping do not match the current F405 motion interface."
+}
