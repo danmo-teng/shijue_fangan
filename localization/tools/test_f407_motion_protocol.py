@@ -146,7 +146,148 @@ def test_official_wheel_input():
         finally: zero.close(); sink.close()
 
 
+def test_lidar_yaw_diagnostic():
+    # Reference parser/timing + static geometry + the SAME chassis client. Only
+    # synthetic rays, memory serial and local pseudo-terminals; no real hardware.
+    import math
+    import os
+    import select
+    import serial
+    import numpy as np
+    from unittest.mock import patch
+    from lidar_yaw_map import LidarYawApp, DEFAULT_CONFIG as LIDAR_CONFIG, prune_completed_sessions as prune_lidar
+    from lidar_yaw_debug.diagnostic import load_config, fixed_yaw_position, DiagnosticState, FieldYaw
+    from lidar_yaw_debug.lidar_reader import LidarStream
+    from lidar_yaw_debug.protocol import crc8, parse_frames, command_frame as lidar_command
+    from f405_test_client import ChassisTestClient
+    config=load_config(LIDAR_CONFIG)
+    assert config["startup_fixture"]["field_heading_deg"]==135
+    assert not any(config["qualification"].values())
+    # Actual recorded short status bytes; one-byte feeds equal whole-buffer parse.
+    raw=bytes.fromhex("54 a1 b7 7a 57 54 1f 00 00 00 41")
+    expected=parse_frames(bytearray(raw),include_status=True)
+    buffer=bytearray();events=[]
+    for byte in raw:
+        buffer.append(byte);events+=parse_frames(buffer,include_status=True)
+    assert events==expected and [e[0] for e in events]==["status","status"]
+    def scan_packet(index):
+        first=(index*11)%360;last=(first+10)%360
+        data=bytearray([0x54,0x2C])+(3600).to_bytes(2,"little")+round(first*100).to_bytes(2,"little")
+        for _ in range(12):data+=(1000).to_bytes(2,"little")+bytes([30])
+        data+=round(last*100).to_bytes(2,"little")+((65520+index*3)%65536).to_bytes(2,"little")
+        data.append(crc8(data));return bytes(data)
+    m=config["installation"]
+    reader=LidarStream(dict(bearing_sign=1,bearing_zero_deg=0,physical_direction=1,
+        center_raw_deg=m["center_raw_deg"],fov_deg=m["display_fov_deg"]),sensor_epoch="offline-timing")
+    scans=[]
+    for i in range(0,150,5):
+        scans+=reader.feed(b"".join(scan_packet(j) for j in range(i,i+5)),1_000_000_000+i*3_000_000)
+    assert len(scans)>=3 and reader.stats["crc_errors"]==0
+    assert all(not s.timing_qualified for s in scans)  # Never qualify nominal 1ms ticks.
+    assert all(all(b.time_ns>a.time_ns for a,b in zip(s.points,s.points[1:])) for s in scans)
+    # Independent rectangle ray caster, actual inverted mounting and retained FOV.
+    truth=np.array([-.9,.85]);heading=math.radians(135)
+    ext=[*m["extrinsic"][:2],math.radians(m["extrinsic"][2])]
+    def rotation(a):return np.array([[math.cos(a),-math.sin(a)],[math.sin(a),math.cos(a)]])
+    laser_origin=truth+rotation(heading)@np.array(ext[:2])
+    points=[]
+    for angle in np.linspace(m["raw_start_deg"],m["raw_end_deg"],350):
+        if any(lo<=angle<hi for lo,hi in m["excluded_raw_ranges_deg"]):continue
+        local=np.array([math.cos(math.radians(angle)),math.sin(math.radians(angle))])
+        ray=rotation(heading+ext[2])@local
+        hits=[(wall-laser_origin[axis])/ray[axis] for axis in (0,1) for wall in (-1.5,1.5) if abs(ray[axis])>1e-10]
+        distance=min(t for t in hits if t>0)
+        hit=laser_origin+distance*ray
+        # Separate exact wall segments from the extractor's 25mm corner support
+        # overlap; this is a transform test, not a claim about real corner bias.
+        if sum(abs(abs(hit)-1.5)<.05)==2:continue
+        points.append(local*distance)
+    fit=fixed_yaw_position(points,truth+[.03,-.02],heading,ext)
+    assert fit["rank_xy"]==2,fit
+    np.testing.assert_allclose(fit["candidate_center_xy_m"],truth,atol=1e-6)
+    assert fit["yaw_rad"]==heading and not fit["qualified_pose"] and fit["covariance"] is None
+    world=np.column_stack((np.full(80,-1.5),np.linspace(-.6,.6,80)))
+    body=(world-truth)@rotation(heading)
+    laser=(body-np.array(ext[:2]))@rotation(ext[2])
+    fit=fixed_yaw_position(laser,truth+[.03,-.02],heading,ext)
+    assert fit["rank_xy"]==1 and fit["position_observed_axes"]==["x"]
+    assert abs(fit["candidate_center_xy_m"][1]-(truth[1]-.02))<1e-9
+    state=DiagnosticState(config)
+    def feedback(t,yaw=42.,rate=0.):
+        state.yaw.ingest(dict(timestamp_monotonic_ns=t,wire_valid=True,age_ms=0,
+            status=3,yaw_deg=yaw,yaw_rate_deg_s=rate))
+        state.note_wheels(dict(timestamp_monotonic_ns=t,status=7,m1_count=123,m2_count=-456,m3_count=78))
+    for t in range(1_000_000_000,1_710_000_000,10_000_000):feedback(t)
+    state.operator_stationary=True
+    ref=state.yaw.align(135,"operator zone1 physical startup fixture",1_700_000_000)
+    assert abs(ref["offset_rad"]-math.radians(93))<1e-12  # 42 != boot zero, still maps to135.
+    state.seed(*(truth+[.03,-.02]),"nearby measured branch")
+    for t in range(1_710_000_000,2_310_000_000,100_000_000):
+        # Keep the complete received static window, not repeated synthetic pose timestamps.
+        for tt in range(t-90_000_000,t+1,10_000_000):
+            if tt>state.yaw.history[-1]["timestamp_monotonic_ns"]:feedback(tt)
+        result=state.observe(points,t,{"capture_time_qualified":False})
+        assert result["rank_xy"]==2 and not result["qualified_pose"]
+    now=t
+    state.review_static("offline static checkpoint, not physical qualification",now)
+    state.enter_rotation(now)
+    rotating=state.observe(points,now,{})
+    assert rotating["status"]=="ROTATION_OR_MOTION_CHAIN_ONLY" and rotating["rank_xy"]==0
+    assert not rotating["translation_compensated"] and not rotating["rotation_compensated"]
+    for i in range(1,101):feedback(now+i*10_000_000,yaw=42+i*.9,rate=90)
+    assert abs(state.yaw.field_rad(now+1_000_000_000)-math.radians(225))<1e-10
+    state.yaw.ingest(dict(wire_valid=False))
+    assert state.yaw.offset_rad is None  # Recoverable reference invalidation; no chassis latch.
+    # Ownership and no automatic commands on the REAL receive loops of two PTYs.
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);cm,cs=os.openpty();lm,ls=os.openpty()
+        options=SimpleNamespace(config=LIDAR_CONFIG,lidar=os.ttyname(ls),chassis=os.ttyname(cs),
+            output_root=root,http_port=0,open_browser=False,baud=230400,
+            actual_lower_mode="NormalDebug",actual_lower_service="MOTIONDEBUG",actual_lower_firmware="unconfirmed")
+        app=LidarYawApp(options)
+        try:
+            app.start()
+            assert not select.select([cm,lm],[],[],.02)[0],"startup wrote motor or radar command"
+            try:app.command("turn 90");assert False,"turn before static checkpoint"
+            except ValueError:pass
+            assert not select.select([cm,lm],[],[],.02)[0]
+            app.command("scan_start")
+            assert select.select([lm],[],[],1)[0]
+            assert os.read(lm,16)==lidar_command(0xA0,0)+lidar_command(0xA2,3600)
+            # Use the reviewed radar command helper, not a chassis opcode.
+            # Drain only this PTY; it is a different physical stream from UART4.
+            assert not select.select([cm],[],[],.02)[0]
+            second=ChassisTestClient(os.ttyname(cs),115200,root/"second.json",root/"second.jsonl")
+            try:second.start();assert False,"duplicate chassis owner"
+            except serial.SerialException:pass
+            app.command("stop")
+            assert select.select([cm],[],[],1)[0]
+            assert os.read(cm,15)[4]==0  # Shared client STOP opcode, no localization STOP lock.
+            # Avoid waiting for absent test ACK on exit; this is not a real stopped proof.
+            app.sent_motion=False
+        finally:
+            app.close(False)
+            for fd in (cm,cs,lm,ls):os.close(fd)
+        assert not list(root.glob("*/session_complete.json"))
+        # Retention tests exclusively in temporary roots; current/user files protected.
+        from lidar_yaw_map import OWNER
+        sessions=[]
+        for i in range(7):
+            p=root/f"20261031_19000{i}_lidar_yaw";p.mkdir();sessions.append(p)
+            (p/"metadata.json").write_text(json.dumps(dict(owner=OWNER)))
+            (p/"session_complete.json").write_text(json.dumps(dict(owner=OWNER,complete=True,session_index=i)))
+        (sessions[0]/"user-calibration.json").write_text("protected")
+        removed=prune_lidar(root,sessions[-1])
+        assert removed==[sessions[1].name] and sessions[-1].exists() and sessions[0].exists()
+    with tempfile.TemporaryDirectory() as temporary:
+        p=Path(temporary)/"config.json";bad=json.loads(json.dumps(config))
+        bad["qualification"]["clock_calibrated"]=True;p.write_text(json.dumps(bad))
+        try:load_config(p);assert False,"unearned qualification accepted"
+        except ValueError:pass
+
+
 def main() -> None:
+    test_lidar_yaw_diagnostic()
     test_official_wheel_input()
     # Payloads match F407 4071c71 vision.c and t265_map/scan_protocol.hpp.
     turn = motion_turn_frame(0, 90.0, 300)

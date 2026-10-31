@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "installation": {
+    "status": "steady_minute_mask_user_confirmed_exact_offset",
+    "date": "2026-10-28",
+    "raw_start_deg": 143.25,
+    "raw_end_deg": 288.25,
+    "center_raw_deg": 215.75,
+    "fov_deg": 145,
+    "extrinsic": [
+      -0.03169599999999999,
+      0.054899082396703144,
+      -94.5
+    ],
+    "basis": "user confirms149deg; trim0.5deg each end; left rear,60deg from rear,63.392mm radius",
+    "note": "Exact mounting translation and raw0 yaw unchanged; triangle206mm is approximate, real shell has arcs/extensions; nominal145deg window minus bad-angle masks.",
+    "extrinsic_units": [
+      "m",
+      "m",
+      "deg"
+    ],
+    "vehicle_side_m": 0.206,
+    "vehicle_front_vertex_deg": 60,
+    "mount_bearing_deg": 120,
+    "radius_m": 0.063392,
+    "vehicle_outline_note": "206mm is an approximate triangular outline only; actual shell has arcs/extensions; exact sensor offset63.392mm retained; edge outward normal120deg, vertices60/180/300deg",
+    "display_fov_deg": 147,
+    "display_raw_start_deg": 142.25,
+    "display_raw_end_deg": 289.25,
+    "excluded_raw_ranges_deg": [
+      [
+        142.0,
+        142.5
+      ],
+      [
+        142.5,
+        143.0
+      ],
+      [
+        143.0,
+        143.5
+      ],
+      [
+        288.0,
+        288.5
+      ],
+      [
+        288.5,
+        289.0
+      ],
+      [
+        289.0,
+        289.5
+      ]
+    ],
+    "usable_angular_measure_deg": 144.5,
+    "boundary_calibration": "reports/lidar/boundary-minute-20261028/steady/calibration.json",
+    "boundary_policy": "exclude entire0.5deg bin after any nonzero off-line return in steady60sec; threshold8mm",
+    "interior_mask_override": "194.5–195.5deg restored by user: suspected tape on temporary box, not permanent mounting contamination"
+  },
+  "installation_confirmation": {
+    "source": "operator confirmation in current chat, 2026-10-31",
+    "unchanged_confirmed": true,
+    "is_accuracy_calibration": false
+  },
+  "lidar": {
+    "port": "/dev/ttyS6",
+    "baud": 230400,
+    "start_on_launch": false,
+    "bearing_sign": 1,
+    "physical_direction": 1
+  },
+  "map": {
+    "arena_size_m": [
+      3.0,
+      3.0
+    ],
+    "arena_origin_in_competition_m": [
+      -1.5,
+      -1.5
+    ],
+    "corner_to_center_translation_m": [
+      -1.5,
+      -1.5
+    ],
+    "axes": "same as competition: +X right, +Y up, CCW positive",
+    "initial_center_xy_m": null,
+    "map_branch_confirmed": false
+  },
+  "qualification": {
+    "timestamp_semantics_verified": false,
+    "clock_calibrated": false,
+    "error_model_qualified": false,
+    "rotation_deskew_qualified": false,
+    "translation_compensated": false,
+    "control_pose_publish_enabled": false
+  },
+  "packet_timing": {
+    "timestamp_anchor": "unknown",
+    "timestamp_semantics_verified": false,
+    "nominal_tick_ns": 1000000.0,
+    "direction": 1
+  },
+  "limits": {
+    "yaw_receive_timeout_ms": 150,
+    "still_window_ms": 500,
+    "still_max_rate_deg_s": 1.0,
+    "still_yaw_span_deg": 1.0,
+    "max_correction_m": 0.1,
+    "max_position_residual_m": 0.035
+  },
+  "startup_fixture": {
+    "field_heading_deg": 135.0,
+    "zone": 1,
+    "basis": "operator confirmed unchanged physical startup heading in current chat, 2026-10-31",
+    "position_center_xy_m": null,
+    "requires_session_placement_confirmation": true,
+    "raw_gyro_zero_is_not_field_zero": true
+  }
+}

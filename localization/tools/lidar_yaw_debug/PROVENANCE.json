@@ -1,0 +1,58 @@
+{
+  "reference_patch_sha256": "3c9aee80455ab489d68d89564a2ad75ee37fecb0e2b0f07ecb6aac4327c37d5e",
+  "reference_baseline": "7e25a8104794e36af36167a638a5cc7d0a4e68f7",
+  "integration_baseline": "c2d4905",
+  "scope": "static/turn diagnostic only; no fusion engine, control publisher or STOP latch",
+  "files": {
+    "protocol.py": {
+      "source": "lidar/protocol.py",
+      "source_sha256": "e8e6a41a3bfbdffdb511285e44686243b54cb878680fb34476aebafb27b28478",
+      "changes": "unchanged"
+    },
+    "crop.py": {
+      "source": "lidar/crop.py",
+      "source_sha256": "5b965834ab7765888c18c913aab927efb3dca07bc08977f964b7d23a1b75aebe",
+      "changes": "unchanged"
+    },
+    "presentation.py": {
+      "source": "lidar/presentation.py",
+      "source_sha256": "aa200270de4135bcdd8ad2f0400d35532cd7f465b79677e17a1f8f46d7c29fb9",
+      "changes": "unchanged"
+    },
+    "view.html": {
+      "source": "lidar/view.html",
+      "source_sha256": "57431b4dd0d529517fc412b935b054e3c0838781959745617872da803df5dabb",
+      "changes": "reuse plotting; fixed corner/competition-centre conversion; hide unobserved XY; diagnostic yaw/status labels; no automatic square symmetry claims"
+    },
+    "lidar_timing.py": {
+      "source": "fusion/lidar_timing.py",
+      "source_sha256": "53faa5572696dde2cad3ba72bbbdba763a89f1391e9c6193cc5cfd644ee8e4e6",
+      "changes": "unchanged"
+    },
+    "lidar_reader.py": {
+      "source": "fusion/lidar_reader.py",
+      "source_sha256": "06842542475c3e4c6ab79086bd9cc0d604a45be8f74382e1e32ba9565a5c8062",
+      "changes": "package-local protocol import only"
+    },
+    "static.py": {
+      "source": "lidar/static.py",
+      "source_sha256": "2ab536d0d66d35de5f0f9e67a08acb7879eddf249ae33479e1a7d034776c6396",
+      "changes": "necessary function/class subset; original bodies retained"
+    },
+    "types.py": {
+      "source": "fusion/types.py",
+      "source_sha256": "4af6d63434f9e31ced61fce74cae4b08cf0e3cae1879b9ba953da59ed424e40f",
+      "changes": "necessary function/class subset; original bodies retained"
+    },
+    "viewer.py": {
+      "source": "lidar/live_view.py",
+      "source_sha256": "08146d5a0beb4b2a6699911a7af2a747ea8475138797b519b7cd7598e87d09c5",
+      "changes": "adapted read-only localhost server; fixed diagnostic presentation, no actuator endpoint"
+    },
+    "diagnostic.py": {
+      "source": "fusion/fence_adapter.py",
+      "source_sha256": "9f64746c8b54bf01f1191f0d2a1f02515cc64384c19f11747f56de40bbafdcad",
+      "changes": "reuse reviewed association/fixed-yaw XY solve/enclosure gates; omit estimator/covariance promotion; add explicit field-reference and static-before-turn diagnostic state"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=雷达-主yaw-验证地图
+Comment=独立静止与原地旋转诊断；复用F405客户端，不启动T265或比赛
+Exec=python3 /home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_map.py --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG --open-browser
+Path=/home/sunrise/RDK_X5/shijue_fangan
+Terminal=true
+Icon=utilities-terminal
+Categories=Development;
