@@ -1,6 +1,7 @@
 #include "config.hpp"
 #include "f407_protocol.hpp"
 #include "fusion.hpp"
+#include "debug_wheel_input.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -765,8 +766,76 @@ void test_t265_yaw_time_sync()
 
 }  // namespace
 
+void test_debug_wheel_input()
+{
+    using Input = omni::DebugWheelInput;
+    using Json = Input::Json;
+    const Json sdk{{"velocimeters", {{{"scale_and_alignment", {1,0,0,0,1,0,0,0,1}},
+        {"noise_variance", .01}, {"extrinsics", {{"T", {0,0,0}}, {"W", {0,0,0}}}}}}}};
+    Input::validate_config(sdk);
+    for (const auto *axis : {"T", "W"}) {
+        auto invalid = sdk;
+        invalid["velocimeters"][0]["extrinsics"][axis] = {0,0,.1};
+        bool rejected = false;
+        try { Input::validate_config(invalid); } catch (const std::exception &) { rejected = true; }
+        check(rejected, "SDK rejects repeated nonzero input extrinsic");
+    }
+    char temporary[] = "/tmp/t265-wheel-check-XXXXXX";
+    const char *created = ::mkdtemp(temporary);
+    check(created != nullptr, "wheel test temporary root");
+    if (!created) return;
+    const std::string root(created), log = root+"/wheel.jsonl";
+    omni::LocalizationConfig config;
+    const double forward[] = {.8660254037844386,0,.5}, up[] = {0,-1,0};
+    std::copy(forward,forward+3,config.camera_robot_forward_axis);
+    std::copy(up,up+3,config.camera_robot_up_axis);
+    config.camera_offset_forward_m = -.0346105;
+    config.camera_offset_left_m = -.0599471445;
+    const double lever0 = -config.camera_offset_left_m, lever1 = config.camera_offset_forward_m;
+    Json packet{{"schema", 1}, {"session_id", "sdk-test"}, {"packet_id", 0},
+        {"source", "measured_wheel_feedback"}, {"measurement_valid", true},
+        {"capture_time_qualified", true}, {"mcu_epoch", "boot1"},
+        {"interval_start_ns", 1000000000}, {"interval_end_ns", 1010000000},
+        {"receive_monotonic_ns", 1011000000}, {"gyro_receive_ns", 1011000000},
+        {"gyro_start_ns", 1000000000}, {"gyro_end_ns", 1010000000}, {"time_uncertainty_ns", 1000000},
+        {"v_body_mps", {0.,0.,0.}}, {"omega_body_rad_s", {0.,0.,1.}},
+        {"lever_body_mps", {lever0,lever1,0.}},
+        {"v_camera_mps", {.8660254037844386*lever0-.5*lever1,0.,.5*lever0+.8660254037844386*lever1}}};
+    {
+        Input input(config,"sdk-test","",log);
+        int calls = 0;
+        auto fake_sdk = [&](std::uint32_t seq, const rs2_vector &v) {
+            check(seq == 0 && near(v.x, .069221, 1e-7) && near(v.z, 0, 1e-8),
+                  "SDK gets once-converted camera velocity with sequence (not timestamp)");
+            ++calls; return true;
+        };
+        check(input.process(packet,1020000000,fake_sdk), "qualified offline sample reaches fake SDK");
+        check(!input.process(packet,1020000000,fake_sdk) && calls == 1, "no duplicate injection");
+        auto stale = packet; stale["packet_id"] = 1;
+        check(!input.process(stale,1090000000,fake_sdk) && calls == 1, "IPC freshness rechecked before SDK");
+        auto rotated_twice = packet; rotated_twice["v_camera_mps"] = {0.,0.,.069221};
+        rotated_twice["packet_id"] = 1;
+        rotated_twice["interval_start_ns"] = 1010000000; rotated_twice["interval_end_ns"] = 1020000000;
+        rotated_twice["receive_monotonic_ns"] = 1020000000;
+        rotated_twice["gyro_end_ns"] = 1020000000; rotated_twice["gyro_receive_ns"] = 1020000000;
+        check(!input.process(rotated_twice,1020000000,fake_sdk) && calls == 1, "repeated/mismatched transform rejected");
+    }
+    {
+        Input input(config,"sdk-test","",log);
+        int calls = 0;
+        auto failed_sdk = [&](std::uint32_t, const rs2_vector &) { ++calls; return false; };
+        check(!input.process(packet,1020000000,failed_sdk), "SDK false is failure, no accuracy claim");
+        packet["packet_id"] = 1; packet["interval_start_ns"] = 1010000000;
+        packet["interval_end_ns"] = 1020000000; packet["receive_monotonic_ns"] = 1020000000;
+        packet["gyro_end_ns"] = 1020000000; packet["gyro_receive_ns"] = 1020000000;
+        check(!input.process(packet,1020000000,failed_sdk) && calls == 1, "failed SDK stream is not silently retried");
+    }
+    ::unlink(log.c_str()); ::unlink((root+"/wheel_sdk_status.json").c_str()); ::rmdir(root.c_str());
+}
+
 int main()
 {
+    test_debug_wheel_input();
     test_protocol();
     test_kinematics();
     test_new_mount();

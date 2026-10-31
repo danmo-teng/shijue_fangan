@@ -2,7 +2,8 @@
 """Existing desktop map adapted to the audited F405 NormalDebug contract.
 
 ChassisTestClient is the only UART owner. The T265-only child receives no UART;
-raw counts and F405 host cross-checks stay in this test path. No wheel injection.
+raw counts and F405 host cross-checks stay in this test path. Optional official
+wheel input uses IPC to that SAME SDK child and requires qualified capture times.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -47,6 +49,7 @@ from f407_motion_protocol import (  # noqa: E402
 )
 from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
+from t265_wheel_input import WheelInputBridge, write_sdk_config, DEPENDENCIES
 
 
 WINDOW_NAME = "t265_f407_motion_map"
@@ -100,7 +103,8 @@ SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_r
     "localization_debug.csv", "t265_raw_pose.csv", "localization_events.jsonl", "localizer.log",
     "f407_motion_status.json", "f407_motion_status.jsonl", "uart_rx.jsonl", "events.jsonl",
     "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json",
-    "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl"})
+    "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
+    "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json"})
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
@@ -252,6 +256,10 @@ class MotionMapApp:
         self.settled_reference_mark: dict | None = None
         self.session_index = 0
         self.logging_failed = False
+        self.wheel_input = None
+        self.wheel_unsubscribe = None
+        self.wheel_sdk_status = None
+        self.visual_disturbance_active = False
 
     @staticmethod
     def detect_screen_size() -> tuple[int, int]:
@@ -367,6 +375,10 @@ class MotionMapApp:
         x0 = 920
         cv2.rectangle(canvas, (900, 0), (LOGICAL_WIDTH, LOGICAL_HEIGHT), (26, 27, 30), -1)
         text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
+        mode = getattr(self.options, "wheel_input", "off")
+        accepted = (self.wheel_sdk_status or {}).get("sdk_api_success_samples", 0)
+        text.add(f"SDK轮速 {mode} / API成功 {accepted} / 旧协议时钟未合格", (x0, 43), 12,
+                 (100, 190, 230))
         running = self.localizer is not None and self.localizer.poll() is None
         service_text = "测试已启用" if self.motion_identity_confirmed() else "仅监听"
         text.add(("定位运行" if running else "定位未运行") + " / " + service_text, (x0, 68), 16,
@@ -511,6 +523,10 @@ class MotionMapApp:
                 del points[:2000]
 
     def update_data(self) -> None:
+        if getattr(self, "wheel_input", None) is not None:
+            self.wheel_input.poll(dict(test_id=self.test_id, host_action_id=self.active_host_action_id,
+                                       identity_basis="GUI receive-time context; not MCU capture identity"))
+            self.wheel_sdk_status = read_json(self.run_dir / "wheel_sdk_status.json")
         if self.localization_json is not None:
             data = read_json(self.localization_json)
             if data is not None:
@@ -896,6 +912,12 @@ class MotionMapApp:
             self.motion_status_path, status_log,
         )
         self.bridge.identity_confirmed = self.motion_identity_confirmed()
+        sdk_session_id = uuid.uuid4().hex
+        wheel_enabled = getattr(self.options, "wheel_input", "off") == "on"
+        wheel_noise = getattr(self.options, "wheel_noise_std_mps", .10)
+        wheel_config = write_sdk_config(self.run_dir / "wheel_sdk_config.json", wheel_noise)
+        self.wheel_input = WheelInputBridge(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
+        self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry)
         self.bridge.start()
         localizer_log_path = self.run_dir / "localizer.log"
         self.localizer_log = localizer_log_path.open("w", encoding="utf-8")
@@ -911,17 +933,23 @@ class MotionMapApp:
             "--rate", "20",
             "--tx-rate", "0",
             "--ignore-encoders",  # UART belongs solely to ChassisTestClient.
+            "--debug-fresh-session",
 
         ]
         if self.options.serial:
             command += ["--serial", self.options.serial]
+        if wheel_enabled:
+            command += ["--debug-wheel-socket", "@t265-wheel-"+sdk_session_id,
+                        "--debug-wheel-config", str(self.run_dir / "wheel_sdk_config.json"),
+                        "--debug-wheel-log", str(self.run_dir / "wheel_sdk.jsonl"),
+                        "--debug-wheel-session", sdk_session_id]
         self.localizer = subprocess.Popen(
             command, cwd=str(LOCALIZATION_ROOT),
             stdout=self.localizer_log, stderr=subprocess.STDOUT,
             start_new_session=True,
         )
         metadata = {
-            "schema_version": 3,
+            "schema_version": 4,
             "created_local": datetime.now().astimezone().isoformat(timespec="seconds"),
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "mode": "interactive_f405_normaldebug",
@@ -935,7 +963,17 @@ class MotionMapApp:
             "turn_command_sign": DEBUG_COMMAND_TURN_SIGN,
             "disable_pose_jumping_requested": False,
             "enable_pose_jumping_requested": True,
-            "pose_source": "t265_direct_with_camera_offset",
+            "pose_source": "t265_sdk_pose_with_camera_offset" if wheel_enabled else "t265_direct_with_camera_offset",
+            "sdk_session_id": sdk_session_id,
+            "wheel_input_requested": wheel_enabled,
+            "wheel_input_time_policy": "qualified_capture_clock_only; legacy_0x15_0x1F_rejected",
+            "wheel_input_definition": "v_C^C=R_CB*(v_B^B+omega_B^B cross r_BC^B)",
+            "wheel_sdk_config": wheel_config,
+            "wheel_noise_basis": f"engineering initial sigma={wheel_noise}m/s, variance={wheel_noise**2}(m/s)^2; not measured calibration; no per-sample covariance",
+            "trajectory_dependency_sources": DEPENDENCIES if wheel_enabled else [],
+            "wheel_and_primary_gyro_independent_of_sdk_input": not wheel_enabled,
+            "wheel_reference_independent_pose": False,
+            "ab_policy": "separate SDK sessions, no live toggle; stopping sends does not remove dependency; clean device restart for strict AB",
             "listen_and_control": self.motion_identity_confirmed(),
             "host_chassis_session_id": self.bridge.host_session_id,
             "mcu_boot_epoch": None,
@@ -975,6 +1013,10 @@ class MotionMapApp:
                 "localizer_log": localizer_log_path.name,
                 "uart_rx_history": "uart_rx.jsonl",
                 "effective_config": "localization.conf",
+                "wheel_input": "wheel_input.jsonl",
+                "wheel_sdk": "wheel_sdk.jsonl",
+                "wheel_sdk_status": "wheel_sdk_status.json",
+                "wheel_sdk_config": "wheel_sdk_config.json",
             },
         }
         try:
@@ -987,7 +1029,7 @@ class MotionMapApp:
         (self.run_dir / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-        self.message = "已启动：监听F405；动作须人工触发"
+        self.message = "已启动：动作须人工触发；旧协议缺采样时钟/epoch，轮速不注入"
         self.record_event("session_started", {"initial_pose": metadata["initial_pose"]})
         print(f"测试日志目录：{self.run_dir}", flush=True)
 
@@ -1024,6 +1066,14 @@ class MotionMapApp:
             self.bridge.close()
             logs_ok = logs_ok and self.bridge.log_error is None
             self.bridge = None
+        if self.wheel_unsubscribe is not None:
+            self.wheel_unsubscribe()
+            self.wheel_unsubscribe = None
+        if self.wheel_input is not None:
+            self.record_event("wheel_input_session_summary", dict(self.wheel_input.stats,
+                sdk_status=read_json(self.run_dir / "wheel_sdk_status.json"), accuracy_verified=False))
+            self.wheel_input.close()
+            self.wheel_input = None
         if self.run_dir is not None:
             csv_path = self.run_dir / "localization_debug.csv"
             if csv_path.exists():
@@ -1041,6 +1091,10 @@ class MotionMapApp:
                             result["trajectory"][key] = None
                     result["effective_config"] = self.session_config
                     result["accuracy_verified"] = False
+                    result["wheel_input_requested"] = getattr(self.options, "wheel_input", "off") == "on"
+                    result["trajectory_dependency_sources"] = DEPENDENCIES if result["wheel_input_requested"] else []
+                    result["wheel_reference_independent_pose"] = False  # Plot uses T265 heading in both modes.
+                    result["wheel_sdk_status"] = read_json(self.run_dir / "wheel_sdk_status.json")
                     result["validation_scope"] = "trajectory diagnostics only; review test_id events and independent ground_truth.jsonl"
                     (self.run_dir / "analysis.json").write_text(
                         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1128,6 +1182,11 @@ class MotionMapApp:
                 self.message = "先结束动作，再人工确认停稳并测量"
         elif key in (ord("r"), ord("R")):
             self.reset_reference()
+        elif key in (ord("d"), ord("D")):
+            self.visual_disturbance_active = not self.visual_disturbance_active
+            self.record_event("visual_disturbance_start" if self.visual_disturbance_active else "visual_disturbance_end",
+                              {"source": "operator_marker", "independent_ground_truth": False})
+            self.message = "视觉受扰开始标记" if self.visual_disturbance_active else "视觉受扰结束标记"
         elif key == ord("["):
             self.turn_rate_deg_s = max(10,self.turn_rate_deg_s-10)
         elif key == ord("]"):
@@ -1171,6 +1230,10 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--uart", default="/dev/ttyS1")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--serial")
+    parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
+                        help="SDK-session choice, default pure T265; legacy F405 timing cannot pass injection gates")
+    parser.add_argument("--wheel-noise-std-mps", type=float, default=.10,
+                        help="initial engineering velocity sigma, not calibrated; SDK uses its square")
     parser.add_argument("--reference-description", default="",
                         help="本轮卷尺零点、车中心标记及地面角度基准；G键录入实测前必填")
     parser.add_argument("--actual-lower-firmware", default="unconfirmed")

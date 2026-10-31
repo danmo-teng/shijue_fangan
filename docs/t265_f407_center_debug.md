@@ -1,5 +1,126 @@
 # T265/F407 中心起点定位调试
 
+## 2026-10-31：官方轮速输入调试路径，严格对时门控
+
+基线f52164d；保留当前安装候选，未同步正式比赛。用户确认下位机尚无新的采样时刻/epoch接口，
+本阶段先完成SDK接入与严格门控。**当前0x15/0x1F不会通过门控，实际注入样本应为0。**
+不能把“开启请求”、配置加载成功或本地IPC发送成功说成已经融合，更不能说实车精度已通过。
+
+### 入口、设备所有权与A/B
+
+沿用原桌面地图、ChassisTestClient及原C++定位进程。父进程唯一读取/控制底盘UART，
+遥测订阅器通过有界的本机Unix数据报通道将合格速度交给该C++进程；不新开pyrealsense设备，
+不启动第二个T265进程。SDK wheel_odometer从原pipeline.resolve获得的同一个pose_sensor构造，
+调用load_wheel_odometery_config在pipeline.start之前，之后才调用send_wheel_odometry。
+
+桌面入口不变，默认`--wheel-input off`；命令行通过原启动器选择本次SDK会话：
+
+```bash
+/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG --wheel-input off
+# 先退出上一会话，确认其进程已退出，再另开：
+/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG --wheel-input on
+```
+
+上述命令会打开调试设备，启动不发送运动；本轮实现过程中没有执行它们。on是请求开启SDK输入，
+不是绕过时间门控；现有下位机仍因未合格而拒绝。固件actual继续可为unconfirmed，expected不作身份认证。
+运行中没有on/off热切换。每次都有新的sdk_session_id；两种模式均显式关闭map preservation，
+不导入地图。停止轮速发送不代表清除了SDK中的依赖/污染，停止/重启也没有被认证为完全擦除融合状态；
+严格A/B需在设备可靠重启、没有USB占用者后独立启动并记录重启事实，勿复用已融合过轮速的轨迹充当纯T265。
+
+### 坐标和输入定义
+
+保持以下测试配置，正式配置不变：
+
+```text
+camera_offset_forward_m = -0.0346105
+camera_offset_left_m = -0.0599471445
+camera_robot_forward_axis = 0.8660254,0,0.5
+camera_robot_up_axis = 0,-1,0
+t265_translation_scale_enabled = false
+t265_translation_scale = 1.000
+```
+
+车体B为X前/Y左/Z上。R_CB的列为forward、up×forward、up，经原配置解析器归一化；
+输入按`v_C^C=R_CB*(v_B^B+omega_B^B×r_BC^B)`处理一次。主gyro原生CCW正，
+deg/s转为rad/s；平面假设omega_B=(0,0,omega_z)、v_B.z=0，不能声称测到了滚转/俯仰角速度。
+输出仍由既有完整姿态投影器处理C→B一次，未添加SDK内部IMU偏移或修改地图初始航向。
+
+| 独立换算检查输入 | 期望C轴速度m/s | 反向检查 |
+| --- | --- | --- |
+| 前进+1m/s | (0.8660254,0,0.5) | 整向量取负 |
+| 左移+1m/s | (-0.5,0,0.8660254) | 整向量取负 |
+| 原地CCW+1rad/s | (0.069221,0,约0) | 整向量取负 |
+
+输入已在C点/C轴，SDK唯一速度源index=0，scale_and_alignment=I、T=0、W=0。
+会话内生成wheel_sdk_config.json，C++再次拒绝非零T/W或非单位比例/旋转，防止双重补偿。
+frame_num是本SDK会话内单调uint32序号，不是采样时间，不随reset_reference重置，溢出需新会话。
+
+### 时间门控与当前下位机边界
+
+0x15原始轮反馈继续按已核对的新F405公式复算；旧F407横向公式没有用于输入。
+当前forward/left_mps仅是主机接收区间估计；0x1F的age是打包时两项最大年龄，不能还原角速度采样时刻。
+批量到达、相同SEQ、名义10ms或主机UUID均不证明同时采样/板端epoch。
+不发送目标速度，不使用T265速度或轮式运动学omega替代主gyro，也不把缺数据补成零。
+
+新增适配器只消费未来经审核解码器提供的本机标准事件（不是新线上TYPE/opcode）：
+
+- `measured_body_velocity`：实测v_body_mps三维向量、interval_start_ns/end_ns、receive_monotonic_ns、
+  sample_id、mcu_epoch、measurement_valid、capture_time_qualified、time_uncertainty_ns，
+  source必须为measured_wheel_feedback。原始轮计数应继续另存核对；可由有采样时间的实测轮计数换算。
+- `imu`：额外明确angular_rate_capture_ns、receive_monotonic_ns、相同mcu_epoch、
+  capture_time_qualified/time_uncertainty_ns、wire_valid及原生yaw_rate_deg_s。
+  使用角速度自己的采样时刻，不能冒用yaw采样时刻或重复包装旧rate作为新测量。
+- capture时刻必须已经通过有误差界的时钟映射进入主机CLOCK_MONOTONIC；当前解码器不产生这些合格事件。
+
+轮区间最大50ms；源时间不确定度各不超过5ms。要求gyro覆盖完整轮区间、样本间隔不超过20ms，
+线性插值后在相同区间积分得到平均角速度，再计算杆臂速度。首个轮采样到实际SDK调用的年龄加不确定度
+不得超过50ms；没有前后gyro包围、异常状态、丢失区间、过期、倒序、重复、未知/变化epoch均拒绝。
+这是初始接入预算，尚未用新固件测量验证；不能把合格布尔位凭接收时间置真。
+有界队列溢出丢弃积压、不重放。实测零速度可发送，缺少反馈不会产生零速度。
+
+SDK拒绝或抛异常记录真实结果、标记轨迹依赖可疑并停止该SDK输入会话的后续发送，
+由新SDK会话恢复；这仅隔离该输入流，不锁存底盘控制，不恢复ESCAPE或覆盖mode51恢复。
+单个暂时过期/缺数据事件不锁存，之后的新合格数据可正常通过。
+下位机配套任务见[f405_normaldebug_interface_followup.md](f405_normaldebug_interface_followup.md)。
+
+### 噪声、日志与验证
+
+`--wheel-noise-std-mps`默认0.10m/s，SDK noise_variance为平方0.01(m/s)^2。
+这是保守工程初值，不是实测标定：当前每计数约0.207mm，10ms差分约0.0207m/s/count，
+还存在轮胎/运动学、全向滑移、gyro杆臂项和时间误差。取0.10不能保证包住打滑偏差；
+有错误/打滑证据仍应拒绝输入。没有照抄演示为突出效果而设的极小噪声。
+SDK不支持逐样本时间或协方差；不通过缩放速度降权，不逐帧重载配置。
+
+日志仍在RDK原模块会话目录，保留最近5次完整会话的原机制；只增加本模块文件白名单，
+当前/不完整/含用户额外文件的会话受保护。本次没有运行真实日志清理。
+
+- `wheel_input.jsonl`：原轮反馈、v_B、对应gyro样本/平均omega、杆臂项、v_C、区间与时间差、
+  拒绝原因、动作的主机上下文或IPC发送结果；不具备的量为null，不伪造数据。
+- `wheel_sdk.jsonl`和`wheel_sdk_status.json`：SDK配置加载结果、逐样本attempt/result、frame_num、
+  调用耗时、API成功计数与依赖状态。IPC成功≠SDK成功；SDK成功≠设备融合回执或精度成功。
+  本机v2.50的tm-device.cpp配置加载实现明确没有固件成功确认，load/send均在stream_write后返回true；
+  日志固定result_scope=host_SDK_call_return_only、device_fusion_confirmed=false。
+- 既有`t265_raw_pose.csv`/`localization_debug.csv`继续记录SDK原始相机轨迹/完整姿态与车中心轨迹，
+  与wheel日志按SDK会话、主机单调时钟对应。commands/events/chassis_actions保留动作身份；
+  GUI上下文明确是接收时关联，不冒充MCU捕获时动作ID。
+- metadata/analysis记录输入模式和依赖来源。凡开启并使用过轮速，轮速和主gyro均成为该SDK轨迹的依赖，
+  之后不得当完全独立观测再次融合或作独立精度真值。未知是否使用时按可能依赖处理。
+
+复用原检查：C++构建、原ctest、原test_f407_motion_protocol.py扩展数学/门控/本地IPC/fake SDK检查。
+这些检查不连接真实底盘或T265，不证明设备配置已加载、实际轮速已融合或地面精度已通过。
+本轮实际结果：cmake构建成功，ctest为2/2通过，Python回归PASS，py_compile与git diff --check通过；
+两个原程序的--help可显示新增选项。只运行离线/本机伪终端检查，没有打开真实UART/USB、启动电机或清理实际日志。
+
+待时间接口具备后，人工逐段做off/on独立会话：前后左右1m及正反90/180/360°，每段M冻结停稳点、
+用卷尺/地面角度基准G录入；D记录短时局部视觉受扰的开始/结束，具体遮挡情况另作文字记录。
+组合运动须等下位机线上合同，不能把顺序平移/旋转当作已验证同时运动，本轮未自动执行任何动作。
+官方示例明确完全遮挡可退化为3DoF并冻结平移，不承诺轮速能解决完全视觉失效。
+
+官方核对来源：
+[v2.50.0轮速示例/生命周期与遮挡边界](https://github.com/realsenseai/librealsense/blob/v2.50.0/wrappers/python/examples/t265_wheel_odometry/t265_wheel_odometry.py)、
+[SDK接口](https://github.com/realsenseai/librealsense/blob/v2.50.0/include/librealsense2/hpp/rs_sensor.hpp)、
+[配置格式](https://github.com/realsenseai/librealsense/blob/v2.50.0/doc/t265.md#wheel-odometry-calibration-file-format)。
+
 ## 2026-10-30：桌面按钮未发送的修复与架空接口实测
 
 用户反馈点击测试无响应，核对20261030_202942_interactive会话发现：

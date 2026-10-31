@@ -34,7 +34,120 @@ def inbound(message_type: int, sequence: int, payload: bytes) -> bytes:
     return FRAME_HEAD + body + crc16_modbus(body).to_bytes(2, "little") + bytes((FRAME_TAIL,))
 
 
+def test_official_wheel_input():
+    # Offline math + local IPC only. Does NOT attest SDK hardware/vehicle accuracy.
+    import math
+    import socket
+    import uuid
+    from t265_f407_motion_map import config_values, DEFAULT_CONFIG
+    from t265_wheel_input import camera_velocity, WheelInputBridge, write_sdk_config
+    cfg = config_values(DEFAULT_CONFIG)
+    f, u, r = [0.8660254,0,.5], [0,-1,0], [-.0346105,-.0599471445,0]
+    for sign in (-1, 1):
+        for body, omega, expected in (([sign,0,0], [0,0,0], [sign*.8660254,0,sign*.5]),
+                                     ([0,sign,0], [0,0,0], [-sign*.5,0,sign*.8660254]),
+                                     ([0,0,0], [0,0,sign], [sign*.069221,0,0])):
+            _, v = camera_velocity(body, omega, f, u, r)
+            assert max(abs(a-b) for a,b in zip(v,expected)) < 1e-8
+    _, combined = camera_velocity([.3,-.2,0], [0,0,1], f,u,r)
+    parts = [camera_velocity(body,omega,f,u,r)[1] for body,omega in
+             (([.3,0,0],[0,0,0]),([0,-.2,0],[0,0,0]),([0,0,0],[0,0,1]))]
+    assert max(abs(combined[i]-sum(p[i] for p in parts)) for i in range(3)) < 1e-10
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        sdk_config = write_sdk_config(root/"sdk.json", .1)
+        assert abs(sdk_config["velocimeters"][0]["noise_variance"]-.01) < 1e-15
+        assert sdk_config["velocimeters"][0]["extrinsics"]["T"] == [0,0,0]
+        session = uuid.uuid4().hex
+        sink = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sink.bind("\0t265-wheel-"+session)
+        sink.settimeout(.1)
+        now = [1_020_000_000]
+        bridge = WheelInputBridge(root, cfg, session, True, clock=lambda:now[0])
+        def event(kind, sample): bridge.telemetry(dict(kind=kind, sample=sample))
+        def gyro(t, **extra):
+            return dict(angular_rate_capture_ns=t, receive_monotonic_ns=t+1_000_000,
+                time_uncertainty_ns=1_000_000, capture_time_qualified=True,
+                mcu_epoch="boot1", wire_valid=True, yaw_rate_deg_s=180/math.pi, **extra)
+        wheel = dict(source="measured_wheel_feedback", v_body_mps=[0,0,0],
+            interval_start_ns=1_000_000_000, interval_end_ns=1_010_000_000,
+            receive_monotonic_ns=1_011_000_000, time_uncertainty_ns=1_000_000,
+            capture_time_qualified=True, measurement_valid=True, mcu_epoch="boot1", sample_id=1)
+        try:
+            event("host_wheel_recomputed", dict(forward_mps=999, capture_monotonic_ns=None))
+            event("imu", dict(wire_valid=True, yaw_rate_deg_s=999))
+            bridge.poll()
+            assert bridge.stats["sent_to_sdk_owner"] == 0
+            event("imu",dict(gyro(1_000_000_000), yaw_rate_deg_s=0.))
+            event("measured_body_velocity",wheel)
+            bridge.poll()
+            assert bridge.stats["sent_to_sdk_owner"] == 0  # Wait for gyro bracket, not latest value.
+            event("imu",dict(gyro(1_010_000_000), yaw_rate_deg_s=360/math.pi))
+            bridge.poll()
+            packet = json.loads(sink.recv(16000))
+            assert abs(packet["v_camera_mps"][0]-.069221) < 1e-8
+            assert abs(packet["omega_body_rad_s"][2]-1) < 1e-12
+            event("measured_body_velocity",wheel)
+            bridge.poll()
+            assert bridge.stats["last_reason"] == "duplicate_or_out_of_order_wheel_interval"
+            event("measured_body_velocity",dict(wheel, source="command_target", sample_id=2))
+            bridge.poll()
+            assert bridge.stats["last_reason"] == "not_valid_measured_wheel_feedback"
+            event("measured_body_velocity",dict(wheel, mcu_epoch="boot2", sample_id=3))
+            bridge.poll()
+            assert bridge.stats["last_reason"] == "epoch_changed_new_sdk_session_required"
+            now[0] += 100_000_000
+            event("measured_body_velocity",dict(wheel,sample_id=4))
+            bridge.poll()
+            assert bridge.stats["last_reason"] == "stale_or_future_wheel_interval"
+            assert bridge.stats["sent_to_sdk_owner"] == 1  # No synthetic zero on missing data.
+        finally:
+            bridge.close(); sink.close()
+        # Off is a distinct session; even qualified feedback is never sent.
+        off = WheelInputBridge(root,cfg,uuid.uuid4().hex,False,clock=lambda:1_020_000_000)
+        try:
+            for t in (1_000_000_000,1_010_000_000): off.telemetry(dict(kind="imu",sample=gyro(t)))
+            off.telemetry(dict(kind="measured_body_velocity",sample=wheel))
+            off.poll()
+            assert off.stats["last_reason"] == "injection_off" and off.stats["sent_to_sdk_owner"] == 0
+        finally: off.close()
+        # Unqualified clocks, missing epoch, gaps, ordering and real zero.
+        cases = [
+            (dict(wheel, time_uncertainty_ns=6_000_000),
+             [gyro(1_000_000_000),gyro(1_010_000_000)], "unqualified_capture_time_or_epoch"),
+            (dict(wheel, mcu_epoch=None),
+             [gyro(1_000_000_000),gyro(1_010_000_000)], "unqualified_capture_time_or_epoch"),
+            (dict(wheel, interval_end_ns=1_030_000_000, receive_monotonic_ns=1_031_000_000),
+             [gyro(1_000_000_000),gyro(1_030_000_000)], "gyro_capture_gap"),
+            (wheel, [gyro(1_000_000_000),gyro(1_000_000_000),gyro(1_010_000_000)],
+             "nonmonotonic_gyro_capture_time"),
+        ]
+        for measured, gyros, expected in cases:
+            rejected = WheelInputBridge(root,cfg,uuid.uuid4().hex,True,clock=lambda:1_040_000_000)
+            try:
+                for g in gyros: rejected.telemetry(dict(kind="imu",sample=g))
+                rejected.telemetry(dict(kind="measured_body_velocity",sample=measured))
+                rejected.poll()
+                assert rejected.stats["last_reason"] == expected
+                assert rejected.stats["sent_to_sdk_owner"] == 0
+            finally: rejected.close()
+        new_session = uuid.uuid4().hex
+        sink = socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind("\0t265-wheel-"+new_session); sink.settimeout(.1)
+        zero = WheelInputBridge(root,cfg,new_session,True,clock=lambda:1_020_000_000)
+        try:
+            for t in (1_000_000_000,1_010_000_000):
+                zero.telemetry(dict(kind="imu",sample=dict(gyro(t),yaw_rate_deg_s=0)))
+            zero.telemetry(dict(kind="measured_body_velocity",sample=wheel))
+            zero.poll()
+            assert json.loads(sink.recv(16000))["v_camera_mps"] == [0,0,0]
+            zero.poll()
+            assert zero.stats["sent_to_sdk_owner"] == 1
+        finally: zero.close(); sink.close()
+
+
 def main() -> None:
+    test_official_wheel_input()
     # Payloads match F407 4071c71 vision.c and t265_map/scan_protocol.hpp.
     turn = motion_turn_frame(0, 90.0, 300)
     assert turn[2] == 0x19 and turn[4:12] == bytes.fromhex("02 09 03 84 00 00 05 2A")

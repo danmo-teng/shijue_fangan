@@ -25,10 +25,14 @@ add_library(omni_localization_core
 target_include_directories(omni_localization_core PUBLIC include)
 target_link_libraries(omni_localization_core PUBLIC pthread)
 
+add_library(debug_wheel_input src/debug_wheel_input.cpp)
+target_include_directories(debug_wheel_input PUBLIC include "${REALSENSE_INCLUDE_DIR}"
+    "${REALSENSE_ROOT}/third_party/librealsense/third-party")
+target_link_libraries(debug_wheel_input PUBLIC "${REALSENSE_LIBRARY}")
 add_executable(t265_omni_localizer src/main.cpp)
 target_include_directories(t265_omni_localizer PRIVATE "${REALSENSE_INCLUDE_DIR}")
 target_link_libraries(t265_omni_localizer PRIVATE
-    omni_localization_core "${REALSENSE_LIBRARY}")
+    omni_localization_core debug_wheel_input "${REALSENSE_LIBRARY}")
 set_target_properties(t265_omni_localizer PROPERTIES
     BUILD_RPATH "${REALSENSE_ROOT}/build-250/librealsense"
     INSTALL_RPATH "${REALSENSE_ROOT}/build-250/librealsense")
@@ -37,7 +41,7 @@ option(BUILD_TESTING "Build protocol and fusion tests" ON)
 if(BUILD_TESTING)
     enable_testing()
     add_executable(test_omni_localization tests/test_omni_localization.cpp)
-    target_link_libraries(test_omni_localization PRIVATE omni_localization_core)
+    target_link_libraries(test_omni_localization PRIVATE omni_localization_core debug_wheel_input)
     add_test(NAME omni_localization_tests COMMAND test_omni_localization)
     add_executable(test_f407_mission_protocol
         firmware/f407_mission_protocol.c

@@ -4,6 +4,7 @@
 #include "f407_protocol.hpp"
 #include "fusion.hpp"
 #include "serial_port.hpp"
+#include "debug_wheel_input.hpp"
 
 #include <algorithm>
 #include <array>
@@ -47,6 +48,7 @@ struct Options {
     std::string stm_status_output_path;
     std::string t265_map_path;
     std::string events_path;
+    std::string debug_wheel_socket, debug_wheel_config, debug_wheel_log, debug_wheel_session;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 0.0;
@@ -57,6 +59,7 @@ struct Options {
     bool ignore_encoders = false;
     bool t265_only_output = false;
     int pose_jumping_override = -1; // -1 leaves the SDK setting unchanged.
+    bool debug_fresh_session = false;
 };
 
 struct TimedEncoderFrame {
@@ -164,6 +167,11 @@ void usage(const char *program)
         << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
+        << "  --debug-wheel-socket @NAME  opt-in measured C-frame velocity IPC (test only)\n"
+        << "  --debug-wheel-config FILE  identity C-frame SDK wheel configuration\n"
+        << "  --debug-wheel-log FILE     complete SDK wheel attempt/result log\n"
+        << "  --debug-wheel-session ID   independent SDK test session identity\n"
+        << "  --debug-fresh-session      disable map preservation for debug A/B\n"
         << "  -h, --help          show help\n";
 }
 
@@ -215,6 +223,16 @@ Options parse_options(int argc, char **argv)
                 value("--t265-frame-timeout"), "--t265-frame-timeout");
         } else if (argument == "--debug-sdk") {
             options.debug_sdk = true;
+        } else if (argument == "--debug-wheel-socket") {
+            options.debug_wheel_socket = value("--debug-wheel-socket");
+        } else if (argument == "--debug-wheel-config") {
+            options.debug_wheel_config = value("--debug-wheel-config");
+        } else if (argument == "--debug-wheel-log") {
+            options.debug_wheel_log = value("--debug-wheel-log");
+        } else if (argument == "--debug-wheel-session") {
+            options.debug_wheel_session = value("--debug-wheel-session");
+        } else if (argument == "--debug-fresh-session") {
+            options.debug_fresh_session = true;
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
         } else if (argument == "--t265-only-output") {
@@ -227,6 +245,17 @@ Options parse_options(int argc, char **argv)
             throw std::invalid_argument("unknown option: " + argument);
         }
     }
+    const bool wheel = !options.debug_wheel_socket.empty();
+    if (wheel != !options.debug_wheel_config.empty() || wheel != !options.debug_wheel_log.empty() ||
+        wheel != !options.debug_wheel_session.empty())
+        throw std::invalid_argument("debug wheel input requires socket/config/log/session together");
+    if (wheel && (!options.uart_path.empty() || !options.ignore_encoders ||
+                  !options.t265_only_output || options.tx_rate_hz != 0 || options.pose_jumping_override != 1))
+        throw std::invalid_argument("debug wheel input requires sole external UART owner, direct Pose, ignore-encoders, pose jumping and TX off");
+    if (options.debug_fresh_session && (!options.t265_only_output || !options.ignore_encoders ||
+                                       !options.uart_path.empty() || options.pose_jumping_override != 1 ||
+                                       !options.t265_map_path.empty()))
+        throw std::invalid_argument("fresh debug A/B requires direct Pose, external UART, pose jumping, no imported map");
     return options;
 }
 
@@ -1069,7 +1098,7 @@ int main(int argc, char **argv)
         rs_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
 
         std::unique_ptr<rs2::pose_sensor> map_pose_sensor;
-        if (t265_map.enabled || options.pose_jumping_override >= 0) {
+        if (t265_map.enabled || options.pose_jumping_override >= 0 || !options.debug_wheel_socket.empty()) {
             // Resolve and obtain the pose sensor from the same pipeline
             // configuration before importing the map. This is required by the
             // T265 map API and avoids opening a second USB handle.
@@ -1169,6 +1198,20 @@ int main(int argc, char **argv)
                     }
                 });
         }
+        std::unique_ptr<omni::DebugWheelInput> debug_wheel;
+        if (options.debug_fresh_session) {
+            if (!map_pose_sensor->supports(RS2_OPTION_ENABLE_MAP_PRESERVATION))
+                throw std::runtime_error("SDK does not support disabling map preservation for debug A/B");
+            map_pose_sensor->set_option(RS2_OPTION_ENABLE_MAP_PRESERVATION, 0.f);
+            event_log.write("debug_map_preservation", "{\"value\":0,\"clean_fusion_state_verified\":false}");
+        }
+        if (!options.debug_wheel_socket.empty()) {
+            debug_wheel.reset(new omni::DebugWheelInput(config, options.debug_wheel_session,
+                options.debug_wheel_socket, options.debug_wheel_log));
+            // Same resolved pose sensor, BEFORE start. Never a second SDK process.
+            debug_wheel->configure(*map_pose_sensor, options.debug_wheel_config);
+            event_log.write("t265_wheel_dependencies", "{\"sources\":[\"measured_wheel_feedback\",\"primary_gyro_rate\"],\"independent_reference\":false}");
+        }
         pipeline.start(rs_config);
         if (map_pose_sensor) {
             const float pose_jumping = map_pose_sensor->get_option(RS2_OPTION_ENABLE_POSE_JUMPING);
@@ -1257,6 +1300,7 @@ int main(int argc, char **argv)
         }
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
+            if (debug_wheel) debug_wheel->poll(monotonic_ns());
             rs2::frameset frames;
             bool have_frames = false;
             try {
