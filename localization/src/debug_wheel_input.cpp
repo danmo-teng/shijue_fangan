@@ -46,12 +46,38 @@ DebugWheelInput::DebugWheelInput(const LocalizationConfig &config, const std::st
             throw std::runtime_error("cannot bind debug wheel socket (owner already running?)");
         }
     }
+    log_thread_=std::thread([this]{write_logs();});
     record({{"event", "wheel_input_session"}, {"input_frame", "C_at_tracking_origin"},
             {"dependencies", {"measured_wheel_feedback", "primary_gyro_rate"}},
             {"accuracy_verified", false}});
 }
 
-DebugWheelInput::~DebugWheelInput() { if (socket_ >= 0) ::close(socket_); }
+DebugWheelInput::~DebugWheelInput()
+{
+    stop();logging_stopping_=true;log_ready_.notify_one();
+    if(log_thread_.joinable())log_thread_.join();
+    if (socket_ >= 0) ::close(socket_);
+}
+
+void DebugWheelInput::start()
+{
+    input_thread_=std::thread([this]{
+        while(!stopping_) {
+            try { poll(0); }
+            catch(const std::exception &e) {
+                logging_failed_=true;
+                record({{"event","wheel_input_worker_failed"},{"error",e.what()}});
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    });
+}
+
+void DebugWheelInput::stop()
+{
+    stopping_=true;if(input_thread_.joinable())input_thread_.join();
+}
 
 void DebugWheelInput::validate_config(const Json &config)
 {
@@ -79,15 +105,50 @@ void DebugWheelInput::record(Json event)
     event["device_fusion_confirmed"] = false;
     event["wheel_dependency_present"] = accepted_ > 0;
     event["wheel_dependency_suspect"] = sdk_failed_;
-    log_ << event.dump() << '\n';
+    event["config_loaded"]=config_loaded_;
+    event["last_sdk_success_ns"]=last_success_ns_;
+    std::lock_guard<std::mutex> lock(log_mutex_);
+    if(records_.size()>=4096) {logging_failed_=true;++dropped_logs_;return;}
+    records_.push_back(std::move(event));log_ready_.notify_one();
+}
+
+void DebugWheelInput::write_logs()
+{
+    Json latest;
+    std::deque<std::uint64_t> success_times;
+    auto last_write=std::chrono::steady_clock::now()-std::chrono::seconds(1);
+    while(true) {
+        std::deque<Json> batch;
+        bool ending=false;
+        {
+            std::unique_lock<std::mutex> lock(log_mutex_);
+            log_ready_.wait_for(lock,std::chrono::milliseconds(50),[&]{return !records_.empty()||logging_stopping_;});
+            batch.swap(records_);
+            ending=batch.empty()&&logging_stopping_;
+        }
+        for(const auto &event:batch) {
+            log_<<event.dump()<<'\n';latest=event;
+            if(event.value("event",std::string())=="wheel_sdk_result" && event.value("sdk_result",false))
+                success_times.push_back(event["last_sdk_success_ns"].get<std::uint64_t>());
+        }
+        const auto now=std::chrono::steady_clock::now();
+        if(!log_)logging_failed_=true;
+        if(!latest.is_null() && (now-last_write>=std::chrono::milliseconds(100)||logging_stopping_)) {
+            const auto ns=std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+            while(!success_times.empty() && ns-success_times.front()>1000000000)success_times.pop_front();
+            latest["sdk_api_rate_hz"]=success_times.size(); // Actual calls in the trailing 1-second window.
+            latest["status_monotonic_ns"]=ns;
+            latest["logging_healthy"]=!logging_failed_;
+            latest["dropped_log_records"]=dropped_logs_.load();
+            const auto temp=status_path_+".tmp";
+            std::ofstream status(temp);status<<latest.dump()<<'\n';status.close();
+            if(!status||std::rename(temp.c_str(),status_path_.c_str())!=0)logging_failed_=true;
+            log_.flush();last_write=now;
+        }
+        if(ending)break;
+    }
+    if(dropped_logs_)log_<<Json({{"event","logging_incomplete"},{"dropped_records",dropped_logs_.load()}}).dump()<<'\n';
     log_.flush();
-    if (!log_) throw std::runtime_error("SDK wheel log write failed; refusing unlogged injection");
-    const auto temp = status_path_+".tmp";
-    std::ofstream status(temp);
-    status << event.dump() << '\n';
-    status.close();
-    if (!status || std::rename(temp.c_str(), status_path_.c_str()) != 0)
-        throw std::runtime_error("cannot save SDK wheel status");
 }
 
 void DebugWheelInput::configure(const rs2::pose_sensor &sensor, const std::string &path)
@@ -106,6 +167,7 @@ void DebugWheelInput::configure(const rs2::pose_sensor &sensor, const std::strin
         record({{"event", "wheel_config_load"}, {"sdk_result", false}, {"error", e.what()}});
         throw;
     }
+    config_loaded_=loaded;
     record({{"event", "wheel_config_load"}, {"before_pipeline_start", true},
             {"sdk_result", loaded}, {"config", config}});
     if (!loaded) throw std::runtime_error("SDK rejected wheel config; debug session not started");
@@ -160,6 +222,7 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
                 throw std::runtime_error("mount_conversion_mismatch");
         }
         if (sdk_failed_) throw std::runtime_error("sdk_stream_failed_new_session_required");
+        if (logging_failed_) throw std::runtime_error("logging_incomplete_not_injected");
         if (next_frame_ > 0xffffffffULL) throw std::runtime_error("frame_sequence_exhausted_new_session_required");
         v = {float(camera[0]), float(camera[1]), float(camera[2])};
     } catch (const std::exception &e) { reason = e.what(); }
@@ -176,17 +239,19 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now()-began).count();
     const auto oldest_source = std::min(start, p.at("gyro_start_ns").get<std::uint64_t>());
-    if (now-oldest_source+elapsed > max_age-p.at("time_uncertainty_ns").get<std::uint64_t>()) {
+    if (logging_failed_ || now-oldest_source+elapsed > max_age-p.at("time_uncertainty_ns").get<std::uint64_t>()) {
         ++rejected_;
         record({{"event", "wheel_input_rejected"}, {"frame_num", frame},
-                {"reason", "expired_before_sdk_call"}, {"sdk_call_attempted", false}});
+                {"reason", logging_failed_ ? "logging_incomplete_not_injected" : "expired_before_sdk_call"}, {"sdk_call_attempted", false}});
         return false;
     }
     bool ok = false;
     std::string error;
     const auto call_start = std::chrono::steady_clock::now();
     try { ok = send(frame, v); } catch (const std::exception &e) { error = e.what(); }
-    if (ok) ++accepted_; else { ++rejected_; sdk_failed_ = true; }
+    if (ok) {++accepted_;last_success_ns_=now+std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now()-began).count();}
+    else { ++rejected_; sdk_failed_ = true; }
     record({{"event", "wheel_sdk_result"}, {"frame_num", frame}, {"sdk_result", ok},
             {"packet_id", packet_id}, {"error", error},
             {"sdk_duration_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(

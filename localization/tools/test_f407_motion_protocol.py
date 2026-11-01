@@ -287,6 +287,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_timed_measurement_pipeline()
     test_timed_f405_client()
     test_lidar_yaw_diagnostic()
     test_official_wheel_input()
@@ -805,6 +806,136 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+
+def test_timed_measurement_pipeline():
+    import socket,uuid,threading,struct
+    from unittest.mock import patch
+    import f405_timed_protocol as wire
+    from f405_timed_measurements import TimedMeasurements
+    from t265_wheel_input import WheelInputBridge
+    from t265_f407_motion_map import config_values,DEFAULT_CONFIG,prune_completed_sessions
+    from async_debug_log import AsyncDebugLog
+    examples=json.loads((Path(__file__).with_name("contracts")/"f405_timed_examples_20261031.json").read_text())["examples"]
+    wheel=wire.decode(bytes.fromhex(next(x["hex"] for x in examples if x["name"]=="forward")))
+    gyro=wire.decode(bytes.fromhex(next(x["hex"] for x in examples if x["name"]=="gyro_ccw")))
+    identity=dict(boot_epoch=wheel["boot_epoch"],epoch_valid=True,drift_bound_ppm=0xffffffff)
+    sync=dict(boot_epoch=wheel["boot_epoch"],epoch_valid=1,host_write_before_ns=900_000_000,
+        receive_monotonic_ns=901_000_000,receive_event_us=1_000_000,response_prepare_us=1_000_100,
+        tick_resolution_us=1,nonce=1)
+    m=TimedMeasurements();m.set_identity(identity);assert m.sync(sync)
+    observed=m.wheel(dict(wheel,receive_monotonic_ns=921_000_000),925_000_000)
+    assert observed["measurement_valid"] and not observed["capture_time_qualified"]
+    assert observed["time_uncertainty_ns"] is None
+    assert "mcu_clock_drift_bound_unknown" in observed["qualification_reasons"]
+    g=m.gyro(dict(gyro,receive_monotonic_ns=921_000_000),925_000_000)
+    assert not g["capture_time_qualified"] and "IMU_acquisition_filter_link_to_ISR_delay_unbounded" in g["qualification_reasons"]
+    assert m.gyro(dict(gyro,receive_monotonic_ns=922_000_000),926_000_000) is None
+    assert m.stats["duplicate_rate"]==1
+    # Synthetic QUALIFIED source only, not the actual f81 firmware calibration.
+    m=TimedMeasurements();m.set_identity(dict(identity,drift_bound_ppm=10));assert m.sync(sync)
+    qualified=m.wheel(dict(wheel,flags=131,source_uncertainty_us=100,receive_monotonic_ns=921_000_000),925_000_000)
+    assert qualified["capture_time_qualified"] and 0<qualified["time_uncertainty_ns"]<=5_000_000
+    assert abs(qualified["v_body_mps"][0]-.239272)<1e-9
+    assert m.wheel(dict(wheel,measurement_id=101,forward_um_s=900000,receive_monotonic_ns=921_000_000),925_000_000)["measurement_valid"] is False
+    m.set_identity(dict(identity,boot_epoch="aa"*16,drift_bound_ppm=10))
+    assert not m.syncs and not m.clock_status(925_000_000)["qualified"]
+    from f405_test_client import ChassisTestClient,TIMED_DOCUMENT_COMMIT
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary)
+        class Memory:
+            def __init__(self):self.written=[]
+            def write(self,p):self.written.append(p);return len(p)
+            def close(self):pass
+        c=ChassisTestClient("FAKE",230400,root/"s.json",root/"s.jsonl",identity_policy="timed")
+        c.serial=Memory();clock=[900_000_000]
+        with patch("f405_test_client.time.monotonic_ns",side_effect=lambda:clock[0]):
+            c._request_identity();req=wire.parse(c.serial.written[-1]);payload=bytearray(wire.parse(bytes.fromhex(next(e['hex'] for e in examples if e['name']=='c_module_host_fixture_type_2')))['payload'])
+            payload[:8]=req['payload'];payload[114:134]=bytes.fromhex(TIMED_DOCUMENT_COMMIT)
+            c.feed(wire.packet(wire.ID_REPLY,req['sequence'],payload),clock[0]+1000)
+            c.start_timed_measurements();c.poll(clock[0]+2000)
+            req=wire.parse(c.serial.written[-1]);assert req['type']==wire.SYNC_REQ
+            assert not any(wire.parse(p)['type']==wire.CONFIG_REQ for p in c.serial.written)
+            wrong=bytearray(payload);wrong[:8]=req['payload']
+            c.feed(wire.packet(wire.ID_REPLY,req['sequence'],wrong),clock[0]+3000)
+            assert len(c.identity_queries)==1 and not c.have_sync_exchange  # Type must match too.
+            nonce=int.from_bytes(req['payload'],'big');epoch=bytes.fromhex(c.device_identity['boot_epoch'])
+            clock[0]+=1_000_000
+            c.feed(wire.packet(wire.SYNC_REPLY,req['sequence'],struct.pack('>Q16sQQIH',nonce,epoch,1_000_000,1_000_100,1,1)),clock[0])
+            c.poll(clock[0]+1000);req=wire.parse(c.serial.written[-1]);assert req['type']==wire.CONFIG_REQ and req['payload'][8:]==b'\x01\x01\x00\x00'
+            nonce=int.from_bytes(req['payload'][:8],'big')
+            c.feed(wire.packet(wire.CONFIG_REPLY,req['sequence'],struct.pack('>Q16sIHBBIIII',nonce,epoch,1,0,1,1,230400,20000,10000,230400)),clock[0]+2000)
+            assert c.measurement_snapshot()['stream_active']
+            c.timed_requested=False;c._request_timed(wire.CONFIG_REQ,enable=False);req=wire.parse(c.serial.written[-1])
+            nonce=int.from_bytes(req['payload'][:8],'big')
+            c.feed(wire.packet(wire.CONFIG_REPLY,req['sequence'],struct.pack('>Q16sIHBBIIII',nonce,epoch,1,0,1,0,230400,20000,10000,230400)),clock[0]+3000)
+            assert not c.measurement_snapshot()['stream_active']
+            assert all(p[:2]==wire.MAGIC for p in c.serial.written)  # No motion/STOP/reset.
+            c.close()
+    # A blocked GUI and blocked disk writer cannot gate wheel processing. This
+    # is local IPC to a fake SDK owner, not a hardware/precision/fusion test.
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);sid=uuid.uuid4().hex;sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind("\0t265-wheel-"+sid);sink.settimeout(.2)
+        disk_gate=threading.Event();original=AsyncDebugLog._run
+        def slow_disk(logger):disk_gate.wait(1);original(logger)
+        with patch.object(AsyncDebugLog,"_run",slow_disk):
+            bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),sid,True)
+        bridge.start()
+        try:
+            now=time.monotonic_ns()
+            for capture in (now-20_000_000,now-10_000_000):
+                bridge.telemetry(dict(kind="imu",sample=dict(angular_rate_capture_ns=capture,
+                    receive_monotonic_ns=now,time_uncertainty_ns=1_000_000,capture_time_qualified=True,
+                    mcu_epoch="test-boot",wire_valid=True,yaw_rate_deg_s=0)))
+            bridge.telemetry(dict(kind="measured_body_velocity",sample=dict(source="measured_wheel_feedback",
+                v_body_mps=[.1,0,0],interval_start_ns=now-20_000_000,interval_end_ns=now-10_000_000,
+                receive_monotonic_ns=now,time_uncertainty_ns=1_000_000,capture_time_qualified=True,
+                measurement_valid=True,mcu_epoch="test-boot",sample_id=1)))
+            time.sleep(.10)  # No GUI update_data/poll call at all.
+            packet=json.loads(sink.recv(16000));assert abs(packet["v_camera_mps"][0]-.08660254)<1e-8
+            assert bridge.snapshot()["sdk_api_success_samples"]==0  # IPC success is NOT SDK success.
+            assert bridge.snapshot(dict(session_id=sid,config_loaded=True))["state"]=="SDK_CONFIG_LOADED"
+            assert bridge.snapshot(dict(session_id=sid,config_loaded=True,sdk_api_success_samples=1,last_sdk_success_ns=now))["state"]=="SDK_API_ACCEPTED"
+            assert bridge.snapshot(dict(session_id=sid,sdk_api_rate_hz=100,status_monotonic_ns=now-2_000_000_000))["sdk_api_rate_hz"]==0
+            assert bridge.snapshot(dict(session_id=sid,sdk_api_rate_hz=5,status_monotonic_ns=time.monotonic_ns()))["sdk_api_rate_hz"]==5
+            assert bridge.snapshot(dict(session_id="old-session",sdk_api_success_samples=999))["sdk_api_success_samples"]==0
+            assert bridge.snapshot()["processing_latency_ms_max"]<50
+            # Stale velocity is rejected rather than replayed after the GUI stall.
+            bridge.telemetry(dict(kind="measured_body_velocity",sample=dict(source="measured_wheel_feedback",
+                v_body_mps=[.1,0,0],interval_start_ns=now-20_000_000,interval_end_ns=now-10_000_000,
+                receive_monotonic_ns=now,time_uncertainty_ns=1_000_000,capture_time_qualified=True,
+                measurement_valid=True,mcu_epoch="test-boot",sample_id=2)))
+            deadline=time.monotonic()+.2
+            while bridge.snapshot()["last_input_rejection"]!="stale_or_future_wheel_interval" and time.monotonic()<deadline:time.sleep(.005)
+            assert bridge.snapshot()["last_input_rejection"]=="stale_or_future_wheel_interval"
+            assert bridge.stats["sent_to_sdk_owner"]==1
+        finally:disk_gate.set();bridge.close();sink.close()
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),uuid.uuid4().hex,False)
+        try:
+            for _ in range(300):bridge.telemetry(dict(kind="host_wheel_recomputed",sample={}))
+            bridge.poll()
+            assert bridge.stats['subscriber_dropped']==44 and bridge.stats['overflow_discarded']==256
+            assert bridge.stats['sent_to_sdk_owner']==0
+        finally:bridge.close()
+    # Only this module's manifest-owned images can be removed. Reproduce the
+    # five-complete-session retention using temporary files, never real logs.
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);sessions=[]
+        for i in range(8):
+            path=root/f"20261101_00000{i}_interactive";path.mkdir();sessions.append(path)
+            (path/'metadata.json').write_text(json.dumps(dict(mode='interactive_f405_normaldebug',sdk_session_id='test',fisheye_evidence_enabled=True)))
+            (path/'session_complete.json').write_text(json.dumps(dict(owner='t265_f407_motion_map',complete=True,session_index=i)))
+        (root/'protected_sessions.json').write_text(json.dumps(dict(owner='t265_f407_motion_map',sessions=[sessions[0].name])))
+        (sessions[2]/'用户文件.bin').write_bytes(b'preserve')
+        image=sessions[1]/'fisheye_b1_s1_f100.pgm';image.write_bytes(b'P5\n1 1\n255\n\0')
+        manifest=sessions[1]/'fisheye_frames.csv'
+        manifest.write_text('session_id,filename\nwrong,fisheye_b1_s1_f100.pgm\n')
+        assert prune_completed_sessions(root,sessions[-1])==[]
+        manifest.write_text('session_id,filename\ntest,fisheye_b1_s1_f100.pgm\n')
+        assert prune_completed_sessions(root,sessions[-1])==[sessions[1].name]
+        assert sessions[0].is_dir() and sessions[2].is_dir() and sessions[-1].is_dir()
 
 
 if __name__ == "__main__":

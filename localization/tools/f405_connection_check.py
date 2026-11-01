@@ -1,5 +1,5 @@
-"""Read-only check invoked by the EXISTING T265 debug entry's --check-chassis.
-No standalone executable, T265, radar, motion, STOP, reset or stream subscription.
+"""Non-motion check invoked by the EXISTING T265 debug entry's --check-chassis.
+No T265, radar, motion, STOP or reset. Timed subscription is explicit/optional.
 """
 from datetime import datetime
 from pathlib import Path
@@ -9,13 +9,15 @@ import re
 import time
 import hashlib
 import subprocess
+import uuid
 
 from f405_test_client import ChassisTestClient, firmware_compatible
 
 OWNER = "f405_connection_check"
 FILES = {"metadata.json","result.json","session_complete.json","uart_rx.jsonl",
          "status.json","status.jsonl","chassis_identity.json","chassis_link.jsonl",
-         "chassis_extended.jsonl","chassis_telemetry.jsonl","imu_telemetry.jsonl","chassis_actions.jsonl"}
+         "chassis_extended.jsonl","chassis_telemetry.jsonl","imu_telemetry.jsonl","chassis_actions.jsonl",
+         "wheel_input.jsonl","wheel_measurements.jsonl","logging_events.jsonl"}
 
 
 def prune(root, current):
@@ -54,6 +56,10 @@ def check_connection(options, root):
     metadata=dict(owner=OWNER,created_local=datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
         uart=options.uart,baud=options.baud,identity_policy=options.chassis_profile,
         read_only=True,t265_started=False,motor_commands_sent=0,stream_subscription_sent=False)
+    requested=getattr(options,"timed_measurements",False)
+    metadata["measurement_subscription_requested"]=requested
+    metadata["stream_subscription_sent"]=None if requested else False
+    metadata["read_only"]=not requested
     project=Path(__file__).resolve().parents[2]
     metadata["upper_git_commit"]=subprocess.check_output(["git","rev-parse","HEAD"],cwd=project,text=True).strip()
     metadata["upper_tracked_changes"]=subprocess.check_output(["git","diff","--name-only","HEAD"],cwd=project,text=True).splitlines()
@@ -65,9 +71,20 @@ def check_connection(options, root):
         identity_confirmed=(options.actual_lower_mode=="NormalDebug" and options.actual_lower_service=="MOTIONDEBUG"
                             and firmware_compatible(options.actual_lower_firmware)))
     complete=False
+    wheel=None
+    if requested:
+        from t265_wheel_input import WheelInputBridge
+        config={}
+        for line in options.config.read_text().splitlines():
+            line=line.split('#',1)[0]
+            if '=' in line:
+                k,v=line.split('=',1);config[k.strip()]=v.strip()
+        wheel=WheelInputBridge(run,config,uuid.uuid4().hex,False)
+        client.telemetry(wheel.telemetry);wheel.start()
     try:
         client.start()
-        deadline=time.monotonic()+1.
+        if requested:client.start_timed_measurements()
+        deadline=time.monotonic()+(2. if requested else 1.)
         while time.monotonic()<deadline:
             client.poll();time.sleep(.02)
         status,stats=client.status_snapshot();link=client.connection_snapshot()
@@ -76,13 +93,24 @@ def check_connection(options, root):
             chassis_link=link,status=status,statistics=stats,fresh_legacy_0x1a=fresh,
             motor_commands_sent=0,capture_time_qualified=False,sdk_time_qualified=False,
             physical_motion_verified=False)
-        (run/"result.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
+        result["measurement_stream"]=client.measurement_snapshot()
+        if wheel:result["input_pipeline"]=wheel.snapshot()
         complete=client.log_error is None
     finally:
         client.close()
+        if wheel:wheel.close()
+    if wheel:complete=complete and wheel.log.healthy()
+    complete=complete and client.log_error is None
+    result["stream_active_after_close"]=client.timed_stream_active
+    result["measurement_stream_after_close"]=client.measurement_snapshot()
+    metadata["stream_subscription_sent"]=client.timed_enable_writes>0
+    metadata["stream_subscription_enable_packets_written"]=client.timed_enable_writes
+    metadata["stream_subscription_disable_packets_written"]=client.timed_disable_writes
+    (run/"metadata.json").write_text(json.dumps(metadata,indent=2)+"\n")
+    (run/"result.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
     if complete:
         (run/"session_complete.json").write_text(json.dumps(dict(owner=OWNER,complete=True,
             session_index=max(indices,default=0)+1,accuracy_verified=False))+"\n")
-        result["old_check_sessions_removed"]=prune(root,run)
+        result["old_check_sessions_removed"]=[] if getattr(options,"no_log_prune",False) else prune(root,run)
     print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
     return 0 if result["connection_ok"] else 2

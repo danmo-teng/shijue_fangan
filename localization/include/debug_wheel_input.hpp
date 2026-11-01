@@ -7,6 +7,11 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <atomic>
 
 namespace omni {
 // Opt-in debug ingress in the SAME SDK owner. No chassis UART or pose fusion.
@@ -20,10 +25,13 @@ public:
     static void validate_config(const Json &);
     void configure(const rs2::pose_sensor &, const std::string &config_path);
     void poll(std::uint64_t now_ns);
+    void start();
+    void stop();
     // Also exercised by the existing regression executable with a fake SDK sink.
     bool process(Json packet, std::uint64_t now_ns, const Send &send);
 private:
     void record(Json);
+    void write_logs();
     LocalizationConfig config_;
     std::string session_, status_path_;
     std::ofstream log_;
@@ -33,5 +41,13 @@ private:
     bool have_packet_ = false, have_epoch_ = false, sdk_failed_ = false;
     Json epoch_;
     std::uint64_t accepted_ = 0, rejected_ = 0;
+    bool config_loaded_=false;
+    std::uint64_t last_success_ns_=0;
+    std::atomic<bool> stopping_{false},logging_stopping_{false},logging_failed_{false};
+    std::atomic<std::uint64_t> dropped_logs_{0};
+    std::thread input_thread_,log_thread_;
+    std::mutex log_mutex_;
+    std::condition_variable log_ready_;
+    std::deque<Json> records_;
 };
 } // namespace omni

@@ -5,6 +5,8 @@
 #include "fusion.hpp"
 #include "serial_port.hpp"
 #include "debug_wheel_input.hpp"
+#include "debug_fisheye_evidence.hpp"
+#include <unistd.h>
 
 #include <algorithm>
 #include <array>
@@ -49,6 +51,7 @@ struct Options {
     std::string t265_map_path;
     std::string events_path;
     std::string debug_wheel_socket, debug_wheel_config, debug_wheel_log, debug_wheel_session;
+    std::string debug_test_session,debug_fisheye_output,debug_fisheye_request;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 0.0;
@@ -119,6 +122,37 @@ private:
     std::uint64_t dropped_ = 0;
 };
 
+class DebugPoseQueue {
+public:
+    struct Sample {rs2::pose_frame frame{rs2::frame{}};std::chrono::steady_clock::time_point received;};
+    void push(rs2::pose_frame frame) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(queue_.size()>=256) {queue_.pop_front();++dropped_;}
+        queue_.push_back({std::move(frame),std::chrono::steady_clock::now()});
+    }
+    bool pop(Sample &sample) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(queue_.empty())return false;
+        sample=std::move(queue_.front());queue_.pop_front();return true;
+    }
+    std::atomic<std::uint64_t> dropped_{0};
+private:
+    std::mutex mutex_;std::deque<Sample> queue_;
+};
+
+struct DebugPipelineGuard {
+    rs2::pipeline &pipeline;
+    omni::DebugWheelInput *wheel;
+    bool stopped=false;
+    void stop() {
+        if(stopped)return;
+        stopped=true;
+        if(wheel)wheel->stop();
+        try {pipeline.stop();}catch(const std::exception &) {}
+    }
+    ~DebugPipelineGuard() {stop();}
+};
+
 double parse_nonnegative(const std::string &text, const char *name)
 {
     try {
@@ -172,6 +206,8 @@ void usage(const char *program)
         << "  --debug-wheel-log FILE     complete SDK wheel attempt/result log\n"
         << "  --debug-wheel-session ID   independent SDK test session identity\n"
         << "  --debug-fresh-session      disable map preservation for debug A/B\n"
+        << "  --debug-test-session ID    record actual SDK process/session identity\n"
+        << "  --debug-fisheye-output DIR --debug-fisheye-request FILE  opt-in bounded same-pipeline evidence\n"
         << "  -h, --help          show help\n";
 }
 
@@ -233,6 +269,12 @@ Options parse_options(int argc, char **argv)
             options.debug_wheel_session = value("--debug-wheel-session");
         } else if (argument == "--debug-fresh-session") {
             options.debug_fresh_session = true;
+        } else if (argument == "--debug-test-session") {
+            options.debug_test_session=value("--debug-test-session");
+        } else if (argument == "--debug-fisheye-output") {
+            options.debug_fisheye_output=value("--debug-fisheye-output");
+        } else if (argument == "--debug-fisheye-request") {
+            options.debug_fisheye_request=value("--debug-fisheye-request");
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
         } else if (argument == "--t265-only-output") {
@@ -256,6 +298,10 @@ Options parse_options(int argc, char **argv)
                                        !options.uart_path.empty() || options.pose_jumping_override != 1 ||
                                        !options.t265_map_path.empty()))
         throw std::invalid_argument("fresh debug A/B requires direct Pose, external UART, pose jumping, no imported map");
+    if(options.debug_fisheye_output.empty()!=options.debug_fisheye_request.empty())
+        throw std::invalid_argument("fisheye evidence requires both output and trigger paths");
+    if(!options.debug_fisheye_output.empty() && (!options.debug_fresh_session || options.debug_test_session.empty()))
+        throw std::invalid_argument("fisheye evidence is confined to an identified debug session");
     return options;
 }
 
@@ -1083,7 +1129,7 @@ int main(int argc, char **argv)
             if (!raw_pose_csv) throw std::runtime_error("cannot open raw pose CSV");
             raw_pose_csv << "receive_monotonic_ns,frame_number,capture_timestamp_ms,timestamp_domain,capture_age_ms,"
                             "tx_m,ty_m,tz_m,vx_mps,vy_mps,vz_mps,qx,qy,qz,qw,"
-                            "wx_radps,wy_radps,wz_radps,tracker_confidence,mapper_confidence\n";
+                            "wx_radps,wy_radps,wz_radps,tracker_confidence,mapper_confidence,processing_monotonic_ns,callback_queue_drops\n";
         }
         EventLog event_log(options.events_path);
         T265MapStatus t265_map;
@@ -1096,6 +1142,10 @@ int main(int argc, char **argv)
         rs2::config rs_config;
         if (!serial.empty()) rs_config.enable_device(serial);
         rs_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
+        if(!options.debug_fisheye_output.empty()) {
+            rs_config.enable_stream(RS2_STREAM_FISHEYE,1,RS2_FORMAT_Y8);
+            rs_config.enable_stream(RS2_STREAM_FISHEYE,2,RS2_FORMAT_Y8);
+        }
 
         std::unique_ptr<rs2::pose_sensor> map_pose_sensor;
         if (t265_map.enabled || options.pose_jumping_override >= 0 || !options.debug_wheel_socket.empty()) {
@@ -1212,7 +1262,29 @@ int main(int argc, char **argv)
             debug_wheel->configure(*map_pose_sensor, options.debug_wheel_config);
             event_log.write("t265_wheel_dependencies", "{\"sources\":[\"measured_wheel_feedback\",\"primary_gyro_rate\"],\"independent_reference\":false}");
         }
-        pipeline.start(rs_config);
+        DebugPoseQueue evidence_pose_queue;
+        std::unique_ptr<omni::DebugFisheyeEvidence> fisheye;
+        rs2::pipeline_profile active_profile;
+        // Destroy this guard BEFORE callback targets on every exit/exception.
+        std::unique_ptr<DebugPipelineGuard> debug_pipeline_guard;
+        if(!options.debug_test_session.empty() || debug_wheel)
+            debug_pipeline_guard.reset(new DebugPipelineGuard{pipeline,debug_wheel.get()});
+        const bool debug_pose_callbacks=!options.debug_test_session.empty();
+        if(!options.debug_fisheye_output.empty()) {
+            fisheye.reset(new omni::DebugFisheyeEvidence(options.debug_fisheye_output,
+                options.debug_fisheye_request,options.debug_test_session));
+        }
+        if(debug_pose_callbacks) {
+            // v2.50 sync poll aggregates video at video rate. The callback gives
+            // unsynchronized Pose independently, preserving its native cadence.
+            active_profile=pipeline.start(rs_config,[&](rs2::frame frame){
+                if(auto pose=frame.as<rs2::pose_frame>())evidence_pose_queue.push(pose);
+                else if(fisheye) {
+                    if(auto frames=frame.as<rs2::frameset>())fisheye->offer(frames,monotonic_ns());
+                }
+            });
+        } else active_profile=pipeline.start(rs_config);
+        if(debug_wheel)debug_wheel->start(); // Same SDK owner process, independent of Pose/GUI/disk loops.
         if (map_pose_sensor) {
             const float pose_jumping = map_pose_sensor->get_option(RS2_OPTION_ENABLE_POSE_JUMPING);
             event_log.write("t265_pose_jumping_final",
@@ -1223,6 +1295,20 @@ int main(int argc, char **argv)
             "pipeline_started",
             "{\"t265_map_enabled\":" +
             std::string(t265_map.enabled ? "true" : "false") + "}");
+        if(!options.debug_test_session.empty()) {
+            omni::DebugWheelInput::Json actual{{"session_id",options.debug_test_session},{"pid",::getpid()},
+                {"serial",serial},{"firmware",device_info(active_profile.get_device(),RS2_CAMERA_INFO_FIRMWARE_VERSION)},
+                {"librealsense_compile_time",RS2_API_VERSION_STR},{"librealsense_api_version",rs2_get_api_version(nullptr)},
+                {"device_boot_epoch",nullptr},{"clean_fusion_state_verified",false}};
+            actual["profiles"]=omni::DebugWheelInput::Json::array();
+            for(const auto &profile:active_profile.get_streams()) {
+                omni::DebugWheelInput::Json stream{{"stream",rs2_stream_to_string(profile.stream_type())},
+                    {"index",profile.stream_index()},{"fps",profile.fps()},{"format",rs2_format_to_string(profile.format())}};
+                if(auto video=profile.as<rs2::video_stream_profile>()) {stream["width"]=video.width();stream["height"]=video.height();}
+                actual["profiles"].push_back(stream);
+            }
+            event_log.write("actual_sdk_session",actual.dump());
+        }
 
         omni::T265FieldProjector projector(config);
         omni::T265YawSynchronizer yaw_synchronizer;
@@ -1300,11 +1386,19 @@ int main(int argc, char **argv)
         }
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
-            if (debug_wheel) debug_wheel->poll(monotonic_ns());
             rs2::frameset frames;
+            rs2::pose_frame pose_frame{rs2::frame{}};
+            std::chrono::steady_clock::time_point callback_received{};
             bool have_frames = false;
             try {
-                have_frames = pipeline.poll_for_frames(&frames);
+                if(debug_pose_callbacks) {
+                    DebugPoseQueue::Sample sample;
+                    have_frames=evidence_pose_queue.pop(sample);
+                    if(have_frames) {pose_frame=sample.frame;callback_received=sample.received;}
+                } else {
+                    have_frames = pipeline.poll_for_frames(&frames);
+                    if(have_frames)pose_frame=frames.get_pose_frame();
+                }
             } catch (const rs2::error &error) {
                 event_log.write(
                     "t265_frame_poll_failed",
@@ -1335,7 +1429,6 @@ int main(int argc, char **argv)
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
-            const rs2::pose_frame pose_frame = frames.get_pose_frame();
             if (!pose_frame) {
                 if (t265_map.enabled && !map_startup_ready) {
                     const double wait_ms = std::chrono::duration<double, std::milli>(
@@ -1365,7 +1458,7 @@ int main(int argc, char **argv)
             const double capture_age_ms = host_clock_timestamp
                 ? host_time_ms - pose_frame.get_timestamp() : std::numeric_limits<double>::infinity();
             const rs2_pose pose = pose_frame.get_pose_data();
-            const auto t265_received = std::chrono::steady_clock::now();
+            const auto t265_received = debug_pose_callbacks ? callback_received : std::chrono::steady_clock::now();
             last_pose_frame_time = t265_received;
             t265_map.last_pose_age_ms = 0.0;
             ++t265_map.pose_frame_count;
@@ -1405,7 +1498,8 @@ int main(int argc, char **argv)
                 for (double v : raw.rotation_xyzw) raw_pose_csv << ',' << v;
                 for (double v : raw.angular_velocity_radps) raw_pose_csv << ',' << v;
                 raw_pose_csv << ',' << static_cast<unsigned>(raw.tracker_confidence)
-                             << ',' << static_cast<unsigned>(raw.mapper_confidence) << '\n';
+                             << ',' << static_cast<unsigned>(raw.mapper_confidence)
+                             << ',' << monotonic_ns() << ',' << evidence_pose_queue.dropped_.load() << '\n';
                 if ((++raw_pose_rows % 20u) == 0u) raw_pose_csv.flush();
             }
             if (options.pose_jumping_override >= 0) {
@@ -1993,7 +2087,8 @@ int main(int argc, char **argv)
                       << " sigma=" << std::setprecision(3) << filter.position_sigma_m() << "m\n";
         }
 
-        pipeline.stop();
+        if(debug_pipeline_guard)debug_pipeline_guard->stop();
+        else pipeline.stop();
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();

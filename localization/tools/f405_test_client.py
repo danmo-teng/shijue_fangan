@@ -20,6 +20,7 @@ import struct
 
 import serial
 import f405_timed_protocol as timed
+from async_debug_log import AsyncDebugLog
 
 from f407_motion_protocol import (
     StreamParser, move_body_frame, turn_ccw_frame, motion_stop_frame,
@@ -119,6 +120,10 @@ class ChassisTestClient:
         self.log_error = None
         self.link_failed = False
         self.rx_log = None
+        self.async_log = None
+        self.timed_requested=False;self.timed_stream_active=False;self.timed_enable_attempted=False
+        self.have_sync_exchange=False;self.next_sync_ns=0;self.next_config_ns=0
+        self.timed_error=None;self.timed_enable_writes=0;self.timed_disable_writes=0
         self.host_session_id = uuid.uuid4().hex
         self.host_reference_epoch = 0
         self.action_number = 0
@@ -176,29 +181,45 @@ class ChassisTestClient:
         return self.capabilities()
 
     def _request_identity(self):
+        return self._request_timed(timed.ID_REQ)
+
+    def _request_timed(self, kind, *, enable=False):
         with self.lock:
             if self.serial is None or self.stop_event.is_set():
                 raise RuntimeError("chassis UART is not connected for identity query")
-            if self.identity_queries:
-                return next(iter(self.identity_queries.values()))["event"]
+            for q in self.identity_queries.values():
+                if q["request_type"]==kind:return q["event"]
             nonce=secrets.randbits(64)
             seq=self.next_query_sequence;self.next_query_sequence=(seq+1)&65535
-            packet=timed.request(timed.ID_REQ,nonce,seq)
+            packet=timed.request(kind,nonce,seq,enable=enable)
             event=threading.Event()
             event.identity_reply=None
-            self._log("chassis_link.jsonl",dict(event="identity_request",nonce=nonce,sequence=seq,
-                packet_hex=packet.hex(),baud=self.baud,read_only=True))
+            self._log("chassis_link.jsonl",dict(event="identity_request" if kind==timed.ID_REQ else "timed_request",nonce=nonce,sequence=seq,
+                request_type=kind,packet_hex=packet.hex(),baud=self.baud,read_only=kind!=timed.CONFIG_REQ,motor_command=False))
             if self.log_error:raise RuntimeError("identity log unavailable: "+self.log_error)
             before=time.monotonic_ns()
-            self.identity_queries[nonce]=dict(sequence=seq,event=event,sent_ns=before,deadline_ns=before+1_000_000_000)
-            self.next_identity_query_ns=before+2_000_000_000
-            self.client_stats["identity_queries"]+=1
+            self.identity_queries[nonce]=dict(sequence=seq,event=event,sent_ns=before,deadline_ns=before+1_000_000_000,
+                                              request_type=kind,reply_type=kind+1)
+            if kind==timed.ID_REQ:
+                self.next_identity_query_ns=before+2_000_000_000;self.client_stats["identity_queries"]+=1
+            if kind==timed.SYNC_REQ:self.next_sync_ns=before+500_000_000
+            if kind==timed.CONFIG_REQ:
+                self.next_config_ns=before+2_000_000_000
+                if enable:self.timed_enable_attempted=True
             try:
                 if self.serial.write(packet)!=len(packet):raise RuntimeError("partial read-only identity write")
-                self._log("chassis_link.jsonl",dict(event="identity_request_written",nonce=nonce,sequence=seq,
-                    write_before_monotonic_ns=before,write_after_monotonic_ns=time.monotonic_ns(),read_only=True))
+                if kind==timed.CONFIG_REQ:
+                    if enable:self.timed_enable_writes+=1
+                    else:self.timed_disable_writes+=1
+                self._log("chassis_link.jsonl",dict(event="identity_request_written" if kind==timed.ID_REQ else "timed_request_written",
+                    request_type=kind,nonce=nonce,sequence=seq,
+                    write_before_monotonic_ns=before,write_after_monotonic_ns=time.monotonic_ns(),
+                    read_only=kind!=timed.CONFIG_REQ,motor_command=False))
             except (OSError,RuntimeError) as error:
-                self.identity_queries.pop(nonce,None);self.identity_error=str(error);event.set()
+                self.identity_queries.pop(nonce,None)
+                if kind==timed.ID_REQ:self.identity_error=str(error)
+                else:self.timed_error=str(error)
+                event.set()
                 self._log("chassis_link.jsonl",dict(event="identity_write_failed",error=str(error)))
             return event
 
@@ -223,7 +244,7 @@ class ChassisTestClient:
         self._log("chassis_extended.jsonl",d)
         if d["type"]==timed.ID_REPLY:
             q=self.identity_queries.get(d["nonce"])
-            if not q or q["sequence"]!=d["sequence"] or not q["sent_ns"]<=receive_ns<=q["deadline_ns"]:
+            if not q or q["reply_type"]!=d["type"] or q["sequence"]!=d["sequence"] or not q["sent_ns"]<=receive_ns<=q["deadline_ns"]:
                 self.client_stats["unmatched_extended"]+=1;return
             self.identity_queries.pop(d["nonce"])
             d["epoch_valid"]=(d["epoch_fault"]==0 and bool(d["clock_flags"]&2) and d["boot_epoch"]!="00"*16)
@@ -233,24 +254,59 @@ class ChassisTestClient:
                 self._finish("unknown_device_restart_or_image_change_no_replay",receive_ns)
                 self.needs_stop_ack=self.needs_stop_ack or had_action
                 self.latest_status=None;self.wheel_reference.previous=None;self.wheel_increments.clear()
+                self.have_sync_exchange=False;self.timed_stream_active=False
                 self._publish("device_identity_changed",dict(previous_boot_epoch=previous["boot_epoch"],new_boot_epoch=d["boot_epoch"]))
             self.device_identity=d;self.identity_received_ns=receive_ns
             self.identity_error=self._identity_problem(d)
+            d["interface_compatible"]=self.identity_error is None
             self._log("chassis_link.jsonl",dict(event="identity_reply",identity=d,compatibility_error=self.identity_error,
                 round_trip_ns=receive_ns-q["sent_ns"],clock_mapping_qualified=False))
             try:
                 path=self.status_path.parent/"chassis_identity.json"
-                temporary=path.with_suffix(".json.tmp")
-                temporary.write_text(json.dumps(d,ensure_ascii=False)+"\n",encoding="utf-8");temporary.replace(path)
+                self._atomic_log(path.name,d)
             except OSError as error:self.log_error=str(error)
             q["event"].identity_reply=copy.deepcopy(d)
             q["event"].set()
+            self._publish("timed_identity",d)
+        elif d["type"] in (timed.SYNC_REPLY,timed.CONFIG_REPLY,timed.STATS_REPLY):
+            q=self.identity_queries.get(d.get("nonce"))
+            if (not q or q["reply_type"]!=d["type"] or q["sequence"]!=d["sequence"] or
+                not q["sent_ns"]<=receive_ns<=q["deadline_ns"] or not self.device_identity or
+                d["boot_epoch"]!=self.device_identity["boot_epoch"]):
+                self.client_stats["unmatched_extended"]+=1;return
+            self.identity_queries.pop(d["nonce"]);d["host_write_before_ns"]=q["sent_ns"]
+            if d["type"]==timed.SYNC_REPLY:
+                self.have_sync_exchange=d["epoch_valid"]==1
+                self._publish("timed_clock_sync",d)
+            elif d["type"]==timed.CONFIG_REPLY:
+                self.timed_stream_active=d["status"]==0 and d["enabled"]==1
+                if d["status"]==0 and d["enabled"]==0:self.timed_enable_attempted=False
+                self.timed_error=None if d["status"]==0 else f"stream configuration rejected status={d['status']}"
+                self._publish("timed_stream_state",d)
+            q["event"].identity_reply=copy.deepcopy(d);q["event"].set()
         elif d["type"] in (timed.WHEEL,timed.GYRO):
             self._publish("timed_wheel_diagnostic" if d["type"]==timed.WHEEL else "timed_gyro_diagnostic",d)
         elif d["type"]==timed.ERROR_REPLY:
             q=self.identity_queries.get(d.get("nonce"))
-            if q and q["sequence"]==d["sequence"] and d["request_type"]==timed.ID_REQ:
-                self.identity_queries.pop(d["nonce"]);self.identity_error="device rejected identity request";q["event"].set()
+            if q and q["sequence"]==d["sequence"] and d["request_type"]==q["request_type"] and q["sent_ns"]<=receive_ns<=q["deadline_ns"]:
+                self.identity_queries.pop(d["nonce"])
+                if q["request_type"]==timed.ID_REQ:self.identity_error="device rejected identity request"
+                else:self.timed_error=f"device rejected timed request status={d['status']}"
+                q["event"].set()
+
+    def start_timed_measurements(self):
+        """Explicit test request: causal sync first, then documented 07/08 stream.
+        Mapping/measurement qualification is decided elsewhere, never by this switch.
+        """
+        with self.lock:
+            self.timed_requested=True;self.next_sync_ns=0;self.next_config_ns=0
+
+    def measurement_snapshot(self):
+        with self.lock:
+            return dict(requested=self.timed_requested,stream_active=self.timed_stream_active,
+                        have_matched_sync=self.have_sync_exchange,error=self.timed_error,
+                        enable_packets_written=self.timed_enable_writes,disable_packets_written=self.timed_disable_writes,
+                        capture_time_qualified=False,logging_healthy=self.async_log.healthy() if self.async_log else self.log_error is None)
 
     def control_identity_problem(self, now_ns=None):
         now=time.monotonic_ns() if now_ns is None else now_ns
@@ -294,16 +350,29 @@ class ChassisTestClient:
         return unsubscribe
 
     def _log(self, filename, document):
+        if self.async_log is not None:
+            if not self.async_log.submit(filename,document):self.log_error=self.async_log.error or "bounded log queue overflow; session incomplete"
+            return
         try:
             with (self.status_path.parent / filename).open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(document, ensure_ascii=False)+"\n")
         except OSError as error:
             self.log_error = str(error)
 
+    def _atomic_log(self, filename, document):
+        if self.async_log is not None:
+            if not self.async_log.submit(filename,document,atomic=True):self.log_error=self.async_log.error or "bounded log queue overflow"
+        else:
+            path=self.status_path.parent/filename;tmp=path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(document,ensure_ascii=False)+"\n",encoding="utf-8");tmp.replace(path)
+
     def _publish(self, kind, sample):
         event = {"kind":kind, "sample":copy.deepcopy(sample), "host_session_id":self.host_session_id,
                  "host_reference_epoch":self.host_reference_epoch, "mcu_epoch":None,
                  "wire_protocol_version":None, "contract_document_revision":1}
+        action=self.pending or self.last_action
+        event["host_action_id_at_receive"]=action["host_action_id"] if action else None
+        event["action_identity_basis"]="host receive context, not MCU acquisition identity"
         self._log("chassis_telemetry.jsonl", event)
         for callback in tuple(self.subscribers):
             try:
@@ -332,6 +401,7 @@ class ChassisTestClient:
     def poll(self, now_ns=None):
         now_ns = time.monotonic_ns() if now_ns is None else now_ns
         with self.lock:
+            if self.async_log and not self.async_log.healthy():self.log_error=self.async_log.error or "diagnostic log overflow"
             self.mixed.expire(now_ns)
             for nonce,q in list(self.identity_queries.items()):
                 if now_ns>q["deadline_ns"]:
@@ -345,6 +415,12 @@ class ChassisTestClient:
             if self.require_device_identity and self.serial is not None and not self.stop_event.is_set() and now_ns>=self.next_identity_query_ns:
                 try:self._request_identity()
                 except (OSError,RuntimeError) as error:self.identity_error=str(error)
+            if self.timed_requested and self.device_identity and self.control_identity_problem(now_ns) is None:
+                try:
+                    if now_ns>=self.next_sync_ns:self._request_timed(timed.SYNC_REQ)
+                    if self.have_sync_exchange and not self.timed_stream_active and now_ns>=self.next_config_ns:
+                        self._request_timed(timed.CONFIG_REQ,enable=True)
+                except (OSError,RuntimeError) as error:self.timed_error=str(error)
 
     def _on_status(self, sample):
         now = sample["timestamp_monotonic_ns"]
@@ -385,9 +461,7 @@ class ChassisTestClient:
         self.latest_status = sample
         self._log(self.status_log_path.name, sample)
         try:
-            temporary = self.status_path.with_suffix(".json.tmp")
-            temporary.write_text(json.dumps(sample,ensure_ascii=False)+"\n",encoding="utf-8")
-            temporary.replace(self.status_path)
+            self._atomic_log(self.status_path.name,sample)
         except OSError as error:
             self.log_error = str(error)
         self._publish("motion_status", sample)
@@ -416,12 +490,7 @@ class ChassisTestClient:
         if self.serial is not None:
             raise RuntimeError("client already owns a UART")
         self.serial = self.serial_factory(self.device,self.baud,timeout=.05,write_timeout=.2,exclusive=True)
-        try:
-            self.rx_log = (self.status_path.parent/"uart_rx.jsonl").open("a",encoding="utf-8",buffering=1)
-        except OSError:
-            self.serial.close()
-            self.serial = None
-            raise
+        self.async_log=AsyncDebugLog(self.status_path.parent)
         self.thread = threading.Thread(target=self._read_loop, name="f405-test-uart-owner",daemon=True)
         self.thread.start()
         if self.require_device_identity:
@@ -444,7 +513,7 @@ class ChassisTestClient:
             now = time.monotonic_ns()
             if data:
                 try:
-                    self.rx_log.write(json.dumps({"timestamp_monotonic_ns":now,"data_hex":data.hex()})+"\n")
+                    self._log("uart_rx.jsonl",{"timestamp_monotonic_ns":now,"data_hex":data.hex()})
                 except OSError as error:
                     self.log_error = str(error)
                 self.feed(data,now)
@@ -552,6 +621,14 @@ class ChassisTestClient:
 
     def close(self):
         """No implicit STOP/reset/replay. UI handles any user-authorized exit STOP."""
+        if self.timed_enable_attempted and self.serial is not None and not self.stop_event.is_set():
+            self.timed_requested=False
+            with self.lock:
+                for nonce,q in list(self.identity_queries.items()):
+                    if q["request_type"]==timed.CONFIG_REQ:
+                        self.identity_queries.pop(nonce);q["event"].set()
+            try:self._request_timed(timed.CONFIG_REQ,enable=False).wait(.3)
+            except (OSError,RuntimeError):pass
         self.stop_event.set()
         if self.thread is not None:
             self.thread.join(timeout=1)
@@ -562,3 +639,6 @@ class ChassisTestClient:
             self.rx_log.close()
         with self.lock:
             self._finish("unknown_client_closed_no_replay",time.monotonic_ns())
+        if self.async_log:
+            self.async_log.close()
+            if not self.async_log.healthy():self.log_error=self.async_log.error or "diagnostic logging incomplete"

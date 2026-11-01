@@ -105,7 +105,8 @@ SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_r
     "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json",
     "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
     "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json",
-    "chassis_link.jsonl", "chassis_extended.jsonl", "chassis_identity.json"})
+    "chassis_link.jsonl", "chassis_extended.jsonl", "chassis_identity.json",
+    "wheel_measurements.jsonl","logging_events.jsonl","fisheye_request.json","fisheye_frames.csv"})
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
@@ -119,9 +120,25 @@ def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[s
     if (not current_marker or current_marker.get("owner") != "t265_f407_motion_map" or
             current_marker.get("complete") is not True):
         return []
+    protection=read_json(root/"protected_sessions.json") or {}
+    protected=set(protection.get("sessions",[])) if protection.get("owner")=="t265_f407_motion_map" else set()
+    def owned_children(path, metadata):
+        image_names=set()
+        manifest=path/"fisheye_frames.csv"
+        if metadata.get("fisheye_evidence_enabled") and manifest.is_file() and not manifest.is_symlink():
+            import csv
+            try:
+                with manifest.open() as f:
+                    for i,row in enumerate(csv.DictReader(f)):
+                        if i>=32 or row.get("session_id")!=metadata.get("sdk_session_id"):return False
+                        name=row.get("filename","")
+                        if not re.fullmatch(r"fisheye_b[12]_s[12]_f\d+\.pgm",name):return False
+                        image_names.add(name)
+            except (OSError,ValueError):return False
+        return all(not p.is_symlink() and p.is_file() and (p.name in SESSION_FILES or p.name in image_names) for p in path.iterdir())
     completed = []
     for path in root.iterdir():
-        if (path.is_symlink() or not path.is_dir() or
+        if (path.name in protected or path.is_symlink() or not path.is_dir() or
                 not re.fullmatch(r"\d{8}_\d{6}_interactive(?:_\d+)?", path.name)):
             continue
         marker = read_json(path / "session_complete.json")
@@ -146,8 +163,7 @@ def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[s
                 order = (0, (path / "events.jsonl").stat().st_mtime_ns)
             except (OSError, ValueError, IndexError, AttributeError):
                 continue
-        children = list(path.iterdir())
-        if any(p.is_symlink() or not p.is_file() or p.name not in SESSION_FILES for p in children):
+        if not owned_children(path,metadata):
             continue
         completed.append((order, path))
     # Include current in the five, even if the system wall clock moved backwards.
@@ -156,10 +172,9 @@ def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[s
     removed = []
     for _, path in others[max(0, keep - 1):]:
         # Recheck immediately before deleting, and never recursively remove.
-        children = list(path.iterdir())
-        if any(p.is_symlink() or not p.is_file() or p.name not in SESSION_FILES for p in children):
+        if not owned_children(path,read_json(path/"metadata.json") or {}):
             continue
-        for child in children:
+        for child in path.iterdir():
             child.unlink()
         path.rmdir()
         removed.append(path.name)
@@ -261,6 +276,7 @@ class MotionMapApp:
         self.wheel_input = None
         self.wheel_unsubscribe = None
         self.wheel_sdk_status = None
+        self.fisheye_requests=0
         self.visual_disturbance_active = False
 
     @staticmethod
@@ -320,9 +336,9 @@ class MotionMapApp:
         cv2.line(canvas, (origin[0] - 10, origin[1]), (origin[0] + 10, origin[1]), (70, 70, 70), 2)
         cv2.line(canvas, (origin[0], origin[1] - 10), (origin[0], origin[1] + 10), (70, 70, 70), 2)
         text.add("测试起点 (0,0)", (origin[0] + 30, origin[1] - 28), 15, (70, 70, 70))
-        text.add("T265中心", (ml + 20, mt + size - 28), 15, (20, 150, 245), True)
-        text.add("轮式中心", (ml + 150, mt + size - 28), 15, (220, 80, 220), True)
-        text.add("raw origin", (ml + 280, mt + size - 28), 15, (50, 170, 80), True)
+        text.add("SDK→车中心", (ml + 20, mt + size - 28), 14, (20, 150, 245), True)
+        text.add("轮反馈参考(借用T265航向)", (ml + 170, mt + size - 28), 14, (220, 80, 220), True)
+        text.add("SDK相机中心投影", (ml + 490, mt + size - 28), 14, (50, 170, 80), True)
 
     def draw_path(self, canvas: np.ndarray, points: list[tuple[float, float]], color, width: int) -> None:
         if len(points) >= 2:
@@ -378,9 +394,26 @@ class MotionMapApp:
         cv2.rectangle(canvas, (900, 0), (LOGICAL_WIDTH, LOGICAL_HEIGHT), (26, 27, 30), -1)
         text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
         mode = getattr(self.options, "wheel_input", "off")
-        accepted = (self.wheel_sdk_status or {}).get("sdk_api_success_samples", 0)
-        text.add(f"SDK轮速 {mode} / API成功 {accepted} / 旧协议时钟未合格", (x0, 43), 12,
+        wheel_state=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
+        labels={"NOT_REQUESTED":"未请求注入","REQUESTED_BLOCKED":"已请求/尚未加载","SDK_CONFIG_LOADED":"配置已加载/待合格输入","SDK_API_ACCEPTED":"有SDK API成功样本"}
+        text.add(f"{labels.get(wheel_state.get('state'),'轮速状态待取')} / 成功{wheel_state.get('sdk_api_success_samples',0)}", (x0, 43), 12,
                  (100, 190, 230))
+        age=wheel_state.get("sdk_success_age_ms")
+        text.add(f"SDK API实际接受 {wheel_state.get('sdk_api_rate_hz',0)} Hz(近1s) / 最近成功距今 {age:.1f}ms" if age is not None else "SDK API实际接受 0Hz / 尚无成功样本",(30,932),15,(220,220,220))
+        sample_age=wheel_state.get("last_sample_age_ms")
+        stream=wheel_state.get("stream") or {}
+        stream_label="07/08已订阅" if stream.get("status")==0 and stream.get("enabled")==1 else "07/08未订阅或无回执"
+        text.add((f"输入事件年龄(未合格时仅估计)：{sample_age:.1f}ms" if sample_age is not None else "输入采样时间未知；不能注入")+" / "+stream_label,(30,955),13,(220,220,220))
+        reason_labels={"unqualified_capture_time_or_epoch":"采样时标/epoch未合格",
+            "mcu_clock_drift_bound_unknown":"MCU漂移界未知",
+            "wheel_capture_time_bound_unknown_including_rear_EXTI":"轮反馈采集延迟界未知",
+            "IMU_acquisition_filter_link_to_ISR_delay_unbounded":"IMU采集延迟界未知",
+            "no_matched_clock_exchange":"尚无匹配对时", "boot_epoch_invalid":"boot epoch无效",
+            "stale_or_future_wheel_interval":"轮区间过期或未来时刻"}
+        reason=wheel_state.get("last_input_rejection")
+        missing=wheel_state.get("qualification_missing") or wheel_state.get("clock",{}).get("missing",[])
+        text.add("拒绝/缺项："+reason_labels.get(reason,str(reason))+" / "+','.join(reason_labels.get(r,r) for r in missing),(30,978),12,(100,190,230),max_width=840)
+        text.add("轮反馈诊断参考不是独立真值；实际API成功也不等于实车精度通过",(30,1000),12,(175,175,180))
         running = self.localizer is not None and self.localizer.poll() is None
         service_text = "测试已启用" if self.motion_identity_confirmed() else "仅监听"
         text.add(("定位运行" if running else "定位未运行") + " / " + service_text, (x0, 68), 16,
@@ -398,7 +431,7 @@ class MotionMapApp:
         text.add(f"上向：{up} / {up_text}", (x0, 149), 13, (175, 175, 180))
         pose = self.localization.get("pose", {})
         try:
-            text.add(f"T265中心：{float(pose['x_m']):+.3f} / {float(pose['y_m']):+.3f} m",
+            text.add(f"车中心(C→B)：{float(pose['x_m']):+.3f} / {float(pose['y_m']):+.3f} m",
                      (x0, 180), 17, (20, 170, 245), True)
             text.add(f"T265方向：{float(pose['yaw_deg']):06.2f}°",
                      (x0, 207), 17, (20, 170, 245), True)
@@ -412,13 +445,24 @@ class MotionMapApp:
                      (x0, 240), 16, (220, 80, 220), True)
         except (KeyError, TypeError, ValueError):
             text.add("复算参考：无有效数据", (x0, 240), 16, (180, 130, 180), True)
-        comparison_text = "下位机实测前/左车速：未提供"
+        measured=wheel_state.get("latest_measured")
+        if measured and measured.get("v_body_mps") is not None:
+            v=measured["v_body_mps"]
+            quality="时间合格" if measured.get("capture_time_qualified") else "时间未合格"
+            comparison_text=f"实测F/L {v[0]:+.3f}/{v[1]:+.3f}m/s {quality}"
+            if measured["receive_age_ms"]>50:comparison_text+=" 接收过期"
+        else:comparison_text = "下位机实测前/左车速：未提供"
         text.add(comparison_text,
                  (x0, 266), 16, (0, 205, 220))
         wheel = self.latest_wheel_reference
         text.add(f"raw计数：{wheel['raw_counts']}" if wheel else "raw计数：待收0x15", (x0,292),14,(50,170,80))
-        estimate = (f"上位机复算 F/L={wheel['forward_mps']:+.3f}/{wheel['left_mps']:+.3f}m/s" if
-                    wheel and wheel["valid"] and time.monotonic_ns()-wheel["receive_monotonic_ns"] <= 250_000_000 else "上位机复算 F/L：不可用/过期")
+        if measured and measured.get("host_recomputed_v_body_mps") is not None:
+            v=measured["host_recomputed_v_body_mps"]
+            estimate=f"同区间计数复算F/L {v[0]:+.3f}/{v[1]:+.3f}m/s"
+            if measured["receive_age_ms"]>50:estimate+=" 接收过期"
+        else:
+            estimate = (f"接收区间复算 F/L={wheel['forward_mps']:+.3f}/{wheel['left_mps']:+.3f}m/s" if
+                        wheel and wheel["valid"] and time.monotonic_ns()-wheel["receive_monotonic_ns"] <= 250_000_000 else "上位机复算 F/L：不可用/过期")
         text.add(estimate,(x0,316),14,(50,170,80))
 
         status = self.motion_status
@@ -483,7 +527,7 @@ class MotionMapApp:
         text.add("V/B前后 L/H左右 O/P/0正转 1/2/3反转", (x0, 843), 13, (175, 175, 180))
         text.add("I/K距离±100 ,/.±10 U/J速度 [/]转速", (x0, 865), 13, (175, 175, 180))
         text.add("M记录停稳点；G录入独立实测；Y转向返航", (x0, 887), 13, (175, 175, 180))
-        text.add("组合/能力查询未提供；S停车 R停稳后重设", (x0, 909), 13, (175, 175, 180))
+        text.add("组合未提供；C短录鱼眼(需显式启用)", (x0, 909), 13, (175, 175, 180))
         text.add(f"日志：{self.run_dir.name if self.run_dir else '未启动'}", (x0, 931), 12, (175, 175, 180))
         if self.measurement_buffer is not None:
             text.add(f"测量 f,l,deg: {self.measurement_buffer}_", (x0, 954), 14, (100, 240, 240))
@@ -530,7 +574,7 @@ class MotionMapApp:
 
     def update_data(self) -> None:
         if getattr(self, "wheel_input", None) is not None:
-            self.wheel_input.poll(dict(test_id=self.test_id, host_action_id=self.active_host_action_id,
+            self.wheel_input.set_context(dict(test_id=self.test_id, host_action_id=self.active_host_action_id,
                                        identity_basis="GUI receive-time context; not MCU capture identity"))
             self.wheel_sdk_status = read_json(self.run_dir / "wheel_sdk_status.json")
         if self.localization_json is not None:
@@ -932,7 +976,9 @@ class MotionMapApp:
         wheel_config = write_sdk_config(self.run_dir / "wheel_sdk_config.json", wheel_noise)
         self.wheel_input = WheelInputBridge(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
         self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry)
+        self.wheel_input.start()
         self.bridge.start()
+        if wheel_enabled or getattr(self.options,"timed_measurements",False):self.bridge.start_timed_measurements()
         link=self.bridge.connection_snapshot()
         localizer_log_path = self.run_dir / "localizer.log"
         self.localizer_log = localizer_log_path.open("w", encoding="utf-8")
@@ -949,10 +995,13 @@ class MotionMapApp:
             "--tx-rate", "0",
             "--ignore-encoders",  # UART belongs solely to ChassisTestClient.
             "--debug-fresh-session",
+            "--debug-test-session",sdk_session_id,
 
         ]
         if self.options.serial:
             command += ["--serial", self.options.serial]
+        if getattr(self.options,"fisheye_evidence",False):
+            command += ["--debug-fisheye-output",str(self.run_dir),"--debug-fisheye-request",str(self.run_dir/"fisheye_request.json")]
         if wheel_enabled:
             command += ["--debug-wheel-socket", "@t265-wheel-"+sdk_session_id,
                         "--debug-wheel-config", str(self.run_dir / "wheel_sdk_config.json"),
@@ -968,6 +1017,7 @@ class MotionMapApp:
             "created_local": datetime.now().astimezone().isoformat(timespec="seconds"),
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "mode": "interactive_f405_normaldebug",
+            "session_purpose":"sensor_lifecycle_check_no_motion" if getattr(self.options,"sensor_check_seconds",0) else "interactive_motion_test",
             "zone": self.zone,
             "initial_pose": {"x_m": 0.0, "y_m": 0.0, "yaw_deg": start_pose(self.zone)[2]},
             "source_config": str(self.options.config),
@@ -980,12 +1030,21 @@ class MotionMapApp:
             "enable_pose_jumping_requested": True,
             "pose_source": "t265_sdk_pose_with_camera_offset" if wheel_enabled else "t265_direct_with_camera_offset",
             "sdk_session_id": sdk_session_id,
+            "sdk_owner_pid": self.localizer.pid,
+            "device_boot_epoch": None,
+            "device_restart_note":getattr(self.options,"device_restart_note","not_confirmed"),
+            "clean_device_restart_verified":False,
+            "fisheye_evidence_enabled":getattr(self.options,"fisheye_evidence",False),
             "wheel_input_requested": wheel_enabled,
+            "timed_measurements_requested": wheel_enabled or getattr(self.options,"timed_measurements",False),
+            "wheel_processing": "bounded background worker; no GUI poll dependency; asynchronous logging",
             "wheel_input_time_policy": "qualified_capture_clock_only; legacy_0x15_0x1F_rejected",
             "wheel_input_definition": "v_C^C=R_CB*(v_B^B+omega_B^B cross r_BC^B)",
             "wheel_sdk_config": wheel_config,
             "wheel_noise_basis": f"engineering initial sigma={wheel_noise}m/s, variance={wheel_noise**2}(m/s)^2; not measured calibration; no per-sample covariance",
-            "trajectory_dependency_sources": DEPENDENCIES if wheel_enabled else [],
+            "trajectory_dependency_sources": [],
+            "potential_input_dependency_sources": DEPENDENCIES if wheel_enabled else [],
+            "wheel_dependency_state_at_start": "requested_not_proven" if wheel_enabled else "not_requested",
             "wheel_and_primary_gyro_independent_of_sdk_input": not wheel_enabled,
             "wheel_reference_independent_pose": False,
             "ab_policy": "separate SDK sessions, no live toggle; stopping sends does not remove dependency; clean device restart for strict AB",
@@ -1039,6 +1098,7 @@ class MotionMapApp:
                 "chassis_identity": "chassis_identity.json",
                 "chassis_link": "chassis_link.jsonl",
                 "chassis_extended": "chassis_extended.jsonl",
+                "wheel_measurements":"wheel_measurements.jsonl",
             },
         }
         try:
@@ -1056,6 +1116,7 @@ class MotionMapApp:
         print(f"测试日志目录：{self.run_dir}", flush=True)
 
     def stop_session(self) -> None:
+        wheel_summary=None
         logs_ok = not self.logging_failed and (self.bridge is None or self.bridge.log_error is None)
         localizer_returncode = None
         if self.active_test is not None:
@@ -1092,9 +1153,10 @@ class MotionMapApp:
             self.wheel_unsubscribe()
             self.wheel_unsubscribe = None
         if self.wheel_input is not None:
-            self.record_event("wheel_input_session_summary", dict(self.wheel_input.stats,
-                sdk_status=read_json(self.run_dir / "wheel_sdk_status.json"), accuracy_verified=False))
+            wheel_summary=self.wheel_input.snapshot(read_json(self.run_dir / "wheel_sdk_status.json"))
+            self.record_event("wheel_input_session_summary",dict(wheel_summary,accuracy_verified=False))
             self.wheel_input.close()
+            logs_ok=logs_ok and self.wheel_input.log.healthy()
             self.wheel_input = None
         if self.run_dir is not None:
             csv_path = self.run_dir / "localization_debug.csv"
@@ -1114,9 +1176,12 @@ class MotionMapApp:
                     result["effective_config"] = self.session_config
                     result["accuracy_verified"] = False
                     result["wheel_input_requested"] = getattr(self.options, "wheel_input", "off") == "on"
-                    result["trajectory_dependency_sources"] = DEPENDENCIES if result["wheel_input_requested"] else []
+                    sdk=read_json(self.run_dir / "wheel_sdk_status.json") or {}
+                    result["trajectory_dependency_sources"] = DEPENDENCIES if (sdk.get("sdk_api_success_samples",0)>0 or sdk.get("wheel_dependency_suspect")) else []
+                    result["potential_input_dependency_sources"] = DEPENDENCIES if result["wheel_input_requested"] else []
                     result["wheel_reference_independent_pose"] = False  # Plot uses T265 heading in both modes.
                     result["wheel_sdk_status"] = read_json(self.run_dir / "wheel_sdk_status.json")
+                    result["wheel_input_pipeline"]=wheel_summary
                     result["validation_scope"] = "trajectory diagnostics only; review test_id events and independent ground_truth.jsonl"
                     (self.run_dir / "analysis.json").write_text(
                         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1133,7 +1198,7 @@ class MotionMapApp:
                     "session_index": self.session_index,
                     "accuracy_verified": False}) + "\n", encoding="utf-8")
                 try:
-                    removed = prune_completed_sessions(self.options.output_root, self.run_dir)
+                    removed = [] if getattr(self.options,"no_log_prune",False) else prune_completed_sessions(self.options.output_root, self.run_dir)
                     self.record_event("session_retention", {"keep_complete_sessions": 5, "removed": removed})
                 except OSError as error:
                     self.record_event("session_retention_failed", {"error": str(error)})
@@ -1215,6 +1280,17 @@ class MotionMapApp:
             self.turn_rate_deg_s = min(360,self.turn_rate_deg_s+10)
         elif key in (ord("y"), ord("Y")):
             self.toggle_test("turn_and_return", self.start_return)
+        elif key in (ord("c"),ord("C")):
+            if not getattr(self.options,"fisheye_evidence",False):
+                self.message="本会话未启用鱼眼证据；用 --fisheye-evidence 新开同一调试入口"
+            elif self.fisheye_requests>=2:self.message="本会话2次短录额度已用完"
+            else:
+                self.fisheye_requests+=1
+                request=dict(request_id=self.fisheye_requests,test_id=self.test_id,host_action_id=self.active_host_action_id)
+                path=self.run_dir/"fisheye_request.json";tmp=path.with_suffix(".json.tmp")
+                tmp.write_text(json.dumps(request)+"\n");tmp.replace(path)
+                self.record_event("fisheye_evidence_requested",request)
+                self.message="请求同一SDK进程短录2秒/4Hz鱼眼画面；不是视觉原因已确诊"
         elif key in (ord("f"), ord("F")):
             self.options.fullscreen = not self.options.fullscreen
             cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN,
@@ -1224,6 +1300,13 @@ class MotionMapApp:
     def run(self) -> int:
         try:
             self.start_session()
+            if getattr(self.options,"sensor_check_seconds",0):
+                deadline=time.monotonic()+self.options.sensor_check_seconds
+                while time.monotonic()<deadline:
+                    self.update_data()
+                    if self.localizer.poll() is not None:raise RuntimeError("SDK owner exited during sensor lifecycle check")
+                    time.sleep(.02)
+                return 0
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
             cv2.resizeWindow(WINDOW_NAME, self.screen_width, self.screen_height)
             cv2.imshow(WINDOW_NAME, self.render_screen())
@@ -1253,6 +1336,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--baud", type=int, choices=(115200,230400), default=230400)
     parser.add_argument("--chassis-profile", choices=("auto","legacy","timed"), default="auto")
     parser.add_argument("--check-chassis", action="store_true",help="read-only UART/identity/status check; no T265, GUI or motion")
+    parser.add_argument("--timed-measurements",action="store_true",help="explicitly sync and subscribe measured 07/08 for diagnostics; not injection eligibility")
+    parser.add_argument("--no-log-prune",action="store_true",help="preserve all existing sessions during investigation")
+    parser.add_argument("--fisheye-evidence",action="store_true",help="same SDK owner enables both fisheyes; C records max two 2s/4Hz bursts")
+    parser.add_argument("--device-restart-note",default="not_confirmed",help="operator record of an ACTUAL device restart; never automatically inferred from pipeline start")
+    parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor check (0..8s); no motion commands")
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice, default pure T265; legacy F405 timing cannot pass injection gates")
@@ -1271,7 +1359,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_RUN_ROOT)
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
-    return parser.parse_args()
+    options=parser.parse_args()
+    if not 0<=options.sensor_check_seconds<=8:parser.error("sensor check must be 0..8 seconds")
+    return options
 
 
 def main() -> int:
