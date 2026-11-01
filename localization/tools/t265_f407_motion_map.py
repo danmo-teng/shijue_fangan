@@ -415,7 +415,7 @@ class MotionMapApp:
         text.add("拒绝/缺项："+reason_labels.get(reason,str(reason))+" / "+','.join(reason_labels.get(r,r) for r in missing),(30,978),12,(100,190,230),max_width=840)
         text.add("轮反馈诊断参考不是独立真值；实际API成功也不等于实车精度通过",(30,1000),12,(175,175,180))
         running = self.localizer is not None and self.localizer.poll() is None
-        service_text = "测试已启用" if self.motion_identity_confirmed() else "仅监听"
+        service_text = "身份已确认" if self.motion_identity_confirmed() else "仅监听"
         text.add(("定位运行" if running else "定位未运行") + " / " + service_text, (x0, 68), 16,
                  (50, 220, 65) if running else (50, 80, 230), True)
         if self.bridge is not None:
@@ -745,14 +745,14 @@ class MotionMapApp:
 
     def reset_reference(self) -> None:
         if not self.motion_identity_confirmed():
-            self.message = "先确认实际F405运动测试服务及固件"
+            self.record_blocked_request("reset_reference",self.motion_identity_problem())
             return
         self._submit_action(lambda:self.bridge.reset_reference(stationary_confirmed=True),
                             "操作者确认停稳后重建下位机Location参考；不重置T265或原始gyro")
 
     def toggle_test(self, name: str, action) -> None:
         if not self.motion_identity_confirmed():
-            self.message = "仅监听：需确认NormalDebug/MOTIONDEBUG；已知固件须与合同相符"
+            self.record_blocked_request(name,self.motion_identity_problem())
             return
         if self.active_test == name:
             self.record_event(f"{name}_end_manual")
@@ -761,7 +761,7 @@ class MotionMapApp:
             self.send_stop("实验按钮再次点击，中止当前动作")
             return
         if self.bridge is not None and (self.bridge.pending is not None or self.bridge.needs_stop_ack):
-            self.message = "请先结束当前动作；需要取消时STOP并等待匹配回执"
+            self.record_blocked_request(name,"请先结束当前动作；需要取消时STOP并等待匹配回执")
             return
         self.active_test = name
         self.return_phase = None
@@ -770,6 +770,17 @@ class MotionMapApp:
         self.active_test_parameters = {"name":name,"distance_mm":self.distance_mm,"speed_mm_s":self.speed_mm_s}
         self.record_event(f"{name}_start")
         action()
+
+    def record_blocked_request(self, name: str, reason: str) -> None:
+        self.message="未发送："+reason
+        self.record_event("chassis_request_not_sent",dict(requested_test=name,reason=reason,
+            distance_mm=self.distance_mm,speed_mm_s=self.speed_mm_s,rate_deg_s=self.turn_rate_deg_s,
+            uart_motion_write_attempted=False))
+
+    def motion_identity_problem(self) -> str:
+        if self.bridge is not None and self.bridge.serial is not None:
+            return self.bridge.control_identity_problem() or "身份检查未通过"
+        return "需确认实际F405 NormalDebug/MOTIONDEBUG服务及已审查固件"
 
     def motion_identity_confirmed(self) -> bool:
         if self.bridge is not None and self.bridge.serial is not None:
@@ -1302,10 +1313,17 @@ class MotionMapApp:
             self.start_session()
             if getattr(self.options,"sensor_check_seconds",0):
                 deadline=time.monotonic()+self.options.sensor_check_seconds
+                frames=0
                 while time.monotonic()<deadline:
                     self.update_data()
+                    # Exercise the existing map renderer without opening a
+                    # clickable window or accepting any automatic actions.
+                    self.render_screen();frames+=1
                     if self.localizer.poll() is not None:raise RuntimeError("SDK owner exited during sensor lifecycle check")
                     time.sleep(.02)
+                self.record_event("sensor_render_check_complete",dict(rendered_frames=frames,
+                    duration_s=self.options.sensor_check_seconds,motion_commands_sent=0,
+                    chassis_link=self.bridge.connection_snapshot(),measurement_stream=self.bridge.measurement_snapshot()))
                 return 0
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
             cv2.resizeWindow(WINDOW_NAME, self.screen_width, self.screen_height)
@@ -1340,7 +1358,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--no-log-prune",action="store_true",help="preserve all existing sessions during investigation")
     parser.add_argument("--fisheye-evidence",action="store_true",help="same SDK owner enables both fisheyes; C records max two 2s/4Hz bursts")
     parser.add_argument("--device-restart-note",default="not_confirmed",help="operator record of an ACTUAL device restart; never automatically inferred from pipeline start")
-    parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor check (0..8s); no motion commands")
+    parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor/map-render check (0..60s); no motion commands")
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice, default pure T265; legacy F405 timing cannot pass injection gates")
@@ -1360,7 +1378,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
-    if not 0<=options.sensor_check_seconds<=8:parser.error("sensor check must be 0..8 seconds")
+    if not 0<=options.sensor_check_seconds<=60:parser.error("sensor check must be 0..60 seconds")
     return options
 
 

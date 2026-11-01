@@ -102,6 +102,7 @@ def check_connection(options, root):
     if wheel:complete=complete and wheel.log.healthy()
     complete=complete and client.log_error is None
     result["stream_active_after_close"]=client.timed_stream_active
+    result["chassis_link_after_close"]=client.connection_snapshot()
     result["measurement_stream_after_close"]=client.measurement_snapshot()
     metadata["stream_subscription_sent"]=client.timed_enable_writes>0
     metadata["stream_subscription_enable_packets_written"]=client.timed_enable_writes

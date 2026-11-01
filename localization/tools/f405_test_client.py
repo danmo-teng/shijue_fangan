@@ -39,6 +39,15 @@ TIMED_IMPLEMENTATION_COMMIT = "43fa6ab456ff26f2cc5661d2b3934efbf482fb45"
 # f81e9ef changes only exported docs/artifacts, not compiled control/transport
 # sources. Rebuilding there legitimately embeds that Git revision (actual board).
 TIMED_COMMITS = (TIMED_IMPLEMENTATION_COMMIT, "cd26448d624b56ede38fa665564687c439bc2bdf", TIMED_DOCUMENT_COMMIT)
+TIMED_V11_IMPLEMENTATION_COMMIT = "512038d2cfe83653d1c3036ad003fc23117df344"
+TIMED_V11_DOCUMENT_COMMIT = "3f61b7ac38bcad0e2e43e13688e548892b974965"
+TIMED_V11_COMMITS = (TIMED_V11_IMPLEMENTATION_COMMIT,TIMED_V11_DOCUMENT_COMMIT,
+                     "11eeacfda71f419834ff78401faf1a0d35a3831e")
+# Reviewed v1.1 adds quality pages and clock-fault validity, preserving all
+# existing control/telemetry layouts. Bind each source revision to its version.
+TIMED_REVIEWED_VERSIONS = {**{sha:(1,0) for sha in TIMED_COMMITS},
+                          **{sha:(1,1) for sha in TIMED_V11_COMMITS}}
+TIMED_COMMITS = tuple(TIMED_REVIEWED_VERSIONS)
 IDENTITY_TIMEOUT_NS = 6_000_000_000
 
 
@@ -157,10 +166,11 @@ class ChassisTestClient:
     def capabilities(self):
         if self.device_identity is not None:
             d=self.device_identity; bits=d["capabilities"]
-            return dict(source="nonce_correlated_device_identity_reply",document_commit=TIMED_DOCUMENT_COMMIT,
+            return dict(source="nonce_correlated_device_identity_reply",
+                document_commit=TIMED_V11_DOCUMENT_COMMIT if (d["protocol_major"],d["protocol_minor"])==(1,1) else TIMED_DOCUMENT_COMMIT,
                 actual_firmware_commit=d["git_commit"],wire_protocol_version=[d["protocol_major"],d["protocol_minor"]],
                 move_body=bool(bits&64),turn_ccw=bool(bits&64),stop=bool(bits&64),reset_reference=bool(bits&64),
-                move_spin_angle=False,capability_query=bool(bits&1),versioned_body_velocity=bool(bits&8),
+                move_spin_angle=False,capability_query=bool(bits&1),quality_query_available=bool(bits&1024),versioned_body_velocity=bool(bits&8),
                 boot_epoch=d["epoch_valid"],reference_epoch=bool(bits&256),strict_stale_ack_exclusion=False,
                 capture_time_qualified=False,sdk_time_qualified=False)
         return {"source":"pinned_source_contract_not_device_query", "document_commit":DOCUMENT_COMMIT,
@@ -189,6 +199,13 @@ class ChassisTestClient:
                 raise RuntimeError("chassis UART is not connected for identity query")
             for q in self.identity_queries.values():
                 if q["request_type"]==kind:return q["event"]
+            # Set the next attempt BEFORE logging/writing: a failed request must
+            # not be retried on every UART/GUI poll or flood its diagnostic log.
+            attempt=time.monotonic_ns()
+            if kind==timed.ID_REQ:self.next_identity_query_ns=attempt+2_000_000_000
+            if kind==timed.SYNC_REQ:self.next_sync_ns=attempt+500_000_000
+            if kind==timed.CONFIG_REQ:self.next_config_ns=attempt+2_000_000_000
+            if self.log_error:raise RuntimeError("identity log unavailable: "+self.log_error)
             nonce=secrets.randbits(64)
             seq=self.next_query_sequence;self.next_query_sequence=(seq+1)&65535
             packet=timed.request(kind,nonce,seq,enable=enable)
@@ -224,12 +241,19 @@ class ChassisTestClient:
             return event
 
     def _identity_problem(self, d):
-        if (d["board"],d["mode"],d["service"],d["protocol_major"],d["protocol_minor"]) != (405,5,1,1,0):
-            return "device board/mode/service/protocol is not audited F405 NormalDebug MOTIONDEBUG v1.0"
+        if (d["board"],d["mode"],d["service"]) != (405,5,1):
+            return "device board/mode/service is not F405 NormalDebug MOTIONDEBUG"
+        version=(d["protocol_major"],d["protocol_minor"])
+        if version not in ((1,0),(1,1)):
+            return f"device protocol {version[0]}.{version[1]} is not reviewed (supported 1.0/1.1)"
         if d["uart_baud"]!=self.baud or not d["capabilities"]&64 or d["max_payload"]!=160:
             return "device UART configuration or legacy compatibility does not match this client"
         if d["git_commit"] not in TIMED_COMMITS:
             return "device firmware is outside the reviewed timed implementation; audit its contract before motion"
+        if TIMED_REVIEWED_VERSIONS[d["git_commit"]]!=version:
+            return "device protocol version differs from the reviewed firmware revision"
+        if version==(1,1) and not d["capabilities"]&1024:
+            return "reviewed v1.1 firmware is missing its quality-query capability"
         if self.asserted_firmware not in ("","unknown","unconfirmed") and not d["git_commit"].startswith(self.asserted_firmware):
             return "operator firmware assertion differs from actual device reply"
         return None
@@ -247,7 +271,8 @@ class ChassisTestClient:
             if not q or q["reply_type"]!=d["type"] or q["sequence"]!=d["sequence"] or not q["sent_ns"]<=receive_ns<=q["deadline_ns"]:
                 self.client_stats["unmatched_extended"]+=1;return
             self.identity_queries.pop(d["nonce"])
-            d["epoch_valid"]=(d["epoch_fault"]==0 and bool(d["clock_flags"]&2) and d["boot_epoch"]!="00"*16)
+            clock_ok=(d["protocol_major"],d["protocol_minor"])!=(1,1) or bool(d["clock_flags"]&1)
+            d["epoch_valid"]=(d["epoch_fault"]==0 and bool(d["clock_flags"]&2) and clock_ok and d["boot_epoch"]!="00"*16)
             previous=self.device_identity
             if previous and (previous["boot_epoch"],previous["firmware_id"],previous["git_commit"]) != (d["boot_epoch"],d["firmware_id"],d["git_commit"]):
                 had_action=self.pending is not None
@@ -306,6 +331,7 @@ class ChassisTestClient:
             return dict(requested=self.timed_requested,stream_active=self.timed_stream_active,
                         have_matched_sync=self.have_sync_exchange,error=self.timed_error,
                         enable_packets_written=self.timed_enable_writes,disable_packets_written=self.timed_disable_writes,
+                        logging_statistics=self.async_log.statistics() if self.async_log else None,
                         capture_time_qualified=False,logging_healthy=self.async_log.healthy() if self.async_log else self.log_error is None)
 
     def control_identity_problem(self, now_ns=None):
@@ -324,6 +350,7 @@ class ChassisTestClient:
     def connection_snapshot(self):
         with self.lock:
             d=copy.deepcopy(self.device_identity)
+            v11=d is not None and (d["protocol_major"],d["protocol_minor"])==(1,1)
             return dict(baud=self.baud,identity_policy=self.identity_policy,
                 motion_identity_ready=self.control_identity_problem() is None,
                 reason=self.control_identity_problem(),identity=d,
@@ -332,8 +359,8 @@ class ChassisTestClient:
                 actual_lower_service="MOTIONDEBUG" if d and d["service"]==1 else "unconfirmed",
                 firmware_identity_reported_by_uart=d is not None,cryptographically_attested=False,
                 mcu_boot_epoch=d["boot_epoch"] if d and d["epoch_valid"] else None,
-                contract_document_commit=TIMED_DOCUMENT_COMMIT if d or self.require_device_identity else DOCUMENT_COMMIT,
-                expected_lower_firmware=TIMED_IMPLEMENTATION_COMMIT if self.require_device_identity else IMPLEMENTATION_COMMIT,
+                contract_document_commit=TIMED_V11_DOCUMENT_COMMIT if v11 else TIMED_DOCUMENT_COMMIT if d or self.require_device_identity else DOCUMENT_COMMIT,
+                expected_lower_firmware=TIMED_V11_IMPLEMENTATION_COMMIT if v11 else TIMED_IMPLEMENTATION_COMMIT if self.require_device_identity else IMPLEMENTATION_COMMIT,
                 capture_time_qualified=False,sdk_time_qualified=False,stats=dict(self.mixed.stats,**self.client_stats))
 
     def move_spin_angle(self, speed_mm_s, direction_deg, turn_deg, max_rate_dps):

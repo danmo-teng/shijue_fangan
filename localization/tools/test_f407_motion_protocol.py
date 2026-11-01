@@ -287,6 +287,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_timed_v11_logging_recovery()
     test_timed_measurement_pipeline()
     test_timed_f405_client()
     test_lidar_yaw_diagnostic()
@@ -806,6 +807,69 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+
+def test_timed_v11_logging_recovery():
+    """Only the reported version/logging/button failures; no real UART or USB."""
+    import threading
+    from unittest.mock import patch
+    from async_debug_log import AsyncDebugLog
+    from f405_test_client import ChassisTestClient,TIMED_V11_COMMITS
+    from t265_f407_motion_map import MotionMapApp
+    import f405_timed_protocol as wire
+    examples=json.loads((Path(__file__).with_name('contracts')/'f405_timed_examples_20261031.json').read_text())['examples']
+    payload=bytearray(wire.parse(bytes.fromhex(next(e['hex'] for e in examples if e['name']=='c_module_host_fixture_type_2')))['payload'])
+    class Memory:
+        def __init__(self):self.written=[]
+        def write(self,p):self.written.append(p);return len(p)
+        def close(self):pass
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);c=ChassisTestClient('FAKE',230400,root/'s.json',root/'s.jsonl',identity_policy='timed')
+        c.serial=Memory();now=[10_000_000_000]
+        with patch('f405_test_client.time.monotonic_ns',side_effect=lambda:now[0]):
+            for sha in TIMED_V11_COMMITS:
+                c._request_identity();req=wire.parse(c.serial.written[-1])
+                p=bytearray(payload);p[:8]=req['payload'];p[43]=1;p[30:38]=(2047).to_bytes(8,'big');p[114:134]=bytes.fromhex(sha)
+                now[0]+=1_000_000;c.feed(wire.packet(wire.ID_REPLY,req['sequence'],p),now[0])
+                assert c.control_identity_problem() is None
+                assert c.connection_snapshot()['actual_lower_firmware']==sha and not c.capabilities()['sdk_time_qualified']
+            identity=dict(c.device_identity)
+            assert c._identity_problem(dict(identity,protocol_minor=0))
+            assert c._identity_problem(dict(identity,protocol_minor=2))
+            assert c._identity_problem(dict(identity,git_commit='ff'*20))
+            assert c._identity_problem(dict(identity,capabilities=1023))
+            # A real clock-fault flag blocks source-time qualification, not the
+            # independently compatible legacy control interface.
+            c._request_identity();req=wire.parse(c.serial.written[-1]);p[:8]=req['payload'];p[8:10]=(2).to_bytes(2,'big')
+            now[0]+=1_000_000;c.feed(wire.packet(wire.ID_REPLY,req['sequence'],p),now[0])
+            assert not c.device_identity['epoch_valid'] and c.control_identity_problem() is None
+            c.device_identity['protocol_minor']=2;c.identity_error=c._identity_problem(c.device_identity)
+            app=MotionMapApp.__new__(MotionMapApp);app.bridge=c
+            app.distance_mm=1000;app.speed_mm_s=300;app.turn_rate_deg_s=60;events=[]
+            app.record_event=lambda event,details:events.append((event,details))
+            before=len(c.serial.written)
+            app.toggle_test('forward',lambda:(_ for _ in ()).throw(AssertionError('blocked action executed')))
+            assert events[-1][0]=='chassis_request_not_sent' and '2' in events[-1][1]['reason']
+            assert not events[-1][1]['uart_motion_write_attempted'] and len(c.serial.written)==before
+            # Logging failure must not create an identity-request retry storm.
+            c.log_error='fixture log failure';c.next_identity_query_ns=0
+            for _ in range(1000):c.poll(now[0])
+            assert c.next_identity_query_ns>now[0] and len(c.serial.written)==before
+            c.close()
+    # Preserve every raw record and timestamp; coalesce only latest-value UI
+    # snapshots while a slow writer is held. Same bounded queue capacity.
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);gate=threading.Event();original=AsyncDebugLog._run
+        def paused(logger):gate.wait(1);original(logger)
+        with patch.object(AsyncDebugLog,'_run',paused):logger=AsyncDebugLog(root)
+        for i in range(100):
+            assert logger.submit('raw.jsonl',dict(timestamp_monotonic_ns=i))
+            assert logger.submit('status.json',dict(timestamp_monotonic_ns=i),atomic=True)
+        gate.set();logger.close()
+        assert logger.healthy() and logger.statistics()['history_records_written']==100
+        assert logger.statistics()['snapshots_coalesced']==99 and logger.statistics()['snapshot_writes']==1
+        assert [json.loads(line)['timestamp_monotonic_ns'] for line in (root/'raw.jsonl').read_text().splitlines()]==list(range(100))
+        assert json.loads((root/'status.json').read_text())['timestamp_monotonic_ns']==99
 
 
 def test_timed_measurement_pipeline():
