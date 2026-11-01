@@ -1,6 +1,7 @@
-"""Single-owner F405 NormalDebug test client, contract a54ee465 / firmware 14157e6.
+"""Single-owner F405 NormalDebug client; legacy + audited timed v1 transport.
 
-No import-time I/O, capability probes, wheel injection or motion on start/close.
+No import-time I/O, wheel injection or motion on start/close. Timed startup and
+periodic health checks send ONLY the documented read-only identity request.
 Host identities and receive-time estimates are NEVER MCU epochs/capture ticks.
 Subscribers reuse this instance; a second process must not open the chassis UART.
 """
@@ -15,8 +16,10 @@ import secrets
 import threading
 import time
 import uuid
+import struct
 
 import serial
+import f405_timed_protocol as timed
 
 from f407_motion_protocol import (
     StreamParser, move_body_frame, turn_ccw_frame, motion_stop_frame,
@@ -30,6 +33,19 @@ DOCUMENT_COMMIT = "a54ee465bf6ac7c35dc6236c61ee580e71fbcfc0"
 CONTRACT_PATH = Path(__file__).with_name("contracts") / "f405_normaldebug_20261030.json"
 CONTRACT = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
 STATUS_TIMEOUT_NS = 1_000_000_000
+TIMED_DOCUMENT_COMMIT = "f81e9ef9a33981d8453eafe9574572e87dea90c6"
+TIMED_IMPLEMENTATION_COMMIT = "43fa6ab456ff26f2cc5661d2b3934efbf482fb45"
+# f81e9ef changes only exported docs/artifacts, not compiled control/transport
+# sources. Rebuilding there legitimately embeds that Git revision (actual board).
+TIMED_COMMITS = (TIMED_IMPLEMENTATION_COMMIT, "cd26448d624b56ede38fa665564687c439bc2bdf", TIMED_DOCUMENT_COMMIT)
+IDENTITY_TIMEOUT_NS = 6_000_000_000
+
+
+def firmware_compatible(value):
+    value = value.strip().lower()
+    return value in ("", "unknown", "unconfirmed") or (7 <= len(value) <= 40 and
+        all(c in "0123456789abcdef" for c in value) and
+        any(commit.startswith(value) for commit in (IMPLEMENTATION_COMMIT, *TIMED_COMMITS)))
 
 
 class UnsupportedCapability(NotImplementedError):
@@ -83,10 +99,16 @@ class WheelReference:
 
 class ChassisTestClient:
     def __init__(self, device: str, baud: int, status_path: Path,
-                 status_log_path: Path, *, identity_confirmed=False, serial_factory=serial.Serial):
+                 status_log_path: Path, *, identity_confirmed=False, serial_factory=serial.Serial,
+                 identity_policy="auto", asserted_firmware="unconfirmed"):
         self.device, self.baud = device, baud
-        if baud != CONTRACT["transport"]["baud"]:
-            raise ValueError("audited F405 contract requires 115200 baud")
+        if baud not in (115200,230400):
+            raise ValueError("audited F405 link supports 115200 or 230400 baud")
+        if identity_policy not in ("auto","legacy","timed") or (identity_policy=="legacy" and baud!=115200):
+            raise ValueError("legacy profile requires 115200; timed profile uses a read-only identity handshake")
+        self.require_device_identity = identity_policy=="timed" or baud==230400
+        self.identity_policy = identity_policy
+        self.asserted_firmware = asserted_firmware.strip().lower()
         self.status_path, self.status_log_path = status_path, status_log_path
         self.identity_confirmed = identity_confirmed
         self.serial_factory = serial_factory
@@ -110,24 +132,153 @@ class ChassisTestClient:
         self.latest_imu = None
         self.latest_wheel = None
         self.latest_wheel_reference = None
+        self.device_identity = None
+        self.identity_received_ns = 0
+        self.identity_error = "waiting for read-only device identity" if self.require_device_identity else None
+        self.identity_queries = {}
+        self.next_query_sequence = secrets.randbelow(65536)
+        self.next_identity_query_ns = 0
         self.wheel_reference = WheelReference()
         self.wheel_increments = deque(maxlen=256)
         self.subscribers = []
         self.batch_odometry = []
         self.client_stats = dict(unmatched_status=0, repeated_status=0, retired_status=0,
-                                 subscriber_errors=0, reference_queue_overflow=0)
+                                 subscriber_errors=0, reference_queue_overflow=0,
+                                 identity_queries=0, identity_timeouts=0, unmatched_extended=0)
         self.parser = StreamParser(on_odom=self._on_odom, on_imu=self._on_imu,
                                    on_motion_status=self._on_status)
+        self.mixed = timed.MixedStream(lambda raw,ns:self.parser.feed(raw,receive_ns=ns),self._on_extended)
 
     def capabilities(self):
+        if self.device_identity is not None:
+            d=self.device_identity; bits=d["capabilities"]
+            return dict(source="nonce_correlated_device_identity_reply",document_commit=TIMED_DOCUMENT_COMMIT,
+                actual_firmware_commit=d["git_commit"],wire_protocol_version=[d["protocol_major"],d["protocol_minor"]],
+                move_body=bool(bits&64),turn_ccw=bool(bits&64),stop=bool(bits&64),reset_reference=bool(bits&64),
+                move_spin_angle=False,capability_query=bool(bits&1),versioned_body_velocity=bool(bits&8),
+                boot_epoch=d["epoch_valid"],reference_epoch=bool(bits&256),strict_stale_ack_exclusion=False,
+                capture_time_qualified=False,sdk_time_qualified=False)
         return {"source":"pinned_source_contract_not_device_query", "document_commit":DOCUMENT_COMMIT,
             "expected_implementation_commit":IMPLEMENTATION_COMMIT, "wire_protocol_version":None,
             "move_body":True, "turn_ccw":True, "stop":True, "reset_reference":True,
             "move_spin_angle":False, "capability_query":False, "versioned_body_velocity":False,
             "boot_epoch":False, "reference_epoch":False, "strict_stale_ack_exclusion":False}
 
-    def query_capabilities(self):
-        raise UnsupportedCapability("UART4 capability query is not implemented; use capabilities() for the pinned source manifest")
+    def query_capabilities(self, timeout_s=1.0):
+        """Read-only v1 identity query. No stream subscription or clock promotion."""
+        event=self._request_identity()
+        if not event.wait(timeout_s):
+            raise RuntimeError(f"no identity reply at {self.baud}; check firmware preset/baud and legacy 0x1A")
+        if getattr(event,"identity_reply",None) is None:
+            raise RuntimeError(f"read-only identity query failed/timed out at {self.baud}; previous replies are not this query's result")
+        if self.identity_error:
+            raise RuntimeError(self.identity_error)
+        return self.capabilities()
+
+    def _request_identity(self):
+        with self.lock:
+            if self.serial is None or self.stop_event.is_set():
+                raise RuntimeError("chassis UART is not connected for identity query")
+            if self.identity_queries:
+                return next(iter(self.identity_queries.values()))["event"]
+            nonce=secrets.randbits(64)
+            seq=self.next_query_sequence;self.next_query_sequence=(seq+1)&65535
+            packet=timed.request(timed.ID_REQ,nonce,seq)
+            event=threading.Event()
+            event.identity_reply=None
+            self._log("chassis_link.jsonl",dict(event="identity_request",nonce=nonce,sequence=seq,
+                packet_hex=packet.hex(),baud=self.baud,read_only=True))
+            if self.log_error:raise RuntimeError("identity log unavailable: "+self.log_error)
+            before=time.monotonic_ns()
+            self.identity_queries[nonce]=dict(sequence=seq,event=event,sent_ns=before,deadline_ns=before+1_000_000_000)
+            self.next_identity_query_ns=before+2_000_000_000
+            self.client_stats["identity_queries"]+=1
+            try:
+                if self.serial.write(packet)!=len(packet):raise RuntimeError("partial read-only identity write")
+                self._log("chassis_link.jsonl",dict(event="identity_request_written",nonce=nonce,sequence=seq,
+                    write_before_monotonic_ns=before,write_after_monotonic_ns=time.monotonic_ns(),read_only=True))
+            except (OSError,RuntimeError) as error:
+                self.identity_queries.pop(nonce,None);self.identity_error=str(error);event.set()
+                self._log("chassis_link.jsonl",dict(event="identity_write_failed",error=str(error)))
+            return event
+
+    def _identity_problem(self, d):
+        if (d["board"],d["mode"],d["service"],d["protocol_major"],d["protocol_minor"]) != (405,5,1,1,0):
+            return "device board/mode/service/protocol is not audited F405 NormalDebug MOTIONDEBUG v1.0"
+        if d["uart_baud"]!=self.baud or not d["capabilities"]&64 or d["max_payload"]!=160:
+            return "device UART configuration or legacy compatibility does not match this client"
+        if d["git_commit"] not in TIMED_COMMITS:
+            return "device firmware is outside the reviewed timed implementation; audit its contract before motion"
+        if self.asserted_firmware not in ("","unknown","unconfirmed") and not d["git_commit"].startswith(self.asserted_firmware):
+            return "operator firmware assertion differs from actual device reply"
+        return None
+
+    def _on_extended(self, raw, receive_ns):
+        try:d=timed.decode(raw)
+        except (ValueError,struct.error):
+            self.mixed.stats["mixed_malformed"]+=1;return
+        d.update(receive_monotonic_ns=receive_ns,capture_time_qualified=False,sdk_time_qualified=False)
+        # Raw timestamps are MCU events. Unknown uncertainty FFFFFFFF remains
+        # unknown, never converted into a qualified host capture timestamp.
+        self._log("chassis_extended.jsonl",d)
+        if d["type"]==timed.ID_REPLY:
+            q=self.identity_queries.get(d["nonce"])
+            if not q or q["sequence"]!=d["sequence"] or not q["sent_ns"]<=receive_ns<=q["deadline_ns"]:
+                self.client_stats["unmatched_extended"]+=1;return
+            self.identity_queries.pop(d["nonce"])
+            d["epoch_valid"]=(d["epoch_fault"]==0 and bool(d["clock_flags"]&2) and d["boot_epoch"]!="00"*16)
+            previous=self.device_identity
+            if previous and (previous["boot_epoch"],previous["firmware_id"],previous["git_commit"]) != (d["boot_epoch"],d["firmware_id"],d["git_commit"]):
+                had_action=self.pending is not None
+                self._finish("unknown_device_restart_or_image_change_no_replay",receive_ns)
+                self.needs_stop_ack=self.needs_stop_ack or had_action
+                self.latest_status=None;self.wheel_reference.previous=None;self.wheel_increments.clear()
+                self._publish("device_identity_changed",dict(previous_boot_epoch=previous["boot_epoch"],new_boot_epoch=d["boot_epoch"]))
+            self.device_identity=d;self.identity_received_ns=receive_ns
+            self.identity_error=self._identity_problem(d)
+            self._log("chassis_link.jsonl",dict(event="identity_reply",identity=d,compatibility_error=self.identity_error,
+                round_trip_ns=receive_ns-q["sent_ns"],clock_mapping_qualified=False))
+            try:
+                path=self.status_path.parent/"chassis_identity.json"
+                temporary=path.with_suffix(".json.tmp")
+                temporary.write_text(json.dumps(d,ensure_ascii=False)+"\n",encoding="utf-8");temporary.replace(path)
+            except OSError as error:self.log_error=str(error)
+            q["event"].identity_reply=copy.deepcopy(d)
+            q["event"].set()
+        elif d["type"] in (timed.WHEEL,timed.GYRO):
+            self._publish("timed_wheel_diagnostic" if d["type"]==timed.WHEEL else "timed_gyro_diagnostic",d)
+        elif d["type"]==timed.ERROR_REPLY:
+            q=self.identity_queries.get(d.get("nonce"))
+            if q and q["sequence"]==d["sequence"] and d["request_type"]==timed.ID_REQ:
+                self.identity_queries.pop(d["nonce"]);self.identity_error="device rejected identity request";q["event"].set()
+
+    def control_identity_problem(self, now_ns=None):
+        now=time.monotonic_ns() if now_ns is None else now_ns
+        with self.lock:
+            if self.device_identity is not None:
+                if self.identity_error:return self.identity_error
+                if not 0<=now-self.identity_received_ns<=IDENTITY_TIMEOUT_NS:return "device identity query is stale; wait for a fresh read-only reply"
+                return None
+            if self.require_device_identity:
+                return f"no validated identity at {self.baud}; check NormalDebugTimed=230400 / legacy=115200, valid frames and read-only query"
+            if not self.identity_confirmed or not firmware_compatible(self.asserted_firmware):
+                return "confirm actual F405 NormalDebug MOTIONDEBUG legacy profile before motion"
+            return None
+
+    def connection_snapshot(self):
+        with self.lock:
+            d=copy.deepcopy(self.device_identity)
+            return dict(baud=self.baud,identity_policy=self.identity_policy,
+                motion_identity_ready=self.control_identity_problem() is None,
+                reason=self.control_identity_problem(),identity=d,
+                actual_lower_firmware=d["git_commit"] if d else "unconfirmed",
+                actual_lower_mode="NormalDebug" if d and d["mode"]==5 else "unconfirmed",
+                actual_lower_service="MOTIONDEBUG" if d and d["service"]==1 else "unconfirmed",
+                firmware_identity_reported_by_uart=d is not None,cryptographically_attested=False,
+                mcu_boot_epoch=d["boot_epoch"] if d and d["epoch_valid"] else None,
+                contract_document_commit=TIMED_DOCUMENT_COMMIT if d or self.require_device_identity else DOCUMENT_COMMIT,
+                expected_lower_firmware=TIMED_IMPLEMENTATION_COMMIT if self.require_device_identity else IMPLEMENTATION_COMMIT,
+                capture_time_qualified=False,sdk_time_qualified=False,stats=dict(self.mixed.stats,**self.client_stats))
 
     def move_spin_angle(self, speed_mm_s, direction_deg, turn_deg, max_rate_dps):
         raise UnsupportedCapability("move_spin_angle has no UART4 request/ACK contract; no packet sent")
@@ -181,10 +332,19 @@ class ChassisTestClient:
     def poll(self, now_ns=None):
         now_ns = time.monotonic_ns() if now_ns is None else now_ns
         with self.lock:
+            self.mixed.expire(now_ns)
+            for nonce,q in list(self.identity_queries.items()):
+                if now_ns>q["deadline_ns"]:
+                    self.identity_queries.pop(nonce);self.client_stats["identity_timeouts"]+=1
+                    self._log("chassis_link.jsonl",dict(event="identity_timeout",baud=self.baud,nonce=nonce))
+                    q["event"].set()
             if self.pending and (now_ns > self.pending["deadline_ns"] or
                     now_ns-self.pending["last_matching_ns"] > STATUS_TIMEOUT_NS):
                 self._finish("unknown_timeout_no_motion_replayed", now_ns)
                 self.needs_stop_ack = True  # Recoverable by a user-requested matching STOPPED.
+            if self.require_device_identity and self.serial is not None and not self.stop_event.is_set() and now_ns>=self.next_identity_query_ns:
+                try:self._request_identity()
+                except (OSError,RuntimeError) as error:self.identity_error=str(error)
 
     def _on_status(self, sample):
         now = sample["timestamp_monotonic_ns"]
@@ -236,7 +396,7 @@ class ChassisTestClient:
         """Same receiver used by live UART and offline/PTY checks; never writes."""
         with self.lock:
             self.batch_odometry = []
-            self.parser.feed(data, receive_ns=receive_ns)
+            self.mixed.feed(data, receive_ns)
             if self.batch_odometry:
                 reset = any(s["status"] != 7 for s in self.batch_odometry)
                 if reset and self.wheel_reference.previous is not None:
@@ -264,6 +424,11 @@ class ChassisTestClient:
             raise
         self.thread = threading.Thread(target=self._read_loop, name="f405-test-uart-owner",daemon=True)
         self.thread.start()
+        if self.require_device_identity:
+            # Read-only handshake; failure leaves the map listening with a clear
+            # reason, never sends STOP/move/reset or enables the new high-rate flow.
+            try:self.query_capabilities(timeout_s=1.1)
+            except RuntimeError as error:self.identity_error=str(error)
 
     def _read_loop(self):
         while not self.stop_event.is_set():
@@ -294,8 +459,8 @@ class ChassisTestClient:
             if name != "stop":
                 if self.link_failed:
                     raise RuntimeError("receive link failed; start a deliberate new client session, without replay")
-                if not self.identity_confirmed:
-                    raise RuntimeError("confirm actual F405 NormalDebug MOTIONDEBUG service and firmware before motion")
+                identity_problem=self.control_identity_problem(now)
+                if identity_problem:raise RuntimeError(identity_problem)
                 if self.pending is not None or self.needs_stop_ack:
                     raise RuntimeError("wait for this action, or request STOP and await matching STOPPED first")
                 if self.latest_status is None or not 0 <= now-self.latest_status["timestamp_monotonic_ns"] <= STATUS_TIMEOUT_NS:
@@ -325,6 +490,7 @@ class ChassisTestClient:
                 opcode=packet[4], name=name, parameters=parameters, packet_hex=packet.hex(),
                 sent_ns=now, last_matching_ns=now, deadline_ns=now+int(timeout_s*1e9),
                 host_reference_epoch=self.host_reference_epoch, mcu_epoch=None,
+                observed_boot_epoch_at_send=self.connection_snapshot()["mcu_boot_epoch"],
                 running_seen=False, stale_reply_exclusion_guaranteed=False)
             self.pending = action
             if name == "stop":
@@ -364,7 +530,9 @@ class ChassisTestClient:
 
     def status_snapshot(self):
         with self.lock:
-            return copy.deepcopy(self.latest_status), dict(self.parser.stats,**self.client_stats)
+            stats=dict(self.parser.stats,**self.mixed.stats,**self.client_stats)
+            stats["crc_errors"]+=self.mixed.stats["mixed_crc_errors"]
+            return copy.deepcopy(self.latest_status), stats
 
     def imu_snapshot(self):
         with self.lock:

@@ -1,0 +1,789 @@
+{
+  "schema_revision": 1,
+  "firmware_implementation_commit": "43fa6ab456ff26f2cc5661d2b3934efbf482fb45",
+  "preserved_ancestor": "a54ee465bf6ac7c35dc6236c61ee580e71fbcfc0",
+  "upper_baseline": "278370a",
+  "scope": "F405 motion debug only; formal task, old controls, legacy 0x15/0x1f unchanged",
+  "hardware_verified": false,
+  "flashed_this_run": false,
+  "sdk_time_qualified": false,
+  "builds": {
+    "default": {
+      "preset": "NormalDebug",
+      "baud": 115200,
+      "stream_boot_default": false,
+      "high_rate_enable_result": "BANDWIDTH status4"
+    },
+    "timed": {
+      "preset": "NormalDebugTimed",
+      "baud": 230400,
+      "mode": 5,
+      "service": 1,
+      "stream_boot_default": false
+    }
+  },
+  "envelope": {
+    "magic_hex": "D4 4D",
+    "version": 1,
+    "type_offset": 3,
+    "length_be_u16_offset": 4,
+    "sequence_be_u16_offset": 6,
+    "header_bytes": 8,
+    "payload_offset": 8,
+    "crc_algorithm": "CRC-16/MODBUS init ffff poly a001",
+    "crc_input": "bytes[2:8+payload_length]",
+    "crc_wire_order": "little",
+    "tail_hex": "E4",
+    "overhead_bytes": 11,
+    "max_tx_payload": 160,
+    "max_rx_frame_bytes": 64,
+    "fragmentation": false,
+    "rx_partial_timeout_us": 20000
+  },
+  "types": {
+    "0x01": {
+      "name": "identity_request",
+      "payload_bytes": 8
+    },
+    "0x02": {
+      "name": "identity_reply",
+      "payload_bytes": 137
+    },
+    "0x03": {
+      "name": "sync_request",
+      "payload_bytes": 8
+    },
+    "0x04": {
+      "name": "sync_reply",
+      "payload_bytes": 46
+    },
+    "0x05": {
+      "name": "configure_request",
+      "payload_bytes": 12
+    },
+    "0x06": {
+      "name": "configure_reply",
+      "payload_bytes": 48
+    },
+    "0x07": {
+      "name": "wheel",
+      "payload_bytes": 84,
+      "frequency_hz": 50
+    },
+    "0x08": {
+      "name": "gyro",
+      "payload_bytes": 84,
+      "frequency_hz": 100
+    },
+    "0x09": {
+      "name": "stats_request",
+      "payload_bytes": 8
+    },
+    "0x0A": {
+      "name": "stats_reply",
+      "payload_bytes": 132
+    },
+    "0x7F": {
+      "name": "error_reply",
+      "payload_bytes": 12
+    }
+  },
+  "endian": "all fields BE except CRC LE",
+  "fields": {
+    "identity_request": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "client correlation nonce, unique for outstanding requests"
+      }
+    ],
+    "identity_reply": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "echo"
+      },
+      {
+        "name": "epoch_fault",
+        "type": "u16",
+        "offset": 8,
+        "bytes": 2,
+        "meaning": "0 RNG epoch available; 1 unavailable"
+      },
+      {
+        "name": "boot_epoch",
+        "type": "opaque",
+        "offset": 10,
+        "bytes": 16,
+        "meaning": "MCU hardware RNG, stable during boot"
+      },
+      {
+        "name": "reference_epoch",
+        "type": "u32",
+        "offset": 26,
+        "bytes": 4,
+        "meaning": "Location reference generation"
+      },
+      {
+        "name": "capabilities",
+        "type": "u64",
+        "offset": 30,
+        "bytes": 8,
+        "meaning": "presence bits, not time qualification"
+      },
+      {
+        "name": "board",
+        "type": "u16",
+        "offset": 38,
+        "bytes": 2,
+        "meaning": "compiled board mapping identifier, 405"
+      },
+      {
+        "name": "mode",
+        "type": "u8",
+        "offset": 40,
+        "bytes": 1,
+        "meaning": "APP_ACTIVE_MODE=5"
+      },
+      {
+        "name": "service",
+        "type": "u8",
+        "offset": 41,
+        "bytes": 1,
+        "meaning": "1=MOTIONDEBUG"
+      },
+      {
+        "name": "protocol_major",
+        "type": "u8",
+        "offset": 42,
+        "bytes": 1,
+        "meaning": "1"
+      },
+      {
+        "name": "protocol_minor",
+        "type": "u8",
+        "offset": 43,
+        "bytes": 1,
+        "meaning": "0"
+      },
+      {
+        "name": "tick_hz",
+        "type": "u32",
+        "offset": 44,
+        "bytes": 4,
+        "meaning": "nominal 1000000"
+      },
+      {
+        "name": "uart_baud",
+        "type": "u32",
+        "offset": 48,
+        "bytes": 4,
+        "meaning": "actual running UART4 configuration"
+      },
+      {
+        "name": "clock_flags",
+        "type": "u32",
+        "offset": 52,
+        "bytes": 4,
+        "meaning": "bit0 configured TIM5; bit1 epoch valid"
+      },
+      {
+        "name": "drift_bound_ppm",
+        "type": "u32",
+        "offset": 56,
+        "bytes": 4,
+        "meaning": "0xffffffff unknown"
+      },
+      {
+        "name": "mcu_uid",
+        "type": "opaque",
+        "offset": 60,
+        "bytes": 12,
+        "meaning": "three hardware UID words, each BE"
+      },
+      {
+        "name": "device_idcode",
+        "type": "u32",
+        "offset": 72,
+        "bytes": 4,
+        "meaning": "runtime DBGMCU IDCODE; family does not uniquely identify board SKU"
+      },
+      {
+        "name": "cpu_id",
+        "type": "u32",
+        "offset": 76,
+        "bytes": 4,
+        "meaning": "runtime SCB CPUID"
+      },
+      {
+        "name": "flash_kib",
+        "type": "u16",
+        "offset": 80,
+        "bytes": 2,
+        "meaning": "runtime flash size register"
+      },
+      {
+        "name": "firmware_id",
+        "type": "opaque",
+        "offset": 82,
+        "bytes": 32,
+        "meaning": "image-embedded SHA256 build-input/config fingerprint, not an ELF self hash"
+      },
+      {
+        "name": "git_commit",
+        "type": "opaque",
+        "offset": 114,
+        "bytes": 20,
+        "meaning": "Git revision embedded when building"
+      },
+      {
+        "name": "source_dirty",
+        "type": "u8",
+        "offset": 134,
+        "bytes": 1,
+        "meaning": "tracked source diff at build"
+      },
+      {
+        "name": "max_payload",
+        "type": "u16",
+        "offset": 135,
+        "bytes": 2,
+        "meaning": "160 MCU TX payload limit; MCU RX total frame limit is 64"
+      }
+    ],
+    "sync_reply": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "echo"
+      },
+      {
+        "name": "boot_epoch",
+        "type": "opaque",
+        "offset": 8,
+        "bytes": 16,
+        "meaning": "boot identity"
+      },
+      {
+        "name": "receive_event_us",
+        "type": "u64",
+        "offset": 24,
+        "bytes": 8,
+        "meaning": "MCU handles last request byte from DMA parse, before main CRC validation"
+      },
+      {
+        "name": "response_prepare_us",
+        "type": "u64",
+        "offset": 32,
+        "bytes": 8,
+        "meaning": "main prepares response timestamp; before CRC build/enqueue, not first UART bit"
+      },
+      {
+        "name": "tick_resolution_us",
+        "type": "u32",
+        "offset": 40,
+        "bytes": 4,
+        "meaning": "1, resolution only, not source uncertainty"
+      },
+      {
+        "name": "epoch_valid",
+        "type": "u16",
+        "offset": 44,
+        "bytes": 2,
+        "meaning": "1 hardware RNG epoch valid"
+      }
+    ],
+    "configure_request": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "echo"
+      },
+      {
+        "name": "enabled",
+        "type": "u8",
+        "offset": 8,
+        "bytes": 1,
+        "meaning": "0 stop new stream, 1 enable"
+      },
+      {
+        "name": "profile",
+        "type": "u8",
+        "offset": 9,
+        "bytes": 1,
+        "meaning": "1 only"
+      },
+      {
+        "name": "reserved",
+        "type": "opaque",
+        "offset": 10,
+        "bytes": 2,
+        "meaning": "must be zero"
+      }
+    ],
+    "configure_reply": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "echo"
+      },
+      {
+        "name": "boot_epoch",
+        "type": "opaque",
+        "offset": 8,
+        "bytes": 16,
+        "meaning": "boot identity"
+      },
+      {
+        "name": "reference_epoch",
+        "type": "u32",
+        "offset": 24,
+        "bytes": 4,
+        "meaning": "Location reference generation"
+      },
+      {
+        "name": "status",
+        "type": "u16",
+        "offset": 28,
+        "bytes": 2,
+        "meaning": "0 OK,4 bandwidth,5 invalid profile"
+      },
+      {
+        "name": "profile",
+        "type": "u8",
+        "offset": 30,
+        "bytes": 1,
+        "meaning": "1"
+      },
+      {
+        "name": "enabled",
+        "type": "u8",
+        "offset": 31,
+        "bytes": 1,
+        "meaning": "resulting state"
+      },
+      {
+        "name": "uart_baud",
+        "type": "u32",
+        "offset": 32,
+        "bytes": 4,
+        "meaning": "actual"
+      },
+      {
+        "name": "wheel_period_us",
+        "type": "u32",
+        "offset": 36,
+        "bytes": 4,
+        "meaning": "20000 nominal"
+      },
+      {
+        "name": "gyro_period_us",
+        "type": "u32",
+        "offset": 40,
+        "bytes": 4,
+        "meaning": "10000 nominal"
+      },
+      {
+        "name": "required_baud",
+        "type": "u32",
+        "offset": 44,
+        "bytes": 4,
+        "meaning": "230400 minimum"
+      }
+    ],
+    "wheel": [
+      {
+        "name": "boot_epoch",
+        "type": "opaque",
+        "offset": 0,
+        "bytes": 16,
+        "meaning": "boot identity"
+      },
+      {
+        "name": "reference_epoch",
+        "type": "u32",
+        "offset": 16,
+        "bytes": 4,
+        "meaning": "reference generation at interval end"
+      },
+      {
+        "name": "measurement_id",
+        "type": "u32",
+        "offset": 20,
+        "bytes": 4,
+        "meaning": "real two-interval encoder feedback record ID; wraps modulo 2^32"
+      },
+      {
+        "name": "t0_us",
+        "type": "u64",
+        "offset": 24,
+        "bytes": 8,
+        "meaning": "previous encoder capture-bracket midpoint"
+      },
+      {
+        "name": "t1_us",
+        "type": "u64",
+        "offset": 32,
+        "bytes": 8,
+        "meaning": "current capture-bracket midpoint"
+      },
+      {
+        "name": "forward_um_s",
+        "type": "i32",
+        "offset": 40,
+        "bytes": 4,
+        "meaning": "rotation-center body X velocity, 1e-6 m/s; INT32_MIN invalid"
+      },
+      {
+        "name": "left_um_s",
+        "type": "i32",
+        "offset": 44,
+        "bytes": 4,
+        "meaning": "rotation-center body Y velocity, 1e-6 m/s; INT32_MIN invalid"
+      },
+      {
+        "name": "raw1_u32",
+        "type": "u32",
+        "offset": 48,
+        "bytes": 4,
+        "meaning": "right front unmodified cumulative count low32"
+      },
+      {
+        "name": "raw2_u32",
+        "type": "u32",
+        "offset": 52,
+        "bytes": 4,
+        "meaning": "left front low32"
+      },
+      {
+        "name": "raw3_u32",
+        "type": "u32",
+        "offset": 56,
+        "bytes": 4,
+        "meaning": "rear low32"
+      },
+      {
+        "name": "delta1",
+        "type": "i32",
+        "offset": 60,
+        "bytes": 4,
+        "meaning": "raw unmodified count increment for this exact interval"
+      },
+      {
+        "name": "delta2",
+        "type": "i32",
+        "offset": 64,
+        "bytes": 4,
+        "meaning": "same"
+      },
+      {
+        "name": "delta3",
+        "type": "i32",
+        "offset": 68,
+        "bytes": 4,
+        "meaning": "same"
+      },
+      {
+        "name": "flags",
+        "type": "u32",
+        "offset": 72,
+        "bytes": 4,
+        "meaning": "feedback health; VALID does not imply source-time qualification or no slip"
+      },
+      {
+        "name": "source_uncertainty_us",
+        "type": "u32",
+        "offset": 76,
+        "bytes": 4,
+        "meaning": "0xffffffff unknown, rear software edge latency unbounded"
+      },
+      {
+        "name": "capture_window_us",
+        "type": "u32",
+        "offset": 80,
+        "bytes": 4,
+        "meaning": "maximum observed CPU read-bracket width in interval, not total sensor timing bound"
+      }
+    ],
+    "gyro": [
+      {
+        "name": "boot_epoch",
+        "type": "opaque",
+        "offset": 0,
+        "bytes": 16,
+        "meaning": "boot identity"
+      },
+      {
+        "name": "reference_epoch",
+        "type": "u32",
+        "offset": 16,
+        "bytes": 4,
+        "meaning": "Location reference generation; raw yaw not reset"
+      },
+      {
+        "name": "publication_id",
+        "type": "u32",
+        "offset": 20,
+        "bytes": 4,
+        "meaning": "publish attempt ID, not source sample ID"
+      },
+      {
+        "name": "yaw_mdeg",
+        "type": "i64",
+        "offset": 24,
+        "bytes": 8,
+        "meaning": "native CCW-positive cumulative yaw, 0.001 deg"
+      },
+      {
+        "name": "yaw_receive_us",
+        "type": "u64",
+        "offset": 32,
+        "bytes": 8,
+        "meaning": "MCU ISR last-byte processing time, NOT acquisition time"
+      },
+      {
+        "name": "yaw_source_id",
+        "type": "u32",
+        "offset": 40,
+        "bytes": 4,
+        "meaning": "MCU valid angle-message counter, NOT vendor sensor ID"
+      },
+      {
+        "name": "yaw_flags",
+        "type": "u32",
+        "offset": 44,
+        "bytes": 4,
+        "meaning": "source health/new/repeat and receive-time semantics"
+      },
+      {
+        "name": "yaw_uncertainty_us",
+        "type": "u32",
+        "offset": 48,
+        "bytes": 4,
+        "meaning": "0xffffffff unknown source-time bound"
+      },
+      {
+        "name": "rate_mdps",
+        "type": "i32",
+        "offset": 52,
+        "bytes": 4,
+        "meaning": "native CCW-positive Z angular rate, 0.001 deg/s"
+      },
+      {
+        "name": "rate_receive_us",
+        "type": "u64",
+        "offset": 56,
+        "bytes": 8,
+        "meaning": "own MCU ISR last-byte processing time"
+      },
+      {
+        "name": "rate_source_id",
+        "type": "u32",
+        "offset": 64,
+        "bytes": 4,
+        "meaning": "MCU valid rate-message counter"
+      },
+      {
+        "name": "rate_flags",
+        "type": "u32",
+        "offset": 68,
+        "bytes": 4,
+        "meaning": "independent flags; heading uncertainty applies only to yaw"
+      },
+      {
+        "name": "rate_uncertainty_us",
+        "type": "u32",
+        "offset": 72,
+        "bytes": 4,
+        "meaning": "0xffffffff unknown source-time bound"
+      },
+      {
+        "name": "publish_us",
+        "type": "u64",
+        "offset": 76,
+        "bytes": 8,
+        "meaning": "main snapshot publication event, before CRC/enqueue, not physical TX"
+      }
+    ],
+    "stats_reply": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "echo"
+      },
+      {
+        "name": "boot_epoch",
+        "type": "opaque",
+        "offset": 8,
+        "bytes": 16,
+        "meaning": "identity"
+      },
+      {
+        "name": "reference_epoch",
+        "type": "u32",
+        "offset": 24,
+        "bytes": 4,
+        "meaning": "reference generation"
+      },
+      {
+        "name": "snapshot_us",
+        "type": "u64",
+        "offset": 28,
+        "bytes": 8,
+        "meaning": "snapshot creation"
+      },
+      {
+        "name": "counters",
+        "type": "u32[24]",
+        "offset": 36,
+        "bytes": 96,
+        "meaning": "ordered counters in validation JSON / Python STATS_NAMES"
+      }
+    ],
+    "error_reply": [
+      {
+        "name": "nonce",
+        "type": "u64",
+        "offset": 0,
+        "bytes": 8,
+        "meaning": "echo if request has >=8 payload bytes, otherwise 0"
+      },
+      {
+        "name": "status",
+        "type": "u16",
+        "offset": 8,
+        "bytes": 2,
+        "meaning": "1 bad version,2 unsupported type,3 bad length"
+      },
+      {
+        "name": "request_type",
+        "type": "u8",
+        "offset": 10,
+        "bytes": 1,
+        "meaning": "request kind"
+      },
+      {
+        "name": "supported_version",
+        "type": "u8",
+        "offset": 11,
+        "bytes": 1,
+        "meaning": "1"
+      }
+    ]
+  },
+  "capabilities": {
+    "identity_query": 1,
+    "synchronization": 2,
+    "stream_configure": 4,
+    "body_center_wheel_feedback": 8,
+    "gyro_receive_timestamps": 16,
+    "statistics": 32,
+    "legacy_compatible": 64,
+    "mcu_rng_boot_epoch": 128,
+    "reference_epoch": 256,
+    "image_build_identity": 512
+  },
+  "wheel_flags": {
+    "VALID_FEEDBACK": 1,
+    "TIME_BOUND_KNOWN": 2,
+    "EXTI_PENDING": 4,
+    "INVALID_TRANSITION": 8,
+    "INVALID_INTERVAL": 16,
+    "NUMERIC_CLIPPED": 32,
+    "SAMPLING_GAP": 64,
+    "SLIP_UNKNOWN": 128,
+    "EPOCH_INVALID": 256,
+    "NO_NEW_FEEDBACK": 512,
+    "REFERENCE_CROSSED": 1024
+  },
+  "gyro_flags": {
+    "VALID_VALUE": 1,
+    "READY": 2,
+    "RECOVERING": 4,
+    "UNCERTAIN": 8,
+    "STALE": 16,
+    "SATURATED": 32,
+    "NEW": 64,
+    "REPEAT": 128,
+    "MCU_RECEIVE_EVENT": 256,
+    "SOURCE_TIME_UNBOUNDED": 512,
+    "EPOCH_INVALID": 1024
+  },
+  "time": {
+    "clock": "dedicated TIM5 1MHz; 32bit CNT plus overflow IRQ high32",
+    "wire_bits": 64,
+    "unit": "us",
+    "low32_wrap_us": 4294967296,
+    "atomic_read": "PRIMASK with pending UIF compensation",
+    "clock_drift_bound_ppm": null,
+    "boot_epoch": "MCU RNG128; probabilistic uniqueness under RNG assumptions, errors invalidate epoch; no RDK UUID or persistent counter",
+    "reference_epoch": "u32 modulo2^32 on Location_ResetReference only; no raw wheel/yaw clearing",
+    "wheel_time": "CPU capture-bracket midpoint for counter latches, not physical edge timestamp",
+    "gyro_time": "ISR handles final byte from UART5 data register; own yaw/rate messages",
+    "imu_sample_tick_available": false,
+    "source_time_uncertainty_unknown_sentinel": 4294967295,
+    "host_mapping": "causal interval using unique nonce, t1 host write-before, t2 MCU receive event, t3 MCU prepare event, t4 host validated-receive-after; drift remains unbounded"
+  },
+  "feedback": {
+    "origin": "body rotation center B",
+    "axes": "X forward, Y left; gyro CCW positive",
+    "units": "wheel velocity um/s; yaw mdeg i64; rate mdps i32",
+    "wheel_order": [
+      "right front",
+      "left front",
+      "rear"
+    ],
+    "raw_signs_to_feedback": [
+      -1,
+      -1,
+      -1
+    ],
+    "counts_per_wheel_rev": 1061.268,
+    "wheel_diameter_m": 0.07,
+    "interval_average": true,
+    "nominal_interval_us": 20000,
+    "max_valid_interval_us": 50000,
+    "filter": "none",
+    "camera_extrinsics_applied": false,
+    "field_135deg_offset_applied": false
+  },
+  "queuing": {
+    "same_kind_unsent_timed_samples": "coalesce latest, visible counter",
+    "timed_unsent_expiry_us": 8000,
+    "active_tx": "never preempt mid-frame",
+    "tx": "UART4 DMA1 Stream4 Channel4 in F405 debug only",
+    "uart4_baud_change": "compile preset only, never automatic runtime switch",
+    "new_frame_sequence": "telemetry global u16 counter; replies echo request u16 sequence; nonce and epoch are stronger identifiers"
+  },
+  "limitations": [
+    "no guaranteed IMU acquisition-to-receive upper bound",
+    "rear EXTI edge-to-counter latency not bounded",
+    "MCU/HSE clock drift not calibrated",
+    "no physical no-slip proof",
+    "no SDK invocation or new-board latency measurements",
+    "old action SEQ remains 8bit with cross-boot stale ACK limitation",
+    "no combination-motion online interface"
+  ],
+  "source_links": {
+    "protocol": "Main/Src/DebugTelemetry.c",
+    "clock": "Main/Src/DebugClock.c",
+    "encoder_capture": "Boards/F405/Src/encoder_f405.c",
+    "gyro_receive": "Main/Src/imu_uart.c",
+    "uart_dma_queue": "Main/Src/Uart.c",
+    "build_identity": "cmake/DebugBuildIdentity.cmake",
+    "reference_codec": "tools/f405_timed_protocol.py"
+  },
+  "st_reference": "https://www.st.com/resource/en/reference_manual/rm0090-stm32f407-advanced-armbased-32bit-mcus-stmicroelectronics.pdf"
+}

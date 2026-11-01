@@ -287,6 +287,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_timed_f405_client()
     test_lidar_yaw_diagnostic()
     test_official_wheel_input()
     # Payloads match F407 4071c71 vision.c and t265_map/scan_protocol.hpp.
@@ -578,7 +579,7 @@ def test_f405_client():
             move=c.move_body(500,0,400)
             assert transport.written[-1] == encoders["move_body_forward_500mm_400mm_s"]()
             assert move["mcu_epoch"] is None and not move["stale_reply_exclusion_guaranteed"]
-            for method in (c.query_capabilities,lambda:c.move_spin_angle(100,0,90,60),lambda:c.turn_ccw(90)):
+            for method in (lambda:c.move_spin_angle(100,0,90,60),lambda:c.turn_ccw(90)):
                 count=len(transport.written)
                 try: method();assert False,"unsupported or concurrent request sent"
                 except (UnsupportedCapability,RuntimeError):pass
@@ -674,6 +675,136 @@ def test_f405_client():
             assert not select.select([master],[],[],.02)[0], "closing the client transmitted bytes"
         finally:
             owner.close();second.close();os.close(master);os.close(slave)
+
+
+def test_timed_f405_client():
+    """Audited v1 vectors + fragmented mixed input + fake/PTY device identity.
+    No real board, motor, T265, subscription or time calibration in this test.
+    """
+    import struct
+    from unittest.mock import patch
+    import f405_timed_protocol as timed
+    from f405_test_client import ChassisTestClient, TIMED_IMPLEMENTATION_COMMIT, TIMED_DOCUMENT_COMMIT
+    fixtures=json.loads((Path(__file__).with_name("contracts")/"f405_timed_examples_20261031.json").read_text())
+    for example in fixtures["examples"]:
+        if "decoded" in example and "expected_rejection" not in example["decoded"]:
+            assert timed.decode(bytes.fromhex(example["hex"]))==example["decoded"],example["name"]
+    base=next(bytes.fromhex(e["hex"]) for e in fixtures["examples"] if e["name"]=="c_module_host_fixture_type_2")
+    def identity_response(request, *, baud=230400, epoch=1, service=1, nonce_delta=0, sequence_delta=0, commit=TIMED_IMPLEMENTATION_COMMIT):
+        req=timed.parse(request);p=bytearray(timed.parse(base)["payload"])
+        p[:8]=(int.from_bytes(req["payload"][:8],"big")+nonce_delta).to_bytes(8,"big")
+        p[10:26]=bytes([epoch])*16;p[41]=service
+        p[48:52]=baud.to_bytes(4,"big");p[114:134]=bytes.fromhex(commit)
+        # Payload magics must NOT become independent legacy/extended packets.
+        p[60:64]=bytes.fromhex("a3b3d44d")
+        return timed.packet(timed.ID_REPLY,(req["sequence"]+sequence_delta)%65536,p)
+    legacy=inbound(MSG_ODOM,17,bytes.fromhex("d4 4d a3 b3 00 00 0a 07"))
+    request=timed.request(timed.ID_REQ,123,9)
+    extended=identity_response(request)
+    seen=[];mux=timed.MixedStream(lambda raw,ns:seen.append(("legacy",raw)),lambda raw,ns:seen.append(("extended",raw)))
+    stream=b"noise"+legacy+extended+legacy
+    for i,b in enumerate(stream):mux.feed(bytes([b]),1_000_000_000+i*1000)
+    assert seen==[("legacy",legacy),("extended",extended),("legacy",legacy)]
+    bad=bytearray(extended);bad[-2]^=1
+    mux.feed(bytes(bad)+legacy,1_001_000_000)
+    assert seen[-1]==("legacy",legacy) and mux.stats["mixed_crc_errors"]>=1
+    class MemorySerial:
+        def __init__(self):self.written=[]
+        def write(self,p):self.written.append(p);return len(p)
+        def close(self):pass
+    def status(seq,command_seq=0,opcode=0,state=0):
+        return inbound(MSG_MOTION_STATUS,seq,bytes([command_seq,state,0,opcode])+bytes(4))
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);c=ChassisTestClient("MEMORY",230400,root/"status.json",root/"status.jsonl",
+            identity_confirmed=True,identity_policy="timed")
+        uart=MemorySerial();c.serial=uart;clock=[10_000_000_000];published=[];c.telemetry(published.append)
+        with patch("f405_test_client.time.monotonic_ns",side_effect=lambda:clock[0]):
+            c.feed(status(1),clock[0])
+            req=uart.written[-1];assert timed.parse(req)["type"]==timed.ID_REQ
+            try:c.turn_ccw(90);assert False,"operator profile bypassed device identity"
+            except RuntimeError:pass
+            assert all(p[:2]==timed.MAGIC for p in uart.written)
+            clock[0]+=1_000_000
+            c.feed(identity_response(req,nonce_delta=1),clock[0]);assert c.device_identity is None
+            c.feed(identity_response(req,sequence_delta=1),clock[0]);assert c.device_identity is None
+            c.feed(identity_response(req),clock[0]);assert c.control_identity_problem() is None
+            assert c.connection_snapshot()["actual_lower_firmware"]==TIMED_IMPLEMENTATION_COMMIT
+            assert not c.capabilities()["sdk_time_qualified"]
+            turn=c.turn_ccw(90,60)
+            assert uart.written[-1][6:8]==(-900).to_bytes(2,"big",signed=True)
+            assert turn["observed_boot_epoch_at_send"]=="01"*16 and turn["mcu_epoch"] is None
+            clock[0]+=10_000_000
+            c.feed(status(2,turn["wire_sequence"],2,2),clock[0])
+            assert c.pending is None
+            gyro=next(e for e in fixtures["examples"] if e["name"]=="gyro_ccw")
+            c.feed(bytes.fromhex(gyro["hex"]),clock[0])
+            event=published[-1]
+            assert event["kind"]=="timed_gyro_diagnostic" and event["sample"]["capture_time_qualified"] is False
+            assert event["sample"]["rate_uncertainty_us"]==0xffffffff
+            assert not any(e["kind"]=="measured_body_velocity" for e in published)
+            # A changed boot cancels correlation, never automatically replays motion.
+            turn=c.turn_ccw(-90,30)
+            c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
+            c.feed(identity_response(req,epoch=2),clock[0])
+            assert c.pending is None and c.needs_stop_ack
+            assert c.latest_status is None and c.last_action["outcome"].startswith("unknown_device_restart")
+            c.feed(status(1),clock[0])
+            stop=c.stop();clock[0]+=1_000_000
+            c.feed(status(2,stop["wire_sequence"],0,4),clock[0]);assert not c.needs_stop_ack
+            clock[0]+=7_000_000_000
+            assert c.control_identity_problem() is not None
+            c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
+            c.feed(identity_response(req,epoch=2,service=2),clock[0]);assert c.control_identity_problem() is not None
+            c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
+            c.feed(identity_response(req,epoch=2),clock[0]);assert c.control_identity_problem() is None
+            c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
+            c.feed(identity_response(req,epoch=2,commit=TIMED_DOCUMENT_COMMIT),clock[0])
+            assert c.control_identity_problem() is None  # Reviewed doc-only rebuild, actually reported Git preserved.
+            assert c.connection_snapshot()["actual_lower_firmware"]==TIMED_DOCUMENT_COMMIT
+            c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
+            c.feed(identity_response(req,epoch=2,commit="ff"*20),clock[0])
+            assert c.control_identity_problem() is not None  # Unknown firmware is not blindly permitted.
+            before=len(uart.written);c.close();assert len(uart.written)==before
+            assert all(timed.parse(p)["type"]==timed.ID_REQ for p in uart.written if p[:2]==timed.MAGIC)
+    # Real serial thread and nonce handshake against one local PTY, not hardware.
+    import os,select,threading,serial
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);master,slave=os.openpty();stop=threading.Event();received=[]
+        def fake_board():
+            buffer=bytearray();counter=0;last_status=0
+            while not stop.is_set():
+                if select.select([master],[],[],.01)[0]:
+                    buffer.extend(os.read(master,4096))
+                    while len(buffer)>=8:
+                        size=int.from_bytes(buffer[4:6],"big")+11
+                        if len(buffer)<size:break
+                        raw=bytes(buffer[:size]);del buffer[:size];received.append(raw)
+                        assert timed.parse(raw)["type"]==timed.ID_REQ
+                        os.write(master,identity_response(raw))
+                if time.monotonic()-last_status>.05:
+                    counter=(counter+1)%256;os.write(master,status(counter));last_status=time.monotonic()
+        worker=threading.Thread(target=fake_board,daemon=True);worker.start()
+        client=ChassisTestClient(os.ttyname(slave),230400,root/"status.json",root/"status.jsonl",identity_policy="timed")
+        try:
+            client.start();assert client.control_identity_problem() is None
+            assert client.connection_snapshot()["identity"]["uart_baud"]==230400
+            assert client.status_snapshot()[0] is not None and received
+            before=len(received);client.close();time.sleep(.03);assert len(received)==before
+        finally:
+            stop.set();worker.join(timeout=1);client.close();os.close(master);os.close(slave)
+    # The new read-only check uses its own five-session retention, never T265
+    # history. Exercise deletion only in an owned temporary root.
+    from f405_connection_check import prune, OWNER as CHECK_OWNER
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);sessions=[]
+        for i in range(8):
+            p=root/f"20261101_00000{i}_check";p.mkdir();sessions.append(p)
+            (p/"metadata.json").write_text(json.dumps(dict(owner=CHECK_OWNER)))
+            (p/"session_complete.json").write_text(json.dumps(dict(owner=CHECK_OWNER,complete=True,session_index=i)))
+        (sessions[0]/"用户测量.txt").write_text("preserve")
+        (sessions[1]/"session_complete.json").unlink()
+        assert prune(root,sessions[-1])==[sessions[2].name]
+        assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
 
 
 if __name__ == "__main__":

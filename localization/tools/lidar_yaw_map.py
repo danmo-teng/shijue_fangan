@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import serial
 
-from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT
+from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from f407_motion_protocol import turn_ccw_frame
 from lidar_yaw_debug.diagnostic import DiagnosticState, load_config
 from lidar_yaw_debug.crop import split_samples
@@ -41,7 +41,7 @@ OWNER = "lidar_yaw_map"
 SESSION_FILES = frozenset({"metadata.json","config.json","events.jsonl","scans.jsonl","results.jsonl",
     "lidar_rx.jsonl","lidar_tx.jsonl","f407_motion_status.json","f407_motion_status.jsonl",
     "uart_rx.jsonl","chassis_telemetry.jsonl","imu_telemetry.jsonl","chassis_actions.jsonl",
-    "analysis.json","session_complete.json"})
+    "analysis.json","session_complete.json","chassis_link.jsonl","chassis_extended.jsonl","chassis_identity.json"})
 
 
 def prune_completed_sessions(root, current):
@@ -121,7 +121,7 @@ class LidarYawApp:
 
     def telemetry(self, event):
         # Subscriber never performs serial I/O or expensive geometry.
-        if event["kind"] not in ("imu","raw_wheel_counts"): return
+        if event["kind"] not in ("imu","raw_wheel_counts","device_identity_changed"): return
         try: self.inbox.put_nowait(event)
         except queue.Full: self.overflow = True
 
@@ -140,9 +140,12 @@ class LidarYawApp:
         while not self.inbox.empty():
             event = self.inbox.get_nowait()
             if event["kind"]=="imu": self.state.yaw.ingest(event["sample"])
-            else:
+            elif event["kind"]=="raw_wheel_counts":
                 self.last_raw_wheel = event["sample"]
                 self.state.note_wheels(event["sample"])
+            else:
+                self.state.yaw.invalidate("DEVICE_IDENTITY_CHANGED_RECHECK_FIELD_REFERENCE")
+                self.state.wheels.clear();self.state.static_review=None
         if self.state.yaw.revision!=revision:
             self.state.static_review = None
             self.state.static_history.clear()
@@ -183,11 +186,11 @@ class LidarYawApp:
             except (OSError,ValueError): pass
         self.session_index=max(indices,default=0)+1
         (self.run_dir/"config.json").write_text(json.dumps(self.config,ensure_ascii=False,indent=2)+"\n")
-        self.client = ChassisTestClient(o.chassis,115200,self.run_dir/"f407_motion_status.json",
+        self.client = ChassisTestClient(o.chassis,getattr(o,"chassis_baud",115200),self.run_dir/"f407_motion_status.json",
             self.run_dir/"f407_motion_status.jsonl",identity_confirmed=(
                 o.actual_lower_mode=="NormalDebug" and o.actual_lower_service=="MOTIONDEBUG" and
-                (o.actual_lower_firmware=="unconfirmed" or
-                 (len(o.actual_lower_firmware)>=7 and IMPLEMENTATION_COMMIT.startswith(o.actual_lower_firmware)))))
+                firmware_compatible(o.actual_lower_firmware)),identity_policy=getattr(o,"chassis_profile","auto"),
+                asserted_firmware=o.actual_lower_firmware)
         self.unsubscribe=self.client.telemetry(self.telemetry)
         metadata=dict(owner=OWNER,mode="independent_static_rotation_diagnostic",session_id=uuid.uuid4().hex,
             timestamp_monotonic_ns=time.monotonic_ns(),
@@ -204,6 +207,18 @@ class LidarYawApp:
             no_competition_output=True,no_t265_process=True,control_pose_published=False)
         (self.run_dir/"metadata.json").write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+"\n")
         self.client.start()
+        link=self.client.connection_snapshot()
+        metadata["chassis_link"]=link
+        metadata["chassis_baud"]=link["baud"]
+        metadata["operator_lower_profile"]=dict(mode=o.actual_lower_mode,service=o.actual_lower_service,firmware=o.actual_lower_firmware)
+        metadata["contract_document_commit"]=link["contract_document_commit"]
+        metadata["expected_lower_firmware"]=link["expected_lower_firmware"]
+        if link["identity"]:
+            for key in ("actual_lower_firmware","actual_lower_mode","actual_lower_service"):
+                metadata[key]=link[key]
+        metadata["firmware_identity_reported_by_uart"]=link["firmware_identity_reported_by_uart"]
+        metadata["mcu_boot_epoch"]=link["mcu_boot_epoch"]
+        (self.run_dir/"metadata.json").write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+"\n")
         self.lidar=serial.Serial(lidar_port,metadata["lidar_baud"],timeout=.02,write_timeout=.2,exclusive=True)
         self.new_reader("serial_connection_open")
         self.viewer=Viewer(o.http_port)
@@ -299,9 +314,7 @@ class LidarYawApp:
             laser_to_base=[*m["extrinsic"][:2],math.radians(m["extrinsic"][2])],pose_reference="vehicle_center",
             vehicle_side_m=m["vehicle_side_m"],vehicle_front_vertex_deg=m["vehicle_front_vertex_deg"],
             reader_stats=dict(self.reader.stats),current_reference_reason=self.state.yaw.reason)
-        result["actual_lower_identity"] = dict(mode=self.options.actual_lower_mode,
-            service=self.options.actual_lower_service,firmware=self.options.actual_lower_firmware,
-            firmware_attested_by_uart=False)
+        result["chassis_link"] = self.client.connection_snapshot()
         xy=result.get("candidate_center_xy_m") or result.get("display_prior_center_xy_m")
         if xy is not None and result["field_yaw_rad"] is not None:
             result["partial_constraint_pose"]=[xy[0]+1.5,xy[1]+1.5,result["field_yaw_rad"]]
@@ -392,6 +405,9 @@ def arguments():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config",type=Path,default=DEFAULT_CONFIG)
     ap.add_argument("--chassis",default="/dev/ttyS1")
+    ap.add_argument("--chassis-baud",type=int,choices=(115200,230400),default=230400,
+                    help="F405 UART4; distinct from radar --baud")
+    ap.add_argument("--chassis-profile",choices=("auto","legacy","timed"),default="auto")
     ap.add_argument("--lidar",help="default config /dev/ttyS6; must differ from chassis")
     ap.add_argument("--baud",type=int,help="default config 230400; no automatic baud commands")
     ap.add_argument("--http-port",type=int,default=8766)

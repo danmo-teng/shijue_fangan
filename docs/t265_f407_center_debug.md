@@ -1,5 +1,61 @@
 # T265/F407 中心起点定位调试
 
+## 2026-11-01：适配NormalDebugTimed的230400与只读身份
+
+基线278370a。最后一次20261101_132227_interactive会话有15次转动、3次前进请求，
+全部因无新鲜0x1A在上位机拒绝，未发动作帧。115200收到了51372字节但无有效帧头。
+下位机新NormalDebugTimed预设为230400；本轮只读实机查询已确认板端实际为230400。
+没有删除或改写该故障会话日志，没有关闭动作前的0x1A检查。
+
+共用ChassisTestClient现支持115200和230400；两个桌面入口改用230400/timed：
+
+- 启动及每约2秒只发正式D4 4D v1身份查询（TYPE01），不发运动、STOP、归零、订阅或对时。
+  nonce、sequence、响应时限、CRC、板型/模式/服务、波特率、协议版本及已审查代码版本须匹配。
+  身份超过6秒不再用于放行新动作；恢复合格响应后可继续，不新增永久故障锁存。
+- A3 B3旧帧与D4 4D新帧由同一个UART owner完整解析，payload里的magic不另算新包。
+  旧0x19/0x1A动作、TURN取反和gyro CCW正保持；旧8位动作ACK仍不能严格排除跨重启迟到回执。
+  检测到身份/boot改变时停止旧动作关联、不重放；有未决动作时沿用显式STOP回执恢复规则。
+- 审查了下位机cd26448、43fa6ab及f81e9ef。f81e9ef相对43fa6ab只修改导出文档/工具，
+  没改编译的底盘控制与传输源文件，所以允许从该提交重编译的同版接口；未知版本仍拒绝。
+  不要求实际返回的Git等于旧expected，不把expected写成actual。
+- metadata、界面及chassis_identity.json记录实际返回的Git、firmware_id、source_dirty、boot、baud。
+  固件自报构建身份不等于签名认证或ELF自校验；本次source_dirty=1照实保留。
+- 新07/08若到达只作原始诊断，不发送订阅，不产生合格wheel/gyro输入事件。
+  FFFFFFFF时间误差/漂移未知值不改成0；encoder_fusion_weight、T265外参、比例及比赛配置不变。
+
+当前入口：原桌面T265-F407-调试地图，或原desktop_launcher.sh。
+新默认`--baud 230400 --chassis-profile timed`；普通旧固件可显式
+`--baud 115200 --chassis-profile legacy`沿用操作者确认的旧合同路径。
+雷达入口另有`--chassis-baud`，不要与雷达自己的`--baud`混淆。
+
+新增的是原入口的只读检查选项，不是独立测试执行程序：
+
+```bash
+python3 /home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py --check-chassis --baud 230400 --chassis-profile timed
+```
+
+它不开T265、雷达或GUI，只记录身份和旧状态，退出不发送STOP。
+日志位于RDK `rescue_map/runtime/history/f405_connection_check/`，最近5次完整检查会话；
+只清理本模块明确归属的已完成日志，保护当前/不完整/含额外用户文件的目录，不清理T265历史。
+日常地图仍按原模块最近5次完整会话保留，新增日志文件列入明确白名单。
+
+本轮实际结果：
+
+- 原Python回归通过，新增v1合同向量、混合碎片、nonce/sequence错误、身份过期/模式错误、
+  boot改变、未知版本拒绝、文档提交重编译兼容、本地PTY握手及旧115200兼容检查。
+- 真实只读检查`20261101_135239_check/result.json`为connection_ok=true：
+  板端自报F405/NormalDebug/MOTIONDEBUG、230400、Git=f81e9ef、source_dirty=1，
+  firmware_id=59ae01677d905e9612c0a2d31348c6afaf53c48e67db32c40c3ecc5bf6cf7bee。
+  收到102帧0x15、99帧0x1F、17帧0x1A及1帧身份响应，CRC错误0；0x1F有2个序号缺口，
+  开口处丢弃2个非完整帧字节，不能说完全无丢帧。状态为IDLE/fault=0，不是物理停稳测量。
+- 仅发送1个只读身份请求，运动/STOP/归零/订阅均为0；没有实际验证车轮转动或地面精度。
+  先前`20261101_134958_check`真实记录了首次过严版本检查的拒绝，保留不改写。
+- 板端drift_bound_ppm仍为FFFFFFFF，采样/延迟资格和SDK融合资格均为false；
+  本轮只完成通信与身份适配，不宣称官方轮速注入、旋转deskew或平移补偿已通过。
+
+下位机合同来源：
+[v1合同](https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/f81e9ef9a33981d8453eafe9574572e87dea90c6/docs/F405_TIMED_CONTRACT_20261031.md)。
+
 ## 2026-10-31：官方轮速输入调试路径，严格对时门控
 
 基线f52164d；保留当前安装候选，未同步正式比赛。用户确认下位机尚无新的采样时刻/epoch接口，

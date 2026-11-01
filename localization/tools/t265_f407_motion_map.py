@@ -47,7 +47,7 @@ from f407_motion_protocol import (  # noqa: E402
     STATE_NAMES,
     imu_is_fresh,
 )
-from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT
+from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
 from t265_wheel_input import WheelInputBridge, write_sdk_config, DEPENDENCIES
 
@@ -104,7 +104,8 @@ SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_r
     "f407_motion_status.json", "f407_motion_status.jsonl", "uart_rx.jsonl", "events.jsonl",
     "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json",
     "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
-    "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json"})
+    "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json",
+    "chassis_link.jsonl", "chassis_extended.jsonl", "chassis_identity.json"})
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
@@ -256,6 +257,7 @@ class MotionMapApp:
         self.settled_reference_mark: dict | None = None
         self.session_index = 0
         self.logging_failed = False
+        self.last_chassis_identity_ns = 0
         self.wheel_input = None
         self.wheel_unsubscribe = None
         self.wheel_sdk_status = None
@@ -383,6 +385,10 @@ class MotionMapApp:
         service_text = "测试已启用" if self.motion_identity_confirmed() else "仅监听"
         text.add(("定位运行" if running else "定位未运行") + " / " + service_text, (x0, 68), 16,
                  (50, 220, 65) if running else (50, 80, 230), True)
+        if self.bridge is not None:
+            link=self.bridge.connection_snapshot()
+            fw=link["actual_lower_firmware"]
+            text.add(f"底盘 {link['baud']} / 实际固件 {fw[:12]}", (28, 25), 15, (220,220,220))
         text.add(f"测试起点：(0,0)  初始航向 {start_pose(self.zone)[2]:.0f}°", (x0, 96), 15, (220, 220, 220))
         forward = self.session_config.get("camera_robot_forward_axis", "?")
         up = self.session_config.get("camera_robot_up_axis", "?")
@@ -539,6 +545,12 @@ class MotionMapApp:
                     self.append_point(self.raw_points,tracking.get("x_m"),tracking.get("y_m"))
         if self.bridge is not None:
             self.bridge.poll()
+            link=self.bridge.connection_snapshot()
+            if not link["motion_identity_ready"]:
+                self.message=link["reason"] or "底盘身份未确认"
+            if getattr(self,"last_chassis_identity_ns",0)!=self.bridge.identity_received_ns:
+                self.last_chassis_identity_ns=self.bridge.identity_received_ns
+                self.record_event("chassis_identity_observed",link)
             self.imu_telemetry = self.bridge.imu_snapshot()
             if self.bridge.log_error is not None:
                 self.message = f"测试日志保存失败：{self.bridge.log_error}"
@@ -716,16 +728,16 @@ class MotionMapApp:
         action()
 
     def motion_identity_confirmed(self) -> bool:
+        if self.bridge is not None and self.bridge.serial is not None:
+            return self.bridge.control_identity_problem() is None
         value = self.options.actual_lower_firmware.strip().lower()
         # UART4 cannot attest a firmware commit. Requiring an unattestable
         # hash blocked the desktop even after the operator confirmed the test
         # service. Keep unknown firmware explicitly unknown; reject a known
         # incompatible commit instead of silently treating it as this contract.
-        firmware_compatible = (value in {"", "unconfirmed", "unknown"} or
-            (re.fullmatch(r"[0-9a-f]{7,40}",value) is not None and IMPLEMENTATION_COMMIT.startswith(value)))
         return (self.options.actual_lower_mode == "NormalDebug" and
                 self.options.actual_lower_service == "MOTIONDEBUG" and
-                firmware_compatible)
+                firmware_compatible(value))
 
     def save_ground_truth(self, text: str) -> None:
         """Signed, independently measured displacement/turn for the current test.
@@ -910,6 +922,8 @@ class MotionMapApp:
         self.bridge = F407SerialBridge(
             self.options.uart, self.options.baud,
             self.motion_status_path, status_log,
+            identity_policy=getattr(self.options,"chassis_profile","auto"),
+            asserted_firmware=self.options.actual_lower_firmware,
         )
         self.bridge.identity_confirmed = self.motion_identity_confirmed()
         sdk_session_id = uuid.uuid4().hex
@@ -919,6 +933,7 @@ class MotionMapApp:
         self.wheel_input = WheelInputBridge(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
         self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry)
         self.bridge.start()
+        link=self.bridge.connection_snapshot()
         localizer_log_path = self.run_dir / "localizer.log"
         self.localizer_log = localizer_log_path.open("w", encoding="utf-8")
         command = [
@@ -976,25 +991,29 @@ class MotionMapApp:
             "ab_policy": "separate SDK sessions, no live toggle; stopping sends does not remove dependency; clean device restart for strict AB",
             "listen_and_control": self.motion_identity_confirmed(),
             "host_chassis_session_id": self.bridge.host_session_id,
-            "mcu_boot_epoch": None,
-            "expected_lower_firmware": LOWER_FIRMWARE,
+            "mcu_boot_epoch": link["mcu_boot_epoch"],
+            "expected_lower_firmware": link["expected_lower_firmware"],
             "expected_lower_mode": "NormalDebug",
             "expected_lower_service": "MOTIONDEBUG",
-            "contract_document_commit": DOCUMENT_COMMIT,
+            "contract_document_commit": link["contract_document_commit"],
+            "chassis_link": link,
             "capabilities": self.bridge.capabilities(),
             "historical_flash_evidence_is_current_identity": False,
-            "lower_measured_body_velocity": "not_provided_on_UART4",
+            "lower_measured_body_velocity": "new_stream_available_but_not_subscribed" if link["identity"] else "not_provided_on_legacy_UART4",
             "wheel_reference": "host_count_recompute_receive_time_and_latest_T265_heading; diagnostic only",
-            "actual_lower_service": self.options.actual_lower_service,
-            "actual_lower_firmware": self.options.actual_lower_firmware,
-            "actual_lower_mode": self.options.actual_lower_mode,
-            "lower_identity_source": "operator-confirmed mode/service profile; firmware commit not reported by UART",
+            "actual_lower_service": link["actual_lower_service"] if link["identity"] else self.options.actual_lower_service,
+            "actual_lower_firmware": link["actual_lower_firmware"] if link["identity"] else self.options.actual_lower_firmware,
+            "actual_lower_mode": link["actual_lower_mode"] if link["identity"] else self.options.actual_lower_mode,
+            "operator_lower_profile": dict(mode=self.options.actual_lower_mode,service=self.options.actual_lower_service,
+                                           firmware=self.options.actual_lower_firmware),
+            "lower_identity_source": "nonce-correlated device reply" if link["identity"] else "operator profile only; no device reply",
+            "firmware_commit_reported_by_uart": link["firmware_identity_reported_by_uart"],
             "firmware_commit_attested_by_uart": False,
-            "motion_enable_policy": "confirmed NormalDebug/MOTIONDEBUG service; unknown firmware retained as unknown; known mismatched commit rejected",
+            "motion_enable_policy": "230400/timed requires current compatible device identity plus fresh legacy 0x1A; explicit 115200 legacy retains operator profile",
             "mount_status": "candidate_not_physically_validated",
             "reference_description": self.options.reference_description,
             "ground_truth_policy": "command target and DONE are not ground truth; operator measures signed displacement/turn after settling",
-            "protocol": MOTION_PROTOCOL,
+            "protocol": dict(MOTION_PROTOCOL,baud=self.options.baud,extended_identity_namespace="D4 4D v1"),
             "localizer_command": command,
             "files": {
                 "localization_csv": "localization_debug.csv",
@@ -1017,6 +1036,9 @@ class MotionMapApp:
                 "wheel_sdk": "wheel_sdk.jsonl",
                 "wheel_sdk_status": "wheel_sdk_status.json",
                 "wheel_sdk_config": "wheel_sdk_config.json",
+                "chassis_identity": "chassis_identity.json",
+                "chassis_link": "chassis_link.jsonl",
+                "chassis_extended": "chassis_extended.jsonl",
             },
         }
         try:
@@ -1029,7 +1051,7 @@ class MotionMapApp:
         (self.run_dir / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-        self.message = "已启动：动作须人工触发；旧协议缺采样时钟/epoch，轮速不注入"
+        self.message = f"底盘{self.options.baud}："+("身份已读回，动作须人工触发；轮速尚未注入" if link["motion_identity_ready"] else str(link["reason"]))
         self.record_event("session_started", {"initial_pose": metadata["initial_pose"]})
         print(f"测试日志目录：{self.run_dir}", flush=True)
 
@@ -1083,7 +1105,7 @@ class MotionMapApp:
                                      float(self.session_config.get("camera_offset_left_m", "-0.0301")),
                                      fit_wheel=False)
                     result["angle_crossings_not_settled_measurements"] = result.pop("rotation_check")
-                    result["protocol"] = MOTION_PROTOCOL
+                    result["protocol"] = dict(MOTION_PROTOCOL,baud=self.options.baud)
                     result["child_wheel_reference_available"] = False
                     result["wheel_reference_source"] = "chassis_telemetry.jsonl: host recomputation; not lower-published velocity"
                     for key in list(result.get("trajectory",{})):
@@ -1228,7 +1250,9 @@ class MotionMapApp:
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="F405 NormalDebug / T265实验地图（保留原桌面入口）")
     parser.add_argument("--uart", default="/dev/ttyS1")
-    parser.add_argument("--baud", type=int, default=115200)
+    parser.add_argument("--baud", type=int, choices=(115200,230400), default=230400)
+    parser.add_argument("--chassis-profile", choices=("auto","legacy","timed"), default="auto")
+    parser.add_argument("--check-chassis", action="store_true",help="read-only UART/identity/status check; no T265, GUI or motion")
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice, default pure T265; legacy F405 timing cannot pass injection gates")
@@ -1252,7 +1276,11 @@ def arguments() -> argparse.Namespace:
 
 def main() -> int:
     try:
-        return MotionMapApp(arguments()).run()
+        options=arguments()
+        if options.check_chassis:
+            from f405_connection_check import check_connection
+            return check_connection(options,DEFAULT_RUN_ROOT.parent/"f405_connection_check")
+        return MotionMapApp(options).run()
     except (OSError, RuntimeError, ValueError, serial.SerialException) as error:
         print(f"错误：{error}", file=sys.stderr)
         return 2
