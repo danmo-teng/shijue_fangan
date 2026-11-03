@@ -1,6 +1,6 @@
-"""Versioned feedback -> explicitly qualified host-time measurements.
+"""Versioned feedback -> actual measurements with timing diagnostics.
 No I/O and no target/T265 velocity. An observed clock exchange is NOT a drift
-or sensor-delay calibration; current f81e9ef unknown bounds remain disqualifying.
+or sensor-delay calibration. Unknown bounds stay unknown, not an adoption gate.
 """
 from collections import deque
 import math
@@ -54,7 +54,8 @@ class TimedMeasurements:
         return estimate,error,[]
 
     def _base(self, sample, now):
-        same=bool(self.identity and sample["boot_epoch"]==self.identity["boot_epoch"] and self.identity.get("epoch_valid"))
+        same=bool(self.identity and sample["boot_epoch"]==self.identity["boot_epoch"] and self.identity.get("epoch_valid")
+                  and self.identity.get("interface_compatible",True) is True)
         return dict(mcu_epoch=sample["boot_epoch"] if same else None,reference_epoch=sample["reference_epoch"],
             host_action_id_at_receive=sample.get("host_action_id_at_receive"),host_chassis_session_id=sample.get("host_chassis_session_id"),
             receive_monotonic_ns=sample["receive_monotonic_ns"],capture_time_qualified=False,
@@ -77,7 +78,7 @@ class TimedMeasurements:
         if source_error==UNKNOWN or not flags&2:reasons.append("wheel_capture_time_bound_unknown_including_rear_EXTI")
         if not result["mcu_epoch"]:reasons.append("boot_epoch_invalid")
         dt=(sample["t1_us"]-sample["t0_us"])/1e6
-        valid=bool(flags&1) and not flags&(4|8|16|32|64|256|512|1024) and 0<dt<=.05
+        valid=bool(flags&1) and not flags&(4|8|32|256|512|1024) and dt>0
         k=math.pi*.070/1061.268
         calculated=None
         if dt>0:
@@ -89,6 +90,8 @@ class TimedMeasurements:
         uncertainty=None if reasons else max(error0,error1)+source_error*1000
         result.update(source="measured_wheel_feedback",sample_id=sample["measurement_id"],
             v_body_mps=measured,host_recomputed_v_body_mps=calculated,
+            alignment_clock="mcu_event",alignment_start_ns=sample["t0_us"]*1000,
+            alignment_end_ns=sample["t1_us"]*1000,
             interval_start_ns=start,interval_end_ns=end,measurement_valid=valid,
             capture_time_qualified=bool(valid and not reasons and uncertainty<=5_000_000),
             time_uncertainty_ns=uncertainty,qualification_reasons=reasons,
@@ -107,9 +110,10 @@ class TimedMeasurements:
         reasons=list(reasons);source_error=sample["rate_uncertainty_us"]
         if source_error==UNKNOWN or flags&512:reasons.append("IMU_acquisition_filter_link_to_ISR_delay_unbounded")
         if not result["mcu_epoch"]:reasons.append("boot_epoch_invalid")
-        valid=(flags&3)==3 and not flags&(4|8|16|32|128|1024)
+        valid=(flags&3)==3 and not flags&(4|8|32|128|1024)
         uncertainty=None if reasons else error+source_error*1000
         result.update(wire_valid=valid,yaw_rate_deg_s=sample["rate_mdps"]/1000.,
+            alignment_clock="mcu_event",alignment_capture_ns=sample["rate_receive_us"]*1000,
             sample_id=sample["rate_source_id"],angular_rate_capture_ns=capture,
             capture_time_qualified=bool(valid and not reasons and uncertainty<=5_000_000),
             time_uncertainty_ns=uncertainty,qualification_reasons=reasons)

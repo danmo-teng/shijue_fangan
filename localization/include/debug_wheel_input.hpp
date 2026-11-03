@@ -40,6 +40,7 @@ private:
     std::uint64_t next_frame_ = 0, last_packet_ = 0, last_end_ = 0;
     bool have_packet_ = false, have_epoch_ = false, sdk_failed_ = false;
     Json epoch_;
+    std::string alignment_clock_;
     std::uint64_t accepted_ = 0, rejected_ = 0;
     bool config_loaded_=false;
     std::uint64_t last_success_ns_=0;

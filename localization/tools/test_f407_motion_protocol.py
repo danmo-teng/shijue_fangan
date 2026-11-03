@@ -99,7 +99,7 @@ def test_official_wheel_input():
             now[0] += 100_000_000
             event("measured_body_velocity",dict(wheel,sample_id=4))
             bridge.poll()
-            assert bridge.stats["last_reason"] == "stale_or_future_wheel_interval"
+            assert bridge.stats["last_reason"] == "duplicate_or_out_of_order_wheel_interval"
             assert bridge.stats["sent_to_sdk_owner"] == 1  # No synthetic zero on missing data.
         finally:
             bridge.close(); sink.close()
@@ -111,14 +111,10 @@ def test_official_wheel_input():
             off.poll()
             assert off.stats["last_reason"] == "injection_off" and off.stats["sent_to_sdk_owner"] == 0
         finally: off.close()
-        # Unqualified clocks, missing epoch, gaps, ordering and real zero.
+        # Missing identity and duplicate rates remain structural errors.
         cases = [
-            (dict(wheel, time_uncertainty_ns=6_000_000),
-             [gyro(1_000_000_000),gyro(1_010_000_000)], "unqualified_capture_time_or_epoch"),
             (dict(wheel, mcu_epoch=None),
-             [gyro(1_000_000_000),gyro(1_010_000_000)], "unqualified_capture_time_or_epoch"),
-            (dict(wheel, interval_end_ns=1_030_000_000, receive_monotonic_ns=1_031_000_000),
-             [gyro(1_000_000_000),gyro(1_030_000_000)], "gyro_capture_gap"),
+             [gyro(1_000_000_000),gyro(1_010_000_000)], "unknown_measurement_epoch"),
             (wheel, [gyro(1_000_000_000),gyro(1_000_000_000),gyro(1_010_000_000)],
              "nonmonotonic_gyro_capture_time"),
         ]
@@ -134,13 +130,18 @@ def test_official_wheel_input():
         new_session = uuid.uuid4().hex
         sink = socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
         sink.bind("\0t265-wheel-"+new_session); sink.settimeout(.1)
-        zero = WheelInputBridge(root,cfg,new_session,True,clock=lambda:1_020_000_000)
+        zero = WheelInputBridge(root,cfg,new_session,True,clock=lambda:9_000_000_000)
         try:
-            for t in (1_000_000_000,1_010_000_000):
-                zero.telemetry(dict(kind="imu",sample=dict(gyro(t),yaw_rate_deg_s=0)))
-            zero.telemetry(dict(kind="measured_body_velocity",sample=wheel))
+            for t in (1_000_000_000,1_100_000_000):
+                zero.telemetry(dict(kind="imu",sample=dict(gyro(t),yaw_rate_deg_s=0,capture_time_qualified=False,time_uncertainty_ns=None)))
+            zero.telemetry(dict(kind="measured_body_velocity",sample=dict(wheel,interval_end_ns=1_100_000_000,
+                capture_time_qualified=False,time_uncertainty_ns=600_000_000)))
             zero.poll()
-            assert json.loads(sink.recv(16000))["v_camera_mps"] == [0,0,0]
+            packet=json.loads(sink.recv(16000))
+            assert packet["v_camera_mps"] == [0,0,0]
+            assert packet['schema']==2 and packet['capture_time_qualified'] is False
+            assert packet['time_uncertainty_ns'] is None and packet['gyro_max_gap_ns']==100_000_000
+            assert packet['age_from_wheel_receive_ns']>50_000_000
             zero.poll()
             assert zero.stats["sent_to_sdk_owner"] == 1
         finally: zero.close(); sink.close()
@@ -896,6 +897,26 @@ def test_timed_measurement_pipeline():
     assert not g["capture_time_qualified"] and "IMU_acquisition_filter_link_to_ISR_delay_unbounded" in g["qualification_reasons"]
     assert m.gyro(dict(gyro,receive_monotonic_ns=922_000_000),926_000_000) is None
     assert m.stats["duplicate_rate"]==1
+    # Actual timed wire shapes with unknown drift/source bounds and NO SYNC:
+    # align in MCU event time, preserve null host mapping, and send once.
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);sid=uuid.uuid4().hex
+        sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);sink.bind('\0t265-wheel-'+sid);sink.settimeout(.2)
+        bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),sid,True,clock=lambda:9_000_000_000)
+        try:
+            bridge.telemetry(dict(kind='timed_identity',sample=dict(identity,interface_compatible=True)))
+            for i,t in enumerate([wheel['t0_us'],wheel['t1_us']]):
+                bridge.telemetry(dict(kind='timed_gyro_diagnostic',sample=dict(gyro,rate_receive_us=t,
+                    rate_source_id=1000+i,receive_monotonic_ns=1_500_000_000)))
+            bridge.telemetry(dict(kind='timed_wheel_diagnostic',sample=dict(wheel,receive_monotonic_ns=1_500_000_000)))
+            bridge.poll();p=json.loads(sink.recv(16000))
+            assert p['alignment_clock']=='mcu_event' and p['alignment_start_ns']==wheel['t0_us']*1000
+            assert p['interval_start_ns'] is None and p['time_uncertainty_ns'] is None and not p['capture_time_qualified']
+            assert p['age_from_wheel_receive_ns']==7_500_000_000
+            assert p['v_body_mps'][0]==wheel['forward_um_s']/1e6 and bridge.stats['sent_to_sdk_owner']==1
+            bridge.telemetry(dict(kind='timed_wheel_diagnostic',sample=dict(wheel,receive_monotonic_ns=1_600_000_000)))
+            bridge.poll();assert bridge.stats['sent_to_sdk_owner']==1
+        finally:bridge.close();sink.close()
     # Synthetic QUALIFIED source only, not the actual f81 firmware calibration.
     m=TimedMeasurements();m.set_identity(dict(identity,drift_bound_ppm=10));assert m.sync(sync)
     qualified=m.wheel(dict(wheel,flags=131,source_uncertainty_us=100,receive_monotonic_ns=921_000_000),925_000_000)
@@ -918,11 +939,11 @@ def test_timed_measurement_pipeline():
             payload[:8]=req['payload'];payload[114:134]=bytes.fromhex(TIMED_DOCUMENT_COMMIT)
             c.feed(wire.packet(wire.ID_REPLY,req['sequence'],payload),clock[0]+1000)
             c.start_timed_measurements();c.poll(clock[0]+2000)
-            req=wire.parse(c.serial.written[-1]);assert req['type']==wire.SYNC_REQ
-            assert not any(wire.parse(p)['type']==wire.CONFIG_REQ for p in c.serial.written)
+            assert wire.parse(c.serial.written[-1])['type']==wire.CONFIG_REQ  # SYNC is diagnostic, not a subscription gate.
+            req=next(wire.parse(p) for p in c.serial.written if wire.parse(p)['type']==wire.SYNC_REQ)
             wrong=bytearray(payload);wrong[:8]=req['payload']
             c.feed(wire.packet(wire.ID_REPLY,req['sequence'],wrong),clock[0]+3000)
-            assert len(c.identity_queries)==1 and not c.have_sync_exchange  # Type must match too.
+            assert len(c.identity_queries)==2 and not c.have_sync_exchange  # Type must match too.
             nonce=int.from_bytes(req['payload'],'big');epoch=bytes.fromhex(c.device_identity['boot_epoch'])
             clock[0]+=1_000_000
             c.feed(wire.packet(wire.SYNC_REPLY,req['sequence'],struct.pack('>Q16sQQIH',nonce,epoch,1_000_000,1_000_100,1,1)),clock[0])
@@ -965,14 +986,14 @@ def test_timed_measurement_pipeline():
             assert bridge.snapshot(dict(session_id=sid,sdk_api_rate_hz=5,status_monotonic_ns=time.monotonic_ns()))["sdk_api_rate_hz"]==5
             assert bridge.snapshot(dict(session_id="old-session",sdk_api_success_samples=999))["sdk_api_success_samples"]==0
             assert bridge.snapshot()["processing_latency_ms_max"]<50
-            # Stale velocity is rejected rather than replayed after the GUI stall.
+            # Same source interval is not sent twice, regardless of its age.
             bridge.telemetry(dict(kind="measured_body_velocity",sample=dict(source="measured_wheel_feedback",
                 v_body_mps=[.1,0,0],interval_start_ns=now-20_000_000,interval_end_ns=now-10_000_000,
                 receive_monotonic_ns=now,time_uncertainty_ns=1_000_000,capture_time_qualified=True,
                 measurement_valid=True,mcu_epoch="test-boot",sample_id=2)))
             deadline=time.monotonic()+.2
-            while bridge.snapshot()["last_input_rejection"]!="stale_or_future_wheel_interval" and time.monotonic()<deadline:time.sleep(.005)
-            assert bridge.snapshot()["last_input_rejection"]=="stale_or_future_wheel_interval"
+            while bridge.snapshot()["last_input_rejection"]!="duplicate_or_out_of_order_wheel_interval" and time.monotonic()<deadline:time.sleep(.005)
+            assert bridge.snapshot()["last_input_rejection"]=="duplicate_or_out_of_order_wheel_interval"
             assert bridge.stats["sent_to_sdk_owner"]==1
         finally:disk_gate.set();bridge.close();sink.close()
     with tempfile.TemporaryDirectory() as temporary:

@@ -1,8 +1,8 @@
 """Debug-only measured-wheel -> tracking-centre input; never owns USB/UART.
 
-Current F405 0x15/0x1F have NO capture clock/epoch: they are logged and rejected.
-Versioned 07/08 use the audited timed decoder, but unknown drift/acquisition
-bounds still block qualification. No target speeds, T265 velocity, or
+Current F405 0x15/0x1F remain count/gyro diagnostics; measured 07/08 provide
+the actual wheel interval and rate events on one MCU clock. Timing quality
+is recorded without gating adoption. No target speeds, T265 velocity, or
 encoder-derived omega are accepted.
 """
 from collections import deque
@@ -15,9 +15,7 @@ import threading
 from async_debug_log import AsyncDebugLog
 from f405_timed_measurements import TimedMeasurements
 
-MAX_AGE_NS = 50_000_000
-MAX_UNCERTAINTY_NS = 5_000_000
-MAX_GYRO_GAP_NS = 20_000_000
+TIME_POLICY = "received_feedback_no_age_gate_v1"
 DEPENDENCIES = ["measured_wheel_feedback", "primary_gyro_rate"]
 
 
@@ -60,12 +58,11 @@ def write_sdk_config(path, noise_std_mps):
 class WheelInputBridge:
     """Bounded subscription consumer. Only the existing C++ SDK owner sends.
 
-    Qualified measured_body_velocity: source=measured_wheel_feedback, v_body_mps,
-    interval_start_ns/end_ns, receive_monotonic_ns, time_uncertainty_ns,
-    capture_time_qualified, measurement_valid, mcu_epoch, sample_id.
-    Qualified imu: angular_rate_capture_ns (NOT yaw capture), yaw_rate_deg_s,
-    receive_monotonic_ns, time_uncertainty_ns, capture_time_qualified,
-    mcu_epoch, wire_valid. All capture times mapped to host CLOCK_MONOTONIC.
+    Measured body velocity: source=measured_wheel_feedback, v_body_mps,
+    alignment_start_ns/end_ns/clock, measurement_valid, mcu_epoch, sample_id.
+    Gyro has its own alignment_capture_ns, yaw_rate_deg_s and wire_valid.
+    The versioned path aligns original MCU events; mapped host capture times
+    and their uncertainty may be null. Qualification is diagnostic only.
     """
     def __init__(self, root, config, session_id, enabled, *, clock=time.monotonic_ns):
         self.enabled, self.session_id, self.clock = enabled, session_id, clock
@@ -133,7 +130,8 @@ class WheelInputBridge:
             # Transport success is not SDK acceptance or localisation accuracy.
             sample=sample, **extra)
         self.log.submit("wheel_input.jsonl",document)
-        if reason!="sent_to_sdk_owner" and (self.timed_mode is False or reason!="unqualified_legacy_capture_time_and_epoch"):
+        if reason=="sent_to_sdk_owner":self.last_input_rejection=None
+        elif self.timed_mode is False or reason!="legacy_counts_reference_only":
             self.last_input_rejection=reason
 
     def start(self):
@@ -166,7 +164,7 @@ class WheelInputBridge:
             measured=dict(self.latest_measured) if self.latest_measured else None
             if measured:measured["receive_age_ms"]=(now-measured["receive_monotonic_ns"])/1e6
             latency=sorted(self.latencies)
-            return dict(requested=self.enabled,state=stage,config_loaded=loaded,sdk_api_success_samples=successes,
+            return dict(requested=self.enabled,state=stage,time_policy=TIME_POLICY,config_loaded=loaded,sdk_api_success_samples=successes,
                 sdk_api_rate_hz=sdk.get("sdk_api_rate_hz",0) if status_fresh else 0,
                 sdk_status_fresh=status_fresh,last_sdk_success_ns=accepted_ns,
                 sdk_success_age_ms=None if not accepted_ns else (now-accepted_ns)/1e6,
@@ -180,10 +178,11 @@ class WheelInputBridge:
                 processing_latency_ms_median=sorted(self.latencies)[len(self.latencies)//2]/1e6 if self.latencies else None,
                 logging_healthy=self.log.healthy(),stats=dict(self.stats),measurement_counts=dict(self.measurements.stats))
 
-    def _qualified(self, sample):
-        return (sample.get("capture_time_qualified") is True and sample.get("mcu_epoch") is not None
-            and isinstance(sample.get("time_uncertainty_ns"), int)
-            and 0 <= sample["time_uncertainty_ns"] <= MAX_UNCERTAINTY_NS)
+    def _usable_rate(self, sample):
+        capture=sample.get("alignment_capture_ns",sample.get("angular_rate_capture_ns"))
+        return (sample.get("mcu_epoch") is not None and sample.get("wire_valid") is True
+                and isinstance(capture,int) and capture>=0
+                and math.isfinite(sample.get("yaw_rate_deg_s",float("nan"))))
 
     def poll(self, context=None):
         with self.lock:
@@ -228,7 +227,7 @@ class WheelInputBridge:
                 if kind=="timed_gyro_diagnostic":
                     self.last_gyro_reasons=sample.get("qualification_reasons",[])
                     self.log.submit("wheel_measurements.jsonl",sample)
-                    if self._qualified(sample) and sample.get("wire_valid") is True:self.gyro.append(sample)
+                    if self._usable_rate(sample):self.gyro.append(sample)
                     else:self.gyro.clear()
                     continue
                 self.log.submit("wheel_measurements.jsonl",sample)
@@ -237,14 +236,14 @@ class WheelInputBridge:
                 kind="measured_body_velocity"
             if event["kind"] == "imu":
                 if self.timed_mode:continue  # Legacy unqualified IMU must not erase valid timed-rate brackets.
-                if self._qualified(sample) and sample.get("wire_valid") is True:
+                if self._usable_rate(sample):
                     self.gyro.append(sample)
                 else:
                     # Invalid rate during an interval must not be interpolated through.
                     self.gyro.clear()
                 continue
             if kind == "host_wheel_recomputed":
-                self._record("unqualified_legacy_capture_time_and_epoch", sample,
+                self._record("legacy_counts_reference_only", sample,
                              injection_requested=self.enabled)
                 continue
             if len(self.pending) >= 64:
@@ -261,6 +260,7 @@ class WheelInputBridge:
             except (ValueError, TypeError, KeyError, OverflowError):
                 reason, packet = "malformed_measured_feedback", None
             if reason == "waiting_for_bracketing_gyro":
+                self.last_input_rejection=reason
                 break
             self.pending.popleft()
             if reason:
@@ -280,18 +280,15 @@ class WheelInputBridge:
 
     def _prepare(self, sample):
         now = self.clock()
-        if not self._qualified(sample):
-            return "unqualified_capture_time_or_epoch", None
+        if sample.get("mcu_epoch") is None:
+            return "unknown_measurement_epoch", None
         if sample.get("measurement_valid") is not True or sample.get("source") != "measured_wheel_feedback":
             return "not_valid_measured_wheel_feedback", None
-        start, end = sample["interval_start_ns"], sample["interval_end_ns"]
-        uncertainty = sample["time_uncertainty_ns"]
-        if not (isinstance(start, int) and isinstance(end, int) and 0 < end-start <= MAX_AGE_NS):
+        clock=sample.get("alignment_clock","host_monotonic_event")
+        start=sample.get("alignment_start_ns",sample.get("interval_start_ns"))
+        end=sample.get("alignment_end_ns",sample.get("interval_end_ns"))
+        if not (isinstance(start,int) and isinstance(end,int) and 0<=start<end):
             return "invalid_wheel_interval", None
-        if not 0 <= now-start <= MAX_AGE_NS-uncertainty:
-            return "stale_or_future_wheel_interval", None
-        if not end <= sample["receive_monotonic_ns"] <= now:
-            return "invalid_wheel_receive_time", None
         epoch = sample["mcu_epoch"]
         if self.epoch is None:
             self.epoch = epoch
@@ -300,8 +297,9 @@ class WheelInputBridge:
         identity = (str(epoch), sample["sample_id"])
         if identity in self.seen or (self.last_end is not None and start < self.last_end):
             return "duplicate_or_out_of_order_wheel_interval", None
-        rates = [s for s in self.gyro if s["mcu_epoch"] == epoch]
-        times = [s["angular_rate_capture_ns"] for s in rates]
+        rates = [s for s in self.gyro if s["mcu_epoch"] == epoch and
+                 s.get("alignment_clock","host_monotonic_event")==clock]
+        times = [s.get("alignment_capture_ns",s.get("angular_rate_capture_ns")) for s in rates]
         if any(b <= a for a, b in zip(times, times[1:])):
             return "nonmonotonic_gyro_capture_time", None
         if not times or times[-1] < end:
@@ -312,16 +310,9 @@ class WheelInputBridge:
         first = before[-1]
         last = next(i for i, t in enumerate(times) if t >= end)
         selected = rates[first:last+1]
-        if any(b["angular_rate_capture_ns"]-a["angular_rate_capture_ns"] > MAX_GYRO_GAP_NS
-               for a, b in zip(selected, selected[1:])):
-            return "gyro_capture_gap", None
-        if any(not s["angular_rate_capture_ns"] <= s["receive_monotonic_ns"] <= now
-               or not 0 <= now-s["angular_rate_capture_ns"] <= MAX_AGE_NS-s["time_uncertainty_ns"]
-               for s in selected):
-            return "stale_or_invalid_gyro_time", None
         integral = 0.
-        for a, b in zip(selected, selected[1:]):
-            ta, tb = a["angular_rate_capture_ns"], b["angular_rate_capture_ns"]
+        for i,(a,b) in enumerate(zip(selected,selected[1:]),first):
+            ta,tb=times[i],times[i+1]
             lo, hi = max(start, ta), min(end, tb)
             va, vb = a["yaw_rate_deg_s"], b["yaw_rate_deg_s"]
             vlo = va+(vb-va)*(lo-ta)/(tb-ta)
@@ -337,17 +328,23 @@ class WheelInputBridge:
         if len(self.seen) > 512:
             self.seen = {identity}
         self.last_end = end
-        packet = dict(schema=1, session_id=self.session_id, packet_id=self.next_id,
-            mcu_epoch=epoch, sample_id=sample["sample_id"], capture_time_qualified=True,
-            source="measured_wheel_feedback", measurement_valid=True, interval_start_ns=start, interval_end_ns=end,
+        errors=[sample.get("time_uncertainty_ns")]+[s.get("time_uncertainty_ns") for s in selected]
+        errors_known=all(isinstance(e,int) and e>=0 for e in errors)
+        qualified=sample.get("capture_time_qualified") is True and all(s.get("capture_time_qualified") is True for s in selected)
+        packet = dict(schema=2,time_policy=TIME_POLICY,session_id=self.session_id, packet_id=self.next_id,
+            mcu_epoch=epoch, sample_id=sample["sample_id"], capture_time_qualified=qualified,
+            source="measured_wheel_feedback", measurement_valid=True,
+            alignment_clock=clock,alignment_start_ns=start,alignment_end_ns=end,
+            interval_start_ns=sample.get("interval_start_ns"),interval_end_ns=sample.get("interval_end_ns"),
             receive_monotonic_ns=sample["receive_monotonic_ns"],
-            time_uncertainty_ns=max([uncertainty]+[s["time_uncertainty_ns"] for s in selected]),
-            alignment_uncertainty_ns=uncertainty+max(s["time_uncertainty_ns"] for s in selected),
-            gyro_start_ns=selected[0]["angular_rate_capture_ns"],
-            gyro_end_ns=selected[-1]["angular_rate_capture_ns"],
+            time_uncertainty_ns=max(errors) if errors_known else None,
+            alignment_uncertainty_ns=errors[0]+max(errors[1:]) if errors_known else None,
+            alignment_gyro_start_ns=times[first],alignment_gyro_end_ns=times[last],
             gyro_receive_ns=max(s["receive_monotonic_ns"] for s in selected),
             wheel_midpoint_ns=(start+end)//2,
             gyro_midpoint_delta_ns=(times[first]+times[last]-start-end)//2,
+            gyro_max_gap_ns=max((b-a for a,b in zip(times[first:last],times[first+1:last+1])),default=0),
+            age_from_wheel_receive_ns=now-sample["receive_monotonic_ns"],
             gyro_samples=selected, v_body_mps=v_body, omega_body_rad_s=omega,
             action_context=self.context,
             host_action_id_at_receive=sample.get("host_action_id_at_receive"),

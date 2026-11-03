@@ -12,7 +12,6 @@
 
 namespace omni {
 namespace {
-constexpr std::uint64_t max_age = 50000000, max_uncertainty = 5000000;
 std::array<double, 3> vector3(const DebugWheelInput::Json &value)
 {
     if (!value.is_array() || value.size() != 3) throw std::runtime_error("expected vector3");
@@ -180,8 +179,9 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     std::uint64_t packet_id = 0, start = 0, end = 0;
     rs2_vector v{};
     try {
-        if (p.at("schema") != 1 || p.at("session_id") != session_ ||
-            p.at("source") != "measured_wheel_feedback" || p.at("capture_time_qualified") != true ||
+        if (p.at("schema") != 2 || p.at("session_id") != session_ ||
+            p.at("time_policy") != "received_feedback_no_age_gate_v1" ||
+            p.at("source") != "measured_wheel_feedback" || !p.at("capture_time_qualified").is_boolean() ||
             p.at("measurement_valid") != true)
             throw std::runtime_error("invalid_session_or_source");
         auto tick = [&](const char *name) {
@@ -189,21 +189,22 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
             if (!j.is_number_integer() || j.get<double>() < 0) throw std::runtime_error("invalid_time_or_id");
             return j.get<std::uint64_t>();
         };
-        packet_id = tick("packet_id"); start = tick("interval_start_ns"); end = tick("interval_end_ns");
-        const auto uncertainty = tick("time_uncertainty_ns");
-        const auto receive = tick("receive_monotonic_ns"), gyro_receive = tick("gyro_receive_ns");
-        const auto gs = tick("gyro_start_ns"), ge = tick("gyro_end_ns");
-        if (uncertainty > max_uncertainty || start >= end || end-start > max_age ||
-            now < start || now-start > max_age-uncertainty ||
-            receive < end || receive > now || gyro_receive < ge || gyro_receive > now ||
-            gs > start || ge < end || ge > now || now-gs > max_age-uncertainty)
-            throw std::runtime_error("stale_or_unaligned_input");
+        packet_id = tick("packet_id"); start = tick("alignment_start_ns"); end = tick("alignment_end_ns");
+        tick("receive_monotonic_ns"); tick("gyro_receive_ns");
+        const auto gs = tick("alignment_gyro_start_ns"), ge = tick("alignment_gyro_end_ns");
+        const auto clock=p.at("alignment_clock").get<std::string>();
+        if ((clock!="mcu_event" && clock!="host_monotonic_event") ||
+            (have_packet_ && clock!=alignment_clock_) || start>=end || gs>start || ge<end)
+            throw std::runtime_error("invalid_alignment_interval");
+        // Unknown capture/drift bounds and sample age are diagnostic only.
+        // These ticks describe one source interval, not an SDK timestamp.
         if (have_packet_ && (packet_id <= last_packet_ || start < last_end_))
             throw std::runtime_error("duplicate_or_out_of_order");
         if (p.at("mcu_epoch").is_null()) throw std::runtime_error("unknown_epoch");
         if (have_epoch_ && p.at("mcu_epoch") != epoch_)
             throw std::runtime_error("epoch_changed_new_sdk_session_required");
         if (!have_epoch_) { epoch_ = p.at("mcu_epoch"); have_epoch_ = true; }
+        alignment_clock_=clock;
         const auto body = vector3(p.at("v_body_mps"));
         const auto omega = vector3(p.at("omega_body_rad_s"));
         const auto camera = vector3(p.at("v_camera_mps"));
@@ -235,14 +236,13 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     last_packet_ = packet_id; last_end_ = end; have_packet_ = true;
     const auto frame = std::uint32_t(next_frame_++); // SDK sequence, never a timestamp.
     record({{"event", "wheel_sdk_attempt"}, {"frame_num", frame}, {"sensor_id", 0},
-            {"timestamp_monotonic_ns", now}, {"age_from_interval_start_ns", now-start}, {"packet", p}});
-    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now()-began).count();
-    const auto oldest_source = std::min(start, p.at("gyro_start_ns").get<std::uint64_t>());
-    if (logging_failed_ || now-oldest_source+elapsed > max_age-p.at("time_uncertainty_ns").get<std::uint64_t>()) {
+            {"timestamp_monotonic_ns", now},
+            {"age_from_wheel_receive_ns",static_cast<std::int64_t>(now)-p.at("receive_monotonic_ns").get<std::int64_t>()},
+            {"time_policy","received_feedback_no_age_gate_v1"},{"packet", p}});
+    if (logging_failed_) {
         ++rejected_;
         record({{"event", "wheel_input_rejected"}, {"frame_num", frame},
-                {"reason", logging_failed_ ? "logging_incomplete_not_injected" : "expired_before_sdk_call"}, {"sdk_call_attempted", false}});
+                {"reason", "logging_incomplete_not_injected"}, {"sdk_call_attempted", false}});
         return false;
     }
     bool ok = false;
@@ -262,7 +262,7 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
 
 void DebugWheelInput::poll(std::uint64_t now)
 {
-    // Bounded per iteration. Never block Pose or replay a stale backlog.
+    // Bounded per iteration. No age gate and no duplicate source injection.
     for (int count = 0; count < 64; ++count) {
         char bytes[16384];
         const auto size = ::recv(socket_, bytes, sizeof(bytes), MSG_DONTWAIT | MSG_TRUNC);

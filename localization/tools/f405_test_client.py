@@ -320,8 +320,8 @@ class ChassisTestClient:
                 q["event"].set()
 
     def start_timed_measurements(self):
-        """Explicit test request: causal sync first, then documented 07/08 stream.
-        Mapping/measurement qualification is decided elsewhere, never by this switch.
+        """Explicit test request: documented 07/08 plus diagnostic clock sync.
+        Missing clock bounds/exchanges must not block measurement subscription.
         """
         with self.lock:
             self.timed_requested=True;self.next_sync_ns=0;self.next_config_ns=0
@@ -445,7 +445,7 @@ class ChassisTestClient:
             if self.timed_requested and self.device_identity and self.control_identity_problem(now_ns) is None:
                 try:
                     if now_ns>=self.next_sync_ns:self._request_timed(timed.SYNC_REQ)
-                    if self.have_sync_exchange and not self.timed_stream_active and now_ns>=self.next_config_ns:
+                    if not self.timed_stream_active and now_ns>=self.next_config_ns:
                         self._request_timed(timed.CONFIG_REQ,enable=True)
                 except (OSError,RuntimeError) as error:self.timed_error=str(error)
 

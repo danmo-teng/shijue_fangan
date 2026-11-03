@@ -49,7 +49,7 @@ from f407_motion_protocol import (  # noqa: E402
 )
 from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
-from t265_wheel_input import WheelInputBridge, write_sdk_config, DEPENDENCIES
+from t265_wheel_input import WheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
 
 
 WINDOW_NAME = "t265_f407_motion_map"
@@ -395,7 +395,7 @@ class MotionMapApp:
         text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
         mode = getattr(self.options, "wheel_input", "off")
         wheel_state=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
-        labels={"NOT_REQUESTED":"未请求注入","REQUESTED_BLOCKED":"已请求/尚未加载","SDK_CONFIG_LOADED":"配置已加载/待合格输入","SDK_API_ACCEPTED":"有SDK API成功样本"}
+        labels={"NOT_REQUESTED":"未请求注入","REQUESTED_BLOCKED":"已请求/尚未加载","SDK_CONFIG_LOADED":"配置已加载/等待实测输入","SDK_API_ACCEPTED":"有SDK API成功样本"}
         text.add(f"{labels.get(wheel_state.get('state'),'轮速状态待取')} / 成功{wheel_state.get('sdk_api_success_samples',0)}", (x0, 43), 12,
                  (100, 190, 230))
         age=wheel_state.get("sdk_success_age_ms")
@@ -403,16 +403,16 @@ class MotionMapApp:
         sample_age=wheel_state.get("last_sample_age_ms")
         stream=wheel_state.get("stream") or {}
         stream_label="07/08已订阅" if stream.get("status")==0 and stream.get("enabled")==1 else "07/08未订阅或无回执"
-        text.add((f"输入事件年龄(未合格时仅估计)：{sample_age:.1f}ms" if sample_age is not None else "输入采样时间未知；不能注入")+" / "+stream_label,(30,955),13,(220,220,220))
+        text.add((f"输入事件年龄(仅诊断)：{sample_age:.1f}ms" if sample_age is not None else "输入主机采样时间未知；按源区间采用")+" / "+stream_label,(30,955),13,(220,220,220))
         reason_labels={"unqualified_capture_time_or_epoch":"采样时标/epoch未合格",
             "mcu_clock_drift_bound_unknown":"MCU漂移界未知",
             "wheel_capture_time_bound_unknown_including_rear_EXTI":"轮反馈采集延迟界未知",
             "IMU_acquisition_filter_link_to_ISR_delay_unbounded":"IMU采集延迟界未知",
             "no_matched_clock_exchange":"尚无匹配对时", "boot_epoch_invalid":"boot epoch无效",
-            "stale_or_future_wheel_interval":"轮区间过期或未来时刻"}
+            "waiting_for_bracketing_gyro":"等待该轮区间的gyro样本"}
         reason=wheel_state.get("last_input_rejection")
         missing=wheel_state.get("qualification_missing") or wheel_state.get("clock",{}).get("missing",[])
-        text.add("拒绝/缺项："+reason_labels.get(reason,str(reason))+" / "+','.join(reason_labels.get(r,r) for r in missing),(30,978),12,(100,190,230),max_width=840)
+        text.add("输入状态/时间诊断："+reason_labels.get(reason,str(reason))+" / "+','.join(reason_labels.get(r,r) for r in missing),(30,978),12,(100,190,230),max_width=840)
         text.add("轮反馈诊断参考不是独立真值；实际API成功也不等于实车精度通过",(30,1000),12,(175,175,180))
         running = self.localizer is not None and self.localizer.poll() is None
         service_text = "身份已确认" if self.motion_identity_confirmed() else "仅监听"
@@ -1049,7 +1049,7 @@ class MotionMapApp:
             "wheel_input_requested": wheel_enabled,
             "timed_measurements_requested": wheel_enabled or getattr(self.options,"timed_measurements",False),
             "wheel_processing": "bounded background worker; no GUI poll dependency; asynchronous logging",
-            "wheel_input_time_policy": "qualified_capture_clock_only; legacy_0x15_0x1F_rejected",
+            "wheel_input_time_policy": TIME_POLICY,
             "wheel_input_definition": "v_C^C=R_CB*(v_B^B+omega_B^B cross r_BC^B)",
             "wheel_sdk_config": wheel_config,
             "wheel_noise_basis": f"engineering initial sigma={wheel_noise}m/s, variance={wheel_noise**2}(m/s)^2; not measured calibration; no per-sample covariance",
@@ -1361,7 +1361,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor/map-render check (0..60s); no motion commands")
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
-                        help="SDK-session choice, default pure T265; legacy F405 timing cannot pass injection gates")
+                        help="SDK-session choice; default pure T265, on uses measured 07/08 with timing diagnostics only")
     parser.add_argument("--wheel-noise-std-mps", type=float, default=.10,
                         help="initial engineering velocity sigma, not calibrated; SDK uses its square")
     parser.add_argument("--reference-description", default="",
