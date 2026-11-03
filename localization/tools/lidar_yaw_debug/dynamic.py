@@ -5,6 +5,8 @@ only from VIO/gyro; a scan is never fed back into its own motion compensation.
 Time quality is diagnostic, not a gate. No wheel-position blend or STOP latch.
 """
 from collections import deque
+from bisect import bisect_left, bisect_right
+from operator import itemgetter
 import math
 import threading
 import time
@@ -84,11 +86,21 @@ class DynamicFence:
             self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.has_anchor=False;self.revision+=1
             return dict(self.reference)
 
-    def _frozen(self):
+    def _frozen(self,first_ns=None,last_ns=None,*,latest=False):
         with self.lock:
             if self.reference is None or not self.poses or not self.yaws:raise ValueError("尚未建立1号位场地参考")
             poses,yaws=list(self.poses),list(self.yaws)
             reference,offset,revision=dict(self.reference),self.offset.copy(),self.revision
+        if latest:first_ns=last_ns=min(poses[-1][0],yaws[-1][0])
+        if first_ns is not None:
+            def window(history):
+                # Retain bracketing samples, or two endpoints for the SAME
+                # extrapolation. Full histories remain stored; no age gate.
+                lo=max(0,bisect_left(history,first_ns,key=itemgetter(0))-1)
+                hi=min(len(history),bisect_right(history,last_ns,key=itemgetter(0))+1)
+                lo=min(lo,max(0,len(history)-2));hi=max(hi,min(len(history),lo+2))
+                return history[lo:hi]
+            poses,yaws=window(poses),window(yaws)
         return np.array(poses),np.array(yaws),reference,offset,revision
 
     @staticmethod
@@ -102,7 +114,7 @@ class DynamicFence:
 
     def observe(self,scan):
         began=time.monotonic_ns();cpu_began=time.thread_time_ns();self.scan_count+=1
-        poses,yaws,reference,offset,revision=self._frozen()
+        poses,yaws,reference,offset,revision=self._frozen(scan.first_point_ns,scan.reference_ns)
         copied=time.monotonic_ns()
         query=self.trajectory(poses,yaws,reference);m=self.mount
         accepted=[]
@@ -147,7 +159,7 @@ class DynamicFence:
 
     def snapshot(self,now=None):
         now=time.monotonic_ns() if now is None else now
-        try:poses,yaws,reference,offset,_=self._frozen()
+        try:poses,yaws,reference,offset,_=self._frozen(latest=True)
         except ValueError as e:return dict(ready=False,reason=str(e),scans=self.scan_count,fixes=self.fit_count)
         # Publish at latest actual motion support, never stamp extrapolation as a new sensor frame.
         sample_ns=int(min(poses[-1,0],yaws[-1,0]));pose=self.trajectory(poses,yaws,reference)([sample_ns])[0]

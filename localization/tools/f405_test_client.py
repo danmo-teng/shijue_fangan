@@ -365,14 +365,17 @@ class ChassisTestClient:
     def move_spin_angle(self, speed_mm_s, direction_deg, turn_deg, max_rate_dps):
         raise UnsupportedCapability("move_spin_angle has no UART4 request/ACK contract; no packet sent")
 
-    def telemetry(self, callback):
-        """Subscribe to this owner's receive stream; callback must not block."""
+    def telemetry(self, callback, *, readonly=False):
+        """Subscribe without blocking. Internal readonly consumers promise not
+        to mutate the frozen receive snapshot; other consumers get deep copies.
+        """
+        subscription=(callback,readonly)
         with self.lock:
-            self.subscribers.append(callback)
+            self.subscribers.append(subscription)
         def unsubscribe():
             with self.lock:
-                if callback in self.subscribers:
-                    self.subscribers.remove(callback)
+                if subscription in self.subscribers:
+                    self.subscribers.remove(subscription)
         return unsubscribe
 
     def _log(self, filename, document):
@@ -400,9 +403,9 @@ class ChassisTestClient:
         event["host_action_id_at_receive"]=action["host_action_id"] if action else None
         event["action_identity_basis"]="host receive context, not MCU acquisition identity"
         self._log("chassis_telemetry.jsonl", event)
-        for callback in tuple(self.subscribers):
+        for callback,readonly in tuple(self.subscribers):
             try:
-                callback(copy.deepcopy(event))
+                callback(event if readonly else copy.deepcopy(event))
             except Exception:
                 self.client_stats["subscriber_errors"] += 1
 

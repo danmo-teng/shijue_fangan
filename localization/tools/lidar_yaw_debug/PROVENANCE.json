@@ -37,7 +37,7 @@
     "static.py": {
       "source": "lidar/static.py",
       "source_sha256": "2ab536d0d66d35de5f0f9e67a08acb7879eddf249ae33479e1a7d034776c6396",
-      "changes": "necessary subset; batch evaluation of the same 160 RANSAC pairs, same thresholds and tie rule"
+      "changes": "RANSAC/TLS subset; 160 uniform ordered pairs per round generated in batches, seeded sequence changes; same geometry thresholds/tie rule; replay and known geometry checked"
     },
     "types.py": {
       "source": "fusion/types.py",
@@ -56,7 +56,11 @@
     },
     "dynamic.py": {
       "source": "fusion/deskew.py; fusion/fence_adapter.py; reviewed math2d/types dependencies",
-      "changes": "SE2 per-point rigid transform reused; motion from sole SDK pose and primary yaw; fixed field reference, only observed-axis correction; no patch STOP/time qualification gates; actual time quality remains false"
+      "changes": "SE2 per-point rigid transform reused; motion from sole SDK pose and primary yaw; fixed field reference, only observed-axis correction; no patch STOP/time qualification gates; actual time quality remains false; retain only bracketing samples during array conversion, full raw histories retained"
+    },
+    "worker.py": {
+      "source": "RDK test integration, user-approved 2026-11-03",
+      "changes": "spawn process solely owns lidar UART/parser/deskew/fitter; bounded original-time pose/yaw IPC from existing SDK/chassis owners; raw logs preserved, display snapshots alone coalesce"
     }
   },
   "dynamic_integration_baseline": "eae0b4a"

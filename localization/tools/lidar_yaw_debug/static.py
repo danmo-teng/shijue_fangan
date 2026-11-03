@@ -35,10 +35,14 @@ def extract_lines(points, seed=0, threshold=.025, min_points=12, min_span=.35):
     for _ in range(8):
         if len(remaining) < min_points:
             break
-        # Same 160 random pairs, threshold and first-best tie rule as the
-        # scalar reference. Batch distances avoid 160 Python/Numpy calls per
-        # line; no reduced geometry requirements or newly fitted yaw.
-        pairs=np.array([rng.choice(len(remaining),2,replace=False).tolist() for _ in range(160)])
+        # Uniform ordered pairs without replacement WITHIN each pair. All
+        # n*(n-1) pairs remain equally likely; hypotheses may repeat, as before.
+        # Two batch draws replace 160 tiny choice calls. The seeded sequence
+        # changes, but hypothesis count, geometry gates and tie rule do not.
+        first=rng.integers(len(remaining),size=160)
+        second=rng.integers(len(remaining)-1,size=160)
+        second += second >= first
+        pairs=np.column_stack((first,second))
         p=remaining[pairs[:,0]];tangent=remaining[pairs[:,1]]-p
         length=np.linalg.norm(tangent,axis=1);valid=length>=.15
         normal=np.column_stack([-tangent[:,1],tangent[:,0]])/np.maximum(length[:,None],1e-12)

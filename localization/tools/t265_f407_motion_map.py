@@ -992,7 +992,7 @@ class MotionMapApp:
         wheel_config = write_sdk_config(self.run_dir / "wheel_sdk_config.json", wheel_noise)
         bridge_type=SyntheticWheelInputBridge if synthetic else WheelInputBridge
         self.wheel_input = bridge_type(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
-        if self.bridge:self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry)
+        if self.bridge:self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry,readonly=True)
         self.wheel_input.start()
         if self.bridge:
             self.bridge.start()

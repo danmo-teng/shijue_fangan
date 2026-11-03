@@ -14,19 +14,16 @@ import time
 import uuid
 import cv2
 import numpy as np
-import serial
 
 import t265_f407_motion_map as base
 from async_debug_log import AsyncDebugLog
 from f405_timed_measurements import TimedMeasurements
 from lidar_yaw_debug.diagnostic import load_config
-from lidar_yaw_debug.dynamic import DynamicFence
-from lidar_yaw_debug.lidar_reader import LidarStream
-from lidar_yaw_debug.lidar_timing import LidarTimingError
-from lidar_yaw_debug.protocol import command_frame
+from lidar_yaw_debug.worker import RadarWorker
 
 DYNAMIC_FILES={'dynamic_events.jsonl','dynamic_scans.jsonl','dynamic_localization.jsonl',
-    'dynamic_status.json','dynamic_summary.json','pose_motion.jsonl','lidar_rx.jsonl','lidar_tx.jsonl'}
+    'dynamic_status.json','dynamic_summary.json','pose_motion.jsonl','lidar_rx.jsonl','lidar_tx.jsonl',
+    'lidar_worker_events.jsonl','lidar_worker_summary.json'}
 base.SESSION_FILES=base.SESSION_FILES|DYNAMIC_FILES
 
 
@@ -35,18 +32,19 @@ class DynamicMapApp(base.MotionMapApp):
         cv2.setNumThreads(1)  # UI resize must not compete with sensor workers.
         super().__init__(options)
         self.dynamic_config=load_config(options.dynamic_config)
-        self.engine=DynamicFence(self.dynamic_config['installation'])
+        self.radar=RadarWorker()
         self.pose_address='\0lidar-vio-'+uuid.uuid4().hex
         self.pose_socket=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
         self.pose_socket.bind(self.pose_address);self.pose_socket.listen(1);self.pose_socket.settimeout(.05)
-        self.dynamic_stop=threading.Event();self.pose_thread=None;self.scan_thread=None;self.fit_thread=None
-        self.lidar=None;self.reader=None;self.dynamic_log=None;self.dynamic_unsubscribe=None
+        self.dynamic_stop=threading.Event();self.pose_thread=None;self.yaw_thread=None
+        self.dynamic_log=None;self.dynamic_unsubscribe=None
         self.chassis_inbox=queue.Queue(maxsize=2048);self.clock_map=TimedMeasurements()
         self.timed_yaw_seen=False;self.last_yaw_id=None;self.pose_packets=0;self.imu_packets=0
-        self.dynamic_error=None;self.processing_ms=[];self.dynamic_snapshot={};self.path=[];self.vio_path=[]
-        self.scan_queue=queue.Queue(maxsize=4);self.scans_received=0;self.scan_queue_drops=0
+        self.dynamic_error=None;self.dynamic_snapshot={};self.path=[];self.vio_path=[]
+        self.last_worker_input_drops=0
         self.last_dynamic_stamp=0;self.exit_requested=False
         self.capture_chain_present=False
+        self.auto_reference_requested=False
         self.speed_mm_s=200;self.turn_rate_deg_s=60;self.distance_mm=500
 
     def extra_localizer_args(self):
@@ -64,21 +62,14 @@ class DynamicMapApp(base.MotionMapApp):
         super().start_session()
         self.dynamic_log=AsyncDebugLog(self.run_dir)
         if self.options.lidar==self.options.uart:raise ValueError('雷达与底盘不能共用同一UART')
-        self.dynamic_unsubscribe=self.bridge.telemetry(self.dynamic_telemetry)
+        self.dynamic_unsubscribe=self.bridge.telemetry(self.dynamic_telemetry,readonly=True)
         if self.bridge.device_identity:self.clock_map.set_identity(self.bridge.device_identity)
         self.bridge.start_timed_measurements()  # Sync is diagnostic; primary yaw keeps its native sign.
         self.pose_thread=threading.Thread(target=self.read_pose,name='dynamic-pose-receiver',daemon=True)
         self.pose_thread.start()
-        self.lidar=serial.Serial(self.options.lidar,self.options.lidar_baud,timeout=.01,write_timeout=.2,exclusive=True)
-        self.reader=self.new_lidar_reader()
-        self.scan_thread=threading.Thread(target=self.read_scans,name='dynamic-lidar-worker',daemon=True)
-        self.scan_thread.start()
-        self.fit_thread=threading.Thread(target=self.process_scans,name='dynamic-fence-worker',daemon=True)
-        self.fit_thread.start()
-        for mode,value in ((0xA0,0),(0xA2,3600)):
-            packet=command_frame(mode,value)
-            self.dlog('lidar_tx.jsonl',dict(timestamp_monotonic_ns=time.monotonic_ns(),data_hex=packet.hex()))
-            if self.lidar.write(packet)!=len(packet):raise RuntimeError('雷达启动命令写入不完整')
+        self.yaw_thread=threading.Thread(target=self.read_yaw,name='dynamic-yaw-forwarder',daemon=True)
+        self.yaw_thread.start()
+        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir)
         m=base.read_json(self.run_dir/'metadata.json')
         m.update(localization_mode='lidar_t265_dynamic_debug',initial_pose=dict(x_m=-1.35,y_m=1.35,yaw_deg=135),
             physical_placement_confirmed=False,lidar_port=self.options.lidar,lidar_baud=self.options.lidar_baud,
@@ -88,16 +79,11 @@ class DynamicMapApp(base.MotionMapApp):
             hardware_speed_accuracy_verified=False,maximum_test_command_speed_mm_s=700)
         m['wheel_and_primary_gyro_independent_of_sdk_input']=False if self.options.wheel_input=='on' else None
         m['sdk_device_internal_state_clean_verified']=False
+        m['lidar_execution']='dedicated_spawn_process_parser_deskew_fit'
+        m['lidar_worker_pid']=self.radar.process.pid
+        m['line_sampler']='uniform_batched_ordered_pairs_160_v1'
         (self.run_dir/'metadata.json').write_text(json.dumps(m,ensure_ascii=False,indent=2)+'\n')
         self.message='放在1号位、车头135°，点击“开始定位”；动作仅由按钮触发'
-
-    def new_lidar_reader(self):
-        m=self.dynamic_config['installation'];timing=dict(self.dynamic_config['packet_timing'])
-        timing['max_receive_gap_ns']=2**62  # Arrival age is diagnostic, not a rejection policy.
-        return LidarStream(dict(bearing_sign=1,bearing_zero_deg=0.,physical_direction=1,
-            center_raw_deg=m['center_raw_deg'],fov_deg=m['display_fov_deg'],packet_timing=timing,
-            max_batch_span_ns=2**62,sector_limits=dict(max_span_ns=2**62,max_point_gap_ns=2**62,max_stall_ns=2**62)),
-            sensor_epoch=uuid.uuid4().hex)
 
     def dynamic_telemetry(self,event):
         if event['kind'] not in ('imu','timed_identity','timed_clock_sync','timed_gyro_diagnostic','device_identity_changed'):return
@@ -112,7 +98,7 @@ class DynamicMapApp(base.MotionMapApp):
             if kind=='timed_identity':self.clock_map.set_identity(s)
             elif kind=='timed_clock_sync':self.clock_map.sync(s)
             elif kind=='device_identity_changed':
-                self.engine.invalidate_reference('device_identity_changed');self.timed_yaw_seen=False;self.last_yaw_id=None
+                self.radar.send('invalidate',dict(reason='device_identity_changed'));self.timed_yaw_seen=False;self.last_yaw_id=None
                 self.devent('reference_invalidated',reason='device_identity_changed')
             elif kind=='timed_gyro_diagnostic':
                 if not self.clock_map.identity or s['boot_epoch']!=self.clock_map.identity['boot_epoch']:continue
@@ -122,11 +108,12 @@ class DynamicMapApp(base.MotionMapApp):
                 if not flags&1 or flags&(4|8|32|1024):continue
                 estimate,uncertainty,reasons=self.clock_map.map_time(s['yaw_receive_us'],s['receive_monotonic_ns'])
                 t=estimate if estimate is not None and estimate>=0 else s['receive_monotonic_ns']
-                self.engine.ingest_yaw(t,s['yaw_mdeg']/1000.,dict(source='versioned_primary_yaw',raw=s,
-                    time_qualified=False,time_uncertainty_ns=uncertainty,time_diagnostics=reasons))
+                self.radar.send('yaw',dict(time_ns=t,yaw_deg=s['yaw_mdeg']/1000.,source=dict(source='versioned_primary_yaw',raw=s,
+                    time_qualified=False,time_uncertainty_ns=uncertainty,time_diagnostics=reasons)))
                 self.last_yaw_id=identity;self.timed_yaw_seen=True;self.imu_packets+=1
             elif kind=='imu' and not self.timed_yaw_seen and s.get('wire_valid'):
-                self.engine.ingest_yaw(s['timestamp_monotonic_ns'],s['yaw_deg'],dict(source='legacy_primary_yaw_receive',raw=s,time_qualified=False))
+                self.radar.send('yaw',dict(time_ns=s['timestamp_monotonic_ns'],yaw_deg=s['yaw_deg'],
+                    source=dict(source='legacy_primary_yaw_receive',raw=s,time_qualified=False)))
                 self.imu_packets+=1
 
     def read_pose(self):
@@ -141,48 +128,36 @@ class DynamicMapApp(base.MotionMapApp):
             except socket.timeout:continue
             except OSError:break
             try:
-                p=json.loads(data);self.engine.ingest_pose(p);self.pose_packets+=1;self.dlog('pose_motion.jsonl',p)
+                p=json.loads(data);self.radar.send('pose',p);self.pose_packets+=1;self.dlog('pose_motion.jsonl',p)
             except (ValueError,KeyError,TypeError) as e:self.dynamic_error='Pose解析: '+str(e)
         if connection is not None:connection.close()
 
-    def read_scans(self):
-        while not self.dynamic_stop.is_set():
-            try:
-                self.drain_yaw()
-                data=self.lidar.read(min(self.lidar.in_waiting or 1,65536));now=time.monotonic_ns()
-                if not data:continue
-                self.dlog('lidar_rx.jsonl',dict(timestamp_monotonic_ns=now,data_hex=data.hex()))
-                try:scans=self.reader.feed(data,now)
-                except LidarTimingError as e:
-                    self.devent('lidar_segment_restart',reason=str(e));self.reader=self.new_lidar_reader();continue
-                for scan in scans:
-                    self.scans_received+=1
-                    self.dlog('dynamic_scans.jsonl',dict(scan_id=scan.scan_id,reference_ns=scan.reference_ns,
-                        time_qualified=False,points=[vars(p).copy() for p in scan.points]))
-                    try:self.scan_queue.put_nowait(scan)
-                    except queue.Full:
-                        self.scan_queue.get_nowait();self.scan_queue.put_nowait(scan);self.scan_queue_drops+=1
-                        self.devent('bounded_scan_queue_overflow',dropped=self.scan_queue_drops)
-            except (OSError,ValueError,KeyError) as e:
-                self.dynamic_error=str(e);self.devent('dynamic_worker_error',reason=str(e));break
-
-    def process_scans(self):
-        while not self.dynamic_stop.is_set():
-            try:scan=self.scan_queue.get(timeout=.05)
-            except queue.Empty:continue
-            if self.engine.reference is None:continue
-            try:
-                result=self.engine.observe(scan);self.dynamic_error=None;self.processing_ms.append(result['compute_ms'])
-                if len(self.processing_ms)>2048:del self.processing_ms[:512]
-                self.dlog('dynamic_localization.jsonl',result)
-            except ValueError as e:self.dynamic_error=str(e)
+    def read_yaw(self):
+        while not self.dynamic_stop.wait(.005):
+            self.drain_yaw()
 
     def update_data(self):
         super().update_data()
-        if self.options.sensor_check_seconds and self.engine.reference is None:
-            try:self.engine.align('desktop sensor check; initial field position is only a hypothesis',physical_confirmed=False)
-            except ValueError:pass
-        self.dynamic_snapshot=self.engine.snapshot()
+        for message in self.radar.poll():
+            if message['kind']=='reference_set':
+                self.path=[];self.vio_path=[];self.dynamic_error=None
+                self.devent('field_reference_set',reference=message['reference'])
+                self.message='定位已开始；初始朝向朝外，先后退可向场内移动'
+            elif message['kind']=='reference_rejected':self.message=message['error']
+            elif message['kind']=='error':raise RuntimeError('雷达进程：'+message['error'])
+        state=self.radar.state;self.dynamic_snapshot=state.get('last',{})
+        if (self.radar.process is not None and self.radar.process.exitcode is not None
+                and not self.dynamic_stop.is_set()):
+            self.logging_failed=True
+            raise RuntimeError('雷达工作进程已退出，查看lidar_worker_events.jsonl')
+        if self.radar.input_drops!=self.last_worker_input_drops:
+            self.last_worker_input_drops=self.radar.input_drops
+            self.devent('bounded_motion_queue_overflow',dropped=self.radar.input_drops)
+        if (self.options.sensor_check_seconds and not self.dynamic_snapshot.get('ready')
+                and not self.auto_reference_requested and self.radar.pending_reference is None
+                and state.get('have_tracked_pose') and state.get('have_primary_yaw')):
+            self.radar.align('desktop sensor check; initial field position is only a hypothesis',physical_confirmed=False)
+            self.auto_reference_requested=True
         self.input_snapshot=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
         if self.dynamic_snapshot.get('ready'):
             stamp=self.dynamic_snapshot['sample_monotonic_ns']
@@ -225,7 +200,7 @@ class DynamicMapApp(base.MotionMapApp):
             number(f'Yaw {s["yaw_deg"]:.1f} deg',120)
         else:number('WAIT: place at zone 1',88)
         number('Wall: '+('/'.join(s.get('current_wall_axes',[])) or 'VIO'),153)
-        number(f'Scan {self.scans_received} / Fit {self.engine.fit_count}',183)
+        number(f'Scan {self.radar.state.get("scans_received",0)} / Fit {self.radar.state.get("fits",0)}',183)
         number(f'Pose {self.pose_packets} / Yaw {self.imu_packets}',213)
         wheel=getattr(self,'input_snapshot',{});count=wheel.get('sdk_api_success_samples',0)
         stage='OFF' if self.options.wheel_input=='off' else ('API_OK' if count else 'CFG_OK' if wheel.get('config_loaded') else 'WAIT_CFG')
@@ -266,8 +241,8 @@ class DynamicMapApp(base.MotionMapApp):
         if name=='start_dynamic':
             if self.bridge.pending:self.message='先结束当前动作再建立起点';return
             try:
-                ref=self.engine.align('operator button: vehicle at zone1 (-1.35,+1.35), heading135');self.path=[];self.vio_path=[]
-                self.devent('field_reference_set',reference=ref);self.dynamic_error=None;self.message='定位已开始；初始朝向朝外，先后退可向场内移动'
+                request=self.radar.align('operator button: vehicle at zone1 (-1.35,+1.35), heading135')
+                self.devent('field_reference_requested',request_id=request);self.message='正在建立1号位参考'
             except ValueError as e:self.message=str(e)
         elif name=='speed_slow':self.speed_mm_s=200;self.turn_rate_deg_s=60
         elif name=='speed_fast':self.speed_mm_s=700;self.turn_rate_deg_s=360
@@ -276,14 +251,14 @@ class DynamicMapApp(base.MotionMapApp):
         elif name=='mark':
             try:
                 self.mark_settled_reference()
-                self.settled_reference_mark['dynamic_localization']=self.engine.snapshot()
+                self.settled_reference_mark['dynamic_localization']=self.dynamic_snapshot
                 self.devent('operator_settled_mark',test_id=self.test_id,marker=self.settled_reference_mark)
                 self.message=f'实验{self.test_id}终点已冻结；点击录入实测，填写卷尺/地面角度'
             except ValueError as e:self.message=str(e)
         elif name=='measure':
             if self.active_test is not None or not self.settled_reference_mark:self.message='先停稳后记点，再录入实测'
             else:self.measurement_buffer=''
-        elif self.engine.reference is None:self.message='请先摆好1号位并开始定位'
+        elif self.radar.pending_reference is not None or not self.dynamic_snapshot.get('ready'):self.message='请先摆好1号位并开始定位'
         else:super().select_at(x,y)
 
     def handle_key(self,key):
@@ -310,23 +285,19 @@ class DynamicMapApp(base.MotionMapApp):
             self.last_sent_command=None  # Parent must not submit a second exit STOP.
         self.dynamic_stop.set()
         if self.dynamic_unsubscribe:self.dynamic_unsubscribe();self.dynamic_unsubscribe=None
-        for worker in (self.pose_thread,self.scan_thread,self.fit_thread):
+        for worker in (self.pose_thread,self.yaw_thread):
             if worker:
                 worker.join(timeout=3)
                 if worker.is_alive():self.logging_failed=True;self.dynamic_error='处理线程退出未完成'
-        if self.lidar:
-            try:self.lidar.write(command_frame(0xA1,0))
-            except (OSError,serial.SerialException):pass
-            self.lidar.close()
+        self.radar.close()
         self.pose_socket.close()
         if self.dynamic_log:
-            self.capture_chain_present=bool(self.engine.poses and self.imu_packets and self.scans_received)
-            summary=dict(pose_packets=self.pose_packets,primary_yaw_packets=self.imu_packets,scans=self.engine.scan_count,
-                scans_received=self.scans_received,scan_queue_drops=self.scan_queue_drops,
-                fits=self.engine.fit_count,scan_processing_ms_p95=float(np.percentile(self.processing_ms,95)) if self.processing_ms else None,
-                last=self.engine.snapshot(),reader_stats=dict(self.reader.stats) if self.reader else {},error=self.dynamic_error,
-                capture_chain_present=self.capture_chain_present,
-                accuracy_verified=False,full_speed_physical_validation=False)
+            summary=dict(self.radar.state,pose_packets=self.pose_packets,primary_yaw_packets=self.imu_packets,
+                motion_queue_drops=self.radar.input_drops,worker_stopped_cleanly=self.radar.stopped_cleanly,
+                parent_error=self.dynamic_error)
+            self.capture_chain_present=bool(summary.get('capture_chain_present'))
+            self.logging_failed=(self.logging_failed or not self.radar.stopped_cleanly
+                or not summary.get('logging_healthy',False))
             self.dynamic_log.submit('dynamic_summary.json',summary,atomic=True);self.dynamic_log.close()
             self.logging_failed=self.logging_failed or not self.dynamic_log.healthy()
         super().stop_session()

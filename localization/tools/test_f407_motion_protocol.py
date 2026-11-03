@@ -288,6 +288,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_dynamic_worker_process()
     # Wire-compatible fast CRCs: independent polynomial reference, including
     # every byte value and a multibyte sequence, not encoder/decoder roundtrip.
     from lidar_yaw_debug.protocol import crc8
@@ -589,6 +590,13 @@ def test_f405_client():
     with tempfile.TemporaryDirectory() as temporary:
         root=Path(temporary)
         c=ChassisTestClient("NOT_OPENED",115200,root/"status.json",root/"status.jsonl",identity_confirmed=True)
+        readonly=[]
+        mutate=c.telemetry(lambda e:e['sample']['values'].append(99))
+        observe=c.telemetry(readonly.append,readonly=True)
+        sample={'values':[1,2]};c._publish('isolation_check',sample)
+        assert sample['values']==[1,2] and readonly[0]['sample']['values']==[1,2]
+        assert json.loads((root/'chassis_telemetry.jsonl').read_text())['sample']['values']==[1,2]
+        mutate();observe()
         transport=FakeSerial();c.serial=transport
         clock=[10_000_000_000]
         def state(sequence,command_sequence,opcode,state):
@@ -830,6 +838,47 @@ def test_timed_f405_client():
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
 
 
+def test_dynamic_worker_process():
+    # Existing regression entry; a PTY fixture, no physical UART or SDK.
+    import os,pty
+    from lidar_yaw_debug.worker import RadarWorker
+    from lidar_yaw_debug.protocol import crc8
+    from lidar_yaw_debug.diagnostic import load_config
+    master,slave=pty.openpty();os.set_blocking(master,False)
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp);worker=RadarWorker()
+        try:
+            cfg=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')
+            worker.start(cfg,os.ttyname(slave),230400,root)
+            deadline=time.monotonic()+5;started=False
+            while time.monotonic()<deadline and not started:
+                started=any(m['kind']=='started' for m in worker.poll());time.sleep(.01)
+            assert started and worker.process.pid!=os.getpid(),worker.state
+            now=time.monotonic_ns()
+            for i,t in enumerate((now-1_000_000_000,now)):
+                worker.send('pose',dict(session_id='offline',frame_number=i,timestamp_monotonic_ns=t,
+                    receive_monotonic_ns=t,x_m=-1.35,y_m=1.35,yaw_rad=2.356194490192345,tracker_confidence=3))
+                worker.send('yaw',dict(time_ns=t,yaw_deg=135.,source={'source':'PTY fixture'}))
+            worker.align('PTY math/transport fixture',physical_confirmed=False)
+            raw=bytearray()
+            for i in range(180):
+                first=(i*600)%36000;last=(first+550)%36000
+                packet=bytearray(b'\x54\x2c')+(3600).to_bytes(2,'little')+first.to_bytes(2,'little')
+                packet += (b'\xe8\x03\x64')*12
+                packet += last.to_bytes(2,'little')+(1000+2*i).to_bytes(2,'little');packet.append(crc8(packet));raw.extend(packet)
+            deadline=time.monotonic()+4;written=0
+            while time.monotonic()<deadline and (written<len(raw) or worker.state.get('scans_received',0)<2):
+                try:written+=os.write(master,raw[written:]) if written<len(raw) else 0
+                except BlockingIOError:pass
+                worker.poll();time.sleep(.01)
+            assert worker.state.get('scans_received',0)>=2 and worker.state.get('capture_chain_present')
+        finally:
+            worker.close();os.close(master);os.close(slave)
+        assert worker.stopped_cleanly and not worker.process.is_alive()
+        assert worker.state['logging_healthy'] and (root/'lidar_worker_summary.json').exists()
+        assert not (root/'commands.jsonl').exists()
+
+
 def test_dynamic_motion_compensation():
     import math
     import numpy as np
@@ -859,6 +908,14 @@ def test_dynamic_motion_compensation():
         walls.append((axis,border))
     scan=RawScan('moving',points[-1].time_ns,tuple(points),'offline','known_synthetic',False)
     ph,yh,ref,_,_=engine._frozen();query=engine.trajectory(ph,yh,ref)
+    for start,end in ((origin-30_000_000,origin-5_000_000),
+                      (origin+17_000_000,origin+23_000_000),
+                      (origin+195_000_000,origin+215_000_000),
+                      (origin+250_000_000,origin+270_000_000)):
+        compact_p,compact_y,compact_ref,_,_=engine._frozen(start,end)
+        ts=np.array([start,(start+end)//2,end],np.int64)
+        assert np.allclose(engine.trajectory(compact_p,compact_y,compact_ref)(ts),query(ts),rtol=0,atol=1e-10)
+    assert len(engine.poses)==41 and len(engine.yaws)==41  # Histories were not pruned.
     corrected,reference=deskew_points(np.array([p.point_lidar_m for p in points]),np.array([p.time_ns for p in points]),scan.reference_ns,query,ext)
     world=corrected@rotation(reference[2]).T+reference[:2]
     assert max(abs(world[i,axis]-border) for i,(axis,border) in enumerate(walls))<1e-8
