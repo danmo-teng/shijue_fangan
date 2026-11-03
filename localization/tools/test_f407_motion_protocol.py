@@ -306,6 +306,7 @@ def main() -> None:
     test_synthetic_wheel_fixture()
     test_timed_v11_logging_recovery()
     test_timed_v13_feedback()
+    test_t265_usb_recovery()
     test_timed_measurement_pipeline()
     test_timed_f405_client()
     test_lidar_yaw_diagnostic()
@@ -1340,6 +1341,57 @@ def test_timed_v13_feedback():
     try:check.validate_sensor_check();assert False,'config alone cannot pass'
     except RuntimeError:pass
     check.wheel_sdk_status['sdk_api_success_samples']=1;check.validate_sensor_check()
+
+
+def test_t265_usb_recovery():
+    """Target selection and one-shot command scope; no real USB operation."""
+    from unittest.mock import patch
+    import t265_usb_recovery as usb
+    devices=[dict(name='usb1',idVendor='1d6b',idProduct='0002',busnum='1',devnum='1'),
+             dict(name='1-1',idVendor='05e3',idProduct='0610',busnum='1',devnum='2'),
+             dict(name='1-1.1',idVendor='03e7',idProduct='2150',busnum='1',devnum='5'),
+             dict(name='1-1.3',idVendor='1bcf',idProduct='28c4',busnum='1',devnum='4')]
+    plan=usb.recovery_plan(devices)
+    assert (plan['location'],plan['port'])==('1-1',1) and plan['force_known_rdk_ganged']
+    for bad in (devices[:2],devices+[dict(devices[2],name='1-1.2')]):
+        try:usb.recovery_plan(bad);assert False,'must not guess absent/ambiguous camera port'
+        except RuntimeError:pass
+    after=[dict(d,devnum='6') if d['name']=='1-1.1' else d for d in devices]
+    with tempfile.TemporaryDirectory() as temporary:
+        commands=[]
+        def fake_run(args,**kwargs):
+            commands.append(args)
+            return SimpleNamespace(returncode=1 if 'fuser' in args[0] else 0,stdout='fixture',stderr='')
+        with patch.object(usb,'usb_inventory',side_effect=[devices,after]), \
+             patch.object(usb.os,'geteuid',return_value=0), \
+             patch.object(usb.shutil,'which',side_effect=lambda name:'/fixture/'+name), \
+             patch.object(usb.subprocess,'run',side_effect=fake_run):
+            result=usb.recover_t265(Path(temporary)/'t265_usb_recovery.json')
+        cycle=next(c for c in commands if '-a' in c)
+        assert cycle==['/fixture/uhubctl','-N','-l','1-1','-p','1','-f','-a','cycle','-d','5']
+        assert result['command_completed'] and result['device_identity_changed']
+        assert not result['vbus_power_off_verified'] and not result['sdk_pose_verified']
+        assert result['after'][-1]==devices[-1]  # Sibling is observed, not a reset target.
+        commands.clear()
+        with patch.object(usb,'usb_inventory',return_value=devices), \
+             patch.object(usb.os,'geteuid',return_value=0), \
+             patch.object(usb.shutil,'which',side_effect=lambda name:'/fixture/'+name), \
+             patch.object(usb.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout='1234',stderr='')) as busy:
+            try:usb.recover_t265(Path(temporary)/'busy.json');assert False,'active SDK must not be reset'
+            except RuntimeError:pass
+            assert busy.call_count==1 and busy.call_args.args[0][0]=='/fixture/fuser'
+        commands.clear()
+        def failed_cycle(args,**kwargs):
+            commands.append(args)
+            return SimpleNamespace(returncode=1 if ('fuser' in args[0] or 'cycle' in args) else 0,stdout='',stderr='')
+        with patch.object(usb,'usb_inventory',return_value=devices), \
+             patch.object(usb.os,'geteuid',return_value=0), \
+             patch.object(usb.shutil,'which',side_effect=lambda name:'/fixture/'+name), \
+             patch.object(usb.subprocess,'run',side_effect=failed_cycle):
+            try:usb.recover_t265(Path(temporary)/'failed.json');assert False,'failed cycle must report failure'
+            except RuntimeError:pass
+        assert sum('cycle' in c for c in commands)==1
+        assert commands[-1][-2:]==['-a','on'] and commands[-1][commands[-1].index('-p')+1]=='1'
 
 
 if __name__ == "__main__":

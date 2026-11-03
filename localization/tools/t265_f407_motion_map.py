@@ -106,7 +106,8 @@ SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_r
     "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
     "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json",
     "chassis_link.jsonl", "chassis_extended.jsonl", "chassis_identity.json",
-    "wheel_measurements.jsonl","logging_events.jsonl","fisheye_request.json","fisheye_frames.csv","wheel_fixture.jsonl"})
+    "wheel_measurements.jsonl","logging_events.jsonl","fisheye_request.json","fisheye_frames.csv","wheel_fixture.jsonl",
+    "t265_usb_recovery.json"})
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
@@ -977,6 +978,11 @@ class MotionMapApp:
         self.events_path = self.run_dir / "events.jsonl"
         self.commands_path = self.run_dir / "commands.jsonl"
         status_log = self.run_dir / "f407_motion_status.jsonl"
+        usb_recovery=None
+        if getattr(self.options,"t265_usb_recovery",False):
+            from t265_usb_recovery import recover_t265
+            # Before UART subscriptions and the sole SDK process are started.
+            usb_recovery=recover_t265(self.run_dir/"t265_usb_recovery.json")
         synthetic=getattr(self.options,"wheel_fixture","off")!="off"
         if not synthetic:
             self.bridge = F407SerialBridge(
@@ -1142,7 +1148,7 @@ class MotionMapApp:
         except (OSError, subprocess.SubprocessError):
             metadata["upper_git_commit"] = "unavailable"
         (self.run_dir / "metadata.json").write_text(
-            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            json.dumps(dict(metadata,t265_usb_recovery=usb_recovery), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         self.message = f"底盘{self.options.baud}："+("身份已读回，动作须人工触发；轮速尚未注入" if link["motion_identity_ready"] else str(link["reason"]))
         self.record_event("session_started", {"initial_pose": metadata["initial_pose"]})
@@ -1395,6 +1401,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--check-chassis", action="store_true",help="read-only UART/identity/status check; no T265, GUI or motion")
     parser.add_argument("--timed-measurements",action="store_true",help="explicitly sync and subscribe measured 07/08 for diagnostics; not injection eligibility")
     parser.add_argument("--no-log-prune",action="store_true",help="preserve all existing sessions during investigation")
+    parser.add_argument("--t265-usb-recovery",action="store_true",
+                        help="opt-in startup uhubctl cycle; RDK ganged hub may also reconnect USB vision camera; never resets during motion")
     parser.add_argument("--fisheye-evidence",action="store_true",help="same SDK owner enables both fisheyes; C records max two 2s/4Hz bursts")
     parser.add_argument("--device-restart-note",default="not_confirmed",help="operator record of an ACTUAL device restart; never automatically inferred from pipeline start")
     parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor/map-render check (0..60s); no motion commands")
@@ -1419,6 +1427,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.check_chassis and options.t265_usb_recovery:
+        parser.error("USB恢复属于T265启动路径，不能与仅底盘--check-chassis组合")
     if options.wheel_fixture!="off":
         if options.wheel_input!="on" or options.check_chassis or options.timed_measurements:
             parser.error("synthetic fixture requires --wheel-input on and forbids chassis check/subscription")
