@@ -28,7 +28,7 @@ DebugWheelInput::DebugWheelInput(const LocalizationConfig &config, const std::st
                                const std::string &address, const std::string &log_path, bool synthetic_input)
     : config_(config), session_(session), log_(log_path, std::ios::app),synthetic_input_(synthetic_input)
 {
-    if (!log_) throw std::runtime_error("cannot open SDK wheel log");
+    if (!log_) logging_failed_=true; // Diagnostic failure does not disable SDK input.
     status_path_ = log_path.substr(0, log_path.find_last_of('/')+1)+"wheel_sdk_status.json";
     // Abstract Unix socket: no filesystem socket or stale file to clean up.
     if (!address.empty()) {
@@ -228,7 +228,6 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
                 throw std::runtime_error("mount_conversion_mismatch");
         }
         if (sdk_failed_) throw std::runtime_error("sdk_stream_failed_new_session_required");
-        if (logging_failed_) throw std::runtime_error("logging_incomplete_not_injected");
         if (next_frame_ > 0xffffffffULL) throw std::runtime_error("frame_sequence_exhausted_new_session_required");
         v = {float(camera[0]), float(camera[1]), float(camera[2])};
     } catch (const std::exception &e) { reason = e.what(); }
@@ -244,12 +243,8 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
             {"timestamp_monotonic_ns", now},
             {"age_from_wheel_receive_ns",static_cast<std::int64_t>(now)-p.at("receive_monotonic_ns").get<std::int64_t>()},
             {"time_policy","received_feedback_no_age_gate_v1"},{"packet", p}});
-    if (logging_failed_) {
-        ++rejected_;
-        record({{"event", "wheel_input_rejected"}, {"frame_num", frame},
-                {"reason", "logging_incomplete_not_injected"}, {"sdk_call_attempted", false}});
-        return false;
-    }
+    // record() may drop under disk pressure. Preserve the real SDK call;
+    // logging_healthy/dropped_log_records remain visible in the status output.
     bool ok = false;
     std::string error;
     const auto call_start = std::chrono::steady_clock::now();

@@ -599,7 +599,7 @@ class MotionMapApp:
                 self.record_event("chassis_identity_observed",link)
             self.imu_telemetry = self.bridge.imu_snapshot()
             if self.bridge.log_error is not None:
-                self.message = f"测试日志保存失败：{self.bridge.log_error}"
+                self.message = f"日志不完整（不阻断动作/注入）：{self.bridge.log_error}"
             status, _ = self.bridge.status_snapshot()
             if status is not None:
                 self.motion_status = status
@@ -1195,7 +1195,8 @@ class MotionMapApp:
             wheel_summary=self.wheel_input.snapshot(read_json(self.run_dir / "wheel_sdk_status.json"))
             self.record_event("wheel_input_session_summary",dict(wheel_summary,accuracy_verified=False))
             self.wheel_input.close()
-            logs_ok=logs_ok and self.wheel_input.log.healthy()
+            logs_ok=(logs_ok and self.wheel_input.log.healthy()
+                     and wheel_summary.get("sdk_logging_healthy") is not False)
             self.wheel_input = None
         if self.run_dir is not None:
             csv_path = self.run_dir / "localization_debug.csv"

@@ -1,0 +1,3805 @@
+{
+  "lever_fit_assumes_no_center_motion": {
+    "train_count": 16,
+    "test_count": 16,
+    "candidate_delta_m": [
+      0.0113,
+      0.0107
+    ],
+    "current_m": [
+      -0.0346105,
+      -0.0599471445
+    ],
+    "candidate_m": [
+      -0.0233,
+      -0.0493
+    ],
+    "train": {
+      "old_mean_m": 0.0354,
+      "new_mean_m": 0.0294,
+      "old_max_m": 0.0681,
+      "new_max_m": 0.055,
+      "worsened": 5
+    },
+    "held_out": {
+      "old_mean_m": 0.0371,
+      "new_mean_m": 0.0331,
+      "old_max_m": 0.067,
+      "new_max_m": 0.0683,
+      "worsened": 7
+    }
+  },
+  "sessions": [
+    {
+      "session": "20261104_050445_interactive",
+      "seconds": 9.73,
+      "pose_count": 1943,
+      "confidence": {
+        "2": 1943
+      },
+      "raw_span_m": [
+        0.0004,
+        0.0007,
+        0.0006
+      ],
+      "center_span_m": [
+        0.0003,
+        0.0006
+      ],
+      "max_raw_step_m": 0.0005370128210797585,
+      "max_center_step_m": 0.0004194795977923122,
+      "receive_gap_ms": [
+        5.0092,
+        5.2296,
+        7.7821
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.012,
+        5.0266
+      ],
+      "frame_missing": 0,
+      "log": [],
+      "not_sent": 0,
+      "sdk_accept": 516,
+      "sdk_reject": 0,
+      "fits": {},
+      "ranks": {},
+      "actions": [],
+      "top_jumps": [
+        {
+          "t_s": 0.09,
+          "step_m": 0.0005,
+          "capture_gap_ms": 5.012,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            17,
+            18
+          ]
+        },
+        {
+          "t_s": 0.781,
+          "step_m": 0.0005,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            155,
+            156
+          ]
+        },
+        {
+          "t_s": 0.721,
+          "step_m": 0.0005,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            143,
+            144
+          ]
+        }
+      ]
+    },
+    {
+      "session": "20261104_055159_interactive",
+      "seconds": 47.39,
+      "pose_count": 9082,
+      "confidence": {
+        "0": 1,
+        "2": 2045,
+        "3": 7036
+      },
+      "raw_span_m": [
+        0.901,
+        0.0435,
+        0.4648
+      ],
+      "center_span_m": [
+        1.0638,
+        0.1091
+      ],
+      "max_raw_step_m": 0.013074207735516048,
+      "max_center_step_m": 0.009813907652646028,
+      "receive_gap_ms": [
+        5.0039,
+        5.2523,
+        1167.3304
+      ],
+      "capture_gap_ms": [
+        5.0103,
+        5.0112,
+        1167.4004
+      ],
+      "frame_missing": 377,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 1914,
+          "first_drop_ns": 368355795394,
+          "last_drop_ns": 369202930593,
+          "error": null
+        }
+      ],
+      "not_sent": 6,
+      "sdk_accept": 2398,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 454,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 3
+      },
+      "ranks": {
+        "2": 454,
+        "0": 7
+      },
+      "actions": [
+        {
+          "seq": 96,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 9.76,
+          "duration_s": 1.345,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.4795,
+            0.0151
+          ],
+          "body_delta_m": [
+            -0.4795,
+            0.0152
+          ],
+          "center_distance_m": 0.4798,
+          "camera_distance_3d_m": 0.4777,
+          "center_excursion_m": 0.4798,
+          "t265_deg": 2.084,
+          "mainyaw_deg": 1.813,
+          "fit_ranks": {
+            "2": 17
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17
+          },
+          "dynamic_scan_range_m": [
+            0.5054,
+            0.0229
+          ],
+          "max_scan_offset_change_m": 0.0069,
+          "wheel_reference_delta_body_m": [
+            -0.5179,
+            0.0043
+          ],
+          "wheel_reference_path_m": 0.5186
+        },
+        {
+          "seq": 97,
+          "test_id": 2,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 15.613,
+          "duration_s": 1.309,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.4654,
+            -0.0048
+          ],
+          "body_delta_m": [
+            -0.4653,
+            0.0112
+          ],
+          "center_distance_m": 0.4654,
+          "camera_distance_3d_m": 0.4647,
+          "center_excursion_m": 0.4655,
+          "t265_deg": 0.886,
+          "mainyaw_deg": 0.894,
+          "fit_ranks": {
+            "2": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.5146,
+            0.011
+          ],
+          "max_scan_offset_change_m": 0.0128,
+          "wheel_reference_delta_body_m": [
+            -0.5248,
+            0.0044
+          ],
+          "wheel_reference_path_m": 0.5262
+        },
+        {
+          "seq": 98,
+          "test_id": 3,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 22.931,
+          "duration_s": 1.732,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0078,
+            -0.0428
+          ],
+          "body_delta_m": [
+            -0.0099,
+            -0.0424
+          ],
+          "center_distance_m": 0.0435,
+          "camera_distance_3d_m": 0.0645,
+          "center_excursion_m": 0.0523,
+          "t265_deg": -91.103,
+          "mainyaw_deg": -90.872,
+          "fit_ranks": {
+            "2": 20
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 20
+          },
+          "dynamic_scan_range_m": [
+            0.0592,
+            0.0254
+          ],
+          "max_scan_offset_change_m": 0.0468,
+          "wheel_reference_delta_body_m": [
+            0.0009,
+            0.0025
+          ],
+          "wheel_reference_path_m": 0.0159,
+          "stationary_assumption_delta_lever_m": [
+            0.0257,
+            0.0163
+          ]
+        },
+        {
+          "seq": 99,
+          "test_id": 4,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 24.993,
+          "duration_s": 1.819,
+          "outcome": "superseded_by_stop_not_physical_stop_proof",
+          "fault": null,
+          "center_delta_m": [
+            -0.082,
+            0.0131
+          ],
+          "body_delta_m": [
+            -0.0156,
+            -0.0815
+          ],
+          "center_distance_m": 0.083,
+          "camera_distance_3d_m": 0.0434,
+          "center_excursion_m": 0.085,
+          "t265_deg": -90.276,
+          "mainyaw_deg": -89.945,
+          "fit_ranks": {
+            "2": 17,
+            "0": 2
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2
+          },
+          "dynamic_scan_range_m": [
+            0.0397,
+            0.0849
+          ],
+          "max_scan_offset_change_m": 0.0803,
+          "wheel_reference_delta_body_m": [
+            0.0002,
+            -0.0008
+          ],
+          "wheel_reference_path_m": 0.0162
+        },
+        {
+          "seq": 101,
+          "test_id": 5,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 29.895,
+          "duration_s": 2.586,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.016,
+            0.0611
+          ],
+          "body_delta_m": [
+            0.0144,
+            -0.0615
+          ],
+          "center_distance_m": 0.0631,
+          "camera_distance_3d_m": 0.0356,
+          "center_excursion_m": 0.0749,
+          "t265_deg": -89.742,
+          "mainyaw_deg": -89.462,
+          "fit_ranks": {
+            "2": 27,
+            "0": 2
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 27,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2
+          },
+          "dynamic_scan_range_m": [
+            0.0696,
+            0.037
+          ],
+          "max_scan_offset_change_m": 0.0213,
+          "wheel_reference_delta_body_m": [
+            0.003,
+            -0.0035
+          ],
+          "wheel_reference_path_m": 0.0193,
+          "stationary_assumption_delta_lever_m": [
+            0.0237,
+            0.038
+          ]
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 16.249,
+          "step_m": 0.0131,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3242,
+            3243
+          ]
+        },
+        {
+          "t_s": 10.817,
+          "step_m": 0.0101,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            2158,
+            2159
+          ]
+        },
+        {
+          "t_s": 16.414,
+          "step_m": 0.008,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3275,
+            3276
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6298,
+        1.1432,
+        3163.4414
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 233,
+      "data_gaps_over_100ms": 2
+    },
+    {
+      "session": "20261104_055305_interactive",
+      "seconds": 111.79,
+      "pose_count": 21236,
+      "confidence": {
+        "2": 3090,
+        "3": 18146
+      },
+      "raw_span_m": [
+        0.7688,
+        0.0713,
+        2.0016
+      ],
+      "center_span_m": [
+        0.3904,
+        2.1825
+      ],
+      "max_raw_step_m": 0.020243753596349515,
+      "max_center_step_m": 0.01596603333841687,
+      "receive_gap_ms": [
+        5.004,
+        5.259,
+        2409.9914
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        2410.1267
+      ],
+      "frame_missing": 1076,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 1215,
+          "first_drop_ns": 467737360962,
+          "last_drop_ns": 499502950664,
+          "error": null
+        }
+      ],
+      "not_sent": 14,
+      "sdk_accept": 5619,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 857,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 222,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 13,
+        "ENCLOSING_ARENA_CONTRADICTION": 4
+      },
+      "ranks": {
+        "2": 848,
+        "0": 239,
+        "1": 9
+      },
+      "actions": [
+        {
+          "seq": 135,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度200mm/s",
+          "start_s": 9.369,
+          "duration_s": 3.104,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0473,
+            -0.4319
+          ],
+          "body_delta_m": [
+            -0.0473,
+            -0.4319
+          ],
+          "center_distance_m": 0.4345,
+          "camera_distance_3d_m": 0.4336,
+          "center_excursion_m": 0.439,
+          "t265_deg": -1.762,
+          "mainyaw_deg": -1.895,
+          "fit_ranks": {
+            "2": 34
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 34
+          },
+          "dynamic_scan_range_m": [
+            0.0263,
+            0.4966
+          ],
+          "max_scan_offset_change_m": 0.0094,
+          "wheel_reference_delta_body_m": [
+            -0.0222,
+            -0.5024
+          ],
+          "wheel_reference_path_m": 0.505
+        },
+        {
+          "seq": 136,
+          "test_id": 2,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 14.187,
+          "duration_s": 2.086,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0455,
+            -0.4541
+          ],
+          "body_delta_m": [
+            -0.0312,
+            -0.4553
+          ],
+          "center_distance_m": 0.4564,
+          "camera_distance_3d_m": 0.4537,
+          "center_excursion_m": 0.4564,
+          "t265_deg": -4.989,
+          "mainyaw_deg": -4.944,
+          "fit_ranks": {
+            "2": 24
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 24
+          },
+          "dynamic_scan_range_m": [
+            0.0399,
+            0.5026
+          ],
+          "max_scan_offset_change_m": 0.0082,
+          "wheel_reference_delta_body_m": [
+            -0.0182,
+            -0.5126
+          ],
+          "wheel_reference_path_m": 0.5159
+        },
+        {
+          "seq": 137,
+          "test_id": 3,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 17.514,
+          "duration_s": 2.058,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.103,
+            -0.4325
+          ],
+          "body_delta_m": [
+            -0.0517,
+            -0.4416
+          ],
+          "center_distance_m": 0.4446,
+          "camera_distance_3d_m": 0.4427,
+          "center_excursion_m": 0.4449,
+          "t265_deg": -3.886,
+          "mainyaw_deg": -3.927,
+          "fit_ranks": {
+            "2": 24
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 24
+          },
+          "dynamic_scan_range_m": [
+            0.097,
+            0.497
+          ],
+          "max_scan_offset_change_m": 0.0098,
+          "wheel_reference_delta_body_m": [
+            -0.0316,
+            -0.5092
+          ],
+          "wheel_reference_path_m": 0.5116
+        },
+        {
+          "seq": 138,
+          "test_id": 4,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 20.593,
+          "duration_s": 2.242,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0986,
+            -0.4622
+          ],
+          "body_delta_m": [
+            -0.0118,
+            -0.4725
+          ],
+          "center_distance_m": 0.4726,
+          "camera_distance_3d_m": 0.4722,
+          "center_excursion_m": 0.4749,
+          "t265_deg": -1.577,
+          "mainyaw_deg": -1.571,
+          "fit_ranks": {
+            "2": 25
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 25
+          },
+          "dynamic_scan_range_m": [
+            0.098,
+            0.4854
+          ],
+          "max_scan_offset_change_m": 0.0096,
+          "wheel_reference_delta_body_m": [
+            -0.0016,
+            -0.5049
+          ],
+          "wheel_reference_path_m": 0.5055
+        },
+        {
+          "seq": 139,
+          "test_id": 5,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 26.407,
+          "duration_s": 1.867,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.008,
+            -0.0173
+          ],
+          "body_delta_m": [
+            0.0115,
+            -0.0152
+          ],
+          "center_distance_m": 0.0191,
+          "camera_distance_3d_m": 0.0827,
+          "center_excursion_m": 0.0221,
+          "t265_deg": -91.207,
+          "mainyaw_deg": -90.649,
+          "fit_ranks": {
+            "2": 19,
+            "0": 3
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 19,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3
+          },
+          "dynamic_scan_range_m": [
+            0.0801,
+            0.0485
+          ],
+          "max_scan_offset_change_m": 0.0334,
+          "wheel_reference_delta_body_m": [
+            0.0044,
+            0.0005
+          ],
+          "wheel_reference_path_m": 0.0213,
+          "stationary_assumption_delta_lever_m": [
+            0.0017,
+            0.0132
+          ]
+        },
+        {
+          "seq": 140,
+          "test_id": 6,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 30.071,
+          "duration_s": 1.745,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0186,
+            -0.0027
+          ],
+          "body_delta_m": [
+            0.007,
+            -0.0175
+          ],
+          "center_distance_m": 0.0188,
+          "camera_distance_3d_m": 0.0794,
+          "center_excursion_m": 0.0617,
+          "t265_deg": -90.117,
+          "mainyaw_deg": -90.066,
+          "fit_ranks": {
+            "2": 10,
+            "1": 1,
+            "0": 9
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 11,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 8,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 1
+          },
+          "dynamic_scan_range_m": [
+            0.1536,
+            0.0866
+          ],
+          "max_scan_offset_change_m": 0.0664,
+          "wheel_reference_delta_body_m": [
+            -0.0004,
+            0.0022
+          ],
+          "wheel_reference_path_m": 0.0178,
+          "stationary_assumption_delta_lever_m": [
+            0.0052,
+            0.0122
+          ]
+        },
+        {
+          "seq": 141,
+          "test_id": 7,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 32.94,
+          "duration_s": 1.85,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0011,
+            0.0414
+          ],
+          "body_delta_m": [
+            0.0085,
+            -0.0406
+          ],
+          "center_distance_m": 0.0414,
+          "camera_distance_3d_m": 0.0575,
+          "center_excursion_m": 0.0521,
+          "t265_deg": -89.838,
+          "mainyaw_deg": -90.208,
+          "fit_ranks": {
+            "2": 19,
+            "1": 3
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 22
+          },
+          "dynamic_scan_range_m": [
+            0.062,
+            0.0853
+          ],
+          "max_scan_offset_change_m": 0.016,
+          "wheel_reference_delta_body_m": [
+            -0.0009,
+            -0.0015
+          ],
+          "wheel_reference_path_m": 0.0177,
+          "stationary_assumption_delta_lever_m": [
+            0.0161,
+            0.0246
+          ]
+        },
+        {
+          "seq": 142,
+          "test_id": 8,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 35.483,
+          "duration_s": 1.893,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0046,
+            -0.0367
+          ],
+          "body_delta_m": [
+            -0.0347,
+            -0.0128
+          ],
+          "center_distance_m": 0.037,
+          "camera_distance_3d_m": 0.102,
+          "center_excursion_m": 0.0448,
+          "t265_deg": -90.453,
+          "mainyaw_deg": -90.253,
+          "fit_ranks": {
+            "0": 21,
+            "2": 1
+          },
+          "fit_reasons": {
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 16,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 4,
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 1,
+            "ENCLOSING_ARENA_CONTRADICTION": 1
+          },
+          "dynamic_scan_range_m": [
+            0.0421,
+            0.0363
+          ],
+          "max_scan_offset_change_m": 0.0401,
+          "wheel_reference_delta_body_m": [
+            0.0047,
+            -0.002
+          ],
+          "wheel_reference_path_m": 0.0183,
+          "stationary_assumption_delta_lever_m": [
+            0.0237,
+            -0.0108
+          ]
+        },
+        {
+          "seq": 143,
+          "test_id": 9,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 39.565,
+          "duration_s": 1.765,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0149,
+            -0.0253
+          ],
+          "body_delta_m": [
+            0.0204,
+            -0.0211
+          ],
+          "center_distance_m": 0.0293,
+          "camera_distance_3d_m": 0.0737,
+          "center_excursion_m": 0.0326,
+          "t265_deg": -90.164,
+          "mainyaw_deg": -89.989,
+          "fit_ranks": {
+            "2": 7,
+            "0": 13
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 7,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 13
+          },
+          "dynamic_scan_range_m": [
+            0.1165,
+            0.0417
+          ],
+          "max_scan_offset_change_m": 0.0424,
+          "wheel_reference_delta_body_m": [
+            0.0058,
+            0.001
+          ],
+          "wheel_reference_path_m": 0.0177,
+          "stationary_assumption_delta_lever_m": [
+            0.0003,
+            0.0207
+          ]
+        },
+        {
+          "seq": 144,
+          "test_id": 10,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 41.889,
+          "duration_s": 2.183,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0098,
+            -0.0081
+          ],
+          "body_delta_m": [
+            0.0102,
+            -0.0076
+          ],
+          "center_distance_m": 0.0127,
+          "camera_distance_3d_m": 0.0879,
+          "center_excursion_m": 0.0242,
+          "t265_deg": -89.49,
+          "mainyaw_deg": -89.918,
+          "fit_ranks": {
+            "0": 25
+          },
+          "fit_reasons": {
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 25
+          },
+          "dynamic_scan_range_m": [
+            0.0213,
+            0.0139
+          ],
+          "max_scan_offset_change_m": 0.0,
+          "wheel_reference_delta_body_m": [
+            0.0004,
+            0.0012
+          ],
+          "wheel_reference_path_m": 0.0139,
+          "stationary_assumption_delta_lever_m": [
+            -0.0013,
+            0.0089
+          ]
+        },
+        {
+          "seq": 145,
+          "test_id": 11,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 52.515,
+          "duration_s": 1.764,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0042,
+            0.068
+          ],
+          "body_delta_m": [
+            0.0197,
+            -0.0652
+          ],
+          "center_distance_m": 0.0681,
+          "camera_distance_3d_m": 0.0347,
+          "center_excursion_m": 0.0682,
+          "t265_deg": -89.669,
+          "mainyaw_deg": -89.703,
+          "fit_ranks": {
+            "0": 4,
+            "1": 5,
+            "2": 12
+          },
+          "fit_reasons": {
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4,
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17
+          },
+          "dynamic_scan_range_m": [
+            0.1183,
+            0.1103
+          ],
+          "max_scan_offset_change_m": 0.097,
+          "wheel_reference_delta_body_m": [
+            -0.0012,
+            -0.0015
+          ],
+          "wheel_reference_path_m": 0.0115,
+          "stationary_assumption_delta_lever_m": [
+            0.0229,
+            0.0425
+          ]
+        },
+        {
+          "seq": 146,
+          "test_id": 12,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 55.353,
+          "duration_s": 1.764,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.038,
+            -0.0135
+          ],
+          "body_delta_m": [
+            -0.0047,
+            -0.0401
+          ],
+          "center_distance_m": 0.0403,
+          "camera_distance_3d_m": 0.0655,
+          "center_excursion_m": 0.0482,
+          "t265_deg": -91.359,
+          "mainyaw_deg": -90.906,
+          "fit_ranks": {
+            "2": 18,
+            "0": 3
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 18,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3
+          },
+          "dynamic_scan_range_m": [
+            0.0285,
+            0.0656
+          ],
+          "max_scan_offset_change_m": 0.0298,
+          "wheel_reference_delta_body_m": [
+            0.0022,
+            -0.0022
+          ],
+          "wheel_reference_path_m": 0.0113,
+          "stationary_assumption_delta_lever_m": [
+            0.0219,
+            0.0178
+          ]
+        },
+        {
+          "seq": 147,
+          "test_id": 13,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 58.006,
+          "duration_s": 2.464,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0061,
+            0.0051
+          ],
+          "body_delta_m": [
+            -0.0072,
+            0.0035
+          ],
+          "center_distance_m": 0.008,
+          "camera_distance_3d_m": 0.1035,
+          "center_excursion_m": 0.0248,
+          "t265_deg": -90.354,
+          "mainyaw_deg": -90.412,
+          "fit_ranks": {
+            "2": 17,
+            "0": 10
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 10
+          },
+          "dynamic_scan_range_m": [
+            0.0531,
+            0.0639
+          ],
+          "max_scan_offset_change_m": 0.0596,
+          "wheel_reference_delta_body_m": [
+            0.0053,
+            0.0025
+          ],
+          "wheel_reference_path_m": 0.0201,
+          "stationary_assumption_delta_lever_m": [
+            0.0019,
+            -0.0053
+          ]
+        },
+        {
+          "seq": 149,
+          "test_id": 14,
+          "name": "move_body",
+          "description": "前+500/左+0mm，速度700mm/s",
+          "start_s": 62.189,
+          "duration_s": 7.88,
+          "outcome": "reported_fault",
+          "fault": 4,
+          "center_delta_m": [
+            -0.1188,
+            -0.3848
+          ],
+          "body_delta_m": [
+            0.4023,
+            -0.0187
+          ],
+          "center_distance_m": 0.4027,
+          "camera_distance_3d_m": 0.4062,
+          "center_excursion_m": 0.4132,
+          "t265_deg": 3.222,
+          "mainyaw_deg": 3.46,
+          "fit_ranks": {
+            "2": 77,
+            "0": 4
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 77,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 1
+          },
+          "dynamic_scan_range_m": [
+            0.1835,
+            0.484
+          ],
+          "max_scan_offset_change_m": 0.0967,
+          "wheel_reference_delta_body_m": [
+            0.4502,
+            -0.0015
+          ],
+          "wheel_reference_path_m": 0.4528
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 34.251,
+          "step_m": 0.0202,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            6835,
+            6836
+          ]
+        },
+        {
+          "t_s": 35.173,
+          "step_m": 0.0148,
+          "capture_gap_ms": 491.056,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            6922,
+            7020
+          ]
+        },
+        {
+          "t_s": 34.281,
+          "step_m": 0.0099,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            6841,
+            6842
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6833,
+        1137.8742,
+        3681.9469
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 481,
+      "data_gaps_over_100ms": 6
+    },
+    {
+      "session": "20261104_055518_interactive",
+      "seconds": 44.92,
+      "pose_count": 8761,
+      "confidence": {
+        "0": 1,
+        "2": 1477,
+        "3": 7283
+      },
+      "raw_span_m": [
+        0.8401,
+        0.05,
+        0.8477
+      ],
+      "center_span_m": [
+        0.9593,
+        0.5033
+      ],
+      "max_raw_step_m": 0.041478227136176306,
+      "max_center_step_m": 0.045996072494334066,
+      "receive_gap_ms": [
+        5.0034,
+        5.2569,
+        676.4067
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        676.4465
+      ],
+      "frame_missing": 204,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 859,
+          "first_drop_ns": 564951733804,
+          "last_drop_ns": 565331691377,
+          "error": null
+        }
+      ],
+      "not_sent": 9,
+      "sdk_accept": 2275,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 414,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 7,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 8
+      },
+      "ranks": {
+        "2": 394,
+        "0": 15,
+        "1": 20
+      },
+      "actions": [
+        {
+          "seq": 46,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度200mm/s",
+          "start_s": 4.363,
+          "duration_s": 3.451,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.4554,
+            0.013
+          ],
+          "body_delta_m": [
+            -0.4554,
+            0.013
+          ],
+          "center_distance_m": 0.4556,
+          "camera_distance_3d_m": 0.4542,
+          "center_excursion_m": 0.4558,
+          "t265_deg": 1.915,
+          "mainyaw_deg": 1.72,
+          "fit_ranks": {
+            "2": 38
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 38
+          },
+          "dynamic_scan_range_m": [
+            0.4855,
+            0.0799
+          ],
+          "max_scan_offset_change_m": 0.0222,
+          "wheel_reference_delta_body_m": [
+            -0.5086,
+            -0.0182
+          ],
+          "wheel_reference_path_m": 0.5113
+        },
+        {
+          "seq": 47,
+          "test_id": 2,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 9.566,
+          "duration_s": 1.334,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.4548,
+            -0.0133
+          ],
+          "body_delta_m": [
+            -0.455,
+            0.0015
+          ],
+          "center_distance_m": 0.455,
+          "camera_distance_3d_m": 0.4542,
+          "center_excursion_m": 0.455,
+          "t265_deg": 0.972,
+          "mainyaw_deg": 0.906,
+          "fit_ranks": {
+            "2": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.4868,
+            0.0742
+          ],
+          "max_scan_offset_change_m": 0.0099,
+          "wheel_reference_delta_body_m": [
+            -0.5189,
+            -0.0006
+          ],
+          "wheel_reference_path_m": 0.5192
+        },
+        {
+          "seq": 48,
+          "test_id": 3,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 19.91,
+          "duration_s": 1.867,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0221,
+            -0.4442
+          ],
+          "body_delta_m": [
+            -0.0431,
+            -0.4427
+          ],
+          "center_distance_m": 0.4448,
+          "camera_distance_3d_m": 0.4425,
+          "center_excursion_m": 0.4497,
+          "t265_deg": -4.278,
+          "mainyaw_deg": -4.153,
+          "fit_ranks": {
+            "2": 22
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 22
+          },
+          "dynamic_scan_range_m": [
+            0.1248,
+            0.4975
+          ],
+          "max_scan_offset_change_m": 0.0117,
+          "wheel_reference_delta_body_m": [
+            -0.0213,
+            -0.5086
+          ],
+          "wheel_reference_path_m": 0.5098
+        },
+        {
+          "seq": 49,
+          "test_id": 4,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 23.004,
+          "duration_s": 2.253,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0264,
+            -0.0237
+          ],
+          "body_delta_m": [
+            -0.0258,
+            -0.0244
+          ],
+          "center_distance_m": 0.0355,
+          "camera_distance_3d_m": 0.087,
+          "center_excursion_m": 0.0434,
+          "t265_deg": -90.032,
+          "mainyaw_deg": -89.84,
+          "fit_ranks": {
+            "2": 22,
+            "0": 4
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 22,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4
+          },
+          "dynamic_scan_range_m": [
+            0.0715,
+            0.0283
+          ],
+          "max_scan_offset_change_m": 0.051,
+          "wheel_reference_delta_body_m": [
+            0.0003,
+            -0.0013
+          ],
+          "wheel_reference_path_m": 0.0213,
+          "stationary_assumption_delta_lever_m": [
+            0.0251,
+            -0.0007
+          ]
+        },
+        {
+          "seq": 50,
+          "test_id": 5,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 27.015,
+          "duration_s": 1.327,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0137,
+            0.4226
+          ],
+          "body_delta_m": [
+            -0.4229,
+            0.0015
+          ],
+          "center_distance_m": 0.4229,
+          "camera_distance_3d_m": 0.4251,
+          "center_excursion_m": 0.4235,
+          "t265_deg": -2.152,
+          "mainyaw_deg": -2.17,
+          "fit_ranks": {
+            "2": 13,
+            "1": 4
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17
+          },
+          "dynamic_scan_range_m": [
+            0.1085,
+            0.506
+          ],
+          "max_scan_offset_change_m": 0.0271,
+          "wheel_reference_delta_body_m": [
+            -0.5148,
+            0.001
+          ],
+          "wheel_reference_path_m": 0.5159
+        },
+        {
+          "seq": 51,
+          "test_id": 6,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 30.684,
+          "duration_s": 2.875,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0129,
+            -0.0042
+          ],
+          "body_delta_m": [
+            0.0034,
+            0.0132
+          ],
+          "center_distance_m": 0.0136,
+          "camera_distance_3d_m": 0.111,
+          "center_excursion_m": 0.0341,
+          "t265_deg": -90.733,
+          "mainyaw_deg": -90.747,
+          "fit_ranks": {
+            "1": 3,
+            "2": 18,
+            "0": 11
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 21,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 8,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3
+          },
+          "dynamic_scan_range_m": [
+            0.0769,
+            0.0765
+          ],
+          "max_scan_offset_change_m": 0.0755,
+          "wheel_reference_delta_body_m": [
+            0.0004,
+            0.0013
+          ],
+          "wheel_reference_path_m": 0.0202,
+          "stationary_assumption_delta_lever_m": [
+            -0.0082,
+            -0.0049
+          ]
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 31.507,
+          "step_m": 0.0415,
+          "capture_gap_ms": 170.367,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            6254,
+            6288
+          ]
+        },
+        {
+          "t_s": 32.183,
+          "step_m": 0.0404,
+          "capture_gap_ms": 676.447,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            6288,
+            6423
+          ]
+        },
+        {
+          "t_s": 27.814,
+          "step_m": 0.0132,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            5550,
+            5551
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6445,
+        7.3598,
+        2299.5531
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 135,
+      "data_gaps_over_100ms": 3
+    },
+    {
+      "session": "20261104_055621_interactive",
+      "seconds": 47.32,
+      "pose_count": 8464,
+      "confidence": {
+        "2": 1518,
+        "3": 6946
+      },
+      "raw_span_m": [
+        0.5539,
+        0.0696,
+        0.296
+      ],
+      "center_span_m": [
+        0.6018,
+        0.0975
+      ],
+      "max_raw_step_m": 0.01839016324377256,
+      "max_center_step_m": 0.01638546582304806,
+      "receive_gap_ms": [
+        5.0038,
+        5.2607,
+        2756.0411
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        2755.906
+      ],
+      "frame_missing": 981,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 10190,
+          "first_drop_ns": 627453372251,
+          "last_drop_ns": 632553369540,
+          "error": null
+        }
+      ],
+      "not_sent": 11,
+      "sdk_accept": 2396,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 259,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 124,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 50
+      },
+      "ranks": {
+        "2": 246,
+        "0": 174,
+        "1": 13
+      },
+      "actions": [
+        {
+          "seq": 17,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 6.607,
+          "duration_s": 1.335,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.4593,
+            0.0068
+          ],
+          "body_delta_m": [
+            -0.4593,
+            0.0068
+          ],
+          "center_distance_m": 0.4593,
+          "camera_distance_3d_m": 0.4607,
+          "center_excursion_m": 0.4593,
+          "t265_deg": -1.147,
+          "mainyaw_deg": -1.181,
+          "fit_ranks": {
+            "2": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.4915,
+            0.1122
+          ],
+          "max_scan_offset_change_m": 0.0193,
+          "wheel_reference_delta_body_m": [
+            -0.514,
+            -0.0126
+          ],
+          "wheel_reference_path_m": 0.5151
+        },
+        {
+          "seq": 18,
+          "test_id": 2,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 11.197,
+          "duration_s": 1.683,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0622,
+            -0.0227
+          ],
+          "body_delta_m": [
+            -0.0618,
+            -0.024
+          ],
+          "center_distance_m": 0.0663,
+          "camera_distance_3d_m": 0.1122,
+          "center_excursion_m": 0.0855,
+          "t265_deg": -90.666,
+          "mainyaw_deg": -90.522,
+          "fit_ranks": {
+            "2": 17,
+            "0": 2
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2
+          },
+          "dynamic_scan_range_m": [
+            0.0485,
+            0.0348
+          ],
+          "max_scan_offset_change_m": 0.031,
+          "wheel_reference_delta_body_m": [
+            0.0036,
+            -0.0032
+          ],
+          "wheel_reference_path_m": 0.0164,
+          "stationary_assumption_delta_lever_m": [
+            0.0428,
+            -0.0185
+          ]
+        },
+        {
+          "seq": 19,
+          "test_id": 3,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 13.946,
+          "duration_s": 1.692,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0316,
+            0.0051
+          ],
+          "body_delta_m": [
+            -0.0041,
+            -0.0318
+          ],
+          "center_distance_m": 0.032,
+          "camera_distance_3d_m": 0.0729,
+          "center_excursion_m": 0.0441,
+          "t265_deg": -90.683,
+          "mainyaw_deg": -90.511,
+          "fit_ranks": {
+            "2": 17,
+            "0": 3
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3
+          },
+          "dynamic_scan_range_m": [
+            0.045,
+            0.0786
+          ],
+          "max_scan_offset_change_m": 0.0402,
+          "wheel_reference_delta_body_m": [
+            0.0029,
+            0.0017
+          ],
+          "wheel_reference_path_m": 0.0165,
+          "stationary_assumption_delta_lever_m": [
+            0.0178,
+            0.0139
+          ]
+        },
+        {
+          "seq": 20,
+          "test_id": 4,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 16.775,
+          "duration_s": 1.706,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0194,
+            0.0008
+          ],
+          "body_delta_m": [
+            -0.0193,
+            -0.0016
+          ],
+          "center_distance_m": 0.0194,
+          "camera_distance_3d_m": 0.1034,
+          "center_excursion_m": 0.0439,
+          "t265_deg": -90.184,
+          "mainyaw_deg": -90.566,
+          "fit_ranks": {
+            "2": 19,
+            "0": 1
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 19,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 1
+          },
+          "dynamic_scan_range_m": [
+            0.0459,
+            0.0511
+          ],
+          "max_scan_offset_change_m": 0.0344,
+          "wheel_reference_delta_body_m": [
+            -0.0017,
+            0.0043
+          ],
+          "wheel_reference_path_m": 0.0197,
+          "stationary_assumption_delta_lever_m": [
+            0.0104,
+            -0.0088
+          ]
+        },
+        {
+          "seq": 21,
+          "test_id": 5,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 19.937,
+          "duration_s": 1.779,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0352,
+            -0.0035
+          ],
+          "body_delta_m": [
+            -0.002,
+            -0.0353
+          ],
+          "center_distance_m": 0.0353,
+          "camera_distance_3d_m": 0.0652,
+          "center_excursion_m": 0.0517,
+          "t265_deg": -89.947,
+          "mainyaw_deg": -89.626,
+          "fit_ranks": {
+            "2": 16,
+            "1": 5
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 21
+          },
+          "dynamic_scan_range_m": [
+            0.0278,
+            0.0399
+          ],
+          "max_scan_offset_change_m": 0.0412,
+          "wheel_reference_delta_body_m": [
+            -0.0019,
+            -0.0002
+          ],
+          "wheel_reference_path_m": 0.0173,
+          "stationary_assumption_delta_lever_m": [
+            0.0187,
+            0.0166
+          ]
+        },
+        {
+          "seq": 22,
+          "test_id": 6,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 22.811,
+          "duration_s": 1.711,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0274,
+            -0.0078
+          ],
+          "body_delta_m": [
+            -0.027,
+            -0.0089
+          ],
+          "center_distance_m": 0.0285,
+          "camera_distance_3d_m": 0.1021,
+          "center_excursion_m": 0.0368,
+          "t265_deg": -91.114,
+          "mainyaw_deg": -90.665,
+          "fit_ranks": {
+            "2": 16,
+            "0": 4
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4
+          },
+          "dynamic_scan_range_m": [
+            0.0603,
+            0.0304
+          ],
+          "max_scan_offset_change_m": 0.0223,
+          "wheel_reference_delta_body_m": [
+            0.0027,
+            -0.0029
+          ],
+          "wheel_reference_path_m": 0.0174,
+          "stationary_assumption_delta_lever_m": [
+            0.0179,
+            -0.0088
+          ]
+        },
+        {
+          "seq": 23,
+          "test_id": 7,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 25.268,
+          "duration_s": 2.033,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0173,
+            0.0568
+          ],
+          "body_delta_m": [
+            -0.0557,
+            -0.0207
+          ],
+          "center_distance_m": 0.0594,
+          "camera_distance_3d_m": 0.1112,
+          "center_excursion_m": 0.0706,
+          "t265_deg": -90.537,
+          "mainyaw_deg": -90.615,
+          "fit_ranks": {
+            "2": 21,
+            "0": 2
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 21,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2
+          },
+          "dynamic_scan_range_m": [
+            0.061,
+            0.093
+          ],
+          "max_scan_offset_change_m": 0.0426,
+          "wheel_reference_delta_body_m": [
+            0.0058,
+            0.0028
+          ],
+          "wheel_reference_path_m": 0.0202,
+          "stationary_assumption_delta_lever_m": [
+            0.0381,
+            -0.0172
+          ]
+        },
+        {
+          "seq": 24,
+          "test_id": 8,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 28.026,
+          "duration_s": 2.093,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0139,
+            -0.0093
+          ],
+          "body_delta_m": [
+            0.0133,
+            0.0103
+          ],
+          "center_distance_m": 0.0168,
+          "camera_distance_3d_m": 0.1064,
+          "center_excursion_m": 0.0295,
+          "t265_deg": -90.771,
+          "mainyaw_deg": -90.764,
+          "fit_ranks": {
+            "2": 18,
+            "0": 1,
+            "1": 5
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 23,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 1
+          },
+          "dynamic_scan_range_m": [
+            0.1091,
+            0.3
+          ],
+          "max_scan_offset_change_m": 0.0623,
+          "wheel_reference_delta_body_m": [
+            0.0011,
+            0.0035
+          ],
+          "wheel_reference_path_m": 0.0203,
+          "stationary_assumption_delta_lever_m": [
+            -0.0117,
+            0.0014
+          ]
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 18.112,
+          "step_m": 0.0184,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3614,
+            3615
+          ]
+        },
+        {
+          "t_s": 21.53,
+          "step_m": 0.0142,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            4296,
+            4297
+          ]
+        },
+        {
+          "t_s": 30.709,
+          "step_m": 0.0129,
+          "capture_gap_ms": 776.676,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            5974,
+            6129
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6538,
+        120.6067,
+        6192.5094
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 550,
+      "data_gaps_over_100ms": 3
+    },
+    {
+      "session": "20261104_055727_interactive",
+      "seconds": 55.15,
+      "pose_count": 9786,
+      "confidence": {
+        "2": 5254,
+        "3": 4532
+      },
+      "raw_span_m": [
+        0.3278,
+        0.0785,
+        0.4451
+      ],
+      "center_span_m": [
+        0.1566,
+        0.3877
+      ],
+      "max_raw_step_m": 0.02148135476622204,
+      "max_center_step_m": 0.020818205686312753,
+      "receive_gap_ms": [
+        5.004,
+        5.2588,
+        6122.9543
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        6123.1223
+      ],
+      "frame_missing": 1221,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 11889,
+          "first_drop_ns": 694153332708,
+          "last_drop_ns": 699086281831,
+          "error": null
+        }
+      ],
+      "not_sent": 4,
+      "sdk_accept": 2786,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 495,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 11,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 11
+      },
+      "ranks": {
+        "2": 334,
+        "1": 161,
+        "0": 22
+      },
+      "actions": [
+        {
+          "seq": 64,
+          "test_id": 1,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 7.233,
+          "duration_s": 1.815,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0074,
+            -0.0317
+          ],
+          "body_delta_m": [
+            -0.0074,
+            -0.0317
+          ],
+          "center_distance_m": 0.0326,
+          "camera_distance_3d_m": 0.0721,
+          "center_excursion_m": 0.0535,
+          "t265_deg": -91.018,
+          "mainyaw_deg": -90.73,
+          "fit_ranks": {
+            "2": 17,
+            "1": 5
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 22
+          },
+          "dynamic_scan_range_m": [
+            0.0286,
+            0.0276
+          ],
+          "max_scan_offset_change_m": 0.0197,
+          "wheel_reference_delta_body_m": [
+            -0.0008,
+            0.0005
+          ],
+          "wheel_reference_path_m": 0.018,
+          "stationary_assumption_delta_lever_m": [
+            0.0193,
+            0.0122
+          ]
+        },
+        {
+          "seq": 65,
+          "test_id": 2,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 9.613,
+          "duration_s": 1.776,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0641,
+            -0.0194
+          ],
+          "body_delta_m": [
+            0.0204,
+            -0.0638
+          ],
+          "center_distance_m": 0.067,
+          "camera_distance_3d_m": 0.0316,
+          "center_excursion_m": 0.0712,
+          "t265_deg": -90.504,
+          "mainyaw_deg": -90.627,
+          "fit_ranks": {
+            "2": 18,
+            "0": 3
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 18,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3
+          },
+          "dynamic_scan_range_m": [
+            0.0601,
+            0.0788
+          ],
+          "max_scan_offset_change_m": 0.082,
+          "wheel_reference_delta_body_m": [
+            0.0024,
+            -0.0028
+          ],
+          "wheel_reference_path_m": 0.0169,
+          "stationary_assumption_delta_lever_m": [
+            0.0214,
+            0.042
+          ]
+        },
+        {
+          "seq": 66,
+          "test_id": 3,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 12.038,
+          "duration_s": 1.693,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0326,
+            0.0341
+          ],
+          "body_delta_m": [
+            0.0334,
+            -0.0333
+          ],
+          "center_distance_m": 0.0472,
+          "camera_distance_3d_m": 0.0614,
+          "center_excursion_m": 0.0614,
+          "t265_deg": -89.56,
+          "mainyaw_deg": -89.73,
+          "fit_ranks": {
+            "2": 18,
+            "0": 2
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 18,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2
+          },
+          "dynamic_scan_range_m": [
+            0.1159,
+            0.0407
+          ],
+          "max_scan_offset_change_m": 0.0745,
+          "wheel_reference_delta_body_m": [
+            0.0032,
+            0.0014
+          ],
+          "wheel_reference_path_m": 0.0139,
+          "stationary_assumption_delta_lever_m": [
+            0.0001,
+            0.0335
+          ]
+        },
+        {
+          "seq": 67,
+          "test_id": 4,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 14.099,
+          "duration_s": 1.667,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.06,
+            0.0068
+          ],
+          "body_delta_m": [
+            0.0077,
+            -0.0599
+          ],
+          "center_distance_m": 0.0603,
+          "camera_distance_3d_m": 0.0413,
+          "center_excursion_m": 0.0754,
+          "t265_deg": -89.279,
+          "mainyaw_deg": -89.583,
+          "fit_ranks": {
+            "2": 9,
+            "0": 3,
+            "1": 8
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 3
+          },
+          "dynamic_scan_range_m": [
+            0.0836,
+            0.0339
+          ],
+          "max_scan_offset_change_m": 0.0211,
+          "wheel_reference_delta_body_m": [
+            -0.0005,
+            0.0026
+          ],
+          "wheel_reference_path_m": 0.0136,
+          "stationary_assumption_delta_lever_m": [
+            0.0265,
+            0.0338
+          ]
+        },
+        {
+          "seq": 68,
+          "test_id": 5,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 16.079,
+          "duration_s": 1.667,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.047,
+            -0.0315
+          ],
+          "body_delta_m": [
+            0.0471,
+            -0.0314
+          ],
+          "center_distance_m": 0.0566,
+          "camera_distance_3d_m": 0.0735,
+          "center_excursion_m": 0.1059,
+          "t265_deg": -90.757,
+          "mainyaw_deg": -90.302,
+          "fit_ranks": {
+            "1": 7,
+            "2": 12
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 19
+          },
+          "dynamic_scan_range_m": [
+            0.0716,
+            0.0259
+          ],
+          "max_scan_offset_change_m": 0.0561,
+          "wheel_reference_delta_body_m": [
+            0.0001,
+            -0.0002
+          ],
+          "wheel_reference_path_m": 0.0141,
+          "stationary_assumption_delta_lever_m": [
+            -0.0081,
+            0.0389
+          ]
+        },
+        {
+          "seq": 69,
+          "test_id": 6,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 18.362,
+          "duration_s": 1.702,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0238,
+            0.0178
+          ],
+          "body_delta_m": [
+            -0.0174,
+            -0.0241
+          ],
+          "center_distance_m": 0.0297,
+          "camera_distance_3d_m": 0.0887,
+          "center_excursion_m": 0.044,
+          "t265_deg": -90.573,
+          "mainyaw_deg": -90.538,
+          "fit_ranks": {
+            "2": 20
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 20
+          },
+          "dynamic_scan_range_m": [
+            0.0371,
+            0.0624
+          ],
+          "max_scan_offset_change_m": 0.0388,
+          "wheel_reference_delta_body_m": [
+            0.0035,
+            -0.0014
+          ],
+          "wheel_reference_path_m": 0.0155,
+          "stationary_assumption_delta_lever_m": [
+            0.0206,
+            0.0034
+          ]
+        },
+        {
+          "seq": 70,
+          "test_id": 7,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 20.776,
+          "duration_s": 2.031,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0345,
+            0.0009
+          ],
+          "body_delta_m": [
+            -0.0344,
+            -0.0017
+          ],
+          "center_distance_m": 0.0345,
+          "camera_distance_3d_m": 0.1109,
+          "center_excursion_m": 0.0421,
+          "t265_deg": -90.757,
+          "mainyaw_deg": -90.929,
+          "fit_ranks": {
+            "2": 22,
+            "0": 1
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 22,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 1
+          },
+          "dynamic_scan_range_m": [
+            0.1163,
+            0.0459
+          ],
+          "max_scan_offset_change_m": 0.0792,
+          "wheel_reference_delta_body_m": [
+            0.0031,
+            0.0016
+          ],
+          "wheel_reference_path_m": 0.0174,
+          "stationary_assumption_delta_lever_m": [
+            0.018,
+            -0.0161
+          ]
+        },
+        {
+          "seq": 71,
+          "test_id": 8,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 25.849,
+          "duration_s": 1.298,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0192,
+            -0.3648
+          ],
+          "body_delta_m": [
+            -0.3653,
+            0.0062
+          ],
+          "center_distance_m": 0.3653,
+          "camera_distance_3d_m": 0.366,
+          "center_excursion_m": 0.3662,
+          "t265_deg": 0.371,
+          "mainyaw_deg": -0.033,
+          "fit_ranks": {
+            "2": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.1927,
+            0.4627
+          ],
+          "max_scan_offset_change_m": 0.0214,
+          "wheel_reference_delta_body_m": [
+            -0.5201,
+            -0.0012
+          ],
+          "wheel_reference_path_m": 0.5211
+        },
+        {
+          "seq": 72,
+          "test_id": 9,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 28.168,
+          "duration_s": 1.838,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0158,
+            0.0554
+          ],
+          "body_delta_m": [
+            0.055,
+            0.0173
+          ],
+          "center_distance_m": 0.0576,
+          "camera_distance_3d_m": 0.1169,
+          "center_excursion_m": 0.0572,
+          "t265_deg": -90.981,
+          "mainyaw_deg": -90.857,
+          "fit_ranks": {
+            "2": 18,
+            "1": 3
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 21
+          },
+          "dynamic_scan_range_m": [
+            0.132,
+            0.0266
+          ],
+          "max_scan_offset_change_m": 0.0376,
+          "wheel_reference_delta_body_m": [
+            0.0012,
+            0.0026
+          ],
+          "wheel_reference_path_m": 0.0218,
+          "stationary_assumption_delta_lever_m": [
+            -0.036,
+            0.0184
+          ]
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 36.262,
+          "step_m": 0.0215,
+          "capture_gap_ms": 6123.122,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            6015,
+            7237
+          ]
+        },
+        {
+          "t_s": 17.191,
+          "step_m": 0.0116,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            3430,
+            3431
+          ]
+        },
+        {
+          "t_s": 16.791,
+          "step_m": 0.008,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            3350,
+            3351
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6264,
+        1.1381,
+        7390.9136
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 1222,
+      "data_gaps_over_100ms": 1
+    },
+    {
+      "session": "20261104_055841_interactive",
+      "seconds": 36.91,
+      "pose_count": 6857,
+      "confidence": {
+        "0": 1,
+        "2": 1736,
+        "3": 5120
+      },
+      "raw_span_m": [
+        1.1787,
+        3.6823,
+        1.7392
+      ],
+      "center_span_m": [
+        1.2417,
+        1.819
+      ],
+      "max_raw_step_m": 3.841795247745081,
+      "max_center_step_m": 1.1462040597012408,
+      "receive_gap_ms": [
+        5.0035,
+        5.2483,
+        2154.6566
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        2154.6543
+      ],
+      "frame_missing": 511,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 5085,
+          "first_drop_ns": 768318371208,
+          "last_drop_ns": 771586878137,
+          "error": null
+        }
+      ],
+      "not_sent": 3,
+      "sdk_accept": 1875,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 47,
+        "ENCLOSING_ARENA_CONTRADICTION": 8,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 110,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 163
+      },
+      "ranks": {
+        "2": 44,
+        "1": 3,
+        "0": 281
+      },
+      "actions": [
+        {
+          "seq": 162,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前+500/左+0mm，速度700mm/s",
+          "start_s": 7.851,
+          "duration_s": 1.363,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.5648,
+            0.1017
+          ],
+          "body_delta_m": [
+            0.5649,
+            0.1013
+          ],
+          "center_distance_m": 0.5739,
+          "camera_distance_3d_m": 2.423,
+          "center_excursion_m": 1.6093,
+          "t265_deg": -1.719,
+          "mainyaw_deg": -1.241,
+          "fit_ranks": {
+            "2": 3,
+            "1": 3,
+            "0": 10
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 6,
+            "ENCLOSING_ARENA_CONTRADICTION": 1,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 7
+          },
+          "dynamic_scan_range_m": [
+            1.5046,
+            0.6351
+          ],
+          "max_scan_offset_change_m": 0.0175,
+          "wheel_reference_delta_body_m": [
+            0.5113,
+            -0.0527
+          ],
+          "wheel_reference_path_m": 0.5154
+        },
+        {
+          "seq": 163,
+          "test_id": 2,
+          "name": "move_body",
+          "description": "前+500/左+0mm，速度700mm/s",
+          "start_s": 12.5,
+          "duration_s": 1.378,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.4316,
+            -0.059
+          ],
+          "body_delta_m": [
+            0.4331,
+            -0.0465
+          ],
+          "center_distance_m": 0.4356,
+          "camera_distance_3d_m": 0.4347,
+          "center_excursion_m": 0.4373,
+          "t265_deg": -0.801,
+          "mainyaw_deg": -0.637,
+          "fit_ranks": {
+            "0": 17
+          },
+          "fit_reasons": {
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 13,
+            "ENCLOSING_ARENA_CONTRADICTION": 4
+          },
+          "dynamic_scan_range_m": [
+            0.3858,
+            0.2056
+          ],
+          "max_scan_offset_change_m": 0.0,
+          "wheel_reference_delta_body_m": [
+            0.5125,
+            -0.0236
+          ],
+          "wheel_reference_path_m": 0.5139
+        },
+        {
+          "seq": 164,
+          "test_id": 3,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 16.574,
+          "duration_s": 2.103,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0345,
+            -0.4281
+          ],
+          "body_delta_m": [
+            -0.0163,
+            -0.4291
+          ],
+          "center_distance_m": 0.4295,
+          "camera_distance_3d_m": 0.4259,
+          "center_excursion_m": 0.4295,
+          "t265_deg": -6.108,
+          "mainyaw_deg": -5.966,
+          "fit_ranks": {
+            "0": 24
+          },
+          "fit_reasons": {
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 24
+          },
+          "dynamic_scan_range_m": [
+            0.1795,
+            0.3913
+          ],
+          "max_scan_offset_change_m": 0.0,
+          "wheel_reference_delta_body_m": [
+            -0.0437,
+            -0.5096
+          ],
+          "wheel_reference_path_m": 0.5128
+        },
+        {
+          "seq": 165,
+          "test_id": 4,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 20.84,
+          "duration_s": 2.174,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0821,
+            -0.417
+          ],
+          "body_delta_m": [
+            -0.0193,
+            -0.4246
+          ],
+          "center_distance_m": 0.425,
+          "camera_distance_3d_m": 0.4255,
+          "center_excursion_m": 0.4304,
+          "t265_deg": -0.352,
+          "mainyaw_deg": -0.318,
+          "fit_ranks": {
+            "0": 25
+          },
+          "fit_reasons": {
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 2,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 23
+          },
+          "dynamic_scan_range_m": [
+            0.2206,
+            0.3692
+          ],
+          "max_scan_offset_change_m": 0.0,
+          "wheel_reference_delta_body_m": [
+            -0.021,
+            -0.5107
+          ],
+          "wheel_reference_path_m": 0.5131
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 9.4,
+          "step_m": 3.8418,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            1875,
+            1876
+          ]
+        },
+        {
+          "t_s": 1.634,
+          "step_m": 0.1448,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            325,
+            326
+          ]
+        },
+        {
+          "t_s": 8.979,
+          "step_m": 0.1132,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            1791,
+            1792
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6592,
+        1225.1355,
+        3835.7599
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 430,
+      "data_gaps_over_100ms": 2
+    },
+    {
+      "session": "20261104_055937_interactive",
+      "seconds": 50.38,
+      "pose_count": 9692,
+      "confidence": {
+        "2": 1365,
+        "3": 8327
+      },
+      "raw_span_m": [
+        0.8372,
+        0.066,
+        0.8705
+      ],
+      "center_span_m": [
+        0.8232,
+        0.6176
+      ],
+      "max_raw_step_m": 0.013251733897758132,
+      "max_center_step_m": 0.012397614487539652,
+      "receive_gap_ms": [
+        5.0036,
+        5.256,
+        1688.6968
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        1688.6438
+      ],
+      "frame_missing": 364,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 1946,
+          "first_drop_ns": 827404134334,
+          "last_drop_ns": 828399292013,
+          "error": null
+        }
+      ],
+      "not_sent": 4,
+      "sdk_accept": 2548,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 457,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 11
+      },
+      "ranks": {
+        "2": 231,
+        "0": 15,
+        "1": 226
+      },
+      "actions": [
+        {
+          "seq": 17,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 5.915,
+          "duration_s": 1.332,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.4268,
+            -0.0138
+          ],
+          "body_delta_m": [
+            -0.4268,
+            -0.0134
+          ],
+          "center_distance_m": 0.427,
+          "camera_distance_3d_m": 0.4304,
+          "center_excursion_m": 0.427,
+          "t265_deg": -3.266,
+          "mainyaw_deg": -3.445,
+          "fit_ranks": {
+            "2": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.4515,
+            0.2353
+          ],
+          "max_scan_offset_change_m": 0.0141,
+          "wheel_reference_delta_body_m": [
+            -0.519,
+            -0.0299
+          ],
+          "wheel_reference_path_m": 0.5215
+        },
+        {
+          "seq": 18,
+          "test_id": 2,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 9.154,
+          "duration_s": 2.981,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0357,
+            -0.0056
+          ],
+          "body_delta_m": [
+            -0.0353,
+            -0.0076
+          ],
+          "center_distance_m": 0.0361,
+          "camera_distance_3d_m": 0.1072,
+          "center_excursion_m": 0.0594,
+          "t265_deg": -90.634,
+          "mainyaw_deg": -90.747,
+          "fit_ranks": {
+            "2": 29,
+            "0": 4
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 29,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4
+          },
+          "dynamic_scan_range_m": [
+            0.0462,
+            0.065
+          ],
+          "max_scan_offset_change_m": 0.0559,
+          "wheel_reference_delta_body_m": [
+            0.0022,
+            -0.0024
+          ],
+          "wheel_reference_path_m": 0.0154,
+          "stationary_assumption_delta_lever_m": [
+            0.0214,
+            -0.0137
+          ]
+        },
+        {
+          "seq": 19,
+          "test_id": 3,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 15.054,
+          "duration_s": 1.416,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0221,
+            0.4552
+          ],
+          "body_delta_m": [
+            -0.4557,
+            -0.0073
+          ],
+          "center_distance_m": 0.4557,
+          "camera_distance_3d_m": 0.4594,
+          "center_excursion_m": 0.4562,
+          "t265_deg": -3.595,
+          "mainyaw_deg": -3.828,
+          "fit_ranks": {
+            "2": 17
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17
+          },
+          "dynamic_scan_range_m": [
+            0.2682,
+            0.4248
+          ],
+          "max_scan_offset_change_m": 0.0188,
+          "wheel_reference_delta_body_m": [
+            -0.5177,
+            -0.0222
+          ],
+          "wheel_reference_path_m": 0.5199
+        },
+        {
+          "seq": 20,
+          "test_id": 4,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 19.478,
+          "duration_s": 2.091,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0094,
+            0.0316
+          ],
+          "body_delta_m": [
+            -0.0325,
+            0.0054
+          ],
+          "center_distance_m": 0.033,
+          "camera_distance_3d_m": 0.1161,
+          "center_excursion_m": 0.0564,
+          "t265_deg": -90.791,
+          "mainyaw_deg": -90.945,
+          "fit_ranks": {
+            "2": 24
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 24
+          },
+          "dynamic_scan_range_m": [
+            0.0515,
+            0.0298
+          ],
+          "max_scan_offset_change_m": 0.0221,
+          "wheel_reference_delta_body_m": [
+            0.0016,
+            -0.0019
+          ],
+          "wheel_reference_path_m": 0.0215,
+          "stationary_assumption_delta_lever_m": [
+            0.0136,
+            -0.0187
+          ]
+        },
+        {
+          "seq": 21,
+          "test_id": 5,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 22.362,
+          "duration_s": 1.346,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.3783,
+            -0.074
+          ],
+          "body_delta_m": [
+            -0.3849,
+            0.0211
+          ],
+          "center_distance_m": 0.3855,
+          "camera_distance_3d_m": 0.3864,
+          "center_excursion_m": 0.3885,
+          "t265_deg": -0.808,
+          "mainyaw_deg": -0.857,
+          "fit_ranks": {
+            "2": 14,
+            "1": 2
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.3763,
+            0.3256
+          ],
+          "max_scan_offset_change_m": 0.015,
+          "wheel_reference_delta_body_m": [
+            -0.515,
+            -0.0025
+          ],
+          "wheel_reference_path_m": 0.5166
+        },
+        {
+          "seq": 22,
+          "test_id": 6,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 24.953,
+          "duration_s": 1.413,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.3878,
+            -0.0421
+          ],
+          "body_delta_m": [
+            -0.3897,
+            -0.0172
+          ],
+          "center_distance_m": 0.3901,
+          "camera_distance_3d_m": 0.3897,
+          "center_excursion_m": 0.3961,
+          "t265_deg": 0.527,
+          "mainyaw_deg": 0.494,
+          "fit_ranks": {
+            "2": 1,
+            "1": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17
+          },
+          "dynamic_scan_range_m": [
+            0.3288,
+            0.3276
+          ],
+          "max_scan_offset_change_m": 0.0197,
+          "wheel_reference_delta_body_m": [
+            -0.5182,
+            -0.0029
+          ],
+          "wheel_reference_path_m": 0.5203
+        },
+        {
+          "seq": 23,
+          "test_id": 7,
+          "name": "move_body",
+          "description": "前+500/左+0mm，速度700mm/s",
+          "start_s": 29.52,
+          "duration_s": 1.236,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.3774,
+            0.0323
+          ],
+          "body_delta_m": [
+            0.3782,
+            0.0219
+          ],
+          "center_distance_m": 0.3788,
+          "camera_distance_3d_m": 0.3796,
+          "center_excursion_m": 0.3799,
+          "t265_deg": 0.641,
+          "mainyaw_deg": 0.687,
+          "fit_ranks": {
+            "1": 10,
+            "0": 1,
+            "2": 4
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 14,
+            "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 1
+          },
+          "dynamic_scan_range_m": [
+            0.3442,
+            0.334
+          ],
+          "max_scan_offset_change_m": 0.0948,
+          "wheel_reference_delta_body_m": [
+            0.5248,
+            0.0085
+          ],
+          "wheel_reference_path_m": 0.5254
+        },
+        {
+          "seq": 24,
+          "test_id": 8,
+          "name": "move_body",
+          "description": "前-500/左+0mm，速度700mm/s",
+          "start_s": 33.178,
+          "duration_s": 1.409,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.3902,
+            -0.0127
+          ],
+          "body_delta_m": [
+            -0.3885,
+            -0.0389
+          ],
+          "center_distance_m": 0.3905,
+          "camera_distance_3d_m": 0.3892,
+          "center_excursion_m": 0.3909,
+          "t265_deg": 1.289,
+          "mainyaw_deg": 1.461,
+          "fit_ranks": {
+            "1": 16,
+            "2": 1
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 17
+          },
+          "dynamic_scan_range_m": [
+            0.3373,
+            0.4822
+          ],
+          "max_scan_offset_change_m": 0.0398,
+          "wheel_reference_delta_body_m": [
+            -0.5174,
+            -0.0137
+          ],
+          "wheel_reference_path_m": 0.5209
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 16.014,
+          "step_m": 0.0133,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3195,
+            3196
+          ]
+        },
+        {
+          "t_s": 23.305,
+          "step_m": 0.0119,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            4650,
+            4651
+          ]
+        },
+        {
+          "t_s": 6.98,
+          "step_m": 0.0104,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            1392,
+            1393
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6544,
+        393.01,
+        2965.2836
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 337,
+      "data_gaps_over_100ms": 2
+    },
+    {
+      "session": "20261104_060046_interactive",
+      "seconds": 53.7,
+      "pose_count": 10359,
+      "confidence": {
+        "2": 10359
+      },
+      "raw_span_m": [
+        0.0393,
+        0.0022,
+        0.0109
+      ],
+      "center_span_m": [
+        0.0066,
+        0.004
+      ],
+      "max_raw_step_m": 0.0014387785051019498,
+      "max_center_step_m": 0.00144654285343539,
+      "receive_gap_ms": [
+        5.0043,
+        5.2566,
+        1523.4474
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        1523.2859
+      ],
+      "frame_missing": 359,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 560,
+          "first_drop_ns": 894391799792,
+          "last_drop_ns": 894706724677,
+          "error": null
+        }
+      ],
+      "not_sent": 0,
+      "sdk_accept": 2714,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 11
+      },
+      "ranks": {
+        "2": 3,
+        "1": 8
+      },
+      "actions": [],
+      "top_jumps": [
+        {
+          "t_s": 24.812,
+          "step_m": 0.0014,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            4951,
+            4952
+          ]
+        },
+        {
+          "t_s": 21.64,
+          "step_m": 0.0012,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            4318,
+            4319
+          ]
+        },
+        {
+          "t_s": 24.607,
+          "step_m": 0.001,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            2,
+            2
+          ],
+          "frames": [
+            4910,
+            4911
+          ]
+        }
+      ]
+    },
+    {
+      "session": "20261104_060158_interactive",
+      "seconds": 44.98,
+      "pose_count": 8334,
+      "confidence": {
+        "2": 3766,
+        "3": 4568
+      },
+      "raw_span_m": [
+        0.6352,
+        0.0343,
+        0.0921
+      ],
+      "center_span_m": [
+        0.5174,
+        0.2661
+      ],
+      "max_raw_step_m": 0.01036167428942317,
+      "max_center_step_m": 0.007454989653522319,
+      "receive_gap_ms": [
+        5.0032,
+        5.2645,
+        1873.5512
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.0112,
+        1874.1013
+      ],
+      "frame_missing": 643,
+      "log": [
+        {
+          "event": "logging_incomplete",
+          "dropped": 5988,
+          "first_drop_ns": 963467055732,
+          "last_drop_ns": 966575681371,
+          "error": null
+        }
+      ],
+      "not_sent": 4,
+      "sdk_accept": 2278,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 262,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 25,
+        "ENCLOSING_ARENA_CONTRADICTION": 39,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 1
+      },
+      "ranks": {
+        "2": 47,
+        "1": 215,
+        "0": 65
+      },
+      "actions": [
+        {
+          "seq": 113,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前+500/左+0mm，速度700mm/s",
+          "start_s": 18.383,
+          "duration_s": 1.365,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.4491,
+            -0.2372
+          ],
+          "body_delta_m": [
+            0.507,
+            -0.0302
+          ],
+          "center_distance_m": 0.5079,
+          "camera_distance_3d_m": 0.5093,
+          "center_excursion_m": 0.5104,
+          "t265_deg": 1.218,
+          "mainyaw_deg": 1.384,
+          "fit_ranks": {
+            "2": 5,
+            "1": 1,
+            "0": 10
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 6,
+            "ENCLOSING_ARENA_CONTRADICTION": 10
+          },
+          "dynamic_scan_range_m": [
+            0.5089,
+            0.0523
+          ],
+          "max_scan_offset_change_m": 0.0118,
+          "wheel_reference_delta_body_m": [
+            0.5218,
+            -0.0232
+          ],
+          "wheel_reference_path_m": 0.5236
+        },
+        {
+          "seq": 114,
+          "test_id": 2,
+          "name": "turn_ccw",
+          "description": "逆时针 +90.0°，角速度上限 360°/s",
+          "start_s": 21.996,
+          "duration_s": 4.058,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.0073,
+            -0.0049
+          ],
+          "body_delta_m": [
+            0.0087,
+            -0.0016
+          ],
+          "center_distance_m": 0.0088,
+          "camera_distance_3d_m": 0.1069,
+          "center_excursion_m": 0.0465,
+          "t265_deg": 91.11,
+          "mainyaw_deg": 90.78,
+          "fit_ranks": {
+            "0": 13,
+            "1": 30
+          },
+          "fit_reasons": {
+            "ENCLOSING_ARENA_CONTRADICTION": 9,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 4,
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 30
+          },
+          "dynamic_scan_range_m": [
+            0.0593,
+            0.0171
+          ],
+          "max_scan_offset_change_m": 0.0456,
+          "wheel_reference_delta_body_m": [
+            0.0052,
+            0.0034
+          ],
+          "wheel_reference_path_m": 0.0233,
+          "stationary_assumption_delta_lever_m": [
+            -0.0051,
+            -0.0035
+          ]
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 19.582,
+          "step_m": 0.0104,
+          "capture_gap_ms": 5.01,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3907,
+            3908
+          ]
+        },
+        {
+          "t_s": 19.211,
+          "step_m": 0.0098,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3833,
+            3834
+          ]
+        },
+        {
+          "t_s": 19.477,
+          "step_m": 0.0089,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3886,
+            3887
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.6381,
+        35.9533,
+        4498.0872
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 374,
+      "data_gaps_over_100ms": 2
+    },
+    {
+      "session": "20261104_060302_interactive",
+      "seconds": 65.1,
+      "pose_count": 11880,
+      "confidence": {
+        "2": 1296,
+        "3": 10584
+      },
+      "raw_span_m": [
+        0.8861,
+        0.0269,
+        0.4501
+      ],
+      "center_span_m": [
+        0.7839,
+        0.5626
+      ],
+      "max_raw_step_m": 0.05285022240936423,
+      "max_center_step_m": 0.051430239953581106,
+      "receive_gap_ms": [
+        5.0036,
+        5.2706,
+        2284.9063
+      ],
+      "capture_gap_ms": [
+        5.011,
+        5.012,
+        2284.9573
+      ],
+      "frame_missing": 1112,
+      "log": [],
+      "not_sent": 4,
+      "sdk_accept": 3613,
+      "sdk_reject": 0,
+      "fits": {
+        "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 553,
+        "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 54,
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 8,
+        "ENCLOSING_ARENA_CONTRADICTION": 2
+      },
+      "ranks": {
+        "2": 552,
+        "0": 64,
+        "1": 1
+      },
+      "actions": [
+        {
+          "seq": 245,
+          "test_id": 1,
+          "name": "move_body",
+          "description": "前+500/左+0mm，速度700mm/s",
+          "start_s": 6.034,
+          "duration_s": 1.303,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.4965,
+            -0.0454
+          ],
+          "body_delta_m": [
+            0.4965,
+            -0.0455
+          ],
+          "center_distance_m": 0.4985,
+          "camera_distance_3d_m": 0.4978,
+          "center_excursion_m": 0.4988,
+          "t265_deg": -0.623,
+          "mainyaw_deg": -0.219,
+          "fit_ranks": {
+            "2": 16
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 16
+          },
+          "dynamic_scan_range_m": [
+            0.5096,
+            0.0362
+          ],
+          "max_scan_offset_change_m": 0.0053,
+          "wheel_reference_delta_body_m": [
+            0.5188,
+            -0.0349
+          ],
+          "wheel_reference_path_m": 0.5209
+        },
+        {
+          "seq": 246,
+          "test_id": 2,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 9.914,
+          "duration_s": 2.143,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0568,
+            -0.4785
+          ],
+          "body_delta_m": [
+            -0.0528,
+            -0.4789
+          ],
+          "center_distance_m": 0.4818,
+          "camera_distance_3d_m": 0.4803,
+          "center_excursion_m": 0.4826,
+          "t265_deg": -2.942,
+          "mainyaw_deg": -3.022,
+          "fit_ranks": {
+            "2": 25
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 25
+          },
+          "dynamic_scan_range_m": [
+            0.059,
+            0.4978
+          ],
+          "max_scan_offset_change_m": 0.0087,
+          "wheel_reference_delta_body_m": [
+            -0.0366,
+            -0.5078
+          ],
+          "wheel_reference_path_m": 0.5106
+        },
+        {
+          "seq": 247,
+          "test_id": 3,
+          "name": "turn_ccw",
+          "description": "逆时针 -90.0°，角速度上限 360°/s",
+          "start_s": 13.876,
+          "duration_s": 1.759,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.0021,
+            -0.007
+          ],
+          "body_delta_m": [
+            -0.0017,
+            -0.0071
+          ],
+          "center_distance_m": 0.0073,
+          "camera_distance_3d_m": 0.0922,
+          "center_excursion_m": 0.0165,
+          "t265_deg": -90.813,
+          "mainyaw_deg": -90.335,
+          "fit_ranks": {
+            "2": 15,
+            "0": 5
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 15,
+            "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 5
+          },
+          "dynamic_scan_range_m": [
+            0.0561,
+            0.0226
+          ],
+          "max_scan_offset_change_m": 0.0388,
+          "wheel_reference_delta_body_m": [
+            0.0032,
+            -0.0013
+          ],
+          "wheel_reference_path_m": 0.02,
+          "stationary_assumption_delta_lever_m": [
+            0.0043,
+            0.0027
+          ]
+        },
+        {
+          "seq": 248,
+          "test_id": 4,
+          "name": "move_body",
+          "description": "前+0/左+500mm，速度700mm/s",
+          "start_s": 16.846,
+          "duration_s": 2.029,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.2216,
+            -0.0313
+          ],
+          "body_delta_m": [
+            0.0156,
+            0.2233
+          ],
+          "center_distance_m": 0.2238,
+          "camera_distance_3d_m": 0.2229,
+          "center_excursion_m": 0.2355,
+          "t265_deg": 2.9,
+          "mainyaw_deg": 2.687,
+          "fit_ranks": {
+            "2": 24
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 24
+          },
+          "dynamic_scan_range_m": [
+            0.5132,
+            0.047
+          ],
+          "max_scan_offset_change_m": 0.0386,
+          "wheel_reference_delta_body_m": [
+            -0.0144,
+            0.5142
+          ],
+          "wheel_reference_path_m": 0.5176
+        },
+        {
+          "seq": 249,
+          "test_id": 5,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 20.907,
+          "duration_s": 2.127,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.3316,
+            0.0305
+          ],
+          "body_delta_m": [
+            -0.0241,
+            -0.3321
+          ],
+          "center_distance_m": 0.333,
+          "camera_distance_3d_m": 0.3318,
+          "center_excursion_m": 0.3411,
+          "t265_deg": -2.272,
+          "mainyaw_deg": -2.203,
+          "fit_ranks": {
+            "2": 24
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 24
+          },
+          "dynamic_scan_range_m": [
+            0.5098,
+            0.0605
+          ],
+          "max_scan_offset_change_m": 0.0232,
+          "wheel_reference_delta_body_m": [
+            -0.0231,
+            -0.5084
+          ],
+          "wheel_reference_path_m": 0.5101
+        },
+        {
+          "seq": 250,
+          "test_id": 6,
+          "name": "move_body",
+          "description": "前+0/左+500mm，速度700mm/s",
+          "start_s": 24.171,
+          "duration_s": 1.962,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            0.4359,
+            -0.0254
+          ],
+          "body_delta_m": [
+            -0.0001,
+            0.4367
+          ],
+          "center_distance_m": 0.4367,
+          "camera_distance_3d_m": 0.434,
+          "center_excursion_m": 0.4384,
+          "t265_deg": 4.804,
+          "mainyaw_deg": 4.79,
+          "fit_ranks": {
+            "2": 22
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 22
+          },
+          "dynamic_scan_range_m": [
+            0.5129,
+            0.0311
+          ],
+          "max_scan_offset_change_m": 0.0189,
+          "wheel_reference_delta_body_m": [
+            -0.0142,
+            0.5147
+          ],
+          "wheel_reference_path_m": 0.5156
+        },
+        {
+          "seq": 251,
+          "test_id": 7,
+          "name": "move_body",
+          "description": "前+0/左-500mm，速度700mm/s",
+          "start_s": 27.781,
+          "duration_s": 2.351,
+          "outcome": "reported_done",
+          "fault": 0,
+          "center_delta_m": [
+            -0.3926,
+            0.019
+          ],
+          "body_delta_m": [
+            -0.0288,
+            -0.392
+          ],
+          "center_distance_m": 0.393,
+          "camera_distance_3d_m": 0.3923,
+          "center_excursion_m": 0.3742,
+          "t265_deg": -1.363,
+          "mainyaw_deg": 0.066,
+          "fit_ranks": {
+            "2": 26
+          },
+          "fit_reasons": {
+            "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 26
+          },
+          "dynamic_scan_range_m": [
+            0.6724,
+            0.0178
+          ],
+          "max_scan_offset_change_m": 0.04,
+          "wheel_reference_delta_body_m": [
+            -0.0092,
+            -0.5024
+          ],
+          "wheel_reference_path_m": 0.5036
+        }
+      ],
+      "top_jumps": [
+        {
+          "t_s": 31.282,
+          "step_m": 0.0529,
+          "capture_gap_ms": 1342.913,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            5975,
+            6243
+          ]
+        },
+        {
+          "t_s": 18.66,
+          "step_m": 0.0082,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            3723,
+            3724
+          ]
+        },
+        {
+          "t_s": 6.989,
+          "step_m": 0.0081,
+          "capture_gap_ms": 5.011,
+          "confidence": [
+            3,
+            3
+          ],
+          "frames": [
+            1394,
+            1395
+          ]
+        }
+      ],
+      "processing_lag_ms": [
+        0.662,
+        2131.9208,
+        3556.7724
+      ],
+      "callback_queue_drops": 0,
+      "max_frame_gap": 456,
+      "data_gaps_over_100ms": 5
+    }
+  ]
+}

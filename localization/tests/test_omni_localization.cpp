@@ -803,6 +803,12 @@ void test_debug_wheel_input()
         {"lever_body_mps", {lever0,lever1,0.}},
         {"v_camera_mps", {.8660254037844386*lever0-.5*lever1,0.,.5*lever0+.8660254037844386*lever1}}};
     {
+        Input input(config,"sdk-test","",root+"/missing/wheel.jsonl");
+        int calls=0;
+        check(input.process(packet,1020000000,[&](std::uint32_t,const rs2_vector &){++calls;return true;}) && calls==1,
+              "unwritable diagnostic log does not gate a valid SDK call");
+    }
+    {
         Input input(config,"sdk-test","",log);
         int calls = 0;
         auto fake_sdk = [&](std::uint32_t seq, const rs2_vector &v) {

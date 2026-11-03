@@ -1075,10 +1075,19 @@ def test_timed_v11_logging_recovery():
             app.toggle_test('forward',lambda:(_ for _ in ()).throw(AssertionError('blocked action executed')))
             assert events[-1][0]=='chassis_request_not_sent' and '2' in events[-1][1]['reason']
             assert not events[-1][1]['uart_motion_write_attempted'] and len(c.serial.written)==before
-            # Logging failure must not create an identity-request retry storm.
+            # Logging failure must neither block identity refresh nor cause a
+            # retry storm. A real reply clears the earlier incompatible identity.
             c.log_error='fixture log failure';c.next_identity_query_ns=0
             for _ in range(1000):c.poll(now[0])
-            assert c.next_identity_query_ns>now[0] and len(c.serial.written)==before
+            assert c.next_identity_query_ns>now[0] and len(c.serial.written)==before+1
+            req=wire.parse(c.serial.written[-1]);p[:8]=req['payload'];p[8:10]=(1).to_bytes(2,'big')
+            now[0]+=1_000_000;c.feed(wire.packet(wire.ID_REPLY,req['sequence'],p),now[0])
+            assert c.control_identity_problem() is None and c.log_error
+            c.latest_status=dict(state=0,command_sequence=250)
+            action=c.move_body(500,0)
+            assert c.serial.written[-1][:2]==b'\xa3\xb3' and action['name']=='move_body'
+            stopped=c.stop()
+            assert stopped['name']=='stop' and c.log_error
             c.close()
     # Preserve every raw record and timestamp; coalesce only latest-value UI
     # snapshots while a slow writer is held. Same bounded queue capacity.
@@ -1191,6 +1200,10 @@ def test_timed_measurement_pipeline():
             bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),sid,True)
         bridge.start()
         try:
+            # Reproduce a bounded history overflow while disk writing stalls.
+            for i in range(bridge.log.queue.maxsize+1):
+                bridge.log.submit('raw.jsonl',dict(index=i))
+            assert not bridge.log.healthy()
             now=time.monotonic_ns()
             for capture in (now-20_000_000,now-10_000_000):
                 bridge.telemetry(dict(kind="imu",sample=dict(angular_rate_capture_ns=capture,
@@ -1208,6 +1221,8 @@ def test_timed_measurement_pipeline():
             assert bridge.snapshot(dict(session_id=sid,sdk_api_rate_hz=100,status_monotonic_ns=now-2_000_000_000))["sdk_api_rate_hz"]==0
             assert bridge.snapshot(dict(session_id=sid,sdk_api_rate_hz=5,status_monotonic_ns=time.monotonic_ns()))["sdk_api_rate_hz"]==5
             assert bridge.snapshot(dict(session_id="old-session",sdk_api_success_samples=999))["sdk_api_success_samples"]==0
+            summary=bridge.snapshot(dict(session_id=sid,sdk_api_success_samples=1,logging_healthy=False))
+            assert summary['state']=='SDK_API_ACCEPTED' and summary['sdk_logging_healthy'] is False
             assert bridge.snapshot()["processing_latency_ms_max"]<50
             # Same source interval is not sent twice, regardless of its age.
             bridge.telemetry(dict(kind="measured_body_velocity",sample=dict(source="measured_wheel_feedback",

@@ -177,7 +177,8 @@ class WheelInputBridge:
                 processing_latency_ms_max=max(self.latencies,default=0)/1e6,
                 processing_latency_ms_p95=latency[int((len(latency)-1)*.95)]/1e6 if latency else None,
                 processing_latency_ms_median=sorted(self.latencies)[len(self.latencies)//2]/1e6 if self.latencies else None,
-                logging_healthy=self.log.healthy(),stats=dict(self.stats),measurement_counts=dict(self.measurements.stats))
+                logging_healthy=self.log.healthy(),sdk_logging_healthy=sdk.get("logging_healthy"),
+                stats=dict(self.stats),measurement_counts=dict(self.measurements.stats))
 
     def _usable_rate(self, sample):
         capture=sample.get("alignment_capture_ns",sample.get("angular_rate_capture_ns"))
@@ -270,8 +271,7 @@ class WheelInputBridge:
             if not self.enabled:
                 self._record("injection_off", sample, converted=packet)
                 continue
-            if not self.log.healthy():
-                self._record("logging_incomplete_not_injected",sample);continue
+            # Log completeness is reported separately, never an input gate.
             try:
                 self.sock.sendto(json.dumps(packet, allow_nan=False).encode(), self.address)
                 self.stats["sent_to_sdk_owner"] += 1
@@ -418,7 +418,6 @@ class SyntheticWheelInputBridge(WheelInputBridge):
                     self.fixture_phase=name
                     self.log.submit("wheel_fixture.jsonl",dict(event="fixture_phase",phase=name,
                         timestamp_monotonic_ns=now,elapsed_s=elapsed,source="synthetic_test_fixture"))
-                if not self.log.healthy():continue
                 packet=self.packet_for(name,body,omega,now);self.next_id+=1
                 try:
                     self.sock.sendto(json.dumps(packet,allow_nan=False).encode(),self.address)

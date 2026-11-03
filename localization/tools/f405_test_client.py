@@ -219,7 +219,6 @@ class ChassisTestClient:
             if kind==timed.ID_REQ:self.next_identity_query_ns=attempt+2_000_000_000
             if kind==timed.SYNC_REQ:self.next_sync_ns=attempt+500_000_000
             if kind==timed.CONFIG_REQ:self.next_config_ns=attempt+2_000_000_000
-            if self.log_error:raise RuntimeError("identity log unavailable: "+self.log_error)
             nonce=secrets.randbits(64)
             seq=self.next_query_sequence;self.next_query_sequence=(seq+1)&65535
             packet=timed.request(kind,nonce,seq,enable=enable)
@@ -227,7 +226,8 @@ class ChassisTestClient:
             event.identity_reply=None
             self._log("chassis_link.jsonl",dict(event="identity_request" if kind==timed.ID_REQ else "timed_request",nonce=nonce,sequence=seq,
                 request_type=kind,packet_hex=packet.hex(),baud=self.baud,read_only=kind!=timed.CONFIG_REQ,motor_command=False))
-            if self.log_error:raise RuntimeError("identity log unavailable: "+self.log_error)
+            # Diagnostic persistence is not a UART/identity prerequisite.
+            # Keep matching real replies even if a bounded log queue overflowed.
             before=time.monotonic_ns()
             self.identity_queries[nonce]=dict(sequence=seq,event=event,sent_ns=before,deadline_ns=before+1_000_000_000,
                                               request_type=kind,reply_type=kind+1)
@@ -580,8 +580,6 @@ class ChassisTestClient:
                     raise RuntimeError("no 0x1A state received; current mechanical state is unknown")
                 if self.latest_status["state"] in (MOTION_STATE_RUNNING, MOTION_STATE_FAULT):
                     raise RuntimeError("lower reports RUNNING/FAULT; finish the action or explicitly STOP before a new request")
-                if self.log_error:
-                    raise RuntimeError("test log is unavailable: "+self.log_error)
             sequence = None
             for _ in range(256):
                 candidate = self.next_sequence
@@ -609,9 +607,8 @@ class ChassisTestClient:
             if name == "stop":
                 self.needs_stop_ack = True
             self._log("chassis_actions.jsonl",dict(action,event="submit"))
-            if self.log_error and name != "stop":
-                self._finish("not_sent_log_unavailable",now)
-                raise RuntimeError("action not sent because test logging failed")
+            # A missing log record marks the session incomplete; it must not
+            # prevent an otherwise valid operator command or its real receipt.
             try:
                 if self.serial.write(packet) != len(packet):
                     raise RuntimeError("partial UART write; action status is unknown, no automatic retransmit")
