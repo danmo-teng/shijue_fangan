@@ -35,7 +35,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
     lidar=None;reader=None;reader_totals={};pending=deque();times=deque(maxlen=2048)
     counters=dict(pose_ingested=0,primary_yaw_ingested=0,scans_received=0,
         scan_queue_drops=0,display_updates_coalesced=0)
-    error=None;last_publish=0.;last_percentile=0.;p95=None
+    error=None;last_publish=0.;last_percentile=0.;p95=None;reference_request_id=None
 
     def event(name,**data):
         log.submit('lidar_worker_events.jsonl',dict(event=name,timestamp_monotonic_ns=time.monotonic_ns(),**data))
@@ -44,6 +44,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
         replies.put_nowait(dict(kind=kind,**data))
 
     def consume():
+        nonlocal reference_request_id
         for _ in range(1024):
             try:kind,payload=inbox.get_nowait()
             except queue.Empty:break
@@ -55,10 +56,14 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                 engine.invalidate_reference(payload['reason']);event('reference_invalidated',**payload)
             elif kind=='align':
                 try:
-                    reference=engine.align(payload['description'],physical_confirmed=payload['physical_confirmed'])
-                    reply('reference_set',request_id=payload['request_id'],reference=reference)
-                    event('field_reference_set',request_id=payload['request_id'],reference=reference)
+                    requested=engine.request_initialization(payload['description'],physical_confirmed=payload['physical_confirmed'])
+                    reference_request_id=payload['request_id']
+                    reply('reference_search_started',request_id=reference_request_id)
+                    event('field_reference_search_started',request_id=reference_request_id,initialization=requested)
                 except ValueError as exc:reply('reference_rejected',request_id=payload['request_id'],error=str(exc))
+            elif kind=='lidar_enabled':
+                engine.set_lidar_enabled(payload['enabled'])
+                event('operator_lidar_availability',enabled=payload['enabled'],reason=payload['reason'])
 
     def state():
         stats=dict(reader_totals)
@@ -69,6 +74,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             worker_pid=os.getpid(),worker_cpu_affinity=sorted(os.sched_getaffinity(0)),
             capture_chain_present=bool(engine.poses and engine.yaws and counters['scans_received']),
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
+            lidar_corrections_enabled=engine.lidar_corrections_enabled,
             logging_healthy=log.healthy(),accuracy_verified=False,full_speed_physical_validation=False)
 
     def publish(value):
@@ -110,6 +116,13 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             consume()  # Motion received while parsing is available to this scan.
             if pending:
                 scan=pending.popleft()
+                if engine.reference is None and reference_request_id is not None:
+                    result=engine.try_initialize(scan)
+                    log.submit('dynamic_initialization.jsonl',result)
+                    if result.get('reference') is not None:
+                        reply('reference_set',request_id=reference_request_id,reference=result['reference'])
+                        event('field_reference_set',request_id=reference_request_id,reference=result['reference'])
+                        reference_request_id=None
                 if engine.reference is not None:
                     try:
                         result=engine.observe(scan);times.append(result['compute_ms'])

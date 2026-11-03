@@ -288,6 +288,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_global_wall_initialization()
     test_dynamic_worker_process()
     # Wire-compatible fast CRCs: independent polynomial reference, including
     # every byte value and a multibyte sequence, not encoder/decoder roundtrip.
@@ -836,6 +837,61 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+
+def test_global_wall_initialization():
+    import math
+    import numpy as np
+    from lidar_yaw_debug.dynamic import DynamicFence,rotation
+    from lidar_yaw_debug.diagnostic import load_config
+    from lidar_yaw_debug.types import RawScan,TimedPoint
+    mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
+    ext=np.array([*mount['extrinsic'][:2],math.radians(mount['extrinsic'][2])])
+    origin=2_000_000_000
+    def cloud(xy,theta,scan_number,one_wall=False):
+        points=[];walls=[];laser=np.array(xy)+rotation(theta)@ext[:2]
+        for i,angle in enumerate(np.linspace(143.25,288.25,320)):
+            direction=np.array([math.cos(theta+ext[2]+math.radians(angle)),math.sin(theta+ext[2]+math.radians(angle))])
+            hits=[]
+            for axis in (0,1):
+                for border in (-1.5,1.5):
+                    if abs(direction[axis])<1e-10:continue
+                    distance=(border-laser[axis])/direction[axis];hit=laser+distance*direction
+                    if distance>0 and abs(hit[1-axis])<=1.5+1e-9:hits.append((distance,axis,border))
+            distance,axis,border=min(hits)
+            points.append(TimedPoint(f'{scan_number}:{i}',origin+scan_number*100_000_000+i*100_000,
+                (distance*math.cos(math.radians(angle)),distance*math.sin(math.radians(angle))),raw_angle_deg=float(angle)))
+            walls.append((axis,border))
+        if one_wall:
+            dominant=max(set(walls),key=walls.count);points=[p for p,w in zip(points,walls) if w==dominant]
+        return RawScan(f'square:{scan_number}',points[-1].time_ns,tuple(points),'fixture','known_synthetic')
+    for xy in ((0.,0.),(.4,-.3)):
+        for quadrant in range(4):
+            e=DynamicFence(mount);theta=math.radians(13+90*quadrant)
+            for i in range(101):
+                t=origin-200_000_000+i*5_000_000
+                e.ingest_pose(dict(session_id='fixture',frame_number=i,timestamp_monotonic_ns=t,
+                    receive_monotonic_ns=t,x_m=0.,y_m=0.,yaw_rad=0.,tracker_confidence=3))
+                e.ingest_yaw(t,1287.,dict(source='synthetic_gyro'))
+            e.request_initialization('offline arbitrary placement',physical_confirmed=False)
+            for scan_number in range(3):
+                sample=cloud(xy,theta,scan_number);result=e.try_initialize(sample)
+                assert e.try_initialize(sample)['status']=='DUPLICATE_INITIAL_SCAN'
+            assert e.reference is not None,result
+            expected=rotation(-quadrant*math.pi/2)@xy
+            # The reviewed 25mm inlier band includes a few points next to a
+            # corner. Check a tight bounded fit, not exact arithmetic equality.
+            assert np.linalg.norm(np.array(e.reference['start_center_xy_m'])-expected)<.001,(xy,quadrant,e.reference,expected)
+            assert abs(e.reference['field_heading_deg']-13)<.1
+            assert e.reference['square_absolute_side_identified'] is False
+            scan=cloud(xy,theta,3);before=e.offset.copy();e.set_lidar_enabled(False)
+            paused=e.observe(scan)
+            assert paused['rank_xy']==0 and np.array_equal(e.offset,before)
+            assert e.snapshot()['ready'] and not e.snapshot()['lidar_corrections_enabled']
+            e.set_lidar_enabled(True);assert e.observe(scan)['rank_xy']==2
+    e.request_initialization('single wall must not locate XY',physical_confirmed=False)
+    for i in range(3):e.try_initialize(cloud((.4,-.3),theta,i,one_wall=True))
+    assert e.reference is None
 
 
 def test_dynamic_worker_process():

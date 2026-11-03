@@ -12,6 +12,7 @@ import threading
 import time
 import numpy as np
 from .diagnostic import fixed_yaw_position
+from .global_init import initialize, initial_heading_branch
 
 
 def rotation(angle):
@@ -48,6 +49,9 @@ class DynamicFence:
         self.offset=np.zeros(2);self.last_fit=None;self.scan_count=0;self.fit_count=0
         self.has_anchor=False
         self.latest_points=[];self.last_sample=None;self.last_yaw=None;self.last_scan_ns=None
+        self.initialization=None;self.pending_initial_pose=None
+        self.last_initial_scan_id=None
+        self.lidar_corrections_enabled=True
 
     def ingest_pose(self,p):
         if p.get('tracker_confidence',0)<=0:return
@@ -73,9 +77,86 @@ class DynamicFence:
         with self.lock:
             self.reference=None;self.revision+=1;self.yaws.clear();self.last_fit=None
             self.has_anchor=False
+            self.initialization=None;self.pending_initial_pose=None
             return dict(event='reference_invalidated',reason=reason)
 
+    def request_initialization(self,description,*,physical_confirmed=True):
+        with self.lock:
+            if not self.poses or not self.yaws:raise ValueError('等待实际T265 Pose和主yaw数据')
+            self.reference=None;self.revision+=1;self.offset[:]=0;self.has_anchor=False
+            self.last_fit=None;self.latest_points=[];self.pending_initial_pose=None
+            self.last_initial_scan_id=None
+            self.initialization=dict(status='SEARCHING_WALLS',description=description,
+                physical_stationary_confirmed=physical_confirmed,initial_primary_yaw_rad=self.yaws[-1][1],
+                initial_pose_yaw_rad=self.poses[-1][3],started_ns=time.monotonic_ns(),
+                confirmations=0,attempts=0,branch_policy='initial_heading_nearest_positive_X_mod_90')
+            return dict(self.initialization)
+
+    def set_lidar_enabled(self,enabled):
+        with self.lock:
+            self.lidar_corrections_enabled=bool(enabled);self.last_fit=None;self.latest_points=[]
+            self.pending_initial_pose=None
+            if self.initialization:self.initialization['confirmations']=0
+
+    def accepted_points(self,scan):
+        m=self.mount
+        return [p for p in scan.points if p.valid_return and p.raw_angle_deg is not None
+            and abs((p.raw_angle_deg-m['center_raw_deg']+180)%360-180)<=m['fov_deg']/2
+            and not any(lo<=p.raw_angle_deg<hi for lo,hi in m['excluded_raw_ranges_deg'])]
+
+    def try_initialize(self,scan):
+        """Stationary global wall initialization; no prescribed XY or red/blue.
+
+        Raw single-scan wall geometry is valid only under the operator's flat,
+        stationary placement declaration. This does not certify calibration.
+        """
+        with self.lock:
+            state=self.initialization
+            if state is None:return dict(status='INITIALIZATION_NOT_REQUESTED')
+            if not self.lidar_corrections_enabled:return dict(status='LIDAR_DISABLED_FOR_OBSTACLE')
+            if scan.scan_id==self.last_initial_scan_id:return dict(status='DUPLICATE_INITIAL_SCAN')
+            self.last_initial_scan_id=scan.scan_id
+            poses=np.array(self.poses);yaws=np.array(self.yaws)
+            if not len(poses) or not len(yaws):return dict(status='WAITING_MOTION_REFERENCE')
+            state['attempts']+=1
+        accepted=self.accepted_points(scan)
+        points=np.array([p.point_lidar_m for p in accepted]).reshape(-1,2)
+        ext=[*self.mount['extrinsic'][:2],math.radians(self.mount['extrinsic'][2])]
+        found,reason=initialize(points,extrinsic=ext)
+        if found is None:
+            self.pending_initial_pose=None;state.update(status=reason,confirmations=0)
+            return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False)
+        t=[scan.reference_ns]
+        raw_yaw=interpolate(yaws[:,0].astype(np.int64),yaws[:,1:2],t)[0,0]
+        pose_values=poses[:,1:4].copy();pose_values[:,2]=np.unwrap(pose_values[:,2])
+        raw_pose=interpolate(poses[:,0].astype(np.int64),pose_values,t)[0]
+        # Choose by heading at the REQUEST, not whichever heading a later scan
+        # happened to have. Hold the first chosen square branch during confirmation.
+        candidate=np.asarray(initial_heading_branch(found,raw_yaw-state['initial_primary_yaw_rad'],self.pending_initial_pose))
+        old=self.pending_initial_pose
+        consistent=old is not None and np.linalg.norm(candidate[:2]-old[:2])<.05 and abs((candidate[2]-old[2]+np.pi)%(2*np.pi)-np.pi)<math.radians(2)
+        state['confirmations']=state['confirmations']+1 if consistent else 1
+        self.pending_initial_pose=candidate
+        state.update(status='CONFIRMING_WALL_MATCH',candidate_center_xy_m=(candidate[:2]-1.5).tolist(),
+            candidate_yaw_deg=math.degrees(candidate[2])%360,support_fraction=found['support_fraction'],
+            equivalent_center_poses=[[q[0]-1.5,q[1]-1.5,math.degrees(q[2])%360] for q in found['equivalent_poses']])
+        if state['confirmations']>=3:
+            theta=float(candidate[2]);xy=(candidate[:2]-1.5).tolist()
+            with self.lock:
+                self.reference=dict(pose_origin=raw_pose[:2].tolist(),vio_rotation=theta-float(raw_pose[2]),
+                    yaw_offset=theta-float(raw_yaw),start_center_xy_m=xy,field_heading_deg=math.degrees(theta)%360,
+                    description=state['description'],physical_placement_confirmed=False,
+                    physical_stationary_confirmed=state['physical_stationary_confirmed'],
+                    source='lidar_global_initialization',branch_policy=state['branch_policy'],
+                    timestamp_monotonic_ns=time.monotonic_ns(),reference_sample_ns=scan.reference_ns,
+                    square_absolute_side_identified=False)
+                self.offset[:]=0;self.has_anchor=True;self.revision+=1
+                state['status']='GLOBAL_SYMMETRIC_FIX'
+        return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
+            reference=dict(self.reference) if self.reference else None)
+
     def align(self,description,*,physical_confirmed=True):
+        """Legacy known-pose fixture for existing offline checks, not GUI startup."""
         with self.lock:
             if not self.poses or not self.yaws:raise ValueError("等待实际T265 Pose和主yaw数据")
             p=self.poses[-1];y=self.yaws[-1]
@@ -88,7 +169,7 @@ class DynamicFence:
 
     def _frozen(self,first_ns=None,last_ns=None,*,latest=False):
         with self.lock:
-            if self.reference is None or not self.poses or not self.yaws:raise ValueError("尚未建立1号位场地参考")
+            if self.reference is None or not self.poses or not self.yaws:raise ValueError("尚未从围栏建立场地参考")
             poses,yaws=list(self.poses),list(self.yaws)
             reference,offset,revision=dict(self.reference),self.offset.copy(),self.revision
         if latest:first_ns=last_ns=min(poses[-1][0],yaws[-1][0])
@@ -117,17 +198,16 @@ class DynamicFence:
         poses,yaws,reference,offset,revision=self._frozen(scan.first_point_ns,scan.reference_ns)
         copied=time.monotonic_ns()
         query=self.trajectory(poses,yaws,reference);m=self.mount
-        accepted=[]
-        for p in scan.points:
-            angle=p.raw_angle_deg
-            if (p.valid_return and angle is not None and abs((angle-m['center_raw_deg']+180)%360-180)<=m['fov_deg']/2
-                and not any(lo<=angle<hi for lo,hi in m['excluded_raw_ranges_deg'])):accepted.append(p)
+        accepted=self.accepted_points(scan)
         if len(accepted)<8:raise ValueError("可用雷达点不足")
         points=np.array([p.point_lidar_m for p in accepted]);times=np.array([p.time_ns for p in accepted],np.int64)
         ext=np.array([*m['extrinsic'][:2],math.radians(m['extrinsic'][2])])
         corrected,ref=deskew_points(points,times,scan.reference_ns,query,ext)
         deskew_done=time.monotonic_ns()
-        fit=fixed_yaw_position(corrected,ref[:2]+offset,ref[2],[0.,0.,0.])
+        fit=(fixed_yaw_position(corrected,ref[:2]+offset,ref[2],[0.,0.,0.]) if self.lidar_corrections_enabled
+            else dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
+                inherited_axes=['x','y'],covariance=None,qualified_pose=False,
+                reason='OPERATOR_OBSTACLE_NO_LIDAR_CORRECTION'))
         fitted=time.monotonic_ns()
         latest=max(poses[-1,0],yaws[-1,0]);oldest=max(poses[0,0],yaws[0,0])
         result=dict(fit,scan_id=scan.scan_id,reference_ns=scan.reference_ns,
@@ -160,7 +240,9 @@ class DynamicFence:
     def snapshot(self,now=None):
         now=time.monotonic_ns() if now is None else now
         try:poses,yaws,reference,offset,_=self._frozen(latest=True)
-        except ValueError as e:return dict(ready=False,reason=str(e),scans=self.scan_count,fixes=self.fit_count)
+        except ValueError as e:return dict(ready=False,reason=str(e),scans=self.scan_count,fixes=self.fit_count,
+            initialization=dict(self.initialization) if self.initialization else None,
+            lidar_corrections_enabled=self.lidar_corrections_enabled)
         # Publish at latest actual motion support, never stamp extrapolation as a new sensor frame.
         sample_ns=int(min(poses[-1,0],yaws[-1,0]));pose=self.trajectory(poses,yaws,reference)([sample_ns])[0]
         with self.lock:
@@ -170,5 +252,6 @@ class DynamicFence:
             last_scan_age_ms=None if self.last_scan_ns is None else (now-self.last_scan_ns)/1e6,
             source='LIDAR_ANCHORED_VIO' if self.has_anchor else 'VIO_FROM_INITIAL_REFERENCE',
             current_wall_axes=fit.get('position_observed_axes',[]) if fit else [],last_fit=fit,
+            lidar_corrections_enabled=self.lidar_corrections_enabled,
             points_field=points,scans=self.scan_count,fixes=self.fit_count,reference=reference,
             qualified_pose=False,accuracy_verified=False,control_pose_published=False)

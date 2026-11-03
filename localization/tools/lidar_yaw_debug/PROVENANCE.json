@@ -37,7 +37,7 @@
     "static.py": {
       "source": "lidar/static.py",
       "source_sha256": "2ab536d0d66d35de5f0f9e67a08acb7879eddf249ae33479e1a7d034776c6396",
-      "changes": "RANSAC/TLS subset; 160 uniform ordered pairs per round generated in batches, seeded sequence changes; same geometry thresholds/tie rule; replay and known geometry checked"
+      "changes": "RANSAC/TLS subset; 160 uniform ordered pairs per round generated in batches, seeded sequence changes; same geometry thresholds/tie rule; replay and known geometry checked; append reviewed Fit/localize for one-time global initialization only; ongoing tracking remains fixed primary yaw"
     },
     "types.py": {
       "source": "fusion/types.py",
@@ -61,6 +61,11 @@
     "worker.py": {
       "source": "RDK test integration, user-approved 2026-11-03",
       "changes": "spawn process solely owns lidar UART/parser/deskew/fitter; bounded original-time pose/yaw IPC from existing SDK/chassis owners; raw logs preserved, display snapshots alone coalesce"
+    },
+    "global_init.py": {
+      "source": "lidar/global_init.py",
+      "source_sha256": "9433336429c966d80fcea19205cbfacafcef5acbd68d5acdef73be773eb92799",
+      "changes": "reuse rectangle initialize/symmetries; omit old AutoLaser and nearest-corner policy; choose initial-heading nearest +X branch, hold during confirmation, convert corner to center origin"
     }
   },
   "dynamic_integration_baseline": "eae0b4a"

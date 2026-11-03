@@ -23,7 +23,7 @@ from lidar_yaw_debug.worker import RadarWorker
 
 DYNAMIC_FILES={'dynamic_events.jsonl','dynamic_scans.jsonl','dynamic_localization.jsonl',
     'dynamic_status.json','dynamic_summary.json','pose_motion.jsonl','lidar_rx.jsonl','lidar_tx.jsonl',
-    'lidar_worker_events.jsonl','lidar_worker_summary.json'}
+    'lidar_worker_events.jsonl','lidar_worker_summary.json','dynamic_initialization.jsonl'}
 base.SESSION_FILES=base.SESSION_FILES|DYNAMIC_FILES
 
 
@@ -57,7 +57,7 @@ class DynamicMapApp(base.MotionMapApp):
         self.dlog('dynamic_events.jsonl',dict(event=event,timestamp_monotonic_ns=time.monotonic_ns(),**data))
 
     def start_session(self):
-        self.message='放在1号位、车头135°，点击“开始定位”；动作仅由按钮触发'
+        self.message='建议场地中心无遮挡处，静止后点自动定位'
         self.render_screen()  # Prepare static glyphs before any sensor threads.
         super().start_session()
         self.dynamic_log=AsyncDebugLog(self.run_dir)
@@ -71,7 +71,7 @@ class DynamicMapApp(base.MotionMapApp):
         self.yaw_thread.start()
         self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir)
         m=base.read_json(self.run_dir/'metadata.json')
-        m.update(localization_mode='lidar_t265_dynamic_debug',initial_pose=dict(x_m=-1.35,y_m=1.35,yaw_deg=135),
+        m.update(localization_mode='lidar_t265_dynamic_debug',initial_pose=dict(known=False,source='waiting_for_lidar_global_initialization'),
             physical_placement_confirmed=False,lidar_port=self.options.lidar,lidar_baud=self.options.lidar_baud,
             lidar_installation=self.dynamic_config['installation'],motion_compensation='SE2_per_point_translation_and_primary_yaw',
             pose_transport='bounded nonblocking same-SDK Unix SEQPACKET',dynamic_time_policy='timing_diagnostic_not_admission',
@@ -82,8 +82,11 @@ class DynamicMapApp(base.MotionMapApp):
         m['lidar_execution']='dedicated_spawn_process_parser_deskew_fit'
         m['lidar_worker_pid']=self.radar.process.pid
         m['line_sampler']='uniform_batched_ordered_pairs_160_v1'
+        m['initialization_policy']='arena_center_origin_initial_heading_nearest_positive_X_mod_90'
+        m['suggested_physical_placement']='arena_center_clear_of_speed_bumps_not_an_exact_pose_measurement'
+        m['obstacle_policy']='operator_disables_lidar_corrections; automatic_occlusion_detection_unverified'
         (self.run_dir/'metadata.json').write_text(json.dumps(m,ensure_ascii=False,indent=2)+'\n')
-        self.message='放在1号位、车头135°，点击“开始定位”；动作仅由按钮触发'
+        self.message='建议场地中心无遮挡处，静止后点自动定位'
 
     def dynamic_telemetry(self,event):
         if event['kind'] not in ('imu','timed_identity','timed_clock_sync','timed_gyro_diagnostic','device_identity_changed'):return
@@ -142,7 +145,8 @@ class DynamicMapApp(base.MotionMapApp):
             if message['kind']=='reference_set':
                 self.path=[];self.vio_path=[];self.dynamic_error=None
                 self.devent('field_reference_set',reference=message['reference'])
-                self.message='定位已开始；初始朝向朝外，先后退可向场内移动'
+                self.message='定位完成；动作单击，再点同一动作会停止'
+            elif message['kind']=='reference_search_started':self.message='寻找至少两面不平行围栏，确认后建立坐标'
             elif message['kind']=='reference_rejected':self.message=message['error']
             elif message['kind']=='error':raise RuntimeError('雷达进程：'+message['error'])
         state=self.radar.state;self.dynamic_snapshot=state.get('last',{})
@@ -156,7 +160,7 @@ class DynamicMapApp(base.MotionMapApp):
         if (self.options.sensor_check_seconds and not self.dynamic_snapshot.get('ready')
                 and not self.auto_reference_requested and self.radar.pending_reference is None
                 and state.get('have_tracked_pose') and state.get('have_primary_yaw')):
-            self.radar.align('desktop sensor check; initial field position is only a hypothesis',physical_confirmed=False)
+            self.radar.align('desktop sensor check; no prescribed XY/heading; actual walls required',physical_confirmed=False)
             self.auto_reference_requested=True
         self.input_snapshot=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
         if self.dynamic_snapshot.get('ready'):
@@ -169,7 +173,7 @@ class DynamicMapApp(base.MotionMapApp):
     def render_logical(self):
         # Chinese rasterization is expensive and can hold the Python GIL.
         # Cache static labels/buttons; per-frame numbers use OpenCV primitives.
-        key=(self.speed_mm_s,self.turn_rate_deg_s,self.options.wheel_input)
+        key=(self.speed_mm_s,self.turn_rate_deg_s,self.options.wheel_input,self.radar.state.get('lidar_corrections_enabled',True))
         if getattr(self,'background_key',None)!=key:
             canvas=np.full((base.LOGICAL_HEIGHT,base.LOGICAL_WIDTH,3),245,np.uint8)
             text=base.TextPainter(font_scale=1./self.render_scale);self.hitboxes.clear()
@@ -177,7 +181,7 @@ class DynamicMapApp(base.MotionMapApp):
             for value in (-1.,-.5,0.,.5,1.):
                 x,y=self.world_to_pixel(value,value)
                 cv2.line(canvas,(x,60),(x,910),(215,215,215));cv2.line(canvas,(30,y),(880,y),(215,215,215))
-            text.add('雷达＋T265动态定位 / 中心原点 / 1号位135°',(30,20),20,(35,35,35),True)
+            text.add('雷达＋T265动态定位 / 场地中心原点 / 启动朝向选90°分支',(30,20),20,(35,35,35),True)
             text.add('绿点：雷达；蓝：T265车中心；橙：雷达修正后',(30,930),16,(35,35,35))
             text.add('测试显示，精度待实测；不向正式比赛发布',(30,960),14,(70,70,70))
             self.draw_panel(canvas,text)
@@ -189,7 +193,8 @@ class DynamicMapApp(base.MotionMapApp):
         self.draw_path(canvas,self.path,(30,130,235),2)
         for p in s.get('points_field',[]):
             q=self.world_to_pixel(*p)
-            if 30<=q[0]<=880 and 60<=q[1]<=910:cv2.circle(canvas,q,1,(70,160,40),-1)
+            if 30<=q[0]<=880 and 60<=q[1]<=910:
+                cv2.circle(canvas,q,1,(70,160,40) if s.get('lidar_corrections_enabled',True) else (150,150,150),-1)
         def number(value,y,color=(225,225,225)):
             cv2.putText(canvas,str(value),(920,y),cv2.FONT_HERSHEY_SIMPLEX,.65,color,1,cv2.LINE_AA)
         if s.get('ready'):
@@ -198,8 +203,11 @@ class DynamicMapApp(base.MotionMapApp):
             cv2.arrowedLine(canvas,point,self.world_to_pixel(x+.15*math.cos(a),y+.15*math.sin(a)),(30,130,235),3)
             number(f'X {x:+.3f}m  Y {y:+.3f}m',88,(230,220,70))
             number(f'Yaw {s["yaw_deg"]:.1f} deg',120)
-        else:number('WAIT: place at zone 1',88)
-        number('Wall: '+('/'.join(s.get('current_wall_axes',[])) or 'VIO'),153)
+        else:
+            number('WAIT: auto wall initialization',88)
+            number('Match '+str((s.get('initialization') or {}).get('confirmations',0))+'/3',120)
+        number('Wall: '+('OFF / obstacle' if not s.get('lidar_corrections_enabled',True) else
+            '/'.join(s.get('current_wall_axes',[])) or ('VIO' if s.get('ready') else 'UNLOCALIZED')),153)
         number(f'Scan {self.radar.state.get("scans_received",0)} / Fit {self.radar.state.get("fits",0)}',183)
         number(f'Pose {self.pose_packets} / Yaw {self.imu_packets}',213)
         wheel=getattr(self,'input_snapshot',{});count=wheel.get('sdk_api_success_samples',0)
@@ -208,7 +216,10 @@ class DynamicMapApp(base.MotionMapApp):
         age=wheel.get('sdk_success_age_ms');age_text='--' if age is None else f'{age:.0f}'
         cv2.putText(canvas,f'last API {age_text}ms / reject {(self.wheel_sdk_status or {}).get("rejected_samples",0)}',
             (920,868),cv2.FONT_HERSHEY_SIMPLEX,.45,(200,200,200),1,cv2.LINE_AA)
-        number(self.motion_status.get('state_name','WAIT'),886,(140,210,240))
+        fault=self.motion_status.get('fault',0)
+        state_text=self.motion_status.get('state_name','WAIT')
+        if fault:state_text+=f' {fault} '+{1:'INVALID',2:'IMU',3:'ODOM',4:'TIMEOUT',5:'MOTOR'}.get(fault,'UNKNOWN')
+        number(state_text,886,(140,210,240))
         msg=('前mm,左mm,角deg；未知?：'+self.measurement_buffer) if self.measurement_buffer is not None else (self.dynamic_error or self.message)
         if getattr(self,'message_key',None)!=msg:
             patch=np.full((110,380,3),(26,27,30),np.uint8)
@@ -221,7 +232,7 @@ class DynamicMapApp(base.MotionMapApp):
     def draw_panel(self,canvas,text):
         x=920;cv2.rectangle(canvas,(900,0),(1280,1024),(26,27,30),-1)
         text.add('运动定位测试',(x,20),24,(240,240,240),True)
-        self.button(canvas,text,'start_dynamic','1号位已摆好，开始定位',(x,240,1250,285))
+        self.button(canvas,text,'start_dynamic','静止后自动定位',(x,240,1250,285))
         self.button(canvas,text,'speed_slow','200mm/s',(x,310,1078,350),self.speed_mm_s==200)
         self.button(canvas,text,'speed_fast','700mm/s 上限',(1090,310,1250,350),self.speed_mm_s==700)
         text.add(f'转速上限 {self.turn_rate_deg_s}°/s',(x,355),12,(200,200,200))
@@ -232,8 +243,10 @@ class DynamicMapApp(base.MotionMapApp):
         self.button(canvas,text,'stop','停止',(x,590,1250,665),False,(55,55,150))
         self.button(canvas,text,'mark','停稳后记点',(x,690,1078,735))
         self.button(canvas,text,'measure','录入实测',(1090,690,1250,735))
-        self.button(canvas,text,'quit','结束并保存',(x,755,1250,800))
-        text.add('SDK轮速输入 / 成功数 / 底盘状态',(x,815),14,(210,210,210))
+        enabled=self.radar.state.get('lidar_corrections_enabled',True)
+        self.button(canvas,text,'obstacle','越障暂停雷达' if enabled else '恢复雷达修正',(x,755,1078,800),not enabled)
+        self.button(canvas,text,'quit','结束并保存',(1090,755,1250,800))
+        text.add('SDK轮速输入 / 成功数 / 底盘状态',(x,807),12,(210,210,210))
 
     def select_at(self,x,y):
         name=next((n for n,b in self.hitboxes.items() if b[0]<=x<=b[2] and b[1]<=y<=b[3]),None)
@@ -241,13 +254,19 @@ class DynamicMapApp(base.MotionMapApp):
         if name=='start_dynamic':
             if self.bridge.pending:self.message='先结束当前动作再建立起点';return
             try:
-                request=self.radar.align('operator button: vehicle at zone1 (-1.35,+1.35), heading135')
-                self.devent('field_reference_requested',request_id=request);self.message='正在建立1号位参考'
+                request=self.radar.align('operator stationary placement; auto XY/yaw from walls; initial-heading +X symmetry branch')
+                self.devent('field_reference_requested',request_id=request);self.message='正在从围栏建立中心原点与启动朝向分支'
             except ValueError as e:self.message=str(e)
         elif name=='speed_slow':self.speed_mm_s=200;self.turn_rate_deg_s=60
         elif name=='speed_fast':self.speed_mm_s=700;self.turn_rate_deg_s=360
         elif name=='stop':self.active_test=None;self.send_stop('用户动态地图停止')
         elif name=='quit':self.exit_requested=True
+        elif name=='obstacle':
+            enabled=not self.radar.state.get('lidar_corrections_enabled',True)
+            if self.radar.send('lidar_enabled',dict(enabled=enabled,reason='operator obstacle/visibility declaration')):
+                self.devent('operator_lidar_availability_requested',enabled=enabled)
+                self.message='恢复后重新匹配墙约束' if enabled else '越障期间只传播T265/主yaw，雷达原始数据继续记录'
+            else:self.message='雷达状态请求队列已满，未改变状态'
         elif name=='mark':
             try:
                 self.mark_settled_reference()
@@ -258,7 +277,7 @@ class DynamicMapApp(base.MotionMapApp):
         elif name=='measure':
             if self.active_test is not None or not self.settled_reference_mark:self.message='先停稳后记点，再录入实测'
             else:self.measurement_buffer=''
-        elif self.radar.pending_reference is not None or not self.dynamic_snapshot.get('ready'):self.message='请先摆好1号位并开始定位'
+        elif self.radar.pending_reference is not None or not self.dynamic_snapshot.get('ready'):self.message='请先静止自动定位；单墙不足以确定完整XY'
         else:super().select_at(x,y)
 
     def handle_key(self,key):
@@ -314,7 +333,7 @@ def arguments():
     finally:sys.argv=old
     for k,v in vars(extra).items():setattr(o,k,v)
     if o.wheel_fixture!='off' or o.check_chassis:raise ValueError('dynamic entry does not accept synthetic/chassis-check mode')
-    o.zone=1;o.center_origin=False;o.heading_offset_deg=0.
+    o.zone=4;o.center_origin=True;o.heading_offset_deg=45.  # Legacy test +X=0, before laser initialization.
     return o
 
 

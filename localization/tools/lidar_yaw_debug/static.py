@@ -1,5 +1,6 @@
-"""Audited geometry subset; no yaw-fitting tracker or control integration."""
+"""Reviewed geometry. SE2 refinement is for startup only; runtime XY keeps primary yaw."""
 import numpy as np
+from dataclasses import dataclass, asdict
 
 def polar_points(samples, center_deg=270., fov_deg=180., inverted=True):
     """Raw packet angles are clockwise upright, counterclockwise inverted.
@@ -97,3 +98,84 @@ def outer_supported_lines(lines, separation=.08, angle_deg=6.):
                       for j,(m,e) in enumerate(oriented))
         if not dominated:keep.append(line)
     return keep
+
+
+@dataclass
+class Fit:
+    status: str
+    pose: list
+    rank: int
+    wall_ids: list
+    residual_rms_m: float | None
+    information_eigenvalues: list
+    unobservable_directions: list
+    reason: str
+
+    def json(self):
+        return asdict(self)
+
+
+def localize(points, prior, size=(3.,3.), extrinsic=(0.,0.,0.), max_correction_m=.10, _lines=None):
+    """Local scan alignment only. prior=(map x,y,CCW rad), laser extrinsic in base.
+
+    Tracking correction trust radius defaults to 0.10m; this is not global recovery.
+    Wall association gate 0.20 m and 12 deg; caller must resolve wall identity/initial pose.
+    A single wall updates normal position and yaw, preserving tangent position.
+    Eigenvalues describe geometry only, not calibrated pose covariance.
+    """
+    prior=np.asarray(prior,float)
+    if prior.shape!=(3,) or not np.isfinite(prior).all() or min(size)<=0 or not np.isfinite(max_correction_m) or max_correction_m<=0:
+        raise ValueError('finite prior and positive arena dimensions required')
+    base=transform(np.asarray(points,float).reshape(-1,2),extrinsic)
+    lines=outer_supported_lines(extract_lines(base)) if _lines is None else _lines
+    pose=prior.copy()
+    normals=np.array([[1.,0.],[1.,0.],[0.,1.],[0.,1.]])
+    distances=np.array([0.,size[0],0.,size[1]])
+    assigned=[]
+    for line in lines:
+        wp=transform(line['points'],prior)
+        n=transform([line['normal']], [0,0,prior[2]])[0]
+        alignment=abs(normals@n)>np.cos(np.deg2rad(12))
+        cost=np.median(abs(wp@normals.T-distances),axis=0)
+        cost[~alignment]=np.inf
+        wid=int(np.argmin(cost))
+        tangent_axis=1 if wid<2 else 0
+        in_segment=np.mean((wp[:,tangent_axis]>=-.05)&(wp[:,tangent_axis]<=size[tangent_axis]+.05))
+        if cost[wid]<.20 and in_segment>.85:
+            assigned.append((wid,line['points']))
+    if not assigned:
+        return Fit('ODOM_ONLY',prior.tolist(),0,[],None,[],np.eye(3).tolist(),'No supported wall compatible with the local prior')
+    pts=np.concatenate([p for _,p in assigned])
+    ids=np.concatenate([np.full(len(p),wid) for wid,p in assigned])
+    ns=normals[ids]
+    for _ in range(15):
+        wp=transform(pts,pose)
+        r=np.sum(wp*ns,axis=1)-distances[ids]
+        rotated=wp-pose[:2]
+        dyaw=np.column_stack((-rotated[:,1],rotated[:,0]))
+        j=np.column_stack((ns,np.sum(ns*dyaw,axis=1)))
+        w=np.minimum(1.,.02/np.maximum(abs(r),1e-12))
+        a=j*np.sqrt(w[:,None]); b=-r*np.sqrt(w)
+        delta=np.linalg.lstsq(a,b,rcond=1e-5)[0]
+        pose+=delta
+        if np.linalg.norm(delta)<1e-7:
+            break
+    wp=transform(pts,pose)
+    r=np.sum(wp*ns,axis=1)-distances[ids]
+    rotated=wp-pose[:2]
+    j=np.column_stack((ns,np.sum(ns*np.column_stack((-rotated[:,1],rotated[:,0])),axis=1)))
+    eig,vec=np.linalg.eigh(j.T@j/len(j))
+    observable=eig>max(eig[-1]*1e-5,1e-9)
+    rank=int(observable.sum())
+    rms=float(np.sqrt(np.mean(r*r)))
+    if rms>.035 or np.linalg.norm(pose[:2]-prior[:2])>max_correction_m or abs(pose[2]-prior[2])>np.deg2rad(12) or not (0<=pose[0]<=size[0] and 0<=pose[1]<=size[1]):
+        return Fit('REJECTED',prior.tolist(),0,[],rms,eig.tolist(),np.eye(3).tolist(),'Residual, arena bounds, or correction gate failed')
+    # Check coherent segments INCLUDING those not selected as mapped walls.
+    # Isolated outliers must not veto a fit; a supported far wall outside the
+    # enclosure contradicts an apparent inner-obstacle-to-wall alignment.
+    for line in lines:
+        segment_world=transform(line['points'],pose)
+        outside=np.any((segment_world < -.06) | (segment_world > np.asarray(size)+.06),axis=1)
+        if outside.sum() >= 6 and outside.mean() > .25:
+            return Fit('REJECTED',prior.tolist(),0,[],rms,eig.tolist(),np.eye(3).tolist(),'Supported scan segment contradicts enclosing arena after correction')
+    return Fit('WALL_XY_YAW' if rank==3 else 'WALL_PARTIAL',pose.tolist(),rank,sorted(set(ids.tolist())),rms,eig.tolist(),vec[:,~observable].T.tolist(),'Local association only; square-map global identity is not resolved')
