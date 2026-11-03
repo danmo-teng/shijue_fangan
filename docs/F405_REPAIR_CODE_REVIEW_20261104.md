@@ -1,5 +1,7 @@
 # F405 1.3修复的代码行为审查
 
+这是适配前的审查记录。后续RDK 1.3测试兼容已实施且实际读回新固件，当前结果见[f405_v13_test_adapter_20261104.md](f405_v13_test_adapter_20261104.md)，不要沿用本文历史“尚未适配/未烧录”作为当前状态。
+
 2026-11-04。输入来自用户指定的/home/sunrise/下载/transfer.txt，其中只有下位机回执链接。
 审查对象：下位机4ac1d3d5006df1d4bced6a9f9e23fa68cef2da96；对比11eeacf，含6个提交。
 实现最后修改在0a2dbf7f523cba577c6ccacc3db5fae31b8dae48，4ac1d3d为后续文档提交。

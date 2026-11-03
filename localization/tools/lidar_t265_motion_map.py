@@ -107,8 +107,7 @@ class DynamicMapApp(base.MotionMapApp):
                 if not self.clock_map.identity or s['boot_epoch']!=self.clock_map.identity['boot_epoch']:continue
                 identity=(s['boot_epoch'],s['yaw_source_id'])
                 if identity==self.last_yaw_id:continue
-                flags=s['yaw_flags']
-                if not flags&1 or flags&(4|8|32|1024):continue
+                if not self.clock_map.gyro_source_valid(s,yaw=True):continue
                 estimate,uncertainty,reasons=self.clock_map.map_time(s['yaw_receive_us'],s['receive_monotonic_ns'])
                 t=estimate if estimate is not None and estimate>=0 else s['receive_monotonic_ns']
                 self.radar.send('yaw',dict(time_ns=t,yaw_deg=s['yaw_mdeg']/1000.,source=dict(source='versioned_primary_yaw',raw=s,

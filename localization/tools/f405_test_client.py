@@ -43,12 +43,25 @@ TIMED_V11_IMPLEMENTATION_COMMIT = "512038d2cfe83653d1c3036ad003fc23117df344"
 TIMED_V11_DOCUMENT_COMMIT = "3f61b7ac38bcad0e2e43e13688e548892b974965"
 TIMED_V11_COMMITS = (TIMED_V11_IMPLEMENTATION_COMMIT,TIMED_V11_DOCUMENT_COMMIT,
                      "11eeacfda71f419834ff78401faf1a0d35a3831e")
-# Reviewed v1.1 adds quality pages and clock-fault validity, preserving all
-# existing control/telemetry layouts. Bind each source revision to its version.
+TIMED_V13_IMPLEMENTATION_COMMIT = "0a2dbf7f523cba577c6ccacc3db5fae31b8dae48"
+TIMED_V13_DOCUMENT_COMMIT = "4ac1d3d5006df1d4bced6a9f9e23fa68cef2da96"
+TIMED_V13_COMMITS = (TIMED_V13_IMPLEMENTATION_COMMIT, TIMED_V13_DOCUMENT_COMMIT)
+# Reviewed layouts stay compatible; v1.3 removes quality pages and separates
+# recovery state from value validity. Bind each source revision to its semantics.
 TIMED_REVIEWED_VERSIONS = {**{sha:(1,0) for sha in TIMED_COMMITS},
-                          **{sha:(1,1) for sha in TIMED_V11_COMMITS}}
+                          **{sha:(1,1) for sha in TIMED_V11_COMMITS},
+                          **{sha:(1,3) for sha in TIMED_V13_COMMITS}}
 TIMED_COMMITS = tuple(TIMED_REVIEWED_VERSIONS)
 IDENTITY_TIMEOUT_NS = 6_000_000_000
+
+
+def timed_contract_profile(identity):
+    version = (identity["protocol_major"], identity["protocol_minor"])
+    if version == (1, 3):
+        return TIMED_V13_IMPLEMENTATION_COMMIT, TIMED_V13_DOCUMENT_COMMIT
+    if version == (1, 1):
+        return TIMED_V11_IMPLEMENTATION_COMMIT, TIMED_V11_DOCUMENT_COMMIT
+    return TIMED_IMPLEMENTATION_COMMIT, TIMED_DOCUMENT_COMMIT
 
 
 def firmware_compatible(value):
@@ -167,10 +180,11 @@ class ChassisTestClient:
         if self.device_identity is not None:
             d=self.device_identity; bits=d["capabilities"]
             return dict(source="nonce_correlated_device_identity_reply",
-                document_commit=TIMED_V11_DOCUMENT_COMMIT if (d["protocol_major"],d["protocol_minor"])==(1,1) else TIMED_DOCUMENT_COMMIT,
+                document_commit=timed_contract_profile(d)[1],
                 actual_firmware_commit=d["git_commit"],wire_protocol_version=[d["protocol_major"],d["protocol_minor"]],
                 move_body=bool(bits&64),turn_ccw=bool(bits&64),stop=bool(bits&64),reset_reference=bool(bits&64),
-                move_spin_angle=False,capability_query=bool(bits&1),quality_query_available=bool(bits&1024),versioned_body_velocity=bool(bits&8),
+                move_spin_angle=False,capability_query=bool(bits&1),quality_query_available=bool(bits&1024),
+                stats_query_available=bool(bits&32),versioned_body_velocity=bool(bits&8),
                 boot_epoch=d["epoch_valid"],reference_epoch=bool(bits&256),strict_stale_ack_exclusion=False,
                 capture_time_qualified=False,sdk_time_qualified=False)
         return {"source":"pinned_source_contract_not_device_query", "document_commit":DOCUMENT_COMMIT,
@@ -244,8 +258,8 @@ class ChassisTestClient:
         if (d["board"],d["mode"],d["service"]) != (405,5,1):
             return "device board/mode/service is not F405 NormalDebug MOTIONDEBUG"
         version=(d["protocol_major"],d["protocol_minor"])
-        if version not in ((1,0),(1,1)):
-            return f"device protocol {version[0]}.{version[1]} is not reviewed (supported 1.0/1.1)"
+        if version not in ((1,0),(1,1),(1,3)):
+            return f"device protocol {version[0]}.{version[1]} is not reviewed (supported 1.0/1.1/1.3)"
         if d["uart_baud"]!=self.baud or not d["capabilities"]&64 or d["max_payload"]!=160:
             return "device UART configuration or legacy compatibility does not match this client"
         if d["git_commit"] not in TIMED_COMMITS:
@@ -284,6 +298,8 @@ class ChassisTestClient:
             self.device_identity=d;self.identity_received_ns=receive_ns
             self.identity_error=self._identity_problem(d)
             d["interface_compatible"]=self.identity_error is None
+            self.parser.imu_protocol_version = ((d["protocol_major"],d["protocol_minor"])
+                                                if self.identity_error is None else None)
             self._log("chassis_link.jsonl",dict(event="identity_reply",identity=d,compatibility_error=self.identity_error,
                 round_trip_ns=receive_ns-q["sent_ns"],clock_mapping_qualified=False))
             try:
@@ -349,7 +365,7 @@ class ChassisTestClient:
     def connection_snapshot(self):
         with self.lock:
             d=copy.deepcopy(self.device_identity)
-            v11=d is not None and (d["protocol_major"],d["protocol_minor"])==(1,1)
+            profile=timed_contract_profile(d) if d else None
             return dict(baud=self.baud,identity_policy=self.identity_policy,
                 motion_identity_ready=self.control_identity_problem() is None,
                 reason=self.control_identity_problem(),identity=d,
@@ -358,8 +374,8 @@ class ChassisTestClient:
                 actual_lower_service="MOTIONDEBUG" if d and d["service"]==1 else "unconfirmed",
                 firmware_identity_reported_by_uart=d is not None,cryptographically_attested=False,
                 mcu_boot_epoch=d["boot_epoch"] if d and d["epoch_valid"] else None,
-                contract_document_commit=TIMED_V11_DOCUMENT_COMMIT if v11 else TIMED_DOCUMENT_COMMIT if d or self.require_device_identity else DOCUMENT_COMMIT,
-                expected_lower_firmware=TIMED_V11_IMPLEMENTATION_COMMIT if v11 else TIMED_IMPLEMENTATION_COMMIT if self.require_device_identity else IMPLEMENTATION_COMMIT,
+                contract_document_commit=profile[1] if profile else TIMED_DOCUMENT_COMMIT if self.require_device_identity else DOCUMENT_COMMIT,
+                expected_lower_firmware=profile[0] if profile else TIMED_IMPLEMENTATION_COMMIT if self.require_device_identity else IMPLEMENTATION_COMMIT,
                 capture_time_qualified=False,sdk_time_qualified=False,stats=dict(self.mixed.stats,**self.client_stats))
 
     def move_spin_angle(self, speed_mm_s, direction_deg, turn_deg, max_rate_dps):

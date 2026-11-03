@@ -88,9 +88,10 @@ def check_connection(options, root):
         while time.monotonic()<deadline:
             client.poll();time.sleep(.02)
         status,stats=client.status_snapshot();link=client.connection_snapshot()
-        fresh=bool(status and 0<=time.monotonic_ns()-status["timestamp_monotonic_ns"]<=1_000_000_000)
-        result=dict(log_directory=str(run),connection_ok=link["motion_identity_ready"] and fresh,
-            chassis_link=link,status=status,statistics=stats,fresh_legacy_0x1a=fresh,
+        received=bool(status)
+        result=dict(log_directory=str(run),connection_ok=link["motion_identity_ready"] and received,
+            chassis_link=link,status=status,statistics=stats,received_legacy_0x1a=received,
+            legacy_status_age_ms=None if not status else (time.monotonic_ns()-status["timestamp_monotonic_ns"])/1e6,
             motor_commands_sent=0,capture_time_qualified=False,sdk_time_qualified=False,
             physical_motion_verified=False)
         result["measurement_stream"]=client.measurement_snapshot()

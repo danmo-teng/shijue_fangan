@@ -94,7 +94,7 @@ def offset_interval_ns(host_before_ns: int, host_after_ns: int, sync: dict) -> t
     """MCU_ns - host_ns bounds from causality; no path symmetry assumption.
 
     Not a drift/extrapolation guarantee. Unknown oscillator or source timing
-    bounds must still fail the upper computer's eligibility gate.
+    bounds remain diagnostic and do not gate adoption of real measurements.
     """
     if host_after_ns < host_before_ns or sync["response_prepare_us"] < sync["receive_event_us"]:
         raise ValueError("non-monotonic synchronization exchange")

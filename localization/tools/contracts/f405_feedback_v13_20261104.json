@@ -1,0 +1,50 @@
+{
+  "contract": "F405 feedback semantics 1.3",
+  "wire_version": 1,
+  "identity_protocol": [1, 3],
+  "capabilities": 991,
+  "layouts_inherited_from": "F405_TIMED_CONTRACT_20261101.json",
+  "override_scope": "All entries below supersede v1.1 behavior; no new motion interfaces",
+  "unsupported_requests": {"0x09": "0x7F status2", "0x0B": "0x7F status2"},
+  "removed_gates": ["wheel15ms/50ms", "gyro20ms", "TX_queue8ms", "TX_stuck100ms", "clock_register_health", "UART_IMU_runtime150ms", "UART_IMU_uncertain300ms", "turn_IMU100ms"],
+  "wheel": {
+    "layout_unchanged": true,
+    "valid_cleared_by": ["nonpositive_numeric_interval", "invalid_quadrature_transition", "raw_delta_mismatch", "numeric_overflow"],
+    "valid_not_cleared_by": ["age", "interval_over50ms", "time_bound_unknown", "EXTI_pending", "epoch_unavailable", "reference_reset"],
+    "missing_feedback": "no new packet; never synthesize zero",
+    "forward_formula": "pi*0.070/1061.268*(dn1-dn2)/(sqrt(3)*dt)",
+    "left_formula": "pi*0.070/1061.268*(dn1+dn2-2*dn3)/(3*dt)",
+    "velocity_unit": "um/s", "raw_delta_sign_changed": false
+  },
+  "gyro": {
+    "layout_unchanged": true,
+    "receive_event": "MCU ISR after valid frame checksum and own source value update",
+    "physical_acquisition_time": false,
+    "valid": "source value exists and is representable; independent of ready/recovering/age/unknown bound",
+    "yaw_unit": "mdeg", "rate_unit": "mdps", "positive": "CCW",
+    "source_ids": "own MCU valid-frame counters, never target or repeated value given new source ID",
+    "unchanged_sources": "suppress when both unchanged; otherwise preserve own REPEAT"
+  },
+  "legacy_0x1F": {"layout_unchanged": true, "yaw_unit": "mdeg", "rate_unit": "0.1deg/s", "age": "max own source age, saturated u8", "uart_valid": "existing valid representable yaw and rate", "uart_stale_flag": "no angle sample yet"},
+  "clock": {"bit0": "TIM5 configured only", "bit1": "RNG epoch available", "epoch_fault": {"0": "RNG available", "1": "RNG unavailable"}, "sync_epoch_valid": "RNG only", "drift_bound_ppm": 4294967295, "physical_source_uncertainty_us": 4294967295, "time_bound_known": false, "source_time_unbounded": true},
+  "builds": {"NormalDebugTimed": {"mode": 5, "service": "MOTIONDEBUG", "UART4_baud": 230400}, "NormalDebugTask": {"service": "TASK", "UART4_baud": 115200, "07_08_enabled": false}},
+  "rate_model": {"wheel_hz": 50, "gyro_publish_ceiling_hz": 100, "07_08_only_Bps": 14250, "measured_this_run": false},
+  "actual_flashed_this_run": false,
+  "implementation_commit": "0a2dbf7f523cba577c6ccacc3db5fae31b8dae48",
+  "build_identity_not_board_actual": {
+    "preset": "NormalDebugTimed",
+    "firmware_id": "acbe5483edf9e02ba767be0d5cebba9457552ea0f3b67c4c3aebc2bd34e6a80d",
+    "git": "0a2dbf7f523cba577c6ccacc3db5fae31b8dae48",
+    "source_dirty": 1,
+    "dirty_diff": "Existing two whitespace-only lines after Main/Src/Task.c line1547; no functional source delta"
+  },
+  "synthetic_unsupported_quality_reply": {
+    "hex": "D4 4D 01 7F 00 0C 12 34 01 02 03 04 05 06 07 08 00 02 0B 01 74 9E E4",
+    "meaning": "SEQ1234, nonce0102030405060708, status2, rejected type0B, supported envelope1; CRC16LE=74 9E",
+    "sent_to_hardware": false
+  },
+  "physical_accuracy_verified": false,
+  "uart_recovery_control": "User approved: retain acquired-ready, last valid feedback and current action through RX recovery; no new timeout/pause/abort; existing action completion/timeouts and manual STOP remain",
+  "uart_ready_semantics": "acquired valid initialization feedback; READY and RECOVERING may both be true; never initialized stays false",
+  "pending_human_decision": null
+}

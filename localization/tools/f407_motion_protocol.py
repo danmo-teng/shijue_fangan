@@ -213,7 +213,7 @@ def parse_motion_status(frame: bytes) -> dict[str, int | bool | str]:
     }
 
 
-def parse_imu(frame: bytes) -> dict:
+def parse_imu(frame: bytes, *, protocol_version=None) -> dict:
     """Current F405 0x1F; native IMU CCW-positive, independently sequenced.
 
     P6 is packaging age, NOT a capture tick. No MCU epoch/capture timestamp
@@ -225,10 +225,14 @@ def parse_imu(frame: bytes) -> dict:
     yaw = int.from_bytes(payload[:4], "big", signed=True)
     rate = int.from_bytes(payload[4:6], "big", signed=True)
     age, status = payload[6:]
+    # Age is diagnostic only. In reviewed 1.3, source validity is independent
+    # of READY/RECOVERING; keep older status semantics until identity is known.
+    valid = (bool(status & 1) and not bool(status & (0x20|0x40|0x80))
+             if protocol_version == (1, 3) else status == 0x03)
     return {"sequence": sequence, "yaw_mdeg": yaw, "yaw_deg": yaw / 1000.0,
             "rate_ddeg_s": rate, "yaw_rate_deg_s": rate / 10.0,
             "age_ms": age, "status": status,
-            "wire_valid": status == 0x03 and age < IMU_STALE_MS,
+            "wire_valid": valid, "feedback_protocol": protocol_version,
             "ready": bool(status & 0x02), "recovering": bool(status & 0x04),
             "uncertain": bool(status & 0x08), "stale": bool(status & 0x10),
             "yaw_clamped": bool(status & 0x20), "rate_clamped": bool(status & 0x40),
@@ -239,15 +243,11 @@ def parse_imu(frame: bytes) -> dict:
 
 
 def imu_is_fresh(sample: dict | None, now_ns: int) -> bool:
-    """Display validity only; unknown UART/filter latency is not calibrated.
-    A repeated packet must not refresh timestamp_monotonic_ns.
+    """Compatibility name: source validity, without age admission thresholds.
+
+    Ages and original receive times remain in the sample for display.
     """
-    if sample is None or not sample.get("wire_valid"):
-        return False
-    received = sample.get("timestamp_monotonic_ns")
-    if received is None or now_ns < received:
-        return False
-    return sample["age_ms"] + (now_ns - received) / 1e6 < IMU_STALE_MS
+    return bool(sample and sample.get("wire_valid"))
 
 
 class StreamParser:
@@ -255,7 +255,9 @@ class StreamParser:
 
     def __init__(self, on_odom: Callable[[dict[str, int]], None] | None = None,
                  on_motion_status: Callable[[dict[str, int | bool | str]], None] | None = None,
-                 on_imu: Callable[[dict], None] | None = None) -> None:
+                 on_imu: Callable[[dict], None] | None = None,
+                 imu_protocol_version=None) -> None:
+        self.imu_protocol_version = imu_protocol_version
         self.on_odom = on_odom
         self.on_motion_status = on_motion_status
         self.on_imu = on_imu
@@ -308,8 +310,8 @@ class StreamParser:
                 continue
             del self.buffer[:FRAME_SIZE]
             try:
-                decoded = {MSG_ODOM: parse_odometry, MSG_MOTION_STATUS: parse_motion_status,
-                           MSG_IMU: parse_imu}[message_type](candidate)
+                decoded = (parse_imu(candidate, protocol_version=self.imu_protocol_version) if message_type == MSG_IMU
+                           else {MSG_ODOM: parse_odometry, MSG_MOTION_STATUS: parse_motion_status}[message_type](candidate))
             except ValueError:
                 self.stats["malformed"] += 1
                 continue

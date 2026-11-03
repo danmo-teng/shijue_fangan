@@ -22,6 +22,20 @@ class TimedMeasurements:
             self.syncs.clear();self.last_wheel=None;self.last_rate=None
         self.identity=dict(sample)
 
+    def retains_valid_feedback(self):
+        return bool(self.identity and
+                    (self.identity.get("protocol_major"), self.identity.get("protocol_minor")) == (1, 3))
+
+    def gyro_source_valid(self, sample, *, yaw=False):
+        flags = sample["yaw_flags" if yaw else "rate_flags"]
+        if self.retains_valid_feedback():
+            # 1.3: existing representable source, independent of READY,
+            # RECOVERING, age and unknown bounds. IDs below still deduplicate.
+            return bool(flags & 1) and not bool(flags & 32)
+        if yaw:
+            return bool(flags & 1) and not bool(flags & (4|8|32|1024))
+        return (flags & 3) == 3 and not bool(flags & (4|8|32|128|1024))
+
     def sync(self, sample):
         if not self.identity or sample["boot_epoch"]!=self.identity["boot_epoch"] or sample.get("epoch_valid")!=1:
             return False
@@ -57,6 +71,8 @@ class TimedMeasurements:
         same=bool(self.identity and sample["boot_epoch"]==self.identity["boot_epoch"] and self.identity.get("epoch_valid")
                   and self.identity.get("interface_compatible",True) is True)
         return dict(mcu_epoch=sample["boot_epoch"] if same else None,reference_epoch=sample["reference_epoch"],
+            feedback_protocol=[self.identity.get("protocol_major"), self.identity.get("protocol_minor")] if self.identity else None,
+            boot_epoch_valid=bool(self.identity and self.identity.get("epoch_valid")),
             host_action_id_at_receive=sample.get("host_action_id_at_receive"),host_chassis_session_id=sample.get("host_chassis_session_id"),
             receive_monotonic_ns=sample["receive_monotonic_ns"],capture_time_qualified=False,
             time_uncertainty_ns=None,raw_mcu_sample=sample,source_time_semantics="MCU event; not automatically physical acquisition",
@@ -78,7 +94,8 @@ class TimedMeasurements:
         if source_error==UNKNOWN or not flags&2:reasons.append("wheel_capture_time_bound_unknown_including_rear_EXTI")
         if not result["mcu_epoch"]:reasons.append("boot_epoch_invalid")
         dt=(sample["t1_us"]-sample["t0_us"])/1e6
-        valid=bool(flags&1) and not flags&(4|8|32|256|512|1024) and dt>0
+        invalid_flags = (8|16|32) if self.retains_valid_feedback() else (4|8|32|256|512|1024)
+        valid=bool(flags&1) and not flags&invalid_flags and dt>0
         k=math.pi*.070/1061.268
         calculated=None
         if dt>0:
@@ -110,7 +127,7 @@ class TimedMeasurements:
         reasons=list(reasons);source_error=sample["rate_uncertainty_us"]
         if source_error==UNKNOWN or flags&512:reasons.append("IMU_acquisition_filter_link_to_ISR_delay_unbounded")
         if not result["mcu_epoch"]:reasons.append("boot_epoch_invalid")
-        valid=(flags&3)==3 and not flags&(4|8|32|128|1024)
+        valid=self.gyro_source_valid(sample)
         uncertainty=None if reasons else error+source_error*1000
         result.update(wire_valid=valid,yaw_rate_deg_s=sample["rate_mdps"]/1000.,
             alignment_clock="mcu_event",alignment_capture_ns=sample["rate_receive_us"]*1000,

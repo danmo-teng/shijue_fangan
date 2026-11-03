@@ -1331,6 +1331,14 @@ class MotionMapApp:
                                   cv2.WINDOW_FULLSCREEN if self.options.fullscreen else cv2.WINDOW_NORMAL)
         return True
 
+    def validate_sensor_check(self):
+        """Evidence for the explicit no-motion check, not a GUI motion gate."""
+        if not self.localization.get("pose"):
+            raise RuntimeError("传感器检查未取得T265 Pose；查看本会话localizer.log，不能算启动成功")
+        if (getattr(self.options,"wheel_input","off")=="on" and
+                (self.wheel_sdk_status or {}).get("sdk_api_success_samples",0)<=0):
+            raise RuntimeError("传感器检查没有真实SDK轮速接受结果；不能以配置或IPC成功代替")
+
     def run(self) -> int:
         try:
             self.start_session()
@@ -1350,6 +1358,7 @@ class MotionMapApp:
                     if self.localizer.poll() is not None:raise RuntimeError("SDK owner exited during sensor lifecycle check")
                     time.sleep(.02)
                 if synthetic and not self.wheel_input.done.is_set():raise RuntimeError("synthetic sequence did not complete before check deadline")
+                self.validate_sensor_check()
                 self.record_event("synthetic_check_complete" if synthetic else "sensor_render_check_complete",dict(rendered_frames=frames,
                     duration_s=self.options.sensor_check_seconds,motion_commands_sent=0,
                     chassis_link=self.bridge.connection_snapshot() if self.bridge else None,

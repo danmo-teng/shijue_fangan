@@ -305,6 +305,7 @@ def main() -> None:
     test_dynamic_motion_compensation()
     test_synthetic_wheel_fixture()
     test_timed_v11_logging_recovery()
+    test_timed_v13_feedback()
     test_timed_measurement_pipeline()
     test_timed_f405_client()
     test_lidar_yaw_diagnostic()
@@ -369,12 +370,12 @@ def main() -> None:
     mixed.feed(imu,receive_ns=1_020_000_000)
     assert len(seen_imu) == 1 and mixed.stats["imu_duplicates"] == 1
     assert imu_is_fresh(seen_imu[0],1_020_000_000)
-    assert not imu_is_fresh(seen_imu[0],1_159_000_000)
-    assert not imu_is_fresh(seen_imu[0],1_009_000_000)
+    assert imu_is_fresh(seen_imu[0],1_159_000_000)  # Age is display-only.
+    assert imu_is_fresh(seen_imu[0],1_009_000_000)
     for flag in (4,8,16,32,64,128):
         d=parse_imu(inbound(MSG_IMU,8,bytes(6)+bytes((1,3|flag))))
         assert not d["wire_valid"]
-    assert not parse_imu(inbound(MSG_IMU,8,bytes(6)+bytes((150,3))))["wire_valid"]
+    assert parse_imu(inbound(MSG_IMU,8,bytes(6)+bytes((150,3))))["wire_valid"]
     wrapped=[]
     wrap_parser=StreamParser(on_imu=wrapped.append)
     for seq in (254,255,0,0,255,2):
@@ -1242,6 +1243,103 @@ def test_timed_measurement_pipeline():
         manifest.write_text('session_id,filename\ntest,fisheye_b1_s1_f100.pgm\n')
         assert prune_completed_sessions(root,sessions[-1])==[sessions[1].name]
         assert sessions[0].is_dir() and sessions[2].is_dir() and sessions[-1].is_dir()
+
+
+def test_timed_v13_feedback():
+    """1.3 identity -> recovery feedback -> existing IPC; no hardware/SDK."""
+    import socket,uuid,queue
+    from unittest.mock import patch
+    import f405_timed_protocol as wire
+    from f405_test_client import (ChassisTestClient, TIMED_V13_COMMITS,
+        TIMED_V13_DOCUMENT_COMMIT, TIMED_V13_IMPLEMENTATION_COMMIT)
+    from f405_timed_measurements import TimedMeasurements
+    from t265_wheel_input import WheelInputBridge
+    from t265_f407_motion_map import config_values,DEFAULT_CONFIG,MotionMapApp
+    from lidar_t265_motion_map import DynamicMapApp
+    examples=json.loads((Path(__file__).with_name('contracts')/'f405_timed_examples_20261031.json').read_text())['examples']
+    def fixture(name):return wire.decode(bytes.fromhex(next(x['hex'] for x in examples if x['name']==name)))
+    base=bytearray(wire.parse(bytes.fromhex(next(x['hex'] for x in examples if x['name']=='c_module_host_fixture_type_2')))['payload'])
+    class Memory:
+        def __init__(self):self.written=[]
+        def write(self,p):self.written.append(p);return len(p)
+        def close(self):pass
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);c=ChassisTestClient('FAKE',230400,root/'s.json',root/'s.jsonl',identity_policy='timed')
+        c.serial=Memory();clock=[10_000_000_000]
+        with patch('f405_test_client.time.monotonic_ns',side_effect=lambda:clock[0]):
+            for sha in TIMED_V13_COMMITS:
+                c._request_identity();req=wire.parse(c.serial.written[-1]);p=bytearray(base)
+                p[:8]=req['payload'];p[42:44]=bytes((1,3));p[30:38]=(0x3df).to_bytes(8,'big');p[114:134]=bytes.fromhex(sha)
+                clock[0]+=1_000_000;c.feed(wire.packet(wire.ID_REPLY,req['sequence'],p),clock[0])
+                assert c.control_identity_problem() is None
+                link=c.connection_snapshot();caps=c.capabilities()
+                assert link['actual_lower_firmware']==sha and link['expected_lower_firmware']==TIMED_V13_IMPLEMENTATION_COMMIT
+                assert link['contract_document_commit']==TIMED_V13_DOCUMENT_COMMIT
+                assert not caps['quality_query_available'] and not caps['stats_query_available']
+            identity=dict(c.device_identity)
+            assert c._identity_problem(dict(identity,protocol_minor=1))
+            assert c._identity_problem(dict(identity,git_commit='ff'*20))
+            before=len(c.serial.written)
+            recovery=inbound(MSG_IMU,2,(1234).to_bytes(4,'big',signed=True)+(10).to_bytes(2,'big',signed=True)+bytes((255,7)))
+            c.feed(recovery,clock[0]);assert c.latest_imu['wire_valid'] and c.latest_imu['recovering']
+            assert c.latest_imu['age_ms']==255 and c.latest_imu['yaw_deg']==1.234
+            assert c.latest_imu['feedback_protocol']==(1,3) and len(c.serial.written)==before
+            stamp=c.latest_imu['timestamp_monotonic_ns'];c.feed(recovery,clock[0]+1000)
+            assert c.latest_imu['timestamp_monotonic_ns']==stamp and c.parser.stats['imu_duplicates']==1
+            assert not parse_imu(recovery)['wire_valid']  # Unidentified/older semantics stay explicit.
+            assert parse_imu(recovery,protocol_version=(1,3))['wire_valid']
+            for flag in (0x20,0x40,0x80):
+                bad=inbound(MSG_IMU,3,bytes(6)+bytes((255,7|flag)))
+                assert not parse_imu(bad,protocol_version=(1,3))['wire_valid']
+            damaged=bytearray(recovery);damaged[5]^=1;c.feed(damaged,clock[0]+2000)
+            assert c.parser.stats['crc_errors']+c.mixed.stats['mixed_crc_errors']>0
+
+        wheel=fixture('forward');gyro=fixture('gyro_ccw')
+        identity.update(boot_epoch=wheel['boot_epoch'],epoch_valid=True,interface_compatible=True)
+        now=20_000_000_000
+        for flags,expected in ((0x81,True),(0x85,True),(0x181,True),(0x89,False),(0x91,False),(0xa1,False),(0x80,False)):
+            m=TimedMeasurements();m.set_identity(identity)
+            result=m.wheel(dict(wheel,flags=flags,receive_monotonic_ns=now),now)
+            assert result['measurement_valid'] is expected,(flags,result)
+            assert not result['capture_time_qualified']
+        m=TimedMeasurements();m.set_identity(identity)
+        result=m.gyro(dict(gyro,rate_flags=0x347,receive_monotonic_ns=now),now)
+        assert result['wire_valid'] and not result['capture_time_qualified']
+        assert m.gyro(dict(gyro,rate_flags=0x387,receive_monotonic_ns=now+1),now+1) is None
+        assert not m.gyro_source_valid(dict(gyro,rate_flags=0x367))  # Clamped.
+        assert m.gyro_source_valid(dict(gyro,rate_flags=0x345))  # Existing source before control READY.
+
+        app=DynamicMapApp.__new__(DynamicMapApp);app.clock_map=TimedMeasurements();app.clock_map.set_identity(identity)
+        app.chassis_inbox=queue.Queue();app.last_yaw_id=None;app.timed_yaw_seen=False;app.imu_packets=0
+        sent=[];app.radar=SimpleNamespace(send=lambda kind,value:sent.append((kind,value)))
+        g=dict(gyro,yaw_flags=0x347,receive_monotonic_ns=now)
+        for _ in range(2):app.chassis_inbox.put(dict(kind='timed_gyro_diagnostic',sample=g))
+        app.drain_yaw();assert app.imu_packets==1 and len(sent)==1 and app.timed_yaw_seen
+
+        sid=uuid.uuid4().hex;sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind('\0t265-wheel-'+sid);sink.settimeout(.3)
+        bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),sid,True,clock=lambda:now)
+        try:
+            bridge.telemetry(dict(kind='timed_identity',sample=identity))
+            for i,t in enumerate((wheel['t0_us'],wheel['t1_us'])):
+                bridge.telemetry(dict(kind='timed_gyro_diagnostic',sample=dict(gyro,rate_flags=0x347,
+                    rate_source_id=100+i,rate_receive_us=t,receive_monotonic_ns=now-5_000_000_000)))
+            event=dict(kind='timed_wheel_diagnostic',sample=dict(wheel,flags=0x85,receive_monotonic_ns=now-5_000_000_000))
+            bridge.telemetry(event);bridge.poll();packet=json.loads(sink.recv(16000))
+            assert packet['v_body_mps'][0]==wheel['forward_um_s']/1e6
+            assert packet['alignment_clock']=='mcu_event' and not packet['capture_time_qualified']
+            assert bridge.stats['sent_to_sdk_owner']==1
+            bridge.telemetry(event);bridge.poll();assert bridge.stats['sent_to_sdk_owner']==1
+        finally:bridge.close();sink.close()
+
+    check=MotionMapApp.__new__(MotionMapApp);check.options=SimpleNamespace(wheel_input='on')
+    check.localization={};check.wheel_sdk_status={'sdk_api_success_samples':10}
+    try:check.validate_sensor_check();assert False,'SDK true without Pose cannot pass'
+    except RuntimeError:pass
+    check.localization={'pose':{'x_m':0,'y_m':0}};check.wheel_sdk_status={'config_loaded':True,'sdk_api_success_samples':0}
+    try:check.validate_sensor_check();assert False,'config alone cannot pass'
+    except RuntimeError:pass
+    check.wheel_sdk_status['sdk_api_success_samples']=1;check.validate_sensor_check()
 
 
 if __name__ == "__main__":
