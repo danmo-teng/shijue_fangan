@@ -118,6 +118,7 @@ class WheelInputBridge:
             self.stats["rejected"] += 1
         converted = extra.get("converted", {})
         body = (sample or {}).get("v_body_mps")
+        if body is None:body=converted.get("v_body_mps")
         if body is None and (sample or {}).get("forward_mps") is not None and sample.get("left_mps") is not None:
             body = [sample["forward_mps"], sample["left_mps"], 0.]
         document=dict(session_id=self.session_id, reason=reason,
@@ -357,3 +358,77 @@ class WheelInputBridge:
         if self.thread is not None:self.thread.join(timeout=1)
         self.sock.close()
         self.log.close()
+
+
+class SyntheticWheelInputBridge(WheelInputBridge):
+    """Explicit desktop SDK-response experiment. No UART or measured sources.
+    One bounded sequence, generated at <=50Hz without catch-up. Fake omega is
+    used ONLY for the lever term; send_wheel_odometry receives velocity, not yaw.
+    """
+    PHASES=[("zero_before",2.,[0.,0.,0.],[0.,0.,0.])]
+    for _name,_body,_omega in (
+        ("forward",[.2,0,0],[0,0,0]),("backward",[-.2,0,0],[0,0,0]),
+        ("left",[0,.2,0],[0,0,0]),("right",[0,-.2,0],[0,0,0]),
+        ("ccw_lever_only",[0,0,0],[0,0,.5]),("cw_lever_only",[0,0,0],[0,0,-.5])):
+        PHASES.extend([(_name,1.,_body,_omega),(_name+"_zero",.5,[0,0,0],[0,0,0])])
+    PHASES.append(("zero_after",2.,[0.,0.,0.],[0.,0.,0.]))
+
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.fixture_start_ns=None;self.fixture_phase=None;self.done=threading.Event()
+        self.log.submit("wheel_fixture.jsonl",dict(event="fixture_plan",session_id=self.session_id,
+            source="synthetic_test_fixture",actual_measurement=False,motor_commands=False,
+            phases=self.PHASES,noise_changed=False,clean_device_state_verified=False))
+
+    def telemetry(self,event):
+        raise RuntimeError("synthetic SDK experiment cannot subscribe to chassis measurements")
+
+    def activate_fixture(self):
+        with self.lock:
+            if self.fixture_start_ns is None:
+                self.fixture_start_ns=self.clock();self.wake.set()
+
+    def packet_for(self,name,body,omega,now):
+        lever,camera=camera_velocity(body,omega,self.forward,self.up,self.offset)
+        return dict(schema=2,time_policy=TIME_POLICY,session_id=self.session_id,packet_id=self.next_id,
+            source="synthetic_test_fixture",measurement_valid=False,test_fixture_valid=True,
+            fixture_session_id=self.session_id,fixture_phase=name,mcu_epoch=None,
+            capture_time_qualified=False,time_uncertainty_ns=None,alignment_uncertainty_ns=None,
+            alignment_clock="synthetic_host_clock",alignment_start_ns=now-20_000_000,alignment_end_ns=now,
+            interval_start_ns=now-20_000_000,interval_end_ns=now,receive_monotonic_ns=now,
+            alignment_gyro_start_ns=now-20_000_000,alignment_gyro_end_ns=now,gyro_receive_ns=now,
+            v_body_mps=body,omega_body_rad_s=omega,lever_body_mps=lever,v_camera_mps=camera,
+            dependency_sources=["synthetic_test_fixture"],motor_commands_sent=0)
+
+    def _run(self):
+        while not self.stop_event.is_set() and not self.done.is_set():
+            self.wake.wait(.02);self.wake.clear()
+            with self.lock:
+                if self.fixture_start_ns is None:continue
+                now=self.clock();elapsed=(now-self.fixture_start_ns)/1e9;end=0.;phase=None
+                for candidate in self.PHASES:
+                    end+=candidate[1]
+                    if elapsed<end:phase=candidate;break
+                if phase is None:
+                    self.log.submit("wheel_fixture.jsonl",dict(event="fixture_complete",timestamp_monotonic_ns=now,
+                        source="synthetic_test_fixture",session_id=self.session_id))
+                    self.done.set();break
+                name,_,body,omega=phase
+                if name!=self.fixture_phase:
+                    self.fixture_phase=name
+                    self.log.submit("wheel_fixture.jsonl",dict(event="fixture_phase",phase=name,
+                        timestamp_monotonic_ns=now,elapsed_s=elapsed,source="synthetic_test_fixture"))
+                if not self.log.healthy():continue
+                packet=self.packet_for(name,body,omega,now);self.next_id+=1
+                try:
+                    self.sock.sendto(json.dumps(packet,allow_nan=False).encode(),self.address)
+                    self.stats["sent_to_sdk_owner"]+=1
+                    self._record("sent_to_sdk_owner",converted=packet,synthetic=True)
+                except OSError as error:
+                    self._record("sdk_owner_unavailable_no_replay",error=str(error),synthetic=True)
+
+    def snapshot(self,sdk=None):
+        result=super().snapshot(sdk)
+        result.update(input_source="synthetic_test_fixture",fixture_phase=self.fixture_phase,
+                      fixture_complete=self.done.is_set(),actual_measurement=False)
+        return result

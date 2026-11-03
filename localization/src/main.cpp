@@ -63,6 +63,7 @@ struct Options {
     bool t265_only_output = false;
     int pose_jumping_override = -1; // -1 leaves the SDK setting unchanged.
     bool debug_fresh_session = false;
+    bool debug_wheel_synthetic = false;
 };
 
 struct TimedEncoderFrame {
@@ -267,6 +268,8 @@ Options parse_options(int argc, char **argv)
             options.debug_wheel_log = value("--debug-wheel-log");
         } else if (argument == "--debug-wheel-session") {
             options.debug_wheel_session = value("--debug-wheel-session");
+        } else if (argument == "--debug-wheel-synthetic") {
+            options.debug_wheel_synthetic = true;
         } else if (argument == "--debug-fresh-session") {
             options.debug_fresh_session = true;
         } else if (argument == "--debug-test-session") {
@@ -288,6 +291,8 @@ Options parse_options(int argc, char **argv)
         }
     }
     const bool wheel = !options.debug_wheel_socket.empty();
+    if(options.debug_wheel_synthetic && (!wheel || !options.debug_fresh_session || options.debug_test_session.empty()))
+        throw std::invalid_argument("synthetic input requires an explicitly identified isolated debug SDK session");
     if (wheel != !options.debug_wheel_config.empty() || wheel != !options.debug_wheel_log.empty() ||
         wheel != !options.debug_wheel_session.empty())
         throw std::invalid_argument("debug wheel input requires socket/config/log/session together");
@@ -1257,10 +1262,12 @@ int main(int argc, char **argv)
         }
         if (!options.debug_wheel_socket.empty()) {
             debug_wheel.reset(new omni::DebugWheelInput(config, options.debug_wheel_session,
-                options.debug_wheel_socket, options.debug_wheel_log));
+                options.debug_wheel_socket, options.debug_wheel_log,options.debug_wheel_synthetic));
             // Same resolved pose sensor, BEFORE start. Never a second SDK process.
             debug_wheel->configure(*map_pose_sensor, options.debug_wheel_config);
-            event_log.write("t265_wheel_dependencies", "{\"sources\":[\"measured_wheel_feedback\",\"primary_gyro_rate\"],\"independent_reference\":false}");
+            event_log.write("t265_wheel_dependencies",options.debug_wheel_synthetic
+                ? "{\"sources\":[\"synthetic_test_fixture\"],\"independent_reference\":false}"
+                : "{\"sources\":[\"measured_wheel_feedback\",\"primary_gyro_rate\"],\"independent_reference\":false}");
         }
         DebugPoseQueue evidence_pose_queue;
         std::unique_ptr<omni::DebugFisheyeEvidence> fisheye;

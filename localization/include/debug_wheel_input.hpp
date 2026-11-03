@@ -20,7 +20,7 @@ public:
     using Json = nlohmann::json;
     using Send = std::function<bool(std::uint32_t, const rs2_vector &)>;
     DebugWheelInput(const LocalizationConfig &, const std::string &session,
-                   const std::string &address, const std::string &log_path);
+                   const std::string &address, const std::string &log_path, bool synthetic_input=false);
     ~DebugWheelInput();
     static void validate_config(const Json &);
     void configure(const rs2::pose_sensor &, const std::string &config_path);
@@ -43,6 +43,7 @@ private:
     std::string alignment_clock_;
     std::uint64_t accepted_ = 0, rejected_ = 0;
     bool config_loaded_=false;
+    bool synthetic_input_=false;
     std::uint64_t last_success_ns_=0;
     std::atomic<bool> stopping_{false},logging_stopping_{false},logging_failed_{false};
     std::atomic<std::uint64_t> dropped_logs_{0};

@@ -833,6 +833,19 @@ void test_debug_wheel_input()
         packet["alignment_gyro_end_ns"] = 1020000000; packet["gyro_receive_ns"] = 1020000000;
         check(!input.process(packet,1020000000,failed_sdk) && calls == 1, "failed SDK stream is not silently retried");
     }
+    {
+        Json fixture=packet;
+        fixture["source"]="synthetic_test_fixture";fixture["measurement_valid"]=false;
+        fixture["test_fixture_valid"]=true;fixture["fixture_session_id"]="sdk-test";
+        fixture["mcu_epoch"]=nullptr;fixture["alignment_clock"]="synthetic_host_clock";
+        int calls=0;
+        auto sink=[&](std::uint32_t,const rs2_vector &v){++calls;return near(v.x,.069221,1e-7);};
+        {Input measured(config,"sdk-test","",log);
+         check(!measured.process(fixture,10000000000ULL,sink) && calls==0,"normal SDK source cannot accept synthetic data");}
+        {Input synthetic(config,"sdk-test","",log,true);
+         check(synthetic.process(fixture,10000000000ULL,sink) && calls==1,"explicit isolated SDK experiment accepts labeled fixture");
+         check(!synthetic.process(packet,10000000000ULL,sink) && calls==1,"synthetic SDK session cannot mix measured feedback");}
+    }
     ::unlink(log.c_str()); ::unlink((root+"/wheel_sdk_status.json").c_str()); ::rmdir(root.c_str());
 }
 

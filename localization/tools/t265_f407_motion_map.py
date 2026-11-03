@@ -49,7 +49,7 @@ from f407_motion_protocol import (  # noqa: E402
 )
 from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
-from t265_wheel_input import WheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
+from t265_wheel_input import WheelInputBridge, SyntheticWheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
 
 
 WINDOW_NAME = "t265_f407_motion_map"
@@ -106,7 +106,7 @@ SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_r
     "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
     "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json",
     "chassis_link.jsonl", "chassis_extended.jsonl", "chassis_identity.json",
-    "wheel_measurements.jsonl","logging_events.jsonl","fisheye_request.json","fisheye_frames.csv"})
+    "wheel_measurements.jsonl","logging_events.jsonl","fisheye_request.json","fisheye_frames.csv","wheel_fixture.jsonl"})
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
@@ -977,23 +977,30 @@ class MotionMapApp:
         self.events_path = self.run_dir / "events.jsonl"
         self.commands_path = self.run_dir / "commands.jsonl"
         status_log = self.run_dir / "f407_motion_status.jsonl"
-        self.bridge = F407SerialBridge(
-            self.options.uart, self.options.baud,
-            self.motion_status_path, status_log,
-            identity_policy=getattr(self.options,"chassis_profile","auto"),
-            asserted_firmware=self.options.actual_lower_firmware,
-        )
-        self.bridge.identity_confirmed = self.motion_identity_confirmed()
+        synthetic=getattr(self.options,"wheel_fixture","off")!="off"
+        if not synthetic:
+            self.bridge = F407SerialBridge(
+                self.options.uart, self.options.baud,
+                self.motion_status_path, status_log,
+                identity_policy=getattr(self.options,"chassis_profile","auto"),
+                asserted_firmware=self.options.actual_lower_firmware,
+            )
+            self.bridge.identity_confirmed = self.motion_identity_confirmed()
         sdk_session_id = uuid.uuid4().hex
         wheel_enabled = getattr(self.options, "wheel_input", "off") == "on"
         wheel_noise = getattr(self.options, "wheel_noise_std_mps", .10)
         wheel_config = write_sdk_config(self.run_dir / "wheel_sdk_config.json", wheel_noise)
-        self.wheel_input = WheelInputBridge(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
-        self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry)
+        bridge_type=SyntheticWheelInputBridge if synthetic else WheelInputBridge
+        self.wheel_input = bridge_type(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
+        if self.bridge:self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry)
         self.wheel_input.start()
-        self.bridge.start()
-        if wheel_enabled or getattr(self.options,"timed_measurements",False):self.bridge.start_timed_measurements()
-        link=self.bridge.connection_snapshot()
+        if self.bridge:
+            self.bridge.start()
+            if wheel_enabled or getattr(self.options,"timed_measurements",False):self.bridge.start_timed_measurements()
+            link=self.bridge.connection_snapshot()
+        else:
+            link=dict(identity=None,motion_identity_ready=False,reason="synthetic SDK experiment; chassis UART not opened",
+                mcu_boot_epoch=None,expected_lower_firmware=None,contract_document_commit=None,firmware_identity_reported_by_uart=False)
         localizer_log_path = self.run_dir / "localizer.log"
         self.localizer_log = localizer_log_path.open("w", encoding="utf-8")
         command = [
@@ -1021,6 +1028,7 @@ class MotionMapApp:
                         "--debug-wheel-config", str(self.run_dir / "wheel_sdk_config.json"),
                         "--debug-wheel-log", str(self.run_dir / "wheel_sdk.jsonl"),
                         "--debug-wheel-session", sdk_session_id]
+        if synthetic:command += ["--debug-wheel-synthetic"]
         self.localizer = subprocess.Popen(
             command, cwd=str(LOCALIZATION_ROOT),
             stdout=self.localizer_log, stderr=subprocess.STDOUT,
@@ -1063,14 +1071,14 @@ class MotionMapApp:
             "wheel_reference_independent_pose": False,
             "ab_policy": "separate SDK sessions, no live toggle; stopping sends does not remove dependency; clean device restart for strict AB",
             "listen_and_control": self.motion_identity_confirmed(),
-            "host_chassis_session_id": self.bridge.host_session_id,
+            "host_chassis_session_id": self.bridge.host_session_id if self.bridge else None,
             "mcu_boot_epoch": link["mcu_boot_epoch"],
             "expected_lower_firmware": link["expected_lower_firmware"],
             "expected_lower_mode": "NormalDebug",
             "expected_lower_service": "MOTIONDEBUG",
             "contract_document_commit": link["contract_document_commit"],
             "chassis_link": link,
-            "capabilities": self.bridge.capabilities(),
+            "capabilities": self.bridge.capabilities() if self.bridge else {},
             "historical_flash_evidence_is_current_identity": False,
             "lower_measured_body_velocity": "new_stream_available_but_not_subscribed" if link["identity"] else "not_provided_on_legacy_UART4",
             "wheel_reference": "host_count_recompute_receive_time_and_latest_T265_heading; diagnostic only",
@@ -1115,6 +1123,16 @@ class MotionMapApp:
                 "wheel_measurements":"wheel_measurements.jsonl",
             },
         }
+        if synthetic:
+            metadata.update(session_purpose="synthetic_sdk_response_no_motion",wheel_input_source="synthetic_test_fixture",
+                actual_lower_firmware="not_opened",actual_lower_mode="not_opened",actual_lower_service="not_opened",
+                lower_identity_source="chassis_not_opened",listen_and_control=False,timed_measurements_requested=False,
+                potential_input_dependency_sources=["synthetic_test_fixture"],chassis_uart_opened=False,
+                fixture_plan=SyntheticWheelInputBridge.PHASES,physical_accuracy_test=False,
+                wheel_and_primary_gyro_independent_of_sdk_input=None,wheel_reference=None,
+                lower_measured_body_velocity="chassis_not_opened",motion_enable_policy="disabled_no_chassis_uart",
+                ground_truth_policy="synthetic SDK response only; no independent physical measurement",
+                ab_policy="synthetic response experiment; prior SDK/device state unverified; user restart before physical baseline")
         try:
             metadata["upper_git_commit"] = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True).strip()
@@ -1191,8 +1209,9 @@ class MotionMapApp:
                     result["accuracy_verified"] = False
                     result["wheel_input_requested"] = getattr(self.options, "wheel_input", "off") == "on"
                     sdk=read_json(self.run_dir / "wheel_sdk_status.json") or {}
-                    result["trajectory_dependency_sources"] = DEPENDENCIES if (sdk.get("sdk_api_success_samples",0)>0 or sdk.get("wheel_dependency_suspect")) else []
-                    result["potential_input_dependency_sources"] = DEPENDENCIES if result["wheel_input_requested"] else []
+                    dependencies=["synthetic_test_fixture"] if getattr(self.options,"wheel_fixture","off")!="off" else DEPENDENCIES
+                    result["trajectory_dependency_sources"] = dependencies if (sdk.get("sdk_api_success_samples",0)>0 or sdk.get("wheel_dependency_suspect")) else []
+                    result["potential_input_dependency_sources"] = dependencies if result["wheel_input_requested"] else []
                     result["wheel_reference_independent_pose"] = False  # Plot uses T265 heading in both modes.
                     result["wheel_sdk_status"] = read_json(self.run_dir / "wheel_sdk_status.json")
                     result["wheel_input_pipeline"]=wheel_summary
@@ -1315,18 +1334,25 @@ class MotionMapApp:
         try:
             self.start_session()
             if getattr(self.options,"sensor_check_seconds",0):
+                synthetic=getattr(self.options,"wheel_fixture","off")!="off"
                 deadline=time.monotonic()+self.options.sensor_check_seconds
                 frames=0
                 while time.monotonic()<deadline:
                     self.update_data()
                     # Exercise the existing map renderer without opening a
                     # clickable window or accepting any automatic actions.
-                    self.render_screen();frames+=1
+                    if synthetic:
+                        if self.localization.get("pose") and (self.wheel_sdk_status or {}).get("config_loaded"):
+                            self.wheel_input.activate_fixture()
+                        if self.wheel_input.done.is_set():break
+                    else:self.render_screen();frames+=1
                     if self.localizer.poll() is not None:raise RuntimeError("SDK owner exited during sensor lifecycle check")
                     time.sleep(.02)
-                self.record_event("sensor_render_check_complete",dict(rendered_frames=frames,
+                if synthetic and not self.wheel_input.done.is_set():raise RuntimeError("synthetic sequence did not complete before check deadline")
+                self.record_event("synthetic_check_complete" if synthetic else "sensor_render_check_complete",dict(rendered_frames=frames,
                     duration_s=self.options.sensor_check_seconds,motion_commands_sent=0,
-                    chassis_link=self.bridge.connection_snapshot(),measurement_stream=self.bridge.measurement_snapshot()))
+                    chassis_link=self.bridge.connection_snapshot() if self.bridge else None,
+                    measurement_stream=self.bridge.measurement_snapshot() if self.bridge else None))
                 return 0
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
             cv2.resizeWindow(WINDOW_NAME, self.screen_width, self.screen_height)
@@ -1365,6 +1391,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice; default pure T265, on uses measured 07/08 with timing diagnostics only")
+    parser.add_argument("--wheel-fixture",choices=("off","axes"),default="off",
+                        help="explicit synthetic SDK-response sequence; headless only, NO chassis UART, not measured feedback")
     parser.add_argument("--wheel-noise-std-mps", type=float, default=.10,
                         help="initial engineering velocity sigma, not calibrated; SDK uses its square")
     parser.add_argument("--reference-description", default="",
@@ -1381,6 +1409,10 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.wheel_fixture!="off":
+        if options.wheel_input!="on" or options.check_chassis or options.timed_measurements:
+            parser.error("synthetic fixture requires --wheel-input on and forbids chassis check/subscription")
+        if not options.sensor_check_seconds:options.sensor_check_seconds=30
     if not 0<=options.sensor_check_seconds<=60:parser.error("sensor check must be 0..60 seconds")
     return options
 

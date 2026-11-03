@@ -25,8 +25,8 @@ std::array<double, 3> vector3(const DebugWheelInput::Json &value)
 }
 
 DebugWheelInput::DebugWheelInput(const LocalizationConfig &config, const std::string &session,
-                               const std::string &address, const std::string &log_path)
-    : config_(config), session_(session), log_(log_path, std::ios::app)
+                               const std::string &address, const std::string &log_path, bool synthetic_input)
+    : config_(config), session_(session), log_(log_path, std::ios::app),synthetic_input_(synthetic_input)
 {
     if (!log_) throw std::runtime_error("cannot open SDK wheel log");
     status_path_ = log_path.substr(0, log_path.find_last_of('/')+1)+"wheel_sdk_status.json";
@@ -47,7 +47,7 @@ DebugWheelInput::DebugWheelInput(const LocalizationConfig &config, const std::st
     }
     log_thread_=std::thread([this]{write_logs();});
     record({{"event", "wheel_input_session"}, {"input_frame", "C_at_tracking_origin"},
-            {"dependencies", {"measured_wheel_feedback", "primary_gyro_rate"}},
+            {"dependencies", synthetic_input_ ? Json{"synthetic_test_fixture"} : Json{"measured_wheel_feedback", "primary_gyro_rate"}},
             {"accuracy_verified", false}});
 }
 
@@ -105,6 +105,7 @@ void DebugWheelInput::record(Json event)
     event["wheel_dependency_present"] = accepted_ > 0;
     event["wheel_dependency_suspect"] = sdk_failed_;
     event["config_loaded"]=config_loaded_;
+    event["input_source"]=synthetic_input_ ? "synthetic_test_fixture" : "measured_wheel_feedback";
     event["last_sdk_success_ns"]=last_success_ns_;
     std::lock_guard<std::mutex> lock(log_mutex_);
     if(records_.size()>=4096) {logging_failed_=true;++dropped_logs_;return;}
@@ -179,10 +180,13 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     std::uint64_t packet_id = 0, start = 0, end = 0;
     rs2_vector v{};
     try {
+        const bool valid_source=synthetic_input_
+            ? (p.at("source")=="synthetic_test_fixture" && p.at("measurement_valid")==false &&
+               p.at("test_fixture_valid")==true && p.at("fixture_session_id")==session_ && p.at("mcu_epoch").is_null())
+            : (p.at("source")=="measured_wheel_feedback" && p.at("measurement_valid")==true);
         if (p.at("schema") != 2 || p.at("session_id") != session_ ||
             p.at("time_policy") != "received_feedback_no_age_gate_v1" ||
-            p.at("source") != "measured_wheel_feedback" || !p.at("capture_time_qualified").is_boolean() ||
-            p.at("measurement_valid") != true)
+            !valid_source || !p.at("capture_time_qualified").is_boolean())
             throw std::runtime_error("invalid_session_or_source");
         auto tick = [&](const char *name) {
             const auto &j = p.at(name);
@@ -193,17 +197,18 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
         tick("receive_monotonic_ns"); tick("gyro_receive_ns");
         const auto gs = tick("alignment_gyro_start_ns"), ge = tick("alignment_gyro_end_ns");
         const auto clock=p.at("alignment_clock").get<std::string>();
-        if ((clock!="mcu_event" && clock!="host_monotonic_event") ||
+        if ((synthetic_input_ ? clock!="synthetic_host_clock" : (clock!="mcu_event" && clock!="host_monotonic_event")) ||
             (have_packet_ && clock!=alignment_clock_) || start>=end || gs>start || ge<end)
             throw std::runtime_error("invalid_alignment_interval");
         // Unknown capture/drift bounds and sample age are diagnostic only.
         // These ticks describe one source interval, not an SDK timestamp.
         if (have_packet_ && (packet_id <= last_packet_ || start < last_end_))
             throw std::runtime_error("duplicate_or_out_of_order");
-        if (p.at("mcu_epoch").is_null()) throw std::runtime_error("unknown_epoch");
-        if (have_epoch_ && p.at("mcu_epoch") != epoch_)
+        const Json input_epoch=synthetic_input_ ? Json(session_) : p.at("mcu_epoch");
+        if (input_epoch.is_null()) throw std::runtime_error("unknown_epoch");
+        if (have_epoch_ && input_epoch != epoch_)
             throw std::runtime_error("epoch_changed_new_sdk_session_required");
-        if (!have_epoch_) { epoch_ = p.at("mcu_epoch"); have_epoch_ = true; }
+        if (!have_epoch_) { epoch_ = input_epoch; have_epoch_ = true; }
         alignment_clock_=clock;
         const auto body = vector3(p.at("v_body_mps"));
         const auto omega = vector3(p.at("omega_body_rad_s"));

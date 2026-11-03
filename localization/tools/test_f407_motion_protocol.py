@@ -288,6 +288,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_synthetic_wheel_fixture()
     test_timed_v11_logging_recovery()
     test_timed_measurement_pipeline()
     test_timed_f405_client()
@@ -810,6 +811,39 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+
+def test_synthetic_wheel_fixture():
+    from unittest.mock import patch
+    import uuid
+    from t265_wheel_input import SyntheticWheelInputBridge
+    from t265_f407_motion_map import config_values,DEFAULT_CONFIG,MotionMapApp,arguments
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);sid=uuid.uuid4().hex
+        b=SyntheticWheelInputBridge(root,config_values(DEFAULT_CONFIG),sid,True)
+        try:
+            p=b.packet_for('ccw_lever_only',[0,0,0],[0,0,.5],1_000_000_000)
+            assert abs(p['v_camera_mps'][0]-.0346105)<1e-8
+            assert p['source']=='synthetic_test_fixture' and p['measurement_valid'] is False
+            assert p['mcu_epoch'] is None and p['fixture_session_id']==sid
+            try:b.telemetry(dict(kind='imu',sample={}));assert False,'mixed real and synthetic source'
+            except RuntimeError:pass
+        finally:b.close()
+        with patch('sys.argv',['map','--wheel-fixture','axes','--wheel-input','on','--output-root',str(root)]):options=arguments()
+        assert options.sensor_check_seconds==30
+        child=SimpleNamespace(pid=123,poll=lambda:0,returncode=0)
+        with patch.object(MotionMapApp,'detect_screen_size',return_value=(1024,768)), \
+             patch('t265_f407_motion_map.F407SerialBridge',side_effect=AssertionError('synthetic opened chassis UART')), \
+             patch('t265_f407_motion_map.subprocess.Popen',return_value=child), \
+             patch('t265_f407_motion_map.subprocess.check_output',return_value='offline'):
+            app=MotionMapApp(options)
+            try:
+                app.start_session();m=json.loads((app.run_dir/'metadata.json').read_text())
+                assert app.bridge is None and m['chassis_uart_opened'] is False
+                assert m['actual_lower_firmware']=='not_opened'
+                assert m['potential_input_dependency_sources']==['synthetic_test_fixture']
+                assert '--debug-wheel-synthetic' in m['localizer_command']
+            finally:app.stop_session()
 
 
 def test_timed_v11_logging_recovery():
