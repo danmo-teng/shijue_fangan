@@ -7,8 +7,9 @@
 
 `f405_connection_check/20261103_183701_check`：actual=11eeacf/source_dirty=1、NormalDebug/MOTIONDEBUG、230400。
 101个轮反馈、200个gyro、CRC错误0、日志丢弃0；结束关闭新流，未发运动/STOP/归零。
-T265仍处于boot枚举，上轮USB上传超时；已请求操作者重新插拔T265并摆好车，等待确认后再启动A组。
-此项检查未启动SDK、未注入轮速，不污染A组。
+18:37检查未启动SDK、未注入轮速。
+操作者随后确认重插/摆好，19:03 A组`20261103_190328_interactive`已在原地图启动；
+固件上传0.348秒，Pose正常输出，wheel-input off。实际动作/独立测量尚待用户执行。
 
 准备地面起点、车头方向线、1m直线及180°方向参考；卷尺测量车体旋转中心的局部位移。
 启动时填写reference-description描述此基准，便于G录入；不要从当前T265地图读数反推地面真值。
