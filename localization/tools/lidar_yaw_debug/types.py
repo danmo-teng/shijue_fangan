@@ -34,7 +34,12 @@ class TimedPoint:
 
     def __post_init__(self):
         require_time_ns(self.time_ns)
-        object.__setattr__(self,'point_lidar_m',tuple(map(float,frozen_array(self.point_lidar_m,(2,)))))
+        # A two-scalar immutable tuple does not need a temporary NumPy array
+        # and ufunc on every raw point (about 4500 points/s on STL50B2).
+        point=tuple(map(float,self.point_lidar_m))
+        if len(point)!=2 or not all(math.isfinite(v) for v in point):
+            raise ValueError('finite two-dimensional point required')
+        object.__setattr__(self,'point_lidar_m',point)
         if type(self.valid_return) is not bool or type(self.time_qualified) is not bool:
             raise ValueError('point validity/time qualification must be explicit bool')
         if not self.raw_point_id or not math.isfinite(self.intensity):

@@ -35,17 +35,17 @@ def extract_lines(points, seed=0, threshold=.025, min_points=12, min_span=.35):
     for _ in range(8):
         if len(remaining) < min_points:
             break
-        best = np.zeros(len(remaining), dtype=bool)
-        for _ in range(160):
-            p,q = remaining[rng.choice(len(remaining),2,replace=False)]
-            tangent=q-p
-            length=np.linalg.norm(tangent)
-            if length < .15:
-                continue
-            normal=np.array([-tangent[1],tangent[0]])/length
-            mask=abs((remaining-p)@normal)<threshold
-            if mask.sum()>best.sum():
-                best=mask
+        # Same 160 random pairs, threshold and first-best tie rule as the
+        # scalar reference. Batch distances avoid 160 Python/Numpy calls per
+        # line; no reduced geometry requirements or newly fitted yaw.
+        pairs=np.array([rng.choice(len(remaining),2,replace=False).tolist() for _ in range(160)])
+        p=remaining[pairs[:,0]];tangent=remaining[pairs[:,1]]-p
+        length=np.linalg.norm(tangent,axis=1);valid=length>=.15
+        normal=np.column_stack([-tangent[:,1],tangent[:,0]])/np.maximum(length[:,None],1e-12)
+        delta=remaining[:,None,:]-p[None,:,:]
+        distance=delta[:,:,0]*normal[None,:,0]+delta[:,:,1]*normal[None,:,1]
+        masks=(abs(distance)<threshold)&valid[None,:]
+        best=masks[:,int(np.argmax(masks.sum(axis=0)))]
         if best.sum()<min_points:
             break
         fit=remaining[best]

@@ -59,12 +59,19 @@ COMMAND_NAMES = {
 }
 
 
+def _crc16_entry(value):
+    for _ in range(8):
+        value = ((value >> 1) ^ 0xA001) if value & 1 else value >> 1
+    return value
+
+
+_CRC16_TABLE = tuple(_crc16_entry(value) for value in range(256))
+
+
 def crc16_modbus(data: bytes) -> int:
     crc = 0xFFFF
     for value in data:
-        crc ^= value
-        for _ in range(8):
-            crc = ((crc >> 1) ^ 0xA001) if crc & 1 else crc >> 1
+        crc = (crc >> 8) ^ _CRC16_TABLE[(crc ^ value) & 255]
     return crc & 0xFFFF
 
 

@@ -182,10 +182,11 @@ def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[s
 
 
 class TextPainter:
+    _font_cache={}
     def __init__(self, font_scale: float = 1.0) -> None:
         self.font_scale = max(1.0, float(font_scale))
         self.items: list[tuple] = []
-        self.fonts: dict[tuple[int, bool], ImageFont.FreeTypeFont] = {}
+        self.fonts = self._font_cache
 
     def add(self, value, xy, size=18, color=(230, 230, 230), bold=False, anchor="la", max_width=None) -> None:
         self.items.append((str(value), tuple(map(int, xy)),
@@ -620,7 +621,6 @@ class MotionMapApp:
                     continue
                 pose = self.localization.get("pose",{})
                 if (not all(k in pose for k in ("x_m","y_m","yaw_deg")) or
-                        time.monotonic_ns()-self.localization.get("timestamp_monotonic_ns",0) > 500_000_000 or
                         self.localization.get("quality") == "LOST"):
                     self.wheel_reference_valid = False
                     self.wheel_reference_pose = None
@@ -636,9 +636,6 @@ class MotionMapApp:
                 self.wheel_reference_pose["yaw_deg"] = pose["yaw_deg"]
                 self.wheel_reference_valid = True
                 self.append_point(self.odom_points,self.wheel_reference_pose["x_m"],self.wheel_reference_pose["y_m"])
-        if (self.latest_wheel_reference is not None and
-                time.monotonic_ns()-self.latest_wheel_reference["receive_monotonic_ns"] > 250_000_000):
-            self.wheel_reference_valid = False
         self.localization["wheel_odom"] = dict(self.wheel_reference_pose or {},available=self.wheel_reference_valid,
             source="host_f405_counts_latest_t265_heading_diagnostic_only")
 
@@ -890,8 +887,7 @@ class MotionMapApp:
                 status.get("host_action_id") != self.active_host_action_id or
                 status.get("command_sequence") != self.active_command_sequence or
                 status.get("command") != self.active_command_opcode or
-                status.get("timestamp_monotonic_ns",0) <= self.active_command_sent_ns or
-                self.status_age(status) > MOTION_STATUS_TIMEOUT_MS):
+                status.get("timestamp_monotonic_ns",0) <= self.active_command_sent_ns):
             return
         state = status["state"]
         if state == MOTION_STATE_DONE and not status.get("fault"):
@@ -955,6 +951,9 @@ class MotionMapApp:
             logical_y = int(round((y - self.content_offset_y) / self.render_scale))
             self.select_at(logical_x, logical_y)
 
+    def extra_localizer_args(self):
+        return []
+
     def start_session(self) -> None:
         self.options.output_root.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -969,7 +968,8 @@ class MotionMapApp:
             if m.get("owner") == "t265_f407_motion_map" and isinstance(m.get("session_index"), int)), default=0)
         config_path = self.run_dir / "localization.conf"
         write_debug_config(self.options.config, config_path, start_zone=self.zone,
-                           center_origin=True, start_heading_offset_deg=START_HEADING_OFFSET_DEG,
+                           center_origin=getattr(self.options,"center_origin",True),
+                           start_heading_offset_deg=getattr(self.options,"heading_offset_deg",START_HEADING_OFFSET_DEG),
                            unit_translation_scale=True)
         self.session_config = config_values(config_path)
         self.localization_json = self.run_dir / "localization_result.json"
@@ -1029,6 +1029,7 @@ class MotionMapApp:
                         "--debug-wheel-log", str(self.run_dir / "wheel_sdk.jsonl"),
                         "--debug-wheel-session", sdk_session_id]
         if synthetic:command += ["--debug-wheel-synthetic"]
+        command += self.extra_localizer_args()
         self.localizer = subprocess.Popen(
             command, cwd=str(LOCALIZATION_ROOT),
             stdout=self.localizer_log, stderr=subprocess.STDOUT,

@@ -81,7 +81,11 @@ class AsyncDebugLog:
                         tmp.replace(path);self.snapshot_writes+=1
                     for stream in streams.values():stream.flush()
                     last_flush=time.monotonic()
-                if self.stop.is_set() and self.queue.empty():break
+                if self.stop.is_set() and self.queue.empty():
+                    # close() may arrive between the flush condition above and
+                    # this check; never lose a final queued atomic summary.
+                    with self.snapshot_lock:
+                        if not self.snapshots:break
         except (OSError,ValueError,TypeError) as error:self.error=str(error)
         finally:
             for stream in streams.values():stream.close()

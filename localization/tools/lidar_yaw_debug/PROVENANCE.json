@@ -2,12 +2,12 @@
   "reference_patch_sha256": "3c9aee80455ab489d68d89564a2ad75ee37fecb0e2b0f07ecb6aac4327c37d5e",
   "reference_baseline": "7e25a8104794e36af36167a638a5cc7d0a4e68f7",
   "integration_baseline": "c2d4905",
-  "scope": "static/turn diagnostic only; no fusion engine, control publisher or STOP latch",
+  "scope": "debug static/turn plus motion-compensated lidar/T265 display; no competition publisher or permanent STOP latch",
   "files": {
     "protocol.py": {
       "source": "lidar/protocol.py",
       "source_sha256": "e8e6a41a3bfbdffdb511285e44686243b54cb878680fb34476aebafb27b28478",
-      "changes": "unchanged"
+      "changes": "CRC lookup equivalent to polynomial reference; existing stream resynchronization retained"
     },
     "crop.py": {
       "source": "lidar/crop.py",
@@ -37,12 +37,12 @@
     "static.py": {
       "source": "lidar/static.py",
       "source_sha256": "2ab536d0d66d35de5f0f9e67a08acb7879eddf249ae33479e1a7d034776c6396",
-      "changes": "necessary function/class subset; original bodies retained"
+      "changes": "necessary subset; batch evaluation of the same 160 RANSAC pairs, same thresholds and tie rule"
     },
     "types.py": {
       "source": "fusion/types.py",
       "source_sha256": "4af6d63434f9e31ced61fce74cae4b08cf0e3cae1879b9ba953da59ed424e40f",
-      "changes": "necessary function/class subset; original bodies retained"
+      "changes": "immutable point tuple scalar validation; same finite/shape/time checks without per-point NumPy allocation"
     },
     "viewer.py": {
       "source": "lidar/live_view.py",
@@ -53,6 +53,11 @@
       "source": "fusion/fence_adapter.py",
       "source_sha256": "9f64746c8b54bf01f1191f0d2a1f02515cc64384c19f11747f56de40bbafdcad",
       "changes": "reuse reviewed association/fixed-yaw XY solve/enclosure gates; omit estimator/covariance promotion; add explicit field-reference and static-before-turn diagnostic state"
+    },
+    "dynamic.py": {
+      "source": "fusion/deskew.py; fusion/fence_adapter.py; reviewed math2d/types dependencies",
+      "changes": "SE2 per-point rigid transform reused; motion from sole SDK pose and primary yaw; fixed field reference, only observed-axis correction; no patch STOP/time qualification gates; actual time quality remains false"
     }
-  }
+  },
+  "dynamic_integration_baseline": "eae0b4a"
 }

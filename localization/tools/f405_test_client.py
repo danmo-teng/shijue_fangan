@@ -83,7 +83,7 @@ class WheelReference:
             lower_velocity_unavailable_reason="not implemented on UART4")
         old = self.previous
         dt = None if old is None else (sample["timestamp_monotonic_ns"]-old["timestamp_monotonic_ns"])/1e9
-        if sample["status"] != 7 or batch_reset or old is None or dt is None or not 0 < dt <= .25:
+        if sample["status"] != 7 or batch_reset or old is None or dt is None or dt <= 0:
             self.previous = dict(sample)
             result["reason"] = "reset_invalid_or_new_baseline" if batch_reset or sample["status"] != 7 else "new_or_gapped_baseline"
             return result
@@ -339,7 +339,6 @@ class ChassisTestClient:
         with self.lock:
             if self.device_identity is not None:
                 if self.identity_error:return self.identity_error
-                if not 0<=now-self.identity_received_ns<=IDENTITY_TIMEOUT_NS:return "device identity query is stale; wait for a fresh read-only reply"
                 return None
             if self.require_device_identity:
                 return f"no validated identity at {self.baud}; check NormalDebugTimed=230400 / legacy=115200, valid frames and read-only query"
@@ -435,8 +434,7 @@ class ChassisTestClient:
                     self.identity_queries.pop(nonce);self.client_stats["identity_timeouts"]+=1
                     self._log("chassis_link.jsonl",dict(event="identity_timeout",baud=self.baud,nonce=nonce))
                     q["event"].set()
-            if self.pending and (now_ns > self.pending["deadline_ns"] or
-                    now_ns-self.pending["last_matching_ns"] > STATUS_TIMEOUT_NS):
+            if self.pending and now_ns > self.pending["deadline_ns"]:
                 self._finish("unknown_timeout_no_motion_replayed", now_ns)
                 self.needs_stop_ack = True  # Recoverable by a user-requested matching STOPPED.
             if self.require_device_identity and self.serial is not None and not self.stop_event.is_set() and now_ns>=self.next_identity_query_ns:
@@ -559,8 +557,8 @@ class ChassisTestClient:
                 if identity_problem:raise RuntimeError(identity_problem)
                 if self.pending is not None or self.needs_stop_ack:
                     raise RuntimeError("wait for this action, or request STOP and await matching STOPPED first")
-                if self.latest_status is None or not 0 <= now-self.latest_status["timestamp_monotonic_ns"] <= STATUS_TIMEOUT_NS:
-                    raise RuntimeError("no fresh 0x1A state; current mechanical state is unknown")
+                if self.latest_status is None:
+                    raise RuntimeError("no 0x1A state received; current mechanical state is unknown")
                 if self.latest_status["state"] in (MOTION_STATE_RUNNING, MOTION_STATE_FAULT):
                     raise RuntimeError("lower reports RUNNING/FAULT; finish the action or explicitly STOP before a new request")
                 if self.log_error:

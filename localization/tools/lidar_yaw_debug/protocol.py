@@ -5,12 +5,19 @@ supplied 2026-10-28 recording and resynchronizes one byte after a bad CRC.
 Raw packet angles are unchanged; mounting conversion is handled by static.polar_points.
 """
 
+def _crc8_entry(value):
+    for _ in range(8):
+        value = ((value << 1) ^ 0x4D) & 0xFF if value & 0x80 else (value << 1) & 0xFF
+    return value
+
+
+_CRC8_TABLE = tuple(_crc8_entry(value) for value in range(256))
+
+
 def crc8(data):
     crc = 0
     for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            crc = ((crc << 1) ^ 0x4D) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+        crc = _CRC8_TABLE[crc ^ byte]
     return crc
 
 

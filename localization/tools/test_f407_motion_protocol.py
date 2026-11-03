@@ -288,6 +288,19 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    # Wire-compatible fast CRCs: independent polynomial reference, including
+    # every byte value and a multibyte sequence, not encoder/decoder roundtrip.
+    from lidar_yaw_debug.protocol import crc8
+    from f405_timed_protocol import crc16
+    for data in [bytes([v]) for v in range(256)]+[bytes(range(256)),b'123456789']:
+        c8=0;c16=65535
+        for v in data:
+            c8^=v;c16^=v
+            for _ in range(8):
+                c8=((c8<<1)^0x4d)&255 if c8&128 else (c8<<1)&255
+                c16=(c16>>1)^0xa001 if c16&1 else c16>>1
+        assert crc8(data)==c8 and crc16(data)==c16 and crc16_modbus(data)==c16
+    test_dynamic_motion_compensation()
     test_synthetic_wheel_fixture()
     test_timed_v11_logging_recovery()
     test_timed_measurement_pipeline()
@@ -566,7 +579,9 @@ def test_f405_client():
         assert result["lower_measured_forward_mps"] is None and result["capture_monotonic_ns"] is None
     w=WheelReference();w.update(wheel([65530,5,0],1,1_000_000_000))
     r=w.update(wheel([4,65531,0],2,1_010_000_000));assert r["raw_delta"]==[10,-10,0]
-    assert not w.update(wheel([4,65531,0],3,2_000_000_000))["valid"]
+    delayed=w.update(wheel([4,65531,0],3,2_000_000_000))
+    assert delayed['valid'] and delayed['interval_s']==.99
+    assert delayed['capture_time_qualified'] is False  # Age alone no longer rejects a real count delta.
     class FakeSerial:
         def __init__(self): self.written=[]
         def write(self,packet): self.written.append(packet);return len(packet)
@@ -620,6 +635,8 @@ def test_f405_client():
             assert c.host_reference_epoch==1 and c.imu_snapshot()["yaw_deg"]==90
             motion=c.move_body(100,0)
             clock[0]+=1_100_000_000;c.poll(clock[0])
+            assert c.pending is not None  # Missing recent status alone is diagnostic.
+            clock[0]=c.pending['deadline_ns']+1;c.poll(clock[0])
             assert c.pending is None and c.needs_stop_ack
             count=len(transport.written)
             c.feed(state(9,motion["wire_sequence"],3,2),clock[0])
@@ -758,7 +775,7 @@ def test_timed_f405_client():
             stop=c.stop();clock[0]+=1_000_000
             c.feed(status(2,stop["wire_sequence"],0,4),clock[0]);assert not c.needs_stop_ack
             clock[0]+=7_000_000_000
-            assert c.control_identity_problem() is not None
+            assert c.control_identity_problem() is None  # Age alone no longer revokes a known compatible identity.
             c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
             c.feed(identity_response(req,epoch=2,service=2),clock[0]);assert c.control_identity_problem() is not None
             c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
@@ -811,6 +828,61 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+
+def test_dynamic_motion_compensation():
+    import math
+    import numpy as np
+    from lidar_yaw_debug.dynamic import DynamicFence,rotation,deskew_points
+    from lidar_yaw_debug.types import RawScan,TimedPoint
+    from lidar_yaw_debug.diagnostic import load_config
+    mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
+    engine=DynamicFence(mount);origin=1_000_000_000
+    def pose(t):return np.array([-1.35+.7*t/math.sqrt(2),1.35-.7*t/math.sqrt(2),math.radians(135)+2*math.pi*t])
+    for i in range(41):
+        t=i*.005;p=pose(t);ns=origin+round(t*1e9)
+        engine.ingest_pose(dict(session_id='offline',frame_number=i,timestamp_monotonic_ns=ns,
+            receive_monotonic_ns=ns,x_m=p[0],y_m=p[1],yaw_rad=p[2],tracker_confidence=3))
+        engine.ingest_yaw(ns,360*t,dict(source='independent_synthetic_motion'))
+        if i==0:engine.align('offline known trajectory',physical_confirmed=False)
+    ext=np.array([*mount['extrinsic'][:2],math.radians(mount['extrinsic'][2])]);points=[];walls=[]
+    for i,(t,a) in enumerate(zip(np.linspace(.12,.16,400),np.linspace(143.25,288.25,400))):
+        p=pose(t);angle=p[2]+ext[2]+math.radians(a);direction=np.array([math.cos(angle),math.sin(angle)])
+        laser=p[:2]+rotation(p[2])@ext[:2];hits=[]
+        for axis in (0,1):
+            for border in (-1.5,1.5):
+                if abs(direction[axis])<1e-9:continue
+                d=(border-laser[axis])/direction[axis];hit=laser+d*direction
+                if d>0 and abs(hit[1-axis])<=1.5+1e-9:hits.append((d,axis,border))
+        d,axis,border=min(hits)
+        points.append(TimedPoint(str(i),origin+round(t*1e9),(d*math.cos(math.radians(a)),d*math.sin(math.radians(a))),raw_angle_deg=a))
+        walls.append((axis,border))
+    scan=RawScan('moving',points[-1].time_ns,tuple(points),'offline','known_synthetic',False)
+    ph,yh,ref,_,_=engine._frozen();query=engine.trajectory(ph,yh,ref)
+    corrected,reference=deskew_points(np.array([p.point_lidar_m for p in points]),np.array([p.time_ns for p in points]),scan.reference_ns,query,ext)
+    world=corrected@rotation(reference[2]).T+reference[:2]
+    assert max(abs(world[i,axis]-border) for i,(axis,border) in enumerate(walls))<1e-8
+    result=engine.observe(scan)
+    assert result['rank_xy']>0 and result['deskew_applied'] and not result['deskew_qualified']
+    assert np.linalg.norm(np.array(result['candidate_center_xy_m'])-pose(.16)[:2])<1e-6
+    dominant=max(set(walls),key=walls.count);single=[p for p,w in zip(points,walls) if w==dominant]
+    single_scan=RawScan('single',single[-1].time_ns,tuple(single),'offline','known_synthetic',False)
+    one=engine.observe(single_scan);assert one['rank_xy']==1
+    assert len(one['position_observed_axes'])==1 and len(one['inherited_axes'])==1
+    old=engine.snapshot(origin+5_000_000_000)
+    assert old['ready'] and old['motion_age_ms']>4000  # No age admission gate.
+    engine.align('new physical reference',physical_confirmed=False)
+    assert engine.snapshot()['source']=='VIO_FROM_INITIAL_REFERENCE'
+    from unittest.mock import patch
+    from lidar_t265_motion_map import DynamicMapApp,arguments
+    with patch('sys.argv',['dynamic-map']),patch.object(DynamicMapApp,'detect_screen_size',return_value=(1024,768)):
+        app=DynamicMapApp(arguments())
+        try:
+            image=app.render_screen();assert image.shape==(768,1024,3)
+            assert {'start_dynamic','stop','speed_fast','backward'}<=set(app.hitboxes)
+            app.measurement_buffer='-500,0,?'
+            assert app.render_screen().shape==(768,1024,3)
+        finally:app.stop_session()
 
 
 def test_synthetic_wheel_fixture():

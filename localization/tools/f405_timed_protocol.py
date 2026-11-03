@@ -1,6 +1,7 @@
 """Reference codec only: no UART, SDK, or robot actions on import/execution."""
 from __future__ import annotations
 import struct
+from f407_motion_protocol import crc16_modbus as crc16
 
 MAGIC = b"\xd4\x4d"
 VERSION = 1
@@ -17,15 +18,6 @@ STATS_NAMES = (
     "max_yaw_receive_gap_us", "max_rate_receive_gap_us", "max_wheel_interval_us",
     "sync_replies", "identity_replies", "max_oldest_gyro_receive_to_dma_return_us",
 )
-
-
-def crc16(data: bytes) -> int:
-    value = 0xFFFF
-    for byte in data:
-        value ^= byte
-        for _ in range(8):
-            value = (value >> 1) ^ (0xA001 if value & 1 else 0)
-    return value
 
 
 def packet(kind: int, sequence: int, payload: bytes, version: int = 1) -> bytes:

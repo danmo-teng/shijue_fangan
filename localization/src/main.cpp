@@ -7,6 +7,8 @@
 #include "debug_wheel_input.hpp"
 #include "debug_fisheye_evidence.hpp"
 #include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <algorithm>
 #include <array>
@@ -16,6 +18,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <fstream>
 #include <iomanip>
@@ -52,6 +55,7 @@ struct Options {
     std::string events_path;
     std::string debug_wheel_socket, debug_wheel_config, debug_wheel_log, debug_wheel_session;
     std::string debug_test_session,debug_fisheye_output,debug_fisheye_request;
+    std::string debug_pose_socket;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 0.0;
@@ -152,6 +156,34 @@ struct DebugPipelineGuard {
         try {pipeline.stop();}catch(const std::exception &) {}
     }
     ~DebugPipelineGuard() {stop();}
+};
+
+class DebugPosePublisher {
+public:
+    explicit DebugPosePublisher(const std::string &address) {
+        if(address.empty())return;
+        if(address[0]!='@' || address.size()>=sizeof(address_.sun_path))
+            throw std::invalid_argument("debug pose output requires short @abstract socket");
+        address_.sun_family=AF_UNIX;
+        std::memcpy(address_.sun_path+1,address.data()+1,address.size()-1);
+        size_=offsetof(sockaddr_un,sun_path)+address.size();
+        fd_=::socket(AF_UNIX,SOCK_SEQPACKET|SOCK_NONBLOCK|SOCK_CLOEXEC,0);
+        if(fd_<0)throw std::runtime_error("cannot create debug pose publisher");
+        const int budget=262144;
+        ::setsockopt(fd_,SOL_SOCKET,SO_SNDBUF,&budget,sizeof(budget));
+        if(::connect(fd_,reinterpret_cast<const sockaddr *>(&address_),size_)!=0){
+            ::close(fd_);fd_=-1;throw std::runtime_error("debug pose receiver unavailable");
+        }
+    }
+    ~DebugPosePublisher(){if(fd_>=0)::close(fd_);}
+    void send(const omni::DebugWheelInput::Json &value) {
+        if(fd_<0)return;
+        auto packet=value;packet["ipc_drops"]=drops_;
+        const auto bytes=packet.dump();
+        if(::send(fd_,bytes.data(),bytes.size(),MSG_DONTWAIT|MSG_NOSIGNAL)!=static_cast<ssize_t>(bytes.size()))++drops_;
+    }
+private:
+    int fd_=-1;sockaddr_un address_{};socklen_t size_=0;std::uint64_t drops_=0;
 };
 
 double parse_nonnegative(const std::string &text, const char *name)
@@ -274,6 +306,8 @@ Options parse_options(int argc, char **argv)
             options.debug_fresh_session = true;
         } else if (argument == "--debug-test-session") {
             options.debug_test_session=value("--debug-test-session");
+        } else if (argument == "--debug-pose-socket") {
+            options.debug_pose_socket=value("--debug-pose-socket");
         } else if (argument == "--debug-fisheye-output") {
             options.debug_fisheye_output=value("--debug-fisheye-output");
         } else if (argument == "--debug-fisheye-request") {
@@ -291,6 +325,8 @@ Options parse_options(int argc, char **argv)
         }
     }
     const bool wheel = !options.debug_wheel_socket.empty();
+    if(!options.debug_pose_socket.empty() && (!options.debug_fresh_session || options.debug_test_session.empty()))
+        throw std::invalid_argument("pose IPC is limited to identified debug sessions");
     if(options.debug_wheel_synthetic && (!wheel || !options.debug_fresh_session || options.debug_test_session.empty()))
         throw std::invalid_argument("synthetic input requires an explicitly identified isolated debug SDK session");
     if (wheel != !options.debug_wheel_config.empty() || wheel != !options.debug_wheel_log.empty() ||
@@ -1318,6 +1354,7 @@ int main(int argc, char **argv)
         }
 
         omni::T265FieldProjector projector(config);
+        DebugPosePublisher pose_publisher(options.debug_pose_socket);
         omni::T265YawSynchronizer yaw_synchronizer;
         omni::OmniEncoderIntegrator encoder_integrator(config);
         omni::PlanarEkf filter;
@@ -1460,6 +1497,7 @@ int main(int argc, char **argv)
             const auto timestamp_domain = pose_frame.get_frame_timestamp_domain();
             const bool host_clock_timestamp = timestamp_domain == RS2_TIMESTAMP_DOMAIN_GLOBAL_TIME ||
                                               timestamp_domain == RS2_TIMESTAMP_DOMAIN_SYSTEM_TIME;
+            const auto capture_conversion_monotonic_ns=monotonic_ns();
             const double host_time_ms = std::chrono::duration<double, std::milli>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
             const double capture_age_ms = host_clock_timestamp
@@ -1581,6 +1619,20 @@ int main(int argc, char **argv)
                 }
             }
             latest_t265 = projector.project(raw);
+            if(!options.debug_pose_socket.empty()) {
+                const auto receive_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(t265_received.time_since_epoch()).count();
+                const double estimate=static_cast<double>(capture_conversion_monotonic_ns)-capture_age_ms*1e6;
+                const bool mapped=std::isfinite(estimate)&&estimate>=0;
+                const auto sample_ns=mapped ? static_cast<std::int64_t>(estimate) : receive_ns;
+                pose_publisher.send({{"schema",1},{"session_id",options.debug_test_session},{"frame_number",frame_number},
+                    {"timestamp_monotonic_ns",sample_ns},{"receive_monotonic_ns",receive_ns},
+                    {"capture_timestamp_ms",pose_frame.get_timestamp()},{"timestamp_domain",static_cast<int>(timestamp_domain)},
+                    {"time_basis",mapped?"SDK_host_clock_mapped_estimate":"host_receive"},
+                    {"x_m",latest_t265.pose.x_m},{"y_m",latest_t265.pose.y_m},{"yaw_rad",latest_t265.pose.yaw_rad},
+                    {"forward_mps",latest_t265.body_forward_velocity_mps},{"left_mps",latest_t265.body_left_velocity_mps},
+                    {"yaw_rate_radps",latest_t265.gyro_yaw_rate_radps},{"tracker_confidence",raw.tracker_confidence},
+                    {"time_qualified",false}});
+            }
             yaw_synchronizer.update(steady_time_s(t265_received), latest_t265);
 
             if (!filter.initialized() && latest_t265.tracker_confidence > 0) {
