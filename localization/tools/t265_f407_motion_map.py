@@ -813,6 +813,8 @@ class MotionMapApp:
             raise ValueError("启动时用--reference-description记录卷尺零点和地面角度基准")
         document = {"test_id": self.test_id, "timestamp_monotonic_ns": time.monotonic_ns(),
             "measurement_end_monotonic_ns": marker["timestamp_monotonic_ns"],
+            "pose_sample_monotonic_ns":marker["localization"].get("timestamp_monotonic_ns"),
+            "pose_age_at_mark_ms":marker.get("pose_age_at_mark_ms"),
             "endpoint_reference": "operator_settled_M_mark",
             "source": "operator_tape_and_ground_reference", "reference": self.options.reference_description,
             "forward_mm": values[0], "left_mm": values[1], "turn_deg_unwrapped": values[2],
@@ -833,15 +835,16 @@ class MotionMapApp:
             raise ValueError("先结束本段动作，再人工确认停稳并标记")
         now = time.monotonic_ns()
         stamp = self.localization.get("timestamp_monotonic_ns", 0)
-        if (not stamp or not 0 <= now-stamp <= 250_000_000 or
+        if (not stamp or
                 self.localization.get("quality") == "LOST" or
                 self.localization.get("t265",{}).get("tracker_confidence",0) <= 0):
-            raise ValueError("T265缺少新鲜有效位姿，未冻结终点")
+            raise ValueError("T265尚无可记录位姿，未冻结终点")
         self.settled_reference_mark = dict(test_id=self.test_id,timestamp_monotonic_ns=now,
+            pose_age_at_mark_ms=(now-stamp)/1_000_000,
             source="operator_declared_settled_not_controller_or_gyro_truth",
             localization=copy.deepcopy(self.localization), motion_status=copy.deepcopy(self.motion_status))
         self.record_event("manual_settled_reference_mark", self.settled_reference_mark)
-        self.message = f"已冻结实验{self.test_id}终点；现在测量，再G录入"
+        self.message = f"已冻结实验{self.test_id}末帧（年龄{(now-stamp)/1_000_000:.0f}ms，仅记录）；测量后G录入"
 
     def start_forward(self) -> None:
         self.send_move(0.0, self.distance_mm)

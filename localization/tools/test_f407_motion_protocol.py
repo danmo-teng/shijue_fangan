@@ -462,7 +462,7 @@ def main() -> None:
         assert moves == [(180.,1000),(270.,1000)] and turns == [-90.,-180.,-360.]
         app.run_dir, app.test_id, app.active_test = root, 1, None
         app.active_test_parameters = {"direction_deg_target":0,"distance_mm_target":1000}
-        app.localization = dict(timestamp_monotonic_ns=time.monotonic_ns(),quality="GOOD",
+        app.localization = dict(timestamp_monotonic_ns=time.monotonic_ns()-2_000_000_000,quality="GOOD",
                                 t265={"tracker_confidence":3},pose={"x_m":.99,"y_m":.002,"yaw_deg":0})
         app.motion_status = {}
         app.settled_reference_mark = None
@@ -477,6 +477,8 @@ def main() -> None:
         measurement = json.loads((root/"ground_truth.jsonl").read_text())
         assert measurement["forward_mm"] == 988 and measurement["turn_deg_unwrapped"] is None
         assert measurement["localization"]["pose"]["x_m"] == .99
+        assert measurement["pose_age_at_mark_ms"]>=2000
+        assert measurement["pose_sample_monotonic_ns"]==measurement["localization"]["timestamp_monotonic_ns"]
         try:
             app.save_ground_truth("nan,0,0")
             assert False, "nonfinite ground reference accepted"
