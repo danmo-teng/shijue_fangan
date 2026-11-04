@@ -1,0 +1,246 @@
+{
+  "scope": "offline replay; no independent ground truth or live hardware",
+  "delivery": "recorded CSV processing time approximates Pose delivery; raw frame gaps retained; recorded field references reused",
+  "sessions": [
+    {
+      "session": "055841",
+      "scans": 328,
+      "new_ranks": {
+        "2": 325,
+        "1": 3
+      },
+      "old_ranks": {
+        "2": 44,
+        "1": 3,
+        "0": 281
+      },
+      "modes": {
+        "T265_WITH_WHEEL_TAIL": 15,
+        "WHEEL_FALLBACK": 313
+      },
+      "source_changes": [
+        {
+          "event": "motion_source_changed",
+          "sample_monotonic_ns": 741944135166,
+          "previous_source": "T265_WITH_WHEEL_TAIL",
+          "motion_source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "spatial_conflict_m": 0.05003974172920452
+        }
+      ],
+      "fit_compute_ms_p50_p95": [
+        27.4438745,
+        35.120183299999994
+      ],
+      "final_motion": {
+        "mode": "WHEEL_FALLBACK",
+        "reason": "T265_wheel_displacement_conflict",
+        "spatial_conflict_m": 0.044516687920692945,
+        "last_paired_pose_ns": 772614949415,
+        "last_raw_pose_ns": 772614949415,
+        "last_wheel_sample_id": 39001,
+        "wheel_time_basis": "mapped_MCU_event_estimate",
+        "wheel_yaw_support": "MCU_interval_endpoint_held",
+        "pending_pose_drops": 0,
+        "recovery_travel_m": 0.0,
+        "recovery_two_axis_fixes": 139,
+        "t265_translation_rebase_m": [
+          0.0,
+          0.0
+        ],
+        "policy": {
+          "single_increment_conflict_m": 0.05,
+          "displacement_conflict_m": 0.05,
+          "comparison_travel_m": 0.25,
+          "recovery_residual_m": 0.025,
+          "recovery_travel_m": 0.5,
+          "recovery_two_axis_fixes": 2
+        },
+        "wheel_and_gyro_are_sdk_dependencies": true,
+        "independent_ground_truth": false
+      },
+      "wall_seconds": 16.429896202000236,
+      "max_inter_scan_step_m": 0.060714430213399374
+    },
+    {
+      "session": "060302",
+      "scans": 617,
+      "new_ranks": {
+        "2": 612,
+        "0": 5
+      },
+      "old_ranks": {
+        "2": 552,
+        "0": 64,
+        "1": 1
+      },
+      "modes": {
+        "T265_WITH_WHEEL_TAIL": 143,
+        "WHEEL_FALLBACK": 474
+      },
+      "source_changes": [
+        {
+          "event": "motion_source_changed",
+          "sample_monotonic_ns": 1014676989162,
+          "previous_source": "T265_WITH_WHEEL_TAIL",
+          "motion_source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "spatial_conflict_m": 0.050127540949150395
+        }
+      ],
+      "fit_compute_ms_p50_p95": [
+        24.356995,
+        30.013688999999996
+      ],
+      "final_motion": {
+        "mode": "WHEEL_FALLBACK",
+        "reason": "T265_wheel_displacement_conflict",
+        "spatial_conflict_m": 0.04150284073191909,
+        "last_paired_pose_ns": 1057114160558,
+        "last_raw_pose_ns": 1067792403904,
+        "last_wheel_sample_id": 53143,
+        "wheel_time_basis": "mapped_MCU_event_estimate",
+        "wheel_yaw_support": "MCU_interval_endpoint_held",
+        "pending_pose_drops": 0,
+        "recovery_travel_m": 0.0,
+        "recovery_two_axis_fixes": 420,
+        "t265_translation_rebase_m": [
+          0.0,
+          0.0
+        ],
+        "policy": {
+          "single_increment_conflict_m": 0.05,
+          "displacement_conflict_m": 0.05,
+          "comparison_travel_m": 0.25,
+          "recovery_residual_m": 0.025,
+          "recovery_travel_m": 0.5,
+          "recovery_two_axis_fixes": 2
+        },
+        "wheel_and_gyro_are_sdk_dependencies": true,
+        "independent_ground_truth": false
+      },
+      "wall_seconds": 28.745136651001303,
+      "max_inter_scan_step_m": 0.0629121496024669
+    },
+    {
+      "session": "055727",
+      "scans": 517,
+      "new_ranks": {
+        "2": 477,
+        "1": 30,
+        "0": 10
+      },
+      "old_ranks": {
+        "2": 334,
+        "1": 161,
+        "0": 22
+      },
+      "modes": {
+        "T265_WITH_WHEEL_TAIL": 98,
+        "WHEEL_FALLBACK": 419
+      },
+      "source_changes": [
+        {
+          "event": "motion_source_changed",
+          "sample_monotonic_ns": 671571328514,
+          "previous_source": "T265_WITH_WHEEL_TAIL",
+          "motion_source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "spatial_conflict_m": 0.050623956429339305
+        }
+      ],
+      "fit_compute_ms_p50_p95": [
+        22.09759,
+        32.054261399999994
+      ],
+      "final_motion": {
+        "mode": "T265_WITH_WHEEL_TAIL",
+        "reason": "paired_field_reference",
+        "spatial_conflict_m": 0.0007431357844112699,
+        "last_paired_pose_ns": 717620113918,
+        "last_raw_pose_ns": 717620113918,
+        "last_wheel_sample_id": 36217,
+        "wheel_time_basis": "mapped_MCU_event_estimate",
+        "wheel_yaw_support": "MCU_interval_endpoint_held",
+        "pending_pose_drops": 0,
+        "recovery_travel_m": 0.0,
+        "recovery_two_axis_fixes": 0,
+        "t265_translation_rebase_m": [
+          0.0,
+          0.0
+        ],
+        "policy": {
+          "single_increment_conflict_m": 0.05,
+          "displacement_conflict_m": 0.05,
+          "comparison_travel_m": 0.25,
+          "recovery_residual_m": 0.025,
+          "recovery_travel_m": 0.5,
+          "recovery_two_axis_fixes": 2
+        },
+        "wheel_and_gyro_are_sdk_dependencies": true,
+        "independent_ground_truth": false
+      },
+      "wall_seconds": 22.547308736999184,
+      "max_inter_scan_step_m": 0.07990171793692785
+    },
+    {
+      "session": "055159",
+      "scans": 461,
+      "new_ranks": {
+        "2": 457,
+        "0": 4
+      },
+      "old_ranks": {
+        "2": 454,
+        "0": 7
+      },
+      "modes": {
+        "T265_WITH_WHEEL_TAIL": 250,
+        "WHEEL_FALLBACK": 211
+      },
+      "source_changes": [
+        {
+          "event": "motion_source_changed",
+          "sample_monotonic_ns": 360560954433,
+          "previous_source": "T265_WITH_WHEEL_TAIL",
+          "motion_source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "spatial_conflict_m": 0.05076532508064918
+        }
+      ],
+      "fit_compute_ms_p50_p95": [
+        19.808686,
+        26.96348
+      ],
+      "final_motion": {
+        "mode": "WHEEL_FALLBACK",
+        "reason": "T265_wheel_displacement_conflict",
+        "spatial_conflict_m": 0.015290523470229155,
+        "last_paired_pose_ns": 381708435741,
+        "last_raw_pose_ns": 381708435741,
+        "last_wheel_sample_id": 19424,
+        "wheel_time_basis": "mapped_MCU_event_estimate",
+        "wheel_yaw_support": "MCU_interval_endpoint_held",
+        "pending_pose_drops": 0,
+        "recovery_travel_m": 0.0,
+        "recovery_two_axis_fixes": 162,
+        "t265_translation_rebase_m": [
+          0.0,
+          0.0
+        ],
+        "policy": {
+          "single_increment_conflict_m": 0.05,
+          "displacement_conflict_m": 0.05,
+          "comparison_travel_m": 0.25,
+          "recovery_residual_m": 0.025,
+          "recovery_travel_m": 0.5,
+          "recovery_two_axis_fixes": 2
+        },
+        "wheel_and_gyro_are_sdk_dependencies": true,
+        "independent_ground_truth": false
+      },
+      "wall_seconds": 19.86380525899949,
+      "max_inter_scan_step_m": 0.06425693137717964
+    }
+  ]
+}

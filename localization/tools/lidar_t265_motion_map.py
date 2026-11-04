@@ -20,6 +20,7 @@ from async_debug_log import AsyncDebugLog
 from f405_timed_measurements import TimedMeasurements
 from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.worker import RadarWorker
+from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 
 DYNAMIC_FILES={'dynamic_events.jsonl','dynamic_scans.jsonl','dynamic_localization.jsonl',
     'dynamic_status.json','dynamic_summary.json','pose_motion.jsonl','lidar_rx.jsonl','lidar_tx.jsonl',
@@ -85,13 +86,18 @@ class DynamicMapApp(base.MotionMapApp):
         m['initialization_policy']='arena_center_origin_initial_heading_nearest_positive_X_mod_90'
         m['suggested_physical_placement']='arena_center_clear_of_speed_bumps_not_an_exact_pose_measurement'
         m['obstacle_policy']='operator_disables_lidar_corrections; automatic_occlusion_detection_unverified'
+        m['motion_source_policy']=dict(MOTION_SOURCE_POLICY,normal='T265_with_measured_wheel_tail',
+            fallback='measured_wheel_and_primary_yaw_with_observable_lidar_axes',
+            recovery='movement_agreement_and_two_axis_walls_then_translation_rebase',
+            source_switch_not_position_weighting=True,thresholds_calibrated=False)
         (self.run_dir/'metadata.json').write_text(json.dumps(m,ensure_ascii=False,indent=2)+'\n')
         self.message='建议场地中心无遮挡处，静止后点自动定位'
 
     def dynamic_telemetry(self,event):
-        if event['kind'] not in ('imu','timed_identity','timed_clock_sync','timed_gyro_diagnostic','device_identity_changed'):return
+        if event['kind'] not in ('imu','timed_identity','timed_clock_sync','timed_gyro_diagnostic',
+                                 'timed_wheel_diagnostic','device_identity_changed'):return
         try:self.chassis_inbox.put_nowait(event)
-        except queue.Full:self.dynamic_error='主yaw队列溢出；已计为数据缺口'
+        except queue.Full:self.dynamic_error='底盘反馈队列溢出；已计为数据缺口'
 
     def drain_yaw(self):
         for _ in range(2048):
@@ -103,6 +109,9 @@ class DynamicMapApp(base.MotionMapApp):
             elif kind=='device_identity_changed':
                 self.radar.send('invalidate',dict(reason='device_identity_changed'));self.timed_yaw_seen=False;self.last_yaw_id=None
                 self.devent('reference_invalidated',reason='device_identity_changed')
+            elif kind=='timed_wheel_diagnostic':
+                measured=self.clock_map.wheel(s,s['receive_monotonic_ns'])
+                if measured is not None:self.radar.send('wheel',measured)
             elif kind=='timed_gyro_diagnostic':
                 if not self.clock_map.identity or s['boot_epoch']!=self.clock_map.identity['boot_epoch']:continue
                 identity=(s['boot_epoch'],s['yaw_source_id'])
@@ -181,7 +190,7 @@ class DynamicMapApp(base.MotionMapApp):
                 x,y=self.world_to_pixel(value,value)
                 cv2.line(canvas,(x,60),(x,910),(215,215,215));cv2.line(canvas,(30,y),(880,y),(215,215,215))
             text.add('雷达＋T265动态定位 / 场地中心原点 / 启动朝向选90°分支',(30,20),20,(35,35,35),True)
-            text.add('绿点：雷达；蓝：T265车中心；橙：雷达修正后',(30,930),16,(35,35,35))
+            text.add('绿点：雷达；蓝：原T265车中心；橙：当前定位（含降级）',(30,930),16,(35,35,35))
             text.add('测试显示，精度待实测；不向正式比赛发布',(30,960),14,(70,70,70))
             self.draw_panel(canvas,text)
             self.background=text.paint(canvas);self.background_key=key
@@ -209,6 +218,14 @@ class DynamicMapApp(base.MotionMapApp):
             '/'.join(s.get('current_wall_axes',[])) or ('VIO' if s.get('ready') else 'UNLOCALIZED')),153)
         number(f'Scan {self.radar.state.get("scans_received",0)} / Fit {self.radar.state.get("fits",0)}',183)
         number(f'Pose {self.pose_packets} / Yaw {self.imu_packets}',213)
+        mode=s.get('motion_selection',{}).get('mode','T265_NO_WHEEL_REFERENCE')
+        if getattr(self,'source_label_key',None)!=mode:
+            label={'WHEEL_FALLBACK':'降级：轮速＋主yaw',
+                   'T265_WITH_WHEEL_TAIL':'T265定位／轮反馈续推'}.get(mode,'T265定位／暂无轮反馈参考')
+            patch=np.full((24,340,3),(26,27,30),np.uint8)
+            text=base.TextPainter(font_scale=1./self.render_scale)
+            text.add(label,(0,0),13,(130,210,240));self.source_label=text.paint(patch);self.source_label_key=mode
+        canvas[215:239,920:1260]=self.source_label
         wheel=getattr(self,'input_snapshot',{});count=wheel.get('sdk_api_success_samples',0)
         stage='OFF' if self.options.wheel_input=='off' else ('API_OK' if count else 'CFG_OK' if wheel.get('config_loaded') else 'WAIT_CFG')
         number(f'{stage} / {count} / {wheel.get("sdk_api_rate_hz",0):.0f}Hz',849)

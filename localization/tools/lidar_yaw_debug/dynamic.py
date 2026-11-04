@@ -1,7 +1,8 @@
 """Debug-only motion-compensated fence XY + T265 translation + fixed primary yaw.
 
 SE(2) deskew follows the reviewed patch fusion/deskew.py. Motion history comes
-only from VIO/gyro; a scan is never fed back into its own motion compensation.
+from the explicitly selected VIO/wheel source and gyro; a scan is never fed
+back into its own motion compensation.
 Time quality is diagnostic, not a gate. No wheel-position blend or STOP latch.
 """
 from collections import deque
@@ -13,6 +14,7 @@ import time
 import numpy as np
 from .diagnostic import fixed_yaw_position
 from .global_init import initialize, initial_heading_branch
+from .motion_source import MotionSource, sample
 
 
 def rotation(angle):
@@ -21,15 +23,13 @@ def rotation(angle):
 
 
 def interpolate(times,values,queries):
-    """Linear interpolation/extrapolation; never relabel prediction as sampling."""
+    """Interpolate actual support; hold endpoints without inventing a velocity."""
     times=np.asarray(times,dtype=np.int64);queries=np.asarray(queries,dtype=np.int64)
     values=np.asarray(values,float)
     if len(times)==0:raise ValueError("no motion samples")
     if len(times)==1:return np.repeat(values[:1],len(queries),axis=0)
     origin=times[0];t=(times-origin)/1e9;q=(queries-origin)/1e9
     result=np.column_stack([np.interp(q,t,values[:,i]) for i in range(values.shape[1])])
-    for mask,i,j in ((q<t[0],0,1),(q>t[-1],-1,-2)):
-        if np.any(mask):result[mask]=values[i]+(q[mask]-t[i])[:,None]*(values[i]-values[j])/(t[i]-t[j])
     return result
 
 
@@ -52,18 +52,20 @@ class DynamicFence:
         self.initialization=None;self.pending_initial_pose=None
         self.last_initial_scan_id=None
         self.lidar_corrections_enabled=True
+        self.motion=MotionSource()
 
     def ingest_pose(self,p):
-        if p.get('tracker_confidence',0)<=0:return
         values=[p.get(k) for k in ('x_m','y_m','yaw_rad')]
         if not all(isinstance(v,(int,float)) and math.isfinite(v) for v in values):return
         with self.lock:
             if self.last_sample and p['session_id']!=self.last_sample['session_id']:
-                self.reference=None;self.revision+=1;self.poses.clear()
+                self.reference=None;self.revision+=1;self.poses.clear();self.motion=MotionSource()
             if self.last_sample and p['session_id']==self.last_sample['session_id'] and p['frame_number']<=self.last_sample['frame_number']:return
             t=int(p['timestamp_monotonic_ns'])
             if self.poses and t<=self.poses[-1][0]:t=int(p['receive_monotonic_ns'])
             if self.poses and t<=self.poses[-1][0]:return
+            self.motion.pose(dict(p,timestamp_monotonic_ns=t))
+            if p.get('tracker_confidence',0)<=0:return
             self.poses.append((t,*values));self.last_sample=dict(p)
 
     def ingest_yaw(self,t,yaw_deg,source):
@@ -72,10 +74,15 @@ class DynamicFence:
             if self.yaws and t<self.yaws[-1][0]:return
             if self.yaws and t==self.yaws[-1][0]:self.yaws.pop()
             self.yaws.append((int(t),math.radians(yaw_deg)));self.last_yaw=dict(source)
+            self.motion.yaw(t,math.radians(yaw_deg),source)
+
+    def ingest_wheel(self,sample):
+        with self.lock:self.motion.wheel(sample,self.yaws)
 
     def invalidate_reference(self,reason):
         with self.lock:
             self.reference=None;self.revision+=1;self.yaws.clear();self.last_fit=None
+            self.motion=MotionSource()
             self.has_anchor=False
             self.initialization=None;self.pending_initial_pose=None
             return dict(event='reference_invalidated',reason=reason)
@@ -84,6 +91,7 @@ class DynamicFence:
         with self.lock:
             if not self.poses or not self.yaws:raise ValueError('等待实际T265 Pose和主yaw数据')
             self.reference=None;self.revision+=1;self.offset[:]=0;self.has_anchor=False
+            self.motion.reference=None;self.motion.history.clear()
             self.last_fit=None;self.latest_points=[];self.pending_initial_pose=None
             self.last_initial_scan_id=None
             self.initialization=dict(status='SEARCHING_WALLS',description=description,
@@ -95,6 +103,7 @@ class DynamicFence:
     def set_lidar_enabled(self,enabled):
         with self.lock:
             self.lidar_corrections_enabled=bool(enabled);self.last_fit=None;self.latest_points=[]
+            self.motion.wall_fixes=0
             self.pending_initial_pose=None
             if self.initialization:self.initialization['confirmations']=0
 
@@ -151,6 +160,7 @@ class DynamicFence:
                     timestamp_monotonic_ns=time.monotonic_ns(),reference_sample_ns=scan.reference_ns,
                     square_absolute_side_identified=False)
                 self.offset[:]=0;self.has_anchor=True;self.revision+=1
+                self.motion.configure(self.reference)
                 state['status']='GLOBAL_SYMMETRIC_FIX'
         return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
             reference=dict(self.reference) if self.reference else None)
@@ -165,18 +175,20 @@ class DynamicFence:
                 field_heading_deg=135.,description=description,physical_placement_confirmed=physical_confirmed,
                 timestamp_monotonic_ns=time.monotonic_ns())
             self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.has_anchor=False;self.revision+=1
+            self.reference['reference_sample_ns']=p[0]
+            self.motion.configure(self.reference)
             return dict(self.reference)
 
     def _frozen(self,first_ns=None,last_ns=None,*,latest=False):
         with self.lock:
             if self.reference is None or not self.poses or not self.yaws:raise ValueError("尚未从围栏建立场地参考")
-            poses,yaws=list(self.poses),list(self.yaws)
+            poses,yaws=list(self.motion.history or self.poses),list(self.yaws)
             reference,offset,revision=dict(self.reference),self.offset.copy(),self.revision
-        if latest:first_ns=last_ns=min(poses[-1][0],yaws[-1][0])
+        if latest:first_ns=last_ns=poses[-1][0]
         if first_ns is not None:
             def window(history):
-                # Retain bracketing samples, or two endpoints for the SAME
-                # extrapolation. Full histories remain stored; no age gate.
+                # Retain bracketing samples, or endpoints for the same hold.
+                # Full histories remain stored; no age gate.
                 lo=max(0,bisect_left(history,first_ns,key=itemgetter(0))-1)
                 hi=min(len(history),bisect_right(history,last_ns,key=itemgetter(0))+1)
                 lo=min(lo,max(0,len(history)-2));hi=max(hi,min(len(history),lo+2))
@@ -213,14 +225,16 @@ class DynamicFence:
         result=dict(fit,scan_id=scan.scan_id,reference_ns=scan.reference_ns,
             deskew_applied=True,rotation_compensated=True,translation_compensated=True,
             timestamp_semantics_verified=False,deskew_qualified=False,accuracy_verified=False,
-            time_policy='adopt_received_data_timing_diagnostic_only',motion_source='T265_center_translation_and_primary_yaw',
+            time_policy='adopt_received_data_timing_diagnostic_only',motion_source=self.motion.mode,
+            motion_selection=self.motion.snapshot(),motion_boundary_policy='hold_outside_measured_support',
             primary_yaw_field_rad=float(ref[2]),prior_center_xy_m=(ref[:2]+offset).tolist(),
             physical_points=len(scan.points),used_points=len(accepted),scan_span_ms=(scan.last_point_ns-scan.first_point_ns)/1e6,
-            motion_support_extrapolation_ns=max(0,int(scan.reference_ns-min(poses[-1,0],yaws[-1,0])),int(oldest-scan.first_point_ns)),
+            motion_unsupported_span_ns=max(0,int(scan.reference_ns-min(poses[-1,0],yaws[-1,0])),int(oldest-scan.first_point_ns)),
             motion_latest_ns=int(latest),timestamp_monotonic_ns=began,reference_revision=revision)
         with self.lock:
             if revision!=self.revision:raise ValueError("reference changed during scan fit")
             candidate=fit.get('candidate_center_xy_m')
+            self.motion.observe_walls(scan.scan_id,fit['position_observed_axes'])
             if candidate is not None:
                 for axis in fit['position_observed_axes']:
                     i=('x','y').index(axis);self.offset[i]=candidate[i]-ref[i]
@@ -244,13 +258,18 @@ class DynamicFence:
             initialization=dict(self.initialization) if self.initialization else None,
             lidar_corrections_enabled=self.lidar_corrections_enabled)
         # Publish at latest actual motion support, never stamp extrapolation as a new sensor frame.
-        sample_ns=int(min(poses[-1,0],yaws[-1,0]));pose=self.trajectory(poses,yaws,reference)([sample_ns])[0]
+        sample_ns=int(poses[-1,0]);pose=self.trajectory(poses,yaws,reference)([sample_ns])[0]
         with self.lock:
             fit=dict(self.last_fit) if self.last_fit else None;points=list(self.latest_points)
-        return dict(ready=True,center_xy_m=(pose[:2]+offset).tolist(),t265_center_xy_m=pose[:2].tolist(),yaw_deg=math.degrees(pose[2])%360,
+            raw=sample(self.poses,sample_ns);raw_stamp=int(self.poses[-1][0])
+        raw_xy=(raw[:2]-reference['pose_origin'])@rotation(reference['vio_rotation']).T+reference['start_center_xy_m']
+        source=self.motion.mode if self.motion.history else ('VIO' if self.has_anchor else 'VIO_FROM_INITIAL_REFERENCE')
+        return dict(ready=True,center_xy_m=(pose[:2]+offset).tolist(),t265_center_xy_m=raw_xy.tolist(),yaw_deg=math.degrees(pose[2])%360,
             sample_monotonic_ns=sample_ns,motion_age_ms=(now-sample_ns)/1e6,
             last_scan_age_ms=None if self.last_scan_ns is None else (now-self.last_scan_ns)/1e6,
-            source='LIDAR_ANCHORED_VIO' if self.has_anchor else 'VIO_FROM_INITIAL_REFERENCE',
+            source=('LIDAR_ANCHORED_'+source) if self.has_anchor else source,
+            motion_selection=self.motion.snapshot(),motion_boundary_policy='hold_outside_measured_support',
+            raw_t265_sample_ns=raw_stamp,
             current_wall_axes=fit.get('position_observed_axes',[]) if fit else [],last_fit=fit,
             lidar_corrections_enabled=self.lidar_corrections_enabled,
             points_field=points,scans=self.scan_count,fixes=self.fit_count,reference=reference,

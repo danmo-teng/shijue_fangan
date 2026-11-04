@@ -303,6 +303,7 @@ def main() -> None:
                 c16=(c16>>1)^0xa001 if c16&1 else c16>>1
         assert crc8(data)==c8 and crc16(data)==c16 and crc16_modbus(data)==c16
     test_dynamic_motion_compensation()
+    test_dynamic_motion_source()
     test_synthetic_wheel_fixture()
     test_timed_v11_logging_recovery()
     test_timed_v13_feedback()
@@ -1000,6 +1001,55 @@ def test_dynamic_motion_compensation():
         finally:app.stop_session()
 
 
+def test_dynamic_motion_source():
+    """Actual-interval math with fake feedback; no UART, SDK or ground accuracy claim."""
+    import numpy as np
+    from lidar_yaw_debug.motion_source import MotionSource, sample
+    from collections import deque
+    m=MotionSource();origin=1_000_000_000;yaws=deque()
+    m.configure(dict(pose_origin=[0.,0.],vio_rotation=0.,yaw_offset=0.,reference_sample_ns=origin))
+    def pose(i,x,confidence=3):
+        m.pose(dict(timestamp_monotonic_ns=origin+i*20_000_000,x_m=x,y_m=0.,tracker_confidence=confidence))
+    def step(i,velocity=.5,yaw=0.):
+        t=origin+i*20_000_000;yaws.append((t,yaw))
+        m.yaw(t,yaw,{'raw':{'yaw_receive_us':t//1000}})
+        m.wheel(dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='boot',sample_id=i,
+            raw_mcu_sample=dict(t0_us=(t-20_000_000)//1000,t1_us=t//1000),v_body_mps=[velocity,0.,0.],
+            interval_start_ns=t-20_000_000,interval_end_ns=t,receive_monotonic_ns=t+9_000_000_000),yaws)
+    pose(0,0.)
+    for i in range(1,11):step(i);pose(i,i*.01)
+    assert m.mode=='T265_WITH_WHEEL_TAIL' and abs(m.history[-1][1]-.1)<1e-10
+    step(11);pose(11,2.11)
+    assert m.mode=='WHEEL_FALLBACK' and abs(m.history[-1][1]-.11)<1e-10
+    for i in range(12,80):
+        step(i);pose(i,2+i*.01);m.observe_walls(str(i),['x'])
+    assert m.mode=='WHEEL_FALLBACK'  # A single wall cannot authorize XY recovery.
+    before=m.history[-1][1]
+    m.observe_walls('both1',['x','y']);m.observe_walls('both2',['x','y'])
+    step(80);pose(80,2.8)
+    assert m.mode=='T265_WITH_WHEEL_TAIL' and abs(m.bias[0]+2)<1e-10
+    assert abs(m.history[-1][1]-before-.01)<1e-10  # Recovery rebase, not a 2m snap.
+    pose(81,2.81,0);step(81)
+    assert m.mode=='WHEEL_FALLBACK'
+    for i in range(82,90):step(i)  # No Pose, but genuine wheel intervals keep moving.
+    assert abs(m.history[-1][1]-.89)<1e-10
+    assert np.allclose(sample(m.history,10**15)[:2],[.89,0.])  # No unbounded last-pose slope.
+    # Source switches never mix target velocity into wheel propagation.
+    count=len(m.wheels);m.wheel(dict(source='command_target'),yaws);assert len(m.wheels)==count
+    assert any(e['motion_source']=='WHEEL_FALLBACK' for e in m.events)
+    # Nonzero yaw/field reference: B-left remains left, no second camera transform.
+    other=MotionSource();other.configure(dict(pose_origin=[0.,0.],vio_rotation=.3,yaw_offset=2.1,reference_sample_ns=origin))
+    other.pose(dict(timestamp_monotonic_ns=origin,x_m=0.,y_m=0.,tracker_confidence=3))
+    for t in (origin,origin+20_000_000):other.yaw(t,.7,{'raw':{'yaw_receive_us':t//1000}})
+    other.wheel(dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='boot',sample_id=1,
+        raw_mcu_sample=dict(t0_us=origin//1000,t1_us=(origin+20_000_000)//1000),v_body_mps=[0.,1.,0.],
+        interval_start_ns=origin,interval_end_ns=origin+20_000_000,receive_monotonic_ns=origin+20_000_000),deque([(origin,.7)]))
+    assert np.allclose(other.history[-1][1:3],.02*np.array([-np.sin(2.5),np.cos(2.5)]))
+    other.configure(dict(pose_origin=[0.,0.],vio_rotation=.3,yaw_offset=2.1,reference_sample_ns=origin))
+    other.pose(dict(timestamp_monotonic_ns=origin+20_000_000,x_m=2.,y_m=0.,tracker_confidence=3))
+    assert other.mode=='WHEEL_FALLBACK'  # First post-reference Pose cannot silently move the origin.
+
+
 def test_synthetic_wheel_fixture():
     from unittest.mock import patch
     import uuid
@@ -1331,6 +1381,9 @@ def test_timed_v13_feedback():
         g=dict(gyro,yaw_flags=0x347,receive_monotonic_ns=now)
         for _ in range(2):app.chassis_inbox.put(dict(kind='timed_gyro_diagnostic',sample=g))
         app.drain_yaw();assert app.imu_packets==1 and len(sent)==1 and app.timed_yaw_seen
+        app.chassis_inbox.put(dict(kind='timed_wheel_diagnostic',sample=dict(wheel,flags=0x85,receive_monotonic_ns=now)))
+        app.drain_yaw();assert sent[-1][0]=='wheel'
+        assert sent[-1][1]['source']=='measured_wheel_feedback' and sent[-1][1]['measurement_valid']
 
         sid=uuid.uuid4().hex;sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
         sink.bind('\0t265-wheel-'+sid);sink.settimeout(.3)

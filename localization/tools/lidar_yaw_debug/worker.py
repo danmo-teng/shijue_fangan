@@ -33,7 +33,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
     display.cancel_join_thread()  # Raw records/final summary use the logger.
     engine=DynamicFence(config['installation']);log=AsyncDebugLog(root)
     lidar=None;reader=None;reader_totals={};pending=deque();times=deque(maxlen=2048)
-    counters=dict(pose_ingested=0,primary_yaw_ingested=0,scans_received=0,
+    counters=dict(pose_ingested=0,primary_yaw_ingested=0,measured_wheel_ingested=0,scans_received=0,
         scan_queue_drops=0,display_updates_coalesced=0)
     error=None;last_publish=0.;last_percentile=0.;p95=None;reference_request_id=None
 
@@ -52,6 +52,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             elif kind=='yaw':
                 engine.ingest_yaw(payload['time_ns'],payload['yaw_deg'],payload['source'])
                 counters['primary_yaw_ingested']+=1
+            elif kind=='wheel':
+                engine.ingest_wheel(payload);counters['measured_wheel_ingested']+=1
             elif kind=='invalidate':
                 engine.invalidate_reference(payload['reason']);event('reference_invalidated',**payload)
             elif kind=='align':
@@ -64,6 +66,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             elif kind=='lidar_enabled':
                 engine.set_lidar_enabled(payload['enabled'])
                 event('operator_lidar_availability',enabled=payload['enabled'],reason=payload['reason'])
+        while engine.motion.events:
+            change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
 
     def state():
         stats=dict(reader_totals)
