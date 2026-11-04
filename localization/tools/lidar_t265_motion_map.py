@@ -215,16 +215,23 @@ class DynamicMapApp(base.MotionMapApp):
             number('WAIT: auto wall initialization',88)
             number('Match '+str((s.get('initialization') or {}).get('confirmations',0))+'/3',120)
         number('Wall: '+('OFF / obstacle' if not s.get('lidar_corrections_enabled',True) else
-            '/'.join(s.get('current_wall_axes',[])) or ('VIO' if s.get('ready') else 'UNLOCALIZED')),153)
+            '/'.join(s.get('current_wall_axes',[])) or ('NONE' if s.get('ready') else 'UNLOCALIZED')),153)
         number(f'Scan {self.radar.state.get("scans_received",0)} / Fit {self.radar.state.get("fits",0)}',183)
         number(f'Pose {self.pose_packets} / Yaw {self.imu_packets}',213)
         mode=s.get('motion_selection',{}).get('mode','T265_NO_WHEEL_REFERENCE')
-        if getattr(self,'source_label_key',None)!=mode:
-            label={'WHEEL_FALLBACK':'降级：轮速＋主yaw',
+        axes=tuple(s.get('current_wall_axes',[])) if s.get('lidar_corrections_enabled',True) else ()
+        confirming=(s.get('last_fit') or {}).get('reacquisition_status')=='CONFIRMING_ENCLOSURE'
+        source_key=(mode,axes,confirming)
+        if getattr(self,'source_label_key',None)!=source_key:
+            label={'WHEEL_FALLBACK':'轮速传播／等待雷达约束',
                    'T265_WITH_WHEEL_TAIL':'T265定位／轮反馈续推'}.get(mode,'T265定位／暂无轮反馈参考')
+            if mode=='WHEEL_FALLBACK' and axes:
+                label='轮速传播／雷达'+''.join(axes).upper()+'修正'
+            if confirming:
+                label=('轮速传播' if mode=='WHEEL_FALLBACK' else 'T265传播')+'／正在重获围栏位置'
             patch=np.full((24,340,3),(26,27,30),np.uint8)
             text=base.TextPainter(font_scale=1./self.render_scale)
-            text.add(label,(0,0),13,(130,210,240));self.source_label=text.paint(patch);self.source_label_key=mode
+            text.add(label,(0,0),13,(130,210,240));self.source_label=text.paint(patch);self.source_label_key=source_key
         canvas[215:239,920:1260]=self.source_label
         wheel=getattr(self,'input_snapshot',{});count=wheel.get('sdk_api_success_samples',0)
         stage='OFF' if self.options.wheel_input=='off' else ('API_OK' if count else 'CFG_OK' if wheel.get('config_loaded') else 'WAIT_CFG')

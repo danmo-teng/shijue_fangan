@@ -43,7 +43,7 @@ def load_config(path):
 
 
 def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
-                       max_correction_m=.10, max_residual_m=.035):
+                       max_correction_m=.10, max_residual_m=.035, _lines=None):
     """Nearby, operator-resolved square branch only. Unobserved XY stays a prior.
 
     Extract/envelope/associate as in the reviewed patch. Solve ONLY XY, never
@@ -51,7 +51,7 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
     """
     points = transform(np.asarray(points_lidar).reshape(-1,2), extrinsic)
     prior = np.array([prior_center_xy[0]+1.5, prior_center_xy[1]+1.5, yaw_rad],float)
-    lines = outer_supported_lines(extract_lines(points))
+    lines = outer_supported_lines(extract_lines(points)) if _lines is None else _lines
     normals = np.array([[1.,0.],[1.,0.],[0.,1.],[0.,1.]])
     distances = np.array([0.,3.,0.,3.])
     assigned = []
@@ -84,10 +84,14 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
     residual = np.sum(transform(support,pose)*ns,axis=1)-distances[ids]
     rms = float(np.sqrt(np.mean(residual**2)))
     result.update(residual_rms_m=rms,wall_ids=sorted(set(ids.tolist())),
-                  correction_m=float(np.linalg.norm(pose[:2]-prior[:2])))
-    if (rms>max_residual_m or result["correction_m"]>max_correction_m or
-            np.any(pose[:2]<0) or np.any(pose[:2]>3)):
-        return dict(result,reason="RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE")
+                  correction_m=float(np.linalg.norm(pose[:2]-prior[:2])),
+                  unconstrained_center_xy_m=(pose[:2]-1.5).tolist())
+    rejection=[]
+    if rms>max_residual_m:rejection.append('wall_residual')
+    if result['correction_m']>max_correction_m:rejection.append('local_correction_distance')
+    if np.any(pose[:2]<0) or np.any(pose[:2]>3):rejection.append('outside_arena')
+    if rejection:
+        return dict(result,reason="RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE",rejection_causes=rejection)
     for line in lines:
         wp = transform(line["points"],pose)
         outside = np.any((wp<-.06)|(wp>3.06),axis=1)
@@ -99,6 +103,39 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
         candidate_center_xy_m=(pose[:2]-1.5).tolist(),
         reason="STATIC_GEOMETRY_DIAGNOSTIC_ONLY")
     return result
+
+
+def reacquire_fixed_yaw_position(points_body, yaw_rad, *, _lines=None):
+    """Recover XY from an enclosing square, independent of the motion XY prior.
+
+    Keep the established field yaw/90-degree branch. With the body centre
+    inside the arena, a wall's signed distance identifies its opposite side.
+    Require both axes; a lone wall cannot establish a new full-position fix.
+    The caller confirms the solution across scans before changing its offset.
+    """
+    lines=outer_supported_lines(extract_lines(points_body)) if _lines is None else _lines
+    values=[[],[]]
+    for line in lines:
+        normal=transform([line['normal']],[0,0,yaw_rad])[0]
+        axis=int(abs(normal[1])>abs(normal[0]))
+        if abs(normal[axis])<=math.cos(math.radians(12)):continue
+        q=transform(line['points'],[0,0,yaw_rad])
+        distance=float(np.median(q[:,axis]))
+        center=(-1.5 if distance<0 else 1.5)-distance
+        if -1.5<center<1.5:values[axis].append(center)
+    empty=dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
+        inherited_axes=['x','y'],covariance=None,qualified_pose=False,
+        supported_lines=len(lines),wall_ids=[],yaw_rad=yaw_rad)
+    if not all(values):return dict(empty,reason='REACQUIRE_REQUIRES_TWO_AXES')
+    seed=[float(np.median(v)) for v in values]
+    # Same residual, line support and enclosure checks as local tracking.
+    # This bound concerns distance from an obsolete XY prior, not fit quality.
+    fit=fixed_yaw_position(points_body,seed,yaw_rad,[0.,0.,0.],
+        max_correction_m=float('inf'),_lines=lines)
+    if fit['rank_xy']!=2:
+        return dict(empty,reason='REACQUIRE_GEOMETRY_UNRESOLVED',geometry_reason=fit['reason'])
+    return dict(fit,reason='FIXED_YAW_ENCLOSURE_CANDIDATE',
+        position_prior_used=False,yaw_reference_changed=False)
 
 
 class FieldYaw:

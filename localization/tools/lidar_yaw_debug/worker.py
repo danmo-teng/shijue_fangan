@@ -131,6 +131,10 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                     try:
                         result=engine.observe(scan);times.append(result['compute_ms'])
                         log.submit('dynamic_localization.jsonl',result)
+                        if result.get('position_reacquired'):
+                            event('lidar_position_reacquired',scan_id=scan.scan_id,
+                                reference_ns=scan.reference_ns,center_xy_m=result['candidate_center_xy_m'],
+                                correction_m=result['correction_m'],motion_source=result['motion_source'])
                     except ValueError as exc:event('scan_not_fitted',scan_id=scan.scan_id,reason=str(exc))
             if time.monotonic()-last_publish>=.05:
                 if times and time.monotonic()-last_percentile>=1.:

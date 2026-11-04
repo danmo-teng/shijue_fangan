@@ -846,7 +846,7 @@ def test_global_wall_initialization():
     import math
     import numpy as np
     from lidar_yaw_debug.dynamic import DynamicFence,rotation
-    from lidar_yaw_debug.diagnostic import load_config
+    from lidar_yaw_debug.diagnostic import load_config, fixed_yaw_position, reacquire_fixed_yaw_position
     from lidar_yaw_debug.types import RawScan,TimedPoint
     mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
     ext=np.array([*mount['extrinsic'][:2],math.radians(mount['extrinsic'][2])])
@@ -892,6 +892,50 @@ def test_global_wall_initialization():
             assert paused['rank_xy']==0 and np.array_equal(e.offset,before)
             assert e.snapshot()['ready'] and not e.snapshot()['lidar_corrections_enabled']
             e.set_lidar_enabled(True);assert e.observe(scan)['rank_xy']==2
+            # A displacement missing from wheel feedback can leave a remote XY
+            # prior. Wall reacquisition keeps field yaw and does not need it.
+            body=np.array([p.point_lidar_m for p in cloud(xy,theta,4).points])@rotation(ext[2]).T+ext[:2]
+            local=fixed_yaw_position(body,np.array(xy)+[.35,.4],theta,[0,0,0])
+            assert local['rank_xy']==0
+            recovered=reacquire_fixed_yaw_position(body,theta)
+            assert recovered['rank_xy']==2 and not recovered['yaw_reference_changed']
+            assert np.linalg.norm(np.array(recovered['candidate_center_xy_m'])-xy)<.001
+            # Geometrically incompatible orientation is not repaired by rotating
+            # the fixed yaw; a single wall cannot fabricate the other axis.
+            assert reacquire_fixed_yaw_position(body,theta+math.radians(25))['rank_xy']==0
+            single=np.array([p.point_lidar_m for p in cloud(xy,theta,5,one_wall=True).points])@rotation(ext[2]).T+ext[:2]
+            assert reacquire_fixed_yaw_position(single,theta)['rank_xy']==0
+            # Exercise the runtime caller with an unmeasured physical push:
+            # no new wheel/Pose translation, unchanged gyro reference.
+            reference=dict(e.reference);shifted=np.array(xy)+[.35,.4]
+            first=cloud(shifted,theta,6);waiting=e.observe(first)
+            assert waiting['reacquisition_status']=='CONFIRMING_ENCLOSURE'
+            assert not waiting['position_reacquired']
+            duplicate=e.observe(first)
+            assert duplicate['duplicate_scan'] and e.reacquisition_count==0
+            recovered=e.observe(cloud(shifted,theta,7))
+            assert recovered['position_reacquired'] and e.reacquisition_count==1
+            assert e.reference==reference  # No yaw/90-degree branch reset.
+            target=rotation(-quadrant*math.pi/2)@shifted
+            # Startup itself estimates yaw to <0.1deg, so this end-to-end bound
+            # includes its millimetre-scale geometric error at the new position.
+            assert np.linalg.norm(np.array(e.snapshot()['center_xy_m'])-target)<.005
+            assert np.linalg.norm(np.array(e.snapshot()['t265_center_xy_m'])-expected)<.001
+            # Motion is removed before comparing candidate offsets. Two scan
+            # centres may move >5cm while their map offset remains consistent.
+            e.offset[:]=0;e.pending_reacquisition=None
+            ref=np.array([0.,0.,theta]);offset=np.array(xy)+[.35,.4]
+            first=e._fit_position(body,ref,offset,'moving-a')
+            assert first['reacquisition_status']=='CONFIRMING_ENCLOSURE'
+            moved=np.array([.12,0.]);body2=body-moved@rotation(theta)
+            second=e._fit_position(body2,np.r_[moved,theta],offset,'moving-b')
+            assert second['position_reacquired']
+            e._fit_position(body,ref,offset,'conflict-a')
+            conflict=e._fit_position(body2,ref,offset,'conflict-b')
+            assert not conflict['position_reacquired']  # Incompatible offsets.
+            e.set_lidar_enabled(False);assert e.pending_reacquisition is None
+            e.set_lidar_enabled(True)
+            assert not e._fit_position(body2,ref,offset,'after-obstacle')['position_reacquired']
     e.request_initialization('single wall must not locate XY',physical_confirmed=False)
     for i in range(3):e.try_initialize(cloud((.4,-.3),theta,i,one_wall=True))
     assert e.reference is None

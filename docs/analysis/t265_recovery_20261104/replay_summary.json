@@ -1,0 +1,80 @@
+{
+  "implementation": "DynamicFence._fit_position; same measured propagation held for before/after comparison",
+  "baseline_wall_ms_percentiles": [
+    17.83884450014739,
+    30.16153315024894,
+    42.08988600021257
+  ],
+  "frames": 4552,
+  "recorded_rank": {
+    "2": 4086,
+    "0": 196,
+    "1": 270
+  },
+  "baseline_rank": {
+    "2": 4079,
+    "0": 203,
+    "1": 270
+  },
+  "tags": {
+    "local": 4550,
+    "confirming": 1,
+    "reacquired": 1
+  },
+  "recorded_reject_causes": {
+    "['wall_residual']": 80,
+    "['wall_residual', 'local_correction_distance']": 7,
+    "['local_correction_distance']": 109
+  },
+  "reacquisitions": [
+    {
+      "reference_ns": 487425664667,
+      "old_rank": 0,
+      "baseline_rank": 0,
+      "baseline_candidate": null,
+      "new_rank": 2,
+      "tag": "reacquired",
+      "old_xy": [
+        -0.8276557512512661,
+        0.25898438571772564
+      ],
+      "new_xy": [
+        -0.8321570440113445,
+        0.3816179899957741
+      ],
+      "old_reason": "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE",
+      "new_reason": "FIXED_YAW_ENCLOSURE_REACQUIRED",
+      "rejection": [
+        "local_correction_distance"
+      ],
+      "global_candidate": [
+        -0.8321570440113445,
+        0.3816179899957741
+      ],
+      "compute_ms": 34.634508999261016,
+      "baseline_ms": 27.786674000708445,
+      "source": "WHEEL_FALLBACK"
+    }
+  ],
+  "replay_wall_ms_percentiles": [
+    17.838735000168526,
+    31.117143950268655,
+    53.857556999901135
+  ],
+  "same_two_axis_output_delta_m_percentiles": [
+    0.0,
+    0.0007145278097764913,
+    0.02611870707382171
+  ],
+  "comparison_notes": [
+    "Offline reconstructed deskew/receive order differs from exact IPC ingestion; old recorded zero-rank=196, recomputed=203.",
+    "Same motion propagation held for both fits; not a replay of all feedback interactions.",
+    "No independent ground truth; wall RMS and accepted axes do not certify absolute accuracy.",
+    "Final policy reacquires only when local rank is zero; preserves surviving single-axis constraints."
+  ],
+  "implemented_rank": {
+    "2": 4185,
+    "0": 96,
+    "1": 271
+  }
+}

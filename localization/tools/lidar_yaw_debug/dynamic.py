@@ -12,9 +12,14 @@ import math
 import threading
 import time
 import numpy as np
-from .diagnostic import fixed_yaw_position
+from .diagnostic import fixed_yaw_position, reacquire_fixed_yaw_position
+from .static import extract_lines, outer_supported_lines
 from .global_init import initialize, initial_heading_branch
 from .motion_source import MotionSource, sample
+
+# Agreement of independently fitted scan offsets after measured motion has
+# been removed. Engineering starting value, not a calibrated position error.
+REACQUISITION_OFFSET_AGREEMENT_M = .05
 
 
 def rotation(angle):
@@ -52,6 +57,7 @@ class DynamicFence:
         self.initialization=None;self.pending_initial_pose=None
         self.last_initial_scan_id=None
         self.lidar_corrections_enabled=True
+        self.pending_reacquisition=None;self.reacquisition_count=0
         self.motion=MotionSource()
 
     def ingest_pose(self,p):
@@ -60,6 +66,7 @@ class DynamicFence:
         with self.lock:
             if self.last_sample and p['session_id']!=self.last_sample['session_id']:
                 self.reference=None;self.revision+=1;self.poses.clear();self.motion=MotionSource()
+                self.pending_reacquisition=None
             if self.last_sample and p['session_id']==self.last_sample['session_id'] and p['frame_number']<=self.last_sample['frame_number']:return
             t=int(p['timestamp_monotonic_ns'])
             if self.poses and t<=self.poses[-1][0]:t=int(p['receive_monotonic_ns'])
@@ -85,6 +92,7 @@ class DynamicFence:
             self.motion=MotionSource()
             self.has_anchor=False
             self.initialization=None;self.pending_initial_pose=None
+            self.pending_reacquisition=None
             return dict(event='reference_invalidated',reason=reason)
 
     def request_initialization(self,description,*,physical_confirmed=True):
@@ -93,6 +101,7 @@ class DynamicFence:
             self.reference=None;self.revision+=1;self.offset[:]=0;self.has_anchor=False
             self.motion.reference=None;self.motion.history.clear()
             self.last_fit=None;self.latest_points=[];self.pending_initial_pose=None
+            self.pending_reacquisition=None
             self.last_initial_scan_id=None
             self.initialization=dict(status='SEARCHING_WALLS',description=description,
                 physical_stationary_confirmed=physical_confirmed,initial_primary_yaw_rad=self.yaws[-1][1],
@@ -105,6 +114,7 @@ class DynamicFence:
             self.lidar_corrections_enabled=bool(enabled);self.last_fit=None;self.latest_points=[]
             self.motion.wall_fixes=0
             self.pending_initial_pose=None
+            self.pending_reacquisition=None
             if self.initialization:self.initialization['confirmations']=0
 
     def accepted_points(self,scan):
@@ -175,6 +185,7 @@ class DynamicFence:
                 field_heading_deg=135.,description=description,physical_placement_confirmed=physical_confirmed,
                 timestamp_monotonic_ns=time.monotonic_ns())
             self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.has_anchor=False;self.revision+=1
+            self.pending_reacquisition=None
             self.reference['reference_sample_ns']=p[0]
             self.motion.configure(self.reference)
             return dict(self.reference)
@@ -205,18 +216,57 @@ class DynamicFence:
             return np.column_stack([xy,y])
         return query
 
+    def _fit_position(self,points,ref,offset,scan_id):
+        """Local tracking, or two-scan enclosure reacquisition at fixed yaw.
+
+        Share line extraction. A bad wheel/T265 XY prior cannot veto a new
+        two-axis wall solution after local XY tracking is lost. Preserve a
+        surviving single-axis track: a distant parallel interior surface must
+        not be promoted to the missing arena wall just to complete XY.
+        Compare correction offsets, not absolute positions of a moving car.
+        """
+        lines=outer_supported_lines(extract_lines(points))
+        prior=ref[:2]+offset
+        local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines)
+        local.update(position_reacquired=False,reacquisition_status='LOCAL_TRACKING')
+        if local['rank_xy']>0:
+            self.pending_reacquisition=None
+            return local
+        found=reacquire_fixed_yaw_position(points,ref[2],_lines=lines)
+        if found['rank_xy']!=2:
+            self.pending_reacquisition=None
+            return dict(local,reacquisition_status=found['reason'])
+        candidate=np.asarray(found['candidate_center_xy_m'])
+        proposed=candidate-ref[:2]
+        previous=self.pending_reacquisition
+        agrees=(previous is not None and previous['scan_id']!=scan_id and
+                np.linalg.norm(proposed-previous['offset'])<=REACQUISITION_OFFSET_AGREEMENT_M)
+        if not agrees:
+            self.pending_reacquisition=dict(scan_id=scan_id,offset=proposed)
+            return dict(local,reacquisition_status='CONFIRMING_ENCLOSURE',
+                reacquisition_candidate_xy_m=candidate.tolist())
+        self.pending_reacquisition=None;self.reacquisition_count+=1
+        return dict(found,reason='FIXED_YAW_ENCLOSURE_REACQUIRED',position_reacquired=True,
+            reacquisition_status='REACQUIRED',reacquisition_confirmations=2,
+            correction_m=float(np.linalg.norm(candidate-prior)),
+            local_reason=local['reason'],local_observed_axes=local['position_observed_axes'])
+
     def observe(self,scan):
+        if self.last_fit and self.last_fit['scan_id']==scan.scan_id:
+            return dict(self.last_fit,duplicate_scan=True,position_reacquired=False)
         began=time.monotonic_ns();cpu_began=time.thread_time_ns();self.scan_count+=1
         poses,yaws,reference,offset,revision=self._frozen(scan.first_point_ns,scan.reference_ns)
         copied=time.monotonic_ns()
         query=self.trajectory(poses,yaws,reference);m=self.mount
         accepted=self.accepted_points(scan)
-        if len(accepted)<8:raise ValueError("可用雷达点不足")
+        if len(accepted)<8:
+            self.pending_reacquisition=None
+            raise ValueError("可用雷达点不足")
         points=np.array([p.point_lidar_m for p in accepted]);times=np.array([p.time_ns for p in accepted],np.int64)
         ext=np.array([*m['extrinsic'][:2],math.radians(m['extrinsic'][2])])
         corrected,ref=deskew_points(points,times,scan.reference_ns,query,ext)
         deskew_done=time.monotonic_ns()
-        fit=(fixed_yaw_position(corrected,ref[:2]+offset,ref[2],[0.,0.,0.]) if self.lidar_corrections_enabled
+        fit=(self._fit_position(corrected,ref,offset,scan.scan_id) if self.lidar_corrections_enabled
             else dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
                 inherited_axes=['x','y'],covariance=None,qualified_pose=False,
                 reason='OPERATOR_OBSTACLE_NO_LIDAR_CORRECTION'))
@@ -270,6 +320,7 @@ class DynamicFence:
             source=('LIDAR_ANCHORED_'+source) if self.has_anchor else source,
             motion_selection=self.motion.snapshot(),motion_boundary_policy='hold_outside_measured_support',
             raw_t265_sample_ns=raw_stamp,
+            position_reacquisitions=self.reacquisition_count,
             current_wall_axes=fit.get('position_observed_axes',[]) if fit else [],last_fit=fit,
             lidar_corrections_enabled=self.lidar_corrections_enabled,
             points_field=points,scans=self.scan_count,fixes=self.fit_count,reference=reference,
