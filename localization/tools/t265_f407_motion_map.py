@@ -11,7 +11,6 @@ import argparse
 import copy
 import json
 import math
-import os
 import re
 import signal
 import subprocess
@@ -49,6 +48,7 @@ from f407_motion_protocol import (  # noqa: E402
 )
 from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
+from motion_log_storage import StoragePanel, list_sessions, delete_sessions, DYNAMIC_SESSION_FILES
 from t265_wheel_input import WheelInputBridge, SyntheticWheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
 
 
@@ -107,78 +107,17 @@ SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_r
     "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json",
     "chassis_link.jsonl", "chassis_extended.jsonl", "chassis_identity.json",
     "wheel_measurements.jsonl","logging_events.jsonl","fisheye_request.json","fisheye_frames.csv","wheel_fixture.jsonl",
-    "t265_usb_recovery.json"})
+    "t265_usb_recovery.json"}) | DYNAMIC_SESSION_FILES
 
 
 def prune_completed_sessions(root: Path, current: Path, keep: int = 5) -> list[str]:
-    """Only delete known files of explicitly completed sessions owned here.
-
-    Legacy sessions need a terminal session_stopped event as completion proof.
-    Active, unproven, symlinked, and user-extended directories are kept.
-    Called after saving the current completed session, never on startup.
-    """
-    current_marker = read_json(current / "session_complete.json")
-    if (not current_marker or current_marker.get("owner") != "t265_f407_motion_map" or
-            current_marker.get("complete") is not True):
+    """Retain current plus the newest completed owned sessions; same UI boundary."""
+    marker = read_json(current / "session_complete.json") or {}
+    if marker.get("owner") != "t265_f407_motion_map" or marker.get("complete") is not True:
         return []
-    protection=read_json(root/"protected_sessions.json") or {}
-    protected=set(protection.get("sessions",[])) if protection.get("owner")=="t265_f407_motion_map" else set()
-    def owned_children(path, metadata):
-        image_names=set()
-        manifest=path/"fisheye_frames.csv"
-        if metadata.get("fisheye_evidence_enabled") and manifest.is_file() and not manifest.is_symlink():
-            import csv
-            try:
-                with manifest.open() as f:
-                    for i,row in enumerate(csv.DictReader(f)):
-                        if i>=32 or row.get("session_id")!=metadata.get("sdk_session_id"):return False
-                        name=row.get("filename","")
-                        if not re.fullmatch(r"fisheye_b[12]_s[12]_f\d+\.pgm",name):return False
-                        image_names.add(name)
-            except (OSError,ValueError):return False
-        return all(not p.is_symlink() and p.is_file() and (p.name in SESSION_FILES or p.name in image_names) for p in path.iterdir())
-    completed = []
-    for path in root.iterdir():
-        if (path.name in protected or path.is_symlink() or not path.is_dir() or
-                not re.fullmatch(r"\d{8}_\d{6}_interactive(?:_\d+)?", path.name)):
-            continue
-        marker = read_json(path / "session_complete.json")
-        metadata = read_json(path / "metadata.json")
-        if (not metadata or
-                metadata.get("mode") not in {"interactive_f407_motion_debug", "interactive_f405_normaldebug"}):
-            continue
-        if marker:
-            if marker.get("owner") != "t265_f407_motion_map" or marker.get("complete") is not True:
-                continue
-            index = marker.get("session_index")
-            if not isinstance(index, int):
-                continue
-            order = (1, index)
-        else:
-            try:
-                with (path / "events.jsonl").open("rb") as stream:
-                    stream.seek(max(0, os.fstat(stream.fileno()).st_size - 65536))
-                    last = json.loads(stream.read().splitlines()[-1])
-                if last.get("event") != "session_stopped":
-                    continue
-                order = (0, (path / "events.jsonl").stat().st_mtime_ns)
-            except (OSError, ValueError, IndexError, AttributeError):
-                continue
-        if not owned_children(path,metadata):
-            continue
-        completed.append((order, path))
-    # Include current in the five, even if the system wall clock moved backwards.
-    others = sorted(((order, p) for order, p in completed if p.resolve() != current.resolve()),
-                    key=lambda item: (item[0], item[1].name), reverse=True)
-    removed = []
-    for _, path in others[max(0, keep - 1):]:
-        # Recheck immediately before deleting, and never recursively remove.
-        if not owned_children(path,read_json(path/"metadata.json") or {}):
-            continue
-        for child in path.iterdir():
-            child.unlink()
-        path.rmdir()
-        removed.append(path.name)
+    rows = [r for r in list_sessions(root, current, SESSION_FILES) if not r["reason"]]
+    rows.sort(key=lambda r: (r["order"], r["name"]), reverse=True)
+    removed, _ = delete_sessions(root, rows[max(0, keep-1):], current, SESSION_FILES)
     return removed
 
 
@@ -236,6 +175,7 @@ class MotionMapApp:
         self.hitboxes: dict[str, tuple[int, int, int, int]] = {}
         self.message = "启动后仅监听，点击实验按钮发送运动指令"
         self.run_dir: Path | None = None
+        self.storage_panel = StoragePanel(options.output_root, SESSION_FILES)
         self.localization_json: Path | None = None
         self.motion_status_path: Path | None = None
         self.bridge: F407SerialBridge | None = None
@@ -401,11 +341,11 @@ class MotionMapApp:
         text.add(f"{labels.get(wheel_state.get('state'),'轮速状态待取')} / 成功{wheel_state.get('sdk_api_success_samples',0)}", (x0, 43), 12,
                  (100, 190, 230))
         age=wheel_state.get("sdk_success_age_ms")
-        text.add(f"SDK API实际接受 {wheel_state.get('sdk_api_rate_hz',0)} Hz(近1s) / 最近成功距今 {age:.1f}ms" if age is not None else "SDK API实际接受 0Hz / 尚无成功样本",(30,932),15,(220,220,220))
+        text.add(f"SDK API实际接受 {wheel_state.get('sdk_api_rate_hz',0)} Hz(近1s) / 最近成功距今 {age:.1f}ms" if age is not None else "SDK API实际接受 0Hz / 尚无成功样本",(30,918),15,(220,220,220))
         sample_age=wheel_state.get("last_sample_age_ms")
         stream=wheel_state.get("stream") or {}
         stream_label="07/08已订阅" if stream.get("status")==0 and stream.get("enabled")==1 else "07/08未订阅或无回执"
-        text.add((f"输入事件年龄(仅诊断)：{sample_age:.1f}ms" if sample_age is not None else "输入主机采样时间未知；按源区间采用")+" / "+stream_label,(30,955),13,(220,220,220))
+        text.add((f"输入事件年龄(仅诊断)：{sample_age:.1f}ms" if sample_age is not None else "输入主机采样时间未知；按源区间采用")+" / "+stream_label,(30,938),13,(220,220,220))
         reason_labels={"unqualified_capture_time_or_epoch":"采样时标/epoch未合格",
             "mcu_clock_drift_bound_unknown":"MCU漂移界未知",
             "wheel_capture_time_bound_unknown_including_rear_EXTI":"轮反馈采集延迟界未知",
@@ -414,8 +354,8 @@ class MotionMapApp:
             "waiting_for_bracketing_gyro":"等待该轮区间的gyro样本"}
         reason=wheel_state.get("last_input_rejection")
         missing=wheel_state.get("qualification_missing") or wheel_state.get("clock",{}).get("missing",[])
-        text.add("输入状态/时间诊断："+reason_labels.get(reason,str(reason))+" / "+','.join(reason_labels.get(r,r) for r in missing),(30,978),12,(100,190,230),max_width=840)
-        text.add("轮反馈诊断参考不是独立真值；实际API成功也不等于实车精度通过",(30,1000),12,(175,175,180))
+        text.add("输入状态/时间诊断："+reason_labels.get(reason,str(reason))+" / "+','.join(reason_labels.get(r,r) for r in missing),(30,956),12,(100,190,230),max_width=840)
+        text.add("轮反馈诊断参考不是独立真值；实际API成功也不等于实车精度通过",(30,972),12,(175,175,180))
         running = self.localizer is not None and self.localizer.poll() is None
         service_text = "身份已确认" if self.motion_identity_confirmed() else "仅监听"
         text.add(("定位运行" if running else "定位未运行") + " / " + service_text, (x0, 68), 16,
@@ -546,7 +486,16 @@ class MotionMapApp:
         return text.paint(canvas)
 
     def render_screen(self) -> np.ndarray:
-        logical = self.render_logical()
+        if getattr(self.options, "logs_only", False):
+            logical = np.zeros((LOGICAL_HEIGHT, LOGICAL_WIDTH, 3), dtype=np.uint8)
+            self.hitboxes.clear()
+            text = TextPainter(font_scale=1. / self.render_scale)
+            text.add("测试日志管理（未启动传感器或底盘）", (30,20), 20)
+            text.add("ESC / Q 或关闭窗口退出", (920,80), 16, max_width=340)
+            logical = text.paint(logical)
+        else:
+            logical = self.render_logical()
+        self.storage_panel.render(logical, self, TextPainter)
         resized = cv2.resize(logical, (self.content_width, self.content_height),
                              interpolation=cv2.INTER_AREA if self.render_scale < 1.0 else cv2.INTER_LINEAR)
         screen = np.zeros((self.screen_height, self.screen_width, 3), dtype=np.uint8)
@@ -913,6 +862,8 @@ class MotionMapApp:
         self.active_command_sequence = None
 
     def select_at(self, x: int, y: int) -> None:
+        if getattr(self, "storage_panel", None) and self.storage_panel.click(x, y, self):
+            return
         for name, (x0, y0, x1, y1) in self.hitboxes.items():
             if not (x0 <= x <= x1 and y0 <= y <= y1):
                 continue
@@ -950,7 +901,10 @@ class MotionMapApp:
         if event == cv2.EVENT_LBUTTONUP:
             logical_x = int(round((x - self.content_offset_x) / self.render_scale))
             logical_y = int(round((y - self.content_offset_y) / self.render_scale))
-            self.select_at(logical_x, logical_y)
+            if getattr(self.options, "logs_only", False):
+                self.storage_panel.click(logical_x, logical_y, self)
+            else:
+                self.select_at(logical_x, logical_y)
 
     def extra_localizer_args(self):
         return []
@@ -1198,6 +1152,8 @@ class MotionMapApp:
             logs_ok=(logs_ok and self.wheel_input.log.healthy()
                      and wheel_summary.get("sdk_logging_healthy") is not False)
             self.wheel_input = None
+        if getattr(self, "storage_panel", None):
+            self.storage_panel.close()  # Finish manual deletion before automatic retention.
         if self.run_dir is not None:
             csv_path = self.run_dir / "localization_debug.csv"
             if csv_path.exists():
@@ -1245,6 +1201,10 @@ class MotionMapApp:
                     self.record_event("session_retention_failed", {"error": str(error)})
 
     def handle_key(self, key: int) -> bool:
+        if getattr(self.options, "logs_only", False):
+            return key & 255 not in (27, ord("q"), ord("Q"))
+        if getattr(self, "storage_panel", None) and self.storage_panel.key(key, self):
+            return True
         key &= 0xFF
         if self.measurement_buffer is not None:
             if key == 27:
@@ -1348,7 +1308,10 @@ class MotionMapApp:
 
     def run(self) -> int:
         try:
-            self.start_session()
+            if self.options.logs_only:
+                self.storage_panel.open = self.storage_panel.scan_requested = True
+            else:
+                self.start_session()
             if getattr(self.options,"sensor_check_seconds",0):
                 synthetic=getattr(self.options,"wheel_fixture","off")!="off"
                 deadline=time.monotonic()+self.options.sensor_check_seconds
@@ -1379,7 +1342,8 @@ class MotionMapApp:
             if self.options.fullscreen:
                 cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             while True:
-                self.update_data()
+                if not self.options.logs_only:
+                    self.update_data()
                 cv2.imshow(WINDOW_NAME, self.render_screen())
                 if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                     break
@@ -1425,9 +1389,12 @@ def arguments() -> argparse.Namespace:
                         help="本轮测试配置；复制到独立日志目录，保留安装轴和偏置")
     parser.add_argument("--zone", type=int, choices=range(1, 5), default=4)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_RUN_ROOT)
+    parser.add_argument("--logs-only", action="store_true", help="只管理已有日志，不启动USB/SDK/UART，不生成测试会话")
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.logs_only and (options.check_chassis or options.sensor_check_seconds or options.wheel_fixture != "off"):
+        parser.error("--logs-only不能与传感器/底盘/人工注入检查组合")
     if options.check_chassis and options.t265_usb_recovery:
         parser.error("USB恢复属于T265启动路径，不能与仅底盘--check-chassis组合")
     if options.wheel_fixture!="off":

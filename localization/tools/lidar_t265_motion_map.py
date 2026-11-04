@@ -22,12 +22,6 @@ from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.worker import RadarWorker
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 
-DYNAMIC_FILES={'dynamic_events.jsonl','dynamic_scans.jsonl','dynamic_localization.jsonl',
-    'dynamic_status.json','dynamic_summary.json','pose_motion.jsonl','lidar_rx.jsonl','lidar_tx.jsonl',
-    'lidar_worker_events.jsonl','lidar_worker_summary.json','dynamic_initialization.jsonl'}
-base.SESSION_FILES=base.SESSION_FILES|DYNAMIC_FILES
-
-
 class DynamicMapApp(base.MotionMapApp):
     def __init__(self,options):
         cv2.setNumThreads(1)  # UI resize must not compete with sensor workers.
@@ -272,6 +266,7 @@ class DynamicMapApp(base.MotionMapApp):
         text.add('SDK轮速输入 / 成功数 / 底盘状态',(x,807),12,(210,210,210))
 
     def select_at(self,x,y):
+        if self.storage_panel.click(x,y,self):return
         name=next((n for n,b in self.hitboxes.items() if b[0]<=x<=b[2] and b[1]<=y<=b[3]),None)
         if name is None:return
         if name=='start_dynamic':
@@ -304,6 +299,8 @@ class DynamicMapApp(base.MotionMapApp):
         else:super().select_at(x,y)
 
     def handle_key(self,key):
+        if self.options.logs_only:return super().handle_key(key)
+        if self.storage_panel.key(key,self):return True
         if self.measurement_buffer is not None:return super().handle_key(key)
         if self.exit_requested or key&255 in (27,ord('q'),ord('Q')):return False
         if key&255 in (32,ord('s'),ord('S')):self.active_test=None;self.send_stop('用户停止键')

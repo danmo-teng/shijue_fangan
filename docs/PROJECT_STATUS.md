@@ -6,6 +6,7 @@
 
 ## 当前目标和方向
 
+- 本轮新增测试地图日志盘容量栏（后台约1Hz）及旧完整会话勾选删除；独立桌面「测试日志管理」复用同一入口的`--logs-only`，USB/SDK/UART均不启动。当前/未完成/明确保留/未知文件锁定，删除前重核快照；未删除真实日志。64GB TF完整克隆与官方备份/扩容步骤见LOG_STORAGE_AND_TF_MIGRATION_20261104.md；未实际迁移。
 - 当前已分析受保护140355会话，并按用户选择交付自动围栏位置重获：旧10cm局部修正范围曾拒绝残差仅8–9mm、需修正约11–12.5cm的墙解。局部XY均失效后，固定主yaw/坐标分支，用两次一致的双轴墙解重新设置平移偏置；无新增时间门控/停车/下位机修改。
 - 保留已有单轴约束，避免把场内表面补成另一面围栏。回放中“单轴也强补XY”的候选出现约0.33m反复切换，已舍弃；仍有单轴而另一轴模糊时，不能保证完整XY恢复。界面现区分轮速传播、当前雷达XY修正及正在重获；软件与实车精度验收分开。
 - 用户确认该次后退转弯是卡物，未拿曲线改外参/比例。手推没有事件时刻，不能直接与某段日志对应；无独立地面真值。原始37文件未改、未清理，派生分析另存；详见T265_LIDAR_REACQUISITION_20261104.md。
@@ -59,6 +60,7 @@
 - 本轮已实施的1.3适配与真实验证：[f405_v13_test_adapter_20261104.md](f405_v13_test_adapter_20261104.md)。
 - USB恢复方法、实际证据和下次桌面入口：[T265_USB_RECOVERY_20261104.md](T265_USB_RECOVERY_20261104.md)。
 - 最新实测、日志修复与漂移分析：[T265_DYNAMIC_LOG_AND_DRIFT_20261104.md](T265_DYNAMIC_LOG_AND_DRIFT_20261104.md)。
+- 日志容量界面、选择删除及64GB TF迁移：[LOG_STORAGE_AND_TF_MIGRATION_20261104.md](LOG_STORAGE_AND_TF_MIGRATION_20261104.md)。
 - 最新围栏重获与140355分析：[T265_LIDAR_REACQUISITION_20261104.md](T265_LIDAR_REACQUISITION_20261104.md)。来源切换实现见[T265_DYNAMIC_FALLBACK_20261104.md](T265_DYNAMIC_FALLBACK_20261104.md)，其旧回放不是本次实车通过。
 - USB实际失败实验、RDK源码案例与快速启动：[T265_USB_FAST_START_20261104.md](T265_USB_FAST_START_20261104.md)。
 - 最新角色切换/端点实验与后续方案边界：[T265_USB_RECOVERY_CONTINUE_20261104.md](T265_USB_RECOVERY_CONTINUE_20261104.md)。
@@ -67,4 +69,4 @@
 - 接入差距：[COMPETITION_LOCALIZATION_READINESS_20261104.md](COMPETITION_LOCALIZATION_READINESS_20261104.md)。
 - 历史过程/旧实测/旧决策：[PROJECT_HISTORY_20261104.md](PROJECT_HISTORY_20261104.md)，追溯时再读，不默认加载。
 
-本轮基于c43e666，仅分析保留日志并增量修改动态测试几何恢复/显示，完成必要离线检查后提交推送。未改正式比赛/下位机，未启动UART、SDK、电机或USB复位；没有清理或修改原始日志。
+本轮基于79ae68c，仅补测试日志容量显示、选择删除及64GB迁移说明。必要临时目录检查和1024×768界面预览通过；提交推送。未改正式比赛/下位机/定位算法，未启动UART、SDK、电机或USB复位；没有清理或修改原始日志。C++ JSON写盘失败退出仍单列LOG-VOLUME-01。

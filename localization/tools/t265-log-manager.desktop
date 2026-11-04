@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=测试日志管理
+Comment=查看SD剩余容量，选择删除本模块完整旧会话；不启动T265、雷达或底盘
+Exec=python3 /home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py --logs-only --fullscreen
+Path=/home/sunrise/RDK_X5/shijue_fangan
+Icon=drive-harddisk
+Terminal=false
+StartupNotify=true
+Categories=Utility;

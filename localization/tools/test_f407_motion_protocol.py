@@ -288,6 +288,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_motion_log_storage()
     test_global_wall_initialization()
     test_dynamic_worker_process()
     # Wire-compatible fast CRCs: independent polynomial reference, including
@@ -1509,6 +1510,110 @@ def test_t265_usb_recovery():
             try:usb.recover_t265(Path(temporary)/'failed.json');assert False,'failed upload must report failure'
             except RuntimeError:pass
         assert len(commands)==2 and all('uhubctl' not in c[0] for c in commands)
+
+
+def test_motion_log_storage():
+    """Deletion only in a temporary root; no UART/SDK or real-log cleanup."""
+    from unittest.mock import patch
+    from motion_log_storage import inspect_session, list_sessions, delete_sessions, OWNER
+    from t265_f407_motion_map import SESSION_FILES, prune_completed_sessions, MotionMapApp, arguments
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        sessions = []
+        for i in range(10):
+            p = root / f"20261104_00000{i}_interactive"
+            p.mkdir()
+            (p/"metadata.json").write_text(json.dumps(dict(mode="interactive_f405_normaldebug", sdk_session_id=str(i))))
+            (p/"session_complete.json").write_text(json.dumps(dict(owner=OWNER, complete=True, session_index=i)))
+            (p/"t265_raw_pose.csv").write_text("fixture\n")
+            sessions.append(p)
+        current = sessions[-1]
+        (root/"protected_sessions.json").write_text(json.dumps(dict(owner=OWNER, sessions=[sessions[0].name])))
+        (sessions[1]/"session_complete.json").unlink()
+        (sessions[1]/"events.jsonl").write_text(json.dumps(dict(event="session_stopped", localizer_returncode=1)))
+        (sessions[2]/"用户笔记.txt").write_text("keep")
+        (sessions[3]/"link").symlink_to(sessions[4]/"t265_raw_pose.csv")
+        rows = list_sessions(root, current, SESSION_FILES)
+        locked = {r["name"] for r in rows if r["reason"]}
+        assert locked == {p.name for p in sessions[:4]+[current]}
+        assert prune_completed_sessions(root, current) == [sessions[4].name]
+        assert all(p.exists() for p in sessions[:4]+sessions[5:])
+        # A newly protected, changed, or symlink-substituted selection must survive.
+        stale = inspect_session(root, sessions[5].name, current, SESSION_FILES)
+        (sessions[5]/"t265_raw_pose.csv").write_text("new data\n")
+        assert delete_sessions(root, [stale], current, SESSION_FILES)[0] == []
+        stale = inspect_session(root, sessions[6].name, current, SESSION_FILES)
+        (root/"protected_sessions.json").write_text(json.dumps(dict(owner=OWNER, sessions=[sessions[0].name,sessions[6].name])))
+        assert delete_sessions(root, [stale], current, SESSION_FILES)[0] == []
+        stale = inspect_session(root, sessions[7].name, current, SESSION_FILES)
+        sessions[7].rename(root/"user_backup")
+        sessions[7].symlink_to(root/"user_backup", target_is_directory=True)
+        assert delete_sessions(root, [stale], current, SESSION_FILES)[0] == []
+        assert (root/"user_backup"/"t265_raw_pose.csv").exists()
+        # Broken protection file fails closed for deletion, not for motion.
+        (root/"protected_sessions.json").write_text("{")
+        assert inspect_session(root, sessions[8].name, current, SESSION_FILES)["reason"]
+        (root/"protected_sessions.json").write_text(json.dumps(dict(owner=OWNER,sessions=[sessions[0].name,sessions[6].name])))
+        # Existing UI: manual selection, two-click confirmation, stop pass-through.
+        with patch("sys.argv",["map","--output-root",str(root)]), \
+                patch.object(MotionMapApp,"detect_screen_size",return_value=(1024,768)):
+            app = MotionMapApp(arguments())
+        app.run_dir = current
+        panel = app.storage_panel
+        try:
+            with patch("motion_log_storage.disk_capacity",return_value=(64*2**30,60*2**30,4*2**30)) as capacity, \
+                    patch("motion_log_storage.time.monotonic",return_value=100.):
+                image = app.render_screen()
+                panel.future.result(timeout=2)
+                app.render_screen()
+                for _ in range(3): app.render_screen()
+                assert capacity.call_count == 1 and image.shape == (768,1024,3)
+                app.select_at(780,1000)
+                app.render_screen(); panel.future.result(timeout=2); app.render_screen()
+                assert panel.open and panel.rows
+                assert not panel.click(950,570,app)  # Original STOP remains reachable.
+                assert panel.key(ord("v")) and not panel.key(ord("s")) and not panel.key(32)
+                stops = []
+                app.send_stop = lambda *args: stops.append(True)
+                app.measurement_buffer = ""
+                app.handle_key(ord("s"))
+                assert stops == [True]  # STOP is not swallowed by measurement input.
+                app.measurement_buffer = None
+                panel.page = 0
+                row = next(r for r in panel.rows if r["name"]==sessions[8].name)
+                panel.selected = {row["name"]}
+                app.render_screen()
+                app.select_at(600,775)
+                assert panel.confirm and sessions[8].exists()
+                app.select_at(600,775)
+                app.render_screen(); panel.future.result(timeout=2); app.render_screen()
+                assert not sessions[8].exists() and current.exists()
+                assert all(p.exists() for p in sessions[:4])
+                app.handle_key(27)
+                assert not panel.open  # ESC closes the panel, not the map.
+                panel.next_refresh = 0
+            with patch("motion_log_storage.disk_capacity",side_effect=OSError("unavailable")):
+                if panel.future: panel.future.result(timeout=2)
+                panel.poll(current)
+                try: panel.future.result(timeout=2)
+                except OSError: pass
+                panel.poll(current)
+                assert panel.capacity is None and "unavailable" in panel.error
+        finally:
+            panel.close()
+        # Same entry can manage logs even when sensor startup would fail.
+        with patch("sys.argv",["map","--logs-only","--windowed","--output-root",str(root)]), \
+                patch.object(MotionMapApp,"detect_screen_size",return_value=(1024,768)):
+            manager = MotionMapApp(arguments())
+        before = sorted(p.name for p in root.iterdir())
+        with patch.object(manager,"start_session",side_effect=AssertionError("hardware startup")), \
+                patch.object(manager,"update_data",side_effect=AssertionError("sensor processing")), \
+                patch("cv2.namedWindow"), patch("cv2.resizeWindow"), patch("cv2.imshow"), \
+                patch("cv2.waitKey",return_value=-1), patch("cv2.setMouseCallback"), \
+                patch("cv2.getWindowProperty",return_value=0), patch("cv2.destroyWindow"):
+            assert manager.run() == 0
+        assert before == sorted(p.name for p in root.iterdir())
+    print("motion log storage / retention / existing map UI PASS (temporary files only)")
 
 
 if __name__ == "__main__":

@@ -14,3 +14,5 @@ install -m 755 "${script_dir}/desktop_launcher.sh" "${desktop_dir}/t265-f407-deb
 install -m 644 "${script_dir}/t265-f407-debug.desktop" "${desktop_dir}/T265-F407-调试地图.desktop"
 chmod +x "${desktop_dir}/T265-F407-调试地图.desktop" 2>/dev/null || true
 echo "已安装到：${desktop_dir}/T265-F407-调试地图.desktop"
+install -m 755 "${script_dir}/t265-log-manager.desktop" "${desktop_dir}/测试日志管理.desktop"
+echo "已安装到：${desktop_dir}/测试日志管理.desktop"
