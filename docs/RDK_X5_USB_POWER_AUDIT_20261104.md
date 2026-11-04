@@ -14,6 +14,33 @@
 3. 普通X5公开原理图仅有接口页，缺少GL3510及5V开关页；尚不能确定RESET/PPON是否控制两组USB 5V输出。
    不将X5 Module底板的EN接线移植到本板，不凭GPIO空闲或名字相似试拉电平。
 
+## 继续资料核查：PWRENJ与Movidius启动实现
+
+基线7eeaf9a，只读研究；当前T265仍为8087:0b37，未重复复位。
+
+新读到Genesys原厂《GL3510-52 Datasheet》Rev1.00（2021-06-03）第13、20、21页：
+QFN64的RESETJ（24脚）为芯片复位输入；PWRENJ（34脚）为GANG模式唯一的电源使能输出，
+并通过上电电阻配置选择高/低有效电源开关或PolyFuse接法。这是GL3510-52参考定义，
+本板具体子型号/接线仍以本板电路为准，不把芯片脚号当作SoC GPIO编号。
+
+**判断边界补充：Linux没有VBUS regulator，只证明那条SoC驱动供电链未接通；
+不能据此排除Hub芯片自主PWRENJ→外部5V开关的路径。** 是否真实切电还要看该连线。
+本机port off返回成功及GPIO13让Hub重新枚举，均不足以确认这条电路。
+目前要定向查的是普通X5 1_B的PWRENJ是否连接两个USB VBUS输出的负载开关EN，
+该信号的有效极性/上电配置，以及EN是否被其他常高电源覆盖；不能假设本板已经采用PolyFuse模式。
+
+另读Movidius原厂NCSDK（c3714ed）`api/src/usb_boot.c`、`usb_link_vsc.c`：
+boot实现为配置1、claim接口0、查bulk OUT并上传；其resetall分支仅对runtime VID/PID发送运行时协议复位。
+没有在所读实现中找到能直接解救T265异常boot态的通用命令；不能把NCS运行时RESET包发给T265 Boot ROM。
+其中按端点包长分块的思路与本机此前64字节首块实测没有构成新的有效恢复证据。
+
+还核对了2025年T265安装教程的“Fix USB Boot Issues”：其udev规则只匹配8087:0b37，
+修改autosuspend/control。我们的失败态是03e7:2150，历史原始记录也显示失败时control原本就是on；
+本轮健康态只读检查同样为on/active。因此不照抄成该故障修复，不额外改udev或升级SDK。
+
+本轮没有找到新增、已验证有效的软件恢复动作；资料收获是把未决电路定位到PWRENJ与EN连接，
+而不是再次尝试RESETJ。未修改运行代码、驱动、系统设置或原始日志。
+
 ## 本机身份及实际连接
 
 - `/sys/class/socinfo/board_id=302`，`board_version=1_B`，`hw_name=x5-rdk`，`soc_name=X5U`。
@@ -123,9 +150,14 @@ Module完整底板图属于另一硬件版本，不能填补这一缺口。
 包括运行DT、GPIO/pinmux、regulator、内核配置、board_identity、reset_gpio_line_info及result_summary。
 获准实验记录另存130809会话；本轮仅更新证据及当前状态，没有运行代码/驱动修改，没有把失败动作变成自动启动功能。
 
-官方源码版本及完整URL：
+原厂资料/源码及所核查教程的完整URL：
 
 ```text
+https://cdn.icstop.com/upload/pdfs/29/c6/29c6bf6bbbab99481ad8541ef60927b8.pdf
+https://datasheet.lcsc.com/datasheet/pdf/4321c9a7aefd52779b485a0872567b52.pdf?productCode=C7501408
+https://github.com/movidius/ncsdk/blob/c3714ed607d3a4c6612668428765fea82efee166/api/src/usb_boot.c
+https://github.com/movidius/ncsdk/blob/c3714ed607d3a4c6612668428765fea82efee166/api/src/usb_link_vsc.c
+https://github.com/pboon09/Intel-RealSense-T265-Setup/blob/main/README.md
 https://github.com/D-Robotics/x5-kernel/blob/b2edb450c6eaef1c7277885d49f74efb6088b634/arch/arm64/boot/dts/hobot/x5-rdk-v1p0.dts
 https://github.com/D-Robotics/x5-kernel/blob/b2edb450c6eaef1c7277885d49f74efb6088b634/drivers/pinctrl/hobot/common.c
 https://github.com/D-Robotics/x5-kernel/blob/b2edb450c6eaef1c7277885d49f74efb6088b634/drivers/usb/phy/phy-sunrise5-usb.c
