@@ -85,9 +85,50 @@ USB2/USB3 Hub所有端口power，视觉相机已重新枚举，USB无进程占�
 日志：`rescue_map/runtime/history/t265_f407_motion_map/20261104_114839_usb_replug_check/`，
 保存重插后descriptor、boot、sdk_pose_check、原始CSV及result_summary；未清理此前失败记录。
 
-参考源码/第一手记录（完整URL便于复制）：
+## Intel官方与香橙派补充核查（基线3a23ccc，只读研究）
+
+Intel《T265/T261 Specification Update》Revision 001（2021-02）第6/8页将TM2-4233列为No Fix：
+VBUS有5V时Movidius立即开始USB枚举；规避方法是先让Hub/控制器连接并完成枚举，再给T265供电。
+官方仓库issue 4681中，贡献者radfordi进一步解释，Movidius早于Hub获得电压会误判USB速度；
+RealSenseCustomerSupport给出的规避说明与勘误一致。该讨论里也有高速连接、bulk maxpacket64、重插恢复的原始内核日志。
+同一贡献者随后明确：即使将uhubctl整合到SDK，仍需USB端口具备供电控制能力。
+
+与本机重插前后描述符/上传的对照结合，**上电时序导致速度识别异常是当前更有依据的解释**，
+但没有测量VBUS波形，仍不是对本板电气根因的最终证明。推迟Python/ROS启动并不等价于推迟VBUS上电；
+没有从官方文档找到可绕过本机失败boot态的通用reset请求。固件0.2.0.951已在该勘误版本范围内。
+官方2.54.1发布说明移除T265，最后验证支持版本为2.50.0；目前使用2.50.0有依据，不为此盲目升级。
+
+香橙派查到的是以下不同证据，不混称成功恢复案例：
+
+| 项目/实际阅读内容 | 能说明什么 | 不能说明什么 |
+| --- | --- | --- |
+| ARBot3 Orange Pi 5 Ultra：POSTUP.md、setup-orangepi.sh | 安装2.53.1/RSUSB，T265接USB2；dwc3-host overlay解决OTG口处于device模式的问题 | 本机本就为host，不能照抄Rockchip设备树当作启动故障修复 |
+| 同项目T265TrackingCamera.cs及2026-09-13 decisions.md | 实现重启pipeline及SDK HardwareReset；后续记录服务重启、硬件reset、共享context重建仍未恢复，物理重插只暂时恢复 | 代码里存在恢复函数，不代表已解决冷启动；该作者最终停用T265只是其项目决定，不移植成我们的方向 |
+| guanjiafu/2026_uav：README注明Orange Pi 5B，t265_manager.py | 启动roscore/rs_t265.launch后订阅Pose，说明正常接入路径 | 该文件未提供boot态USB复位或冷启动免插拔验证 |
+| Kyhralus/AutoCar_T265：orangepi安装记录、t265_publisher.py | pipeline.start/取Pose/正常退出 | 所读节点没有解决0字节固件上传的逻辑；其轴向/比例/置信度规则不摘入本项目 |
+
+另检索到Aya《Realsense相机的疑难杂症》，正文实际是Jetson/AGX Orin的uhubctl方法；
+不能因为同站存在Orange Pi文章就称为香橙派验证。也不能采用其“USB2就无法使用”的概括：
+本机健康boot态本来就是480Mbps，关键差异是描述符和固件传输是否正常。
+
+本次没有复位当前健康设备、没有启动SDK/电机或更改系统/运行代码。只读复核仍为host及8087:0b37。
+未找到可直接采用的新软件恢复接口；仍保留纯软件方向，但不以无证据的升级、等待或重复重试充当修复。
+
+参考源码/第一手记录（完整URL便于复制；外部项目的规则/方案不是本项目授权）：
 
 ```text
+https://dev.realsenseai.com/download/16547/
+https://github.com/realsenseai/librealsense/issues/4681#issuecomment-525556850
+https://github.com/realsenseai/librealsense/issues/4681#issuecomment-527214406
+https://github.com/realsenseai/librealsense/issues/4681#issuecomment-538537601
+https://github.com/realsenseai/librealsense/issues/4681#issuecomment-600868251
+https://github.com/realsenseai/librealsense/releases/tag/v2.54.1
+https://github.com/AlesRuda/ARBot3/blob/275d571548de06d7e5fc9f8623990f376a55fabb/OrangePi5Ultra/POSTUP.md
+https://github.com/AlesRuda/ARBot3/blob/275d571548de06d7e5fc9f8623990f376a55fabb/doc/decisions.md#L685
+https://github.com/AlesRuda/ARBot3/blob/275d571548de06d7e5fc9f8623990f376a55fabb/Src/ARBot.HALArmbian/Devices/Camera/T265TrackingCamera.cs
+https://github.com/guanjiafu/2026_uav/blob/main/上位机/uav_master4/t265_manager.py
+https://github.com/Kyhralus/AutoCar_T265/blob/5ea5879b3f9d96881a2904de4b943f52b49c4016/src/car_t265/car_t265/t265_publisher.py
+https://ayasowen.github.io/2025/03/08/Realsense%20%E7%9B%B8%E6%9C%BA%E7%9A%84%E7%96%91%E9%9A%BE%E6%9D%82%E7%97%87/
 https://github.com/realsenseai/librealsense/issues/7772
 https://github.com/realsenseai/librealsense/issues/9660
 https://github.com/mvp/uhubctl/blob/master/README.md
