@@ -110,7 +110,7 @@ bool device_present(libusb_context *context, std::uint16_t vid, std::uint16_t pi
 
 struct Options {
     unsigned timeout_ms = 15000;
-    unsigned chunk_kib = 256;
+    unsigned chunk_bytes = 256 * 1024;
     bool reset_usb = false;
 };
 
@@ -121,7 +121,7 @@ Options parse_options(int argc, char **argv)
         const std::string argument(argv[i]);
         if (argument == "-h" || argument == "--help") {
             std::cout << "Usage: " << argv[0]
-                      << " [--timeout-ms MS] [--chunk-kib KiB] [--reset-usb]\n"
+                      << " [--timeout-ms MS] [--chunk-kib KiB | --chunk-bytes BYTES] [--reset-usb]\n"
                       << "Load official 0.2.0.951 firmware into a T265 in 03e7:2150 boot state.\n";
             std::exit(EXIT_SUCCESS);
         }
@@ -129,7 +129,7 @@ Options parse_options(int argc, char **argv)
             options.reset_usb = true;
             continue;
         }
-        if ((argument != "--timeout-ms" && argument != "--chunk-kib") || i + 1 >= argc) {
+        if ((argument != "--timeout-ms" && argument != "--chunk-kib" && argument != "--chunk-bytes") || i + 1 >= argc) {
             throw std::invalid_argument("unknown or incomplete option: " + argument);
         }
         const std::string value(argv[++i]);
@@ -144,10 +144,11 @@ Options parse_options(int argc, char **argv)
             }
             options.timeout_ms = static_cast<unsigned>(parsed);
         } else {
-            if (parsed > 4096) {
-                throw std::invalid_argument("invalid --chunk-kib: " + value);
+            const unsigned long unit = argument == "--chunk-kib" ? 1024ul : 1ul;
+            if (parsed > (4ul * 1024ul * 1024ul) / unit) {
+                throw std::invalid_argument("invalid " + argument + ": " + value);
             }
-            options.chunk_kib = static_cast<unsigned>(parsed);
+            options.chunk_bytes = static_cast<unsigned>(parsed * unit);
         }
     }
     return options;
@@ -198,11 +199,11 @@ int main(int argc, char **argv)
                   << "[BOOT] bytes=" << firmware.size() << " endpoint=0x"
                   << std::hex << endpoint << std::dec << " interface=" << interface_number
                   << " timeout_per_chunk=" << options.timeout_ms << " ms"
-                  << " chunk=" << options.chunk_kib << " KiB\n";
+                  << " chunk=" << options.chunk_bytes << " bytes\n";
 
         const auto start = std::chrono::steady_clock::now();
         std::size_t total_transferred = 0;
-        const std::size_t chunk_bytes = static_cast<std::size_t>(options.chunk_kib) * 1024u;
+        const std::size_t chunk_bytes = options.chunk_bytes;
         while (total_transferred < firmware.size()) {
             const std::size_t request_size = std::min(chunk_bytes,
                                                        firmware.size() - total_transferred);
