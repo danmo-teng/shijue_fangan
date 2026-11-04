@@ -1,7 +1,6 @@
-"""Opt-in startup uhubctl operation for the existing debug entry, no SDK/UART.
-
-Kernel enumeration and a successful request do not prove VBUS went low.
-The caller must still obtain actual Pose/SDK input results in its own session.
+"""Fast firmware preparation for the existing debug entry; no SDK/UART owner.
+Enumeration is not Pose evidence. Failed logical reset experiments are recorded
+in docs/T265_USB_FAST_START_20261104.md, not repeated as a startup ritual.
 """
 import json
 import os
@@ -13,8 +12,7 @@ import time
 
 USB_ROOT = Path('/sys/bus/usb/devices')
 T265_IDS = {('03e7','2150'), ('8087','0b37')}
-# This RDK's paired hub reports ganged switching. The explicit startup option
-# authorizes this known shared-hub experiment, not forcing arbitrary hubs.
+# Topology evidence only; fast startup does not issue hub power commands.
 RDK_GANGED_IDS = {('05e3','0610'), ('05e3','0626')}
 
 
@@ -50,18 +48,24 @@ def recovery_plan(devices):
 
 
 def recover_t265(log_path):
-    """One explicit cycle before opening the sole SDK owner. Never retries."""
+    """Prepare the sole SDK owner's device without an unconditional power cycle.
+
+    Runtime PID is not proof of a healthy Pose stream. The caller still starts
+    its existing SDK owner and verifies real Pose/SDK results. On this RDK, all
+    tried logical resets failed to recover the cold-boot fault; do not repeat
+    those resets on every launch or advertise them as a successful recovery.
+    """
     log_path=Path(log_path)
-    result=dict(method='uhubctl_cycle',requested=True,command_completed=False,
-                result_scope='USB operation only; inspect raw Pose and wheel_sdk results in this same session',
-                vbus_power_off_verified=False,reboot_fault_recovery_verified=False,
-                sdk_pose_verified=False,commands=[],before=usb_inventory())
+    result=dict(method='existing_boot_tool_no_forced_cycle',requested=True,
+        result_scope='firmware/runtime enumeration only; caller must verify actual SDK Pose',
+        command_completed=False,vbus_power_off_verified=False,
+        reboot_fault_recovery_verified=False,sdk_pose_verified=False,
+        forced_power_cycle=False,fixed_wait_seconds=0,commands=[],before=usb_inventory())
     boot=Path('/proc/sys/kernel/random/boot_id')
     if boot.exists():result['host_boot_id']=boot.read_text().strip()
     result['started_monotonic_ns']=time.monotonic_ns()
-    command=None;cycle_started=False
 
-    def run(args,timeout=25):
+    def run(args,timeout):
         entry=dict(argv=args,returncode=None);result['commands'].append(entry)
         try:completed=subprocess.run(args,capture_output=True,text=True,timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -71,54 +75,33 @@ def recover_t265(log_path):
 
     try:
         plan=recovery_plan(result['before']);result['target']=plan
-        executable=shutil.which('uhubctl')
-        if executable is None and os.access('/usr/local/sbin/uhubctl',os.X_OK):
-            executable='/usr/local/sbin/uhubctl'  # Desktop launchers may omit sbin from PATH.
-        if executable is None:raise RuntimeError('未安装uhubctl；本机测试使用官方v2.6.0，不自动下载/更改权限')
-        prefix=[] if os.geteuid()==0 else ['sudo','-n']
-        camera=plan['camera']
+        camera=plan['camera'];prefix=[] if os.geteuid()==0 else ['sudo','-n']
         node=f"/dev/bus/usb/{int(camera['busnum']):03d}/{int(camera['devnum']):03d}"
         fuser=shutil.which('fuser')
-        if fuser is None:raise RuntimeError('缺少fuser，不能确认是否已有SDK占用T265')
-        occupied=run(prefix+[fuser,node],timeout=5)
-        if occupied.returncode==0:raise RuntimeError('T265正被其它进程使用；先关闭原SDK/地图，未执行USB恢复')
-        if occupied.returncode!=1:raise RuntimeError('无法核对T265设备占用，未执行USB恢复')
-        version=run([executable,'--version'],timeout=5)
-        result['uhubctl_version']=version.stdout.strip()
-        # -N avoids querying strings from the potentially stuck USB device.
-        command=prefix+[executable,'-N','-l',plan['location'],'-p',str(plan['port'])]
-        if plan['force_known_rdk_ganged']:command+=['-f']
-        hub_status=run(command);result['before_hub_status']=hub_status.stdout
-        if hub_status.returncode!=0:raise RuntimeError('uhubctl无法访问所选Hub，未执行电源循环')
-        print(f"[USB RECOVERY] hub={plan['location']} port={plan['port']} shared_hub={plan['may_affect_shared_usb_camera']}; one 5s cycle",flush=True)
-        # Keep uhubctl's paired USB2/USB3 handling. No whole-hub -R reset and
-        # no 'all ports' operation are silently added.
-        cycle_started=True
-        cycle=run(command+['-a','cycle','-d','5'])
-        result['command_completed']=cycle.returncode==0
-        if cycle.returncode!=0:raise RuntimeError('uhubctl请求失败，查看本会话t265_usb_recovery.json')
-        deadline=time.monotonic()+10
-        while True:
-            result['after']=usb_inventory()
-            result['t265_after']=[d for d in result['after'] if (d['idVendor'],d['idProduct']) in T265_IDS]
-            if result['t265_after'] or time.monotonic()>=deadline:break
-            time.sleep(.2)
-        result['enumerated_after']=bool(result['t265_after'])
-        result['device_identity_changed']=result['t265_after']!=[camera]
-        if not result['enumerated_after']:raise RuntimeError('USB操作后未枚举到T265；未启动第二个SDK或自动重试')
-        result['after_hub_status']=run(command).stdout
+        if fuser is None:raise RuntimeError('缺少fuser，不能核对T265设备占用')
+        occupied=run(prefix+[fuser,node],5)
+        if occupied.returncode==0:raise RuntimeError('T265正被其它进程使用；请关闭原SDK/地图，未复位设备')
+        if occupied.returncode!=1:raise RuntimeError('无法核对T265设备占用')
+        if (camera['idVendor'],camera['idProduct'])==('8087','0b37'):
+            result.update(action='runtime_pid_skip_reset',runtime_enumerated=True)
+            print('[T265 START] runtime PID present; skip reset, verify Pose in the existing SDK owner',flush=True)
+            return result
+        loader=Path(__file__).resolve().parents[2]/'t265_trajectory/build/t265_boot'
+        if not os.access(loader,os.X_OK):raise RuntimeError('缺少现有t265_boot固件加载工具')
+        print('[T265 START] boot PID; upload now, no fixed power-cycle delay',flush=True)
+        completed=run([str(loader),'--timeout-ms','1000','--chunk-kib','256'],15)
+        result.update(action='firmware_upload',command_completed=completed.returncode==0,
+                      after=usb_inventory())
+        result['runtime_enumerated']=any((d['idVendor'],d['idProduct'])==('8087','0b37') for d in result['after'])
+        if completed.returncode!=0 or not result['runtime_enumerated']:
+            detail=(completed.stderr or completed.stdout).strip()[-600:]
+            raise RuntimeError('T265固件启动失败；未执行无效的重复断电循环。'+detail)
+        print('[T265 START] firmware uploaded; verify real Pose in the existing SDK owner',flush=True)
         return result
-    except (OSError,subprocess.TimeoutExpired,RuntimeError,KeyboardInterrupt) as error:
+    except (OSError,subprocess.TimeoutExpired,RuntimeError) as error:
         result['error']=str(error)
-        if cycle_started and not result['command_completed']:
-            # A failed/interrupted cycle may have left the port off. Restore
-            # that same port, without repeating the cycle or widening scope.
-            result['restore_on_attempted']=True
-            try:result['restore_on_returncode']=run(command+['-a','on'],timeout=10).returncode
-            except (OSError,subprocess.TimeoutExpired) as restore_error:
-                result['restore_on_error']=str(restore_error)
-        if isinstance(error,KeyboardInterrupt):raise
-        raise RuntimeError('T265 USB恢复：'+str(error)) from error
+        raise RuntimeError('T265启动准备：'+str(error)) from error
     finally:
         result['finished_monotonic_ns']=time.monotonic_ns()
+        result['elapsed_s']=(result['finished_monotonic_ns']-result['started_monotonic_ns'])/1e9
         log_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

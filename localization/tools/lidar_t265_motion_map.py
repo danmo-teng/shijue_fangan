@@ -185,12 +185,12 @@ class DynamicMapApp(base.MotionMapApp):
         if getattr(self,'background_key',None)!=key:
             canvas=np.full((base.LOGICAL_HEIGHT,base.LOGICAL_WIDTH,3),245,np.uint8)
             text=base.TextPainter(font_scale=1./self.render_scale);self.hitboxes.clear()
-            cv2.rectangle(canvas,(30,60),(880,910),(70,70,70),2)
+            cv2.rectangle(canvas,(30,60),(880,910),(130,130,130),1)
             for value in (-1.,-.5,0.,.5,1.):
                 x,y=self.world_to_pixel(value,value)
-                cv2.line(canvas,(x,60),(x,910),(215,215,215));cv2.line(canvas,(30,y),(880,y),(215,215,215))
+                cv2.line(canvas,(x,60),(x,910),(230,230,230),1);cv2.line(canvas,(30,y),(880,y),(230,230,230),1)
             text.add('雷达＋T265动态定位 / 场地中心原点 / 启动朝向选90°分支',(30,20),20,(35,35,35),True)
-            text.add('绿点：雷达；蓝：原T265车中心；橙：当前定位（含降级）',(30,930),16,(35,35,35))
+            text.add('红点：雷达；蓝：原T265车中心；橙：当前定位（含降级）',(30,930),16,(35,35,35))
             text.add('测试显示，精度待实测；不向正式比赛发布',(30,960),14,(70,70,70))
             self.draw_panel(canvas,text)
             self.background=text.paint(canvas);self.background_key=key
@@ -202,7 +202,7 @@ class DynamicMapApp(base.MotionMapApp):
         for p in s.get('points_field',[]):
             q=self.world_to_pixel(*p)
             if 30<=q[0]<=880 and 60<=q[1]<=910:
-                cv2.circle(canvas,q,1,(70,160,40) if s.get('lidar_corrections_enabled',True) else (150,150,150),-1)
+                cv2.circle(canvas,q,2,(40,40,220) if s.get('lidar_corrections_enabled',True) else (150,150,150),-1,cv2.LINE_AA)
         def number(value,y,color=(225,225,225)):
             cv2.putText(canvas,str(value),(920,y),cv2.FONT_HERSHEY_SIMPLEX,.65,color,1,cv2.LINE_AA)
         if s.get('ready'):

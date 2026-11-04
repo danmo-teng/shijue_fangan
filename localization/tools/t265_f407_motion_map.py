@@ -1403,7 +1403,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--timed-measurements",action="store_true",help="explicitly sync and subscribe measured 07/08 for diagnostics; not injection eligibility")
     parser.add_argument("--no-log-prune",action="store_true",help="preserve all existing sessions during investigation")
     parser.add_argument("--t265-usb-recovery",action="store_true",
-                        help="opt-in startup uhubctl cycle; RDK ganged hub may also reconnect USB vision camera; never resets during motion")
+                        help="fast startup firmware preparation; skip reset in runtime state; no fixed hub-cycle delay")
     parser.add_argument("--fisheye-evidence",action="store_true",help="same SDK owner enables both fisheyes; C records max two 2s/4Hz bursts")
     parser.add_argument("--device-restart-note",default="not_confirmed",help="operator record of an ACTUAL device restart; never automatically inferred from pipeline start")
     parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor/map-render check (0..60s); no motion commands")

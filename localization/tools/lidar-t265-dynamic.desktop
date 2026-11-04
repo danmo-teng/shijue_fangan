@@ -2,7 +2,7 @@
 Version=1.0
 Type=Application
 Name=雷达-T265动态定位
-Comment=启动前恢复T265 USB；建议场地中心；围栏自动定位/启动朝向90度对称；官方轮速输入；动作单击
+Comment=启动前快速准备T265（无固定等待）；建议场地中心；围栏自动定位/启动朝向90度对称；官方轮速输入；动作单击
 Exec=python3 /home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py --fullscreen --chassis-profile timed --t265-usb-recovery --reference-description 卷尺与地面方向标线，前左逆时针为正
 Path=/home/sunrise/RDK_X5/shijue_fangan
 Icon=applications-engineering
