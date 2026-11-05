@@ -462,6 +462,20 @@ def test_range_context_and_calibration() -> None:
     assert calibration.distance(10500, (640, 700), (1280,1024))[0] == 0
     assert calibration.distance(12000, (640, 500), (1280,1024))[0] is None
     assert calibration.distance(10500, (640, 500), (640,512))[0] is None
+    # Production tables use the saved, different partitions for each angle.
+    actual = ApproachRangeCalibration.load(PROJECT_ROOT / "vision/config/approach_range.json")
+    for pitch, edges, distances in (
+        (10500, (0,150,291,432,603,1024), (400,400,370,160,40)),
+        (12000, (0,73,217,381,580,1024), (380,300,150,50,20)),
+    ):
+        for index, (low, high, mm) in enumerate(zip(edges, edges[1:], distances)):
+            reason = "range_user_approved_provisional" if pitch == 10500 and index < 2 else "range_measured"
+            for y in (low, (low + high) / 2, high - 0.01):
+                assert actual.distance(pitch, (640,y), (1280,1024)) == (mm, reason)
+        assert actual.distance(pitch, (640,1024), (1280,1024))[0] is None
+    unapproved = json.loads(json.dumps(actual.data))
+    unapproved["angles"]["10500"]["user_approved"] = False
+    assert ApproachRangeCalibration(unapproved).distance(10500, (640,75), (1280,1024))[0] is None
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))

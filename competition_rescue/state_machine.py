@@ -1605,7 +1605,7 @@ class CompetitionMission:
                   self.range_pitch_cdeg in {10500, 12000} and distance is not None)
         if not usable:
             return CompetitionOutput(self.state, self._hold(),
-                "mode52等待对准后新图及对应角度实测分段：" + vision.range_reason,
+                "mode52等待对准后新图及对应角度分区距离表：" + vision.range_reason,
                 self.selected_batch, reason="approach_range_wait", expected_stm_modes=(52, 24, 3))
         flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if self.state == CompetitionState.CLUSTER_APPROACH:
@@ -1613,7 +1613,7 @@ class CompetitionMission:
         self.range_command = CommandRequest(CMD_APPROACH_TARGET, flags, distance,
                                             self.range_pitch_cdeg, 0,
                                             source_vision_frame=vision.frame_sequence)
-        return CompetitionOutput(self.state, self.range_command, "按实测分段发起一次定距接近",
+        return CompetitionOutput(self.state, self.range_command, "按分区距离表发起一次定距接近",
                                  self.selected_batch, reason="approach_range_request",
                                  expected_stm_modes=(52, 53, 21, 38, 24, 3))
 

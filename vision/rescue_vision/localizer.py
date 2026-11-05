@@ -93,7 +93,7 @@ class GroundLocalizer:
 
 
 class ApproachRangeCalibration:
-    """Measured centre-Y bands at a fixed camera pitch; never uses homography."""
+    """Centre-Y distance bands, including explicit user-approved provisional values."""
 
     def __init__(self, data: dict | None = None) -> None:
         self.data = data or {}
@@ -108,7 +108,8 @@ class ApproachRangeCalibration:
     def distance(self, pitch: int, point: tuple[float, float], resolution: tuple[int, int]) -> tuple[int | None, str]:
         try:
             entry = self.data["angles"][str(pitch)]
-            if (pitch not in {10500, 12000} or entry["measured"] is not True or
+            if (pitch not in {10500, 12000} or
+                    not (entry.get("measured") is True or entry.get("user_approved") is True) or
                     (entry["width"], entry["height"]) != resolution or
                     entry["pixel_reference"] != "bbox_center" or
                     entry["distance_reference"] != "measured_chassis_travel_to_claw_entry" or
@@ -125,7 +126,14 @@ class ApproachRangeCalibration:
                         type(distance) is int and 0 <= distance <= 2500):
                     return None, "range_calibration_bands_invalid"
                 previous = high
-            matches = [b["advance_mm"] for b in bands if b["y_min"] <= y < b["y_max"]]
-            return (matches[0], "range_measured") if len(matches) == 1 else (None, "range_band_unmeasured")
+            matches = [b for b in bands if b["y_min"] <= y < b["y_max"]]
+            if len(matches) != 1:
+                return None, "range_band_unmeasured"
+            band = matches[0]
+            if band.get("measured", entry.get("measured")) is True:
+                return band["advance_mm"], "range_measured"
+            if entry.get("user_approved") is True:
+                return band["advance_mm"], "range_user_approved_provisional"
+            return None, "range_band_unmeasured"
         except (KeyError, TypeError, ValueError):
             return None, "range_calibration_missing"

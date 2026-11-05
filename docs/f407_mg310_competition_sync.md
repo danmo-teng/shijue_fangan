@@ -28,7 +28,7 @@ python3 vision/calibrate_range_view.py --pitch 105 --bands 5
 
 1/2切换105°/120°标签并恢复实时画面，两角度保留各自修改；标签不控制舵机、不证明实物已到对应角度。S保存当前角度的分区设置，同时保存带框/中心点/分区线的截图和JSON；Q退出。未保存的修改显示UNSAVED，须按S保存。下次启动自动读取vision/captures/range_calibration/layouts/105deg.json或120deg.json；--output改变目录时，分区也保存在该目录的layouts中。--bands仍可指定分区数，保存设置只在数量和分辨率相符时采用。
 
-分区设置不含距离、标记measured=false，不写入正式approach_range.json。正式距离仍按下方已有入口录入独立实测值。
+分区设置本身不含距离、标记measured=false，不自动写入正式approach_range.json。2026-11-05已将用户提供的距离与实际保存分界写入正式表；105°B1/B2为用户指定暂用值，详见[当前分区距离表](APPROACH_RANGE_20261105.md)。以后只拖动/保存标定画面不会自动更改正式表。
 
 逐区记录Y_MIN、Y_MAX和ADVANCE_MM（从当前车体位置到夹爪入口前保留补进余量所需的实际前进距离）。将实测值通过已有标定入口录入：
 
@@ -36,7 +36,7 @@ python3 vision/calibrate_range_view.py --pitch 105 --bands 5
 python3 vision/calibrate_ground.py --range-pitch 105 --range-camera-mount "本次相机安装及测量零点描述" --range-band Y_MIN:Y_MAX:ADVANCE_MM [--range-band ...]
 ```
 
-这是参数格式，不含示例假距离。120°另执行一次；默认两角度保存同一vision/config/approach_range.json，按角度隔离。表中保存像素基准bbox_center、分辨率和measured_chassis_travel_to_claw_entry零点，不采用相机斜距。重启上位机加载该表。仓库目前没有实测值，没有生成或提交伪标定文件。
+这是参数格式，不含示例假距离。120°另执行一次；默认两角度保存同一vision/config/approach_range.json，按角度隔离。表中保存像素基准bbox_center、分辨率和measured_chassis_travel_to_claw_entry零点，不采用相机斜距。重启上位机加载该表。当前正式表已录入本次用户数据；以上实测录入命令会将整个角度标为measured=true，不能用来把105°B1/B2暂用值冒充实测。
 
 ### 必要检查及部署
 

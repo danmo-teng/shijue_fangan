@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-11-05",
+  "source": "User-provided centimetre values applied to saved per-angle range-view partitions; no additional distance correction.",
+  "angles": {
+    "10500": {
+      "measured": false,
+      "user_approved": true,
+      "width": 1280,
+      "height": 1024,
+      "pixel_reference": "bbox_center",
+      "distance_reference": "measured_chassis_travel_to_claw_entry",
+      "camera_mount": "现有视觉相机安装，使用测距画面对应105°/120°标签；本次未另测安装高度或光轴角。",
+      "layout_source": "vision/captures/range_calibration/layouts/105deg.json",
+      "note": "按用户指定距离直接从cm换算mm作为定距接近行程；不额外扣除或叠加爪偏移、补进量。",
+      "bands": [
+        {
+          "band": "B1",
+          "y_min": 0,
+          "y_max": 150,
+          "advance_mm": 400,
+          "measured": false,
+          "source": "user_requested_placeholder",
+          "note": "过远，用户要求暂用40cm；不是精确实测距离。"
+        },
+        {
+          "band": "B2",
+          "y_min": 150,
+          "y_max": 291,
+          "advance_mm": 400,
+          "measured": false,
+          "source": "user_requested_placeholder",
+          "note": "过远，用户要求暂用40cm；不是精确实测距离。"
+        },
+        {
+          "band": "B3",
+          "y_min": 291,
+          "y_max": 432,
+          "advance_mm": 370,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        },
+        {
+          "band": "B4",
+          "y_min": 432,
+          "y_max": 603,
+          "advance_mm": 160,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        },
+        {
+          "band": "B5",
+          "y_min": 603,
+          "y_max": 1024,
+          "advance_mm": 40,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        }
+      ]
+    },
+    "12000": {
+      "measured": true,
+      "user_approved": true,
+      "width": 1280,
+      "height": 1024,
+      "pixel_reference": "bbox_center",
+      "distance_reference": "measured_chassis_travel_to_claw_entry",
+      "camera_mount": "现有视觉相机安装，使用测距画面对应105°/120°标签；本次未另测安装高度或光轴角。",
+      "layout_source": "vision/captures/range_calibration/layouts/120deg.json",
+      "note": "按用户指定距离直接从cm换算mm作为定距接近行程；不额外扣除或叠加爪偏移、补进量。",
+      "bands": [
+        {
+          "band": "B1",
+          "y_min": 0,
+          "y_max": 73,
+          "advance_mm": 380,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        },
+        {
+          "band": "B2",
+          "y_min": 73,
+          "y_max": 217,
+          "advance_mm": 300,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        },
+        {
+          "band": "B3",
+          "y_min": 217,
+          "y_max": 381,
+          "advance_mm": 150,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        },
+        {
+          "band": "B4",
+          "y_min": 381,
+          "y_max": 580,
+          "advance_mm": 50,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        },
+        {
+          "band": "B5",
+          "y_min": 580,
+          "y_max": 1024,
+          "advance_mm": 20,
+          "measured": true,
+          "source": "user_measurement",
+          "note": "用户提供测距值；未提供误差范围。"
+        }
+      ]
+    }
+  }
+}
