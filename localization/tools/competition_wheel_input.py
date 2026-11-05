@@ -15,7 +15,7 @@ from t265_wheel_input import WheelInputBridge, write_sdk_config
 
 
 class CompetitionWheelInput:
-    def __init__(self, root, config, session_id):
+    def __init__(self, root, config, session_id, telemetry_sink=None):
         self.root, self.session_id = root, session_id
         self.identity_nonce, self.config_nonce = secrets.randbits(64), secrets.randbits(64)
         self.requests_path = root / "wheel_feedback_requests.bin"
@@ -31,6 +31,7 @@ class CompetitionWheelInput:
         self.error = None
         self.stop_event = threading.Event()
         self.thread = None
+        self.telemetry_sink = telemetry_sink
 
     def start(self):
         self.bridge.start()
@@ -63,7 +64,10 @@ class CompetitionWheelInput:
         else:
             self.bridge.log.submit("chassis_extended.jsonl", sample)
             return
-        self.bridge.telemetry(dict(kind=event, sample=sample, host_session_id=self.session_id))
+        message = dict(kind=event, sample=sample, host_session_id=self.session_id)
+        self.bridge.telemetry(message)
+        if self.telemetry_sink is not None:
+            self.telemetry_sink(message)
 
     def _run(self):
         while not self.stop_event.is_set():

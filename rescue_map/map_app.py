@@ -91,6 +91,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--launch-vision", action="store_true")
     parser.add_argument("--official-wheel-input", action=argparse.BooleanOptionalAction, default=False,
                         help="competition adapter: reuse tested official SDK wheel input")
+    parser.add_argument("--dynamic-localization", action=argparse.BooleanOptionalAction, default=False,
+                        help="competition: reuse desktop lidar/T265/wheel fallback chain")
+    parser.add_argument("--dynamic-config", type=Path, default=PROJECT_ROOT / "localization/config/lidar_yaw_debug.json")
+    parser.add_argument("--lidar", default="/dev/ttyS6")
+    parser.add_argument("--lidar-baud", type=int, default=230400)
     parser.add_argument("--t265-map", type=Path, help="T265 localization map to import")
     parser.add_argument(
         "--use-t265-map",
@@ -464,6 +469,8 @@ class RescueMapApp:
             )
             if getattr(self, "official_wheel_input", False):
                 mode_text = "T265＋官方SDK轮速输入"
+            if getattr(self, "dynamic_localization", False):
+                mode_text = "雷达＋T265＋轮速降级"
             text.add(f"定位方式：{mode_text}", (x0, 720), 18, (200, 200, 205))
             if self.localization_mode == "fusion":
                 text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 755), 18, (200, 200, 205))

@@ -1681,3 +1681,69 @@ def test_competition_feedback_adapter():
             assert state['stats']['sent_to_sdk_owner']==1 and state['sdk_api_success_samples']==0
         finally:
             adapter.close();sink.close()
+
+
+def test_competition_dynamic_transport():
+    """Real worker/IPC through a PTY; no camera, chassis, motors or raw log edits."""
+    import math, os, pty, socket, uuid
+    from async_debug_log import AsyncDebugLog
+    from competition_dynamic_localization import CompetitionDynamicLocalization
+    from lidar_yaw_debug.dynamic import DynamicFence
+    from lidar_yaw_debug.diagnostic import load_config
+    cfg=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')
+    # Selected competition branch is preserved at every start; delayed setup
+    # must not subtract displacement already present in the SDK field pose.
+    for x,y,yaw in ((-1.32,1.32,135.),(1.32,1.32,45.),(1.32,-1.32,225.),(-1.32,-1.32,315.)):
+        e=DynamicFence(cfg['installation'])
+        stamp=1_000_000_000
+        e.ingest_pose(dict(session_id='fixture',frame_number=1,timestamp_monotonic_ns=stamp,
+            receive_monotonic_ns=stamp,x_m=x+.06,y_m=y,yaw_rad=math.radians(yaw),tracker_confidence=3))
+        e.ingest_yaw(stamp,1234.,{})
+        # A received wheel-feedback interval brackets the first tracked Pose.
+        # The earlier 6 cm field displacement must not become a false conflict
+        # against zero travel in this stationary interval.
+        e.ingest_wheel(dict(source='measured_wheel_feedback',measurement_valid=True,
+            mcu_epoch='fixture-boot',sample_id=1,
+            raw_mcu_sample=dict(t0_us=(stamp-10_000_000)//1000,t1_us=(stamp+10_000_000)//1000),
+            v_body_mps=[0.,0.,0.],interval_start_ns=stamp-10_000_000,
+            interval_end_ns=stamp+10_000_000,receive_monotonic_ns=stamp+10_000_000))
+        e.align('formal fixture',physical_confirmed=False,center_xy=(x,y),heading_deg=yaw,first_sample=True)
+        state=e.snapshot()
+        assert abs(state['center_xy_m'][0]-x-.06)<1e-10
+        assert state['center_xy_m']==state['t265_center_xy_m']
+        assert state['motion_selection']['mode']=='T265_WITH_WHEEL_TAIL'
+        assert state['motion_selection']['spatial_conflict_m']==0.
+        assert e.reference['selected_start']==dict(center_xy_m=[x,y],yaw_deg=yaw)
+        assert abs(state['yaw_deg']-yaw)<1e-9 and e.reference['vio_rotation']==0
+    master,slave=pty.openpty()
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp);sid=uuid.uuid4().hex;log=AsyncDebugLog(root)
+        cfg['lidar']['port']=os.ttyname(slave)
+        app=CompetitionDynamicLocalization(root,sid,cfg,dict(x_m=-1.32,y_m=1.32,yaw_deg=135),log)
+        sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind(app.control_address);sink.settimeout(4)
+        source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        try:
+            app.start();source.connect(app.pose_address)
+            now=time.monotonic_ns()
+            app.telemetry(dict(kind='imu',sample=dict(wire_valid=True,timestamp_monotonic_ns=now,yaw_deg=100.)))
+            source.send(json.dumps(dict(session_id=sid,frame_number=1,timestamp_monotonic_ns=now,
+                receive_monotonic_ns=now,x_m=-1.30,y_m=1.32,yaw_rad=math.radians(135),tracker_confidence=3)).encode())
+            packet=json.loads(sink.recv(32768))
+            assert packet['pose']==dict(x_m=-1.30,y_m=1.32,yaw_deg=135.)
+            assert packet['timestamp_monotonic_ns']==now and packet['reference']['source']=='selected_competition_start'
+            assert packet['qualified_pose'] is False and not packet['wheel']['independent_reference']
+            # No new SDK frame required to deliver a current worker snapshot.
+            later=json.loads(sink.recv(32768));assert later['packet_id']>packet['packet_id']
+            assert later['timestamp_monotonic_ns']==now
+            app.set_lidar_enabled(False)
+            deadline=time.monotonic()+2
+            while time.monotonic()<deadline:
+                later=json.loads(sink.recv(32768))
+                if not later['lidar_corrections_enabled']:break
+            assert not later['lidar_corrections_enabled']
+            assert later['pose']==packet['pose']
+        finally:
+            source.close();sink.close();app.close();log.close();os.close(master);os.close(slave)
+        assert app.radar.stopped_cleanly and log.healthy() and app.error is None
+        assert not (root/'commands.jsonl').exists()

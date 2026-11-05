@@ -26,7 +26,7 @@ add_library(omni_localization_core
 target_include_directories(omni_localization_core PUBLIC include)
 target_link_libraries(omni_localization_core PUBLIC pthread)
 
-add_library(debug_wheel_input src/debug_wheel_input.cpp src/debug_fisheye_evidence.cpp)
+add_library(debug_wheel_input src/debug_wheel_input.cpp src/debug_fisheye_evidence.cpp src/dynamic_pose_relay.cpp)
 target_include_directories(debug_wheel_input PUBLIC include "${REALSENSE_INCLUDE_DIR}"
     "${REALSENSE_ROOT}/third_party/librealsense/third-party")
 target_link_libraries(debug_wheel_input PUBLIC "${REALSENSE_LIBRARY}")

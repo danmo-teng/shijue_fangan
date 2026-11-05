@@ -175,15 +175,24 @@ class DynamicFence:
         return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
             reference=dict(self.reference) if self.reference else None)
 
-    def align(self,description,*,physical_confirmed=True):
-        """Legacy known-pose fixture for existing offline checks, not GUI startup."""
+    def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False):
+        """Known field reference; legacy fixture defaults unchanged, formal start explicit."""
         with self.lock:
             if not self.poses or not self.yaws:raise ValueError("等待实际T265 Pose和主yaw数据")
-            p=self.poses[-1];y=self.yaws[-1]
-            self.reference=dict(pose_origin=list(p[1:3]),vio_rotation=math.radians(135)-p[3],
-                yaw_offset=math.radians(135)-y[1],start_center_xy_m=[-1.35,1.35],
-                field_heading_deg=135.,description=description,physical_placement_confirmed=physical_confirmed,
+            p=self.poses[0 if first_sample else -1]
+            y=self.yaws[0 if first_sample else -1]
+            # Formal SDK projection already starts in field axes. Anchor both
+            # sides at this actual Pose so the field transform stays identity
+            # and wheel propagation uses the position at reference_sample_ns.
+            origin=list(p[1:3])
+            vio_rotation=0. if first_sample else math.radians(heading_deg)-p[3]
+            self.reference=dict(pose_origin=origin,vio_rotation=vio_rotation,
+                yaw_offset=math.radians(heading_deg)-y[1],start_center_xy_m=origin.copy() if first_sample else list(center_xy),
+                field_heading_deg=heading_deg,description=description,physical_placement_confirmed=physical_confirmed,
+                source='selected_competition_start' if first_sample else 'known_pose_fixture',
                 timestamp_monotonic_ns=time.monotonic_ns())
+            if first_sample:
+                self.reference['selected_start']=dict(center_xy_m=list(center_xy),yaw_deg=heading_deg)
             self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.has_anchor=False;self.revision+=1
             self.pending_reacquisition=None
             self.reference['reference_sample_ns']=p[0]

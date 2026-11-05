@@ -720,6 +720,7 @@ class CompetitionMission:
         self.staging_zero_accepted = False
         self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s: float | None = None
+        self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_freeze_frame_floor: int | None = None
         self.safe_zone_freeze_last_frame_sequence: int | None = None
         self.safe_zone_freeze_hits = 0
@@ -3649,6 +3650,7 @@ class CompetitionMission:
         self.staging_zero_accepted = False
         self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s = None
+        self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_freeze_frame_floor = None
         self.safe_zone_freeze_last_frame_sequence = None
         self.safe_zone_freeze_hits = 0
@@ -4018,6 +4020,7 @@ class CompetitionMission:
     ) -> None:
         self.transport_audit_handoff_active = False
         self.safe_zone_acquire_started_s = now
+        self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_freeze_frame_floor = (
             vision.frame_sequence if vision.frame_sequence > 0 else None
         )
@@ -6018,11 +6021,14 @@ class CompetitionMission:
                 self.settings.safe_zone_acquire_timeout_s
             ):
                 reason = "SAFE_CORRIDOR_UNAVAILABLE"
+                event = "" if self.safe_zone_acquire_timeout_reported else "safe_zone_acquire_no_box"
+                self.safe_zone_acquire_timeout_reported = True
                 return CompetitionOutput(
                     self.state,
                     self._safe_zone_pose_align_command(),
                     f"{reason}：等待新安全区画面完成视觉ALIGN与像素走廊检查",
                     self.selected_batch,
+                    event=event,
                     tx_policy="normal_command",
                     reason=reason,
                     expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),

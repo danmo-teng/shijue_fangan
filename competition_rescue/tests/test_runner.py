@@ -656,3 +656,115 @@ def test_formal_wheel_start_and_pose_adoption():
                 app.stop_localization()
             assert app.wheel_input is None and not adapter.thread.is_alive()
             assert not (app.wheel_run_dir/'session_complete.json').exists()
+
+
+def test_formal_dynamic_start_wiring():
+    """Launcher wiring only; mock worker start, no UART/SDK and no runtime files."""
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    import competition_map_app as formal
+    import map_app
+    from competition_dynamic_localization import CompetitionDynamicLocalization
+    with tempfile.TemporaryDirectory() as directory:
+        runtime = Path(directory)
+        options = SimpleNamespace(zone=2, side='blue', corner_offset_mm=150*2**.5,
+            encoder_weight=.25, localization_mode='t265', localization_json=runtime/'pose.json',
+            localization_log=None, launch_localization=False, launch_vision=False,
+            uart='/dev/ttyS1', baud=230400, tx_rate=20., fullscreen=False, demo=False,
+            screenshot=None, official_wheel_input=False, dynamic_localization=True,
+            dynamic_config=PROJECT_ROOT/'localization/config/lidar_yaw_debug.json',
+            lidar='/dev/ttyS6', lidar_baud=230400)
+        with patch.object(map_app, 'RUNTIME', runtime), patch.object(formal, 'RUNTIME', runtime), \
+                patch.object(CompetitionDynamicLocalization, 'start') as start:
+            app = formal.CompetitionMapApp(options)
+            try:
+                app.start_session(); cmd = app.localization_command()
+                assert start.call_count == 1 and app.official_wheel_input
+                assert app.dynamic.field_start == dict(x_m=1.35,y_m=1.35,yaw_deg=45.)
+                assert cmd.count('--uart') == 1 and cmd[cmd.index('--uart')+1] == '/dev/ttyS1'
+                assert cmd[cmd.index('--dynamic-pose-output')+1] == str(runtime/'pose.json')
+                assert Path(cmd[cmd.index('--output')+1]).name == 'raw_t265_result.json'
+                assert '--debug-pose-socket' in cmd and '--wheel-feedback-socket' in cmd
+                assert app.wheel_input.telemetry_sink == app.dynamic.telemetry
+                assert app.localization_command() == cmd and start.call_count == 1
+                metadata = json.loads((runtime/'session.json').read_text())
+                assert metadata['pose_source'] == 'lidar_t265_measured_wheel_fallback'
+                assert metadata['qualification']['translation_compensated'] is False
+                assert metadata['accuracy_verified'] is False
+            finally:
+                app.stop_localization()
+            assert app.dynamic is None and app.wheel_input is None
+
+
+def test_incident_video_replay_and_log_only_timeout():
+    """Encode/read back a short fixture; no camera, motors, runtime logs or GUI."""
+    import cv2
+    from dataclasses import replace
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    from vision_replay import VisionReplay
+    from state_machine import CargoBatch
+    # Logging changes must not alter the existing no-box command/transition.
+    mission = CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    mission._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    mission.confirmed_delivery_destination='material'
+    mission._begin_safe_zone_acquire(VisionSnapshot(frame_sequence=1),1.)
+    p = PoseSnapshot(valid=True,x_m=-.15,y_m=.54,yaw_deg=90,age_ms=0)
+    s = StmSnapshot(mode=11,age_ms=0,flags=2,camera_pitch_cdeg=12000)
+    a = mission.step(VisionSnapshot(frame_sequence=2,observed_monotonic_s=6.1),p,s,6.1)
+    b = mission.step(VisionSnapshot(frame_sequence=3,observed_monotonic_s=6.2),p,s,6.2)
+    assert a.event=='safe_zone_acquire_no_box' and not b.event
+    assert a.state==b.state==CompetitionState.ACQUIRE_SAFE_ZONE and a.command==b.command
+    with tempfile.TemporaryDirectory() as directory:
+        root=Path(directory);r=VisionReplay(root,'replay-fixture',fps=8,pre_s=.3,post_s=.3,size=(192,128))
+        r.start()
+        try:
+            deadline=time.monotonic()+3
+            while not (root/'vision_replay_manifest.json').exists() and time.monotonic()<deadline:time.sleep(.02)
+            for i in range(10):
+                image=np.full((128,192,3),(i*20,20,40),np.uint8)
+                meta=dict(frame_sequence=i,capture_monotonic_ns=1_000_000_000+i*130_000_000,
+                    source_size=[192,128],detections=[dict(bbox=[10,20,20,20],confidence=.8,**{'class':'green_supply'})],
+                    pose=dict(x_m=.1,y_m=.2,yaw_deg=90,age_ms=float('inf')),stm=dict(mode=11,camera_pitch_cdeg=12000),
+                    upper_state='ACQUIRE_SAFE_ZONE',acquire_started_s=1.,
+                    reason='SAFE_CORRIDOR_UNAVAILABLE' if i>=4 else 'safe_zone_acquire_wait')
+                assert r.submit(image,'bgr',meta,now=1.+i*.13)
+                time.sleep(.03)
+        finally:r.close()
+        manifest=json.loads((root/'vision_replay_manifest.json').read_text())
+        assert manifest['complete'] and manifest['error'] is None and manifest['dropped_frames']==0,manifest
+        assert len(manifest['clips'])==1
+        clip=manifest['clips'][0];rows=[json.loads(l) for l in (root/clip['frames']).read_text().splitlines()]
+        assert [x['frame_sequence'] for x in rows]==[2,3,4,5,6]
+        assert rows[0]['pose']['age_ms'] is None and rows[0]['seconds_from_trigger']<0
+        assert rows[-1]['seconds_from_trigger']>0 and clip['complete']
+        cap=cv2.VideoCapture(str(root/clip['video']));count=0
+        while True:
+            ok,frame=cap.read()
+            if not ok:break
+            assert frame.shape==(224,192,3)
+            assert abs(float(frame[180,180,0])-rows[count]['frame_sequence']*20)<8
+            count+=1
+        cap.release();assert count==len(rows)==clip['frames_written']
+        # Bounded queue pressure changes only diagnostic counters, no blocking.
+        r.next_frame_s=0.;r.error=None;r.started=True
+        with patch.object(r,'process',SimpleNamespace(is_alive=lambda:True)), \
+             patch.object(r.inbox,'put_nowait',side_effect=__import__('queue').Full):
+            assert not r.submit(image,'bgr',meta,now=10.) and r.dropped.value==1
+        # Retention recognizes only this session's completed, manifested files.
+        sys.path.insert(0,str(PROJECT_ROOT/'localization/tools'))
+        from motion_log_storage import inspect_session
+        import competition_map_app as formal
+        parent=root/'sessions';parent.mkdir();run=parent/'20261105_000001_competition_wheel';run.mkdir()
+        for file in root.glob('safe_zone_replay_*'): file.rename(run/file.name)
+        (root/'vision_replay_manifest.json').rename(run/'vision_replay_manifest.json')
+        (run/'metadata.json').write_text(json.dumps(dict(owner=formal.WHEEL_OWNER,mode='competition_t265_wheel_input',sdk_session_id='replay-fixture')))
+        (run/'session_complete.json').write_text(json.dumps(dict(owner=formal.WHEEL_OWNER,complete=True,session_index=1)))
+        assert not inspect_session(parent,run.name,None,formal.WHEEL_FILES,owner=formal.WHEEL_OWNER)['reason']
+        (run/'user.txt').write_text('keep')
+        assert inspect_session(parent,run.name,None,formal.WHEEL_FILES,owner=formal.WHEEL_OWNER)['reason']
+        # Worker-side disk failure is observable and cannot escape to control.
+        broken=VisionReplay(root/'missing_directory','broken-replay')
+        broken.start();broken.process.join(3)
+        assert not broken.submit(image,'bgr',meta,now=20.)
+        assert broken.close()['error']

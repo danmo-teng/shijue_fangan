@@ -20,14 +20,17 @@ sys.path.insert(0, str(PROJECT_ROOT / "localization/tools"))
 
 from map_app import RUNTIME, RescueMapApp, parse_args  # noqa: E402
 from competition_wheel_input import CompetitionWheelInput
-from motion_log_storage import list_sessions, delete_sessions, read_json
+from competition_dynamic_localization import CompetitionDynamicLocalization
+from lidar_yaw_debug.diagnostic import load_config
+from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
+from motion_log_storage import list_sessions, delete_sessions, read_json, DYNAMIC_SESSION_FILES
 
 WHEEL_OWNER = "competition_wheel_input"
 WHEEL_FILES = frozenset({"metadata.json", "localization.conf", "session_complete.json",
     "wheel_feedback_requests.bin", "t265_raw_pose.csv", "localization_debug.csv",
     "localization_events.jsonl", "wheel_sdk_config.json", "wheel_sdk.jsonl", "wheel_sdk_status.json",
     "wheel_input.jsonl", "wheel_measurements.jsonl", "chassis_identity.json",
-    "chassis_extended.jsonl", "logging_events.jsonl", "final_status.json"})
+    "chassis_extended.jsonl", "logging_events.jsonl", "final_status.json", "raw_t265_result.json", "control_pose.jsonl", "vision_replay_manifest.json"}) | DYNAMIC_SESSION_FILES
 
 
 class CompetitionMapApp(RescueMapApp):
@@ -37,7 +40,9 @@ class CompetitionMapApp(RescueMapApp):
         super().__init__(options)
         self.reset_request_path = RUNTIME / "startup_reset_request.json"
         self.reset_session_token = None
-        self.official_wheel_input = getattr(options, "official_wheel_input", False)
+        self.dynamic_localization = getattr(options, "dynamic_localization", False)
+        self.dynamic = None
+        self.official_wheel_input = self.dynamic_localization or getattr(options, "official_wheel_input", False)
         self.wheel_input = None
         self.wheel_run_dir = None
         self.pose_age_gate = False
@@ -77,7 +82,7 @@ class CompetitionMapApp(RescueMapApp):
         # The old formal template's expected F407 identity is not actual F405.
         for key in ("expected_lower_firmware", "expected_lower_mode"):
             metadata.pop(key, None)
-        metadata.update(owner=WHEEL_OWNER, mode="competition_t265_wheel_input", sdk_session_id=session_id,
+        metadata.update(localization_log_dir=str(run_dir), owner=WHEEL_OWNER, mode="competition_t265_wheel_input", sdk_session_id=session_id,
                         wheel_input_requested=True, actual_lower_firmware="unconfirmed", actual_lower_mode="unconfirmed",
                         lower_identity_source="chassis_identity.json: actual UART reply, when received",
                         pose_source="t265_direct_with_camera_offset", encoder_fusion_weight=0.0,
@@ -91,6 +96,27 @@ class CompetitionMapApp(RescueMapApp):
         session_tmp = RUNTIME / "session.json.tmp"
         session_tmp.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
         session_tmp.replace(RUNTIME / "session.json")
+        if self.dynamic_localization:
+            dynamic_config = load_config(self.options.dynamic_config)
+            dynamic_config['lidar'].update(port=self.options.lidar, baud=self.options.lidar_baud)
+            if self.options.lidar == self.options.uart:
+                raise ValueError("雷达与底盘不能共用同一UART")
+            self.dynamic = CompetitionDynamicLocalization(run_dir, session_id, dynamic_config,
+                metadata['initial_pose'], self.wheel_input.bridge.log)
+            self.wheel_input.telemetry_sink = self.dynamic.telemetry
+            metadata['heading_conventions']['pose'] = 'primary gyro, fixed selected field start reference, CCW positive'
+            metadata['pose_dependencies'].append('STL50B2 observable fence constraints')
+            metadata.update(localization_chain='desktop_DynamicFence_RadarWorker_MotionSource',
+                pose_source='lidar_t265_measured_wheel_fallback',
+                initial_reference_policy='selected_formal_start_no_wall_wait',
+                lidar_installation=dynamic_config['installation'],
+                qualification=dynamic_config['qualification'],
+                control_pose_publish_enabled=True, accuracy_verified=False,
+                motion_source_policy=dict(MOTION_SOURCE_POLICY),
+                obstacle_policy='operator_lidar_pause_resume_same_as_desktop_test')
+            session_tmp.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
+            session_tmp.replace(RUNTIME / "session.json")
+            self.dynamic.start()
         self.wheel_input.bridge.log.submit("metadata.json", metadata, atomic=True)
         self.wheel_input.start()
         # Same SDK path/flags as the test; only UART ownership and field start differ.
@@ -105,6 +131,13 @@ class CompetitionMapApp(RescueMapApp):
                     "--debug-wheel-session", session_id,
                     "--wheel-feedback-socket", "@" + self.wheel_input.address[1:],
                     "--wheel-feedback-requests", str(self.wheel_input.requests_path)]
+        if self.dynamic is not None:
+            # C++ raw output is diagnostic only. Its dynamic relay writes the
+            # formal JSON and 0x16 from the exact same worker snapshot.
+            command[command.index('--output') + 1] = str(run_dir / 'raw_t265_result.json')
+            command += ['--debug-pose-socket', '@' + self.dynamic.pose_address[1:],
+                        '--dynamic-pose-socket', '@' + self.dynamic.control_address[1:],
+                        '--dynamic-pose-output', str(self.localization_json)]
         self.wheel_command = list(command)
         return command
 
@@ -118,7 +151,17 @@ class CompetitionMapApp(RescueMapApp):
         self.wheel_input = None
         if adapter is None:
             return
+        dynamic = self.dynamic
+        self.dynamic = None
+        dynamic_complete = True
+        if dynamic is not None:
+            adapter.telemetry_sink = None
+            dynamic.close()
+            dynamic_complete = (dynamic.radar.stopped_cleanly and dynamic.error is None
+                and dynamic.radar.state.get('logging_healthy') is True)
         status = adapter.snapshot()
+        if dynamic is not None:
+            status['dynamic'] = dynamic.snapshot()
         adapter.bridge.log.submit("final_status.json", status, atomic=True)
         adapter.close()
         # Log retention is module-local and runs only after a complete saved
@@ -126,7 +169,9 @@ class CompetitionMapApp(RescueMapApp):
         try:
             run_dir = adapter.root
             required = ("metadata.json", "localization_debug.csv", "t265_raw_pose.csv", "final_status.json")
-            if (process is not None and process.returncode == 0 and adapter.bridge.log.healthy()
+            replay_path = run_dir / 'vision_replay_manifest.json'
+            replay_complete = not replay_path.exists() or read_json(replay_path).get('complete') is True
+            if (replay_complete and dynamic_complete and process is not None and process.returncode == 0 and adapter.bridge.log.healthy()
                     and status.get("sdk_logging_healthy") is True
                     and all((run_dir / n).is_file() and (run_dir / n).stat().st_size > 0 for n in required)):
                 markers = [read_json(p) for p in run_dir.parent.glob("*/session_complete.json")]
@@ -138,6 +183,35 @@ class CompetitionMapApp(RescueMapApp):
                 delete_sessions(run_dir.parent, rows[4:], run_dir, WHEEL_FILES, owner=WHEEL_OWNER)
         except (OSError, ValueError, TypeError) as error:
             print(f"轮速会话收尾失败（原始文件保留）：{error}", file=sys.stderr)
+
+    def draw_panel(self, canvas, text):
+        super().draw_panel(canvas, text)
+        if self.dynamic is not None and not self.selecting:
+            state = self.dynamic.snapshot()
+            mode = state.get('motion_selection', {}).get('mode', 'WAIT')
+            label = {'WHEEL_FALLBACK': '轮速＋主yaw降级',
+                     'T265_WITH_WHEEL_TAIL': 'T265＋轮反馈续推'}.get(mode, mode)
+            axes = '/'.join(state.get('current_wall_axes', [])) or '暂无约束'
+            text.add('当前来源：' + label, (920, 455), 17, (80, 205, 245))
+            text.add('雷达修正：' + axes, (920, 490), 17, (80, 205, 245))
+            self.button(canvas, text, 'lidar_toggle',
+                '越障：暂停雷达 [L]' if self.dynamic.lidar_enabled else '恢复雷达修正 [L]',
+                (920, 515, 1245, 555), self.dynamic.lidar_enabled)
+            if state.get('transport_error'):
+                self.message = '定位链错误：' + state['transport_error']
+
+    def select_at(self, x, y):
+        rect = self.hitboxes.get('lidar_toggle')
+        if self.dynamic is not None and rect and rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]:
+            self.dynamic.set_lidar_enabled(not self.dynamic.lidar_enabled)
+            return
+        super().select_at(x, y)
+
+    def handle_key(self, key):
+        if key & 0xFF in (ord('l'), ord('L')) and self.dynamic is not None:
+            self.dynamic.set_lidar_enabled(not self.dynamic.lidar_enabled)
+            return True
+        return super().handle_key(key)
 
     def record_reset_event(self, event: str, source: str) -> None:
         try:

@@ -71,6 +71,21 @@ def inspect_session(root, name, current, allowed_files, *, owner=OWNER):
                         row["reason"] = "鱼眼清单无法确认"
                         return row
                     image_names.add(filename)
+        replay_manifest = path / "vision_replay_manifest.json"
+        if replay_manifest.exists():
+            replay = read_json(replay_manifest)
+            if (owner != "competition_wheel_input" or replay.get("schema_version") != 1 or
+                    replay.get("sdk_session_id") != metadata.get("sdk_session_id") or
+                    replay.get("complete") is not True or not isinstance(replay.get("clips"), list)):
+                row["reason"] = "回放未完整结束/归属不明"
+                return row
+            for index, clip in enumerate(replay['clips'], 1):
+                stem = f"safe_zone_replay_{index:04d}"
+                if (clip.get('video') != stem + '.avi' or clip.get('frames') != stem + '.jsonl'
+                        or clip.get('complete') is not True):
+                    row["reason"] = "回放文件清单无法确认"
+                    return row
+                image_names.update((clip['video'], clip['frames']))
         if any(n not in allowed_files and n not in image_names for n, _ in children):
             row["reason"] = "含未知/用户文件，保留"
             return row

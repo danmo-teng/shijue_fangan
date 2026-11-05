@@ -29,6 +29,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from vision_replay import VisionReplay
+
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
 VISION_ROOT = PROJECT_ROOT / "vision"
@@ -2123,6 +2125,16 @@ class CompetitionPlanner:
                                 "gripper_closed": stm.gripper_closed,
                                 "camera_pitch_cdeg": stm.camera_pitch_cdeg,
                             })
+                        if output.event == "safe_zone_acquire_no_box":
+                            event_data.update(dict(vision_frame_sequence=vision.frame_sequence,
+                                observed_monotonic_s=vision.observed_monotonic_s,
+                                pose=asdict(pose), camera_pitch_cdeg=stm.camera_pitch_cdeg,
+                                stm_mode=stm.mode, action_status=stm.action_status,
+                                task_id=stm.task_id, action_id=stm.action_id,
+                                safe_bbox=vision.safe_bbox, safe_zone_filter_blocked=vision.safe_zone_filter_blocked,
+                                safe_zone_freeze_hits=self.mission.safe_zone_freeze_hits,
+                                cargo_count=len(vision.cargo),
+                                command=None if output.command is None else asdict(output.command)))
                         self.events_log.write(output.event, event_data)
                     diagnostics_now = time.monotonic()
                     if (
@@ -2470,6 +2482,15 @@ def main() -> int:
     running = True
     exit_reason = "setup_complete"
     display_process = display_frames = display_messages = display_stop = display_render_ms = None
+    replay = None
+    replay_root = session.get('localization_log_dir')
+    if replay_root and session.get('sdk_session_id'):
+        try:
+            replay = VisionReplay(Path(replay_root), session['sdk_session_id'])
+            replay.start()
+        except Exception as error:
+            events.write('vision_replay_unavailable', dict(error=str(error)))
+            replay = None
     display_enabled = not args.no_display
     active_window_mode = args.window_mode
     started = time.monotonic()
@@ -2785,6 +2806,29 @@ def main() -> int:
                     )
                     log_write_elapsed_ms = (time.monotonic() - log_write_started) * 1000.0
                     next_detection_log = log_now + 1.0 / args.detection_log_fps
+                if replay is not None and replay.due(log_now):
+                    try:
+                        replay_output, replay_pose, replay_stm = planner.snapshot()
+                        replay_record = detection_log_record(vision_sequence,timing,detection_objects,latest_vision.cargo)
+                        replay.submit(packet.image,packet.pixel_format,dict(
+                            sdk_session_id=session.get('sdk_session_id'),
+                            frame_sequence=vision_sequence, camera_frame_id=packet.frame_id,
+                            capture_monotonic_ns=packet.published_ns,
+                            snapshot_monotonic_ns=time.monotonic_ns(),
+                            source_size=[IMAGE_WIDTH,IMAGE_HEIGHT],
+                            detections=replay_record['detections'], tracks=replay_record['tracks'],
+                            pose=asdict(replay_pose), stm=asdict(replay_stm),
+                            upper_state=replay_output.state.value, reason=replay_output.reason,
+                            message=replay_output.message,
+                            command=None if replay_output.command is None else asdict(replay_output.command),
+                            acquire_started_s=mission.safe_zone_acquire_started_s,
+                            safe_bbox=latest_vision.safe_bbox,
+                            safe_zone_filter_blocked=latest_vision.safe_zone_filter_blocked,
+                            roi_polygons=[capture_rois.overall,latest_vision.safe_corridor_polygon],
+                            model=str(args.model), model_family='YOLO26',
+                            pose_alignment='latest planner state, not capture synchronized'),log_now)
+                    except Exception as error:
+                        replay.error = str(error)  # Recording never aborts the mission.
                 inference_frames += 1
                 inference_total += 1
             if now - fps_started >= 1.0:
@@ -2817,7 +2861,10 @@ def main() -> int:
         })
         raise
     finally:
+        if replay is not None: replay.request_close()
         planner.stop(exit_reason)
+        if replay is not None:
+            events.write('vision_replay_closed', replay.close())
         detector.close()
         if camera is not None:
             camera.stop()

@@ -3,6 +3,7 @@
 #include "f405_telemetry.hpp"
 #include "fusion.hpp"
 #include "debug_wheel_input.hpp"
+#include "dynamic_pose_relay.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -877,8 +878,40 @@ void test_debug_wheel_input()
     ::unlink(log.c_str()); ::unlink((root+"/wheel_sdk_status.json").c_str()); ::rmdir(root.c_str());
 }
 
+void test_dynamic_pose_relay()
+{
+    using Relay = omni::DynamicPoseRelay;
+    using Json = Relay::Json;
+    const std::string path = "/tmp/omni-dynamic-pose-" + std::to_string(::getpid()) + ".json";
+    std::vector<omni::FusedPoseFrame> frames;
+    Relay relay("", "formal-fixture", path, [&](const std::array<std::uint8_t, omni::kFrameSize> &bytes) {
+        omni::FusedPoseFrame f;
+        check(omni::decode_fused_pose_frame(bytes.data(), bytes.size(), f), "dynamic 0x16 CRC/payload");
+        frames.push_back(f); return true;
+    });
+    Json p = {{"schema_version", 1}, {"session_id", "formal-fixture"}, {"packet_id", 0},
+        {"frame", "field"}, {"timestamp_monotonic_ns", 1}, {"quality", "DEGRADED"},
+        {"pose", {{"x_m", -.123}, {"y_m", .527}, {"yaw_deg", 270.25}}},
+        {"motion_source", "WHEEL_FALLBACK"}, {"t265", {{"tracker_confidence", 3}}}};
+    check(relay.accept(p), "dynamic packet accepted without age gate or SDK Pose arrival");
+    Json saved; { std::ifstream file(path); file >> saved; }
+    check(frames.size() == 1 && frames[0].x_mm == -123 && frames[0].y_mm == 527 &&
+          frames[0].heading_cdeg == 27025, "dynamic field units and heading");
+    check(saved["pose"] == p["pose"] && saved["timestamp_monotonic_ns"] == 1,
+          "formal JSON is the same dynamic snapshot and original sample time");
+    check((frames[0].status & omni::kPoseValid) && (frames[0].status & omni::kPoseWheelActive) &&
+          !(frames[0].status & omni::kPoseT265Good), "fallback remains valid, never mislabeled T265 good");
+    check(!relay.accept(p), "duplicate transport packet not replayed");
+    p["packet_id"] = 1; p["quality"] = "LOST";
+    check(relay.accept(p) && !(frames.back().status & omni::kPoseValid), "reference invalid is not fabricated valid");
+    p["packet_id"] = 2; p["session_id"] = "other";
+    check(!relay.accept(p), "other session cannot override competition pose");
+    ::unlink(path.c_str());
+}
+
 int main()
 {
+    test_dynamic_pose_relay();
     test_debug_wheel_input();
     test_protocol();
     test_kinematics();

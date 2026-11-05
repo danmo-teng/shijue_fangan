@@ -63,6 +63,10 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                     reply('reference_search_started',request_id=reference_request_id)
                     event('field_reference_search_started',request_id=reference_request_id,initialization=requested)
                 except ValueError as exc:reply('reference_rejected',request_id=payload['request_id'],error=str(exc))
+            elif kind=='field_start':
+                reference=engine.align(payload['description'],physical_confirmed=False,
+                    center_xy=payload['center_xy_m'],heading_deg=payload['yaw_deg'],first_sample=True)
+                event('field_reference_set',reference=reference)
             elif kind=='lidar_enabled':
                 engine.set_lidar_enabled(payload['enabled'])
                 event('operator_lidar_availability',enabled=payload['enabled'],reason=payload['reason'])

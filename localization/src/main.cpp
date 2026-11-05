@@ -6,6 +6,7 @@
 #include "fusion.hpp"
 #include "serial_port.hpp"
 #include "debug_wheel_input.hpp"
+#include "dynamic_pose_relay.hpp"
 #include "debug_fisheye_evidence.hpp"
 #include <unistd.h>
 #include <sys/socket.h>
@@ -58,6 +59,7 @@ struct Options {
     std::string debug_test_session,debug_fisheye_output,debug_fisheye_request;
     std::string debug_pose_socket;
     std::string wheel_feedback_socket, wheel_feedback_requests;
+    std::string dynamic_pose_socket, dynamic_pose_output;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 0.0;
@@ -224,6 +226,8 @@ void usage(const char *program)
         << "  --raw-pose-csv FILE  retain all received SDK Pose samples, including confidence=0\n"
         << "  --command-file FILE relay new valid TYPE 0x11/0x12/0x18 frames\n"
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
+        << "  --dynamic-pose-socket @NAME  receive desktop dynamic localization result\n"
+        << "  --dynamic-pose-output FILE  formal JSON matching dynamic 0x16 (raw --output separate)\n"
         << "  --t265-map FILE     import a T265 localization map before start\n"
         << "  --relocalization-timeout SEC  map startup timeout (default 30)\n"
         << "  --t265-frame-timeout SEC  first Pose-frame timeout in map mode (default 5)\n"
@@ -316,6 +320,10 @@ Options parse_options(int argc, char **argv)
             options.debug_fisheye_output=value("--debug-fisheye-output");
         } else if (argument == "--debug-fisheye-request") {
             options.debug_fisheye_request=value("--debug-fisheye-request");
+        } else if (argument == "--dynamic-pose-socket") {
+            options.dynamic_pose_socket = value("--dynamic-pose-socket");
+        } else if (argument == "--dynamic-pose-output") {
+            options.dynamic_pose_output = value("--dynamic-pose-output");
         } else if (argument == "--wheel-feedback-socket") {
             options.wheel_feedback_socket = value("--wheel-feedback-socket");
         } else if (argument == "--wheel-feedback-requests") {
@@ -332,6 +340,10 @@ Options parse_options(int argc, char **argv)
             throw std::invalid_argument("unknown option: " + argument);
         }
     }
+    if (options.dynamic_pose_socket.empty() != options.dynamic_pose_output.empty() ||
+        (!options.dynamic_pose_socket.empty() && (options.dynamic_pose_output == options.output_path ||
+          options.debug_pose_socket.empty() || options.wheel_feedback_socket.empty())))
+        throw std::invalid_argument("dynamic pose requires separate raw output, Pose IPC and formal wheel owner");
     const bool wheel = !options.debug_wheel_socket.empty();
     const bool competition_wheel = !options.wheel_feedback_socket.empty();
     if (competition_wheel != !options.wheel_feedback_requests.empty() ||
@@ -1144,8 +1156,21 @@ int main(int argc, char **argv)
             std::cerr << "[UART] disabled; output is T265-only\n";
         }
 
+        std::unique_ptr<omni::DynamicPoseRelay> dynamic_relay;
+        if (!options.dynamic_pose_socket.empty()) {
+            dynamic_relay.reset(new omni::DynamicPoseRelay(options.dynamic_pose_socket,
+                options.debug_test_session, options.dynamic_pose_output,
+                [&](const std::array<std::uint8_t, omni::kFrameSize> &bytes) {
+                    if (!uart) return false;
+                    std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                    return uart->write_all(bytes.data(), bytes.size(), 50);
+                }));
+            dynamic_relay->start();
+        }
+
         std::ofstream csv;
         std::uint64_t csv_rows = 0;
+        std::uint64_t raw_json_errors = 0;
         if (!options.csv_path.empty()) {
             csv.open(options.csv_path);
             if (!csv) throw std::runtime_error("cannot open CSV: " + options.csv_path);
@@ -1667,6 +1692,7 @@ int main(int argc, char **argv)
                     {"x_m",latest_t265.pose.x_m},{"y_m",latest_t265.pose.y_m},{"yaw_rad",latest_t265.pose.yaw_rad},
                     {"forward_mps",latest_t265.body_forward_velocity_mps},{"left_mps",latest_t265.body_left_velocity_mps},
                     {"yaw_rate_radps",latest_t265.gyro_yaw_rate_radps},{"tracker_confidence",raw.tracker_confidence},
+                    {"mapper_confidence",raw.mapper_confidence},{"travel_from_start_m",latest_t265.travel_from_origin_m},
                     {"time_qualified",false}});
             }
             yaw_synchronizer.update(steady_time_s(t265_received), latest_t265);
@@ -1945,7 +1971,7 @@ int main(int argc, char **argv)
                 static_cast<std::int64_t>(sample_ns) - last_ns <=
                     static_cast<std::int64_t>(config.uart_stale_ms) * 1000000LL;
 
-            if (uart && options.tx_rate_hz > 0.0 && now >= next_pose_tx) {
+            if (options.dynamic_pose_socket.empty() && uart && options.tx_rate_hz > 0.0 && now >= next_pose_tx) {
                 next_pose_tx = now +
                     std::chrono::duration_cast<std::chrono::steady_clock::duration>(pose_tx_period);
                 const long x_mm_long = std::lround(fused.x_m * 1000.0);
@@ -2145,7 +2171,8 @@ int main(int argc, char **argv)
             const std::uint64_t uart_frames = live_uart_frames.load(std::memory_order_relaxed);
             const std::uint64_t crc_errors = live_crc_errors.load(std::memory_order_relaxed);
             const std::uint64_t sequence_gaps = live_sequence_gaps.load(std::memory_order_relaxed);
-            write_atomic_json(options.output_path, fused, latest_t265, filter, odometry,
+            try {
+                write_atomic_json(options.output_path, fused, latest_t265, filter, odometry,
                               wheel_debug, quality,
                               wheel_gate, uart_fresh, wheel_accepted, wheel_rejected,
                               uart_frames, crc_errors, sequence_gaps,
@@ -2162,6 +2189,12 @@ int main(int argc, char **argv)
                               innovation_m,
                               config.encoder_fusion_weight,
                               t265_map);
+            } catch (const std::exception &error) {
+                if (options.dynamic_pose_socket.empty()) throw;
+                if (++raw_json_errors == 1)
+                    std::cerr << "[RAW T265 LOG] " << error.what()
+                              << "; dynamic control/UART continues\n";
+            }
 
             std::cout << std::fixed << std::setprecision(3)
                       << "POSE t=" << elapsed
@@ -2203,7 +2236,7 @@ int main(int argc, char **argv)
                   << " status_write_errors="
                   << status_write_errors.load(std::memory_order_relaxed)
                   << " queue_dropped=" << encoder_queue.dropped() << '\n';
-        return map_startup_failed ? 4 : EXIT_SUCCESS;
+        return map_startup_failed ? 4 : (raw_json_errors ? 5 : EXIT_SUCCESS);
     } catch (const rs2::error &error) {
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();

@@ -20,6 +20,7 @@ from async_debug_log import AsyncDebugLog
 from f405_timed_measurements import TimedMeasurements
 from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.worker import RadarWorker
+from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 
 class DynamicMapApp(base.MotionMapApp):
@@ -97,29 +98,7 @@ class DynamicMapApp(base.MotionMapApp):
         for _ in range(2048):
             try:event=self.chassis_inbox.get_nowait()
             except queue.Empty:break
-            s=event['sample'];kind=event['kind']
-            if kind=='timed_identity':self.clock_map.set_identity(s)
-            elif kind=='timed_clock_sync':self.clock_map.sync(s)
-            elif kind=='device_identity_changed':
-                self.radar.send('invalidate',dict(reason='device_identity_changed'));self.timed_yaw_seen=False;self.last_yaw_id=None
-                self.devent('reference_invalidated',reason='device_identity_changed')
-            elif kind=='timed_wheel_diagnostic':
-                measured=self.clock_map.wheel(s,s['receive_monotonic_ns'])
-                if measured is not None:self.radar.send('wheel',measured)
-            elif kind=='timed_gyro_diagnostic':
-                if not self.clock_map.identity or s['boot_epoch']!=self.clock_map.identity['boot_epoch']:continue
-                identity=(s['boot_epoch'],s['yaw_source_id'])
-                if identity==self.last_yaw_id:continue
-                if not self.clock_map.gyro_source_valid(s,yaw=True):continue
-                estimate,uncertainty,reasons=self.clock_map.map_time(s['yaw_receive_us'],s['receive_monotonic_ns'])
-                t=estimate if estimate is not None and estimate>=0 else s['receive_monotonic_ns']
-                self.radar.send('yaw',dict(time_ns=t,yaw_deg=s['yaw_mdeg']/1000.,source=dict(source='versioned_primary_yaw',raw=s,
-                    time_qualified=False,time_uncertainty_ns=uncertainty,time_diagnostics=reasons)))
-                self.last_yaw_id=identity;self.timed_yaw_seen=True;self.imu_packets+=1
-            elif kind=='imu' and not self.timed_yaw_seen and s.get('wire_valid'):
-                self.radar.send('yaw',dict(time_ns=s['timestamp_monotonic_ns'],yaw_deg=s['yaw_deg'],
-                    source=dict(source='legacy_primary_yaw_receive',raw=s,time_qualified=False)))
-                self.imu_packets+=1
+            forward_motion_event(self,event)
 
     def read_pose(self):
         connection=None
