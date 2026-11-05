@@ -4,7 +4,7 @@ set -uo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "${script_dir}" || exit 1
 export DISPLAY="${DISPLAY:-:0}"
-python3 "${script_dir}/calibrate_range_view.py" --pitch 105 --bands 6 "$@"
+python3 "${script_dir}/calibrate_range_view.py" --pitch 105 --bands 5 "$@"
 status=$?
 if (( status != 0 )); then
     echo

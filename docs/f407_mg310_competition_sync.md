@@ -21,7 +21,7 @@
 
 ```bash
 cd /home/sunrise/RDK_X5/shijue_fangan
-python3 vision/calibrate_range_view.py --pitch 105 --bands 6
+python3 vision/calibrate_range_view.py --pitch 105 --bands 5
 ```
 
 空格冻结，S存带框/中心坐标/分区线的截图及JSON，Q退出。原图尺寸1280×1024，分区由上到下编号；可用--bands改变分段数。1/2仅切换记录角度标签，不控制舵机；标签不作为已测角度的证明。120°单独固定后记录。结果存vision/captures/range_calibration，不自动写入正式标定。

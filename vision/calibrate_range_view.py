@@ -13,7 +13,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="测距标定画面：物资中心坐标、横向分区；不发送串口或运动命令")
     parser.add_argument("--pitch", type=int, choices=(105, 120), default=105,
                         help="当前手动设置的相机角度标签；本程序不控制舵机")
-    parser.add_argument("--bands", type=int, default=6)
+    parser.add_argument("--bands", type=int, default=5)
     parser.add_argument("--device", default="/dev/video0")
     parser.add_argument("--model", type=Path, default=root / "models/best_bayese_320x320_nv12.bin")
     parser.add_argument("--output", type=Path, default=root / "captures/range_calibration")
@@ -40,7 +40,7 @@ def main() -> int:
     capture_ns = None
     frozen = False
     print("请先停止比赛进程，固定相机为105°或120°。1/2仅切换记录标签，不控制舵机。")
-    print("默认6个横向区域，坐标按原始1280×1024记录；空格冻结，S保存截图/中心点，Q退出。")
+    print(f"当前{args.bands}个横向区域，坐标按原始1280×1024记录；空格冻结，S保存截图/中心点，Q退出。")
     print("请记录每个区域车体到夹爪入口的实际应走距离及预留补进余量，不以相机斜距代替。")
     try:
         camera.start()
