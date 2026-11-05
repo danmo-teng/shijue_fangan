@@ -13,6 +13,8 @@ from pathlib import Path
 
 OWNER = "t265_f407_motion_map"
 SESSION_NAME = re.compile(r"\d{8}_\d{6}_interactive(?:_\d+)?")
+SESSION_PATTERNS = {OWNER: SESSION_NAME,
+    "competition_wheel_input": re.compile(r"\d{8}_\d{6}_competition_wheel(?:_\d+)?")}
 DYNAMIC_SESSION_FILES = frozenset({"dynamic_events.jsonl", "dynamic_scans.jsonl", "dynamic_localization.jsonl",
     "dynamic_status.json", "dynamic_summary.json", "pose_motion.jsonl", "lidar_rx.jsonl", "lidar_tx.jsonl",
     "lidar_worker_events.jsonl", "lidar_worker_summary.json", "dynamic_initialization.jsonl"})
@@ -26,12 +28,13 @@ def read_json(path):
         return {}
 
 
-def inspect_session(root, name, current, allowed_files):
+def inspect_session(root, name, current, allowed_files, *, owner=OWNER):
     """Snapshot only immediate children. Unknown/user files are never traversed."""
     path = root / name
     row = dict(name=name, size=0, reason="", fingerprint=None, order=(0, 0))
     try:
-        if not SESSION_NAME.fullmatch(name) or path.is_symlink() or not path.is_dir():
+        pattern = SESSION_PATTERNS[owner]
+        if not pattern.fullmatch(name) or path.is_symlink() or not path.is_dir():
             row["reason"] = "非本模块目录/符号链接"
             return row
         directory = path.stat()
@@ -43,7 +46,7 @@ def inspect_session(root, name, current, allowed_files):
         protection = read_json(protection_path)
         if current is not None and path.resolve() == current.resolve():
             row["reason"] = "当前会话"
-        elif (protection_path.exists() or protection_path.is_symlink()) and (protection.get("owner") != OWNER or
+        elif (protection_path.exists() or protection_path.is_symlink()) and (protection.get("owner") != owner or
                 not isinstance(protection.get("sessions"), list)):
             row["reason"] = "保护清单不可读，暂不删除"
         elif name in protection.get("sessions", []):
@@ -53,7 +56,8 @@ def inspect_session(root, name, current, allowed_files):
         if row["reason"]:
             return row
         metadata = read_json(path / "metadata.json")
-        if metadata.get("mode") not in {"interactive_f407_motion_debug", "interactive_f405_normaldebug"}:
+        modes = {"interactive_f407_motion_debug", "interactive_f405_normaldebug"} if owner == OWNER else {"competition_t265_wheel_input"}
+        if metadata.get("mode") not in modes or (owner != OWNER and metadata.get("owner") != owner):
             row["reason"] = "归属无法确认"
             return row
         image_names = set()
@@ -73,7 +77,7 @@ def inspect_session(root, name, current, allowed_files):
         marker_path = path / "session_complete.json"
         marker = read_json(marker_path)
         if marker_path.exists():
-            if (marker.get("owner") != OWNER or marker.get("complete") is not True or
+            if (marker.get("owner") != owner or marker.get("complete") is not True or
                     not isinstance(marker.get("session_index"), int)):
                 row["reason"] = "未完整结束"
             else:
@@ -96,18 +100,18 @@ def inspect_session(root, name, current, allowed_files):
     return row
 
 
-def list_sessions(root, current, allowed_files):
+def list_sessions(root, current, allowed_files, *, owner=OWNER):
     if not root.exists():
         return []
-    return [inspect_session(root, p.name, current, allowed_files)
-            for p in sorted(root.iterdir(), reverse=True) if SESSION_NAME.fullmatch(p.name)]
+    return [inspect_session(root, p.name, current, allowed_files, owner=owner)
+            for p in sorted(root.iterdir(), reverse=True) if SESSION_PATTERNS[owner].fullmatch(p.name)]
 
 
-def delete_sessions(root, selected, current, allowed_files):
+def delete_sessions(root, selected, current, allowed_files, *, owner=OWNER):
     """Delete exactly the reviewed completed snapshots, never recursive paths."""
     removed, skipped = [], []
     for original in selected:
-        row = inspect_session(root, original["name"], current, allowed_files)
+        row = inspect_session(root, original["name"], current, allowed_files, owner=owner)
         if row["reason"] or row["fingerprint"] != original["fingerprint"]:
             skipped.append((row["name"], row["reason"] or "选择后内容已变化"))
             continue

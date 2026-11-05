@@ -20,10 +20,11 @@ exec python3 "${script_dir}/competition_map_app.py" \
     --launch-localization \
     --launch-vision \
     --localization-mode t265 \
+    --official-wheel-input \
     --tx-rate 20 \
     --disable-t265-translation-scale \
     --t265-translation-scale 1.000 \
     --uart /dev/ttyS1 \
-    --baud 115200 \
+    --baud 230400 \
     --fullscreen \
     "$@"

@@ -1053,7 +1053,8 @@ class CompetitionMission:
 
     @staticmethod
     def _pose_fresh(pose: PoseSnapshot) -> bool:
-        return pose.valid and pose.age_ms <= 250.0
+        # Historical name; received pose age is not an admission condition.
+        return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
         if self.state == CompetitionState.RECOVERY_WAIT:

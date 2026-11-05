@@ -1613,8 +1613,71 @@ def test_motion_log_storage():
                 patch("cv2.getWindowProperty",return_value=0), patch("cv2.destroyWindow"):
             assert manager.run() == 0
         assert before == sorted(p.name for p in root.iterdir())
+    # Formal wheel sessions share deletion mechanics, never the test owner/root.
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);owner="competition_wheel_input"
+        files={"metadata.json","session_complete.json"}
+        names=[f"20261105_00000{i}_competition_wheel" for i in range(7)]
+        for i,name in enumerate(names):
+            p=root/name;p.mkdir()
+            (p/'metadata.json').write_text(json.dumps(dict(owner=owner,mode='competition_t265_wheel_input',sdk_session_id=str(i))))
+            (p/'session_complete.json').write_text(json.dumps(dict(owner=owner,complete=True,session_index=i)))
+        current=root/names[-1]
+        assert not list_sessions(root,current,files)  # Old test module cannot select these.
+        rows=[r for r in list_sessions(root,current,files,owner=owner) if not r['reason']]
+        rows.sort(key=lambda r:r['order'],reverse=True)
+        removed,_=delete_sessions(root,rows[4:],current,files,owner=owner)
+        assert set(removed)==set(names[:2]) and current.exists()
+        assert len(list(root.iterdir()))==5
     print("motion log storage / retention / existing map UI PASS (temporary files only)")
 
 
 if __name__ == "__main__":
     main()
+
+
+def test_competition_feedback_adapter():
+    """Same existing wire fixtures -> production test bridge -> SDK-owner IPC.
+    No actual SDK API or motor action; old host receive time is not a gate.
+    """
+    import socket, uuid, struct
+    import f405_timed_protocol as wire
+    from competition_wheel_input import CompetitionWheelInput
+    from t265_f407_motion_map import config_values, DEFAULT_CONFIG
+    from t265_wheel_input import WheelInputBridge
+    examples=json.loads((Path(__file__).with_name('contracts')/'f405_timed_examples_20261031.json').read_text())['examples']
+    def raw(name):return bytes.fromhex(next(x['hex'] for x in examples if x['name']==name))
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary); sid=uuid.uuid4().hex
+        sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind('\0t265-wheel-'+sid);sink.settimeout(.5)
+        adapter=CompetitionWheelInput(root,config_values(DEFAULT_CONFIG),sid)
+        try:
+            assert type(adapter.bridge) is WheelInputBridge
+            wheel=wire.decode(raw('forward'));g=wire.decode(raw('gyro_ccw'))
+            p=bytearray(wire.parse(raw('c_module_host_fixture_type_2'))['payload'])
+            p[:8]=adapter.identity_nonce.to_bytes(8,'big')
+            p[8:10]=b'\0\0';p[10:26]=bytes.fromhex(wheel['boot_epoch'])
+            p[41]=2  # Actual TASK service, not MotionDebug. No mode/SHA admission lock.
+            p[42:44]=bytes((1,3));p[52:56]=(3).to_bytes(4,'big')
+            p[56:60]=(0xffffffff).to_bytes(4,'big')
+            received=time.monotonic_ns()-5_000_000_000
+            def feed(frame):adapter.accept(struct.pack('>Q',received)+frame)
+            feed(wire.packet(wire.ID_REPLY,0,p))
+            for i,t in enumerate((wheel['t0_us'],wheel['t1_us'])):
+                payload=struct.pack('>16sIIqQIIIiQIIIQ',bytes.fromhex(g['boot_epoch']),g['reference_epoch'],i,
+                    g['yaw_mdeg'],t,100+i,0x347,0,0,t,100+i,0x347,0,t)
+                feed(wire.packet(wire.GYRO,i,payload))
+            feed(raw('forward'));adapter.bridge.poll()
+            packet=json.loads(sink.recv(16000))
+            assert packet['v_body_mps'][0] == wheel['forward_um_s']/1e6
+            assert packet['v_body_mps'][1] == wheel['left_um_s']/1e6
+            assert abs(packet['v_camera_mps'][0] - packet['v_body_mps'][0]*.8660254) < 1e-7
+            assert abs(packet['v_camera_mps'][2] - packet['v_body_mps'][0]*.5) < 1e-7
+            assert packet['omega_body_rad_s'] == [0.,0.,0.]
+            assert packet['alignment_clock']=='mcu_event' and not packet['capture_time_qualified']
+            assert adapter.identity['service']==2 and adapter.identity['epoch_valid']
+            state=adapter.snapshot()
+            assert state['stats']['sent_to_sdk_owner']==1 and state['sdk_api_success_samples']==0
+        finally:
+            adapter.close();sink.close()

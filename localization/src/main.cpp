@@ -2,6 +2,7 @@
 
 #include "config.hpp"
 #include "f407_protocol.hpp"
+#include "f405_telemetry.hpp"
 #include "fusion.hpp"
 #include "serial_port.hpp"
 #include "debug_wheel_input.hpp"
@@ -56,6 +57,7 @@ struct Options {
     std::string debug_wheel_socket, debug_wheel_config, debug_wheel_log, debug_wheel_session;
     std::string debug_test_session,debug_fisheye_output,debug_fisheye_request;
     std::string debug_pose_socket;
+    std::string wheel_feedback_socket, wheel_feedback_requests;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 0.0;
@@ -240,6 +242,8 @@ void usage(const char *program)
         << "  --debug-wheel-session ID   independent SDK test session identity\n"
         << "  --debug-fresh-session      disable map preservation for debug A/B\n"
         << "  --debug-test-session ID    record actual SDK process/session identity\n"
+        << "  --wheel-feedback-socket @NAME  formal UART measured-feedback tap\n"
+        << "  --wheel-feedback-requests FILE  one identity + one stream request from existing codec\n"
         << "  --debug-fisheye-output DIR --debug-fisheye-request FILE  opt-in bounded same-pipeline evidence\n"
         << "  -h, --help          show help\n";
 }
@@ -312,6 +316,10 @@ Options parse_options(int argc, char **argv)
             options.debug_fisheye_output=value("--debug-fisheye-output");
         } else if (argument == "--debug-fisheye-request") {
             options.debug_fisheye_request=value("--debug-fisheye-request");
+        } else if (argument == "--wheel-feedback-socket") {
+            options.wheel_feedback_socket = value("--wheel-feedback-socket");
+        } else if (argument == "--wheel-feedback-requests") {
+            options.wheel_feedback_requests = value("--wheel-feedback-requests");
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
         } else if (argument == "--t265-only-output") {
@@ -325,6 +333,10 @@ Options parse_options(int argc, char **argv)
         }
     }
     const bool wheel = !options.debug_wheel_socket.empty();
+    const bool competition_wheel = !options.wheel_feedback_socket.empty();
+    if (competition_wheel != !options.wheel_feedback_requests.empty() ||
+        (competition_wheel && (!wheel || options.uart_path.empty() || options.debug_wheel_synthetic)))
+        throw std::invalid_argument("competition wheel feedback needs the C++ UART, measured SDK input and startup requests");
     if(!options.debug_pose_socket.empty() && (!options.debug_fresh_session || options.debug_test_session.empty()))
         throw std::invalid_argument("pose IPC is limited to identified debug sessions");
     if(options.debug_wheel_synthetic && (!wheel || !options.debug_fresh_session || options.debug_test_session.empty()))
@@ -332,11 +344,11 @@ Options parse_options(int argc, char **argv)
     if (wheel != !options.debug_wheel_config.empty() || wheel != !options.debug_wheel_log.empty() ||
         wheel != !options.debug_wheel_session.empty())
         throw std::invalid_argument("debug wheel input requires socket/config/log/session together");
-    if (wheel && (!options.uart_path.empty() || !options.ignore_encoders ||
-                  !options.t265_only_output || options.tx_rate_hz != 0 || options.pose_jumping_override != 1))
-        throw std::invalid_argument("debug wheel input requires sole external UART owner, direct Pose, ignore-encoders, pose jumping and TX off");
+    if (wheel && ((!competition_wheel && (!options.uart_path.empty() || options.tx_rate_hz != 0)) ||
+                  !options.ignore_encoders || !options.t265_only_output || options.pose_jumping_override != 1))
+        throw std::invalid_argument("wheel input needs direct Pose, ignore-encoders, pose jumping; internal UART only with competition feedback tap");
     if (options.debug_fresh_session && (!options.t265_only_output || !options.ignore_encoders ||
-                                       !options.uart_path.empty() || options.pose_jumping_override != 1 ||
+                                       (!competition_wheel && !options.uart_path.empty()) || options.pose_jumping_override != 1 ||
                                        !options.t265_map_path.empty()))
         throw std::invalid_argument("fresh debug A/B requires direct Pose, external UART, pose jumping, no imported map");
     if(options.debug_fisheye_output.empty()!=options.debug_fisheye_request.empty())
@@ -953,6 +965,15 @@ int main(int argc, char **argv)
         std::atomic<std::uint16_t> navigation_heading_cdeg{0};
         std::mutex uart_tx_mutex;
         std::unique_ptr<omni::SerialPort> uart;
+        auto feedback_tap = std::make_shared<omni::WheelTelemetryTap>(options.wheel_feedback_socket);
+        std::vector<std::uint8_t> feedback_requests;
+        if (!options.wheel_feedback_requests.empty()) {
+            std::ifstream file(options.wheel_feedback_requests, std::ios::binary);
+            feedback_requests.assign(std::istreambuf_iterator<char>(file), {});
+            // Existing codec produces one 19-byte identity and one 23-byte subscription request.
+            if (feedback_requests.size() != 42)
+                throw std::invalid_argument("expected one identity and one stream startup request");
+        }
         if (!options.uart_path.empty()) {
             uart.reset(new omni::SerialPort(options.uart_path, options.baud));
             uart->open_port();
@@ -960,7 +981,7 @@ int main(int argc, char **argv)
                       << " 8N1, RX TYPE=0x15/0x17, TX TYPE=0x16 @ "
                       << options.tx_rate_hz
                       << " Hz, mission heartbeat=100 Hz (T265-independent)\n";
-            uart_thread = std::thread([&]() {
+            uart_thread = std::thread([&, feedback_tap]() {
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
                     if (!options.ignore_encoders) encoder_queue.push(frame);
                     last_uart_ns.store(static_cast<std::int64_t>(monotonic_ns()),
@@ -981,6 +1002,10 @@ int main(int argc, char **argv)
                         status_write_errors.fetch_add(1, std::memory_order_relaxed);
                     }
                 });
+                std::uint64_t received_ns = 0;
+                omni::F405MixedFrames mixed(
+                    [&](const std::uint8_t *data, std::size_t size) { parser.feed(data, size); },
+                    [&](const std::uint8_t *data, std::size_t size) { feedback_tap->publish(data, size, received_ns); });
                 std::uint8_t buffer[256];
                 while (running.load(std::memory_order_relaxed) && !g_stop) {
                     const int count = uart->read_some(buffer, sizeof(buffer), 50);
@@ -989,7 +1014,11 @@ int main(int argc, char **argv)
                         running.store(false, std::memory_order_relaxed);
                         break;
                     }
-                    if (count > 0) parser.feed(buffer, static_cast<std::size_t>(count));
+                    if (count > 0) {
+                        received_ns = monotonic_ns();
+                        if (!options.wheel_feedback_socket.empty()) mixed.feed(buffer, static_cast<std::size_t>(count));
+                        else parser.feed(buffer, static_cast<std::size_t>(count));
+                    }
                     const omni::ParserStats &stats = parser.stats();
                     live_uart_frames.store(stats.frames_ok, std::memory_order_relaxed);
                     live_crc_errors.store(stats.crc_errors, std::memory_order_relaxed);
@@ -997,6 +1026,13 @@ int main(int argc, char **argv)
                 }
                 final_parser_stats = parser.stats();
             });
+            if (!feedback_requests.empty()) {
+                // One-shot startup configuration, no reply wait or periodic identity/sync loop.
+                std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                const bool sent = uart->write_all(feedback_requests.data(), feedback_requests.size(), 50);
+                std::cerr << "[WHEEL FEEDBACK] startup identity/subscription write=" << sent
+                          << "; no command/pose admission gate\n";
+            }
             if (!options.command_file_path.empty()) {
                 relay_thread = std::thread([&]() {
                     constexpr auto heartbeat_period = std::chrono::milliseconds(10);
@@ -1933,8 +1969,11 @@ int main(int argc, char **argv)
                                           std::fabs(fused.y_m) <= config.field_half_m;
                 const double processing_age_ms = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - t265_received).count();
-                const bool source_fresh = std::isfinite(capture_age_ms) && capture_age_ms >= -50.0 &&
-                                          capture_age_ms + processing_age_ms <= 250.0;
+                // The migrated test path retains timestamps, but does not use
+                // pose age to clear VALID in the competition 0x16 output.
+                const bool source_fresh = !options.wheel_feedback_socket.empty() ||
+                    (std::isfinite(capture_age_ms) && capture_age_ms >= -50.0 &&
+                     capture_age_ms + processing_age_ms <= 250.0);
                 tx.status = omni::t265_pose_status(t265_update_accepted,
                                                    latest_t265.tracker_confidence, source_fresh);
                 if (uart_fresh && config.encoder_fusion_weight > 0.0 &&

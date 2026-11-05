@@ -93,8 +93,8 @@ def normalize_heading(degrees: float) -> float:
     return degrees % 360.0
 
 
-def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
-    """Read one atomic localization snapshot; stale/partial input is invalid."""
+def load_localization_pose(path: Path, stale_ms: int | None = 250) -> Pose | None:
+    """Read one atomic snapshot. None retains age as information only."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         timestamp = int(data["timestamp_monotonic_ns"])
@@ -103,13 +103,13 @@ def load_localization_pose(path: Path, stale_ms: int = 250) -> Pose | None:
         wheel = data.get("wheel", {})
         navigation = data.get("navigation", {})
         now_ns = time.monotonic_ns()
-        if timestamp > now_ns + 1_000_000_000:
+        if stale_ms is not None and timestamp > now_ns + 1_000_000_000:
             return None
         age_ms = max(0.0, (now_ns - timestamp) / 1_000_000.0)
         quality = str(data.get("quality", "LOST")).upper()
         if data.get("frame") != "field" or quality not in {"GOOD", "DEGRADED", "LOST"}:
             return None
-        if age_ms > stale_ms:
+        if stale_ms is not None and age_ms > stale_ms:
             quality = "STALE"
         x_m = float(pose["x_m"])
         y_m = float(pose["y_m"])

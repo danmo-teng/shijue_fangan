@@ -179,7 +179,7 @@ def load_pose(path: Path) -> PoseSnapshot:
         navigation = data.get("navigation", {})
         wheel_progress = navigation.get("wheel_progress_m")
         return PoseSnapshot(
-            valid=data.get("quality") in {"GOOD", "DEGRADED"} and age_ms <= 250.0,
+            valid=data.get("quality") in {"GOOD", "DEGRADED"},
             x_m=float(pose["x_m"]),
             y_m=float(pose["y_m"]),
             yaw_deg=yaw % 360.0,

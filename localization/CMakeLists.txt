@@ -20,6 +20,7 @@ endif()
 add_library(omni_localization_core
     src/config.cpp
     src/f407_protocol.cpp
+    src/f405_telemetry.cpp
     src/fusion.cpp
     src/serial_port.cpp)
 target_include_directories(omni_localization_core PUBLIC include)

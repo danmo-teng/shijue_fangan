@@ -591,3 +591,54 @@ def main() -> None:
 if __name__ == "__main__":
     test_range_context_and_calibration()
     main()
+
+
+def test_formal_wheel_start_and_pose_adoption():
+    """No UART/SDK: formal coordinates, lifecycle and received-pose policy."""
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    sys.path.insert(0, str(PROJECT_ROOT / 'rescue_map'))
+    import map_app
+    import competition_map_app as formal
+    from field_model import load_localization_pose
+    with tempfile.TemporaryDirectory() as directory:
+        runtime = Path(directory)
+        options = SimpleNamespace(zone=1, side='red', corner_offset_mm=150*2**.5,
+            encoder_weight=.25, localization_mode='t265', localization_json=runtime/'pose.json',
+            localization_log=None, launch_localization=False, launch_vision=False,
+            uart='/dev/ttyS1', baud=230400, tx_rate=20., fullscreen=False, demo=False,
+            screenshot=None, official_wheel_input=True)
+        with patch.object(map_app, 'RUNTIME', runtime), patch.object(formal, 'RUNTIME', runtime):
+            app = formal.CompetitionMapApp(options)
+            try:
+                app.start_session()
+                cmd = app.localization_command()
+                assert cmd.count('--uart') == 1 and '--ignore-encoders' in cmd
+                assert all(x in cmd for x in ('--debug-fresh-session', '--debug-test-session',
+                    '--enable-pose-jumping', '--t265-only-output', '--wheel-feedback-socket'))
+                conf = Path(cmd[cmd.index('--config')+1]).read_text()
+                assert 'start_zone = 1' in conf and 'start_center_m = 1.350000' in conf
+                assert 'start_heading_offset_deg = 0.0' in conf
+                assert 'camera_offset_forward_m = -0.0346105' in conf
+                assert 'camera_robot_forward_axis = 0.8660254,0,0.5' in conf
+                assert app.pose.yaw_deg == 135 and app.pose.x_m != 0
+                assert app.encoder_weight == 0 and not app.t265_translation_scale_enabled
+                assert len(app.wheel_input.requests_path.read_bytes()) == 42
+                before = app.wheel_input_status()
+                assert before['sdk_api_success_samples'] == 0 and not before['config_loaded']
+                session = json.loads((runtime/'session.json').read_text())
+                assert session['actual_lower_firmware'] == 'unconfirmed'
+                assert 'expected_lower_firmware' not in session
+                options.localization_json.write_text(json.dumps(dict(frame='field',quality='GOOD',
+                    timestamp_monotonic_ns=time.monotonic_ns()-5_000_000_000,
+                    pose=dict(x_m=.1,y_m=.2,yaw_deg=30))))
+                assert load_localization_pose(options.localization_json).quality == 'STALE'
+                app.update_pose()
+                assert app.pose.quality == 'GOOD' and app.pose.age_ms > 250
+                pose = runner_module.load_pose(options.localization_json)
+                assert pose.valid and CompetitionMission._pose_fresh(pose)
+            finally:
+                adapter = app.wheel_input
+                app.stop_localization()
+            assert app.wheel_input is None and not adapter.thread.is_alive()
+            assert not (app.wheel_run_dir/'session_complete.json').exists()

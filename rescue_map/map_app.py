@@ -89,6 +89,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--launch-localization", action="store_true")
     parser.add_argument("--launch-vision", action="store_true")
+    parser.add_argument("--official-wheel-input", action=argparse.BooleanOptionalAction, default=False,
+                        help="competition adapter: reuse tested official SDK wheel input")
     parser.add_argument("--t265-map", type=Path, help="T265 localization map to import")
     parser.add_argument(
         "--use-t265-map",
@@ -395,6 +397,8 @@ class RescueMapApp:
                 if self.localization_mode == "t265" else
                 "T265+编码器（命令行覆盖）"
             )
+            if getattr(self, "official_wheel_input", False):
+                localization_label = "T265＋官方SDK轮速输入"
             scale_label = (
                 f"开启 {self.t265_translation_scale:.3f}×"
                 if self.t265_translation_scale_enabled else "关闭（命令行覆盖）"
@@ -432,7 +436,9 @@ class RescueMapApp:
                 text.add(f"融合-里程计差异：{pose.fused_odom_delta_m:.3f} m / {pose.fused_odom_yaw_delta_deg:+.2f}°", (x0, 510), 16, (0, 195, 220))
                 text.add(f"里程计更新：{pose.odom_updates}  帧龄：{pose.odom_update_age_ms:.0f} ms", (x0, 540), 16, (200, 150, 200))
             else:
-                text.add("轮式里程计：等待有效编码器解算", (x0, 420), 18, (180, 150, 180))
+                label = ("轮反馈作为SDK输入，非独立位置" if getattr(self, "official_wheel_input", False)
+                         else "轮式里程计：等待有效编码器解算")
+                text.add(label, (x0, 420), 17, (180, 150, 180))
             text.add(f"T265起点位移：{pose.t265_travel_m:.3f} m", (x0, 580), 18, (200, 200, 205))
             scale_state = "启用" if pose.t265_translation_scale_enabled else "关闭"
             text.add(f"T265平移比例：{pose.t265_translation_scale:.3f}×（{scale_state}）", (x0, 615), 18, (200, 200, 205))
@@ -456,11 +462,18 @@ class RescueMapApp:
                 f"T265+编码器（权重{pose.encoder_fusion_weight * 100:.0f}%）"
                 if self.localization_mode == "fusion" else "仅T265（位置权重100%）"
             )
+            if getattr(self, "official_wheel_input", False):
+                mode_text = "T265＋官方SDK轮速输入"
             text.add(f"定位方式：{mode_text}", (x0, 720), 18, (200, 200, 205))
             if self.localization_mode == "fusion":
                 text.add(f"编码器UART：{'正常' if pose.uart_fresh else '超时'}", (x0, 755), 18, (200, 200, 205))
                 primary = "轮式" if pose.navigation_wheel_primary else "T265"
                 text.add(f"轮速门控：{pose.wheel_gate}  当前主导：{primary}", (x0, 790), 16, (175, 175, 180))
+            elif getattr(self, "official_wheel_input", False):
+                status = self.wheel_input_status()
+                text.add(f"轮速：{status.get('state', 'REQUESTED_BLOCKED')}", (x0, 755), 16, (200, 200, 205))
+                text.add(f"API接受 {status.get('sdk_api_success_samples', 0)} 次 / {status.get('sdk_api_rate_hz', 0):.1f} Hz",
+                         (x0, 790), 16, (200, 200, 205))
             else:
                 text.add("轮式仅作参考，定位仅T265", (x0, 755), 18, (200, 200, 205))
             age_text = "--" if math.isinf(pose.age_ms) else f"{pose.age_ms:.0f} ms"
@@ -563,7 +576,7 @@ class RescueMapApp:
             actual_lower_mode=getattr(self.options, "actual_lower_mode", "unconfirmed"),
         )
         write_localization_config(
-            PROJECT_ROOT / "localization/config/localization.example.conf",
+            getattr(self, "localization_config_template", PROJECT_ROOT / "localization/config/localization.example.conf"),
             RUNTIME / "localization.conf",
             self.zone,
             self.corner_offset_m,
@@ -583,8 +596,8 @@ class RescueMapApp:
         else:
             self.message = "等待T265和编码器融合数据" if self.localization_mode == "fusion" else "等待T265定位数据"
         if self.options.launch_localization and not self.options.screenshot:
-            command = self.localization_command()
             try:
+                command = self.localization_command()
                 self.localization_json.unlink(missing_ok=True)
                 self.localization_log.unlink(missing_ok=True)
                 (RUNTIME / "uart_command.bin").unlink(missing_ok=True)
@@ -593,6 +606,7 @@ class RescueMapApp:
                 self.localization_process = subprocess.Popen(command, cwd=PROJECT_ROOT / "localization")
                 self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
             except OSError as exc:
+                self.stop_localization()
                 self.message = f"定位启动失败：{exc}"
                 self.session_started = False
                 self.selecting = True
@@ -611,8 +625,9 @@ class RescueMapApp:
             self.message = "定位已退出；修复后按Enter重试"
             return
         if (self.pose.quality not in {"GOOD", "DEGRADED"}
-                or self.pose.age_ms > 250.0 or not self.pose.t265_map_startup_ready):
-            self.message = "等待新鲜定位就绪，再启动识别"
+                or (getattr(self, "pose_age_gate", True) and self.pose.age_ms > 250.0)
+                or not self.pose.t265_map_startup_ready):
+            self.message = "等待定位就绪，再启动识别"
             return
         try:
             self.vision_process = subprocess.Popen(
@@ -786,7 +801,8 @@ class RescueMapApp:
             )
             self.message = "演示模式（未读取真实硬件）"
         else:
-            live = load_localization_pose(self.localization_json)
+            live = load_localization_pose(self.localization_json,
+                                          stale_ms=250 if getattr(self, "pose_age_gate", True) else None)
             if live is not None:
                 self.pose = live
                 self.last_live_read_monotonic = time.monotonic()

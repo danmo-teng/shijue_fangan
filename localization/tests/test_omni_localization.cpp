@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "f407_protocol.hpp"
+#include "f405_telemetry.hpp"
 #include "fusion.hpp"
 #include "debug_wheel_input.hpp"
 
@@ -87,6 +88,27 @@ void test_protocol()
     expected.sample_period_ms = 10;
     expected.status = 0x07;
     const auto bytes = omni::build_encoder_frame(expected);
+
+    // A valid legacy-looking payload inside an extended packet is not a
+    // second UART frame. Fragmentation must not change task/status parsing.
+    std::vector<std::uint8_t> extended{0xd4, 0x4d, 1, 7, 0, 15, 0, 1};
+    extended.insert(extended.end(), bytes.begin(), bytes.end());
+    auto crc = omni::modbus_crc16(extended.data()+2, extended.size()-2);
+    extended.push_back(crc & 255); extended.push_back(crc >> 8); extended.push_back(0xe4);
+    int legacy_count = 0, extended_count = 0;
+    omni::F405MixedFrames mixed(
+        [&](const std::uint8_t *p, std::size_t n) {
+            check(n == bytes.size() && std::equal(p, p+n, bytes.begin()), "legacy packet unchanged");
+            ++legacy_count;
+        },
+        [&](const std::uint8_t *p, std::size_t n) {
+            check(n == extended.size() && std::equal(p, p+n, extended.begin()), "extended packet unchanged");
+            ++extended_count;
+        });
+    for (auto byte : extended) mixed.feed(&byte, 1);
+    check(legacy_count == 0 && extended_count == 1, "consume extended container atomically");
+    mixed.feed(bytes.data(), bytes.size());
+    check(legacy_count == 1, "legacy traffic continues after extended packet");
 
     std::vector<omni::EncoderFrame> parsed;
     omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
