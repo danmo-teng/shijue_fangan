@@ -66,7 +66,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                 except ValueError as exc:reply('reference_rejected',request_id=payload['request_id'],error=str(exc))
             elif kind=='field_start':
                 reference=engine.align(payload['description'],physical_confirmed=False,
-                    center_xy=payload['center_xy_m'],heading_deg=payload['yaw_deg'],first_sample=True)
+                    center_xy=payload['center_xy_m'],heading_deg=payload['yaw_deg'],
+                    first_sample=payload.get('first_sample',True),round_token=payload.get('round_token'))
+                pending.clear()  # Previous placement's queued scans do not cross the explicit start bind.
                 event('field_reference_set',reference=reference)
             elif kind=='lidar_enabled':
                 requested_lidar_enabled=bool(payload['enabled'])

@@ -175,7 +175,7 @@ class DynamicFence:
         return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
             reference=dict(self.reference) if self.reference else None)
 
-    def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False):
+    def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False,round_token=None):
         """Known field reference; legacy fixture defaults unchanged, formal start explicit."""
         with self.lock:
             if not self.poses or not self.yaws:raise ValueError("等待实际T265 Pose和主yaw数据")
@@ -193,6 +193,9 @@ class DynamicFence:
                 timestamp_monotonic_ns=time.monotonic_ns())
             if first_sample:
                 self.reference['selected_start']=dict(center_xy_m=list(center_xy),yaw_deg=heading_deg)
+            if round_token is not None:
+                self.reference.update(round_token=round_token,source='selected_competition_start_at_button',
+                    selected_start=dict(center_xy_m=list(center_xy),yaw_deg=heading_deg))
             self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.has_anchor=False;self.revision+=1
             self.pending_reacquisition=None
             self.reference['reference_sample_ns']=p[0]

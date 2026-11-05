@@ -89,6 +89,7 @@ def main() -> None:
 
         class FakeProcess:
             returncode = None
+            pid = 987654321
 
             def poll(self):
                 return self.returncode
@@ -100,12 +101,18 @@ def main() -> None:
                 return self.returncode
 
         original_popen = map_app.subprocess.Popen
+        original_killpg = map_app.os.killpg
+        fake_processes = []
         def fake_popen(command, cwd=None, **kwargs):
             if command[0] == "git":
                 return original_popen(command, cwd=cwd, **kwargs)
             launched.append(command)
-            return FakeProcess()
+            assert kwargs.get('start_new_session') is True
+            process = FakeProcess()
+            fake_processes.append(process)
+            return process
         map_app.subprocess.Popen = fake_popen
+        map_app.os.killpg = lambda pid, sig: [p.send_signal(sig) for p in fake_processes if p.pid == pid]
         try:
             app.options.launch_localization = True
             app.options.launch_vision = True
@@ -123,6 +130,7 @@ def main() -> None:
         finally:
             app.stop_session_processes()
             map_app.subprocess.Popen = original_popen
+            map_app.os.killpg = original_killpg
         app.started_monotonic -= 0.4
         app.update_pose()
         assert app.pose.quality == "NO_DATA"
@@ -193,6 +201,55 @@ def main() -> None:
         assert frame.shape == (1024, 1280, 3)
 
     print("rescue_map app integration PASS")
+
+
+def test_stop_owned_session_releases_child_resource():
+    """A stopped upload shell must not leave its child holding the USB analogue."""
+    import fcntl
+    import os
+    import signal
+    child_source = """import fcntl, signal, sys, time
+from pathlib import Path
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+f = open(sys.argv[1], 'w')
+fcntl.flock(f, fcntl.LOCK_EX)
+Path(sys.argv[2]).write_text('ready')
+time.sleep(30)
+"""
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for parent_exits in (False, True):
+            marker = root / 'ready'
+            marker.unlink(missing_ok=True)
+            resource = root / 'exclusive-resource'
+            source = ("import subprocess, sys, time, signal\n"
+                      "signal.signal(signal.SIGINT, lambda *_: sys.exit(0))\n"
+                      f"subprocess.Popen([sys.executable, '-c', {child_source!r}, {str(resource)!r}, {str(marker)!r}])\n"
+                      + ("" if parent_exits else "time.sleep(30)\n"))
+            process = map_app.RescueMapApp.start_owned_process([sys.executable, '-c', source], root)
+            try:
+                deadline = time.monotonic() + 2
+                while not marker.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                assert marker.exists()
+                if parent_exits:
+                    process.wait(timeout=2)
+                map_app.RescueMapApp.stop_process(process)
+                with resource.open('a') as stream:
+                    deadline = time.monotonic() + 1
+                    while True:
+                        try:
+                            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except BlockingIOError:
+                            assert time.monotonic() < deadline, 'upload child still owns resource'
+                            time.sleep(.01)
+            finally:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=2)
 
 
 if __name__ == "__main__":

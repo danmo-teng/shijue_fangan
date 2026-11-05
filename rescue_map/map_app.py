@@ -617,7 +617,7 @@ class RescueMapApp:
                 (RUNTIME / "uart_command.bin").unlink(missing_ok=True)
                 (RUNTIME / "stm32_status.json").unlink(missing_ok=True)
                 (RUNTIME / "localization_events.jsonl").unlink(missing_ok=True)
-                self.localization_process = subprocess.Popen(command, cwd=PROJECT_ROOT / "localization")
+                self.localization_process = self.start_owned_process(command, PROJECT_ROOT / "localization")
                 self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
             except OSError as exc:
                 self.stop_localization()
@@ -644,9 +644,7 @@ class RescueMapApp:
             self.message = "等待定位就绪，再启动识别"
             return
         try:
-            self.vision_process = subprocess.Popen(
-                self.vision_command(), cwd=PROJECT_ROOT / "mission_test",
-            )
+            self.vision_process = self.start_owned_process(self.vision_command(), PROJECT_ROOT / "mission_test")
             self.vision_start_pending = False
             self.message = "定位就绪，识别流程已启动"
         except OSError as exc:
@@ -750,19 +748,46 @@ class RescueMapApp:
         return command
 
     @staticmethod
+    def start_owned_process(command, cwd):
+        # The localization shell may still be uploading firmware in a child.
+        # Own that whole session so exiting cannot leave it holding T265 USB.
+        process = subprocess.Popen(command, cwd=cwd, start_new_session=True)
+        process._rescue_process_group = True
+        return process
+
+    @staticmethod
     def stop_process(process: subprocess.Popen | None) -> None:
-        if process is None or process.poll() is not None:
+        if process is None:
             return
-        process.send_signal(signal.SIGINT)
-        try:
-            process.wait(timeout=3.0)
-        except subprocess.TimeoutExpired:
-            process.terminate()
+        owns_group = getattr(process, '_rescue_process_group', False) is True
+
+        def send(sig):
             try:
-                process.wait(timeout=2.0)
+                if owns_group:
+                    os.killpg(process.pid, sig)
+                else:
+                    process.send_signal(sig)
+            except ProcessLookupError:
+                pass
+
+        try:
+            if process.poll() is not None:
+                return
+            send(signal.SIGINT)
+            try:
+                process.wait(timeout=3.0)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=2.0)
+                send(signal.SIGTERM)
+                try:
+                    process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    send(signal.SIGKILL)
+                    process.wait(timeout=2.0)
+        finally:
+            # A shell can exit before its upload/model child. Only this owned
+            # session is cleaned up; never kill by executable name or USB bus.
+            if owns_group:
+                send(signal.SIGKILL)
 
     def stop_vision(self) -> None:
         self.stop_process(self.vision_process)

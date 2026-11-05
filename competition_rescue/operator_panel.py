@@ -63,6 +63,7 @@ class OperatorPanel:
         self._state_lock = threading.Lock()
         self._stop_serial = 0
         self._beep_sequence = 0
+        self._pending_beep = None
         self.buttons = SysfsButtonInput()
         selection = _read_json(self.selection_path)
         if not getattr(app.options, 'zone', None) and selection.get('zone') in (1, 2, 3, 4):
@@ -132,7 +133,8 @@ class OperatorPanel:
         self._lock_file = lock_file
         self.active = True
         self._quit.clear()
-        self._start_standby()
+        if not getattr(self.app, 'prewarm_enabled', False):
+            self._start_standby()
         self._thread = threading.Thread(target=self._poll_buttons, name='competition-buttons', daemon=True)
         self._thread.start()
 
@@ -171,16 +173,28 @@ class OperatorPanel:
             for event in self.buttons.poll():
                 if event['action'] == 'stop':
                     self.request_stop()
-                if event['action'] == 'start' and self.transitioning:
+                if (event['action'] == 'start' and self.transitioning
+                        and not getattr(self.app, 'prewarm_enabled', False)):
                     continue
                 event['_stop_serial'] = self._stop_serial
                 self._enqueue(event)
             self._quit.wait(.02)
 
+    def _flush_beep(self):
+        if self._pending_beep is None:
+            return True
+        count, long, sequence = self._pending_beep
+        if send_beep(self.socket_name,count=count,long=long,sequence=sequence):
+            self._pending_beep = None
+            return True
+        return False
+
     def _beep(self, count, long=False):
         self._beep_sequence = (self._beep_sequence + 1) & 255
-        if not send_beep(self.socket_name, count=count, long=long, sequence=self._beep_sequence):
-            self._record('operator_feedback_unavailable', 'IPC未送达；选择已保留，不等待声音回执')
+        # One replaceable local notification, never a UART acknowledgment wait.
+        self._pending_beep = (count, long, self._beep_sequence)
+        if not self._flush_beep():
+            self._record('operator_feedback_pending', '本地IPC暂未绑定；保留一条声音请求，不等待下位机回执')
 
     def _query_zone(self):
         self.app.message = f'当前出发区：{self.app.zone}号'
@@ -192,6 +206,7 @@ class OperatorPanel:
         self._beep(1 if red else 2, long=True)
 
     def tick(self):
+        self._flush_beep()
         if self._standby is not None and self._standby.poll() is not None and not self._standby_reported:
             self._standby_reported = True
             self._notice(f'待机底盘通信已退出：{self._standby.returncode}；可选择和启动，声音可能不可用')
@@ -208,6 +223,7 @@ class OperatorPanel:
                 self._record('operator_input_recovered', f"key{event['key']}")
             elif action == 'stop':
                 self.app.vision_start_pending = False
+                self.app.start_requested = False
                 self._notice('已请求停止本轮运动；长按4号返回待机', 'operator_stop')
             elif action == 'exit_session':
                 if not self.transitioning:
@@ -233,6 +249,7 @@ class OperatorPanel:
                     self.app.start_session()
 
     def before_start(self):
+        self._pending_beep = None
         with self._state_lock:
             self.transitioning = True
             self.stopped = False
@@ -243,6 +260,17 @@ class OperatorPanel:
                 self._notice(f'旧按键控制记录清理失败：{error}')
         self.save_selection()
         self._stop_standby()
+
+    def release_start(self, zone, side, opening_strategy):
+        # Serialize with the independent GPIO STOP writer: a STOP must never
+        # be overwritten by a concurrently prepared START.
+        with self._state_lock:
+            if self.stopped:
+                return False
+            _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
+                action='start', start_zone=zone, side=side, opening_strategy=opening_strategy,
+                reference_token=self.app.reset_session_token))
+        return True
 
     def after_start(self):
         with self._state_lock:
@@ -263,10 +291,11 @@ class OperatorPanel:
             except OSError as error:
                 self._notice(f'按键控制记录清理失败：{error}')
             self.transitioning = False
-        if self.active:
+        if self.active and not getattr(self.app, 'prewarm_enabled', False):
             self._start_standby()
 
     def close(self):
+        self._pending_beep = None
         self._quit.set()
         if self._thread is not None:
             self._thread.join(timeout=1)

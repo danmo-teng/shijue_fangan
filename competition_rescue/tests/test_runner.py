@@ -39,6 +39,81 @@ from state_machine import (  # noqa: E402
 )
 
 
+def test_async_diagnostics_keeps_producer_running_and_marks_overflow() -> None:
+    from unittest.mock import patch
+    from async_diagnostics import AsyncDiagnosticWriter
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        held, release = threading.Event(), threading.Event()
+        original = AsyncDiagnosticWriter._run
+
+        def blocked_disk(writer):
+            held.set()
+            release.wait(2)
+            original(writer)
+
+        with patch.object(AsyncDiagnosticWriter, "_run", blocked_disk):
+            writer = AsyncDiagnosticWriter(root / "logging.json", capacity=3)
+        assert held.wait(1)
+        log = JsonlLog(root / "events.jsonl", writer)
+        data = {"nested": {"value": 1}}
+        before = time.monotonic_ns()
+        log.write("first", data)
+        data["nested"]["value"] = 9
+        log.write("second", {})
+        log.write("overflow", {})
+        assert writer.statistics()["dropped"] == 1
+        assert not release.is_set()  # Producers completed while the writer was held.
+        release.set()
+        status = writer.close()
+        rows = [json.loads(line) for line in log.path.read_text().splitlines()]
+        assert [row["event"] for row in rows] == ["first", "second"]
+        assert rows[0]["nested"]["value"] == 1
+        assert before <= rows[0]["timestamp_monotonic_ns"] <= time.monotonic_ns()
+        assert status["incomplete"] and status["pending_records"] == 0
+        assert json.loads((root / "logging.json").read_text())["dropped"] == 1
+
+
+def test_async_diagnostics_coalesces_snapshots_and_disk_error_is_not_control_error() -> None:
+    from unittest.mock import patch
+    from async_diagnostics import AsyncDiagnosticWriter
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        release = threading.Event()
+        original = AsyncDiagnosticWriter._run
+
+        def blocked_disk(writer):
+            release.wait(2)
+            original(writer)
+
+        with patch.object(AsyncDiagnosticWriter, "_run", blocked_disk):
+            writer = AsyncDiagnosticWriter(root / "logging.json")
+        log = JsonlLog(root / "events.jsonl", writer)
+        planner = CompetitionPlanner(CompetitionMission(CompetitionSettings(side="red")),
+            root / "pose", root / "stm", root / "command", root / "diagnostics.json", log, 50)
+        for number in range(4):
+            planner._diagnostics(CompetitionOutput(CompetitionState.SEARCH, None, str(number)),
+                                 PoseSnapshot(), StmSnapshot(), VisionSnapshot(frame_sequence=number))
+        assert writer.statistics()["pending_snapshots"] == 1
+        assert writer.statistics()["snapshots_coalesced"] == 3
+        assert not (root / "command").exists()
+        release.set()
+        assert not writer.close()["incomplete"]
+        assert json.loads((root / "diagnostics.json").read_text())["message"] == "3"
+
+        # A path whose parent is a file makes real background I/O fail.
+        bad_parent = root / "not_a_directory"
+        bad_parent.write_text("occupied")
+        failed = AsyncDiagnosticWriter(root / "failure_logging.json")
+        assert failed.append(bad_parent / "events.jsonl", {"event": "test"})
+        failure = failed.close()
+        assert failure["error"] and failure["incomplete"]
+        assert not failed.append(root / "unused", {"event": "after_failure"})
+        assert not (root / "command").exists()
+
+
 def test_suppressed_publish_preserves_command_file_and_sequence() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -892,6 +967,7 @@ def test_operator_standby_returns_after_failed_start_only_after_cleanup():
     def make_app():
         app = formal.CompetitionMapApp.__new__(formal.CompetitionMapApp)
         app.session_started = False
+        app.prewarm_enabled = False
         app.selecting = True
         app.message = ''
         app.record_reset_event = Mock()
@@ -950,3 +1026,134 @@ def test_operator_standby_returns_after_failed_start_only_after_cleanup():
         raise AssertionError('cleanup failure must remain visible')
     app.operator.after_reset.assert_not_called()
     assert not app.operator.transitioning
+
+
+def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
+    """Warm session -> user start reuses processes; no device or motor calls."""
+    from unittest.mock import Mock, patch
+    from types import SimpleNamespace
+    import competition_map_app as formal
+    import operator_panel as panel_module
+    import map_app
+    from lidar_yaw_debug.dynamic import DynamicFence
+    from field_model import initial_pose
+    with tempfile.TemporaryDirectory() as directory:
+        runtime = Path(directory)
+        options = SimpleNamespace(zone=1,side='red',corner_offset_mm=150*2**.5,
+            encoder_weight=0.,localization_mode='t265',localization_json=runtime/'pose.json',
+            localization_log=None,launch_localization=True,launch_vision=True,
+            uart='MOCK',baud=230400,tx_rate=20.,fullscreen=False,demo=False,screenshot=None,
+            official_wheel_input=True,dynamic_localization=True,gpio_buttons=True,headless=True)
+        with patch.object(map_app,'RUNTIME',runtime), patch.object(formal,'RUNTIME',runtime), \
+             patch.object(panel_module,'RUNTIME',runtime), patch.object(panel_module,'send_beep',return_value=True):
+            app = formal.CompetitionMapApp(options)
+            owner = Mock(); owner.poll.return_value = None
+            vision = Mock(); vision.poll.return_value = None
+            dynamic = SimpleNamespace(radar=SimpleNamespace(state={}),state={},request_start=Mock())
+            def cold_prepare(_):
+                app.session_started = True
+                app.localization_process = owner
+                app.dynamic = dynamic
+            with patch.object(formal.RescueMapApp,'start_session',cold_prepare), \
+                 patch.object(app,'start_owned_process',return_value=vision) as spawn:
+                app.prepare_warm_session()
+                assert app.warming and app.selecting and not app.session_started
+                assert '--wait-for-operator' in spawn.call_args.args[0]
+                token = app.reset_session_token
+                app.zone,app.side = 4,'blue'
+                app.start_session()  # Press before ready is remembered.
+                app._update_warm_start()
+                assert app.start_requested and not app.start_released
+                dynamic.request_start.assert_not_called()
+                assert not app.operator.control_path.exists()
+                app.warm_status_path.write_text(json.dumps(dict(session_token=token,ready=True,competition_started=False)))
+                dynamic.radar.state.update(have_tracked_pose=True,have_primary_yaw=True)
+                app._update_warm_start()
+                assert app.start_released and spawn.call_count == 1 and app.localization_process is owner
+                request=json.loads(app.operator.control_path.read_text())
+                assert request['side']=='blue' and request['start_zone']==4 and request['reference_token']==token
+                dynamic.request_start.assert_called_once()
+                assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token) is None
+                app.localization_json.write_text(json.dumps(dict(reference=dict(round_token='old'))))
+                assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token) is None
+                app.localization_json.write_text(json.dumps(dict(reference=dict(round_token=token))))
+                assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token)['start_zone']==4
+                app.warm_status_path.write_text(json.dumps(dict(session_token=token,ready=True,competition_started=True)))
+                app._update_warm_start()
+                assert app.session_started and not app.warming and not app.selecting
+                assert spawn.call_count==1 and app.localization_process is owner
+            # Exactly the existing transform, sampled after carrying/turning.
+            engine=DynamicFence({})
+            for seq,x,y,yaw in ((1,0.,0.,0.),(2,2.,-1.,.7)):
+                engine.ingest_pose(dict(session_id='sdk',frame_number=seq,timestamp_monotonic_ns=seq*100,
+                    receive_monotonic_ns=seq*100,x_m=x,y_m=y,yaw_rad=yaw,tracker_confidence=3))
+                engine.ingest_yaw(seq*100,10.+seq*20,dict(raw={}))
+            selected=initial_pose(4,app.corner_offset_m)
+            ref=engine.align('button',center_xy=(selected.x_m,selected.y_m),heading_deg=selected.yaw_deg,round_token=token)
+            assert ref['pose_origin']==[2.,-1.] and ref['reference_sample_ns']==200
+            result=engine.trajectory(np.array(engine.poses),np.array(engine.yaws),ref)([200])[0]
+            assert np.allclose(result,[selected.x_m,selected.y_m,np.deg2rad(selected.yaw_deg)])
+            assert ref['round_token']==token and ref['source']=='selected_competition_start_at_button'
+
+
+def test_warm_start_stop_wins_before_release_and_failure_does_not_retry():
+    from unittest.mock import Mock
+    from types import SimpleNamespace
+    import competition_map_app as formal
+    app=formal.CompetitionMapApp.__new__(formal.CompetitionMapApp)
+    app.localization_process=Mock();app.localization_process.poll.return_value=None
+    app.vision_process=Mock();app.vision_process.poll.return_value=None
+    app.warming=True;app.session_started=False;app.selecting=False
+    app.start_requested=True;app.start_released=False;app.warm_ready_announced=False
+    app.warm_status_path=Path('/nonexistent/mock-warm-status')
+    app.reset_session_token='mock'
+    app.dynamic=SimpleNamespace(radar=SimpleNamespace(state={}),request_start=Mock())
+    app.operator=SimpleNamespace(stopped=True,_beep=Mock(),_start_standby=Mock())
+    app.record_reset_event=Mock();app.stop_session_processes=Mock()
+    app._update_warm_start()
+    assert not app.start_requested and not app.start_released
+    app.dynamic.request_start.assert_not_called()
+    app.operator.stopped=False
+    app.localization_process.poll.return_value=1;app.localization_process.returncode=1
+    app._update_warm_start()
+    assert not app.warming and app.selecting and not app.start_requested
+    app.stop_session_processes.assert_called_once()
+    app.operator._start_standby.assert_called_once()
+    app.operator._beep.assert_called_once_with(3,long=True)
+
+
+
+def test_warm_config_partial_start_remembers_abort_obligation():
+    from unittest.mock import patch
+    sent=[];facts=[]
+    with patch.object(runner_module,'write_command_frame',side_effect=lambda p,frame:sent.append(frame)), \
+         patch.object(runner_module.time,'sleep',return_value=None):
+        assert not runner_module.publish_start_config(Path('/unused'), 'blue', 4,
+            lambda:len(sent)==0,lambda:facts.append('config_sent'))
+        assert len(sent)==1 and facts==['config_sent']
+        assert sent[0][2]==0x11  # Real lower CONFIG, not a prepare/handshake frame.
+        sent.clear();facts.clear()
+        assert not runner_module.publish_start_config(Path('/unused'),'red',1,lambda:False,lambda:facts.append(1))
+        assert not sent and not facts
+        assert runner_module.publish_start_config(Path('/unused'),'red',1,lambda:True,lambda:facts.append(1))
+        assert len(sent)==3 and len(facts)==3
+
+
+
+def test_warm_error_beep_waits_only_for_local_socket_binding():
+    from unittest.mock import Mock, patch
+    from types import SimpleNamespace
+    import operator_panel as panel_module
+    app=SimpleNamespace(options=SimpleNamespace(zone=1,side='red'),zone=1,side='red',corner_offset_m=.2,
+        record_reset_event=Mock())
+    with tempfile.TemporaryDirectory() as directory, patch.object(panel_module,'RUNTIME',Path(directory)), \
+         patch.object(panel_module,'send_beep',side_effect=[False,True,True]) as send:
+        panel=panel_module.OperatorPanel(app)
+        panel._beep(3,long=True)
+        assert panel._pending_beep is not None
+        panel.tick()
+        assert panel._pending_beep is None and send.call_count==2
+        panel.tick()
+        assert send.call_count==2  # No periodic UART resend/ACK polling.
+        panel._beep(1)
+        assert send.call_count==3 and panel._pending_beep is None

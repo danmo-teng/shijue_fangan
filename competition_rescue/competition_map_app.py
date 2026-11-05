@@ -25,6 +25,7 @@ from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 from motion_log_storage import list_sessions, delete_sessions, read_json, DYNAMIC_SESSION_FILES
 from operator_panel import OperatorPanel
+from field_model import initial_pose
 
 WHEEL_OWNER = "competition_wheel_input"
 WHEEL_FILES = frozenset({"metadata.json", "localization.conf", "session_complete.json",
@@ -48,6 +49,14 @@ class CompetitionMapApp(RescueMapApp):
         self.wheel_run_dir = None
         self.pose_age_gate = False
         self.operator = None
+        self.prewarm_enabled = bool(getattr(options, 'gpio_buttons', False) and self.dynamic_localization
+            and not options.demo and not options.screenshot)
+        self.warming = False
+        self.start_requested = False
+        self.start_released = False
+        self.warm_ready_announced = False
+        self.warm_error = None
+        self.warm_status_path = RUNTIME / 'operator_warm_status.json'
         if self.official_wheel_input:
             # Use the same file as the test, but the normal writer sets the
             # selected competition corner/heading (never the test centre).
@@ -60,7 +69,125 @@ class CompetitionMapApp(RescueMapApp):
         if (getattr(options, 'gpio_buttons', False) and not options.demo and not options.screenshot):
             self.operator = OperatorPanel(self)
 
+    def prepare_warm_session(self):
+        """Start the one SDK/UART and vision owners, with command production disarmed."""
+        if self.warming or self.session_started:
+            return
+        self.warm_error = None
+        self.start_requested = self.start_released = self.warm_ready_announced = False
+        self.warm_status_path.unlink(missing_ok=True)
+        try:
+            self.operator.before_start()
+            super().start_session()
+            if not self.session_started:
+                raise RuntimeError(self.message)
+            self.warming = True
+            # Base start prepares all existing session/log paths. Warm vision
+            # starts independently of Pose so USB and model loading overlap.
+            self.session_started = False
+            self.selecting = True
+            self.vision_start_pending = False
+            if self.options.launch_vision:
+                self.vision_process = self.start_owned_process(self.vision_command(), PROJECT_ROOT / 'mission_test')
+            self.message = '预热T265、雷达和视觉；可选区，按3一次记录开赛请求'
+            self.record_reset_event('prewarm_started', 'same_sdk_session_until_start')
+        except Exception as error:
+            self._warm_failed(str(error))
+        finally:
+            self.operator.after_start()
+
+    def _warm_failed(self, reason):
+        self.warm_error = reason
+        self.start_requested = self.start_released = self.warming = False
+        self.session_started = False
+        self.selecting = True
+        self.stop_session_processes()
+        self.operator._start_standby()
+        self.message = f'预热失败：{reason}；修复后按3重试，未发送开赛命令'
+        self.record_reset_event('prewarm_failed', reason)
+        self.operator._beep(3, long=True)
+
+    def _update_warm_start(self):
+        for name, process in (('定位', self.localization_process), ('视觉', self.vision_process)):
+            if process is not None and process.poll() is not None:
+                self._warm_failed(f'{name}进程退出({process.returncode})')
+                return
+        if self.dynamic is not None and getattr(self.dynamic, 'error', None):
+            self._warm_failed(f'动态定位准备失败：{self.dynamic.error}')
+            return
+        status = read_json(self.warm_status_path)
+        arrivals = {
+            'T265 Pose': bool(self.dynamic is not None and self.dynamic.radar.state.get('have_tracked_pose')),
+            '主yaw': bool(self.dynamic is not None and self.dynamic.radar.state.get('have_primary_yaw')),
+            '视觉推理': bool(status.get('session_token') == self.reset_session_token and status.get('ready')),
+        }
+        ready = all(arrivals.values())
+        if ready and not self.warm_ready_announced:
+            self.warm_ready_announced = True
+            self.operator._beep(1)
+            self.record_reset_event('prewarm_ready', 'one_short_beep; SDK Pose, gyro and actual inference present')
+        if self.operator.stopped:
+            self.start_requested = False
+            self.message = '已请求停止；长按4退出后自动重新预热'
+            return
+        if self.start_requested and ready and not self.start_released:
+            selected = initial_pose(self.zone, self.corner_offset_m)
+            start = dict(x_m=selected.x_m, y_m=selected.y_m, yaw_deg=selected.yaw_deg)
+            self.dynamic.request_start(start, self.reset_session_token)
+            metadata = read_json(RUNTIME / 'session.json')
+            metadata.setdefault('warm_selection',dict(start_zone=metadata.get('start_zone'),side=metadata.get('side'),initial_pose=metadata.get('initial_pose')))
+            metadata.update(start_zone=self.zone,side=self.side,opening_strategy=self.opening_strategy,
+                actual_start_selection=dict(start_zone=self.zone,side=self.side,initial_pose=start),
+                initial_pose=start,round_reference_token=self.reset_session_token)
+            try:
+                temporary = RUNTIME / 'session.json.tmp'
+                temporary.write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n')
+                temporary.replace(RUNTIME / 'session.json')
+            except OSError as error:
+                self.record_reset_event('session_metadata_write_failed', str(error))
+            if self.wheel_input is not None:
+                self.wheel_input.bridge.log.submit('metadata.json',metadata,atomic=True)
+            # The runner requires this exact local reference in final Pose JSON
+            # before CONFIG; it never waits for a lower-side acknowledgment.
+            try:
+                self.start_released = self.operator.release_start(self.zone, self.side, self.opening_strategy)
+            except OSError as error:
+                self._warm_failed(f'开赛控制文件写入失败：{error}')
+                return
+            self.record_reset_event('warm_start_requested', 'bind_latest_pose_and_primary_yaw')
+        if self.start_released and status.get('competition_started'):
+            self.warming = False
+            self.session_started = True
+            self.selecting = False
+            self.started_monotonic = time.monotonic()
+            self.trajectory.reset()
+            self.odometry_trajectory.reset()
+            self.message = '本轮已启动；SDK会话保持，正式起点已按按3时刻重建'
+            return
+        if not ready:
+            received = '、'.join(name for name, present in arrivals.items() if present) or '无'
+            missing = '、'.join(name for name, present in arrivals.items() if not present)
+            request_note = '已记录开赛请求，4号可取消' if self.start_requested else '按3可提前记录开赛请求'
+            self.message = f'预热已到：{received}；待到：{missing}。{request_note}'
+        elif self.start_requested:
+            self.message = '已记录开赛请求，正在绑定正式起点；4号可取消'
+        else:
+            self.message = '预热完成：按3开始'
+
     def start_session(self):
+        if self.prewarm_enabled:
+            if self.session_started:
+                return
+            if self.operator.stopped:
+                self.message = '本轮已停止；长按4退出后可重新开始'
+                return
+            if not self.warming:
+                self.prepare_warm_session()
+            if self.warming:
+                self.start_requested = True
+                self.selecting = False
+                self.record_reset_event('operator_start_requested', 'gpio_or_map; no SDK restart')
+            return
         if self.session_started:
             return  # A new round starts after explicit exit/reset, never resumes old actions.
         try:
@@ -90,6 +217,8 @@ class CompetitionMapApp(RescueMapApp):
             self.operator.transitioning = False
 
     def maybe_start_vision(self):
+        if self.prewarm_enabled:
+            return
         was_started = self.session_started
         super().maybe_start_vision()
         # The base launcher can return to selection after an asynchronous
@@ -103,6 +232,8 @@ class CompetitionMapApp(RescueMapApp):
         try:
             if self.operator is not None:
                 self.operator.start()
+                if self.prewarm_enabled:
+                    self.prepare_warm_session()
             return super().run()
         finally:
             # Also covers setup/window errors before the base run-loop finally.
@@ -160,7 +291,7 @@ class CompetitionMapApp(RescueMapApp):
             if self.options.lidar == self.options.uart:
                 raise ValueError("雷达与底盘不能共用同一UART")
             self.dynamic = CompetitionDynamicLocalization(run_dir, session_id, dynamic_config,
-                metadata['initial_pose'], self.wheel_input.bridge.log)
+                metadata['initial_pose'], self.wheel_input.bridge.log,defer_reference=self.prewarm_enabled)
             self.wheel_input.telemetry_sink = self.dynamic.telemetry
             metadata['heading_conventions']['pose'] = 'primary gyro, fixed selected field start reference, CCW positive'
             metadata['pose_dependencies'].append('STL50B2 observable fence constraints')
@@ -171,7 +302,10 @@ class CompetitionMapApp(RescueMapApp):
                 qualification=dynamic_config['qualification'],
                 control_pose_publish_enabled=True, accuracy_verified=False,
                 motion_source_policy=dict(MOTION_SOURCE_POLICY),
-                obstacle_policy='operator_lidar_pause_resume_same_as_desktop_test')
+                obstacle_policy='operator_lidar_pause_resume_same_as_desktop_test',
+                prewarm_enabled=self.prewarm_enabled,
+                raw_projected_pose_frame='warm_SDK_local_projection' if self.prewarm_enabled else 'field',
+                round_start_reference='latest_warm_pose_and_primary_yaw_on_operator_start' if self.prewarm_enabled else 'first_pose')
             session_tmp.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
             session_tmp.replace(RUNTIME / "session.json")
             self.dynamic.start()
@@ -312,6 +446,7 @@ class CompetitionMapApp(RescueMapApp):
             print(f"复位日志写入失败：{error}", file=sys.stderr)
 
     def reset_session(self, source: str = "map_window") -> None:
+        self.warming = self.start_requested = self.start_released = False
         if self.operator is not None:
             self.operator.transitioning = True
         self.record_reset_event("session_reset_requested", source)
@@ -321,6 +456,8 @@ class CompetitionMapApp(RescueMapApp):
         self.record_reset_event("session_reset_completed", source)
         if self.operator is not None:
             self.operator.after_reset()
+            if self.prewarm_enabled:
+                self.prepare_warm_session()
 
     def consume_reset_request(self) -> bool:
         try:
@@ -331,7 +468,7 @@ class CompetitionMapApp(RescueMapApp):
             return False
         self.reset_request_path.unlink(missing_ok=True)
         # A leftover request must never reset a later session or another runner.
-        if (not isinstance(request, dict) or not self.session_started
+        if (not isinstance(request, dict) or not (self.session_started or self.warming)
                 or self.reset_session_token is None
                 or request.get("session_token") != self.reset_session_token):
             return False
@@ -344,6 +481,7 @@ class CompetitionMapApp(RescueMapApp):
             RUNTIME / "competition_diagnostics.json",
             RUNTIME / "competition_detections.jsonl",
             RUNTIME / "competition_events.jsonl",
+            RUNTIME / "competition_logging_status.json",
         )
         existing = [path for path in candidates if path.is_file()]
         if not existing:
@@ -383,6 +521,8 @@ class CompetitionMapApp(RescueMapApp):
         ]
         if self.operator is not None:
             command += ['--operator-control', str(self.operator.control_path)]
+        if self.prewarm_enabled:
+            command += ['--wait-for-operator', '--warm-status', str(self.warm_status_path)]
         if getattr(self.options, 'headless', False):
             command += ['--no-display']
         return command
@@ -391,6 +531,13 @@ class CompetitionMapApp(RescueMapApp):
         if self.operator is not None:
             self.operator.tick()
         if self.consume_reset_request():
+            return
+        if self.warming:
+            selected = self.selecting
+            self.selecting = False
+            super().update_pose()
+            self.selecting = selected
+            self._update_warm_start()
             return
         super().update_pose()
         if (

@@ -30,6 +30,7 @@ import cv2
 import numpy as np
 
 from vision_replay import VisionReplay
+from async_diagnostics import AsyncDiagnosticWriter
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
@@ -135,6 +136,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--reset-session-token", default="", help="本轮启动窗口复位令牌")
     parser.add_argument("--operator-control", type=Path,
                         help="实体按键会话控制文件；与reset-session-token匹配的stop结束本轮运动并保留观察")
+    parser.add_argument("--wait-for-operator", action="store_true", help="预热模型/相机，等匹配的本地开赛请求才发CONFIG")
+    parser.add_argument("--warm-status", type=Path, help="一次实际推理完成及开赛状态")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="normal")
     parser.add_argument("--display-fps", type=float, default=10.0)
     parser.add_argument(
@@ -176,6 +179,32 @@ def operator_stop_requested(path: Path | None, session_token: str) -> bool:
     return bool(isinstance(request, dict) and
                 request.get("session_token") == session_token and
                 request.get("action") == "stop")
+
+
+
+def operator_start_request(control_path: Path | None, pose_path: Path, session_token: str) -> dict | None:
+    """Match the one local coordinate commit to this human start, no age check."""
+    request = load_json(control_path) if control_path else None
+    if (not session_token or not isinstance(request, dict) or request.get('session_token') != session_token
+            or request.get('action') != 'start' or request.get('reference_token') != session_token
+            or request.get('side') not in ('red', 'blue') or request.get('start_zone') not in (1, 2, 3, 4)):
+        return None
+    pose = load_json(pose_path) or {}
+    if pose.get('reference', {}).get('round_token') != session_token:
+        return None
+    return dict(request, reference=pose['reference'])
+
+
+
+def publish_start_config(command_path, side, start_zone, continue_start, on_sent):
+    """Existing CONFIG sequence; remember the first write before any interruption."""
+    for sequence in range(3):
+        if not continue_start():
+            return False
+        write_command_frame(command_path, config_frame(sequence, 0x11 if side == 'red' else 0x12, start_zone))
+        on_sent()
+        time.sleep(.04)
+    return continue_start()
 
 
 def load_pose(path: Path) -> PoseSnapshot:
@@ -942,11 +971,15 @@ def detection_log_record(
 
 
 class JsonlLog:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, writer: AsyncDiagnosticWriter | None = None) -> None:
         self.path = path
+        self.writer = writer
         self.lock = threading.Lock()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text("", encoding="utf-8")
+        if writer is not None:
+            writer.reset(path)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text("", encoding="utf-8")
 
     def write(self, event: str, data: dict) -> None:
         record = {
@@ -954,6 +987,9 @@ class JsonlLog:
             "event": event,
             **data,
         }
+        if self.writer is not None:
+            self.writer.append(self.path, record)
+            return
         with self.lock:
             with self.path.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -1711,7 +1747,10 @@ class CompetitionPlanner:
             "aux": output.command.aux,
             "audit": None if output.command.audit is None else asdict(output.command.audit),
         }
-        write_atomic_json(self.diagnostics_path, {
+        diagnostics_writer = getattr(self.events_log, "writer", None)
+        write_snapshot = diagnostics_writer.snapshot if diagnostics_writer is not None else write_atomic_json
+        write_snapshot(self.diagnostics_path, {
+            "diagnostic_logging": diagnostics_writer.statistics() if diagnostics_writer is not None else None,
             "diagnostic_error_count": getattr(self, "diagnostic_error_count", 0),
             "approach_range": {"pitch_cdeg": self.mission.range_pitch_cdeg,
                                "epoch": self.mission.range_epoch, "reason": vision.range_reason,
@@ -2393,8 +2432,9 @@ def main() -> int:
     side = str(session["side"])
     start_zone = int(session.get("start_zone", 1))
     opening_strategy = str(session.get("opening_strategy", "attack"))
-    events = JsonlLog(args.events_log)
-    detection_log = JsonlLog(args.detections_log)
+    diagnostic_writer = AsyncDiagnosticWriter(args.events_log.with_name("competition_logging_status.json"))
+    events = JsonlLog(args.events_log, diagnostic_writer)
+    detection_log = JsonlLog(args.detections_log, diagnostic_writer)
     events.write("runner_starting", {
         "side": side,
         "start_zone": start_zone,
@@ -2408,7 +2448,7 @@ def main() -> int:
     try:
         pose_deadline = time.monotonic() + args.startup_timeout
         startup_pose = load_pose(args.pose)
-        while not startup_pose.valid:
+        while not startup_pose.valid and not args.wait_for_operator:
             if time.monotonic() >= pose_deadline:
                 raise RuntimeError("定位尚未就绪，完整比赛流程不会发送运动命令")
             time.sleep(0.05)
@@ -2514,7 +2554,8 @@ def main() -> int:
             "error": str(error),
             "traceback": traceback.format_exc(),
         })
-        planner.stop("setup_exception")
+        if not args.wait_for_operator:
+            planner.stop("setup_exception")
         detector.close()
         raise
     camera_decoder = args.decoder
@@ -2569,8 +2610,57 @@ def main() -> int:
     safe_zone_missing_frames = 0
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = ()
     competition_started = False
+    config_sent = False
     operator_stopped = False
+    operator_start_ready = not args.wait_for_operator
+    warm_ready_written = False
+    warm_status_error_reported = False
     next_operator_poll = 0.0
+
+    def write_warm_status():
+        nonlocal warm_status_error_reported
+        if args.warm_status is not None:
+            # Low-rate control state, separate from diagnostic queues. No
+            # per-frame disk writes: only first inference and start transition.
+            try:
+                write_atomic_json(args.warm_status, dict(session_token=args.reset_session_token,
+                    ready=True, competition_started=competition_started))
+            except OSError as error:
+                if not warm_status_error_reported:
+                    print(f'预热控制状态写入失败，尚不能向按键入口报告就绪：{error}',file=sys.stderr)
+                    events.write('warm_status_write_failed', dict(error=str(error)))
+                    warm_status_error_reported = True
+                return False
+        return True
+
+    def prepare_operator_start():
+        nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
+        nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
+        if operator_start_ready or operator_stopped or not args.wait_for_operator:
+            return
+        request = operator_start_request(args.operator_control,args.pose,args.reset_session_token)
+        if request is None:
+            return
+        side, start_zone = request['side'], request['start_zone']
+        opening_strategy = request.get('opening_strategy', opening_strategy)
+        mission = CompetitionMission(CompetitionSettings(side=side,start_zone=start_zone,
+            opening_strategy=opening_strategy,initial_stash_enabled=not args.disable_initial_stash,
+            yield_distance_m=args.yield_distance_mm / 1000.0,
+            safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm))
+        planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
+            args.diagnostics,events,args.planner_fps)
+        if replay is not None:
+            planner.replay_event_sink = replay.record_event
+        tracker = MultiFrameTracker(config)
+        recent_safe_bbox = None
+        safe_zone_missing_frames = 0
+        recent_carried_bboxes = ()
+        startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
+            startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
+        operator_start_ready = True
+        events.write('warm_reference_bound', dict(session_token=args.reset_session_token,
+            reference=request['reference'],side=side,start_zone=start_zone))
+
 
     def apply_operator_stop(*, force: bool = False) -> bool:
         nonlocal operator_stopped, next_operator_poll
@@ -2597,24 +2687,22 @@ def main() -> int:
         return True
 
     def start_after_first_vision() -> None:
-        nonlocal competition_started
-        if competition_started or apply_operator_stop(force=True) or not running:
+        nonlocal competition_started, config_sent, warm_ready_written
+        if (competition_started or not operator_start_ready
+                or apply_operator_stop(force=True) or not running):
             return
-        # Preserve the existing three CONFIG publications. Neither a paused
-        # planner nor subsequent STOP may publish over or re-arm this sequence.
-        for sequence in range(3):
-            if not running or apply_operator_stop(force=True):
-                return
-            write_command_frame(args.command_file, config_frame(
-                sequence, 0x11 if side == "red" else 0x12, start_zone))
-            time.sleep(0.04)
-        if not running or apply_operator_stop(force=True):
+        def remember_config_sent():
+            nonlocal config_sent
+            config_sent = True
+        if not publish_start_config(args.command_file,side,start_zone,
+                lambda: running and not apply_operator_stop(force=True),remember_config_sent):
             return
         competition_started = True
+        warm_ready_written = write_warm_status()
         events.write("competition_started", {
             **startup_details,
             "first_vision_sequence": vision_sequence,
-            "start_basis": "explicit_session_start_and_first_inference",
+            "start_basis": "warm_operator_start_and_reference_bound" if args.wait_for_operator else "explicit_session_start_and_first_inference",
         })
         planner.set_paused(False, reason="camera_recovery")
         planner.start()
@@ -2677,6 +2765,7 @@ def main() -> int:
                 raise RuntimeError(f"比赛规划线程退出：{planner.error}")
             now = time.monotonic()
             apply_operator_stop()
+            prepare_operator_start()
             planner.observe_without_commands(now)
             if display_messages is not None:
                 while True:
@@ -2871,6 +2960,10 @@ def main() -> int:
                         latest_vision.carried_reference_bboxes
                     )
                 planner.set_vision(latest_vision)
+                if not warm_ready_written:
+                    warm_ready_written = write_warm_status()
+                    events.write('vision_prewarm_ready', dict(session_token=args.reset_session_token,
+                        first_vision_sequence=vision_sequence,wait_for_operator=args.wait_for_operator))
                 start_after_first_vision()
                 vision_performance_last = time.monotonic()
                 if vision_performance_started is None:
@@ -2954,7 +3047,8 @@ def main() -> int:
         raise
     finally:
         if replay is not None: replay.request_close()
-        planner.stop(exit_reason)
+        if config_sent or competition_started or operator_stopped or not args.wait_for_operator:
+            planner.stop(exit_reason)
         if replay is not None:
             events.write('vision_replay_closed', replay.close())
         detector.close()
@@ -2997,8 +3091,12 @@ def main() -> int:
             "camera_recovery_pending": camera_recovery_pending,
             "display_enabled": display_enabled,
             "competition_started": competition_started,
+            "config_sent": config_sent,
             "operator_stopped": operator_stopped,
         })
+        logging_status = diagnostic_writer.close()
+        if logging_status["incomplete"]:
+            print("competition diagnostic logging incomplete: " + json.dumps(logging_status), file=sys.stderr)
     return 0
 
 

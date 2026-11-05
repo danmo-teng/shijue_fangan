@@ -15,7 +15,7 @@ from lidar_yaw_debug.worker import RadarWorker
 
 
 class CompetitionDynamicLocalization:
-    def __init__(self, root, session_id, config, field_start, log):
+    def __init__(self, root, session_id, config, field_start, log, *, defer_reference=False):
         self.root, self.session_id, self.config = root, session_id, config
         self.field_start, self.log = field_start, log
         self.radar = RadarWorker()
@@ -35,6 +35,7 @@ class CompetitionDynamicLocalization:
         self.stop_event = threading.Event()
         self.thread = None
         self.reference_requested = False
+        self.defer_reference = defer_reference
         self.error = None
         self.state = {}
         self.latest_pose = {}
@@ -42,6 +43,8 @@ class CompetitionDynamicLocalization:
         self.lidar_enabled = True
         self.packet_id = 0
         self.last_control = None
+        self.start_request = None
+        self.start_request_sent = False
 
     def devent(self, event, **data):
         self.log.submit('dynamic_events.jsonl', dict(event=event,
@@ -61,6 +64,13 @@ class CompetitionDynamicLocalization:
     def set_lidar_enabled(self, enabled):
         if self.radar.send('lidar_enabled', dict(enabled=bool(enabled), reason='operator_obstacle_toggle')):
             self.lidar_enabled = bool(enabled)
+
+    def request_start(self, field_start, round_token):
+        # One local coordinate bind; no MCU handshake or data-age policy.
+        self.start_request = dict(center_xy_m=[field_start['x_m'],field_start['y_m']],
+            yaw_deg=field_start['yaw_deg'],first_sample=False,round_token=round_token,
+            description='operator start: bind current warm Pose and gyro to selected formal start')
+        self.start_request_sent = False
 
     def control_packet(self, state):
         if not state.get('ready'):
@@ -131,12 +141,15 @@ class CompetitionDynamicLocalization:
                         self.error = reply['error']
                         self.devent('worker_error', reason=self.error)
                 state = self.radar.state
-                if (not self.reference_requested and state.get('have_tracked_pose')
+                if (not self.defer_reference and not self.reference_requested and state.get('have_tracked_pose')
                         and state.get('have_primary_yaw')):
                     self.reference_requested = self.radar.send('field_start', dict(
                         center_xy_m=[self.field_start['x_m'], self.field_start['y_m']],
                         yaw_deg=self.field_start['yaw_deg'],
                         description='selected formal competition start; operator selects zone; not lidar calibration'))
+                if (self.start_request is not None and not self.start_request_sent
+                        and state.get('have_tracked_pose') and state.get('have_primary_yaw')):
+                    self.start_request_sent = self.radar.send('field_start', self.start_request)
                 self.state = state.get('last', {})
                 self.log.submit('dynamic_status.json', self.snapshot(), atomic=True)
                 if self.radar.process.exitcode is not None:
@@ -158,7 +171,12 @@ class CompetitionDynamicLocalization:
                 connection.close()
 
     def snapshot(self):
-        return dict(self.state, transport_error=self.error, pose_packets=self.pose_packets,
+        state = dict(self.state)
+        if self.defer_reference and self.start_request is None:
+            state.update(reason='预热接收中；等待按3绑定正式起点',reference_phase='prewarm_waiting_for_operator')
+        return dict(state, transport_error=self.error, pose_packets=self.pose_packets,
+            have_tracked_pose=bool(self.radar.state.get('have_tracked_pose')),
+            have_primary_yaw=bool(self.radar.state.get('have_primary_yaw')),
             lidar_connected=self.radar.state.get('lidar_connected',False),
             lidar_error=self.radar.state.get('lidar_error'),
             primary_yaw_packets=self.imu_packets, input_drops=self.input_drops,
