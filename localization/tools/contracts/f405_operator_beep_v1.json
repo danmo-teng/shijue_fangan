@@ -1,0 +1,80 @@
+{
+  "name": "f405_operator_beep",
+  "message_version": 1,
+  "date": "2026-11-06",
+  "implementation_status": {
+    "upper": "implemented_in_upper_source",
+    "lower_reviewed_commit": "51f1d0709059566c41b818309711986d22f34982",
+    "lower": "not_implemented_at_reviewed_commit",
+    "actual_flashed_firmware": "unconfirmed",
+    "physical_beep_validation": "not_performed"
+  },
+  "transport": {
+    "uart": "existing_single_chassis_uart_owner",
+    "baud": 230400,
+    "serial_format": "8N1",
+    "frame_size_bytes": 15,
+    "head_hex": "a3 b3",
+    "type_hex": "20",
+    "tail_hex": "c3",
+    "crc": {
+      "name": "CRC16_MODBUS",
+      "initial_hex": "ffff",
+      "reflected_polynomial_hex": "a001",
+      "input_offset": 2,
+      "input_length": 10,
+      "output_offset": 12,
+      "byte_order": "little"
+    }
+  },
+  "fields": [
+    {"offset": 3, "name": "sequence", "size": 1, "range": [0, 255], "meaning": "transport_only_no_action_pairing_or_dedup"},
+    {"offset": 4, "name": "version", "size": 1, "value": 1},
+    {"offset": 5, "name": "count", "size": 1, "range": [1, 4]},
+    {"offset": 6, "name": "kind", "size": 1, "values": {"0": "short", "1": "long"}},
+    {"offset": 7, "name": "reserved", "size": 5, "value_hex": "00 00 00 00 00"}
+  ],
+  "playback": {
+    "gpio": "PA10_existing_board_buzzer",
+    "electrical_polarity": "confirm_against_current_board_driver_before_implementation",
+    "short_ms": 100,
+    "long_ms": 350,
+    "inter_beep_gap_ms": 150,
+    "new_request": "replace_current_playback",
+    "request_queue": "none",
+    "after_last_beep": "off",
+    "scheduler": "existing_low_frequency_main_loop_nonblocking",
+    "timing_scope": "sound_duration_only_no_sensor_age_or_admission_gate"
+  },
+  "receiver_rules": {
+    "dispatch_before_context_pending_consumption": true,
+    "return_after_independent_beep_dispatch": true,
+    "mutates_mission_or_config_or_ack": false,
+    "invalid_beep": "ignore_only_this_message",
+    "ack": false,
+    "handshake": false,
+    "new_interrupt": false,
+    "blocking_delay": false,
+    "freshness_check": false,
+    "new_telemetry": false,
+    "failure_blocks_control": false,
+    "new_test_program_required": false
+  },
+  "existing_controls": {
+    "start": "existing_0x11_CONFIG_only_on_operator_start",
+    "stop": "existing_0x18_opcode_0x07_ABORT",
+    "restart_after_remote_stop": "existing_Vision_RearmConfig_and_new_CONFIG",
+    "reserved_conflict": "0x1b_and_0x1c_already_reserved_by_current_firmware_do_not_use"
+  },
+  "examples": [
+    {"name": "one_short", "sequence": 0, "count": 1, "kind": 0, "hex": "a3 b3 20 00 01 01 00 00 00 00 00 00 a0 61 c3"},
+    {"name": "four_short", "sequence": 0, "count": 4, "kind": 0, "hex": "a3 b3 20 00 01 04 00 00 00 00 00 00 f5 61 c3"},
+    {"name": "one_long", "sequence": 0, "count": 1, "kind": 1, "hex": "a3 b3 20 00 01 01 01 00 00 00 00 00 a1 b0 c3"},
+    {"name": "two_long", "sequence": 0, "count": 2, "kind": 1, "hex": "a3 b3 20 00 01 02 01 00 00 00 00 00 92 b0 c3"}
+  ],
+  "source_urls": {
+    "upper_repository": "https://github.com/danmo-teng/shijue_fangan",
+    "lower_repository": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot",
+    "lower_reviewed_commit": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/commit/51f1d0709059566c41b818309711986d22f34982"
+  }
+}

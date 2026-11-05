@@ -133,6 +133,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--events-log", type=Path, default=PROJECT_ROOT / "rescue_map/runtime/competition_events.jsonl")
     parser.add_argument("--reset-request", type=Path, help="启动窗口的整轮复位请求文件")
     parser.add_argument("--reset-session-token", default="", help="本轮启动窗口复位令牌")
+    parser.add_argument("--operator-control", type=Path,
+                        help="实体按键会话控制文件；与reset-session-token匹配的stop结束本轮运动并保留观察")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="normal")
     parser.add_argument("--display-fps", type=float, default=10.0)
     parser.add_argument(
@@ -164,6 +166,16 @@ def load_json(path: Path) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, json.JSONDecodeError):
         return None
+
+
+def operator_stop_requested(path: Path | None, session_token: str) -> bool:
+    """A STOP belongs to this explicit start only; it stays present until exit."""
+    if path is None or not session_token:
+        return False
+    request = load_json(path)
+    return bool(isinstance(request, dict) and
+                request.get("session_token") == session_token and
+                request.get("action") == "stop")
 
 
 def load_pose(path: Path) -> PoseSnapshot:
@@ -1081,6 +1093,20 @@ class CompetitionPlanner:
     def snapshot(self):
         with self.lock:
             return self.latest_output, self.latest_pose, self.latest_stm
+
+    def observe_without_commands(self, now: float) -> None:
+        """Keep preview/diagnostics live before start and after operator STOP."""
+        if self.running or now - self.last_diagnostics_s < self.diagnostics_period_s:
+            return
+        pose, stm = load_pose(self.pose_path), load_stm(self.stm_path)
+        with self.lock:
+            output, vision = self.latest_output, self.latest_vision
+            self.latest_pose, self.latest_stm = pose, stm
+        try:
+            self._diagnostics(output, pose, stm, vision, now=now)
+        except Exception as error:
+            self._record_diagnostic_error(error, now)
+        self.last_diagnostics_s = now
 
     def _update_grab_waitnav_diagnostic(
         self,
@@ -2449,14 +2475,11 @@ def main() -> int:
         args.planner_fps,
     )
 
-    # Configuration still goes through the existing atomic relay. The new
-    # task runner never opens /dev/ttyS1 itself.
-    red_side = side == "red"
+    # Launching this runner is an explicit start request from the operator.
+    # Prepare model/camera first: the first CONFIG starts F405 autonomous motion.
+    # This runner keeps using the sole C++ UART owner's atomic command relay.
     try:
-        for sequence in range(3):
-            write_command_frame(args.command_file, config_frame(sequence, 0x11 if red_side else 0x12, start_zone))
-            time.sleep(0.04)
-        events.write("competition_started", {
+        startup_details = {
             "model": str(args.model), "model_family": "YOLO26",
             "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
             "model_input_wh": [detector.input_width, detector.input_height],
@@ -2483,7 +2506,7 @@ def main() -> int:
             "detection_log_fps": args.detection_log_fps,
             "vision_fps": args.vision_fps,
             "startup_pose": pose_dict(startup_pose),
-        })
+        }
         camera_device = resolve_camera_device(args.device)
     except Exception as error:
         events.write("fatal_exception", {
@@ -2545,6 +2568,56 @@ def main() -> int:
     recent_safe_bbox: tuple[int, int, int, int] | None = None
     safe_zone_missing_frames = 0
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = ()
+    competition_started = False
+    operator_stopped = False
+    next_operator_poll = 0.0
+
+    def apply_operator_stop(*, force: bool = False) -> bool:
+        nonlocal operator_stopped, next_operator_poll
+        if operator_stopped:
+            return True
+        now = time.monotonic()
+        if not force and now < next_operator_poll:
+            return False
+        next_operator_poll = now + 0.02
+        if not operator_stop_requested(args.operator_control, args.reset_session_token):
+            return False
+        operator_stopped = True
+        planner.stop("operator_stop")
+        with planner.lock:
+            planner.latest_output = CompetitionOutput(
+                mission.state, None, "本轮已停止；保留视觉和定位观察，长按退出后可重新开始",
+                suppress_command_tx=True, suppression_reason="operator_stop",
+                reason="operator_stop")
+        events.write("operator_stopped", {
+            "competition_started": competition_started,
+            "session_token": args.reset_session_token,
+            "action": "observe_without_further_commands",
+        })
+        return True
+
+    def start_after_first_vision() -> None:
+        nonlocal competition_started
+        if competition_started or apply_operator_stop(force=True) or not running:
+            return
+        # Preserve the existing three CONFIG publications. Neither a paused
+        # planner nor subsequent STOP may publish over or re-arm this sequence.
+        for sequence in range(3):
+            if not running or apply_operator_stop(force=True):
+                return
+            write_command_frame(args.command_file, config_frame(
+                sequence, 0x11 if side == "red" else 0x12, start_zone))
+            time.sleep(0.04)
+        if not running or apply_operator_stop(force=True):
+            return
+        competition_started = True
+        events.write("competition_started", {
+            **startup_details,
+            "first_vision_sequence": vision_sequence,
+            "start_basis": "explicit_session_start_and_first_inference",
+        })
+        planner.set_paused(False, reason="camera_recovery")
+        planner.start()
 
     def create_camera() -> LatestFrameCamera:
         return LatestFrameCamera(
@@ -2558,14 +2631,11 @@ def main() -> int:
         )
 
     try:
-        # Start the planner in a paused/hold state first. Camera startup and
-        # later recovery must never leave a previous motion command active.
-        planner.set_paused(True, reason="camera_recovery")
-        planner.start()
+        # No planner or CONFIG until actual camera inference is ready. Existing
+        # in-session camera recovery retains its original pause/resume behavior.
         try:
             camera = create_camera()
             camera.start()
-            planner.set_paused(False, reason="camera_recovery")
         except Exception as error:
             if camera is not None:
                 camera.stop()
@@ -2606,6 +2676,8 @@ def main() -> int:
             if planner.error is not None:
                 raise RuntimeError(f"比赛规划线程退出：{planner.error}")
             now = time.monotonic()
+            apply_operator_stop()
+            planner.observe_without_commands(now)
             if display_messages is not None:
                 while True:
                     try:
@@ -2799,6 +2871,7 @@ def main() -> int:
                         latest_vision.carried_reference_bboxes
                     )
                 planner.set_vision(latest_vision)
+                start_after_first_vision()
                 vision_performance_last = time.monotonic()
                 if vision_performance_started is None:
                     vision_performance_started = vision_performance_last
@@ -2923,6 +2996,8 @@ def main() -> int:
             "camera_restarts": camera_restarts,
             "camera_recovery_pending": camera_recovery_pending,
             "display_enabled": display_enabled,
+            "competition_started": competition_started,
+            "operator_stopped": operator_stopped,
         })
     return 0
 

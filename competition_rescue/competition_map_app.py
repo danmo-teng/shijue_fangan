@@ -24,6 +24,7 @@ from competition_dynamic_localization import CompetitionDynamicLocalization
 from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 from motion_log_storage import list_sessions, delete_sessions, read_json, DYNAMIC_SESSION_FILES
+from operator_panel import OperatorPanel
 
 WHEEL_OWNER = "competition_wheel_input"
 WHEEL_FILES = frozenset({"metadata.json", "localization.conf", "session_complete.json",
@@ -46,6 +47,7 @@ class CompetitionMapApp(RescueMapApp):
         self.wheel_input = None
         self.wheel_run_dir = None
         self.pose_age_gate = False
+        self.operator = None
         if self.official_wheel_input:
             # Use the same file as the test, but the normal writer sets the
             # selected competition corner/heading (never the test centre).
@@ -55,11 +57,67 @@ class CompetitionMapApp(RescueMapApp):
             self.t265_translation_scale_enabled = False
             self.t265_translation_scale = 1.0
             self.t265_map_enabled = False
+        if (getattr(options, 'gpio_buttons', False) and not options.demo and not options.screenshot):
+            self.operator = OperatorPanel(self)
+
+    def start_session(self):
+        if self.session_started:
+            return  # A new round starts after explicit exit/reset, never resumes old actions.
+        try:
+            if self.operator is not None:
+                self.operator.before_start()
+            super().start_session()
+        except Exception as error:
+            if self.operator is None:
+                raise
+            self.session_started = False
+            self.selecting = True
+            self.message = f"比赛准备失败：{error}；修复后可再次按3号启动"
+            self.record_reset_event("session_start_failed", str(error))
+        finally:
+            if self.operator is not None:
+                self.operator.after_start()
+        if self.operator is not None and self.selecting and not self.session_started:
+            self._restore_operator_standby()
+
+    def _restore_operator_standby(self):
+        """Release failed session owners before handing UART back to standby."""
+        self.operator.transitioning = True
+        try:
+            self.stop_session_processes()
+            self.operator.after_reset()
+        finally:
+            self.operator.transitioning = False
+
+    def maybe_start_vision(self):
+        was_started = self.session_started
+        super().maybe_start_vision()
+        # The base launcher can return to selection after an asynchronous
+        # localizer exit or a failed vision spawn. Finish that failed session,
+        # including its wheel/lidar adapters, before restoring feedback UART.
+        if (self.operator is not None and was_started and
+                self.selecting and not self.session_started):
+            self._restore_operator_standby()
+
+    def run(self):
+        try:
+            if self.operator is not None:
+                self.operator.start()
+            return super().run()
+        finally:
+            # Also covers setup/window errors before the base run-loop finally.
+            try:
+                self.stop_session_processes()
+            finally:
+                if self.operator is not None:
+                    self.operator.close()
 
     def localization_command(self) -> list[str]:
         if self.wheel_input is not None:
             return list(self.wheel_command)
         command = super().localization_command()
+        if self.operator is not None:
+            command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:
             return command
         root = RUNTIME / "history" / WHEEL_OWNER
@@ -204,6 +262,13 @@ class CompetitionMapApp(RescueMapApp):
 
     def draw_panel(self, canvas, text):
         super().draw_panel(canvas, text)
+        if self.operator is not None:
+            y = 890 if self.selecting else 570
+            for line in ('实体键：1长按选起点 / 2长按选红蓝',
+                         '3启动 / 4按下停止，长按退出本轮',
+                         '1、2短按：声音查询当前选择'):
+                text.add(line, (920, y), 14, (200, 210, 225))
+                y += 25
         if self.dynamic is not None and not self.selecting:
             state = self.dynamic.snapshot()
             mode = state.get('motion_selection', {}).get('mode', 'WAIT')
@@ -247,11 +312,15 @@ class CompetitionMapApp(RescueMapApp):
             print(f"复位日志写入失败：{error}", file=sys.stderr)
 
     def reset_session(self, source: str = "map_window") -> None:
+        if self.operator is not None:
+            self.operator.transitioning = True
         self.record_reset_event("session_reset_requested", source)
         super().reset_session()
         self.reset_session_token = None
         self.reset_request_path.unlink(missing_ok=True)
         self.record_reset_event("session_reset_completed", source)
+        if self.operator is not None:
+            self.operator.after_reset()
 
     def consume_reset_request(self) -> bool:
         try:
@@ -294,8 +363,9 @@ class CompetitionMapApp(RescueMapApp):
 
     def vision_command(self) -> list[str]:
         self.reset_request_path.unlink(missing_ok=True)
-        self.reset_session_token = secrets.token_hex(16)
-        return [
+        if self.reset_session_token is None:
+            self.reset_session_token = secrets.token_hex(16)
+        command = [
             str(PROJECT_ROOT / "competition_rescue/run_competition_rescue.sh"),
             "--session", str(RUNTIME / "session.json"),
             "--pose", str(self.localization_json),
@@ -311,8 +381,15 @@ class CompetitionMapApp(RescueMapApp):
             "--window-mode", "normal",
             "--startup-timeout", f"{max(60.0, self.relocalization_timeout_s + 20.0):.3f}",
         ]
+        if self.operator is not None:
+            command += ['--operator-control', str(self.operator.control_path)]
+        if getattr(self.options, 'headless', False):
+            command += ['--no-display']
+        return command
 
     def update_pose(self) -> None:
+        if self.operator is not None:
+            self.operator.tick()
         if self.consume_reset_request():
             return
         super().update_pose()

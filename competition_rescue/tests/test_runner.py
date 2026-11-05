@@ -782,3 +782,171 @@ def test_incident_video_replay_and_log_only_timeout():
         broken.start();broken.process.join(3)
         assert not broken.submit(image,'bgr',meta,now=20.)
         assert broken.close()['error']
+
+
+def test_operator_buttons_and_feedback_encoding():
+    """Human input sequences only; no GPIO, UART or sensor access."""
+    from button_input import SysfsButtonInput
+    from operator_protocol import beep_frame
+    from protocol import crc16_modbus
+    levels = {1: 1, 2: 1, 3: 0, 4: 1}
+    buttons = SysfsButtonInput(read_level=lambda key: levels[key])
+    assert buttons.poll(0.) == []
+    assert buttons.poll(2.) == []  # Boot with START held never starts.
+    levels[3] = 1; buttons.poll(2.1)
+    assert buttons.poll(2.14) == []
+    levels[1] = 0; buttons.poll(3.); assert buttons.poll(3.04) == []
+    assert [e['action'] for e in buttons.poll(4.1)] == ['next_zone']
+    assert buttons.poll(5.) == []  # Held key does not repeat selection.
+    levels[1] = 1; buttons.poll(5.1); assert buttons.poll(5.14) == []
+    levels[3] = 0; buttons.poll(6.); buttons.poll(6.04)
+    levels[4] = 0; levels[3] = 1; buttons.poll(6.1)
+    assert [e['action'] for e in buttons.poll(6.14)] == ['stop']
+    assert [e['action'] for e in buttons.poll(8.2)] == ['exit_session']
+    for count in range(1, 5):
+        for long in (False, True):
+            frame = beep_frame(count, long, 9)
+            assert len(frame) == 15 and frame[2:7] == bytes((0x20, 9, 1, count, long))
+            assert int.from_bytes(frame[12:14], 'little') == crc16_modbus(frame[2:12])
+    assert beep_frame().hex() == 'a3b320000101000000000000a061c3'
+
+
+def test_operator_panel_stop_and_session_ownership():
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    import operator_panel as panel_module
+    from operator_panel import OperatorPanel
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root/'operator_selection.json').write_text('{"zone":3,"side":"blue"}')
+        app = SimpleNamespace(options=SimpleNamespace(zone=None, side=None, uart='PTY-only', baud=230400),
+            zone=1, side='red', corner_offset_m=.15*2**.5, selecting=True,
+            session_started=False, reset_session_token=None, vision_start_pending=True,
+            message='', record_reset_event=Mock(), start_session=Mock(), reset_session=Mock())
+        with patch.object(panel_module, 'RUNTIME', root), \
+                patch.object(panel_module, 'send_abort', return_value=True) as abort, \
+                patch.object(panel_module, 'send_beep', return_value=True) as beep:
+            panel = OperatorPanel(app)
+            assert (app.zone, app.side, app.selecting) == (3, 'blue', True)
+            panel._enqueue(dict(action='next_zone',key=1));panel.tick()
+            assert app.zone == 4 and beep.call_args.kwargs['count'] == 4
+            panel._enqueue(dict(action='start',key=3,_stop_serial=0))
+            panel.request_stop();panel.tick()
+            app.start_session.assert_not_called()  # STOP cancels queued START.
+            standby = Mock();standby.poll.return_value=None;panel._standby=standby
+            panel.before_start()
+            standby.terminate.assert_called_once();standby.wait.assert_called_once()
+            assert panel._standby is None and not panel.stopped
+            token = app.reset_session_token
+            assert token and not panel.control_path.exists()
+            # STOP during preparation reaches the owner immediately, not the UI queue.
+            assert panel.request_stop() and abort.call_count == 2
+            assert runner_module.operator_stop_requested(panel.control_path, token)
+            assert not runner_module.operator_stop_requested(panel.control_path, 'previous-session')
+            panel.after_start()
+            assert panel.stopped and not app.vision_start_pending
+            app.selecting=False
+            panel._enqueue(dict(action='next_zone',key=1));panel.tick()
+            assert app.zone == 4  # Active round can query, never change reference.
+            panel.after_reset()
+            assert app.reset_session_token is None and not panel.control_path.exists()
+            panel.close()
+
+
+def test_formal_button_launcher_wiring_without_hardware():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    import competition_map_app as formal
+    import operator_panel as panel_module
+    import map_app
+    with tempfile.TemporaryDirectory() as directory:
+        runtime = Path(directory)
+        options = SimpleNamespace(zone=2, side='blue', corner_offset_mm=150*2**.5,
+            encoder_weight=0., localization_mode='t265', localization_json=runtime/'pose.json',
+            localization_log=None, launch_localization=False, launch_vision=False,
+            uart='PTY-only', baud=230400, tx_rate=20., fullscreen=False, demo=False,
+            screenshot=None, official_wheel_input=False, dynamic_localization=False,
+            gpio_buttons=True, headless=True)
+        with patch.object(map_app,'RUNTIME',runtime), patch.object(formal,'RUNTIME',runtime), \
+                patch.object(panel_module,'RUNTIME',runtime):
+            app = formal.CompetitionMapApp(options)
+            assert app.selecting and not app.session_started  # Even with CLI zone/side.
+            app.start_session()
+            token = app.reset_session_token
+            command = app.localization_command(); vision = app.vision_command()
+            assert command[command.index('--operator-socket')+1] == app.operator.socket_name
+            assert '--no-display' in vision
+            assert vision[vision.index('--operator-control')+1] == str(runtime/'operator_control.json')
+            assert vision[vision.index('--reset-session-token')+1] == token
+            assert app.vision_command()[app.vision_command().index('--reset-session-token')+1] == token
+            app.reset_session(source='offline-check')
+            assert app.selecting and not app.session_started and app.reset_session_token is None
+            app.operator.close()
+
+
+def test_operator_standby_returns_after_failed_start_only_after_cleanup():
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    import competition_map_app as formal
+
+    def make_app():
+        app = formal.CompetitionMapApp.__new__(formal.CompetitionMapApp)
+        app.session_started = False
+        app.selecting = True
+        app.message = ''
+        app.record_reset_event = Mock()
+        calls = []
+        app.stop_session_processes = Mock(side_effect=lambda: calls.append('session_owners_closed'))
+        app.operator = SimpleNamespace(transitioning=False)
+        def before_start():
+            app.operator.transitioning = True
+            calls.append('standby_owner_closed')
+        def after_start():
+            app.operator.transitioning = False
+        def after_reset():
+            assert calls[-1] == 'session_owners_closed'
+            calls.append('standby_owner_restored')
+        app.operator.before_start = Mock(side_effect=before_start)
+        app.operator.after_start = Mock(side_effect=after_start)
+        app.operator.after_reset = Mock(side_effect=after_reset)
+        return app, calls
+
+    # A synchronous spawn failure is already reported by the base method.
+    app, calls = make_app()
+    with patch.object(formal.RescueMapApp, 'start_session', return_value=None):
+        app.start_session()
+    assert calls == ['standby_owner_closed', 'session_owners_closed', 'standby_owner_restored']
+    assert not app.operator.transitioning
+
+    # A failure inside before_start also clears the transition state.
+    app, calls = make_app()
+    def failed_before_start():
+        app.operator.transitioning = True
+        raise OSError('mock standby shutdown failure')
+    app.operator.before_start.side_effect = failed_before_start
+    with patch.object(formal.RescueMapApp, 'start_session') as launch:
+        app.start_session()
+    launch.assert_not_called()
+    assert calls == ['session_owners_closed', 'standby_owner_restored']
+    assert not app.operator.transitioning and '准备失败' in app.message
+
+    # An asynchronously failed localizer returns to selection later.
+    app, calls = make_app()
+    app.session_started, app.selecting = True, False
+    def failed_async_start(_app):
+        _app.session_started, _app.selecting = False, True
+    with patch.object(formal.RescueMapApp, 'maybe_start_vision', failed_async_start):
+        app.maybe_start_vision()
+    assert calls == ['session_owners_closed', 'standby_owner_restored']
+
+    # Never open a standby owner when release of an earlier owner failed.
+    app, _calls = make_app()
+    app.stop_session_processes.side_effect = RuntimeError('mock owner still running')
+    try:
+        app._restore_operator_standby()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError('cleanup failure must remain visible')
+    app.operator.after_reset.assert_not_called()
+    assert not app.operator.transitioning

@@ -89,6 +89,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--launch-localization", action="store_true")
     parser.add_argument("--launch-vision", action="store_true")
+    parser.add_argument("--gpio-buttons", action=argparse.BooleanOptionalAction, default=False,
+                        help="competition: use the existing four physical operator buttons")
+    parser.add_argument("--headless", action="store_true",
+                        help="run the same map/session supervisor without graphical windows")
     parser.add_argument("--official-wheel-input", action=argparse.BooleanOptionalAction, default=False,
                         help="competition adapter: reuse tested official SDK wheel input")
     parser.add_argument("--dynamic-localization", action=argparse.BooleanOptionalAction, default=False,
@@ -891,6 +895,22 @@ class RescueMapApp:
             if not cv2.imwrite(str(self.options.screenshot), self.render()):
                 raise RuntimeError(f"cannot write screenshot: {self.options.screenshot}")
             self.stop_session_processes()
+            return 0
+
+        if getattr(self.options, "headless", False):
+            active = True
+            def request_exit(_signum, _frame):
+                nonlocal active
+                active = False
+            previous = {sig: signal.signal(sig, request_exit) for sig in (signal.SIGINT, signal.SIGTERM)}
+            try:
+                while active:
+                    self.update_pose()
+                    time.sleep(.02)
+            finally:
+                self.stop_session_processes()
+                for sig, handler in previous.items():
+                    signal.signal(sig, handler)
             return 0
 
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)

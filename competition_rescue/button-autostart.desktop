@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=智能救援实体按键待机
+Comment=Wait for the physical START button; never auto-start a competition
+Exec=/home/sunrise/RDK_X5/shijue_fangan/competition_rescue/run_competition_map.sh --gpio-buttons
+Terminal=false
+X-GNOME-Autostart-enabled=true
+Categories=Utility;

@@ -22,6 +22,7 @@ exec python3 "${script_dir}/competition_map_app.py" \
     --localization-mode t265 \
     --official-wheel-input \
     --dynamic-localization \
+    --gpio-buttons \
     --tx-rate 20 \
     --disable-t265-translation-scale \
     --t265-translation-scale 1.000 \

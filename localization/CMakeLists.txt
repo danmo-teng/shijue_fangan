@@ -22,6 +22,7 @@ add_library(omni_localization_core
     src/f407_protocol.cpp
     src/f405_telemetry.cpp
     src/fusion.cpp
+    src/operator_uart.cpp
     src/serial_port.cpp)
 target_include_directories(omni_localization_core PUBLIC include)
 target_link_libraries(omni_localization_core PUBLIC pthread)

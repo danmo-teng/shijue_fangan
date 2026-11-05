@@ -5,6 +5,7 @@
 #include "f405_telemetry.hpp"
 #include "fusion.hpp"
 #include "serial_port.hpp"
+#include "operator_uart.hpp"
 #include "debug_wheel_input.hpp"
 #include "dynamic_pose_relay.hpp"
 #include "debug_fisheye_evidence.hpp"
@@ -60,6 +61,8 @@ struct Options {
     std::string debug_pose_socket;
     std::string wheel_feedback_socket, wheel_feedback_requests;
     std::string dynamic_pose_socket, dynamic_pose_output;
+    std::string operator_socket;
+    bool operator_uart_only = false;
     int baud = 115200;
     double output_rate_hz = 20.0;
     double tx_rate_hz = 0.0;
@@ -220,6 +223,8 @@ void usage(const char *program)
         << "  --config FILE       localization config\n"
         << "  --uart DEVICE       F407 UART, e.g. /dev/ttyS3 (optional)\n"
         << "  --baud BAUD         UART baud, default 115200\n"
+        << "  --operator-socket @NAME  one-shot operator beep/manual ABORT IPC\n"
+        << "  --operator-uart-only     standby UART owner, no T265/CONFIG/task startup\n"
         << "  --serial SERIAL     select T265 serial\n"
         << "  --output FILE       atomic JSON output\n"
         << "  --csv FILE          full-rate T265/odometry diagnostic CSV log\n"
@@ -270,6 +275,10 @@ Options parse_options(int argc, char **argv)
             options.uart_path = value("--uart");
         } else if (argument == "--baud") {
             options.baud = parse_positive_int(value("--baud"), "--baud");
+        } else if (argument == "--operator-socket") {
+            options.operator_socket = value("--operator-socket");
+        } else if (argument == "--operator-uart-only") {
+            options.operator_uart_only = true;
         } else if (argument == "--serial") {
             options.serial = value("--serial");
         } else if (argument == "--output") {
@@ -340,6 +349,12 @@ Options parse_options(int argc, char **argv)
             throw std::invalid_argument("unknown option: " + argument);
         }
     }
+    if ((!options.operator_socket.empty() && options.uart_path.empty()) ||
+        (options.operator_uart_only && (options.operator_socket.empty() ||
+         !options.command_file_path.empty() || !options.dynamic_pose_socket.empty() ||
+         !options.wheel_feedback_socket.empty() || !options.debug_wheel_socket.empty() ||
+         options.tx_rate_hz != 0)))
+        throw std::invalid_argument("operator UART-only needs UART/socket and no localization/task streams");
     if (options.dynamic_pose_socket.empty() != options.dynamic_pose_output.empty() ||
         (!options.dynamic_pose_socket.empty() && (options.dynamic_pose_output == options.output_path ||
           options.debug_pose_socket.empty() || options.wheel_feedback_socket.empty())))
@@ -368,6 +383,31 @@ Options parse_options(int argc, char **argv)
     if(!options.debug_fisheye_output.empty() && (!options.debug_fresh_session || options.debug_test_session.empty()))
         throw std::invalid_argument("fisheye evidence is confined to an identified debug session");
     return options;
+}
+
+int run_operator_standby(const Options &options)
+{
+    // Executed before constructing rs2::context: idle selection works without
+    // opening the T265, loading its firmware, or sending autonomous CONFIG.
+    omni::SerialPort uart(options.uart_path, options.baud);
+    uart.open_port();
+    omni::OperatorUartRelay relay(options.operator_socket,
+        [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
+            return uart.write_all(frame.data(), frame.size(), 50);
+        });
+    std::cerr << "[OPERATOR] standby UART owner " << options.uart_path << " @ "
+              << options.baud << "; no SDK, no autonomous configuration\n";
+    const auto started = std::chrono::steady_clock::now();
+    std::uint8_t buffer[512];
+    while (!g_stop) {
+        // Drain the existing receive stream; standby neither subscribes nor
+        // interprets sensor telemetry and does not query firmware repeatedly.
+        if (uart.read_some(buffer, sizeof(buffer), 50) < 0)
+            throw std::runtime_error("operator standby UART read failed");
+        if (options.duration_sec > 0 && std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - started).count() >= options.duration_sec) break;
+    }
+    return EXIT_SUCCESS;
 }
 
 std::string device_info(const rs2::device &device, rs2_camera_info field)
@@ -924,9 +964,10 @@ int main(int argc, char **argv)
     std::thread relay_thread;
     try {
         const Options options = parse_options(argc, argv);
-        const omni::LocalizationConfig config = omni::load_config(options.config_path);
         std::signal(SIGINT, signal_handler);
         std::signal(SIGTERM, signal_handler);
+        if (options.operator_uart_only) return run_operator_standby(options);
+        const omni::LocalizationConfig config = omni::load_config(options.config_path);
         rs2::log_to_console(options.debug_sdk ? RS2_LOG_SEVERITY_DEBUG : RS2_LOG_SEVERITY_WARN);
 
         std::cerr << "[CONFIG] start_zone=" << config.start_zone
@@ -977,6 +1018,11 @@ int main(int argc, char **argv)
         std::atomic<std::uint16_t> navigation_heading_cdeg{0};
         std::mutex uart_tx_mutex;
         std::unique_ptr<omni::SerialPort> uart;
+        // Explicit physical-button STOP is scoped to this process/session.
+        // It prevents an in-flight model startup or old command file from
+        // sending CONFIG/mission heartbeats again after the manual ABORT.
+        std::atomic<bool> operator_stopped{false};
+        std::unique_ptr<omni::OperatorUartRelay> operator_relay;
         auto feedback_tap = std::make_shared<omni::WheelTelemetryTap>(options.wheel_feedback_socket);
         std::vector<std::uint8_t> feedback_requests;
         if (!options.wheel_feedback_requests.empty()) {
@@ -989,6 +1035,17 @@ int main(int argc, char **argv)
         if (!options.uart_path.empty()) {
             uart.reset(new omni::SerialPort(options.uart_path, options.baud));
             uart->open_port();
+            if (!options.operator_socket.empty()) {
+                operator_relay.reset(new omni::OperatorUartRelay(options.operator_socket,
+                    [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
+                        std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        if (omni::is_operator_abort(frame)) {
+                            operator_stopped.store(true, std::memory_order_relaxed);
+                            navigation_command_active.store(false, std::memory_order_relaxed);
+                        }
+                        return uart->write_all(frame.data(), frame.size(), 50);
+                    }));
+            }
             std::cerr << "[UART] " << options.uart_path << " @ " << options.baud
                       << " 8N1, RX TYPE=0x15/0x17, TX TYPE=0x16 @ "
                       << options.tx_rate_hz
@@ -1064,6 +1121,7 @@ int main(int argc, char **argv)
                     auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame,
                                         const std::array<std::uint8_t, omni::kFrameSize> *context = nullptr) {
                         std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        if (operator_stopped.load(std::memory_order_relaxed)) return;
                         if (context && !uart->write_all(context->data(), context->size(), 50)) {
                             relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
                             return;
@@ -1088,6 +1146,12 @@ int main(int argc, char **argv)
                     };
 
                     while (running.load(std::memory_order_relaxed) && !g_stop) {
+                        if (operator_stopped.load(std::memory_order_relaxed)) {
+                            have_active_mission = false;
+                            navigation_command_active.store(false, std::memory_order_relaxed);
+                            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                            continue;
+                        }
                         std::array<std::uint8_t, omni::kFrameSize> input{};
                         std::array<std::uint8_t, omni::kFrameSize> context{};
                         bool contextual = false;
