@@ -14,6 +14,18 @@ import f405_timed_protocol as wire
 from t265_wheel_input import WheelInputBridge, write_sdk_config
 
 
+def identity_names(identity):
+    """Describe the actual reply; unknown combinations never imply a role."""
+    board, mode, service = (identity[key] for key in ("board", "mode", "service"))
+    roles = {(405, 5, 2): ("NormalRun", "TASK"),
+             (405, 5, 1): ("MotionDebug", "MOTIONDEBUG")}
+    mode_name, service_name = roles.get((board, mode, service),
+        (f"unknown(mode={mode})", f"unknown(service={service})"))
+    return dict(board_name="F405" if board == 405 else f"unknown(board={board})",
+                mode_name=mode_name, service_name=service_name,
+                identity_source="actual_uart_reply")
+
+
 class CompetitionWheelInput:
     def __init__(self, root, config, session_id, telemetry_sink=None):
         self.root, self.session_id = root, session_id
@@ -52,6 +64,7 @@ class CompetitionWheelInput:
                                      and clock_ok and sample["boot_epoch"] != "00"*16)
             # Packet semantics, not a Git SHA whitelist or a control admission test.
             sample["interface_compatible"] = sample["board"] == 405 and version in {(1,0),(1,1),(1,3)}
+            sample.update(identity_names(sample))
             self.identity = dict(sample)
             self.bridge.log.submit("chassis_identity.json", sample, atomic=True)
             event = "timed_identity"
@@ -85,7 +98,12 @@ class CompetitionWheelInput:
             sdk = json.loads((self.root / "wheel_sdk_status.json").read_text())
         except (OSError, ValueError):
             sdk = {}
-        return dict(self.bridge.snapshot(sdk), actual_lower_identity=self.identity, receiver_error=self.error)
+        identity = self.identity or {}
+        return dict(self.bridge.snapshot(sdk), actual_lower_identity=self.identity,
+                    actual_lower_firmware=identity.get("git_commit", "unconfirmed"),
+                    actual_lower_mode=identity.get("mode_name", "unconfirmed"),
+                    actual_lower_service=identity.get("service_name", "unconfirmed"),
+                    receiver_error=self.error)
 
     def close(self):
         self.stop_event.set()

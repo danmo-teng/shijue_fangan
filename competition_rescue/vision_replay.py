@@ -9,6 +9,7 @@ import math
 import multiprocessing as mp
 from pathlib import Path
 import queue
+import threading
 import time
 
 
@@ -86,8 +87,10 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
             cv2.putText(view,line,(8,24+30*i),cv2.FONT_HERSHEY_SIMPLEX,.48,(235,235,235),1,cv2.LINE_AA)
         writer.write(view)
         row = dict(meta, video_frame_index=clip['frames_written'],
-            seconds_from_trigger=(meta['capture_monotonic_ns']-clip['trigger_capture_ns'])/1e9)
+            seconds_from_trigger=(meta['capture_monotonic_ns']-clip['trigger_monotonic_ns'])/1e9)
         frames.write(json.dumps(row,ensure_ascii=False,allow_nan=False)+'\n')
+        if clip['first_capture_ns'] is None:
+            clip['first_capture_ns'] = meta['capture_monotonic_ns']
         clip['frames_written'] += 1
         clip['last_capture_ns'] = meta['capture_monotonic_ns']
 
@@ -95,7 +98,7 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
         persist()
         while True:
             try:
-                image, pixel_format, meta, trigger = inbox.get(timeout=.05)
+                image, pixel_format, meta, triggers = inbox.get(timeout=.05)
             except queue.Empty:
                 if stop.is_set(): break
                 continue
@@ -105,23 +108,37 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
             bgr = cv2.resize(bgr,size,interpolation=cv2.INTER_AREA)
             while ring and stamp-ring[0][0]['capture_monotonic_ns'] > pre_s*1e9:
                 ring.popleft()
+            # Planner events survive skipped/full frame queues. Their original
+            # occurrence time anchors the clip even if the next frame has a
+            # different state. Overlapping incidents extend the same tail.
+            for event in _finite(triggers):
+                event_ns = event['trigger_monotonic_ns']
+                if writer is not None and event_ns > clip_end_ns:
+                    finish('post_window_finished')
+                if writer is None:
+                    number = len(manifest['clips']) + 1
+                    stem = f'safe_zone_replay_{number:04d}'
+                    clip = dict(video=stem+'.avi', frames=stem+'.jsonl', complete=False,
+                        trigger='safe_zone_acquire_no_box', trigger_monotonic_ns=event_ns,
+                        events=[event], frames_written=0, first_capture_ns=None)
+                    manifest['clips'].append(clip); persist()
+                    writer = cv2.VideoWriter(str(root/clip['video']),cv2.VideoWriter_fourcc(*'MJPG'),fps,(size[0],size[1]+96))
+                    if not writer.isOpened(): raise RuntimeError('MJPG video encoder unavailable')
+                    frames = (root/clip['frames']).open('w',encoding='utf-8')
+                    clip_end_ns = event_ns + round(post_s*1e9)
+                    for old_meta,jpeg in ring:
+                        if not event_ns-round(pre_s*1e9) <= old_meta['capture_monotonic_ns'] <= clip_end_ns:
+                            continue
+                        old = cv2.imdecode(jpeg,cv2.IMREAD_COLOR)
+                        if old is None: raise RuntimeError('replay prebuffer decode failed')
+                        write_frame(old,old_meta)
+                else:
+                    clip['events'].append(event)
+                    clip_end_ns = max(clip_end_ns,event_ns+round(post_s*1e9))
+                clip['post_window_end_ns'] = clip_end_ns
+                persist()
             if writer is not None and stamp > clip_end_ns:
                 finish('post_window_finished')
-            if trigger and writer is None:
-                number = len(manifest['clips']) + 1
-                stem = f'safe_zone_replay_{number:04d}'
-                clip = dict(video=stem+'.avi', frames=stem+'.jsonl', complete=False,
-                    trigger='safe_zone_acquire_no_box', trigger_capture_ns=stamp,
-                    frames_written=0, first_capture_ns=ring[0][0]['capture_monotonic_ns'] if ring else stamp)
-                manifest['clips'].append(clip); persist()
-                writer = cv2.VideoWriter(str(root/clip['video']),cv2.VideoWriter_fourcc(*'MJPG'),fps,(size[0],size[1]+96))
-                if not writer.isOpened(): raise RuntimeError('MJPG video encoder unavailable')
-                frames = (root/clip['frames']).open('w',encoding='utf-8')
-                clip_end_ns = stamp + round(post_s*1e9)
-                for old_meta,jpeg in ring:
-                    old = cv2.imdecode(jpeg,cv2.IMREAD_COLOR)
-                    if old is None: raise RuntimeError('replay prebuffer decode failed')
-                    write_frame(old,old_meta)
             if writer is not None:
                 write_frame(bgr,meta)
             ok, jpeg = cv2.imencode('.jpg',bgr,[cv2.IMWRITE_JPEG_QUALITY,85])
@@ -150,7 +167,10 @@ class VisionReplay:
             name='competition-incident-replay',daemon=True)
         self.period_s = 1./fps
         self.next_frame_s = 0.
-        self.triggered_wait = None
+        self.event_lock = threading.Lock()
+        self.pending_events = deque(maxlen=32)
+        self.event_sequence = 0
+        self.event_overflow_count = 0
         self.error = None
         self.started = False
 
@@ -163,18 +183,28 @@ class VisionReplay:
     def due(self, now):
         return self.started and self.error is None and now >= self.next_frame_s
 
+    def record_event(self, event):
+        """Called by the planner, independently of image sampling or disk IO."""
+        with self.event_lock:
+            self.event_sequence += 1
+            if len(self.pending_events) == self.pending_events.maxlen:
+                self.event_overflow_count += 1
+            self.pending_events.append(dict(event,event_id=self.event_sequence))
+
     def submit(self, image, pixel_format, metadata, now):
         if not self.due(now): return False
         self.next_frame_s = now + self.period_s
         if not self.process.is_alive():
             self.error = 'replay worker exited; see manifest'
             return False
-        key = metadata.get('acquire_started_s')
-        trigger = (metadata.get('upper_state') == 'ACQUIRE_SAFE_ZONE' and
-            metadata.get('reason') == 'SAFE_CORRIDOR_UNAVAILABLE' and key != self.triggered_wait)
+        with self.event_lock:
+            events = list(self.pending_events)
         try:
-            self.inbox.put_nowait((image,pixel_format,metadata,trigger))
-            if trigger: self.triggered_wait = key
+            self.inbox.put_nowait((image,pixel_format,metadata,events))
+            if events:
+                with self.event_lock:
+                    while self.pending_events and self.pending_events[0]['event_id'] <= events[-1]['event_id']:
+                        self.pending_events.popleft()
             return True
         except queue.Full:
             self.dropped.value += 1
@@ -197,7 +227,15 @@ class VisionReplay:
         try:
             manifest = json.loads((self.root/'vision_replay_manifest.json').read_text())
             self.error = self.error or manifest.get('error')
+            with self.event_lock:
+                pending_events = _finite(list(self.pending_events))
+                overflow_count = self.event_overflow_count
+            manifest.update(pending_events=pending_events,event_overflow_count=overflow_count)
+            if pending_events or overflow_count:
+                manifest['complete'] = False
+            _write_json(self.root/'vision_replay_manifest.json',manifest)
         except (OSError,ValueError):
             self.error = self.error or 'replay manifest unavailable'
         return dict(dropped_frames=self.dropped.value,error=self.error,
+                    pending_events=len(self.pending_events),event_overflow_count=self.event_overflow_count,
                     manifest=str(self.root/'vision_replay_manifest.json'))

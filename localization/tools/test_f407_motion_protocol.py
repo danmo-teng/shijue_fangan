@@ -1718,11 +1718,18 @@ def test_competition_dynamic_transport():
     master,slave=pty.openpty()
     with tempfile.TemporaryDirectory() as tmp:
         root=Path(tmp);sid=uuid.uuid4().hex;log=AsyncDebugLog(root)
-        cfg['lidar']['port']=os.ttyname(slave)
+        port=root/'lidar-port'
+        cfg['lidar']['port']=str(port)  # Initially missing; motion must still start.
         app=CompetitionDynamicLocalization(root,sid,cfg,dict(x_m=-1.32,y_m=1.32,yaw_deg=135),log)
         sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
         sink.bind(app.control_address);sink.settimeout(4)
         source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        def wait_packet(predicate):
+            deadline=time.monotonic()+4
+            while time.monotonic()<deadline:
+                result=json.loads(sink.recv(32768))
+                if predicate(result):return result
+            raise AssertionError('dynamic output did not reach expected state')
         try:
             app.start();source.connect(app.pose_address)
             now=time.monotonic_ns()
@@ -1733,6 +1740,10 @@ def test_competition_dynamic_transport():
             assert packet['pose']==dict(x_m=-1.30,y_m=1.32,yaw_deg=135.)
             assert packet['timestamp_monotonic_ns']==now and packet['reference']['source']=='selected_competition_start'
             assert packet['qualified_pose'] is False and not packet['wheel']['independent_reference']
+            assert not packet['lidar_connected'] and packet['lidar_error']
+            port.symlink_to(os.ttyname(slave))
+            connected=wait_packet(lambda p:p['lidar_connected'])
+            assert connected['pose']==packet['pose'] and connected['lidar_error'] is None
             # No new SDK frame required to deliver a current worker snapshot.
             later=json.loads(sink.recv(32768));assert later['packet_id']>packet['packet_id']
             assert later['timestamp_monotonic_ns']==now
@@ -1743,7 +1754,39 @@ def test_competition_dynamic_transport():
                 if not later['lidar_corrections_enabled']:break
             assert not later['lidar_corrections_enabled']
             assert later['pose']==packet['pose']
+            # UART unplug cannot kill the motion engine or freeze its output.
+            os.close(master);os.close(slave);master=slave=None
+            down=wait_packet(lambda p:not p['lidar_connected'])
+            assert down['current_wall_axes']==[] and down['lidar_error']
+            def wheel(index,a,b,speed):
+                return dict(source='measured_wheel_feedback',measurement_valid=True,
+                    mcu_epoch='fixture-boot',sample_id=index,v_body_mps=[speed,0.,0.],
+                    raw_mcu_sample=dict(t0_us=a//1000,t1_us=b//1000),
+                    interval_start_ns=a,interval_end_ns=b,receive_monotonic_ns=b)
+            app.radar.send('wheel',wheel(1,now-10_000_000,now,0.))
+            wait_packet(lambda p:p['motion_source']=='T265_WITH_WHEEL_TAIL')
+            source.send(json.dumps(dict(session_id=sid,frame_number=2,timestamp_monotonic_ns=now+1_000_000,
+                receive_monotonic_ns=now+1_000_000,x_m=-1.30,y_m=1.32,
+                yaw_rad=math.radians(135),tracker_confidence=0)).encode())
+            wait_packet(lambda p:p['motion_source']=='WHEEL_FALLBACK')
+            end=now+200_000_000
+            app.radar.send('yaw',dict(time_ns=end,yaw_deg=100.,source={}))
+            app.radar.send('wheel',wheel(2,now,end,.5))
+            moved=wait_packet(lambda p:p['timestamp_monotonic_ns']==end)
+            assert not moved['lidar_connected'] and moved['motion_source']=='WHEEL_FALLBACK'
+            assert abs(moved['pose']['x_m']-(-1.30-.1/math.sqrt(2)))<1e-8
+            assert abs(moved['pose']['y_m']-(1.32+.1/math.sqrt(2)))<1e-8
+            # Reopen the port automatically without resetting XY/reference or
+            # overriding the operator's existing pause of wall corrections.
+            master,slave=pty.openpty();port.unlink();port.symlink_to(os.ttyname(slave))
+            recovered=wait_packet(lambda p:p['lidar_connected'])
+            assert recovered['pose']==moved['pose'] and recovered['reference']==packet['reference']
+            assert not recovered['lidar_corrections_enabled']
+            app.set_lidar_enabled(True)
+            wait_packet(lambda p:p['lidar_corrections_enabled'])
         finally:
-            source.close();sink.close();app.close();log.close();os.close(master);os.close(slave)
+            source.close();sink.close();app.close();log.close()
+            for fd in (master,slave):
+                if fd is not None:os.close(fd)
         assert app.radar.stopped_cleanly and log.healthy() and app.error is None
         assert not (root/'commands.jsonl').exists()

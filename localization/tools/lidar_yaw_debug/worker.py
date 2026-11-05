@@ -36,6 +36,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
     counters=dict(pose_ingested=0,primary_yaw_ingested=0,measured_wheel_ingested=0,scans_received=0,
         scan_queue_drops=0,display_updates_coalesced=0)
     error=None;last_publish=0.;last_percentile=0.;p95=None;reference_request_id=None
+    lidar_error=None;next_open_s=0.;open_attempts=0;requested_lidar_enabled=True
 
     def event(name,**data):
         log.submit('lidar_worker_events.jsonl',dict(event=name,timestamp_monotonic_ns=time.monotonic_ns(),**data))
@@ -44,7 +45,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
         replies.put_nowait(dict(kind=kind,**data))
 
     def consume():
-        nonlocal reference_request_id
+        nonlocal reference_request_id,requested_lidar_enabled
         for _ in range(1024):
             try:kind,payload=inbox.get_nowait()
             except queue.Empty:break
@@ -68,7 +69,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                     center_xy=payload['center_xy_m'],heading_deg=payload['yaw_deg'],first_sample=True)
                 event('field_reference_set',reference=reference)
             elif kind=='lidar_enabled':
-                engine.set_lidar_enabled(payload['enabled'])
+                requested_lidar_enabled=bool(payload['enabled'])
+                engine.set_lidar_enabled(requested_lidar_enabled and lidar is not None)
                 event('operator_lidar_availability',enabled=payload['enabled'],reason=payload['reason'])
         while engine.motion.events:
             change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
@@ -82,6 +84,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             worker_pid=os.getpid(),worker_cpu_affinity=sorted(os.sched_getaffinity(0)),
             capture_chain_present=bool(engine.poses and engine.yaws and counters['scans_received']),
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
+            lidar_connected=lidar is not None,lidar_error=lidar_error,
+            lidar_open_attempts=open_attempts,lidar_requested_enabled=requested_lidar_enabled,
             lidar_corrections_enabled=engine.lidar_corrections_enabled,
             logging_healthy=log.healthy(),accuracy_verified=False,full_speed_physical_validation=False)
 
@@ -94,18 +98,52 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             try:display.put_nowait(value)
             except queue.Full:pass
 
+    def disconnect_lidar(exc):
+        nonlocal lidar,reader,lidar_error,next_open_s
+        reason=str(exc)
+        if lidar is not None:
+            try:lidar.close()
+            except (OSError,serial.SerialException):pass
+        lidar=None
+        if reader:
+            for k,v in reader.stats.items():reader_totals[k]=reader_totals.get(k,0)+v
+        reader=None;pending.clear()
+        # Keep the reference, accumulated wall correction and motion history.
+        # Only observations from the unavailable lidar stop contributing.
+        engine.set_lidar_enabled(False)
+        if reason!=lidar_error:event('lidar_connection_error',reason=reason,motion_propagation_continues=True)
+        lidar_error=reason
+        next_open_s=time.monotonic()+1.  # Port retry pacing, never a feedback-age gate.
+
+    def connect_lidar():
+        nonlocal lidar,reader,lidar_error,open_attempts
+        open_attempts+=1
+        try:
+            lidar=serial.Serial(port,baud,timeout=.005,write_timeout=.2,exclusive=True)
+            for mode,value in ((0xA0,0),(0xA2,3600)):
+                packet=command_frame(mode,value)
+                log.submit('lidar_tx.jsonl',dict(timestamp_monotonic_ns=time.monotonic_ns(),data_hex=packet.hex()))
+                if lidar.write(packet)!=len(packet):raise serial.SerialException('雷达启动命令写入不完整')
+        except (OSError,serial.SerialException) as exc:
+            disconnect_lidar(exc)
+            return
+        reader=make_reader(config);lidar_error=None
+        engine.set_lidar_enabled(requested_lidar_enabled)
+        event('lidar_connected',port=port,open_attempt=open_attempts)
+
     try:
-        lidar=serial.Serial(port,baud,timeout=.005,write_timeout=.2,exclusive=True)
-        reader=make_reader(config)
-        for mode,value in ((0xA0,0),(0xA2,3600)):
-            packet=command_frame(mode,value)
-            log.submit('lidar_tx.jsonl',dict(timestamp_monotonic_ns=time.monotonic_ns(),data_hex=packet.hex()))
-            if lidar.write(packet)!=len(packet):raise RuntimeError('雷达启动命令写入不完整')
+        connect_lidar()
         reply('started',pid=os.getpid());event('worker_started',port=port,baud=baud,
             chassis_uart_owned=False,t265_sdk_owned=False)
         while not stop.is_set():
             consume()
-            data=lidar.read(min(lidar.in_waiting or 1,65536));now=time.monotonic_ns()
+            if lidar is None and time.monotonic()>=next_open_s:connect_lidar()
+            data=b''
+            if lidar is not None:
+                try:data=lidar.read(min(lidar.in_waiting or 1,65536))
+                except (OSError,serial.SerialException) as exc:disconnect_lidar(exc)
+            else:stop.wait(.005)  # Preserve the normal receive-loop cadence while unplugged.
+            now=time.monotonic_ns()
             if data:
                 log.submit('lidar_rx.jsonl',dict(timestamp_monotonic_ns=now,data_hex=data.hex()))
                 try:scans=reader.feed(data,now)
@@ -154,7 +192,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                 packet=command_frame(0xA1,0);lidar.write(packet)
                 log.submit('lidar_tx.jsonl',dict(timestamp_monotonic_ns=time.monotonic_ns(),data_hex=packet.hex()))
             except (OSError,serial.SerialException) as exc:event('lidar_stop_write_failed',reason=str(exc))
-            lidar.close()
+            try:lidar.close()
+            except (OSError,serial.SerialException) as exc:event('lidar_close_failed',reason=str(exc))
+            lidar=None
         if times:p95=float(np.percentile(times,95))
         final=state();log.submit('lidar_worker_summary.json',final,atomic=True);log.close()
         final['logging_healthy']=log.healthy();final['logging_statistics']=log.statistics()

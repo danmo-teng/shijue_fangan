@@ -1023,6 +1023,7 @@ class CompetitionPlanner:
         self.command_path = command_path
         self.diagnostics_path = diagnostics_path
         self.events_log = events_log
+        self.replay_event_sink = None
         self.period_s = 1.0 / rate_hz
         self.lock = threading.Lock()
         self.latest_vision = VisionSnapshot()
@@ -1962,6 +1963,22 @@ class CompetitionPlanner:
             except Exception:
                 pass  # Failure to report diagnostics must not stop control.
 
+    def _record_replay_event(self, output, pose, stm, vision, now: float) -> None:
+        if output.event != "safe_zone_acquire_no_box" or self.replay_event_sink is None:
+            return
+        try:
+            self.replay_event_sink(dict(event=output.event,
+                trigger_monotonic_ns=round(now * 1_000_000_000),
+                acquire_started_s=self.mission.safe_zone_acquire_started_s,
+                upper_state=output.state.value, reason=output.reason, message=output.message,
+                vision_frame_sequence=vision.frame_sequence,
+                observed_monotonic_s=vision.observed_monotonic_s,
+                pose=asdict(pose), stm=asdict(stm), safe_bbox=vision.safe_bbox,
+                safe_zone_filter_blocked=vision.safe_zone_filter_blocked,
+                command=None if output.command is None else asdict(output.command)))
+        except Exception as error:
+            self._record_diagnostic_error(error, now)
+
     def _log_capture_decision(self, output, vision, stm, now: float, pending_task: int, pending_action: int) -> None:
         try:
             self._write_capture_decision(output, vision, stm, now, pending_task, pending_action)
@@ -2019,6 +2036,7 @@ class CompetitionPlanner:
                 pending_task, pending_action = self.protocol_task, self.protocol_action
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
                 self._publish(output)
+                self._record_replay_event(output, pose, stm, vision, started)
                 try:
                     self._update_grab_waitnav_diagnostic(
                         output, pose, stm, started
@@ -2488,6 +2506,7 @@ def main() -> int:
         try:
             replay = VisionReplay(Path(replay_root), session['sdk_session_id'])
             replay.start()
+            planner.replay_event_sink = replay.record_event
         except Exception as error:
             events.write('vision_replay_unavailable', dict(error=str(error)))
             replay = None

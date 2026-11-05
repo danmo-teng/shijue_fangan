@@ -144,6 +144,24 @@ class CompetitionMapApp(RescueMapApp):
     def wheel_input_status(self):
         return self.wheel_input.snapshot() if self.wheel_input else {}
 
+    def draw_panel_heading(self, text):
+        if self.selecting or not self.official_wheel_input:
+            return super().draw_panel_heading(text)
+        text.add("救援场地定位", (920, 45), 30, (245, 245, 245), True)
+        identity = self.wheel_input.identity if self.wheel_input is not None else None
+        if not identity:
+            text.add("下位机实际身份：unconfirmed", (920, 80), 16, (200, 210, 225))
+            text.add("尚未收到实际身份回包", (920, 105), 14, (165, 165, 170))
+            return
+        if identity['mode_name'].startswith('unknown'):
+            role = f"unknown B{identity['board']} M{identity['mode']} S{identity['service']}"
+        else:
+            role = f"{identity['board_name']} {identity['mode_name']}/{identity['service_name']}"
+        text.add("实际：" + role, (920, 80), 15, (200, 210, 225))
+        build = (f"{identity['git_commit'][:8]} dirty={identity['source_dirty']} · "
+                 f"v{identity['protocol_major']}.{identity['protocol_minor']} · {identity['uart_baud']}")
+        text.add(build, (920, 105), 13, (165, 165, 170))
+
     def stop_localization(self) -> None:
         process = self.localization_process
         super().stop_localization()
@@ -193,7 +211,9 @@ class CompetitionMapApp(RescueMapApp):
                      'T265_WITH_WHEEL_TAIL': 'T265＋轮反馈续推'}.get(mode, mode)
             axes = '/'.join(state.get('current_wall_axes', [])) or '暂无约束'
             text.add('当前来源：' + label, (920, 455), 17, (80, 205, 245))
-            text.add('雷达修正：' + axes, (920, 490), 17, (80, 205, 245))
+            radar_text = ('雷达断开重连中；运动传播继续' if state.get('lidar_error')
+                          else '雷达修正：' + axes)
+            text.add(radar_text, (920, 490), 17, (80, 205, 245))
             self.button(canvas, text, 'lidar_toggle',
                 '越障：暂停雷达 [L]' if self.dynamic.lidar_enabled else '恢复雷达修正 [L]',
                 (920, 515, 1245, 555), self.dynamic.lidar_enabled)

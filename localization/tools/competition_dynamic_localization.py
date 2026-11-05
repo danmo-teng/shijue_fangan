@@ -88,6 +88,8 @@ class CompetitionDynamicLocalization:
             qualified_pose=False, accuracy_verified=False,
             current_wall_axes=state['current_wall_axes'],
             lidar_corrections_enabled=state['lidar_corrections_enabled'],
+            lidar_connected=self.radar.state.get('lidar_connected',False),
+            lidar_error=self.radar.state.get('lidar_error'),
             position_reacquisitions=state['position_reacquisitions'],
             reference=state['reference'], motion_selection=state['motion_selection'])
         return self.last_control
@@ -157,6 +159,8 @@ class CompetitionDynamicLocalization:
 
     def snapshot(self):
         return dict(self.state, transport_error=self.error, pose_packets=self.pose_packets,
+            lidar_connected=self.radar.state.get('lidar_connected',False),
+            lidar_error=self.radar.state.get('lidar_error'),
             primary_yaw_packets=self.imu_packets, input_drops=self.input_drops,
             worker_input_drops=self.radar.input_drops, output_drops=self.output_drops,
             control_packets_sent=self.packet_id, control_pose_publish_enabled=True,

@@ -379,11 +379,14 @@ class RescueMapApp:
         text.add(label, ((x0 + x1) // 2, (y0 + y1) // 2), 21, (245, 245, 245), selected, "mm")
         self.hitboxes[name] = rect
 
+    def draw_panel_heading(self, text: TextPainter) -> None:
+        text.add("救援场地定位", (920, 45), 30, (245, 245, 245), True)
+        text.add("赛题图6 · 3000×3000 mm", (920, 80), 17, (165, 165, 170))
+
     def draw_panel(self, canvas: np.ndarray, text: TextPainter) -> None:
         x0 = 920
         cv2.rectangle(canvas, (900, 0), (self.width, self.height), (26, 27, 30), -1)
-        text.add("救援场地定位", (x0, 45), 30, (245, 245, 245), True)
-        text.add("赛题图6 · 3000×3000 mm", (x0, 80), 17, (165, 165, 170))
+        self.draw_panel_heading(text)
         if self.selecting:
             text.add("选择出发区", (x0, 130), 22, (230, 230, 230), True)
             for idx in range(4):

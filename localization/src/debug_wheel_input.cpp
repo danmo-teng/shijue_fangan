@@ -103,7 +103,12 @@ void DebugWheelInput::record(Json event)
     event["result_scope"] = "host_SDK_call_return_only; no_device_fusion_ACK";
     event["device_fusion_confirmed"] = false;
     event["wheel_dependency_present"] = accepted_ > 0;
-    event["wheel_dependency_suspect"] = sdk_failed_;
+    // Historical failed calls may still have affected the device; this label
+    // preserves the dependency provenance, never blocks subsequent samples.
+    event["wheel_dependency_suspect"] = sdk_failed_samples_ > 0;
+    event["sdk_api_failed_samples"] = sdk_failed_samples_;
+    event["last_sdk_call_failed"] = last_sdk_call_failed_;
+    event["sdk_failure_policy"] = "continue_with_next_new_sample";
     event["config_loaded"]=config_loaded_;
     event["input_source"]=synthetic_input_ ? "synthetic_test_fixture" : "measured_wheel_feedback";
     event["last_sdk_success_ns"]=last_success_ns_;
@@ -227,7 +232,6 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
             if (std::abs(camera[i]-expected) > 1e-6 || std::abs(lever[i]-expected_lever[i]) > 1e-6)
                 throw std::runtime_error("mount_conversion_mismatch");
         }
-        if (sdk_failed_) throw std::runtime_error("sdk_stream_failed_new_session_required");
         if (next_frame_ > 0xffffffffULL) throw std::runtime_error("frame_sequence_exhausted_new_session_required");
         v = {float(camera[0]), float(camera[1]), float(camera[2])};
     } catch (const std::exception &e) { reason = e.what(); }
@@ -249,9 +253,13 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     std::string error;
     const auto call_start = std::chrono::steady_clock::now();
     try { ok = send(frame, v); } catch (const std::exception &e) { error = e.what(); }
+    // Consume every attempted sample/frame exactly once, including failures.
+    // A failed API call is not a permanent SDK/session failure: the next new
+    // measured sample is attempted normally, without replay or synthetic zero.
+    last_sdk_call_failed_ = !ok;
     if (ok) {++accepted_;last_success_ns_=now+std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now()-began).count();}
-    else { ++rejected_; sdk_failed_ = true; }
+    else { ++rejected_; ++sdk_failed_samples_; }
     record({{"event", "wheel_sdk_result"}, {"frame_num", frame}, {"sdk_result", ok},
             {"packet_id", packet_id}, {"error", error},
             {"sdk_duration_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(

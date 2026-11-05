@@ -855,12 +855,47 @@ void test_debug_wheel_input()
     {
         Input input(config,"sdk-test","",log);
         int calls = 0;
-        auto failed_sdk = [&](std::uint32_t, const rs2_vector &) { ++calls; return false; };
-        check(!input.process(packet,1020000000,failed_sdk), "SDK false is failure, no accuracy claim");
-        packet["packet_id"] = 1; packet["alignment_start_ns"] = 1010000000;
-        packet["alignment_end_ns"] = 1020000000; packet["receive_monotonic_ns"] = 1020000000;
-        packet["alignment_gyro_end_ns"] = 1020000000; packet["gyro_receive_ns"] = 1020000000;
-        check(!input.process(packet,1020000000,failed_sdk) && calls == 1, "failed SDK stream is not silently retried");
+        auto intermittent_sdk = [&](std::uint32_t frame, const rs2_vector &) {
+            check(frame == static_cast<std::uint32_t>(calls), "SDK failure still consumes its frame sequence");
+            ++calls;
+            if (calls == 1) return false;
+            if (calls == 3) throw std::runtime_error("fixture SDK exception");
+            return true;
+        };
+        auto sample = packet;
+        check(!input.process(sample,1020000000,intermittent_sdk), "SDK false is failure, no accuracy claim");
+        check(!input.process(sample,1020000000,intermittent_sdk) && calls == 1,
+              "failed sample is not replayed");
+        for (int index = 1; index <= 3; ++index) {
+            sample["packet_id"] = index;
+            sample["alignment_start_ns"] = 1000000000ULL + index*10000000ULL;
+            sample["alignment_end_ns"] = 1010000000ULL + index*10000000ULL;
+            sample["alignment_gyro_end_ns"] = sample["alignment_end_ns"];
+            check(input.process(sample,1050000000,intermittent_sdk) == (index != 2),
+                  "SDK false or exception does not block the next new measured sample");
+            if (index == 2)
+                check(!input.process(sample,1050000000,intermittent_sdk) && calls == 3,
+                      "exception sample is not replayed");
+        }
+        check(calls == 4, "one SDK attempt per distinct measured sample, with no retry loop");
+    }
+    {
+        Json status;
+        std::ifstream file(root+"/wheel_sdk_status.json"); file >> status;
+        check(status["sdk_result"] == true && status["sdk_api_success_samples"] == 2 &&
+              status["sdk_api_failed_samples"] == 2 && status["rejected_samples"] == 4 &&
+              status["last_sdk_call_failed"] == false && status["wheel_dependency_suspect"] == true &&
+              status["sdk_failure_policy"] == "continue_with_next_new_sample",
+              "recovered SDK status separates current success from historical failures");
+        bool exception_recorded = false;
+        std::ifstream records(log);
+        for (std::string line; std::getline(records,line);) {
+            const auto event = Json::parse(line);
+            if (event.value("event",std::string()) == "wheel_sdk_result" &&
+                event.value("error",std::string()) == "fixture SDK exception")
+                exception_recorded = event["sdk_result"] == false && event["last_sdk_call_failed"] == true;
+        }
+        check(exception_recorded, "SDK exception remains a failed result in the original sample log");
     }
     {
         Json fixture=packet;

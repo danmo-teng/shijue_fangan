@@ -717,17 +717,23 @@ def test_incident_video_replay_and_log_only_timeout():
     assert a.state==b.state==CompetitionState.ACQUIRE_SAFE_ZONE and a.command==b.command
     with tempfile.TemporaryDirectory() as directory:
         root=Path(directory);r=VisionReplay(root,'replay-fixture',fps=8,pre_s=.3,post_s=.3,size=(192,128))
+        planner = CompetitionPlanner(mission,root/'pose.json',root/'stm.json',root/'command.bin',
+            root/'diagnostics.json',JsonlLog(root/'events.jsonl'),50.)
+        planner.replay_event_sink = r.record_event
         r.start()
         try:
             deadline=time.monotonic()+3
             while not (root/'vision_replay_manifest.json').exists() and time.monotonic()<deadline:time.sleep(.02)
             for i in range(10):
                 image=np.full((128,192,3),(i*20,20,40),np.uint8)
+                if i in (4,6):
+                    planner._record_replay_event(a,p,s,VisionSnapshot(frame_sequence=i),1.+i*.13)
                 meta=dict(frame_sequence=i,capture_monotonic_ns=1_000_000_000+i*130_000_000,
                     source_size=[192,128],detections=[dict(bbox=[10,20,20,20],confidence=.8,**{'class':'green_supply'})],
                     pose=dict(x_m=.1,y_m=.2,yaw_deg=90,age_ms=float('inf')),stm=dict(mode=11,camera_pitch_cdeg=12000),
-                    upper_state='ACQUIRE_SAFE_ZONE',acquire_started_s=1.,
-                    reason='SAFE_CORRIDOR_UNAVAILABLE' if i>=4 else 'safe_zone_acquire_wait')
+                    # The timeout state has already disappeared by the sampled
+                    # image; the planner event must still trigger the clip.
+                    upper_state='ALIGN_SAFE_ZONE',acquire_started_s=1.,reason='safe_zone_visible')
                 assert r.submit(image,'bgr',meta,now=1.+i*.13)
                 time.sleep(.03)
         finally:r.close()
@@ -735,7 +741,10 @@ def test_incident_video_replay_and_log_only_timeout():
         assert manifest['complete'] and manifest['error'] is None and manifest['dropped_frames']==0,manifest
         assert len(manifest['clips'])==1
         clip=manifest['clips'][0];rows=[json.loads(l) for l in (root/clip['frames']).read_text().splitlines()]
-        assert [x['frame_sequence'] for x in rows]==[2,3,4,5,6]
+        assert [x['frame_sequence'] for x in rows]==[2,3,4,5,6,7,8]
+        assert [event['vision_frame_sequence'] for event in clip['events']]==[4,6]
+        assert clip['post_window_end_ns']==2_080_000_000
+        assert manifest['pending_events']==[] and manifest['event_overflow_count']==0
         assert rows[0]['pose']['age_ms'] is None and rows[0]['seconds_from_trigger']<0
         assert rows[-1]['seconds_from_trigger']>0 and clip['complete']
         cap=cv2.VideoCapture(str(root/clip['video']));count=0
@@ -748,9 +757,14 @@ def test_incident_video_replay_and_log_only_timeout():
         cap.release();assert count==len(rows)==clip['frames_written']
         # Bounded queue pressure changes only diagnostic counters, no blocking.
         r.next_frame_s=0.;r.error=None;r.started=True
+        r.record_event(dict(event='safe_zone_acquire_no_box',trigger_monotonic_ns=10_000_000_000))
         with patch.object(r,'process',SimpleNamespace(is_alive=lambda:True)), \
-             patch.object(r.inbox,'put_nowait',side_effect=__import__('queue').Full):
+             patch.object(r.inbox,'put_nowait',side_effect=[__import__('queue').Full,None]) as enqueue:
             assert not r.submit(image,'bgr',meta,now=10.) and r.dropped.value==1
+            assert len(r.pending_events)==1
+            assert not r.submit(image,'bgr',meta,now=10.01) and len(r.pending_events)==1
+            assert r.submit(image,'bgr',meta,now=10.13) and not r.pending_events
+            assert enqueue.call_args.args[0][3][0]['trigger_monotonic_ns']==10_000_000_000
         # Retention recognizes only this session's completed, manifested files.
         sys.path.insert(0,str(PROJECT_ROOT/'localization/tools'))
         from motion_log_storage import inspect_session
