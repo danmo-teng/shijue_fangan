@@ -24,7 +24,11 @@ cd /home/sunrise/RDK_X5/shijue_fangan
 python3 vision/calibrate_range_view.py --pitch 105 --bands 5
 ```
 
-空格冻结，S存带框/中心坐标/分区线的截图及JSON，Q退出。原图尺寸1280×1024，分区由上到下编号；可用--bands改变分段数。1/2仅切换记录角度标签，不控制舵机；标签不作为已测角度的证明。120°单独固定后记录。结果存vision/captures/range_calibration，不自动写入正式标定。
+2026-11-05界面更新：默认5个不等宽区域，上窄下宽，仅为方便调整的初值，不代表等地面距离或测距标定。拖动内部横线（或右侧粗把手）调整；空格冻结后仍可拖动。分区从上到下编号，原始坐标1280×1024，内部线不能相互跨越。
+
+1/2切换105°/120°标签并恢复实时画面，两角度保留各自修改；标签不控制舵机、不证明实物已到对应角度。S保存当前角度的分区设置，同时保存带框/中心点/分区线的截图和JSON；Q退出。未保存的修改显示UNSAVED，须按S保存。下次启动自动读取vision/captures/range_calibration/layouts/105deg.json或120deg.json；--output改变目录时，分区也保存在该目录的layouts中。--bands仍可指定分区数，保存设置只在数量和分辨率相符时采用。
+
+分区设置不含距离、标记measured=false，不写入正式approach_range.json。正式距离仍按下方已有入口录入独立实测值。
 
 逐区记录Y_MIN、Y_MAX和ADVANCE_MM（从当前车体位置到夹爪入口前保留补进余量所需的实际前进距离）。将实测值通过已有标定入口录入：
 
