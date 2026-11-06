@@ -746,6 +746,7 @@ def test_wheel_bridge_coalesces_ready_velocities_without_age_rejection():
             for i in range(7):
                 bridge.gyro.append(dict(mcu_epoch='fixture',alignment_clock='mcu_event',
                     alignment_capture_ns=1_000_000_000+i*10_000_000,yaw_rate_deg_s=0.,
+                    raw_mcu_sample=dict(rate_source_id=i,fixture_payload='x'*2000),
                     receive_monotonic_ns=1_000_000_000+i*10_000_000))
             for i in range(3):
                 bridge.telemetry(dict(kind='measured_body_velocity',sample=dict(
@@ -758,8 +759,102 @@ def test_wheel_bridge_coalesces_ready_velocities_without_age_rejection():
             assert packet['sample_id']==2 and abs(packet['v_camera_mps'][0]-.3*.8660254)<1e-7
             assert bridge.stats['sent_to_sdk_owner']==1 and bridge.stats['sdk_requests_coalesced']==2
             assert bridge.stats['rejected']==0 and packet['capture_time_qualified'] is False
+            assert all('raw_mcu_sample' not in g for g in packet['gyro_samples'])
+            assert packet['gyro_samples'][0]['rate_source_id'] == 4
         finally:
             bridge.close();sink.close()
+
+
+def test_published_post_grab_audit_survives_changed_frame_before_paired_done():
+    from dataclasses import replace
+    from protocol import CMD_CARGO_AUDIT
+    from state_machine import CargoAudit, CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+        p = CompetitionPlanner(m, root/'pose', root/'stm', root/'cmd', root/'diag', JsonlLog(root/'events'), 50)
+        m._begin_post_grab_audit(VisionSnapshot(frame_sequence=10), 1.)
+        m.audit_camera_key = (23, True, m.audit_epoch)
+        m.audit_camera_ready_since = 1.
+        m.audit_camera_floor = 10
+        m.audit_last_frame_sequence = 20
+        audit = CargoAudit(left_class='green_supply', left_count=1, left_green_count=1, total_count=1, stable=True)
+        status = StmSnapshot(mode=23, flags=1|2, age_ms=0, camera_pitch_cdeg=14000)
+        m._begin_audit_confirmation(audit, m._audit_payload(audit), True, 'both', False,
+                                    'post_grab_valid', status, 2.)
+        stable = CommandRequest(CMD_CARGO_AUDIT, 1, audit=m.pending_audit_payload, audit_vision_frame=20)
+        p._publish(CompetitionOutput(m.state, stable, 'published valid'))
+        task, action = p.protocol_task, p.protocol_action
+        status = replace(status, context_valid=True, task_id=task, action_id=action,
+                         accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        empty = VisionSnapshot(frame_sequence=21, observed_monotonic_s=2.05,
+                               capture_audit=CargoAudit(), capture_observation_valid=True)
+        changed = p._output_for_cycle(empty, PoseSnapshot(valid=True), status, False, 2.05)
+        assert m.pending_audit is None  # New candidate still follows real observations.
+        p._publish(changed)
+        assert (p.protocol_task, p.protocol_action) == (task, action)
+        done = replace(status, mode=22, flags=2|16|64, relay_mission_tx_frames=5,
+                       relay_last_mission_command=CMD_CARGO_AUDIT,
+                       relay_last_mission_payload=tuple(changed.command.to_frame(0)[4:12]))
+        p._restore_audit_handoff(replace(done, action_id=action+1))
+        assert m.pending_audit is None  # A different action cannot borrow evidence.
+        out = p._output_for_cycle(empty, PoseSnapshot(valid=True), done, False, 2.1)
+        assert out.reason == 'post_grab_audit_confirmed' and m.grab_complete_confirmed
+        assert m.pending_audit == audit and m.carried_total_count == 1
+        p._publish(out)
+        assert p._output_for_cycle(empty, PoseSnapshot(valid=True), done, False, 2.12).reason != 'missing_committed_audit'
+
+
+def test_range_move_camera_handoff_never_rearms_pixel_approach():
+    from dataclasses import replace
+    from protocol import CMD_APPROACH_RANGE, CMD_DISTANCE_VALID
+    from state_machine import CargoBatch, TrackedCargo
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for state, audit_mode in ((CompetitionState.APPROACH,21), (CompetitionState.CLUSTER_APPROACH,38)):
+            m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+            m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+            m.state = state
+            p = CompetitionPlanner(m, root/'pose', root/'stm', root/'cmd', root/'diag', JsonlLog(root/'events'), 50)
+            m.range_command = CommandRequest(CMD_APPROACH_TARGET, 1|CMD_APPROACH_RANGE|CMD_DISTANCE_VALID, 400, 12000,
+                                             source_vision_frame=20)
+            p._publish(CompetitionOutput(state,m.range_command,'range move'))
+            original = (p.protocol_task, p.protocol_action)
+            status = StmSnapshot(mode=20, age_ms=0, camera_pitch_cdeg=12100, context_valid=True,
+                task_id=original[0],action_id=original[1],accepted_command=CMD_APPROACH_TARGET,action_status=1)
+            view = VisionSnapshot(frame_sequence=30, observed_monotonic_s=1.,
+                cargo=(TrackedCargo(1,'green_supply',.9,(500,400,40,40),hits=3),))
+            out = p._output_for_cycle(view,PoseSnapshot(valid=True),status,False,1.)
+            assert out.reason == 'approach_range_handoff' and out.command.opcode == CMD_HOLD
+            p._publish(out)
+            assert original == (p.protocol_task,p.protocol_action) and m.range_command is not None
+            status = replace(status,mode=audit_mode,camera_pitch_cdeg=14000,flags=1)
+            out = p._output_for_cycle(view,PoseSnapshot(valid=True),status,False,1.1)
+            assert out.command.opcode != CMD_APPROACH_TARGET and m.range_command is None
+            assert m.state == CompetitionState.CAPTURE_AUDIT
+
+
+def test_sweep_duplicate_rejection_does_not_reset_accepted_pickup():
+    from dataclasses import replace
+    from protocol import CMD_CARGO_AUDIT, CargoAuditPayload
+    from state_machine import CargoBatch, SweepPickupContext
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+        m.state = CompetitionState.CLEAR_SAFE_ZONE
+        m.safe_sweep_pickup = SweepPickupContext(target_id=2,target_class='injured_orange',target_bbox=None,
+            original_ids=frozenset({1}),original_classes=frozenset({'green_supply'}),excluded_ids=frozenset())
+        m.safe_sweep_pickup.mode = 43
+        m.safe_sweep_pickup.audit_hits = 2
+        p = CompetitionPlanner(m,root/'pose',root/'stm',root/'cmd',root/'diag',JsonlLog(root/'events'),50)
+        p._publish(CompetitionOutput(m.state,CommandRequest(CMD_CARGO_AUDIT,audit=CargoAuditPayload()),'audit'))
+        status = StmSnapshot(mode=39,age_ms=0,context_valid=True,task_id=p.protocol_task,
+            action_id=p.protocol_action,accepted_command=CMD_CARGO_AUDIT,action_status=5,rejected_action_id=p.protocol_action)
+        assert p._reconcile_sweep_rejection(VisionSnapshot(),PoseSnapshot(),status,1.) is None
+        assert m.safe_sweep_pickup.mode == 43 and m.safe_sweep_pickup.audit_hits == 2
+        assert p._reconcile_sweep_rejection(VisionSnapshot(),PoseSnapshot(),replace(status,task_id=status.task_id+1),1.) is None
 
 
 def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():

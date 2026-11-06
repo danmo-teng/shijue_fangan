@@ -13,7 +13,7 @@
 namespace omni {
 DynamicPoseRelay::DynamicPoseRelay(const std::string &address, const std::string &session,
                                  const std::string &output, Send send)
-    : session_(session), output_(output), send_(std::move(send))
+    : session_(session), output_(output), send_(std::move(send)), snapshot_(output)
 {
     if (address.empty()) return; // Offline fixture.
     sockaddr_un a{}; a.sun_family = AF_UNIX;
@@ -29,7 +29,11 @@ DynamicPoseRelay::DynamicPoseRelay(const std::string &address, const std::string
 }
 DynamicPoseRelay::~DynamicPoseRelay() { stop(); if (fd_ >= 0) ::close(fd_); }
 void DynamicPoseRelay::start() { thread_ = std::thread(&DynamicPoseRelay::run, this); }
-void DynamicPoseRelay::stop() { stop_ = true; if (thread_.joinable()) thread_.join(); }
+void DynamicPoseRelay::stop() {
+    stop_ = true;
+    if (thread_.joinable()) thread_.join();
+    snapshot_.close();
+}
 
 FusedPoseFrame DynamicPoseRelay::frame(const Json &p, std::uint8_t sequence)
 {
@@ -72,13 +76,9 @@ bool DynamicPoseRelay::accept(Json packet)
     packet["control_pose_published"] = true;
     packet["uart"] = {{"pose_tx_frames", tx_ok_}, {"pose_tx_errors", tx_error_},
                       {"last_pose_write_success", sent}};
-    packet["json_write_errors"] = json_errors_;
-    const std::string temporary = output_ + ".tmp";
-    std::ofstream file(temporary, std::ios::trunc);
-    file << packet.dump() << '\n'; file.close();
-    if (!file || std::rename(temporary.c_str(), output_.c_str()) != 0) {
-        if (++json_errors_ == 1) std::cerr << "[DYNAMIC POSE] JSON write failed; UART relay continues\n";
-    }
+    packet["json_write_errors"] = snapshot_.errors();
+    packet["json_snapshots_coalesced"] = snapshot_.coalesced();
+    snapshot_.submit(packet.dump() + '\n');
     return true;
 }
 

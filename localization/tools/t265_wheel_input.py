@@ -132,7 +132,11 @@ class WheelInputBridge:
             lever_body_mps=converted.get("lever_body_mps"), v_camera_mps=converted.get("v_camera_mps"),
             gyro_midpoint_delta_ns=converted.get("gyro_midpoint_delta_ns"),
             # Transport success is not SDK acceptance or localisation accuracy.
-            sample=sample, **extra)
+            sample=(dict(log="wheel_measurements.jsonl", mcu_epoch=sample.get("mcu_epoch"),
+                         sample_id=sample.get("sample_id"),
+                         receive_monotonic_ns=sample.get("receive_monotonic_ns"))
+                    if sample and sample.get("source") == "measured_wheel_feedback" and self.timed_mode
+                    else sample), **extra)
         self.log.submit("wheel_input.jsonl",document)
         if reason=="sent_to_sdk_owner":self.last_input_rejection=None
         elif self.timed_mode is False or reason!="legacy_counts_reference_only":
@@ -284,7 +288,7 @@ class WheelInputBridge:
         if latest is not None:
             sample, packet = latest
             try:
-                self.sock.sendto(json.dumps(packet, allow_nan=False).encode(), self.address)
+                self.sock.sendto(json.dumps(packet, allow_nan=False, separators=(",", ":")).encode(), self.address)
                 self.stats["sent_to_sdk_owner"] += 1
                 self._record("sent_to_sdk_owner", sample, converted=packet)
             except OSError as error:
@@ -357,7 +361,14 @@ class WheelInputBridge:
             gyro_midpoint_delta_ns=(times[first]+times[last]-start-end)//2,
             gyro_max_gap_ns=max((b-a for a,b in zip(times[first:last],times[first+1:last+1])),default=0),
             age_from_wheel_receive_ns=now-sample["receive_monotonic_ns"],
-            gyro_samples=selected, v_body_mps=v_body, omega_body_rad_s=omega,
+            # Original versioned samples, including all source/clock fields,
+            # are logged once. Do not copy their nested raw packets into every
+            # IPC request and both Python/C++ injection logs.
+            measurement_log="wheel_measurements.jsonl",
+            gyro_samples=[dict({k:s.get(k) for k in ("mcu_epoch", "alignment_capture_ns",
+                "angular_rate_capture_ns", "yaw_rate_deg_s", "receive_monotonic_ns")},
+                rate_source_id=s.get("raw_mcu_sample",{}).get("rate_source_id")) for s in selected],
+            v_body_mps=v_body, omega_body_rad_s=omega,
             action_context=self.context,
             host_action_id_at_receive=sample.get("host_action_id_at_receive"),
             lever_body_mps=lever, v_camera_mps=v_camera, dependency_sources=DEPENDENCIES)

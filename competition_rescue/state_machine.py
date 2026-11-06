@@ -680,6 +680,7 @@ class CompetitionMission:
         self.pending_audit_tx_baseline: int | None = None
         self.pending_audit_initial_ack: int | None = None
         self.pending_audit_event_emitted = False
+        self.pending_audit_handoff_accepted = False
         self.invalid_release_side = "both"
         self.invalid_release_final = False
         self.invalid_release_context = "none"
@@ -1630,6 +1631,23 @@ class CompetitionMission:
         self.range_started_s = None
         self.range_frame_floor = 0
 
+    def _range_handoff_output(self, stm: StmSnapshot) -> CompetitionOutput | None:
+        if (self.range_command is None or not stm.fresh or stm.fault or
+                self.state not in {CompetitionState.INITIAL_APPROACH,
+                                   CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH}):
+            return None
+        if (stm.mode in {STM_MODE_APPROACH_TARGET, STM_MODE_CAPTURE_AUDIT,
+                         STM_MODE_CLUSTER_CAPTURE_AUDIT} and
+                not (stm.mode in {STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT} and
+                     stm.claw_visible and stm.camera_pitch_cdeg == 14000)):
+            # The finite move has handed back to the MCU's camera lift. HOLD
+            # keeps its accepted context; a fresh pixel request would rearm it.
+            return CompetitionOutput(self.state, self._hold(),
+                "定距接近后由下位机抬相机，保持动作上下文直到夹内观察",
+                self.selected_batch, reason="approach_range_handoff",
+                expected_stm_modes=(20, 21, 38, 24, 3))
+        return None
+
     def _approach_output(
         self,
         vision: VisionSnapshot,
@@ -1830,6 +1848,7 @@ class CompetitionMission:
         self.pending_audit_tx_baseline = None
         self.pending_audit_initial_ack = None
         self.pending_audit_event_emitted = False
+        self.pending_audit_handoff_accepted = False
 
     def _reset_audit_timing(self) -> None:
         self.audit_first_accepted_observed_s = None
@@ -2227,6 +2246,7 @@ class CompetitionMission:
             stm.acknowledged_sequence if stm.fresh else None
         )
         self.pending_audit_event_emitted = False
+        self.pending_audit_handoff_accepted = False
         self._set_state(CompetitionState.AUDIT_CONFIRM, now)
 
     def _resume_legal_audit_before_disperse(
@@ -2493,9 +2513,9 @@ class CompetitionMission:
                 STM_MODE_CAPTURE_DONE
             )
             if (
-                self._relay_sent_since(
+                (self.pending_audit_handoff_accepted or self._relay_sent_since(
                     stm, stable_command, self.pending_audit_tx_baseline
-                ) and
+                )) and
                 self._fresh_mode_after(
                     stm, expected_done_mode, self.pending_audit_initial_ack
                 ) and
@@ -2626,9 +2646,9 @@ class CompetitionMission:
             STM_MODE_CAPTURE_AUDIT
         )
         if (
-            self._relay_sent_since(
+            (self.pending_audit_handoff_accepted or self._relay_sent_since(
                 stm, stable_command, self.pending_audit_tx_baseline
-            ) and
+            )) and
             self._fresh_mode_after(
                 stm, audit_confirm_mode, self.pending_audit_initial_ack
             ) and
@@ -5638,6 +5658,9 @@ class CompetitionMission:
                 self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
                                CompetitionState.CLUSTER_APPROACH}):
             return self._range_approach_output(vision, stm, now)
+        handoff = self._range_handoff_output(stm)
+        if handoff is not None:
+            return handoff
         if stm.fresh and stm.mode not in {52, 53}:
             self._clear_range_approach()
         if self.state_started_s == 0.0:

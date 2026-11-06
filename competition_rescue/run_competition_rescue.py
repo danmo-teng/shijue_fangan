@@ -880,7 +880,10 @@ def make_vision_snapshot(
         carried_bbox_reference,
     )
     range_distances = []
-    range_reason = "range_calibration_missing"
+    range_reason = ("range_calibration_missing" if range_calibration is None else
+                    "range_status_unavailable" if not stm.fresh else
+                    "range_pitch_not_applicable" if stm.camera_pitch_cdeg not in {10500, 12000} else
+                    image_quality_reason or "range_no_visible_target")
     if range_calibration is not None and stm.fresh and stm.camera_pitch_cdeg in {10500, 12000} and not image_quality_reason:
         for item in cargo:
             if item.visible:
@@ -1090,6 +1093,7 @@ class CompetitionPlanner:
         self.protocol_vision_frame = 0
         self.protocol_vision = VisionSnapshot()
         self.protocol_last_output: CompetitionOutput | None = None
+        self.published_audit_handoff = None
         self.running = False
         self.error: Exception | None = None
         self.last_state = mission.state
@@ -1372,6 +1376,7 @@ class CompetitionPlanner:
                     self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
                     self.protocol_task = self.protocol_task_cursor
                 self.protocol_action_key = key
+                self.published_audit_handoff = None
                 self.protocol_source_stamp = None
                 self.protocol_vision_frame = 0
         if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
@@ -1400,6 +1405,16 @@ class CompetitionPlanner:
             self.protocol_vision_frame if command.opcode in {CMD_APPROACH_TARGET, CMD_CARGO_AUDIT} else 0,
         )
         write_command_frame(self.command_path, context + command.to_frame(self.sequence))
+        if (command.opcode == CMD_CARGO_AUDIT and command.audit is not None and
+                command.audit.stable and command.audit == self.mission.pending_audit_payload and
+                command.audit_vision_frame == self.mission.pending_audit_frame_sequence and
+                self.mission.pending_audit_valid):
+            # Candidate observations can still change and supply real new IDs
+            # to the MCU's two-frame audit. Keep the published legal snapshot
+            # separately in case the already accepted handoff arrives later.
+            self.published_audit_handoff = (
+                self.protocol_task, self.protocol_action, self.mission.audit_epoch,
+                {k: v for k, v in vars(self.mission).items() if k.startswith("pending_audit")})
         if not overlay or self.protocol_last_output is None:
             self.protocol_last_output = output
         self.sequence = (self.sequence + 1) & 0xFF
@@ -1420,6 +1435,26 @@ class CompetitionPlanner:
         self.protocol_source_stamp = None
         self.protocol_vision_frame = 0
         self.protocol_last_output = None
+        self.published_audit_handoff = None
+
+    def _restore_audit_handoff(self, stm: StmSnapshot) -> None:
+        saved = self.published_audit_handoff
+        if (saved is None or stm.mode not in {22, 40, 50} or not stm.context_valid or
+                stm.fault or not stm.action_status & 1 or stm.accepted_command != CMD_CARGO_AUDIT):
+            return
+        task, action, epoch, evidence = saved
+        if ((stm.task_id, stm.action_id) != (task, action) or
+                (self.protocol_task, self.protocol_action) != (task, action) or
+                self.mission.audit_epoch != epoch):
+            return
+        if stm.mode in {22, 40} and not (stm.gripper_closed and stm.audit_ready and stm.audit_valid):
+            return
+        # Only the matching MCU handoff commits this snapshot. It is never
+        # reused as a fresh camera observation or evidence for a new action.
+        if self.mission.committed_audit_handoff_mode is None:
+            for key, value in evidence.items():
+                setattr(self.mission, key, value)
+            self.mission.pending_audit_handoff_accepted = True
 
     def _is_recovery_observation(self, stm: StmSnapshot) -> bool:
         if not stm.fresh:
@@ -1510,6 +1545,12 @@ class CompetitionPlanner:
                  self.mission.safe_sweep_reaudit_active) and
                 stm.mode in {23, 39, 42, 43, 44, 45}):
             return None
+        pending = self.protocol_last_output.command
+        if (pending is not None and stm.action_id == self.protocol_action and
+                stm.accepted_command == pending.opcode and stm.action_status & 1):
+            # The MCU may reject a duplicate update while the accepted action
+            # is already executing. Do not reset its pickup evidence in a loop.
+            return None
         self._adopt_recovery_context()
         current = replace(stm, context_matches=True)
         if stm.mode == 23:
@@ -1596,6 +1637,7 @@ class CompetitionPlanner:
         now: float,
     ) -> CompetitionOutput:
         self.protocol_vision = vision
+        self._restore_audit_handoff(stm)
         if (stm.fresh and stm.mode == STM_MODE_RECOVERY_WAIT and not stm.fault and
                 self.mission.state not in {CompetitionState.FAULT, CompetitionState.FINISHED}):
             if stm.context_valid and stm.action_status & 1:
@@ -1657,6 +1699,9 @@ class CompetitionPlanner:
                 self.mission._clear_range_approach()
             ranged_vision = replace(vision, range_distances=()) if paused else vision
             return self.mission._range_approach_output(ranged_vision, stm, now)
+        handoff = self.mission._range_handoff_output(stm)
+        if handoff is not None:
+            return handoff
         # Recovery is an observation from the MCU, not an ACK of the last
         # requested action. Handle it before context_pending/camera pause.
         if self._is_recovery_observation(stm):

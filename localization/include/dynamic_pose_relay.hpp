@@ -1,5 +1,6 @@
 #pragma once
 #include "f407_protocol.hpp"
+#include "async_latest_file.hpp"
 #include <json.hpp>
 #include <atomic>
 #include <functional>
@@ -24,10 +25,11 @@ private:
     int fd_ = -1;
     std::string session_, output_;
     Send send_;
+    AsyncLatestFile snapshot_;
     std::atomic<bool> stop_{false};
     std::thread thread_;
     bool have_packet_ = false;
-    std::uint64_t packet_id_ = 0, tx_ok_ = 0, tx_error_ = 0, json_errors_ = 0;
+    std::uint64_t packet_id_ = 0, tx_ok_ = 0, tx_error_ = 0;
     std::uint8_t sequence_ = 0;
 };
 }

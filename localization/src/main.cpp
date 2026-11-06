@@ -10,6 +10,7 @@
 #include "dynamic_pose_relay.hpp"
 #include "debug_fisheye_evidence.hpp"
 #include "async_csv_log.hpp"
+#include "async_latest_file.hpp"
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -722,12 +723,11 @@ void write_atomic_json(const std::string &path,
                        double t265_position_sigma_multiplier,
                        double t265_innovation_m,
                        double encoder_fusion_weight,
-                       const T265MapStatus &t265_map)
+                       const T265MapStatus &t265_map,
+                       omni::AsyncLatestFile *snapshot_writer = nullptr)
 {
     if (path.empty()) return;
-    const std::string temporary = path + ".tmp";
-    std::ofstream file(temporary, std::ios::trunc);
-    if (!file) throw std::runtime_error("cannot write JSON: " + temporary);
+    std::ostringstream file;
     const std::uint64_t now_ns = monotonic_ns();
     const omni::Pose2d odom_pose = odometry.pose();
     const omni::WheelIncrement &increment = wheel_debug.latest_increment;
@@ -949,9 +949,9 @@ void write_atomic_json(const std::string &path,
          << ", \"pose_tx_frames\": " << pose_tx_frames
          << ", \"pose_tx_errors\": " << pose_tx_errors << "}\n"
          << "}\n";
-    file.close();
-    if (!file) throw std::runtime_error("failed while writing JSON: " + temporary);
-    if (std::rename(temporary.c_str(), path.c_str()) != 0) {
+    if (snapshot_writer) {
+        snapshot_writer->submit(file.str());
+    } else if (!omni::AsyncLatestFile::atomic_write(path, file.str())) {
         throw std::runtime_error("cannot replace JSON output: " + path);
     }
 }
@@ -1227,6 +1227,7 @@ int main(int argc, char **argv)
         }
 
         omni::AsyncCsvLog csv_log(options.csv_path);
+        omni::AsyncLatestFile raw_snapshot(options.dynamic_pose_socket.empty() ? "" : options.output_path);
         std::ostringstream csv;
         std::uint64_t raw_json_errors = 0;
         if (!options.csv_path.empty()) {
@@ -2244,7 +2245,7 @@ int main(int argc, char **argv)
                               active_t265_position_multiplier,
                               innovation_m,
                               config.encoder_fusion_weight,
-                              t265_map);
+                              t265_map, options.dynamic_pose_socket.empty() ? nullptr : &raw_snapshot);
             } catch (const std::exception &error) {
                 if (options.dynamic_pose_socket.empty()) throw;
                 if (++raw_json_errors == 1)
@@ -2280,11 +2281,14 @@ int main(int argc, char **argv)
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();
         csv_log.close();raw_pose_log.close();
+        raw_snapshot.close();
         event_log.write("diagnostic_csv_status", "{\"localization_dropped_rows\":" +
             std::to_string(csv_log.dropped()) + ",\"localization_io_failed\":" +
             (csv_log.failed() ? "true" : "false") + ",\"raw_pose_dropped_rows\":" +
             std::to_string(raw_pose_log.dropped()) + ",\"raw_pose_io_failed\":" +
-            (raw_pose_log.failed() ? "true" : "false") + "}");
+            (raw_pose_log.failed() ? "true" : "false") + ",\"raw_json_write_errors\":" +
+            std::to_string(raw_snapshot.errors()) + ",\"raw_json_coalesced\":" +
+            std::to_string(raw_snapshot.coalesced()) + "}");
         std::cerr << "[SUMMARY] wheel accepted=" << wheel_accepted
                   << " rejected=" << wheel_rejected
                   << " UART frames=" << final_parser_stats.frames_ok

@@ -5,6 +5,7 @@
 #include "debug_wheel_input.hpp"
 #include "dynamic_pose_relay.hpp"
 #include "async_csv_log.hpp"
+#include "async_latest_file.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -930,11 +931,8 @@ void test_dynamic_pose_relay()
         {"pose", {{"x_m", -.123}, {"y_m", .527}, {"yaw_deg", 270.25}}},
         {"motion_source", "WHEEL_FALLBACK"}, {"t265", {{"tracker_confidence", 3}}}};
     check(relay.accept(p), "dynamic packet accepted without age gate or SDK Pose arrival");
-    Json saved; { std::ifstream file(path); file >> saved; }
     check(frames.size() == 1 && frames[0].x_mm == -123 && frames[0].y_mm == 527 &&
           frames[0].heading_cdeg == 27025, "dynamic field units and heading");
-    check(saved["pose"] == p["pose"] && saved["timestamp_monotonic_ns"] == 1,
-          "formal JSON is the same dynamic snapshot and original sample time");
     check((frames[0].status & omni::kPoseValid) && (frames[0].status & omni::kPoseWheelActive) &&
           !(frames[0].status & omni::kPoseT265Good), "fallback remains valid, never mislabeled T265 good");
     check(!relay.accept(p), "duplicate transport packet not replayed");
@@ -942,6 +940,10 @@ void test_dynamic_pose_relay()
     check(relay.accept(p) && !(frames.back().status & omni::kPoseValid), "reference invalid is not fabricated valid");
     p["packet_id"] = 2; p["session_id"] = "other";
     check(!relay.accept(p), "other session cannot override competition pose");
+    relay.stop(); // Flush the one latest file snapshot, outside UART processing.
+    Json saved; { std::ifstream file(path); file >> saved; }
+    check(saved["pose"] == p["pose"] && saved["timestamp_monotonic_ns"] == 1 && saved["packet_id"] == 1,
+          "formal JSON is the same latest dynamic snapshot and original sample time");
     ::unlink(path.c_str());
 }
 
@@ -969,8 +971,37 @@ void test_async_csv_logging()
     ::unlink(path.c_str());::rmdir(directory);
 }
 
+void test_async_latest_snapshot()
+{
+    std::mutex mutex;
+    std::condition_variable ready;
+    bool entered = false, release = false;
+    std::vector<std::string> written;
+    omni::AsyncLatestFile latest("fixture", [&](const std::string &, const std::string &body) {
+        std::unique_lock<std::mutex> lock(mutex);
+        entered = true; ready.notify_one();
+        ready.wait(lock, [&] { return release; });
+        written.push_back(body);
+        return true;
+    });
+    latest.submit("first");
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        ready.wait(lock, [&] { return entered; });
+    }
+    latest.submit("old pending"); latest.submit("newest");
+    check(latest.coalesced() == 1, "snapshot producer completes while disk is blocked, bounded latest slot");
+    { std::lock_guard<std::mutex> lock(mutex); release = true; }
+    ready.notify_one(); latest.close();
+    check(written == std::vector<std::string>({"first", "newest"}), "close preserves the newest pending snapshot");
+    omni::AsyncLatestFile failed("fixture", [](const std::string &, const std::string &) { return false; });
+    failed.submit("pose"); failed.close();
+    check(failed.errors() == 1, "snapshot failure is reported without throwing into control");
+}
+
 int main()
 {
+    test_async_latest_snapshot();
     test_async_csv_logging();
     test_dynamic_pose_relay();
     test_debug_wheel_input();
