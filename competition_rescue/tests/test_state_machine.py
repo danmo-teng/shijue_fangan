@@ -993,7 +993,7 @@ def test_return_center_sends_zero_until_search() -> None:
     assert output.command and output.command.arg_a == 0
     assert output.command.aux == 13500
     output = mission.step(VisionSnapshot(), pose(), replace(initial, mode=3, age_ms=1000), 0.4)
-    assert mission.state == CompetitionState.RETURN_CENTER
+    assert mission.state == CompetitionState.SEARCH  # Actual completion is not rejected by age.
     output = mission.step(VisionSnapshot(), pose(), replace(initial, mode=3), 0.5)
     assert output.state == CompetitionState.SEARCH
     assert output.command.opcode == CMD_HOLD

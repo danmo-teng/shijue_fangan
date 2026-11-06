@@ -140,9 +140,10 @@ def main() -> int:
         assert len(pose_frames) >= result["uart"]["pose_tx_frames"], (
             result, len(pose_frames)
         )
-        # The unchanged mission input is bridged for 250 ms at 100 Hz.
-        assert len(mission_frames) >= 15, len(mission_frames)
-        assert len({item[3] for item in mission_frames}) == len(mission_frames)
+        # The unchanged mission input remains active without a 250 ms cutoff.
+        assert len(mission_frames) >= 100, len(mission_frames)
+        assert all(((b[3]-a[3]) & 0xff) == 1
+                   for a,b in zip(mission_frames,mission_frames[1:]))
         assert all(item[4:12] == mission_frames[0][4:12]
                    for item in mission_frames)
         print("PTY UART full-duplex test passed:", result["uart"],

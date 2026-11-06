@@ -88,6 +88,7 @@ class WheelInputBridge:
         self.last_qualification_reasons=[]
         self.last_gyro_reasons=[];self.latest_measured=None
         self.stats = dict(sent_to_sdk_owner=0, rejected=0, subscriber_dropped=0, overflow_discarded=0,
+                          sdk_requests_coalesced=0,
                           last_reason="waiting_for_measured_feedback")
         self.forward = self._axis(config["camera_robot_forward_axis"])
         self.up = self._axis(config["camera_robot_up_axis"])
@@ -114,7 +115,9 @@ class WheelInputBridge:
 
     def _record(self, reason, sample=None, **extra):
         self.stats["last_reason"] = reason
-        if reason != "sent_to_sdk_owner":
+        if reason == "superseded_before_sdk":
+            self.stats["sdk_requests_coalesced"] += 1
+        elif reason != "sent_to_sdk_owner":
             self.stats["rejected"] += 1
         converted = extra.get("converted", {})
         body = (sample or {}).get("v_body_mps")
@@ -251,6 +254,7 @@ class WheelInputBridge:
             if len(self.pending) >= 64:
                 self._record("wheel_queue_overflow", self.pending.popleft())
             self.pending.append(sample)
+        latest = None
         while self.pending:
             sample = self.pending[0]
             self.last_qualification_reasons=sample.get("qualification_reasons",[])
@@ -271,7 +275,14 @@ class WheelInputBridge:
             if not self.enabled:
                 self._record("injection_off", sample, converted=packet)
                 continue
-            # Log completeness is reported separately, never an input gate.
+            if latest is not None:
+                self._record("superseded_before_sdk", latest[0], converted=latest[1])
+            latest = (sample, packet)
+        # Feed one current measured velocity, not a burst of historical SDK calls.
+        # Every original wheel interval remains in wheel_measurements.jsonl and
+        # the separate motion-integrator subscription; no age threshold is used.
+        if latest is not None:
+            sample, packet = latest
             try:
                 self.sock.sendto(json.dumps(packet, allow_nan=False).encode(), self.address)
                 self.stats["sent_to_sdk_owner"] += 1

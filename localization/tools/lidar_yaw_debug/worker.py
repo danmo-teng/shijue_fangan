@@ -1,12 +1,13 @@
-"""One lidar owner + geometry process. No chassis UART or T265 SDK imports.
+"""Independent lidar reception, latest-scan fitting and motion publication.
 
-Motion arrives from the existing owners; bounded queues carry original times.
-Only display snapshots coalesce. Raw measurements and decisions remain logged.
+No chassis UART or T265 SDK imports. Raw data retain their original timestamps;
+only pending fit requests/display snapshots coalesce, without an age gate.
 """
 from collections import deque
 import multiprocessing as mp
 import os
 import queue
+import threading
 import time
 import uuid
 import numpy as np
@@ -28,15 +29,143 @@ def make_reader(config):
         sensor_epoch=uuid.uuid4().hex)
 
 
+def offer_latest(channel, value):
+    """Bounded mailbox, not a FIFO of old control/fit requests."""
+    dropped = 0
+    try:
+        channel.put_nowait(value)
+        return dropped
+    except queue.Full:
+        try:
+            channel.get_nowait()
+            dropped += 1
+        except queue.Empty:
+            return 1  # Multiprocessing feeder has not exposed the queued item yet.
+    try:
+        channel.put_nowait(value)
+    except queue.Full:
+        dropped += 1
+    return dropped
+
+
+def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
+    """Sole lidar serial owner; fitting/motion/GUI cannot delay the next read."""
+    scans.cancel_join_thread()
+    log = AsyncDebugLog(root)
+    lidar = reader = None
+    totals = {}
+    state = dict(lidar_connected=False, lidar_error=None, lidar_open_attempts=0,
+                 scans_received=0, scan_queue_drops=0, reader_stats={}, receiver_pid=os.getpid())
+    next_open = last_publish = 0.
+
+    def event(name, **data):
+        log.submit('lidar_reader_events.jsonl', dict(event=name,
+            timestamp_monotonic_ns=time.monotonic_ns(), **data))
+
+    def publish():
+        stats = dict(totals)
+        if reader:
+            for k, v in reader.stats.items():
+                stats[k] = stats.get(k, 0) + v
+        state['reader_stats'] = stats
+        state['reader_logging_healthy'] = log.healthy()
+        offer_latest(updates, dict(state))
+
+    def disconnect(exc):
+        nonlocal lidar, reader, next_open
+        if lidar is not None:
+            try: lidar.close()
+            except (OSError, serial.SerialException): pass
+        if reader:
+            for k, v in reader.stats.items(): totals[k] = totals.get(k, 0) + v
+        lidar = reader = None
+        state.update(lidar_connected=False, lidar_error=str(exc))
+        event('lidar_connection_error', reason=str(exc), motion_propagation_continues=True)
+        next_open = time.monotonic() + 1.
+        publish()
+
+    try:
+        while not stop.is_set():
+            if lidar is None:
+                if time.monotonic() < next_open:
+                    stop.wait(.005)
+                    continue
+                state['lidar_open_attempts'] += 1
+                try:
+                    lidar = serial.Serial(port, baud, timeout=.005, write_timeout=.2, exclusive=True)
+                    for mode, value in ((0xA0, 0), (0xA2, 3600)):
+                        packet = command_frame(mode, value)
+                        log.submit('lidar_tx.jsonl', dict(timestamp_monotonic_ns=time.monotonic_ns(), data_hex=packet.hex()))
+                        if lidar.write(packet) != len(packet):
+                            raise serial.SerialException('雷达启动命令写入不完整')
+                    reader = make_reader(config)
+                    state.update(lidar_connected=True, lidar_error=None)
+                    event('lidar_connected', port=port, open_attempt=state['lidar_open_attempts'])
+                    publish()
+                except (OSError, serial.SerialException) as exc:
+                    disconnect(exc)
+                    continue
+            try:
+                data = lidar.read(min(lidar.in_waiting or 1, 65536))
+            except (OSError, serial.SerialException) as exc:
+                disconnect(exc)
+                continue
+            received = time.monotonic_ns()
+            if data:
+                log.submit('lidar_rx.jsonl', dict(timestamp_monotonic_ns=received, data_hex=data.hex()))
+                try:
+                    ready = reader.feed(data, received)
+                except LidarTimingError as exc:
+                    event('lidar_segment_restart', reason=str(exc))
+                    for k, v in reader.stats.items(): totals[k] = totals.get(k, 0) + v
+                    reader = make_reader(config)
+                    ready = []
+                for scan in ready:
+                    state['scans_received'] += 1
+                    log.submit('dynamic_scans.jsonl', dict(scan_id=scan.scan_id,
+                        reference_ns=scan.reference_ns, time_qualified=False,
+                        points=[vars(p).copy() for p in scan.points]))
+                    state['scan_queue_drops'] += offer_latest(scans, scan)
+            if time.monotonic() - last_publish >= .05:
+                publish()
+                last_publish = time.monotonic()
+    except Exception as exc:
+        state['lidar_error'] = str(exc)
+        event('lidar_receiver_error', reason=str(exc))
+    finally:
+        if lidar is not None:
+            try:
+                packet = command_frame(0xA1, 0)
+                lidar.write(packet)
+                log.submit('lidar_tx.jsonl', dict(timestamp_monotonic_ns=time.monotonic_ns(), data_hex=packet.hex()))
+            except (OSError, serial.SerialException) as exc: event('lidar_stop_write_failed', reason=str(exc))
+            try: lidar.close()
+            except (OSError, serial.SerialException): pass
+        state['lidar_connected'] = False
+        publish()
+        log.submit('lidar_reader_summary.json', dict(state), atomic=True)
+        log.close()
+        state['reader_logging_healthy'] = log.healthy()
+        state['reader_logging_statistics'] = log.statistics()
+        offer_latest(updates, dict(state))
+
+
 def run_worker(config,port,baud,root,inbox,display,replies,stop):
-    # Spawn target: never inherits UART/SDK handles from the parent.
-    display.cancel_join_thread()  # Raw records/final summary use the logger.
+    # This process owns motion propagation. Its receiver child alone owns lidar.
+    display.cancel_join_thread()
     engine=DynamicFence(config['installation']);log=AsyncDebugLog(root)
-    lidar=None;reader=None;reader_totals={};pending=deque();times=deque(maxlen=2048)
-    counters=dict(pose_ingested=0,primary_yaw_ingested=0,measured_wheel_ingested=0,scans_received=0,
-        scan_queue_drops=0,display_updates_coalesced=0)
-    error=None;last_publish=0.;last_percentile=0.;p95=None;reference_request_id=None
-    lidar_error=None;next_open_s=0.;open_attempts=0;requested_lidar_enabled=True
+    context=mp.get_context('spawn')
+    scans=context.Queue(maxsize=2);updates=context.Queue(maxsize=8)
+    receiver=context.Process(target=run_lidar_receiver,
+        args=(config,port,baud,root,scans,updates,stop),name='lidar-serial-receiver')
+    fit_inbox=queue.Queue(maxsize=1);fit_done=queue.Queue(maxsize=8)
+    fitting_stop=threading.Event()
+    reader_state=dict(lidar_connected=False,lidar_error=None,lidar_open_attempts=0,
+        scans_received=0,scan_queue_drops=0,reader_stats={})
+    counters=dict(pose_ingested=0,primary_yaw_ingested=0,measured_wheel_ingested=0,
+        fit_requests_coalesced=0,display_updates_coalesced=0)
+    times=deque(maxlen=2048);error=None;last_publish=last_percentile=0.;p95=None
+    reference_request_id=None;requested_lidar_enabled=True
 
     def event(name,**data):
         log.submit('lidar_worker_events.jsonl',dict(event=name,timestamp_monotonic_ns=time.monotonic_ns(),**data))
@@ -46,15 +175,14 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
 
     def consume():
         nonlocal reference_request_id,requested_lidar_enabled
-        for _ in range(1024):
+        for _ in range(256):
             try:kind,payload=inbox.get_nowait()
             except queue.Empty:break
             if kind=='pose':engine.ingest_pose(payload);counters['pose_ingested']+=1
             elif kind=='yaw':
                 engine.ingest_yaw(payload['time_ns'],payload['yaw_deg'],payload['source'])
                 counters['primary_yaw_ingested']+=1
-            elif kind=='wheel':
-                engine.ingest_wheel(payload);counters['measured_wheel_ingested']+=1
+            elif kind=='wheel':engine.ingest_wheel(payload);counters['measured_wheel_ingested']+=1
             elif kind=='invalidate':
                 engine.invalidate_reference(payload['reason']);event('reference_invalidated',**payload)
             elif kind=='align':
@@ -68,141 +196,128 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                 reference=engine.align(payload['description'],physical_confirmed=False,
                     center_xy=payload['center_xy_m'],heading_deg=payload['yaw_deg'],
                     first_sample=payload.get('first_sample',True),round_token=payload.get('round_token'))
-                pending.clear()  # Previous placement's queued scans do not cross the explicit start bind.
+                reference_request_id=None
+                # Pending observations belong to the previous placement.
+                for channel in (scans,fit_inbox):
+                    while True:
+                        try:channel.get_nowait()
+                        except queue.Empty:break
                 event('field_reference_set',reference=reference)
             elif kind=='lidar_enabled':
                 requested_lidar_enabled=bool(payload['enabled'])
-                engine.set_lidar_enabled(requested_lidar_enabled and lidar is not None)
+                engine.set_lidar_enabled(requested_lidar_enabled and reader_state['lidar_connected'])
                 event('operator_lidar_availability',enabled=payload['enabled'],reason=payload['reason'])
-        while engine.motion.events:
-            change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
+        with engine.lock:
+            while engine.motion.events:
+                change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
 
     def state():
-        stats=dict(reader_totals)
-        if reader:
-            for k,v in reader.stats.items():stats[k]=stats.get(k,0)+v
-        return dict(counters,scans=engine.scan_count,fits=engine.fit_count,
-            scan_processing_ms_p95=p95,last=engine.snapshot(),reader_stats=stats,error=error,
+        return dict(counters,**reader_state,scans=engine.scan_count,fits=engine.fit_count,
+            scan_processing_ms_p95=p95,last=engine.snapshot(),error=error,
             worker_pid=os.getpid(),worker_cpu_affinity=sorted(os.sched_getaffinity(0)),
-            capture_chain_present=bool(engine.poses and engine.yaws and counters['scans_received']),
+            capture_chain_present=bool(engine.poses and engine.yaws and reader_state['scans_received']),
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
-            lidar_connected=lidar is not None,lidar_error=lidar_error,
-            lidar_open_attempts=open_attempts,lidar_requested_enabled=requested_lidar_enabled,
+            lidar_requested_enabled=requested_lidar_enabled,
             lidar_corrections_enabled=engine.lidar_corrections_enabled,
             logging_healthy=log.healthy(),accuracy_verified=False,full_speed_physical_validation=False)
 
-    def publish(value):
-        try:display.put_nowait(value)
-        except queue.Full:
-            try:display.get_nowait()
-            except queue.Empty:return
-            counters['display_updates_coalesced']+=1
-            try:display.put_nowait(value)
-            except queue.Full:pass
+    def drain_reader():
+        nonlocal reader_state
+        while True:
+            try:value=updates.get_nowait()
+            except queue.Empty:break
+            changed=(value['lidar_connected']!=reader_state['lidar_connected'] or
+                     value['lidar_error']!=reader_state['lidar_error'])
+            reader_state=value
+            if changed:
+                engine.set_lidar_enabled(requested_lidar_enabled and value['lidar_connected'])
+                event('lidar_connected' if value['lidar_connected'] else 'lidar_connection_error',
+                    reason=value['lidar_error'],motion_propagation_continues=True)
 
-    def disconnect_lidar(exc):
-        nonlocal lidar,reader,lidar_error,next_open_s
-        reason=str(exc)
-        if lidar is not None:
-            try:lidar.close()
-            except (OSError,serial.SerialException):pass
-        lidar=None
-        if reader:
-            for k,v in reader.stats.items():reader_totals[k]=reader_totals.get(k,0)+v
-        reader=None;pending.clear()
-        # Keep the reference, accumulated wall correction and motion history.
-        # Only observations from the unavailable lidar stop contributing.
-        engine.set_lidar_enabled(False)
-        if reason!=lidar_error:event('lidar_connection_error',reason=reason,motion_propagation_continues=True)
-        lidar_error=reason
-        next_open_s=time.monotonic()+1.  # Port retry pacing, never a feedback-age gate.
+    def fit_loop():
+        while not fitting_stop.is_set():
+            try:scan,revision,request_id=fit_inbox.get(timeout=.05)
+            except queue.Empty:continue
+            try:
+                with engine.lock:
+                    if revision!=engine.revision:continue
+                    initializing=engine.reference is None and request_id is not None
+                    # Initialization has no control reference yet. Keep its
+                    # three-scan state atomic against a new operator bind.
+                    result=engine.try_initialize(scan) if initializing else None
+                if not initializing:
+                    if engine.reference is None:continue
+                    result=engine.observe(scan,expected_revision=revision)
+                fit_done.put((initializing,request_id,result),timeout=.05)
+            except ValueError as exc:event('scan_not_fitted',scan_id=scan.scan_id,reason=str(exc))
+            except queue.Full:event('fit_result_queue_full',scan_id=scan.scan_id)
+            except Exception as exc:
+                # A geometry failure cannot terminate motion propagation.
+                event('scan_fit_error',scan_id=scan.scan_id,reason=str(exc))
 
-    def connect_lidar():
-        nonlocal lidar,reader,lidar_error,open_attempts
-        open_attempts+=1
-        try:
-            lidar=serial.Serial(port,baud,timeout=.005,write_timeout=.2,exclusive=True)
-            for mode,value in ((0xA0,0),(0xA2,3600)):
-                packet=command_frame(mode,value)
-                log.submit('lidar_tx.jsonl',dict(timestamp_monotonic_ns=time.monotonic_ns(),data_hex=packet.hex()))
-                if lidar.write(packet)!=len(packet):raise serial.SerialException('雷达启动命令写入不完整')
-        except (OSError,serial.SerialException) as exc:
-            disconnect_lidar(exc)
-            return
-        reader=make_reader(config);lidar_error=None
-        engine.set_lidar_enabled(requested_lidar_enabled)
-        event('lidar_connected',port=port,open_attempt=open_attempts)
+    fitter=threading.Thread(target=fit_loop,name='lidar-fit',daemon=True)
+
+    def drain_fits():
+        nonlocal reference_request_id
+        for _ in range(8):
+            try:initializing,request_id,result=fit_done.get_nowait()
+            except queue.Empty:break
+            if initializing:
+                log.submit('dynamic_initialization.jsonl',result)
+                if result.get('reference') is not None and request_id==reference_request_id:
+                    reply('reference_set',request_id=request_id,reference=result['reference'])
+                    event('field_reference_set',request_id=request_id,reference=result['reference'])
+                    reference_request_id=None
+            else:
+                times.append(result['compute_ms']);log.submit('dynamic_localization.jsonl',result)
+                if result.get('position_reacquired'):
+                    event('lidar_position_reacquired',scan_id=result['scan_id'],
+                        reference_ns=result['reference_ns'],center_xy_m=result['candidate_center_xy_m'],
+                        correction_m=result['correction_m'],motion_source=result['motion_source'])
 
     try:
-        connect_lidar()
+        receiver.start();fitter.start()
         reply('started',pid=os.getpid());event('worker_started',port=port,baud=baud,
-            chassis_uart_owned=False,t265_sdk_owned=False)
+            chassis_uart_owned=False,t265_sdk_owned=False,receiver_pid=receiver.pid)
         while not stop.is_set():
-            consume()
-            if lidar is None and time.monotonic()>=next_open_s:connect_lidar()
-            data=b''
-            if lidar is not None:
-                try:data=lidar.read(min(lidar.in_waiting or 1,65536))
-                except (OSError,serial.SerialException) as exc:disconnect_lidar(exc)
-            else:stop.wait(.005)  # Preserve the normal receive-loop cadence while unplugged.
-            now=time.monotonic_ns()
-            if data:
-                log.submit('lidar_rx.jsonl',dict(timestamp_monotonic_ns=now,data_hex=data.hex()))
-                try:scans=reader.feed(data,now)
-                except LidarTimingError as exc:
-                    event('lidar_segment_restart',reason=str(exc))
-                    for k,v in reader.stats.items():reader_totals[k]=reader_totals.get(k,0)+v
-                    reader=make_reader(config);scans=[]
-                for scan in scans:
-                    counters['scans_received']+=1
-                    log.submit('dynamic_scans.jsonl',dict(scan_id=scan.scan_id,reference_ns=scan.reference_ns,
-                        time_qualified=False,points=[vars(p).copy() for p in scan.points]))
-                    if len(pending)>=4:
-                        pending.popleft();counters['scan_queue_drops']+=1
-                        event('bounded_scan_queue_overflow',dropped=counters['scan_queue_drops'])
-                    pending.append(scan)
-            consume()  # Motion received while parsing is available to this scan.
-            if pending:
-                scan=pending.popleft()
-                if engine.reference is None and reference_request_id is not None:
-                    result=engine.try_initialize(scan)
-                    log.submit('dynamic_initialization.jsonl',result)
-                    if result.get('reference') is not None:
-                        reply('reference_set',request_id=reference_request_id,reference=result['reference'])
-                        event('field_reference_set',request_id=reference_request_id,reference=result['reference'])
-                        reference_request_id=None
-                if engine.reference is not None:
-                    try:
-                        result=engine.observe(scan);times.append(result['compute_ms'])
-                        log.submit('dynamic_localization.jsonl',result)
-                        if result.get('position_reacquired'):
-                            event('lidar_position_reacquired',scan_id=scan.scan_id,
-                                reference_ns=scan.reference_ns,center_xy_m=result['candidate_center_xy_m'],
-                                correction_m=result['correction_m'],motion_source=result['motion_source'])
-                    except ValueError as exc:event('scan_not_fitted',scan_id=scan.scan_id,reason=str(exc))
+            consume();drain_reader()
+            latest=None
+            for _ in range(8):
+                try:latest=scans.get_nowait()
+                except queue.Empty:break
+            if latest is not None:
+                counters['fit_requests_coalesced']+=offer_latest(fit_inbox,
+                    (latest,engine.revision,reference_request_id))
+            drain_fits()
             if time.monotonic()-last_publish>=.05:
                 if times and time.monotonic()-last_percentile>=1.:
                     p95=float(np.percentile(times,95));last_percentile=time.monotonic()
-                publish(state());last_publish=time.monotonic()
+                counters['display_updates_coalesced']+=offer_latest(display,state())
+                last_publish=time.monotonic()
+            stop.wait(.002)
     except Exception as exc:
         error=str(exc);event('worker_error',reason=error)
         try:reply('error',error=error)
         except queue.Full:pass
     finally:
-        if lidar is not None:
-            try:
-                packet=command_frame(0xA1,0);lidar.write(packet)
-                log.submit('lidar_tx.jsonl',dict(timestamp_monotonic_ns=time.monotonic_ns(),data_hex=packet.hex()))
-            except (OSError,serial.SerialException) as exc:event('lidar_stop_write_failed',reason=str(exc))
-            try:lidar.close()
-            except (OSError,serial.SerialException) as exc:event('lidar_close_failed',reason=str(exc))
-            lidar=None
+        stop.set();fitting_stop.set()
+        if fitter.ident is not None:fitter.join(timeout=2)
+        drain_fits()
+        if receiver.pid is not None:
+            deadline=time.monotonic()+2
+            while receiver.is_alive() and time.monotonic()<deadline:
+                drain_reader();receiver.join(timeout=.02)
+            drain_reader()
+            if receiver.is_alive():receiver.terminate();receiver.join(timeout=1)
         if times:p95=float(np.percentile(times,95))
         final=state();log.submit('lidar_worker_summary.json',final,atomic=True);log.close()
-        final['logging_healthy']=log.healthy();final['logging_statistics']=log.statistics()
-        # Keep final truth independent of the coalescing display queue.
+        final['logging_healthy']=log.healthy() and reader_state.get('reader_logging_healthy',False)
+        final['logging_statistics']=log.statistics()
+        final['receiver_stopped_cleanly']=receiver.exitcode==0
+        final['fit_thread_stopped']=not fitter.is_alive()
         try:reply('stopped',summary=final)
         except queue.Full:pass
+        for channel in (scans,updates):channel.cancel_join_thread();channel.close()
 
 
 class RadarWorker:
@@ -240,7 +355,9 @@ class RadarWorker:
             if message['kind'] in ('reference_set','reference_rejected'):
                 if message['request_id']!=self.pending_reference:continue
                 self.pending_reference=None
-            if message['kind']=='stopped':self.state=message['summary'];self.stopped_cleanly=True
+            if message['kind']=='stopped':
+                self.state=message['summary']
+                self.stopped_cleanly=bool(self.state.get('receiver_stopped_cleanly') and self.state.get('fit_thread_stopped'))
             results.append(message)
         return results
 

@@ -4,6 +4,7 @@
 #include "fusion.hpp"
 #include "debug_wheel_input.hpp"
 #include "dynamic_pose_relay.hpp"
+#include "async_csv_log.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -944,8 +945,33 @@ void test_dynamic_pose_relay()
     ::unlink(path.c_str());
 }
 
+void test_async_csv_logging()
+{
+    char pattern[] = "/tmp/t265-csv-XXXXXX";
+    const char *directory = ::mkdtemp(pattern);
+    check(directory != nullptr, "create isolated CSV directory");
+    if (!directory) return;
+    const std::string path = std::string(directory) + "/pose.csv";
+    {
+        omni::AsyncCsvLog log(path);
+        log.submit("header\n");log.submit("first\n");log.submit("second\n");
+        log.close();
+        check(!log.failed() && log.dropped() == 0, "CSV close drains accepted rows");
+    }
+    std::ifstream file(path);
+    const std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    check(content == "header\nfirst\nsecond\n", "CSV row order and contents survive async I/O");
+    {
+        omni::AsyncCsvLog failed(std::string(directory) + "/missing/pose.csv");
+        failed.submit("real data\n");failed.close();
+        check(failed.failed() && failed.dropped() == 1, "CSV failure is reported without throwing into control");
+    }
+    ::unlink(path.c_str());::rmdir(directory);
+}
+
 int main()
 {
+    test_async_csv_logging();
     test_dynamic_pose_relay();
     test_debug_wheel_input();
     test_protocol();

@@ -270,12 +270,14 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
 
 void DebugWheelInput::poll(std::uint64_t now)
 {
-    // Bounded per iteration. No age gate and no duplicate source injection.
+    // Bounded latest-value ingress. Do not replay a socket backlog into SDK.
+    Json latest;
+    unsigned superseded = 0;
     for (int count = 0; count < 64; ++count) {
         char bytes[16384];
         const auto size = ::recv(socket_, bytes, sizeof(bytes), MSG_DONTWAIT | MSG_TRUNC);
         if (size < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             throw std::runtime_error("debug wheel IPC receive failed");
         }
         Json p;
@@ -287,11 +289,16 @@ void DebugWheelInput::poll(std::uint64_t now)
             record({{"event", "wheel_input_malformed"}, {"error", e.what()}});
             continue;
         }
-        const auto current = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        process(std::move(p), static_cast<std::uint64_t>(current), [&](std::uint32_t frame, const rs2_vector &velocity) {
-            return wheel_->send_wheel_odometry(0, frame, velocity);
-        });
+        if (!latest.is_null()) ++superseded;
+        latest = std::move(p);
     }
+    if (latest.is_null()) return;
+    if (superseded) record({{"event","wheel_requests_coalesced"}, {"samples",superseded},
+        {"sdk_call_attempted",false}, {"kept_packet_id",latest.value("packet_id",Json())}});
+    const auto current = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    process(std::move(latest), static_cast<std::uint64_t>(current), [&](std::uint32_t frame, const rs2_vector &velocity) {
+        return wheel_->send_wheel_odometry(0, frame, velocity);
+    });
 }
 } // namespace omni

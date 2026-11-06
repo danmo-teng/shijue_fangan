@@ -9,6 +9,7 @@
 #include "debug_wheel_input.hpp"
 #include "dynamic_pose_relay.hpp"
 #include "debug_fisheye_evidence.hpp"
+#include "async_csv_log.hpp"
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -1114,9 +1115,6 @@ int main(int argc, char **argv)
                     bool have_active_mission = false;
                     std::uint8_t mission_sequence = 0;
                     auto next_heartbeat = std::chrono::steady_clock::now();
-                    auto last_input_change = next_heartbeat;
-                    constexpr auto heartbeat_bridge_limit =
-                        std::chrono::milliseconds(250);
 
                     auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame,
                                         const std::array<std::uint8_t, omni::kFrameSize> *context = nullptr) {
@@ -1161,7 +1159,6 @@ int main(int argc, char **argv)
                             last_input = input;
                             last_context = context;
                             have_last_input = true;
-                            last_input_change = now;
                             if (input[2] == omni::kMissionCommandMessageType) {
                                 if (!have_active_mission) {
                                     mission_sequence = input[3];
@@ -1193,11 +1190,8 @@ int main(int argc, char **argv)
                                 transmit(input);
                             }
                         }
-                        if (have_active_mission &&
-                            now - last_input_change > heartbeat_bridge_limit) {
-                            have_active_mission = false;
-                            navigation_command_active.store(false, std::memory_order_relaxed);
-                        }
+                        // Last real command stays active until explicitly replaced,
+                        // operator STOP/ABORT or process shutdown; no producer-age gate.
                         if (have_active_mission && now >= next_heartbeat) {
                             auto heartbeat = active_mission;
                             auto context_heartbeat = active_context;
@@ -1232,12 +1226,10 @@ int main(int argc, char **argv)
             dynamic_relay->start();
         }
 
-        std::ofstream csv;
-        std::uint64_t csv_rows = 0;
+        omni::AsyncCsvLog csv_log(options.csv_path);
+        std::ostringstream csv;
         std::uint64_t raw_json_errors = 0;
         if (!options.csv_path.empty()) {
-            csv.open(options.csv_path);
-            if (!csv) throw std::runtime_error("cannot open CSV: " + options.csv_path);
             csv << "timestamp_monotonic_ns,elapsed_s,t265_timestamp_s,"
                    "raw_tx_m,raw_ty_m,raw_tz_m,raw_vx_mps,raw_vy_mps,raw_vz_mps,"
                    "raw_qx,raw_qy,raw_qz,raw_qw,raw_ang_vx_radps,raw_ang_vy_radps,"
@@ -1284,18 +1276,18 @@ int main(int argc, char **argv)
                    "navigation_command,"
                    "navigation_remaining_mm,navigation_heading_cdeg,"
                    "navigation_wheel_progress_m,navigation_distance_compensation_m,pose_frame_number,pose_timestamp_domain,capture_age_ms,receive_monotonic_ns,up_world_x,up_world_y,up_world_z\n";
+            csv_log.submit(csv.str());csv.str("");
         }
 
         // Optional diagnostic stream precedes confidence/startup gating, so
         // lost tracking and initial invalid samples are retained verbatim.
-        std::ofstream raw_pose_csv;
-        std::uint64_t raw_pose_rows = 0;
+        omni::AsyncCsvLog raw_pose_log(options.raw_pose_csv_path);
+        std::ostringstream raw_pose_csv;
         if (!options.raw_pose_csv_path.empty()) {
-            raw_pose_csv.open(options.raw_pose_csv_path);
-            if (!raw_pose_csv) throw std::runtime_error("cannot open raw pose CSV");
             raw_pose_csv << "receive_monotonic_ns,frame_number,capture_timestamp_ms,timestamp_domain,capture_age_ms,"
                             "tx_m,ty_m,tz_m,vx_mps,vy_mps,vz_mps,qx,qy,qz,qw,"
                             "wx_radps,wy_radps,wz_radps,tracker_confidence,mapper_confidence,processing_monotonic_ns,callback_queue_drops\n";
+            raw_pose_log.submit(raw_pose_csv.str());raw_pose_csv.str("");
         }
         EventLog event_log(options.events_path);
         T265MapStatus t265_map;
@@ -1658,7 +1650,7 @@ int main(int argc, char **argv)
             raw.timestamp_s = pose_frame.get_timestamp() * 0.001;
             raw.tracker_confidence = pose.tracker_confidence;
             raw.mapper_confidence = pose.mapper_confidence;
-            if (raw_pose_csv) {
+            if (raw_pose_log.enabled()) {
                 raw_pose_csv << std::setprecision(17)
                     << std::chrono::duration_cast<std::chrono::nanoseconds>(t265_received.time_since_epoch()).count()
                     << ',' << frame_number << ',' << pose_frame.get_timestamp() << ','
@@ -1670,7 +1662,7 @@ int main(int argc, char **argv)
                 raw_pose_csv << ',' << static_cast<unsigned>(raw.tracker_confidence)
                              << ',' << static_cast<unsigned>(raw.mapper_confidence)
                              << ',' << monotonic_ns() << ',' << evidence_pose_queue.dropped_.load() << '\n';
-                if ((++raw_pose_rows % 20u) == 0u) raw_pose_csv.flush();
+                raw_pose_log.submit(raw_pose_csv.str());raw_pose_csv.str("");
             }
             if (options.pose_jumping_override >= 0) {
                 if (have_previous_debug_pose) {
@@ -2086,7 +2078,7 @@ int main(int argc, char **argv)
                 }
             }
 
-            if (csv) {
+            if (csv_log.enabled()) {
                 const bool have_increment = wheel_debug.have_latest_increment;
                 const bool have_frame = wheel_debug.have_latest_frame;
                 const double odom_yaw_rate_radps = have_increment &&
@@ -2225,7 +2217,7 @@ int main(int argc, char **argv)
                     << std::chrono::duration_cast<std::chrono::nanoseconds>(t265_received.time_since_epoch()).count() << ','
                     << latest_t265.up_world[0] << ',' << latest_t265.up_world[1] << ','
                     << latest_t265.up_world[2] << '\n';
-                if ((++csv_rows % 20u) == 0u) csv.flush();
+                csv_log.submit(csv.str());csv.str("");
             }
             if (options.output_rate_hz > 0.0 && now < next_output) continue;
             if (options.output_rate_hz > 0.0) {
@@ -2287,6 +2279,12 @@ int main(int argc, char **argv)
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();
+        csv_log.close();raw_pose_log.close();
+        event_log.write("diagnostic_csv_status", "{\"localization_dropped_rows\":" +
+            std::to_string(csv_log.dropped()) + ",\"localization_io_failed\":" +
+            (csv_log.failed() ? "true" : "false") + ",\"raw_pose_dropped_rows\":" +
+            std::to_string(raw_pose_log.dropped()) + ",\"raw_pose_io_failed\":" +
+            (raw_pose_log.failed() ? "true" : "false") + "}");
         std::cerr << "[SUMMARY] wheel accepted=" << wheel_accepted
                   << " rejected=" << wheel_rejected
                   << " UART frames=" << final_parser_stats.frames_ok

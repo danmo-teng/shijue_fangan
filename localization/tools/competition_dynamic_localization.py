@@ -34,6 +34,7 @@ class CompetitionDynamicLocalization:
         self.output.setblocking(False)
         self.stop_event = threading.Event()
         self.thread = None
+        self.input_threads = []
         self.reference_requested = False
         self.defer_reference = defer_reference
         self.error = None
@@ -58,6 +59,11 @@ class CompetitionDynamicLocalization:
 
     def start(self):
         self.radar.start(self.config, self.config['lidar']['port'], self.config['lidar']['baud'], self.root)
+        self.input_threads = [
+            threading.Thread(target=self._read_chassis, name='dynamic-motion-input', daemon=True),
+            threading.Thread(target=self._read_pose, name='dynamic-pose-input', daemon=True)]
+        for thread in self.input_threads:
+            thread.start()
         self.thread = threading.Thread(target=self._run, name='competition-dynamic-transport', daemon=True)
         self.thread.start()
 
@@ -104,17 +110,21 @@ class CompetitionDynamicLocalization:
             reference=state['reference'], motion_selection=state['motion_selection'])
         return self.last_control
 
-    def _run(self):
+    def _read_chassis(self):
+        while not self.stop_event.is_set():
+            try:
+                event = self.chassis_inbox.get(timeout=.05)
+            except queue.Empty:
+                continue
+            try:
+                forward_motion_event(self, event)
+            except (ValueError, KeyError, TypeError) as exc:
+                self.devent('motion_input_error', reason=str(exc))
+
+    def _read_pose(self):
         connection = None
-        last_poll = 0.
         try:
             while not self.stop_event.is_set():
-                for _ in range(2048):
-                    try:
-                        event = self.chassis_inbox.get_nowait()
-                    except queue.Empty:
-                        break
-                    forward_motion_event(self, event)
                 try:
                     if connection is None:
                         connection, _ = self.pose_socket.accept()
@@ -132,10 +142,19 @@ class CompetitionDynamicLocalization:
                         connection.close()
                         connection = None
                 except socket.timeout:
-                    pass
-                if time.monotonic() - last_poll < .05:
                     continue
-                last_poll = time.monotonic()
+                except (ValueError, KeyError, TypeError) as exc:
+                    self.devent('pose_input_error', reason=str(exc))
+        except OSError as exc:
+            if not self.stop_event.is_set():
+                self.devent('pose_input_error', reason=str(exc))
+        finally:
+            if connection is not None:
+                connection.close()
+
+    def _run(self):
+        try:
+            while not self.stop_event.wait(.05):
                 for reply in self.radar.poll():
                     if reply['kind'] == 'error':
                         self.error = reply['error']
@@ -166,9 +185,6 @@ class CompetitionDynamicLocalization:
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self.error = str(exc)
             self.devent('dynamic_transport_error', reason=self.error)
-        finally:
-            if connection is not None:
-                connection.close()
 
     def snapshot(self):
         state = dict(self.state)
@@ -188,6 +204,8 @@ class CompetitionDynamicLocalization:
         self.stop_event.set()
         if self.thread:
             self.thread.join()
+        for thread in self.input_threads:
+            thread.join()
         self.radar.close()
         self.pose_socket.close()
         self.output.close()

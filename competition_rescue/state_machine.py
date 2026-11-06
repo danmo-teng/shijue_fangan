@@ -201,7 +201,14 @@ class StmSnapshot:
 
     @property
     def fresh(self) -> bool:
-        return self.age_ms <= 250.0
+        # Compatibility name: an actually received status remains usable.
+        # Age is displayed, but must not pause navigation/search/handoffs.
+        return math.isfinite(self.age_ms)
+
+    @property
+    def audit_fresh(self) -> bool:
+        # Retain the existing age check only for authorizing claw evidence.
+        return self.fresh and self.age_ms <= 250.0
 
     @property
     def fault(self) -> bool:
@@ -1876,7 +1883,7 @@ class CompetitionMission:
     def _audit_observation_wait(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
-        ready = stm.fresh and stm.claw_visible and stm.camera_pitch_cdeg == 14000
+        ready = stm.audit_fresh and stm.claw_visible and stm.camera_pitch_cdeg == 14000
         if stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT, STM_MODE_RECOVERY_WAIT}:
             key = (stm.mode, ready, self.audit_epoch)
             if key != self.audit_camera_key:
@@ -4173,9 +4180,9 @@ class CompetitionMission:
         distance = math.hypot(dx, dy)
         heading = math.degrees(math.atan2(dy, dx)) % 360.0
         # Keep the geometric target bearing all the way to the staging point.
-        # F407 uses it as the field-frame translation direction and keeps the
-        # chassis heading separately, so near-zone lateral correction remains
-        # possible for the omni base.
+        # This is the field-frame translation bearing, not a final body yaw.
+        # Terminal holonomic control must hold body yaw separately in F405;
+        # the existing STAGE payload/flags and D=0 arrival remain unchanged.
         flags = (
             self._side_flags() | CMD_DISTANCE_VALID | CMD_STAGE_ONLY
             if staging_only else

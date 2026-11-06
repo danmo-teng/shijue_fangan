@@ -667,7 +667,187 @@ def test_mode51_context_priority_and_separation_rejection() -> None:
         assert p.protocol_task == 11 and p.protocol_action == 0  # No unconfirmed task rollover.
 
 
+def test_received_status_age_does_not_pause_navigation_but_claw_audit_keeps_check():
+    from dataclasses import replace
+    from protocol import CMD_CARGO_AUDIT, CMD_RETURN_CENTER
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.state = CompetitionState.RETURN_CENTER
+    status = StmSnapshot(mode=10, age_ms=2000, camera_pitch_cdeg=14000, flags=1)
+    out = m.step(VisionSnapshot(), PoseSnapshot(valid=True, x_m=.5), status, 1.)
+    assert out.command.opcode == CMD_RETURN_CENTER
+    assert status.fresh and not status.audit_fresh and not StmSnapshot().fresh
+    # The old check remains local to authorizing actual claw observations.
+    waiting = m._audit_observation_wait(VisionSnapshot(frame_sequence=1), status, 1.)
+    assert waiting.command.opcode == CMD_CARGO_AUDIT
+    assert waiting.command.audit_vision_frame == 0 and not waiting.command.audit.stable
+    assert replace(status, age_ms=0).audit_fresh
+
+
+def test_rejected_approach_exits_pending_and_finishes_separation_budget():
+    from dataclasses import replace
+    from protocol import CMD_CARGO_AUDIT, CMD_RETURN_CENTER
+    from state_machine import CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for attempts in (0, 1):
+            m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+            m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+            m.state = CompetitionState.APPROACH
+            m.disperse_attempts = attempts
+            p = CompetitionPlanner(m, root/"pose", root/"stm", root/"command",
+                                   root/"diag", JsonlLog(root/"events"), 50)
+            p._publish(CompetitionOutput(m.state, CommandRequest(CMD_APPROACH_TARGET, 9, 299, 95), "request"))
+            rejected = StmSnapshot(mode=3, age_ms=1000, context_valid=True,
+                task_id=p.protocol_task, action_id=(p.protocol_action-1)&65535,
+                accepted_command=CMD_CARGO_AUDIT, action_status=7,
+                rejected_action_id=p.protocol_action)
+            v = VisionSnapshot(frame_sequence=100, observed_monotonic_s=1.)
+            assert p._reconcile_approach_rejection(v, PoseSnapshot(), replace(rejected, rejected_action_id=0), 1.) is None
+            out = p._output_for_cycle(v, PoseSnapshot(valid=True, x_m=.2), rejected, False, 1.)
+            assert out.reason == "approach_recover_after_reject" and p.protocol_last_output is None
+            assert out.state == (CompetitionState.RETURN_CENTER if attempts else CompetitionState.SEARCH)
+            if attempts:
+                assert out.command.opcode == CMD_RETURN_CENTER and m.disperse_attempts == 1
+            p._publish(out)
+            assert p.protocol_action != rejected.rejected_action_id or out.command.opcode == CMD_HOLD
+
+
+def test_pending_pixel_approach_continues_updating_camera_target():
+    from state_machine import CargoBatch, TrackedCargo
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        m.state = CompetitionState.APPROACH
+        p = CompetitionPlanner(m, root/"pose", root/"stm", root/"command", root/"diag", JsonlLog(root/"events"), 50)
+        p._publish(CompetitionOutput(m.state, CommandRequest(CMD_APPROACH_TARGET, 9, 200, 200), "old target"))
+        status = StmSnapshot(mode=3, age_ms=500, context_valid=True, task_id=p.protocol_task,
+                             action_id=(p.protocol_action-1)&65535, action_status=1)
+        target = TrackedCargo(1, "green_supply", .9, (600,500,40,40), hits=3)
+        view = VisionSnapshot(frame_sequence=20, observed_monotonic_s=1., cargo=(target,))
+        out = p._output_for_cycle(view, PoseSnapshot(valid=True), status, False, 1.)
+        assert out.command.opcode == CMD_APPROACH_TARGET
+        assert (out.command.arg_a, out.command.arg_b) != (200, 200)
+        p._publish(out)
+        assert p.protocol_vision_frame == 20
+
+
+def test_wheel_bridge_coalesces_ready_velocities_without_age_rejection():
+    import socket
+    sys.path.insert(0, str(PROJECT_ROOT/'localization/tools'))
+    from t265_wheel_input import WheelInputBridge
+    with tempfile.TemporaryDirectory() as d:
+        config = dict(camera_robot_forward_axis='0.8660254,0,0.5',camera_robot_up_axis='0,-1,0',
+                      camera_offset_forward_m='-0.0346105',camera_offset_left_m='-0.0599471445')
+        bridge = WheelInputBridge(Path(d),config,'coalesce-fixture',True,clock=lambda:10_000_000_000)
+        sink = socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind(bridge.address);sink.settimeout(.1)
+        try:
+            for i in range(7):
+                bridge.gyro.append(dict(mcu_epoch='fixture',alignment_clock='mcu_event',
+                    alignment_capture_ns=1_000_000_000+i*10_000_000,yaw_rate_deg_s=0.,
+                    receive_monotonic_ns=1_000_000_000+i*10_000_000))
+            for i in range(3):
+                bridge.telemetry(dict(kind='measured_body_velocity',sample=dict(
+                    mcu_epoch='fixture',sample_id=i,measurement_valid=True,source='measured_wheel_feedback',
+                    alignment_clock='mcu_event',alignment_start_ns=1_000_000_000+i*20_000_000,
+                    alignment_end_ns=1_020_000_000+i*20_000_000,receive_monotonic_ns=1_020_000_000+i*20_000_000,
+                    v_body_mps=[.1*(i+1),0.,0.])))
+            bridge.poll()
+            packet=json.loads(sink.recv(16384))
+            assert packet['sample_id']==2 and abs(packet['v_camera_mps'][0]-.3*.8660254)<1e-7
+            assert bridge.stats['sent_to_sdk_owner']==1 and bridge.stats['sdk_requests_coalesced']==2
+            assert bridge.stats['rejected']==0 and packet['capture_time_qualified'] is False
+        finally:
+            bridge.close();sink.close()
+
+
+def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():
+    """Real PTY + existing worker; no SDK, chassis port, GUI or real log directory."""
+    import multiprocessing as mp
+    import os
+    import pty
+    import queue
+    import struct
+    from unittest.mock import patch
+    sys.path.insert(0,str(PROJECT_ROOT/'localization/tools'))
+    from lidar_yaw_debug.dynamic import DynamicFence
+    from lidar_yaw_debug.protocol import crc8
+    from lidar_yaw_debug.worker import run_worker
+
+    def revolution(index):
+        packets=[]
+        for k in range(60):
+            first=k*600
+            data=bytes([0x54,0x2c])+struct.pack('<HH',3600,first)
+            data+=struct.pack('<HB',1500,100)*12
+            data+=struct.pack('<HH',first+550,(index*60+k)*3%65536)
+            packets.append(data+bytes([crc8(data)]))
+        return b''.join(packets)
+
+    ctx=mp.get_context('spawn');stop=ctx.Event()
+    inbox,display,replies=queue.Queue(),ctx.Queue(maxsize=4),ctx.Queue(maxsize=16)
+    master,slave=pty.openpty();entered,release=threading.Event(),threading.Event()
+    original=DynamicFence.observe
+    def slow_fit(engine,scan,**kwargs):
+        entered.set();release.wait(4)
+        return original(engine,scan,**kwargs)
+    config=json.loads((PROJECT_ROOT/'localization/config/lidar_yaw_debug.json').read_text())
+    with tempfile.TemporaryDirectory() as d, patch.object(DynamicFence,'observe',slow_fit):
+        worker=threading.Thread(target=run_worker,args=(config,os.ttyname(slave),230400,Path(d),inbox,display,replies,stop))
+        worker.start()
+        try:
+            now=time.monotonic_ns()
+            inbox.put(('pose',dict(session_id='fixture',frame_number=1,timestamp_monotonic_ns=now,
+                receive_monotonic_ns=now,x_m=0.,y_m=0.,yaw_rad=0.,tracker_confidence=3)))
+            inbox.put(('yaw',dict(time_ns=now,yaw_deg=0.,source={})))
+            inbox.put(('field_start',dict(description='fixture',center_xy_m=[0.,0.],yaw_deg=0.,first_sample=False)))
+            # Wait only for local receiver startup, not a sensor qualification.
+            deadline=time.monotonic()+4
+            while time.monotonic()<deadline:
+                try:state=display.get(timeout=.1)
+                except queue.Empty:continue
+                if state['lidar_connected']:break
+            else:raise AssertionError('PTY receiver did not open')
+            os.write(master,revolution(0)+revolution(1))
+            assert entered.wait(3)
+            for k in range(2,5):os.write(master,revolution(k))
+            for i in range(1,3):
+                t=time.monotonic_ns()
+                inbox.put(('yaw',dict(time_ns=t,yaw_deg=0.,source={})))
+                inbox.put(('wheel',dict(source='measured_wheel_feedback',measurement_valid=True,
+                    mcu_epoch='fixture',sample_id=i,v_body_mps=[.2,0.,0.],receive_monotonic_ns=t,
+                    interval_start_ns=t-20_000_000,interval_end_ns=t,
+                    raw_mcu_sample=dict(t0_us=i*20000,t1_us=(i+1)*20000))))
+                inbox.put(('pose',dict(session_id='fixture',frame_number=i+1,timestamp_monotonic_ns=t,
+                    receive_monotonic_ns=t,x_m=.004*i,y_m=0.,yaw_rad=0.,tracker_confidence=3)))
+            deadline=time.monotonic()+2
+            while time.monotonic()<deadline:
+                try:state=display.get(timeout=.1)
+                except queue.Empty:continue
+                if state['measured_wheel_ingested']>=2 and state['scans_received']>=3:break
+            else:raise AssertionError('motion/receiver stalled behind the blocked fit')
+            assert state['last']['ready'] and not release.is_set()
+            assert state['reader_stats']['crc_errors']==0
+        finally:
+            release.set();stop.set();worker.join(timeout=5)
+            os.close(master);os.close(slave)
+        assert not worker.is_alive()
+        final=None
+        while True:
+            try:message=replies.get(timeout=.2)
+            except queue.Empty:break
+            if message['kind']=='stopped':final=message['summary']
+        assert final is not None
+        assert final['receiver_stopped_cleanly'] and final['fit_thread_stopped']
+        assert (Path(d)/'lidar_rx.jsonl').stat().st_size>0
+    for channel in (display,replies):channel.cancel_join_thread();channel.close()
+
+
 def main() -> None:
+    test_received_status_age_does_not_pause_navigation_but_claw_audit_keeps_check()
+    test_rejected_approach_exits_pending_and_finishes_separation_budget()
+    test_pending_pixel_approach_continues_updating_camera_target()
     test_mode51_context_priority_and_separation_rejection()
     test_4071_fault_precedes_context_and_manual_pause()
     test_suppressed_publish_preserves_command_file_and_sequence()

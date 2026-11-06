@@ -111,6 +111,7 @@ class DynamicFence:
 
     def set_lidar_enabled(self,enabled):
         with self.lock:
+            self.revision+=1  # Cancel an in-flight fit when availability changes.
             self.lidar_corrections_enabled=bool(enabled);self.last_fit=None;self.latest_points=[]
             self.motion.wall_fixes=0
             self.pending_initial_pose=None
@@ -228,7 +229,15 @@ class DynamicFence:
             return np.column_stack([xy,y])
         return query
 
-    def _fit_position(self,points,ref,offset,scan_id):
+    def _fit_position(self,points,ref,offset,scan_id,revision=None):
+        # Expensive extraction never holds the motion/control lock.
+        lines=outer_supported_lines(extract_lines(points))
+        with self.lock:
+            if revision is not None and revision!=self.revision:
+                raise ValueError("reference changed during line extraction")
+            return self._fit_lines_position(points,ref,offset,scan_id,lines)
+
+    def _fit_lines_position(self,points,ref,offset,scan_id,lines):
         """Local tracking, or two-scan enclosure reacquisition at fixed yaw.
 
         Share line extraction. A bad wheel/T265 XY prior cannot veto a new
@@ -237,7 +246,6 @@ class DynamicFence:
         not be promoted to the missing arena wall just to complete XY.
         Compare correction offsets, not absolute positions of a moving car.
         """
-        lines=outer_supported_lines(extract_lines(points))
         prior=ref[:2]+offset
         local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines)
         local.update(position_reacquired=False,reacquisition_status='LOCAL_TRACKING')
@@ -257,17 +265,19 @@ class DynamicFence:
             self.pending_reacquisition=dict(scan_id=scan_id,offset=proposed)
             return dict(local,reacquisition_status='CONFIRMING_ENCLOSURE',
                 reacquisition_candidate_xy_m=candidate.tolist())
-        self.pending_reacquisition=None;self.reacquisition_count+=1
+        self.pending_reacquisition=None
         return dict(found,reason='FIXED_YAW_ENCLOSURE_REACQUIRED',position_reacquired=True,
             reacquisition_status='REACQUIRED',reacquisition_confirmations=2,
             correction_m=float(np.linalg.norm(candidate-prior)),
             local_reason=local['reason'],local_observed_axes=local['position_observed_axes'])
 
-    def observe(self,scan):
+    def observe(self,scan,*,expected_revision=None):
         if self.last_fit and self.last_fit['scan_id']==scan.scan_id:
             return dict(self.last_fit,duplicate_scan=True,position_reacquired=False)
         began=time.monotonic_ns();cpu_began=time.thread_time_ns();self.scan_count+=1
         poses,yaws,reference,offset,revision=self._frozen(scan.first_point_ns,scan.reference_ns)
+        if expected_revision is not None and revision!=expected_revision:
+            raise ValueError("queued scan belongs to a previous reference")
         copied=time.monotonic_ns()
         query=self.trajectory(poses,yaws,reference);m=self.mount
         accepted=self.accepted_points(scan)
@@ -278,7 +288,7 @@ class DynamicFence:
         ext=np.array([*m['extrinsic'][:2],math.radians(m['extrinsic'][2])])
         corrected,ref=deskew_points(points,times,scan.reference_ns,query,ext)
         deskew_done=time.monotonic_ns()
-        fit=(self._fit_position(corrected,ref,offset,scan.scan_id) if self.lidar_corrections_enabled
+        fit=(self._fit_position(corrected,ref,offset,scan.scan_id,revision) if self.lidar_corrections_enabled
             else dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
                 inherited_axes=['x','y'],covariance=None,qualified_pose=False,
                 reason='OPERATOR_OBSTACLE_NO_LIDAR_CORRECTION'))
@@ -302,6 +312,7 @@ class DynamicFence:
                     i=('x','y').index(axis);self.offset[i]=candidate[i]-ref[i]
                 self.fit_count+=1
                 self.has_anchor=True
+                if fit.get('position_reacquired'):self.reacquisition_count+=1
             self.last_scan_ns=scan.reference_ns
             self.latest_points=(corrected@rotation(ref[2]).T+ref[:2]+self.offset).tolist()
             result['map_translation_offset_m']=self.offset.tolist()

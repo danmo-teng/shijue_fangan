@@ -675,7 +675,7 @@ def make_vision_snapshot(
     capture_items: list[TrackedCargo] = []
     capture_side_by_track: dict[int, str] = {}
     capture_enabled = (
-        stm.fresh and
+        stm.audit_fresh and
         stm.claw_visible and
         stm.camera_pitch_cdeg == 14000
     )
@@ -1559,6 +1559,34 @@ class CompetitionPlanner:
                        event="separation_request_rejected", reason="separation_reobserve_after_reject",
                        message="分离/释放请求明确拒绝，不计次数，撤销等待并用新帧重新审核")
 
+    def _reconcile_approach_rejection(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        pending = self.protocol_last_output
+        if not (pending is not None and pending.command is not None and
+                pending.command.opcode == CMD_APPROACH_TARGET and
+                self.mission.state in {CompetitionState.INITIAL_APPROACH,
+                    CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH} and
+                stm.fresh and stm.context_valid and stm.mode == 3 and
+                stm.task_id == self.protocol_task and stm.action_status & 4 and
+                stm.rejected_action_id == self.protocol_action):
+            return None
+        if (stm.action_id == self.protocol_action and stm.action_status & 1 and
+                stm.accepted_command == CMD_APPROACH_TARGET):
+            return None  # A late duplicate rejection cannot cancel an accepted action.
+        self._adopt_recovery_context()
+        current = replace(stm, context_matches=True)
+        if self.mission.disperse_attempts or self.mission.recovery_task_locked:
+            # The existing MCU keeps the pile budget until RETURN_CENTER.
+            # Finish that route rather than retrying a cancelled same-task target.
+            self.mission._clear_search_recovery_context(vision, clear_carried=True)
+            self.mission._begin_return(current, now)
+            result = self.mission._return_center_output(pose, now, "分离后接近请求被拒绝，按原流程返中结束当前批次")
+        else:
+            result = self.mission._audit_reacquire_output(vision, current, now)
+        return replace(result, event="approach_request_rejected",
+                       reason="approach_recover_after_reject")
+
     def _output_for_cycle(
         self,
         vision: VisionSnapshot,
@@ -1670,6 +1698,9 @@ class CompetitionPlanner:
         reconciled = self._reconcile_separation_rejection(vision, stm, now)
         if reconciled is not None:
             return reconciled
+        reconciled = self._reconcile_approach_rejection(vision, pose, stm, now)
+        if reconciled is not None:
+            return reconciled
         if (stm.fresh and stm.mode in {22, 40, 50} and
                 (not self.mission._has_committed_audit(stm.mode) or self.mission.selected_batch is None)):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
@@ -1683,6 +1714,14 @@ class CompetitionPlanner:
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.protocol_last_output is not None and stm.fresh and
                 not matches and stm.mode != 41 and not stm.fault):
+            pending = self.protocol_last_output.command
+            if (pending is not None and pending.opcode == CMD_APPROACH_TARGET and
+                    not pending.flags & CMD_APPROACH_RANGE and stm.mode in {3, 20} and
+                    self.mission.state in {CompetitionState.INITIAL_APPROACH,
+                        CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH}):
+                # Pixel tracking is dynamic. Waiting for ACCEPT must not freeze
+                # the source frame/target while the camera continues to move.
+                return self.mission.step(vision, pose, replace(stm, context_matches=False), now)
             # Re-send this request while waiting for its paired status. Do
             # not replace it with PAUSE and prevent acceptance of the action.
             return replace(self.protocol_last_output, event="", reason="command_context_pending",
