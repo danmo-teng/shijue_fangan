@@ -8,10 +8,13 @@ if [[ -z "${desktop_dir}" ]]; then
 fi
 
 mkdir -p "${desktop_dir}"
-install -m 0755 "${script_dir}/complete-rescue.desktop" \
-    "${desktop_dir}/智能救援完整比赛流程.desktop"
-if command -v gio >/dev/null 2>&1; then
-    gio set "${desktop_dir}/智能救援完整比赛流程.desktop" \
-        metadata::trusted true >/dev/null 2>&1 || true
-fi
-echo "桌面快捷方式已安装：${desktop_dir}/智能救援完整比赛流程.desktop"
+for entry in "complete-rescue.desktop:智能救援完整比赛流程.desktop" \
+             "capture-roi-editor.desktop:识别区域调整.desktop"; do
+    source_name="${entry%%:*}"
+    target_name="${entry#*:}"
+    install -m 0755 "${script_dir}/${source_name}" "${desktop_dir}/${target_name}"
+    if command -v gio >/dev/null 2>&1; then
+        gio set "${desktop_dir}/${target_name}" metadata::trusted true >/dev/null 2>&1 || true
+    fi
+    echo "桌面快捷方式已安装：${desktop_dir}/${target_name}"
+done

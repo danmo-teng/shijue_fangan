@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=识别区域调整
+Comment=在实时画面中编辑夹爪判断区域的位置和大小，保存正式比赛ROI
+Exec=/home/sunrise/RDK_X5/shijue_fangan/competition_rescue/capture_roi_desktop_launcher.sh
+Path=/home/sunrise/RDK_X5/shijue_fangan/competition_rescue
+Icon=applications-graphics
+Terminal=true
+StartupNotify=false
+Categories=Utility;
+
