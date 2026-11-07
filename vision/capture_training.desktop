@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=比赛摄像头批量拍摄
+Comment=填写张数、间隔及A起始编号，原图连续拍摄与可选ZIP压缩
+Exec=/home/sunrise/RDK_X5/shijue_fangan/vision/capture_training_launcher.sh
+Icon=camera-photo
+Terminal=true
+StartupNotify=true
+Categories=Graphics;

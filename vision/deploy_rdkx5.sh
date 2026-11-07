@@ -5,6 +5,8 @@ sudo apt-get update
 sudo apt-get install -y \
   python3-opencv \
   python3-numpy \
+  python3-tk \
+  python3-pil.imagetk \
   python3-serial \
   python3-gi \
   gir1.2-gstreamer-1.0 \

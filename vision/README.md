@@ -83,10 +83,25 @@ export DISPLAY=:0
 python3 capture_training_burst.py
 ```
 
-点击画面左上角`CAPTURE 20 FRAMES`按钮，或按空格/`B`，会保存连续20个新到达的真实帧到
-`captures/training/burst_时间/`。每组目录中的`timestamps.csv`记录每张图片的单调时钟时间戳和
-实际帧间隔。默认每隔0.5秒保存一张，一组20张约需9.5秒完成；可通过`--interval-ms`覆盖间隔。
-按`Q`或`Esc`退出。
+桌面入口为“比赛摄像头批量拍摄”，重新安装快捷方式：
+
+```bash
+bash /home/sunrise/RDK_X5/shijue_fangan/vision/install_capture_training_desktop.sh
+```
+
+先关闭占用相机的比赛/取景程序，再打开入口。在窗口填写“连续张数”“间隔（秒）”和“起始编号”，
+点击“开始拍摄”。默认20张、间隔0.5秒、从A1开始；从99开始即保存`A99.jpg`、`A100.jpg`，
+第20张为`A118.jpg`，不补零。拍完后起始编号自动续到下一张，也可手动指定，但不覆盖已有图片。
+
+同次启动的多轮拍摄共用`vision/captures/training/session_时间/`，退出后重新启动并拍摄才建立新目录。
+图片直接保存相机原始JPEG，不缩放、不二次压缩、不带预览文字；沿用相机当前曝光、白平衡和焦距。
+`timestamps.csv`继续记录实际帧间隔；设置间隔小于相机帧周期时只选取真实新帧，不复制图片。
+“停止本轮拍摄”停止选帧并保留已采集图片。点击“压缩本次文件夹（ZIP）”可生成同目录旁的ZIP，
+或勾选“退出时压缩”；两者均保留原文件夹，后续继续拍摄后可再次压缩以更新ZIP。
+关闭窗口会保存已采集图片，不继续等待未拍的剩余张数。此采集目录不按运行日志的5次策略自动删除。
+
+CLI仍可设置初始值，例如`--burst-count 20 --interval-ms 500 --start-number 99`。
+桌面界面还需`python3-tk`和`python3-pil.imagetk`（当前RDK已安装）；本工具不加载模型或控制底盘。
 
 ## 3. 运行阈值编辑器
 
