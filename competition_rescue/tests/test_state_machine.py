@@ -1322,7 +1322,62 @@ def test_range_cumulative_and_transport_sort() -> None:
     assert nav.command.flags & (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING) == (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING)
 
 
+def test_safe_staging_arrival_keeps_zero_handoff_and_stash_window() -> None:
+    from protocol import CMD_STAGE_ONLY
+
+    # Reproduce the logged 42.7 mm axial miss for both field sides and cargo
+    # destinations. Arrival requests D=0; it must not skip the lower handoff.
+    for side in ("red", "blue"):
+        for destination, class_name in (
+            ("material", "green_supply"), ("injury", "injured_orange")
+        ):
+            m = CompetitionMission(CompetitionSettings(side=side))
+            m._select_batch(CargoBatch((1,), (class_name,), destination))
+            m.confirmed_delivery_destination = destination
+            m.state = CompetitionState.NAVIGATE
+            x, y = m._target_point()
+            status = stm(mode=STM_MODE_NAVIGATE, flags=2)
+
+            # Errors outside either axis and an invalid pose still cannot
+            # latch arrival. Changing the staging window must not widen X.
+            for sample in (
+                pose(x, y + 0.051), pose(x + 0.061, y),
+                replace(pose(x, y), valid=False),
+            ):
+                m._navigate(VisionSnapshot(), sample, status, 1.0)
+                assert m.staging_zero_tx_baseline is None
+
+            sample = pose(x + 0.012, y + m.settings.side_sign * 0.0427)
+            requested = m._navigate(VisionSnapshot(), sample, status, 1.1)
+            assert requested.state == CompetitionState.NAVIGATE
+            assert requested.command and requested.command.opcode == CMD_NAVIGATE_WAYPOINT
+            assert requested.command.flags & CMD_STAGE_ONLY
+            assert requested.command.arg_a == 0
+            assert not m.staging_zero_accepted
+
+            # Pose jitter after arrival does not restart a nonzero correction.
+            pending = m._navigate(VisionSnapshot(), pose(x, y + 0.08), status, 1.2)
+            assert pending.command and pending.command.arg_a == 0
+            assert pending.state == CompetitionState.NAVIGATE
+            done = m._navigate(VisionSnapshot(), sample, replace(status, flags=2 | 32), 1.3)
+            assert done.state == CompetitionState.TRANSPORT_AUDIT
+            assert done.command and done.command.opcode == CMD_CARGO_AUDIT
+
+    # The same 42.7 mm error at a stash point still requires correction.
+    stash = CompetitionMission(CompetitionSettings(side="red"))
+    stash._select_batch(CargoBatch((1,), ("green_supply",), "stash", initial_stash=True))
+    stash.state = CompetitionState.INITIAL_STASH_NAV
+    stash.navigation_initial_ack = 0
+    x, y = stash._target_point()
+    output = stash._navigate(VisionSnapshot(), pose(x, y + 0.0427),
+        stm(mode=STM_MODE_NAVIGATE, acknowledged_sequence=1), 2.0)
+    assert output.state == CompetitionState.INITIAL_STASH_NAV
+    assert output.command and output.command.arg_a == 43
+    assert stash.staging_zero_tx_baseline is None
+
+
 def main() -> None:
+    test_safe_staging_arrival_keeps_zero_handoff_and_stash_window()
     test_range_cumulative_and_transport_sort()
     test_mode51_reference_audit_exits_and_budget()
     test_4071_separation_evidence_and_fault_latch()

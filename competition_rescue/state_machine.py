@@ -511,6 +511,7 @@ class CompetitionSettings:
     safe_zone_inner_edge_m: float = 1.20
     safe_fence_face_m: float = 1.14
     safe_zone_staging_distance_m: float = 0.60
+    safe_zone_staging_axial_tolerance_m: float = 0.050
     safe_zone_freeze_frames: int = 3
     safe_zone_acquire_timeout_s: float = 5.0
     safe_sweep_capture_offset_mm: float = 150.0  # Legacy config; visual sweep ignores it.
@@ -565,6 +566,7 @@ class CompetitionSettings:
             raise ValueError("boundary margin cannot be negative")
         if (
             self.safe_zone_staging_distance_m <= 0 or
+            self.safe_zone_staging_axial_tolerance_m <= 0 or
             self.safe_zone_freeze_frames <= 0 or
             self.safe_zone_acquire_timeout_s <= 0
         ):
@@ -4169,11 +4171,20 @@ class CompetitionMission:
             return self.settings.material_target_x_m, self.settings.safe_staging_y_m
         raise RuntimeError("formal delivery destination is not audit-confirmed")
 
-    def _at_target(self, pose: PoseSnapshot, target: tuple[float, float]) -> bool:
+    def _at_target(
+        self, pose: PoseSnapshot, target: tuple[float, float], *,
+        staging_only: bool = False,
+    ) -> bool:
+        # The staging point is followed by cargo audit and final alignment.
+        # Keep its arrival window separate from the temporary stash point.
+        axial_tolerance = (
+            self.settings.safe_zone_staging_axial_tolerance_m if staging_only
+            else self.settings.fence_axial_tolerance_m
+        )
         return (
             pose.valid and
             abs(pose.x_m - target[0]) <= self.settings.fence_lateral_tolerance_m and
-            abs(pose.y_m - target[1]) <= self.settings.fence_axial_tolerance_m
+            abs(pose.y_m - target[1]) <= axial_tolerance
         )
 
     def _delivery_lateral_aligned(self, pose: PoseSnapshot) -> bool:
@@ -5205,7 +5216,7 @@ class CompetitionMission:
                 pose, target, staging_only=True
             )
             if (
-                self._at_target(pose, target) or
+                self._at_target(pose, target, staging_only=True) or
                 self.staging_zero_tx_baseline is not None
             ):
                 if self.staging_zero_tx_baseline is None:
