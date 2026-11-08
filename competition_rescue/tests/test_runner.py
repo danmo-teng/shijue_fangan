@@ -869,6 +869,7 @@ def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():
     from lidar_yaw_debug.dynamic import DynamicFence
     from lidar_yaw_debug.protocol import crc8
     from lidar_yaw_debug.worker import run_worker
+    from lidar_yaw_debug.latest_snapshot import LatestSnapshot
 
     def revolution(index):
         packets=[]
@@ -881,6 +882,7 @@ def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():
         return b''.join(packets)
 
     ctx=mp.get_context('spawn');stop=ctx.Event()
+    control=LatestSnapshot(ctx)
     inbox,display,replies=queue.Queue(),ctx.Queue(maxsize=4),ctx.Queue(maxsize=16)
     master,slave=pty.openpty();entered,release=threading.Event(),threading.Event()
     original=DynamicFence.observe
@@ -889,7 +891,7 @@ def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():
         return original(engine,scan,**kwargs)
     config=json.loads((PROJECT_ROOT/'localization/config/lidar_yaw_debug.json').read_text())
     with tempfile.TemporaryDirectory() as d, patch.object(DynamicFence,'observe',slow_fit):
-        worker=threading.Thread(target=run_worker,args=(config,os.ttyname(slave),230400,Path(d),inbox,display,replies,stop))
+        worker=threading.Thread(target=run_worker,args=(config,os.ttyname(slave),230400,Path(d),inbox,display,replies,stop,control))
         worker.start()
         try:
             now=time.monotonic_ns()
@@ -916,6 +918,15 @@ def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():
                     raw_mcu_sample=dict(t0_us=i*20000,t1_us=(i+1)*20000))))
                 inbox.put(('pose',dict(session_id='fixture',frame_number=i+1,timestamp_monotonic_ns=t,
                     receive_monotonic_ns=t,x_m=.004*i,y_m=0.,yaw_rad=0.,tracker_confidence=3)))
+            # Do not consume any display snapshot until control has advanced:
+            # both blocked fitting and an unattended GUI remain off its path.
+            deadline=time.monotonic()+2
+            while time.monotonic()<deadline:
+                fast=control.get(timeout=.1)
+                if fast and fast['last'].get('sample_monotonic_ns')==t:break
+            else:raise AssertionError('control publication stalled behind fitting/display')
+            assert fast['last']['ready'] and not release.is_set()
+            assert 'points_field' not in fast['last'] and 'last_fit' not in fast['last']
             deadline=time.monotonic()+2
             while time.monotonic()<deadline:
                 try:state=display.get(timeout=.1)

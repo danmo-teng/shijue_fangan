@@ -1019,6 +1019,12 @@ def test_dynamic_worker_process():
             while time.monotonic()<deadline and not started:
                 started=any(m['kind']=='started' for m in worker.poll());time.sleep(.01)
             assert started and worker.process.pid!=os.getpid(),worker.state
+            # PTY bytes sent before serial.open are flushed by pyserial. Wait
+            # for the fixture receiver, not a hardware qualification exchange.
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline and not worker.state.get('lidar_connected'):
+                worker.poll();time.sleep(.01)
+            assert worker.state.get('lidar_connected'),worker.state
             now=time.monotonic_ns()
             for i,t in enumerate((now-1_000_000_000,now)):
                 worker.send('pose',dict(session_id='offline',frame_number=i,timestamp_monotonic_ns=t,
@@ -1036,7 +1042,7 @@ def test_dynamic_worker_process():
                 try:written+=os.write(master,raw[written:]) if written<len(raw) else 0
                 except BlockingIOError:pass
                 worker.poll();time.sleep(.01)
-            assert worker.state.get('scans_received',0)>=2 and worker.state.get('capture_chain_present')
+            assert worker.state.get('scans_received',0)>=2 and worker.state.get('capture_chain_present'),worker.state
         finally:
             worker.close();os.close(master);os.close(slave)
         assert worker.stopped_cleanly and not worker.process.is_alive()
@@ -1093,6 +1099,8 @@ def test_dynamic_motion_compensation():
     assert len(one['position_observed_axes'])==1 and len(one['inherited_axes'])==1
     old=engine.snapshot(origin+5_000_000_000)
     assert old['ready'] and old['motion_age_ms']>4000  # No age admission gate.
+    compact=engine.control_snapshot(origin+5_000_000_000)
+    assert compact=={k:v for k,v in old.items() if k not in ('last_fit','points_field')}
     engine.align('new physical reference',physical_confirmed=False)
     assert engine.snapshot()['source']=='VIO_FROM_INITIAL_REFERENCE'
     from unittest.mock import patch
@@ -1801,13 +1809,18 @@ def test_competition_dynamic_transport():
             assert packet['pose']==dict(x_m=-1.30,y_m=1.32,yaw_deg=135.)
             assert packet['timestamp_monotonic_ns']==now and packet['reference']['source']=='selected_competition_start'
             assert packet['qualified_pose'] is False and not packet['wheel']['independent_reference']
-            assert not packet['lidar_connected'] and packet['lidar_error']
+            assert not packet['lidar_connected']
+            # Motion can publish before the independent receiver has attempted
+            # serial.open; its initial unknown error is not a reason to wait.
+            if not packet['lidar_error']:
+                wait_packet(lambda p:not p['lidar_connected'] and p['lidar_error'])
             port.symlink_to(os.ttyname(slave))
             connected=wait_packet(lambda p:p['lidar_connected'])
             assert connected['pose']==packet['pose'] and connected['lidar_error'] is None
-            # No new SDK frame required to deliver a current worker snapshot.
-            later=json.loads(sink.recv(32768));assert later['packet_id']>packet['packet_id']
-            assert later['timestamp_monotonic_ns']==now
+            # Availability changes are delivered without another SDK frame;
+            # an idle timer must not manufacture a new sensor sample.
+            assert connected['packet_id']>packet['packet_id']
+            assert connected['timestamp_monotonic_ns']==now
             app.set_lidar_enabled(False)
             deadline=time.monotonic()+2
             while time.monotonic()<deadline:
@@ -1851,3 +1864,154 @@ def test_competition_dynamic_transport():
                 if fd is not None:os.close(fd)
         assert app.radar.stopped_cleanly and log.healthy() and app.error is None
         assert not (root/'commands.jsonl').exists()
+
+
+def test_latest_control_snapshot_mailbox():
+    import multiprocessing as mp
+    import queue
+    from lidar_yaw_debug.latest_snapshot import LatestSnapshot,MotionInbox
+    inbox=MotionInbox()
+    try:
+        inbox.put_nowait(('wheel',dict(sample=1)))
+        assert inbox.get(timeout=0)==('wheel',dict(sample=1))
+        try:inbox.get_nowait()
+        except queue.Empty:pass
+        else:raise AssertionError('empty input must not manufacture a measurement')
+        accepted=0
+        for _ in range(1000):
+            try:inbox.put_nowait(dict(data='x'*1024));accepted+=1
+            except queue.Full:break
+        else:raise AssertionError('motion input capacity must be bounded')
+        for _ in range(accepted):assert inbox.get_nowait()==dict(data='x'*1024)
+    finally:inbox.close()
+    box=LatestSnapshot(mp.get_context('spawn'),capacity=1024)
+    assert box.get(timeout=0) is None
+    assert box.put_latest(dict(sample=1))==0
+    assert box.put_latest(dict(sample=2))==1
+    assert box.get(timeout=0)==dict(sample=2)
+    assert box.get(timeout=0) is None
+    box.wake()
+    assert box.get(timeout=0) is None  # Operator/exit wake is not a new pose.
+    try:box.put_latest(dict(data='x'*2048))
+    except ValueError:pass
+    else:raise AssertionError('mailbox capacity must be bounded')
+    box.put_latest(dict(sample=3))
+    assert box.get(timeout=0)==dict(sample=3)
+
+
+def test_localization_realtime_permission_fallback():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    import low_latency_scheduling as scheduling
+    with patch.dict('os.environ',{'RDK_LOCALIZATION_RT':'1'}), \
+            patch.object(scheduling.resource,'getrlimit',return_value=(0,0)), \
+            patch.object(scheduling.subprocess,'run',return_value=SimpleNamespace(returncode=1,stderr='not permitted')):
+        result=scheduling.prepare_realtime()
+        assert result['rtprio_limit']==[0,0] and result['error']=='not permitted'
+    with patch.dict('os.environ',{'RDK_LOCALIZATION_RT':'1'}), \
+            patch.object(scheduling.os,'sched_setscheduler',side_effect=PermissionError('not permitted')):
+        assert scheduling.set_realtime_thread()['error']=='not permitted'
+    with patch.dict('os.environ',{'RDK_LOCALIZATION_RT':'0'}), \
+            patch.object(scheduling.os,'sched_setscheduler') as apply:
+        assert not scheduling.set_realtime_thread()['requested']
+        apply.assert_not_called()
+
+
+def test_competition_control_rate():
+    """Paced 100 distinct feedback intervals through the existing worker/IPC.
+
+    Records offline transport latency, not MCU/UART, SDK or physical accuracy.
+    The same fixture can report the old 20Hz transport as a baseline by calling
+    with require_all=False; no artificial repeated pose stamps are counted.
+    """
+    competition_control_rate_fixture()
+
+
+def competition_control_rate_fixture(*,require_all=True,lidar_records=None):
+    import os,pty,socket,threading,uuid
+    from async_debug_log import AsyncDebugLog
+    from competition_dynamic_localization import CompetitionDynamicLocalization
+    from lidar_yaw_debug.diagnostic import load_config
+    import numpy as np
+    cfg=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp);sid=uuid.uuid4().hex;log=AsyncDebugLog(root)
+        master=slave=None
+        cfg['lidar']['port']=str(root/'absent-lidar')
+        if lidar_records:
+            master,slave=pty.openpty();cfg['lidar']['port']=os.ttyname(slave)
+        app=CompetitionDynamicLocalization(root,sid,cfg,dict(x_m=0.,y_m=0.,yaw_deg=0.),log)
+        sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        sink.bind(app.control_address);sink.settimeout(5)
+        source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        sent={};received={};producer=lidar_producer=None
+        def wheel(index,a,b):
+            return dict(source='measured_wheel_feedback',measurement_valid=True,
+                mcu_epoch='fixture-boot',sample_id=index,v_body_mps=[.1,0.,0.],
+                raw_mcu_sample=dict(t0_us=a//1000,t1_us=b//1000),
+                interval_start_ns=a,interval_end_ns=b,receive_monotonic_ns=b)
+        try:
+            app.start();source.connect(app.pose_address)
+            now=time.monotonic_ns()
+            app.telemetry(dict(kind='imu',sample=dict(wire_valid=True,timestamp_monotonic_ns=now,yaw_deg=0.)))
+            source.send(json.dumps(dict(session_id=sid,frame_number=1,timestamp_monotonic_ns=now,
+                receive_monotonic_ns=now,x_m=0.,y_m=0.,yaw_rad=0.,tracker_confidence=3)).encode())
+            packet=json.loads(sink.recv(32768))
+            assert packet['timestamp_monotonic_ns']==now
+            if lidar_records:
+                while not packet['lidar_connected']:packet=json.loads(sink.recv(32768))
+                def replay():
+                    origin=lidar_records[0]['timestamp_monotonic_ns'];start=time.monotonic_ns()
+                    for row in lidar_records:
+                        delay=(start+row['timestamp_monotonic_ns']-origin-time.monotonic_ns())/1e9
+                        if delay>0:time.sleep(delay)
+                        os.write(master,bytes.fromhex(row['data_hex']))
+                lidar_producer=threading.Thread(target=replay);lidar_producer.start()
+            def produce():
+                start=time.monotonic_ns()
+                for i in range(1,101):
+                    deadline=start+i*10_000_000
+                    delay=(deadline-time.monotonic_ns())/1e9
+                    if delay>0:time.sleep(delay)
+                    t=now+i*10_000_000
+                    sent[t]=time.monotonic_ns()
+                    app.telemetry(dict(kind='imu',sample=dict(wire_valid=True,timestamp_monotonic_ns=t,yaw_deg=0.)))
+                    app.radar.send('wheel',wheel(i,t-10_000_000,t))
+                    # Two actual Pose samples/interval, the SDK's 200Hz shape.
+                    for j in (1,0):
+                        p=t-5_000_000*j
+                        source.send(json.dumps(dict(session_id=sid,frame_number=2*i+1-j,
+                            timestamp_monotonic_ns=p,receive_monotonic_ns=p,
+                            x_m=.1*(p-now)/1e9,y_m=0.,yaw_rad=0.,tracker_confidence=3)).encode())
+            producer=threading.Thread(target=produce);producer.start()
+            while True:
+                packet=json.loads(sink.recv(32768));stamp=packet['timestamp_monotonic_ns']
+                if stamp in sent and stamp not in received:received[stamp]=time.monotonic_ns()
+                if stamp==now+1_000_000_000:break
+            producer.join()
+            if not lidar_records:assert abs(packet['pose']['x_m']-.1)<1e-9
+            assert not packet['wheel']['independent_reference']
+            latency=[(received[t]-sent[t])/1e6 for t in received]
+            metrics=dict(sent_distinct_intervals=len(sent),received_distinct_intervals=len(received),
+                processing_ms_median=float(np.median(latency)),processing_ms_p95=float(np.percentile(latency,95)),
+                processing_ms_max=max(latency),worker_input_drops=app.radar.input_drops,
+                output_drops=app.output_drops)
+        finally:
+            if producer is not None:producer.join()
+            if lidar_producer is not None:lidar_producer.join()
+            source.close();sink.close();app.close();log.close()
+            for fd in (master,slave):
+                if fd is not None:os.close(fd)
+        assert app.error is None and app.radar.stopped_cleanly and log.healthy()
+        assert metrics['worker_input_drops']==metrics['output_drops']==0
+        metrics.update(lidar_scans=app.radar.state['scans_received'],
+            lidar_fits=app.radar.state['scans'],fit_processing_ms_p95=app.radar.state['scan_processing_ms_p95'],
+            ingested_distinct_intervals=app.radar.state['measured_wheel_ingested'],
+            motion_scheduling=app.radar.state.get('motion_scheduling'),
+            transport_scheduling=dict(app.scheduling) if hasattr(app,'scheduling') else None)
+        # The bounded output deliberately coalesces if its consumer is delayed.
+        # Check all real input intervals were processed; report actual distinct
+        # output and latency instead of making OS scheduling a lossless test.
+        if require_all:assert metrics['ingested_distinct_intervals']==len(sent),metrics
+        print(json.dumps(dict(competition_control_rate=metrics)))
+        return metrics

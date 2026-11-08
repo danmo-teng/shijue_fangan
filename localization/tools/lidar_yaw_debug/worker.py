@@ -1,7 +1,7 @@
 """Independent lidar reception, latest-scan fitting and motion publication.
 
 No chassis UART or T265 SDK imports. Raw data retain their original timestamps;
-only pending fit requests/display snapshots coalesce, without an age gate.
+only pending fit requests/control/display snapshots coalesce, without an age gate.
 """
 from collections import deque
 import multiprocessing as mp
@@ -13,9 +13,11 @@ import uuid
 import numpy as np
 import serial
 from async_debug_log import AsyncDebugLog
+from low_latency_scheduling import prepare_realtime, set_realtime_thread
 from .dynamic import DynamicFence
 from .lidar_reader import LidarStream
 from .lidar_timing import LidarTimingError
+from .latest_snapshot import LatestSnapshot, MotionInbox
 from .protocol import command_frame
 
 
@@ -150,7 +152,7 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
         offer_latest(updates, dict(state))
 
 
-def run_worker(config,port,baud,root,inbox,display,replies,stop):
+def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
     # This process owns motion propagation. Its receiver child alone owns lidar.
     display.cancel_join_thread()
     engine=DynamicFence(config['installation']);log=AsyncDebugLog(root)
@@ -163,9 +165,12 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
     reader_state=dict(lidar_connected=False,lidar_error=None,lidar_open_attempts=0,
         scans_received=0,scan_queue_drops=0,reader_stats={})
     counters=dict(pose_ingested=0,primary_yaw_ingested=0,measured_wheel_ingested=0,
-        fit_requests_coalesced=0,display_updates_coalesced=0)
+        fit_requests_coalesced=0,display_updates_coalesced=0,
+        control_updates=0,control_updates_coalesced=0,control_capacity_errors=0)
     times=deque(maxlen=2048);error=None;last_publish=last_percentile=0.;p95=None
     reference_request_id=None;requested_lidar_enabled=True
+    last_control_key=None
+    scheduling=None
 
     def event(name,**data):
         log.submit('lidar_worker_events.jsonl',dict(event=name,timestamp_monotonic_ns=time.monotonic_ns(),**data))
@@ -173,11 +178,16 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
     def reply(kind,**data):
         replies.put_nowait(dict(kind=kind,**data))
 
-    def consume():
+    def consume(first):
         nonlocal reference_request_id,requested_lidar_enabled
+        changed=False
         for _ in range(256):
-            try:kind,payload=inbox.get_nowait()
-            except queue.Empty:break
+            if first is not None:
+                kind,payload=first;first=None
+            else:
+                try:kind,payload=inbox.get_nowait()
+                except queue.Empty:break
+            changed=True
             if kind=='pose':engine.ingest_pose(payload);counters['pose_ingested']+=1
             elif kind=='yaw':
                 engine.ingest_yaw(payload['time_ns'],payload['yaw_deg'],payload['source'])
@@ -210,6 +220,33 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
         with engine.lock:
             while engine.motion.events:
                 change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
+        return changed
+
+    def publish_control():
+        nonlocal last_control_key
+        # Small, coherent latest value. No scan points, percentile calculation,
+        # display queue or file write is on this publication path.
+        value=dict(last=engine.control_snapshot(),have_tracked_pose=bool(engine.poses),
+            have_primary_yaw=bool(engine.yaws),lidar_connected=reader_state['lidar_connected'],
+            lidar_error=reader_state['lidar_error'])
+        pose=value['last'];raw=engine.last_sample or {}
+        # A future SDK Pose/gyro that has not changed the supported endpoint
+        # must not turn the same 100Hz wheel endpoint into extra control frames.
+        # Raw input histories and the full display diagnostics remain intact.
+        key=(engine.revision,pose.get('ready'),pose.get('sample_monotonic_ns'),
+            tuple(pose.get('center_xy_m',[])),pose.get('yaw_deg'),pose.get('source'),
+            tuple(pose.get('current_wall_axes',[])),pose.get('fixes'),
+            raw.get('tracker_confidence'),raw.get('mapper_confidence'),
+            value['have_tracked_pose'],value['have_primary_yaw'],
+            value['lidar_connected'],value['lidar_error'])
+        if key==last_control_key:return
+        try:
+            counters['control_updates_coalesced']+=control.put_latest(value)
+            counters['control_updates']+=1
+            last_control_key=key
+        except ValueError as exc:
+            counters['control_capacity_errors']+=1
+            event('control_snapshot_capacity_error',reason=str(exc))
 
     def state():
         return dict(counters,**reader_state,scans=engine.scan_count,fits=engine.fit_count,
@@ -219,10 +256,12 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
             lidar_requested_enabled=requested_lidar_enabled,
             lidar_corrections_enabled=engine.lidar_corrections_enabled,
-            logging_healthy=log.healthy(),accuracy_verified=False,full_speed_physical_validation=False)
+            logging_healthy=log.healthy(),motion_scheduling=scheduling,
+            accuracy_verified=False,full_speed_physical_validation=False)
 
     def drain_reader():
         nonlocal reader_state
+        dirty=False
         while True:
             try:value=updates.get_nowait()
             except queue.Empty:break
@@ -230,9 +269,11 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                      value['lidar_error']!=reader_state['lidar_error'])
             reader_state=value
             if changed:
+                dirty=True
                 engine.set_lidar_enabled(requested_lidar_enabled and value['lidar_connected'])
                 event('lidar_connected' if value['lidar_connected'] else 'lidar_connection_error',
                     reason=value['lidar_error'],motion_propagation_continues=True)
+        return dirty
 
     def fit_loop():
         while not fitting_stop.is_set():
@@ -259,9 +300,11 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
 
     def drain_fits():
         nonlocal reference_request_id
+        changed=False
         for _ in range(8):
             try:initializing,request_id,result=fit_done.get_nowait()
             except queue.Empty:break
+            changed=True
             if initializing:
                 log.submit('dynamic_initialization.jsonl',result)
                 if result.get('reference') is not None and request_id==reference_request_id:
@@ -274,13 +317,23 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
                     event('lidar_position_reacquired',scan_id=result['scan_id'],
                         reference_ns=result['reference_ns'],center_xy_m=result['candidate_center_xy_m'],
                         correction_m=result['correction_m'],motion_source=result['motion_source'])
+        return changed
 
     try:
         receiver.start();fitter.start()
+        # Start display/reply feeder threads under normal scheduling too.
+        offer_latest(display,state())
         reply('started',pid=os.getpid());event('worker_started',port=port,baud=baud,
             chassis_uart_owned=False,t265_sdk_owned=False,receiver_pid=receiver.pid)
+        scheduling=set_realtime_thread()
+        event('motion_scheduling',**scheduling)
         while not stop.is_set():
-            consume();drain_reader()
+            # Queue arrival wakes motion immediately; the 2ms idle timeout only
+            # services scan/results/stop when there is no motion input.
+            try:first=inbox.get(timeout=.002)
+            except queue.Empty:first=None
+            changed=consume(first)
+            changed=drain_reader() or changed
             latest=None
             for _ in range(8):
                 try:latest=scans.get_nowait()
@@ -288,13 +341,13 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
             if latest is not None:
                 counters['fit_requests_coalesced']+=offer_latest(fit_inbox,
                     (latest,engine.revision,reference_request_id))
-            drain_fits()
+            changed=drain_fits() or changed
+            if control is not None and changed:publish_control()
             if time.monotonic()-last_publish>=.05:
                 if times and time.monotonic()-last_percentile>=1.:
                     p95=float(np.percentile(times,95));last_percentile=time.monotonic()
                 counters['display_updates_coalesced']+=offer_latest(display,state())
                 last_publish=time.monotonic()
-            stop.wait(.002)
     except Exception as exc:
         error=str(exc);event('worker_error',reason=error)
         try:reply('error',error=error)
@@ -321,15 +374,18 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop):
 
 
 class RadarWorker:
-    def __init__(self):
+    def __init__(self,*,control_updates=False):
         self.context=mp.get_context('spawn');self.process=None
-        self.inbox=self.context.Queue(maxsize=1024);self.display=self.context.Queue(maxsize=4)
+        self.inbox=MotionInbox();self.display=self.context.Queue(maxsize=4)
         self.replies=self.context.Queue(maxsize=16);self.stop=self.context.Event()
+        self.control=LatestSnapshot(self.context) if control_updates else None
         self.state={};self.input_drops=0;self.pending_reference=None;self.stopped_cleanly=False
+        self.scheduling_setup=None
 
     def start(self,config,port,baud,root):
+        self.scheduling_setup=prepare_realtime()
         self.process=self.context.Process(target=run_worker,args=(config,port,baud,root,
-            self.inbox,self.display,self.replies,self.stop),name='lidar-geometry-owner')
+            self.inbox,self.display,self.replies,self.stop,self.control),name='lidar-geometry-owner')
         self.process.start()
 
     def send(self,kind,payload):
@@ -363,6 +419,7 @@ class RadarWorker:
 
     def close(self):
         self.stop.set()
+        if self.control is not None:self.control.wake()
         if self.process is not None:
             deadline=time.monotonic()+5
             while self.process.is_alive() and time.monotonic()<deadline:

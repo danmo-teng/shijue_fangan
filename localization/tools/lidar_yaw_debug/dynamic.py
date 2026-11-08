@@ -206,18 +206,18 @@ class DynamicFence:
     def _frozen(self,first_ns=None,last_ns=None,*,latest=False):
         with self.lock:
             if self.reference is None or not self.poses or not self.yaws:raise ValueError("尚未从围栏建立场地参考")
-            poses,yaws=list(self.motion.history or self.poses),list(self.yaws)
-            reference,offset,revision=dict(self.reference),self.offset.copy(),self.revision
-        if latest:first_ns=last_ns=poses[-1][0]
-        if first_ns is not None:
+            poses,yaws=self.motion.history or self.poses,self.yaws
+            if latest:first_ns=last_ns=poses[-1][0]
             def window(history):
-                # Retain bracketing samples, or endpoints for the same hold.
-                # Full histories remain stored; no age gate.
+                if first_ns is None:return list(history)
+                # Copy only bracketing samples. Index near the deque's tail
+                # directly instead of copying both full 4096-row histories.
                 lo=max(0,bisect_left(history,first_ns,key=itemgetter(0))-1)
                 hi=min(len(history),bisect_right(history,last_ns,key=itemgetter(0))+1)
                 lo=min(lo,max(0,len(history)-2));hi=max(hi,min(len(history),lo+2))
-                return history[lo:hi]
+                return [history[i] for i in range(lo,hi)]
             poses,yaws=window(poses),window(yaws)
+            reference,offset,revision=dict(self.reference),self.offset.copy(),self.revision
         return np.array(poses),np.array(yaws),reference,offset,revision
 
     @staticmethod
@@ -324,27 +324,45 @@ class DynamicFence:
             self.last_fit=result
         return result
 
-    def snapshot(self,now=None):
+    def control_snapshot(self,now=None):
+        return self.snapshot(now,include_display=False)
+
+    def snapshot(self,now=None,*,include_display=True):
         now=time.monotonic_ns() if now is None else now
-        try:poses,yaws,reference,offset,_=self._frozen(latest=True)
-        except ValueError as e:return dict(ready=False,reason=str(e),scans=self.scan_count,fixes=self.fit_count,
-            initialization=dict(self.initialization) if self.initialization else None,
-            lidar_corrections_enabled=self.lidar_corrections_enabled)
-        # Publish at latest actual motion support, never stamp extrapolation as a new sensor frame.
-        sample_ns=int(poses[-1,0]);pose=self.trajectory(poses,yaws,reference)([sample_ns])[0]
         with self.lock:
-            fit=dict(self.last_fit) if self.last_fit else None;points=list(self.latest_points)
+            if self.reference is None or not self.poses or not self.yaws:
+                return dict(ready=False,reason='尚未从围栏建立场地参考',scans=self.scan_count,fixes=self.fit_count,
+                initialization=dict(self.initialization) if self.initialization else None,
+                lidar_corrections_enabled=self.lidar_corrections_enabled)
+            # The query is exactly the latest actual motion endpoint. Read it
+            # directly; constructing two arrays/interpolators per control
+            # packet gives the same endpoint at much higher Python/NumPy cost.
+            selected=(self.motion.history or self.poses)[-1]
+            sample_ns=int(selected[0]);reference=dict(self.reference);offset=self.offset.copy()
+            yaw=sample(self.yaws,sample_ns)[0]+reference['yaw_offset']
             raw=sample(self.poses,sample_ns);raw_stamp=int(self.poses[-1][0])
-        raw_xy=(raw[:2]-reference['pose_origin'])@rotation(reference['vio_rotation']).T+reference['start_center_xy_m']
-        source=self.motion.mode if self.motion.history else ('VIO' if self.has_anchor else 'VIO_FROM_INITIAL_REFERENCE')
-        return dict(ready=True,center_xy_m=(pose[:2]+offset).tolist(),t265_center_xy_m=raw_xy.tolist(),yaw_deg=math.degrees(pose[2])%360,
+            fit=self.last_fit
+            source=self.motion.mode if self.motion.history else ('VIO' if self.has_anchor else 'VIO_FROM_INITIAL_REFERENCE')
+            # Capture one coherent estimator state; geometry runs outside this
+            # short lock. Control never copies fitted points or full fit logs.
+            result=dict(source=('LIDAR_ANCHORED_'+source) if self.has_anchor else source,
+                motion_selection=self.motion.snapshot(),position_reacquisitions=self.reacquisition_count,
+                current_wall_axes=list(fit.get('position_observed_axes',[])) if fit else [],
+                lidar_corrections_enabled=self.lidar_corrections_enabled,
+                last_scan_age_ms=None if self.last_scan_ns is None else (now-self.last_scan_ns)/1e6,
+                scans=self.scan_count,fixes=self.fit_count)
+            if include_display:
+                result.update(last_fit=dict(fit) if fit else None,points_field=list(self.latest_points))
+        # Publish at latest actual motion support, never stamp extrapolation as a new sensor frame.
+        c,s=math.cos(reference['vio_rotation']),math.sin(reference['vio_rotation'])
+        def field_xy(xy):
+            x,y=xy[0]-reference['pose_origin'][0],xy[1]-reference['pose_origin'][1]
+            return [c*x-s*y+reference['start_center_xy_m'][0],s*x+c*y+reference['start_center_xy_m'][1]]
+        center=field_xy(selected[1:3]);raw_xy=field_xy(raw[:2])
+        return dict(result,ready=True,center_xy_m=[float(center[0]+offset[0]),float(center[1]+offset[1])],
+            t265_center_xy_m=raw_xy,yaw_deg=math.degrees(yaw)%360,
             sample_monotonic_ns=sample_ns,motion_age_ms=(now-sample_ns)/1e6,
-            last_scan_age_ms=None if self.last_scan_ns is None else (now-self.last_scan_ns)/1e6,
-            source=('LIDAR_ANCHORED_'+source) if self.has_anchor else source,
-            motion_selection=self.motion.snapshot(),motion_boundary_policy='hold_outside_measured_support',
+            motion_boundary_policy='hold_outside_measured_support',
             raw_t265_sample_ns=raw_stamp,
-            position_reacquisitions=self.reacquisition_count,
-            current_wall_axes=fit.get('position_observed_axes',[]) if fit else [],last_fit=fit,
-            lidar_corrections_enabled=self.lidar_corrections_enabled,
-            points_field=points,scans=self.scan_count,fixes=self.fit_count,reference=reference,
+            reference=reference,
             qualified_pose=False,accuracy_verified=False,control_pose_published=False)

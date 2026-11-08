@@ -12,13 +12,14 @@ import time
 from f405_timed_measurements import TimedMeasurements
 from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.worker import RadarWorker
+from low_latency_scheduling import set_realtime_thread
 
 
 class CompetitionDynamicLocalization:
     def __init__(self, root, session_id, config, field_start, log, *, defer_reference=False):
         self.root, self.session_id, self.config = root, session_id, config
         self.field_start, self.log = field_start, log
-        self.radar = RadarWorker()
+        self.radar = RadarWorker(control_updates=True)
         self.clock_map = TimedMeasurements()
         self.timed_yaw_seen = False
         self.last_yaw_id = None
@@ -39,6 +40,8 @@ class CompetitionDynamicLocalization:
         self.defer_reference = defer_reference
         self.error = None
         self.state = {}
+        self.control_state = {}
+        self.scheduling = {}
         self.latest_pose = {}
         self.input_drops = self.output_drops = 0
         self.lidar_enabled = True
@@ -59,9 +62,11 @@ class CompetitionDynamicLocalization:
 
     def start(self):
         self.radar.start(self.config, self.config['lidar']['port'], self.config['lidar']['baud'], self.root)
+        self.devent('realtime_permission_setup',**self.radar.scheduling_setup)
         self.input_threads = [
             threading.Thread(target=self._read_chassis, name='dynamic-motion-input', daemon=True),
-            threading.Thread(target=self._read_pose, name='dynamic-pose-input', daemon=True)]
+            threading.Thread(target=self._read_pose, name='dynamic-pose-input', daemon=True),
+            threading.Thread(target=self._publish_status, name='dynamic-display-status', daemon=True)]
         for thread in self.input_threads:
             thread.start()
         self.thread = threading.Thread(target=self._run, name='competition-dynamic-transport', daemon=True)
@@ -77,6 +82,7 @@ class CompetitionDynamicLocalization:
             yaw_deg=field_start['yaw_deg'],first_sample=False,round_token=round_token,
             description='operator start: bind current warm Pose and gyro to selected formal start')
         self.start_request_sent = False
+        self.radar.control.wake()
 
     def control_packet(self, state):
         if not state.get('ready'):
@@ -104,13 +110,14 @@ class CompetitionDynamicLocalization:
             qualified_pose=False, accuracy_verified=False,
             current_wall_axes=state['current_wall_axes'],
             lidar_corrections_enabled=state['lidar_corrections_enabled'],
-            lidar_connected=self.radar.state.get('lidar_connected',False),
-            lidar_error=self.radar.state.get('lidar_error'),
+            lidar_connected=self.control_state.get('lidar_connected',False),
+            lidar_error=self.control_state.get('lidar_error'),
             position_reacquisitions=state['position_reacquisitions'],
             reference=state['reference'], motion_selection=state['motion_selection'])
         return self.last_control
 
     def _read_chassis(self):
+        self._schedule_thread('motion_input')
         while not self.stop_event.is_set():
             try:
                 event = self.chassis_inbox.get(timeout=.05)
@@ -122,6 +129,7 @@ class CompetitionDynamicLocalization:
                 self.devent('motion_input_error', reason=str(exc))
 
     def _read_pose(self):
+        self._schedule_thread('pose_input')
         connection = None
         try:
             while not self.stop_event.is_set():
@@ -153,13 +161,16 @@ class CompetitionDynamicLocalization:
                 connection.close()
 
     def _run(self):
+        self._schedule_thread('control_output')
         try:
-            while not self.stop_event.wait(.05):
-                for reply in self.radar.poll():
-                    if reply['kind'] == 'error':
-                        self.error = reply['error']
-                        self.devent('worker_error', reason=self.error)
-                state = self.radar.state
+            while not self.stop_event.is_set():
+                value = self.radar.control.get(timeout=.05)
+                if self.stop_event.is_set():
+                    break
+                if value is not None:
+                    self.control_state = value
+                    self.state = value['last']
+                state = self.control_state
                 if (not self.defer_reference and not self.reference_requested and state.get('have_tracked_pose')
                         and state.get('have_primary_yaw')):
                     self.reference_requested = self.radar.send('field_start', dict(
@@ -169,11 +180,11 @@ class CompetitionDynamicLocalization:
                 if (self.start_request is not None and not self.start_request_sent
                         and state.get('have_tracked_pose') and state.get('have_primary_yaw')):
                     self.start_request_sent = self.radar.send('field_start', self.start_request)
-                self.state = state.get('last', {})
-                self.log.submit('dynamic_status.json', self.snapshot(), atomic=True)
                 if self.radar.process.exitcode is not None:
                     self.error = self.error or 'radar worker exited'
                     break  # Do not invent a replacement position or send STOP.
+                if value is None:
+                    continue  # Idle wakeups/start requests are not sensor updates.
                 packet = self.control_packet(self.state)
                 if packet is not None:
                     try:
@@ -186,22 +197,44 @@ class CompetitionDynamicLocalization:
             self.error = str(exc)
             self.devent('dynamic_transport_error', reason=self.error)
 
+    def _publish_status(self):
+        # Display/fit details remain 20Hz; neither GUI polling nor JSON file
+        # snapshots can hold the event-driven control consumer here.
+        while not self.stop_event.wait(.05):
+            for reply in self.radar.poll():
+                if reply['kind'] == 'error':
+                    self.error = reply['error']
+                    self.devent('worker_error', reason=self.error)
+            self.log.submit('dynamic_status.json', self.snapshot(), atomic=True)
+
+    def _schedule_thread(self, role):
+        result=set_realtime_thread()
+        self.scheduling[role]=result
+        self.devent('thread_scheduling',role=role,**result)
+
     def snapshot(self):
-        state = dict(self.state)
+        control = self.state
+        display = self.radar.state.get('last', {})
+        # Do not draw scan points from the previous round/reference over a new
+        # high-frequency control pose while the display snapshot catches up.
+        state = dict(display) if display.get('reference') == control.get('reference') else dict(points_field=[], last_fit=None)
+        state.update(control)
         if self.defer_reference and self.start_request is None:
             state.update(reason='预热接收中；等待按3绑定正式起点',reference_phase='prewarm_waiting_for_operator')
         return dict(state, transport_error=self.error, pose_packets=self.pose_packets,
-            have_tracked_pose=bool(self.radar.state.get('have_tracked_pose')),
-            have_primary_yaw=bool(self.radar.state.get('have_primary_yaw')),
-            lidar_connected=self.radar.state.get('lidar_connected',False),
-            lidar_error=self.radar.state.get('lidar_error'),
+            have_tracked_pose=bool(self.control_state.get('have_tracked_pose')),
+            have_primary_yaw=bool(self.control_state.get('have_primary_yaw')),
+            lidar_connected=self.control_state.get('lidar_connected',False),
+            lidar_error=self.control_state.get('lidar_error'),
             primary_yaw_packets=self.imu_packets, input_drops=self.input_drops,
             worker_input_drops=self.radar.input_drops, output_drops=self.output_drops,
             control_packets_sent=self.packet_id, control_pose_publish_enabled=True,
+            thread_scheduling=dict(self.scheduling),
             accuracy_verified=False)
 
     def close(self):
         self.stop_event.set()
+        self.radar.control.wake()
         if self.thread:
             self.thread.join()
         for thread in self.input_threads:
