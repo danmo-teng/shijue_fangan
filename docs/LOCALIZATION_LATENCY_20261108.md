@@ -414,5 +414,19 @@ result.json同时保存空移除列表与automatic_deletion=false。既有test_t
 
 最终共享实现复用原正式控制检查：1000个10ms运动区间和98历史扫描，全部1000摄入、输入/输出队列丢0；输出993不同端点，控制处理P958.872/max17.799ms、98次C++/0回退。
 这次smoke不能与旧单轮数值相减宣称因果提速，更不保证真实SDK/YOLO联合每10ms交付；它证明共享改动没有破坏现有正式输送/几何链。
-033738的启动缺口与桌面先启动SDK再spawn worker有关；正式现有顺序是先spawn worker，不在本轮悄悄修改启动策略或新增ready等待。
+033738的启动缺口出现在桌面先启动SDK、后spawn worker的阶段；正式现有顺序是先spawn worker。下节仅调整测试顺序，不新增ready等待。
 040649在外部重启后仅一次现有SDK检查仍固件0字节上传/15秒超时，无Pose；待T265物理重插后补真实联合负载，原始失败日志同样保留。
+
+### 继续分离相机负载与冷启动
+
+042007复用原run_competition_rescue.py的wait-for-operator/no-display/duration18：真实相机/JPU/VSE/BPU/YOLO，未开SDK或底盘UART，无operator请求。
+正常退出，热身后12个整秒平均48.67FPS、最低46；相机重启0、日志丢0、未CONFIG/开赛/生成命令文件。没有人为造SDK会话，不启用依赖SDK会话的回放环缓存；不把此短检查算完整30秒稳定性认证。
+
+042336相同视觉预热期间执行原1000区间＋98历史扫描控制回放：全1000摄入/输入输出队列丢0，966不同端点，控制处理P9513.029/max21.901ms、C++98次/0回退。
+运动生产→worker发布P958.016ms、邮箱交付P953.563ms、控制→sink P953.606ms；分位数不能直接相加。几何CPU中位13.622/P9517.262ms、墙钟P9550.596ms。YOLO平均46.83FPS、最低44，原日志写盘丢0，相机重启0。
+普通内核下联合负载仍没有每10ms交付的余量，不能把此前单轮8.872ms当全负载保证，也不凭单次相减断言因果；当前没有真实SDK/UART、正式显示或VisionReplay负载。
+两次Hub设备号保持，不能由此证明T265与相机联合供电/USB稳定。数据见reports/localization_vision_load_20261109.json；日志在RDK的competition_vision_preheat对应完整目录，未清理。
+
+已知033738的3条启动输入缺口发生于测试先启动SDK、后spawn worker的阶段。现base增加无操作的before_localizer_start扩展点，动态子类将原日志和radar.start搬到C++Popen之前；正式顺序保持，不引入ready等待、握手、扩容或时标变化。
+既有生命周期检查覆盖radar_spawn→sdk_spawn→bridge_start→读线程，以及Popen失败时原finally收尾、无运动或假完整标记；连同原worker PTY共2项通过，diff检查通过。
+这只能证明启动顺序与异常清理，极端真实冷启动缺口仍待设备恢复；不把mock顺序检查当实板零丢失。

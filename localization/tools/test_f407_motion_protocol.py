@@ -1446,6 +1446,97 @@ def test_historical_wall_correction_rebases_updated_endpoint():
             assert state['motion_selection']['mode']=='T265_WITH_WHEEL_TAIL'
 
 
+def test_dynamic_consumer_starts_before_sdk_and_failed_spawn_closes_it():
+    """Existing entry lifecycle only: no SDK, UART, radar or motion is opened."""
+    import threading
+    from unittest.mock import patch
+    import t265_f407_motion_map as base
+    import lidar_t265_motion_map as dynamic
+
+    for fail_spawn in (False, True):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch('sys.argv', ['map', '--output-root', str(root), '--uart', 'fixture-chassis',
+                                   '--lidar', 'fixture-lidar', '--windowed']):
+                options = dynamic.arguments()
+            order = []
+            holder = []
+            class FakeRadar:
+                def __init__(self):
+                    self.process = None
+                    self.state = dict(logging_healthy=True)
+                    self.input_drops = 0
+                    self.stopped_cleanly = False
+                def start(self, config, port, baud, directory, *, sdk_policy):
+                    app = holder[0]
+                    assert directory == app.run_dir and directory.is_dir()
+                    assert (directory / 'localization.conf').is_file()
+                    assert sdk_policy['session_id'] == app.wheel_input.session_id
+                    assert sdk_policy['address'] == '\0t265-wheel-' + app.wheel_input.session_id
+                    assert app.localizer is None and app.bridge.serial is None
+                    order.append('radar_spawn')
+                    self.process = SimpleNamespace(pid=987)
+                def close(self):
+                    order.append('radar_close')
+                    self.stopped_cleanly = True
+            radar = FakeRadar()
+            class FakeThread:
+                def __init__(self, *, target, name, daemon):
+                    self.name = name
+                def start(self): order.append(self.name)
+                def join(self, timeout=None): pass
+                def is_alive(self): return False
+            def spawn(command, **kwargs):
+                app = holder[0]
+                assert order == ['radar_spawn']
+                assert '--debug-pose-socket' in command
+                assert command[command.index('--debug-pose-socket') + 1] == '@' + app.pose_address[1:]
+                assert command[command.index('--debug-wheel-session') + 1] == app.wheel_input.session_id
+                assert not (app.run_dir / 'metadata.json').exists()
+                order.append('sdk_spawn')
+                if fail_spawn:
+                    raise OSError('fixture SDK process creation failure')
+                return SimpleNamespace(pid=123, poll=lambda: 0, returncode=0)
+            with patch.object(base.MotionMapApp, 'detect_screen_size', return_value=(1024, 768)), \
+                 patch.object(dynamic.DynamicMapApp, 'render_screen'), \
+                 patch.object(dynamic, 'RadarWorker', return_value=radar), \
+                 patch.object(dynamic, 'threading', SimpleNamespace(Thread=FakeThread, Event=threading.Event)), \
+                 patch.object(base.F407SerialBridge, 'start', side_effect=lambda: order.append('bridge_start')), \
+                 patch.object(base.subprocess, 'Popen', side_effect=spawn), \
+                 patch.object(base.subprocess, 'check_output', return_value='offline'), \
+                 patch('low_latency_scheduling.prepare_realtime', return_value=dict(requested=False)), \
+                 patch.object(base.cv2, 'destroyWindow'):
+                app = dynamic.DynamicMapApp(options)
+                holder.append(app)
+                if fail_spawn:
+                    try:
+                        app.run()  # The original run/finally must close the early consumer.
+                        assert False, 'SDK process creation failure was hidden'
+                    except OSError as error:
+                        assert str(error) == 'fixture SDK process creation failure'
+                    assert order == ['radar_spawn', 'sdk_spawn', 'radar_close']
+                    assert app.pose_thread is None and app.yaw_thread is None
+                else:
+                    try:
+                        app.start_session()
+                        assert order == ['radar_spawn', 'sdk_spawn', 'bridge_start',
+                                         'dynamic-pose-receiver', 'dynamic-yaw-forwarder']
+                        metadata = json.loads((app.run_dir / 'metadata.json').read_text())
+                        assert metadata['lidar_worker_pid'] == 987
+                        assert metadata['sdk_session_id'] == app.wheel_input.session_id
+                        assert metadata['control_pose_published'] is False
+                    finally:
+                        app.stop_session()
+                assert order[-1] == 'radar_close' and radar.stopped_cleanly
+                assert app.localizer is None and app.localizer_log is None
+                assert app.bridge is None and app.wheel_input is None
+                assert app.dynamic_log.healthy() and not app.dynamic_log.thread.is_alive()
+                assert app.pose_socket.fileno() == -1
+                assert not (app.run_dir / 'commands.jsonl').exists()
+                assert not (app.run_dir / 'chassis_actions.jsonl').exists()
+                assert not (app.run_dir / 'session_complete.json').exists()
+
+
 def test_synthetic_wheel_fixture():
     from unittest.mock import patch
     import uuid

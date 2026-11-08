@@ -1,0 +1,335 @@
+{
+  "date": "2026-11-09",
+  "scope": "Stationary actual camera/YOLO isolation and the existing synthetic motion/historical lidar control fixture under actual YOLO load; not real SDK/chassis fusion or field validation",
+  "kernel": "6.1.83 PREEMPT, not PREEMPT_RT",
+  "motor_commands": 0,
+  "original_logs_modified": false,
+  "sessions": [
+    {
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_vision_preheat/20261109_042007_static",
+      "actual_camera": true,
+      "actual_yolo": true,
+      "actual_sdk": false,
+      "actual_chassis_uart": false,
+      "display_included": false,
+      "vision_replay_included": false,
+      "metadata": {
+        "purpose": "actual camera and YOLO stationary preheat isolation; T265 SDK and chassis UART not opened",
+        "motor_commands": 0,
+        "operator_control": null,
+        "upper_commit": "f9fa722cf95c8d17137cd1ad3a8cde32b71b8405"
+      },
+      "vision_performance": {
+        "timestamp_monotonic_ns": 1506120439052,
+        "event": "vision_performance",
+        "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+        "model_family": "YOLO26",
+        "warmup_seconds": 5,
+        "metric": "unique frames after tracking/ROI and planner.set_vision",
+        "fps_1s_including_warmup": [
+          50,
+          49,
+          48,
+          50,
+          48,
+          49,
+          49,
+          49,
+          49,
+          46,
+          49,
+          49,
+          49,
+          49,
+          49,
+          48,
+          49
+        ],
+        "measurement_seconds": 12,
+        "frames_after_warmup": 584,
+        "mean_fps": 48.666666666666664,
+        "min_fps_1s": 46,
+        "stable_30fps": false
+      },
+      "termination": {
+        "timestamp_monotonic_ns": 1506120916901,
+        "event": "competition_stopped",
+        "state": "WAIT_START",
+        "delivery_count": 0,
+        "first_common_delivered": false,
+        "first_fault_code": null,
+        "exit_reason": "duration",
+        "tx_policy": "termination_abort",
+        "termination_abort": {
+          "attempted": false,
+          "reason": "",
+          "command_file_written": false,
+          "transmitted": false,
+          "confirmed": false,
+          "confirmation_status": "unconfirmed",
+          "timeout": false,
+          "sequence": null
+        },
+        "inference_frames": 49,
+        "inference_total": 844,
+        "camera_decoder": "jpu",
+        "camera_restarts": 0,
+        "camera_recovery_pending": false,
+        "display_enabled": false,
+        "competition_started": false,
+        "config_sent": false,
+        "operator_stopped": false
+      },
+      "logging": {
+        "queue_capacity": 1024,
+        "pending_records": 0,
+        "pending_snapshots": 0,
+        "records_written": 170,
+        "snapshots_written": 140,
+        "snapshots_coalesced": 32,
+        "dropped": 0,
+        "error": null,
+        "close_timed_out": false,
+        "incomplete": false
+      },
+      "command_file_exists": false,
+      "hybrid": null
+    },
+    {
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_vision_preheat/20261109_042336_control_load",
+      "actual_camera": true,
+      "actual_yolo": true,
+      "actual_sdk": false,
+      "actual_chassis_uart": false,
+      "display_included": false,
+      "vision_replay_included": false,
+      "metadata": {
+        "purpose": "real camera and YOLO prewarm plus existing synthetic motion/historical lidar formal-control fixture; no chassis UART or SDK devices",
+        "motor_commands": 0,
+        "operator_control": null,
+        "physical_localization_accuracy_verified": false,
+        "upper_commit": "f9fa722cf95c8d17137cd1ad3a8cde32b71b8405"
+      },
+      "vision_performance": {
+        "timestamp_monotonic_ns": 1714457052680,
+        "event": "vision_performance",
+        "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+        "model_family": "YOLO26",
+        "warmup_seconds": 5,
+        "metric": "unique frames after tracking/ROI and planner.set_vision",
+        "fps_1s_including_warmup": [
+          46,
+          45,
+          45,
+          41,
+          45,
+          44,
+          46,
+          45,
+          47,
+          46,
+          48,
+          45,
+          46,
+          48,
+          49,
+          48,
+          50
+        ],
+        "measurement_seconds": 12,
+        "frames_after_warmup": 562,
+        "mean_fps": 46.833333333333336,
+        "min_fps_1s": 44,
+        "stable_30fps": false
+      },
+      "termination": {
+        "timestamp_monotonic_ns": 1714457542025,
+        "event": "competition_stopped",
+        "state": "WAIT_START",
+        "delivery_count": 0,
+        "first_common_delivered": false,
+        "first_fault_code": null,
+        "exit_reason": "duration",
+        "tx_policy": "termination_abort",
+        "termination_abort": {
+          "attempted": false,
+          "reason": "",
+          "command_file_written": false,
+          "transmitted": false,
+          "confirmed": false,
+          "confirmation_status": "unconfirmed",
+          "timeout": false,
+          "sequence": null
+        },
+        "inference_frames": 48,
+        "inference_total": 805,
+        "camera_decoder": "jpu",
+        "camera_restarts": 0,
+        "camera_recovery_pending": false,
+        "display_enabled": false,
+        "competition_started": false,
+        "config_sent": false,
+        "operator_stopped": false
+      },
+      "logging": {
+        "queue_capacity": 1024,
+        "pending_records": 0,
+        "pending_snapshots": 0,
+        "records_written": 166,
+        "snapshots_written": 156,
+        "snapshots_coalesced": 17,
+        "dropped": 0,
+        "error": null,
+        "close_timed_out": false,
+        "incomplete": false
+      },
+      "command_file_exists": false,
+      "hybrid": {
+        "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_vision_preheat/20261109_042336_control_load",
+        "vision_returncode": 0,
+        "metrics": {
+          "sent_distinct_intervals": 1000,
+          "received_distinct_intervals": 966,
+          "processing_ms_median": 7.28734,
+          "processing_ms_p95": 13.02923825,
+          "processing_ms_max": 21.900525,
+          "worker_input_drops": 0,
+          "output_drops": 0,
+          "synthetic_capture_to_output_ms_p95": 13.70917875,
+          "synthetic_capture_to_output_ms_max": 28.026744,
+          "producer_schedule_delay_ms_p95": 2.1385617999999993,
+          "producer_schedule_delay_ms_max": 11.79297,
+          "fixture_stage_ms": {
+            "input_to_worker_publication": {
+              "median": 4.635298000000001,
+              "p95": 8.01586675,
+              "maximum": 11.168767,
+              "samples": 966,
+              "negative_samples": 0
+            },
+            "mailbox_delivery": {
+              "median": 0.9761070000000001,
+              "p95": 3.56259575,
+              "maximum": 12.388463,
+              "samples": 966,
+              "negative_samples": 0
+            },
+            "control_to_sink": {
+              "median": 1.2572174999999999,
+              "p95": 3.60585675,
+              "maximum": 16.290974,
+              "samples": 966,
+              "negative_samples": 0
+            },
+            "input_to_worker_ingress": {
+              "median": 0.673662,
+              "p95": 3.81701825,
+              "maximum": 7.384593,
+              "samples": 966,
+              "negative_samples": 0
+            },
+            "worker_ingress_to_publication": {
+              "median": 3.71788,
+              "p95": 5.25087575,
+              "maximum": 8.38224,
+              "samples": 966,
+              "negative_samples": 0
+            }
+          },
+          "lidar_scans": 98,
+          "lidar_geometry_calls": 98,
+          "lidar_accepted_posteriors": 0,
+          "line_geometry": {
+            "backend": "native_streaming_ransac",
+            "load_error": null,
+            "geometry_policy_changed": false,
+            "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+            "extraction_load_error": null,
+            "extraction_calls": 98,
+            "extraction_fallbacks": 0,
+            "extraction_last_error": null
+          },
+          "fit_processing_ms_p95": 50.595790449999974,
+          "ingested_distinct_intervals": 1000,
+          "motion_scheduling": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "worker_control_updates": 1030,
+          "worker_control_coalesced": 0,
+          "transport_scheduling": {
+            "motion_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "pose_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "control_output": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            }
+          },
+          "fit_stage_ms": {
+            "compute_ms": {
+              "median": 31.3369085,
+              "p95": 50.595790449999974
+            },
+            "compute_thread_cpu_ms": {
+              "median": 13.621957,
+              "p95": 17.261843949999996
+            },
+            "snapshot_ms": {
+              "median": 0.2585685,
+              "p95": 0.40836344999999996
+            },
+            "deskew_ms": {
+              "median": 9.018818,
+              "p95": 16.971300199999998
+            },
+            "fit_ms": {
+              "median": 20.810264,
+              "p95": 38.53716774999998
+            }
+          }
+        },
+        "command_file_exists": false,
+        "scope": "real YOLO camera/BPU/JPU/log load; motion/Pose synthetic and lidar historical; no physical SDK/UART/motors; no field accuracy"
+      }
+    }
+  ],
+  "interpretation": {
+    "camera_only": "18-second bounded run, no restart/config/start/ABORT TX; measured 12 whole post-warmup windows, not a 30-second stability certification",
+    "hybrid": "All1000 intervals ingested, input/output queue drops0,966 distinct output endpoints; processing P95 13.029ms and max21.901ms. No strict 10ms guarantee and no claimed causal improvement from one smoke comparison.",
+    "stable_30fps_flag": "False because the existing flag requires at least30 post-warmup whole-second windows; these bounded runs have12, not because observed FPS dropped under30."
+  },
+  "startup_change": {
+    "scope": "Test dynamic map spawns original RadarWorker before the SDK/UART Popen; formal order unchanged",
+    "new_ready_wait": false,
+    "new_handshake_or_age_gate": false,
+    "tests": [
+      "test_dynamic_consumer_starts_before_sdk_and_failed_spawn_closes_it",
+      "test_dynamic_worker_process"
+    ],
+    "passed": 2,
+    "elapsed_seconds": 5.6,
+    "hardware_startup_retested": false,
+    "source_sha256": {
+      "localization/tools/t265_f407_motion_map.py": "ceb84b4402479adfc94d412eac02d64a4375c340a9ac0b07eeb6b0d238fa974a",
+      "localization/tools/lidar_t265_motion_map.py": "00058ea01c3e39e3abff877395911d3adb1eec48074aca59d804f505a252e929"
+    }
+  }
+}

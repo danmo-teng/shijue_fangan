@@ -925,6 +925,10 @@ class MotionMapApp:
     def extra_localizer_args(self):
         return []
 
+    def before_localizer_start(self):
+        """Prepare an optional consumer before the sole SDK/UART owner starts."""
+        pass
+
     def start_session(self) -> None:
         self.options.output_root.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1008,6 +1012,7 @@ class MotionMapApp:
         else:command += ['--uart',self.options.uart,'--baud',str(self.options.baud),
                          '--test-uart-socket',native_address]
         command += self.extra_localizer_args()
+        self.before_localizer_start()
         self.localizer = subprocess.Popen(
             command, cwd=str(LOCALIZATION_ROOT),
             stdout=self.localizer_log, stderr=subprocess.STDOUT,

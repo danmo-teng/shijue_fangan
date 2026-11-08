@@ -53,12 +53,19 @@ class DynamicMapApp(base.MotionMapApp):
     def devent(self,event,**data):
         self.dlog('dynamic_events.jsonl',dict(event=event,timestamp_monotonic_ns=time.monotonic_ns(),**data))
 
+    def before_localizer_start(self):
+        # Spawn the consumer before starting actual SDK/UART traffic. This is
+        # startup ordering only: no ready wait, handshake or queue expansion.
+        if self.options.lidar==self.options.uart:raise ValueError('雷达与底盘不能共用同一UART')
+        self.dynamic_log=AsyncDebugLog(self.run_dir)
+        sdk_policy=(dict(session_id=self.wheel_input.session_id,address='\0t265-wheel-'+self.wheel_input.session_id)
+                    if self.options.wheel_input=='on' else None)
+        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy)
+
     def start_session(self):
         self.message='建议场地中心无遮挡处，静止后点自动定位'
         self.render_screen()  # Prepare static glyphs before any sensor threads.
         super().start_session()
-        self.dynamic_log=AsyncDebugLog(self.run_dir)
-        if self.options.lidar==self.options.uart:raise ValueError('雷达与底盘不能共用同一UART')
         self.dynamic_unsubscribe=self.bridge.telemetry(self.dynamic_telemetry,readonly=True)
         if self.bridge.device_identity:self.clock_map.set_identity(self.bridge.device_identity)
         self.bridge.start_timed_measurements()  # Sync is diagnostic; primary yaw keeps its native sign.
@@ -66,9 +73,6 @@ class DynamicMapApp(base.MotionMapApp):
         self.pose_thread.start()
         self.yaw_thread=threading.Thread(target=self.read_yaw,name='dynamic-yaw-forwarder',daemon=True)
         self.yaw_thread.start()
-        sdk_policy=(dict(session_id=self.wheel_input.session_id,address='\0t265-wheel-'+self.wheel_input.session_id)
-                    if self.options.wheel_input=='on' else None)
-        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy)
         m=base.read_json(self.run_dir/'metadata.json')
         m.update(localization_mode='lidar_t265_dynamic_debug',initial_pose=dict(known=False,source='waiting_for_lidar_global_initialization'),
             physical_placement_confirmed=False,lidar_port=self.options.lidar,lidar_baud=self.options.lidar_baud,
