@@ -120,9 +120,17 @@ class DynamicFence:
 
     def accepted_points(self,scan):
         m=self.mount
+        # Same union of half-open bad-angle intervals. Prepare once per scan
+        # (so a changed installation still takes effect), rather than creating
+        # a Python generator and checking every interval for every point.
+        merged=[]
+        for lo,hi in sorted((lo,hi) for lo,hi in m['excluded_raw_ranges_deg'] if lo<hi):
+            if merged and lo<=merged[-1][1]:merged[-1][1]=max(merged[-1][1],hi)
+            else:merged.append([lo,hi])
+        bounds=tuple(x for interval in merged for x in interval)
         return [p for p in scan.points if p.valid_return and p.raw_angle_deg is not None
             and abs((p.raw_angle_deg-m['center_raw_deg']+180)%360-180)<=m['fov_deg']/2
-            and not any(lo<=p.raw_angle_deg<hi for lo,hi in m['excluded_raw_ranges_deg'])]
+            and bisect_right(bounds,p.raw_angle_deg)%2==0]
 
     def try_initialize(self,scan,*,expected_revision=None):
         """Stationary global wall initialization; no prescribed XY or red/blue.

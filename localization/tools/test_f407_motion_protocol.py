@@ -1221,6 +1221,34 @@ def test_dynamic_motion_compensation():
     from lidar_yaw_debug.types import RawScan,TimedPoint
     from lidar_yaw_debug.diagnostic import load_config
     mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
+    # Preserve physical point identity and exact half-open bad-angle/FOV
+    # boundaries when reducing six per-point interval scans to binary lookup.
+    filter_engine=DynamicFence(dict(mount))
+    actual_ranges=mount['excluded_raw_ranges_deg']
+    changed_ranges=[[210.,215.],[150.,170.],[170.,180.],[160.,175.],
+                    [220.,220.],[230.,225.],[215.,217.]]
+    edges=[mount['center_raw_deg']-mount['fov_deg']/2,
+           mount['center_raw_deg']+mount['fov_deg']/2]
+    edges += [edge for ranges in (actual_ranges,changed_ranges) for pair in ranges for edge in pair]
+    angles=[float(v) for v in np.linspace(-360.,720.,200)]
+    angles += [edge+delta for edge in edges for delta in (-1e-12,0.,1e-12)]
+    angles += [None,float('nan'),float('inf'),-float('inf')]
+    filter_points=tuple(TimedPoint('filter-'+str(i),i+1,(1.,0.),raw_angle_deg=angle,
+        valid_return=valid) for i,(angle,valid) in enumerate(
+            [(angle,True) for angle in angles]+[(edges[0],False),(mount['center_raw_deg'],False)]))
+    filter_scan=RawScan('filter-boundaries',filter_points[-1].time_ns,filter_points,
+                        'offline','synthetic',False)
+    # Mutate the same live mount between scans: an empty/changed mask must not
+    # retain cached merged intervals. Reversed and zero-width intervals were
+    # empty in the original predicate and remain empty.
+    for ranges in (actual_ranges,[],changed_ranges,list(reversed(changed_ranges)),actual_ranges):
+        filter_engine.mount['excluded_raw_ranges_deg']=ranges
+        expected=[point for point in filter_points if point.valid_return and point.raw_angle_deg is not None
+            and abs((point.raw_angle_deg-mount['center_raw_deg']+180)%360-180)<=mount['fov_deg']/2
+            and not any(lo<=point.raw_angle_deg<hi for lo,hi in ranges)]
+        selected=filter_engine.accepted_points(filter_scan)
+        assert [point.raw_point_id for point in selected]==[point.raw_point_id for point in expected]
+        assert all(a is b for a,b in zip(selected,expected))
     engine=DynamicFence(mount);origin=1_000_000_000
     def pose(t):return np.array([-1.35+.7*t/math.sqrt(2),1.35-.7*t/math.sqrt(2),math.radians(135)+2*math.pi*t])
     for i in range(41):
