@@ -1,0 +1,652 @@
+{
+  "scope": "Actual stationary YOLO/JPU/VSE/BPU and log load, existing synthetic motion/Pose and historical lidar fixture. No physical SDK/UART/motors or field truth.",
+  "kernel": "6.1.83",
+  "motor_commands": 0,
+  "source_sha256": {
+    "baseline": "2535df4a9e5ef905def6699883319b633718f64cb400276a139557542df4ca15",
+    "candidate": "b5da85636dd9b17c9f85e0d4fc87303c8eb54112231bb5cba8569c432802721d"
+  },
+  "rounds": [
+    {
+      "index": 1,
+      "mode": "A_baseline",
+      "metrics": {
+        "sent_distinct_intervals": 1000,
+        "received_distinct_intervals": 964,
+        "processing_ms_median": 7.5030275,
+        "processing_ms_p95": 13.21218875,
+        "processing_ms_max": 23.922416,
+        "worker_input_drops": 0,
+        "output_drops": 0,
+        "synthetic_capture_to_output_ms_p95": 13.53398775,
+        "synthetic_capture_to_output_ms_max": 24.040781,
+        "producer_schedule_delay_ms_p95": 1.9769368499999986,
+        "producer_schedule_delay_ms_max": 16.840084,
+        "fixture_stage_ms": {
+          "input_to_worker_publication": {
+            "median": 4.698168,
+            "p95": 8.244434649999997,
+            "maximum": 12.807696,
+            "samples": 964,
+            "negative_samples": 0
+          },
+          "mailbox_delivery": {
+            "median": 1.0046775000000001,
+            "p95": 3.7013640499999982,
+            "maximum": 8.254177,
+            "samples": 964,
+            "negative_samples": 0
+          },
+          "control_to_sink": {
+            "median": 1.311812,
+            "p95": 3.4805571999999985,
+            "maximum": 18.182362,
+            "samples": 964,
+            "negative_samples": 0
+          },
+          "input_to_worker_ingress": {
+            "median": 0.708772,
+            "p95": 4.143599549999998,
+            "maximum": 8.466434,
+            "samples": 964,
+            "negative_samples": 0
+          },
+          "worker_ingress_to_publication": {
+            "median": 3.7696810000000003,
+            "p95": 5.30496425,
+            "maximum": 8.888278,
+            "samples": 964,
+            "negative_samples": 0
+          }
+        },
+        "lidar_scans": 98,
+        "lidar_geometry_calls": 98,
+        "lidar_accepted_posteriors": 0,
+        "line_geometry": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 98,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "fit_processing_ms_p95": 53.12311115,
+        "ingested_distinct_intervals": 1000,
+        "motion_scheduling": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        },
+        "worker_control_updates": 1023,
+        "worker_control_coalesced": 0,
+        "transport_scheduling": {
+          "motion_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "pose_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "control_output": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          }
+        },
+        "fit_stage_ms": {
+          "compute_ms": {
+            "median": 33.284839000000005,
+            "p95": 53.12311115
+          },
+          "compute_thread_cpu_ms": {
+            "median": 14.135457500000001,
+            "p95": 17.2927189
+          },
+          "snapshot_ms": {
+            "median": 0.2574035,
+            "p95": 0.4832990999999997
+          },
+          "deskew_ms": {
+            "median": 9.8024745,
+            "p95": 18.316181349999997
+          },
+          "fit_ms": {
+            "median": 21.5564915,
+            "p95": 36.85657824999997
+          }
+        }
+      },
+      "vision_alive_through_round": true
+    },
+    {
+      "index": 2,
+      "mode": "B_fast_first_read",
+      "metrics": {
+        "sent_distinct_intervals": 1000,
+        "received_distinct_intervals": 955,
+        "processing_ms_median": 8.025662,
+        "processing_ms_p95": 14.211540699999997,
+        "processing_ms_max": 19.185256,
+        "worker_input_drops": 0,
+        "output_drops": 0,
+        "synthetic_capture_to_output_ms_p95": 14.627581099999997,
+        "synthetic_capture_to_output_ms_max": 25.453497,
+        "producer_schedule_delay_ms_p95": 1.833739149999999,
+        "producer_schedule_delay_ms_max": 7.679064,
+        "fixture_stage_ms": {
+          "input_to_worker_publication": {
+            "median": 5.08774,
+            "p95": 9.1496211,
+            "maximum": 12.149667,
+            "samples": 955,
+            "negative_samples": 0
+          },
+          "mailbox_delivery": {
+            "median": 1.123534,
+            "p95": 4.638172499999999,
+            "maximum": 9.789384,
+            "samples": 955,
+            "negative_samples": 0
+          },
+          "control_to_sink": {
+            "median": 1.317791,
+            "p95": 3.559500499999998,
+            "maximum": 14.63295,
+            "samples": 955,
+            "negative_samples": 0
+          },
+          "input_to_worker_ingress": {
+            "median": 0.752564,
+            "p95": 3.8779269999999992,
+            "maximum": 6.150062,
+            "samples": 955,
+            "negative_samples": 0
+          },
+          "worker_ingress_to_publication": {
+            "median": 4.086083,
+            "p95": 6.1742485999999985,
+            "maximum": 8.653851,
+            "samples": 955,
+            "negative_samples": 0
+          }
+        },
+        "lidar_scans": 98,
+        "lidar_geometry_calls": 98,
+        "lidar_accepted_posteriors": 0,
+        "line_geometry": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 98,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "fit_processing_ms_p95": 65.21955064999997,
+        "ingested_distinct_intervals": 1000,
+        "motion_scheduling": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        },
+        "worker_control_updates": 994,
+        "worker_control_coalesced": 1,
+        "transport_scheduling": {
+          "motion_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "pose_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "control_output": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          }
+        },
+        "fit_stage_ms": {
+          "compute_ms": {
+            "median": 37.472778000000005,
+            "p95": 65.21955064999997
+          },
+          "compute_thread_cpu_ms": {
+            "median": 14.242143500000001,
+            "p95": 17.085972299999998
+          },
+          "snapshot_ms": {
+            "median": 0.29500950000000004,
+            "p95": 1.6753861999999975
+          },
+          "deskew_ms": {
+            "median": 10.879001500000001,
+            "p95": 24.12806059999999
+          },
+          "fit_ms": {
+            "median": 23.838853999999998,
+            "p95": 46.039059550000005
+          }
+        }
+      },
+      "vision_alive_through_round": true
+    },
+    {
+      "index": 3,
+      "mode": "B_fast_first_read",
+      "metrics": {
+        "sent_distinct_intervals": 1000,
+        "received_distinct_intervals": 962,
+        "processing_ms_median": 7.891966999999999,
+        "processing_ms_p95": 14.06899155,
+        "processing_ms_max": 20.416112,
+        "worker_input_drops": 0,
+        "output_drops": 0,
+        "synthetic_capture_to_output_ms_p95": 14.544552499999996,
+        "synthetic_capture_to_output_ms_max": 20.754345,
+        "producer_schedule_delay_ms_p95": 1.7513381499999972,
+        "producer_schedule_delay_ms_max": 9.192495,
+        "fixture_stage_ms": {
+          "input_to_worker_publication": {
+            "median": 5.0785085,
+            "p95": 8.990246399999998,
+            "maximum": 14.019214,
+            "samples": 962,
+            "negative_samples": 0
+          },
+          "mailbox_delivery": {
+            "median": 1.0777204999999999,
+            "p95": 4.3695766,
+            "maximum": 8.545757,
+            "samples": 962,
+            "negative_samples": 0
+          },
+          "control_to_sink": {
+            "median": 1.284622,
+            "p95": 3.3260550999999987,
+            "maximum": 11.032331,
+            "samples": 962,
+            "negative_samples": 0
+          },
+          "input_to_worker_ingress": {
+            "median": 0.7275635,
+            "p95": 3.9353882499999955,
+            "maximum": 6.846957,
+            "samples": 962,
+            "negative_samples": 0
+          },
+          "worker_ingress_to_publication": {
+            "median": 3.9455565000000004,
+            "p95": 6.0271036,
+            "maximum": 10.526734,
+            "samples": 962,
+            "negative_samples": 0
+          }
+        },
+        "lidar_scans": 98,
+        "lidar_geometry_calls": 98,
+        "lidar_accepted_posteriors": 0,
+        "line_geometry": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 98,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "fit_processing_ms_p95": 49.99630329999998,
+        "ingested_distinct_intervals": 1000,
+        "motion_scheduling": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        },
+        "worker_control_updates": 1005,
+        "worker_control_coalesced": 0,
+        "transport_scheduling": {
+          "motion_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "pose_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "control_output": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          }
+        },
+        "fit_stage_ms": {
+          "compute_ms": {
+            "median": 36.621464,
+            "p95": 49.99630329999998
+          },
+          "compute_thread_cpu_ms": {
+            "median": 13.8632285,
+            "p95": 16.293720099999994
+          },
+          "snapshot_ms": {
+            "median": 0.29477949999999997,
+            "p95": 1.2265372499999998
+          },
+          "deskew_ms": {
+            "median": 9.9665295,
+            "p95": 20.054292799999995
+          },
+          "fit_ms": {
+            "median": 22.801332,
+            "p95": 37.71681729999999
+          }
+        }
+      },
+      "vision_alive_through_round": true
+    },
+    {
+      "index": 4,
+      "mode": "A_baseline",
+      "metrics": {
+        "sent_distinct_intervals": 1000,
+        "received_distinct_intervals": 923,
+        "processing_ms_median": 7.835189,
+        "processing_ms_p95": 14.457324799999995,
+        "processing_ms_max": 37.719191,
+        "worker_input_drops": 0,
+        "output_drops": 0,
+        "synthetic_capture_to_output_ms_p95": 17.843026299999995,
+        "synthetic_capture_to_output_ms_max": 96.713458,
+        "producer_schedule_delay_ms_p95": 7.549948699999983,
+        "producer_schedule_delay_ms_max": 86.504246,
+        "fixture_stage_ms": {
+          "input_to_worker_publication": {
+            "median": 4.65418,
+            "p95": 8.683163099999998,
+            "maximum": 13.623361,
+            "samples": 923,
+            "negative_samples": 0
+          },
+          "mailbox_delivery": {
+            "median": 1.103325,
+            "p95": 4.271405499999998,
+            "maximum": 14.09829,
+            "samples": 923,
+            "negative_samples": 0
+          },
+          "control_to_sink": {
+            "median": 1.457252,
+            "p95": 4.9758844,
+            "maximum": 20.931115,
+            "samples": 923,
+            "negative_samples": 0
+          },
+          "input_to_worker_ingress": {
+            "median": 0.755898,
+            "p95": 4.365062799999999,
+            "maximum": 7.199919,
+            "samples": 923,
+            "negative_samples": 0
+          },
+          "worker_ingress_to_publication": {
+            "median": 3.688359,
+            "p95": 5.3604135,
+            "maximum": 9.824623,
+            "samples": 923,
+            "negative_samples": 0
+          }
+        },
+        "lidar_scans": 98,
+        "lidar_geometry_calls": 97,
+        "lidar_accepted_posteriors": 0,
+        "line_geometry": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 97,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "fit_processing_ms_p95": 56.35856379999998,
+        "ingested_distinct_intervals": 1000,
+        "motion_scheduling": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        },
+        "worker_control_updates": 992,
+        "worker_control_coalesced": 4,
+        "transport_scheduling": {
+          "motion_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "pose_input": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "control_output": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          }
+        },
+        "fit_stage_ms": {
+          "compute_ms": {
+            "median": 33.849291,
+            "p95": 56.35856379999998
+          },
+          "compute_thread_cpu_ms": {
+            "median": 14.365959,
+            "p95": 17.2351168
+          },
+          "snapshot_ms": {
+            "median": 0.276717,
+            "p95": 0.8235245999999979
+          },
+          "deskew_ms": {
+            "median": 10.992243,
+            "p95": 22.642664799999995
+          },
+          "fit_ms": {
+            "median": 22.163031,
+            "p95": 41.06520059999999
+          }
+        }
+      },
+      "vision_alive_through_round": true
+    }
+  ],
+  "vision_returncode": 0,
+  "command_file_exists": false,
+  "date": "2026-11-09",
+  "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_vision_preheat/20261109_043427_motion_inbox_abba",
+  "actual_camera": true,
+  "actual_yolo": true,
+  "actual_sdk": false,
+  "actual_chassis_uart": false,
+  "display_included": false,
+  "vision_replay_included": false,
+  "original_logs_modified": false,
+  "vision_performance": {
+    "timestamp_monotonic_ns": 2415902640600,
+    "event": "vision_performance",
+    "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+    "model_family": "YOLO26",
+    "warmup_seconds": 5,
+    "metric": "unique frames after tracking/ROI and planner.set_vision",
+    "fps_1s_including_warmup": [
+      44,
+      42,
+      45,
+      41,
+      44,
+      43,
+      45,
+      44,
+      45,
+      46,
+      45,
+      46,
+      47,
+      46,
+      45,
+      44,
+      46,
+      45,
+      43,
+      44,
+      44,
+      45,
+      45,
+      46,
+      43,
+      46,
+      44,
+      45,
+      46,
+      44,
+      44,
+      46,
+      46,
+      46,
+      46,
+      45,
+      46,
+      46,
+      45,
+      44,
+      43,
+      44,
+      45,
+      43,
+      44,
+      44,
+      45,
+      45,
+      44,
+      30,
+      33,
+      48,
+      48,
+      49,
+      48,
+      49,
+      48,
+      48,
+      49,
+      49,
+      48,
+      49,
+      49,
+      48,
+      49,
+      48,
+      48
+    ],
+    "measurement_seconds": 62,
+    "frames_after_warmup": 2811,
+    "mean_fps": 45.33870967741935,
+    "min_fps_1s": 30,
+    "stable_30fps": true
+  },
+  "termination": {
+    "timestamp_monotonic_ns": 2415903129155,
+    "event": "competition_stopped",
+    "state": "WAIT_START",
+    "delivery_count": 0,
+    "first_common_delivered": false,
+    "first_fault_code": null,
+    "exit_reason": "duration",
+    "tx_policy": "termination_abort",
+    "termination_abort": {
+      "attempted": false,
+      "reason": "",
+      "command_file_written": false,
+      "transmitted": false,
+      "confirmed": false,
+      "confirmation_status": "unconfirmed",
+      "timeout": false,
+      "sequence": null
+    },
+    "inference_frames": 42,
+    "inference_total": 3048,
+    "camera_decoder": "jpu",
+    "camera_restarts": 0,
+    "camera_recovery_pending": false,
+    "display_enabled": false,
+    "competition_started": false,
+    "config_sent": false,
+    "operator_stopped": false
+  },
+  "logging": {
+    "queue_capacity": 1024,
+    "pending_records": 0,
+    "pending_snapshots": 0,
+    "records_written": 622,
+    "snapshots_written": 590,
+    "snapshots_coalesced": 75,
+    "dropped": 0,
+    "error": null,
+    "close_timed_out": false,
+    "incomplete": false
+  },
+  "decision": "Not adopted: processing-P95 ranges overlap and candidate shows no consistent improvement. Reverted both runtime candidate and candidate-only assertion; retained current implementation. Maxima/distinct-endpoint counts do not establish a causal gain.",
+  "remaining": "Actual SDK/F405/YOLO joint USB and complete control-tail validation still pending T265 recovery. No RT boot or field accuracy verified.",
+  "candidate_design": "MotionInbox.get first calls existing PyDLL MSG_DONTWAIT reader; only queue.Empty invokes original select timeout; no new timestamps, capacity, source/math or TX changes.",
+  "runtime_restored_exactly_to_baseline": true,
+  "candidate_targeted_check": {
+    "name": "test_latest_control_snapshot_mailbox",
+    "passed": true,
+    "elapsed_seconds": 2.89,
+    "retained": false
+  },
+  "comparison_limitations": "All rounds received98 scans, but actual geometry calls were98/98/98/97; the final one-scan difference cannot be assigned to teardown/coalescing from existing summaries. No strict identical-compute-count or causal speedup claim."
+}

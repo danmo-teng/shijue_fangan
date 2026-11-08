@@ -34,7 +34,7 @@ T265用户重插后恢复，实际固件0.2.0.951/librealsense2.50.0。最新011
 
 042007隔离真实YOLO/相机、无SDK/UART的18秒预热正常退出：热身后12个整秒平均48.67FPS、最低46，相机重启0、日志丢0、未CONFIG/开赛/生成命令文件。042336叠加原正式1000区间＋98历史扫描：全摄入/队列丢0、966不同输出端点、处理P9513.029/max21.901ms，YOLO46.83FPS/最低44，未出现Hub重枚举。它只证明该次相机/模型单独及混合软件负载，不能排除T265联合USB问题，也没有稳定10ms或实车精度结论。见reports/localization_vision_load_20261109.json。
 
-为减少已知桌面冷启动输入缺口，动态测试入口现于原C++SDK/UART Popen之前spawn原RadarWorker，沿用正式既有顺序；只移动启动顺序，不增加ready等待、握手、队列扩容或计时。启动顺序及Popen失败收尾、原worker PTY共2项必要检查通过；极端冷启动缺口是否消除仍待实际SDK重插后核对。
+88b4937已提交推送测试启动顺序：原RadarWorker先于唯一C++SDK/UART Popen，不增加ready等待、握手、队列扩容或计时。顺序及失败收尾共2项必要检查通过，实际冷启动缺口待恢复后核对。另对MotionInbox首读先NOWAIT作真实YOLO负载A/B/B/A：处理P95原13.212/14.457ms、候选14.212/14.069ms，各1000摄入/队列丢0，无稳定收益，已完全撤回候选；不以单轮低值报喜。见reports/localization_motion_inbox_abba_20261109.json。当前仅保留已验证的共享接收优化和启动顺序修复，T265仍需恢复。
 
 测试客户端已修反馈角色与控制角色混淆：TASK可订阅实测07/08作静止诊断，MotionDebug运动仍仅发给service1，actual原样记录。没有拿expected替actual，也没有向TASK发送测试运动。
 
