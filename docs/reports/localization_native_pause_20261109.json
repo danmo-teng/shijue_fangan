@@ -1,0 +1,29 @@
+{
+  "scope": "static native policy transition only; not automatic slip detection or dynamic accuracy",
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_004815_interactive",
+  "same_SDK_session": true,
+  "phases": [
+    {
+      "paused": true,
+      "pose_samples": 399,
+      "pose_hz": 199.55571707356853,
+      "max_receive_gap_ms": 5.479118,
+      "frame_number_gaps": 0,
+      "sdk_api_success_samples": 0
+    },
+    {
+      "paused": false,
+      "pose_samples": 1680,
+      "pose_hz": 199.5829371825006,
+      "max_receive_gap_ms": 16.096184,
+      "frame_number_gaps": 0,
+      "sdk_api_success_samples": 840
+    }
+  ],
+  "api_failed": 0,
+  "paused_measured_samples": 200,
+  "device_estimator_reset": false,
+  "wheel_dependency_cleared": false,
+  "complete": true,
+  "motor_commands": 0
+}

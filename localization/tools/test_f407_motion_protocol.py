@@ -2052,7 +2052,7 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
         sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
         sink.bind(app.control_address);sink.settimeout(5)
         source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
-        sent={};received={};producer=lidar_producer=None
+        sent={};scheduled={};received={};producer=lidar_producer=None
         def wheel(index,a,b):
             return dict(source='measured_wheel_feedback',measurement_valid=True,
                 mcu_epoch='fixture-boot',sample_id=index,v_body_mps=[.1,0.,0.],
@@ -2083,6 +2083,7 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
                     if delay>0:time.sleep(delay)
                     t=now+i*10_000_000
                     sent[t]=time.monotonic_ns()
+                    scheduled[t]=deadline
                     app.telemetry(dict(kind='imu',sample=dict(wire_valid=True,timestamp_monotonic_ns=t,yaw_deg=0.)))
                     app.radar.send('wheel',wheel(i,t-10_000_000,t))
                     # Two actual Pose samples/interval, the SDK's 200Hz shape.
@@ -2104,6 +2105,12 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
                 processing_ms_median=float(np.median(latency)),processing_ms_p95=float(np.percentile(latency,95)),
                 processing_ms_max=max(latency),worker_input_drops=app.radar.input_drops,
                 output_drops=app.output_drops)
+            capture=[(received[t]-scheduled[t])/1e6 for t in received]
+            lateness=[(sent[t]-scheduled[t])/1e6 for t in sent]
+            metrics.update(synthetic_capture_to_output_ms_p95=float(np.percentile(capture,95)),
+                synthetic_capture_to_output_ms_max=max(capture),
+                producer_schedule_delay_ms_p95=float(np.percentile(lateness,95)),
+                producer_schedule_delay_ms_max=max(lateness))
         finally:
             if producer is not None:producer.join()
             if lidar_producer is not None:lidar_producer.join()
@@ -2116,6 +2123,8 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
             lidar_fits=app.radar.state['scans'],fit_processing_ms_p95=app.radar.state['scan_processing_ms_p95'],
             ingested_distinct_intervals=app.radar.state['measured_wheel_ingested'],
             motion_scheduling=app.radar.state.get('motion_scheduling'),
+            worker_control_updates=app.radar.state.get('control_updates'),
+            worker_control_coalesced=app.radar.state.get('control_updates_coalesced'),
             transport_scheduling=dict(app.scheduling) if hasattr(app,'scheduling') else None)
         fit_log=root/'dynamic_localization.jsonl'
         if fit_log.exists():
@@ -2215,3 +2224,77 @@ def test_native_cpp_wheel_input():
                 assert actual['motion_wire_request_at_receive']['wire_sequence']==42
         print(json.dumps(dict(native_cpp_wheel_parity_samples=len(native),max_vector_error=max_error,
                               unknown_time_bounds_preserved=True,actual_SDK=False,motor_commands=False)))
+
+
+def test_wall_supported_source_arbitration():
+    """Known independent synthetic wall displacements, not ground precision.
+
+    Wheel-only slip, VIO-only error, both wrong, single-wall ambiguity, late
+    capture-time correction, recovery, and a later confidence=3 jump.
+    """
+    import math,numpy as np
+    from collections import deque
+    from lidar_yaw_debug.motion_source import MotionSource,sample
+    class Playback:
+        def __init__(self,angle=0.):
+            self.m=MotionSource();self.origin=1_000_000_000;self.raw=deque();self.yaws=deque();self.i=0
+            self.angle=angle;self.start=np.array([.2,-.3]);c,s=math.cos(angle),math.sin(angle);self.r=np.array([[c,-s],[s,c]])
+            self.m.configure(dict(pose_origin=[0.,0.],vio_rotation=angle,yaw_offset=angle,
+                reference_sample_ns=self.origin,start_center_xy_m=self.start.tolist()))
+            self.pose(0.,self.origin)
+        def pose(self,x,t,confidence=3):
+            self.m.pose(dict(timestamp_monotonic_ns=t,x_m=x,y_m=0.,tracker_confidence=confidence))
+            if confidence>0:self.raw.append((t,x,0.,0.))
+        def tick(self,v,x):
+            self.i+=1;t=self.origin+self.i*10_000_000;self.yaws.append((t,0.))
+            self.m.yaw(t,0.,dict(raw=dict(yaw_receive_us=t//1000)))
+            self.m.wheel(dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='fixture',sample_id=self.i,
+                raw_mcu_sample=dict(t0_us=(t-10_000_000)//1000,t1_us=t//1000),v_body_mps=[v,0.,0.],
+                interval_start_ns=t-10_000_000,interval_end_ns=t,receive_monotonic_ns=t),self.yaws)
+            self.pose(x,t)
+            if self.i==1:self.wall(0.,index=0)
+        def wall(self,x,axes=('x','y'),index=None,reacquired=False):
+            i=self.i if index is None else index
+            self.m.observe_walls('scan-'+str(i),list(axes),reference_ns=self.origin+i*10_000_000,
+                center_xy=(self.start+self.r@np.array([x,0.])).tolist(),raw_poses=self.raw,reacquired=reacquired)
+    slip=Playback()
+    for i in range(1,41):
+        slip.tick(1.,0.)
+        if i%10==0:slip.wall(0.)
+    assert slip.m.mode=='T265_PRIMARY_WHEEL_SUSPECT' and slip.m.wheel_suspect
+    held=slip.m.history[-1][1]
+    for i in range(41,51):slip.tick(1.,0.)
+    assert abs(slip.m.history[-1][1]-held)<1e-12  # no slipping-wheel tail
+    before=slip.m.history[-1]
+    slip.pose(.8,before[0]+5_000_000)  # confidence=3 still cannot bypass old jump handling
+    assert slip.m.mode=='WHEEL_FALLBACK' and slip.m.wheel_suspect
+    assert slip.m.reason=='SDK_single_step_jump_while_wheel_suspect'
+    assert abs(slip.m.history[-1][1]-before[1])<1e-12
+    assert all(a[0]<b[0] for a,b in zip(slip.m.history,list(slip.m.history)[1:]))
+    for which in ('vio_bad','both_bad','single_wall'):
+        p=Playback()
+        for i in range(1,51):
+            raw=3*i*.01 if which=='vio_bad' else -i*.01 if which=='both_bad' else 0.
+            p.tick(1.,raw)
+            if i%10==0:p.wall(i*.01 if which=='vio_bad' else 0.,axes=('x',) if which=='single_wall' else ('x','y'))
+        assert p.m.mode=='WHEEL_FALLBACK' and not p.m.wheel_suspect,which
+    recovery=Playback()
+    for i in range(1,111):
+        x=0. if i<=40 else (i-40)*.01
+        recovery.tick(1.,x)
+        if i%10==0:recovery.wall(x)
+    assert recovery.m.mode=='T265_WITH_WHEEL_TAIL' and not recovery.m.wheel_suspect,recovery.m.snapshot()
+    # The fit arrives after more motion: correcting at the capture time must
+    # preserve exactly the VIO motion AFTER that scan, in both field branches.
+    for angle in (0.,.7):
+        p=Playback(angle)
+        for i in range(1,51):p.tick(2.,i*.01)
+        p.wall(.3,index=30);before_scan=sample(p.m.history,p.origin+400_000_000)[:2]
+        p.wall(.4,index=40)
+        assert p.m.mode=='T265_PRIMARY_WHEEL_SUSPECT'
+        selected=sample(p.m.history,p.origin+400_000_000)[:2]
+        assert np.allclose(selected,before_scan)
+        candidate=p.start+p.r@np.array([.4,0.]);offset=candidate-(p.start+p.r@selected)
+        posterior=p.start+p.r@np.array(p.m.history[-1][1:3])+offset
+        assert np.allclose(posterior,p.start+p.r@np.array([.5,0.]),atol=1e-12)
+    print('PASS wall-supported arbitration / one-axis ambiguity / capture-time source rebase / confidence=3 jump')

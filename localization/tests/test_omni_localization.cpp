@@ -918,6 +918,23 @@ void test_debug_wheel_input()
          check(synthetic.process(fixture,10000000000ULL,sink) && calls==1,"explicit isolated SDK experiment accepts labeled fixture");
          check(!synthetic.process(packet,10000000000ULL,sink) && calls==1,"synthetic SDK session cannot mix measured feedback");}
     }
+    {
+        Input input(config,"sdk-test","",log);int calls=0;
+        auto sink=[&](std::uint32_t frame,const rs2_vector &){check(frame==static_cast<unsigned>(calls),"paused samples do not invent SDK frame numbers");++calls;return true;};
+        check(input.process(packet,2000000000,sink)&&calls==1,"policy fixture starts with actual fake-sink call");
+        Json policy{{"schema",3},{"kind","wheel_source_policy"},{"session_id","sdk-test"},{"pause",true},{"reason","wall-supported wheel suspect fixture"}};
+        check(input.source_policy(policy),"same session source policy applies");
+        auto next=packet;next["packet_id"]=1;next["alignment_start_ns"]=1010000000;next["alignment_end_ns"]=1020000000;
+        next["alignment_gyro_end_ns"]=1020000000;
+        check(!input.process(next,3000000000,sink)&&calls==1,"pause consumes measured sample without API/zero");
+        auto wrong=policy;wrong["session_id"]="another-sdk";wrong["pause"]=false;
+        check(!input.source_policy(wrong),"other SDK session cannot change source policy");
+        policy["pause"]=false;check(input.source_policy(policy),"resume needs no estimator restart/config reload");
+        check(!input.process(next,4000000000,sink)&&calls==1,"resume cannot replay a sample skipped while paused");
+        next["packet_id"]=2;next["alignment_start_ns"]=1020000000;next["alignment_end_ns"]=1030000000;
+        next["alignment_gyro_end_ns"]=1030000000;
+        check(input.process(next,5000000000,sink)&&calls==2,"next genuinely new measured sample resumes normally");
+    }
     ::unlink(log.c_str()); ::unlink((root+"/wheel_sdk_status.json").c_str()); ::rmdir(root.c_str());
 }
 

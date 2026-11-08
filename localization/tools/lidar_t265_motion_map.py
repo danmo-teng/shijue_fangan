@@ -65,7 +65,9 @@ class DynamicMapApp(base.MotionMapApp):
         self.pose_thread.start()
         self.yaw_thread=threading.Thread(target=self.read_yaw,name='dynamic-yaw-forwarder',daemon=True)
         self.yaw_thread.start()
-        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir)
+        sdk_policy=(dict(session_id=self.wheel_input.session_id,address='\0t265-wheel-'+self.wheel_input.session_id)
+                    if self.options.wheel_input=='on' else None)
+        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy)
         m=base.read_json(self.run_dir/'metadata.json')
         m.update(localization_mode='lidar_t265_dynamic_debug',initial_pose=dict(known=False,source='waiting_for_lidar_global_initialization'),
             physical_placement_confirmed=False,lidar_port=self.options.lidar,lidar_baud=self.options.lidar_baud,
@@ -84,6 +86,8 @@ class DynamicMapApp(base.MotionMapApp):
         m['motion_source_policy']=dict(MOTION_SOURCE_POLICY,normal='T265_with_measured_wheel_tail',
             fallback='measured_wheel_and_primary_yaw_with_observable_lidar_axes',
             recovery='movement_agreement_and_two_axis_walls_then_translation_rebase',
+            wheel_suspect='two_axis_wall_motion_supports_T265_then_pause_SDK_wheel_input',
+            pause_does_not_clear_previous_SDK_wheel_dependency=True,
             source_switch_not_position_weighting=True,thresholds_calibrated=False)
         (self.run_dir/'metadata.json').write_text(json.dumps(m,ensure_ascii=False,indent=2)+'\n')
         self.message='建议场地中心无遮挡处，静止后点自动定位'
@@ -197,6 +201,7 @@ class DynamicMapApp(base.MotionMapApp):
         source_key=(mode,axes,confirming)
         if getattr(self,'source_label_key',None)!=source_key:
             label={'WHEEL_FALLBACK':'轮速传播／等待雷达约束',
+                   'T265_PRIMARY_WHEEL_SUSPECT':'T265＋主yaw／轮式可疑',
                    'T265_WITH_WHEEL_TAIL':'T265定位／轮反馈续推'}.get(mode,'T265定位／暂无轮反馈参考')
             if mode=='WHEEL_FALLBACK' and axes:
                 label='轮速传播／雷达'+''.join(axes).upper()+'修正'
@@ -207,7 +212,8 @@ class DynamicMapApp(base.MotionMapApp):
             text.add(label,(0,0),13,(130,210,240));self.source_label=text.paint(patch);self.source_label_key=source_key
         canvas[215:239,920:1260]=self.source_label
         wheel=getattr(self,'input_snapshot',{});count=wheel.get('sdk_api_success_samples',0)
-        stage='OFF' if self.options.wheel_input=='off' else ('API_OK' if count else 'CFG_OK' if wheel.get('config_loaded') else 'WAIT_CFG')
+        stage='OFF' if self.options.wheel_input=='off' else ('PAUSED_WHEEL_SUSPECT' if wheel.get('wheel_input_paused') else
+            'API_OK' if count else 'CFG_OK' if wheel.get('config_loaded') else 'WAIT_CFG')
         number(f'{stage} / {count} / {wheel.get("sdk_api_rate_hz",0):.0f}Hz',849)
         age=wheel.get('sdk_success_age_ms');age_text='--' if age is None else f'{age:.0f}'
         cv2.putText(canvas,f'last API {age_text}ms / reject {(self.wheel_sdk_status or {}).get("rejected_samples",0)}',
@@ -313,9 +319,13 @@ class DynamicMapApp(base.MotionMapApp):
             summary=dict(self.radar.state,pose_packets=self.pose_packets,primary_yaw_packets=self.imu_packets,
                 motion_queue_drops=self.radar.input_drops,worker_stopped_cleanly=self.radar.stopped_cleanly,
                 parent_error=self.dynamic_error)
+            # Raw UART/Pose may be complete while online motion inputs were
+            # lost. Do not certify that session as an intact analysis chain.
+            # This affects final log completeness only, never live control.
+            summary['motion_stream_complete']=self.radar.input_drops==0
             self.capture_chain_present=bool(summary.get('capture_chain_present'))
             self.logging_failed=(self.logging_failed or not self.radar.stopped_cleanly
-                or not summary.get('logging_healthy',False))
+                or not summary.get('logging_healthy',False) or not summary['motion_stream_complete'])
             self.dynamic_log.submit('dynamic_summary.json',summary,atomic=True);self.dynamic_log.close()
             self.logging_failed=self.logging_failed or not self.dynamic_log.healthy()
         super().stop_session()

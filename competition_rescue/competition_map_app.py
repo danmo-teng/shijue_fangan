@@ -402,6 +402,7 @@ class CompetitionMapApp(RescueMapApp):
             state = self.dynamic.snapshot()
             mode = state.get('motion_selection', {}).get('mode', 'WAIT')
             label = {'WHEEL_FALLBACK': '轮速＋主yaw降级',
+                     'T265_PRIMARY_WHEEL_SUSPECT': 'T265＋主yaw（轮式可疑）',
                      'T265_WITH_WHEEL_TAIL': 'T265＋轮反馈续推'}.get(mode, mode)
             axes = '/'.join(state.get('current_wall_axes', [])) or '暂无约束'
             text.add('当前来源：' + label, (920, 455), 17, (80, 205, 245))

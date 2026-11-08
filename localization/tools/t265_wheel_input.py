@@ -414,7 +414,11 @@ class NativeWheelObserver(WheelInputBridge):
 
     def snapshot(self,sdk=None):
         result=super().snapshot(sdk)
-        result.update(processing_owner='native_cpp_sdk_owner',python_sdk_sender=False)
+        result.update(processing_owner='native_cpp_sdk_owner',python_sdk_sender=False,
+            wheel_input_paused=bool(sdk and sdk.get('session_id')==self.session_id and sdk.get('wheel_input_paused')))
+        if self.enabled and sdk and sdk.get('session_id')==self.session_id and sdk.get('wheel_input_paused'):
+            result.update(state='SDK_INPUT_PAUSED_WHEEL_SUSPECT',pause_applied_by_sdk_owner=True,
+                pause_reason=sdk.get('wheel_input_policy_reason'),paused_samples=sdk.get('wheel_input_paused_samples',0))
         for key in ('processing_latency_ms_max','processing_latency_ms_p95','processing_latency_ms_median'):
             result[key]=None  # Python does not measure the native input worker.
         if sdk and sdk.get('session_id')==self.session_id and sdk.get('event') in ('wheel_native_rejected','wheel_input_rejected'):

@@ -61,7 +61,8 @@ class CompetitionDynamicLocalization:
             self.input_drops += 1
 
     def start(self):
-        self.radar.start(self.config, self.config['lidar']['port'], self.config['lidar']['baud'], self.root)
+        self.radar.start(self.config, self.config['lidar']['port'], self.config['lidar']['baud'], self.root,
+            sdk_policy=dict(session_id=self.session_id,address='\0t265-wheel-'+self.session_id))
         self.devent('realtime_permission_setup',**self.radar.scheduling_setup)
         self.input_threads = [
             threading.Thread(target=self._read_chassis, name='dynamic-motion-input', daemon=True),

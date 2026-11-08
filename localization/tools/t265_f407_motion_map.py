@@ -352,7 +352,8 @@ class MotionMapApp:
         text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
         mode = getattr(self.options, "wheel_input", "off")
         wheel_state=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
-        labels={"NOT_REQUESTED":"未请求注入","REQUESTED_BLOCKED":"已请求/尚未加载","SDK_CONFIG_LOADED":"配置已加载/等待实测输入","SDK_API_ACCEPTED":"有SDK API成功样本"}
+        labels={"NOT_REQUESTED":"未请求注入","REQUESTED_BLOCKED":"已请求/尚未加载","SDK_CONFIG_LOADED":"配置已加载/等待实测输入","SDK_API_ACCEPTED":"有SDK API成功样本",
+            "SDK_INPUT_PAUSED_WHEEL_SUSPECT":"轮式可疑／SDK已暂停输入"}
         text.add(f"{labels.get(wheel_state.get('state'),'轮速状态待取')} / 成功{wheel_state.get('sdk_api_success_samples',0)}", (x0, 43), 12,
                  (100, 190, 230))
         age=wheel_state.get("sdk_success_age_ms")

@@ -1,4 +1,4 @@
-"""Debug-only motion-compensated fence XY + T265 translation + fixed primary yaw.
+"""Shared motion-compensated fence XY + T265 translation + fixed primary yaw.
 
 SE(2) deskew follows the reviewed patch fusion/deskew.py. Motion history comes
 from the explicitly selected VIO/wheel source and gyro; a scan is never fed
@@ -310,10 +310,12 @@ class DynamicFence:
             # against that CURRENT history, then keep subsequent propagation.
             # Subtracting the frozen pre-fit prior would apply its revision
             # twice to the vehicle position. No sensor-age decision is made.
+            candidate=fit.get('candidate_center_xy_m')
+            self.motion.observe_walls(scan.scan_id,fit['position_observed_axes'],reference_ns=scan.reference_ns,
+                center_xy=candidate,raw_poses=self.poses,reacquired=fit.get('position_reacquired',False))
             current=sample(self.motion.history or self.poses,scan.reference_ns)
             current_xy=(current[:2]-reference['pose_origin'])@rotation(reference['vio_rotation']).T+reference['start_center_xy_m']
-            candidate=fit.get('candidate_center_xy_m')
-            self.motion.observe_walls(scan.scan_id,fit['position_observed_axes'])
+            result.update(motion_source=self.motion.mode,motion_selection=self.motion.snapshot())
             if candidate is not None:
                 for axis in fit['position_observed_axes']:
                     i=('x','y').index(axis);self.offset[i]=candidate[i]-current_xy[i]
@@ -355,7 +357,7 @@ class DynamicFence:
             # Capture one coherent estimator state; geometry runs outside this
             # short lock. Control never copies fitted points or full fit logs.
             result=dict(source=('LIDAR_ANCHORED_'+source) if self.has_anchor else source,
-                motion_selection=self.motion.snapshot(),position_reacquisitions=self.reacquisition_count,
+                motion_selection=self.motion.snapshot(include_evidence=include_display),position_reacquisitions=self.reacquisition_count,
                 current_wall_axes=list(fit.get('position_observed_axes',[])) if fit else [],
                 lidar_corrections_enabled=self.lidar_corrections_enabled,
                 last_scan_age_ms=None if self.last_scan_ns is None else (now-self.last_scan_ns)/1e6,

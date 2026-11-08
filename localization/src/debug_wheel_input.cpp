@@ -131,6 +131,7 @@ void DebugWheelInput::native_loop() {
         }
         if(dropped||prestart)record({{"event","wheel_native_input_discarded"},{"queue_overflow",dropped},{"before_sdk_start",prestart}});
         try {
+            receive_source_policies();
             for(const auto &p:batch) {
                 if(p.request)native_->request(p.data.data(),p.data.size(),p.ns);
                 else native_->feedback(p.data.data(),p.data.size(),p.ns);
@@ -143,6 +144,27 @@ void DebugWheelInput::native_loop() {
         }catch(const std::exception &e) {
             record({{"event","wheel_native_rejected"},{"reason","malformed_native_measurement"},{"error",e.what()}});
         }
+    }
+}
+
+bool DebugWheelInput::source_policy(const Json &p) {
+    if(p.at("schema")!=3 || p.at("kind")!="wheel_source_policy" || p.at("session_id")!=session_ || !p.at("pause").is_boolean())return false;
+    const bool pause=p.at("pause").get<bool>();const auto reason=p.at("reason").get<std::string>();
+    if(pause==input_paused_&&reason==input_policy_reason_)return true;
+    input_paused_=pause;input_policy_reason_=reason;
+    record({{"event","wheel_source_policy_applied"},{"policy_request",p},
+        {"device_estimator_reset",false},{"previous_wheel_dependency_cleared",false}});
+    return true;
+}
+
+void DebugWheelInput::receive_source_policies() {
+    for(int i=0;i<64;++i) {
+        char bytes[8192];const auto n=::recv(socket_,bytes,sizeof(bytes),MSG_DONTWAIT|MSG_TRUNC);
+        if(n<0)break;
+        try {
+            if(n>=static_cast<ssize_t>(sizeof(bytes)) || !source_policy(Json::parse(bytes,bytes+n)))
+                throw std::runtime_error("native owner accepts source-policy requests, not a second converted-velocity producer");
+        }catch(const std::exception &e) {record({{"event","wheel_source_policy_rejected"},{"error",e.what()}});}
     }
 }
 
@@ -181,6 +203,9 @@ void DebugWheelInput::record(Json event)
     event["config_loaded"]=config_loaded_;
     event["input_source"]=synthetic_input_ ? "synthetic_test_fixture" : "measured_wheel_feedback";
     event["last_sdk_success_ns"]=last_success_ns_;
+    event["wheel_input_paused"]=input_paused_;
+    event["wheel_input_policy_reason"]=input_policy_reason_;
+    event["wheel_input_paused_samples"]=paused_samples_;
     std::lock_guard<std::mutex> lock(log_mutex_);
     if(records_.size()>=4096) {logging_failed_=true;++dropped_logs_;return;}
     records_.push_back(std::move(event));log_ready_.notify_one();
@@ -311,6 +336,11 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
         return false;
     }
     last_packet_ = packet_id; last_end_ = end; have_packet_ = true;
+    if(input_paused_) {
+        ++paused_samples_;
+        record({{"event","wheel_input_sample_paused"},{"sdk_call_attempted",false},{"reason",input_policy_reason_},{"packet",p}});
+        return false; // Consumed once, no fake zero, no replay on resume.
+    }
     const auto frame = std::uint32_t(next_frame_++); // SDK sequence, never a timestamp.
     record({{"event", "wheel_sdk_attempt"}, {"frame_num", frame}, {"sensor_id", 0},
             {"timestamp_monotonic_ns", now},

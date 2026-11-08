@@ -1,4 +1,4 @@
-"""Test-only exclusive translation source, with measured wheel bridging.
+"""Shared exclusive translation source, with measured wheel bridging.
 
 Positions live in the original T265 local frame, before any lidar correction.
 No age gate, pose weighting, motor I/O, or extrapolation of SLAM position jumps.
@@ -40,6 +40,10 @@ class MotionSource:
         self.last_conflict_m=0.;self.wheel_time_basis=None
         self.wheel_yaw_support=None
         self.pending_pose_drops=0
+        self.last_raw_xy=None
+        self.wheel_suspect=False
+        self.wall_window=None;self.wall_evidence=None
+        self.evidence_verdict=None;self.evidence_confirmations=0;self.last_evidence_scan=None
 
     def yaw(self, host_ns, yaw_rad, source):
         raw=source.get('raw',{})
@@ -55,6 +59,8 @@ class MotionSource:
         self.recovery_travel=0.;self.wall_fixes=0;self.last_wall=None
         self.last_paired_ns=None;self.mode='T265_NO_WHEEL_REFERENCE'
         self.reason='no_measured_wheel_reference'
+        self.wheel_suspect=False;self.wall_window=None;self.wall_evidence=None
+        self.evidence_verdict=None;self.evidence_confirmations=0;self.last_evidence_scan=None
         angle=reference['yaw_offset']-reference['vio_rotation']
         c,s=math.cos(angle),math.sin(angle);self.basis=np.array([[c,-s],[s,c]])
         t=reference.get('reference_sample_ns',reference.get('timestamp_monotonic_ns',0))
@@ -65,11 +71,18 @@ class MotionSource:
         t=int(p['timestamp_monotonic_ns']);xy=np.array([p['x_m'],p['y_m']],float)
         if not np.isfinite(xy).all():return
         if self.last_raw_ns is not None and t<=self.last_raw_ns:return
-        self.last_raw_ns=t;self.last_confidence=p['tracker_confidence']
+        raw_step=(float(np.linalg.norm(xy-self.last_raw_xy)) if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.last_raw_xy is not None else 0.)
+        self.last_raw_ns=t;self.last_raw_xy=xy;self.last_confidence=p['tracker_confidence']
         if len(self.pending)==self.pending.maxlen:self.pending_pose_drops+=1
         self.pending.append((t,*xy,int(p['tracker_confidence'])))
         if p['tracker_confidence']<=0 and self.anchor is not None:
             self._fallback('SDK_tracking_lost',t)
+        elif self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and raw_step>POLICY['single_increment_conflict_m']:
+            self._fallback('SDK_single_step_jump_while_wheel_suspect',t)
+        elif self.mode=='T265_PRIMARY_WHEEL_SUSPECT':
+            # An actual new Pose, not a repeated wheel tail or a synthetic
+            # 100Hz timestamp. Heading still comes from the main gyro outside.
+            self._publish_vio(t,xy)
         self._process()
 
     def wheel(self, p, host_yaws):
@@ -109,6 +122,10 @@ class MotionSource:
         w=sample(self.wheels,t);return np.r_[self.basis@w[:2],w[2]]
 
     def _fallback(self,reason,t):
+        if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.wheels and self.history:
+            end=self.wheels[-1][0]
+            self.anchor=sample(self.history,end)[:2]
+            self.anchor_wheel=self._wheel_at(end)[:2]
         if self.mode!='WHEEL_FALLBACK':
             self.events.append(dict(event='motion_source_changed',sample_monotonic_ns=t,
                 previous_source=self.mode,motion_source='WHEEL_FALLBACK',reason=reason,
@@ -148,7 +165,10 @@ class MotionSource:
                 self.last_conflict_m=max(step,conflict)
                 bad=step>POLICY['single_increment_conflict_m'] or conflict>POLICY['displacement_conflict_m']
                 if bad:
-                    self._fallback('T265_wheel_displacement_conflict',t)
+                    if self.mode!='T265_PRIMARY_WHEEL_SUSPECT':
+                        self._fallback('T265_wheel_displacement_conflict',t)
+                    else:
+                        self.recovery_window=None;self.recovery_travel=0.
                     self.window=(xy,w)
                 elif self.mode=='T265_WITH_WHEEL_TAIL':
                     self.anchor=xy+self.bias;self.anchor_wheel=w[:2].copy()
@@ -162,13 +182,17 @@ class MotionSource:
                     elif w[2]-rw[2]>=POLICY['comparison_travel_m']:
                         self.recovery_travel+=w[2]-rw[2];self.recovery_window=(xy,w)
                     if (self.recovery_travel>=POLICY['recovery_travel_m'] and
-                            self.wall_fixes>=POLICY['recovery_two_axis_fixes']):
-                        continuous=self.anchor+w[:2]-self.anchor_wheel
+                            self.wall_fixes>=POLICY['recovery_two_axis_fixes'] and
+                            (not self.wheel_suspect or (self.evidence_verdict=='BOTH_AGREE' and self.evidence_confirmations>=2))):
+                        previous_mode=self.mode
+                        continuous=(xy+self.bias if self.mode=='T265_PRIMARY_WHEEL_SUSPECT'
+                                    else self.anchor+w[:2]-self.anchor_wheel)
                         self.bias=continuous-xy;self.anchor=continuous;self.anchor_wheel=w[:2].copy()
                         self.mode='T265_WITH_WHEEL_TAIL';self.reason='motion_and_two_axis_walls_agree_rebased'
+                        self.wheel_suspect=False
                         self.window=(xy,w)
                         self.events.append(dict(event='motion_source_changed',sample_monotonic_ns=t,
-                            previous_source='WHEEL_FALLBACK',motion_source=self.mode,reason=self.reason,
+                            previous_source=previous_mode,motion_source=self.mode,reason=self.reason,
                             t265_translation_rebase_m=self.bias.tolist(),recovery_travel_m=self.recovery_travel))
                 self.previous=(xy,w)
             self.last_paired_ns=t
@@ -176,22 +200,117 @@ class MotionSource:
 
     def _publish(self):
         if self.anchor is None or not self.wheels:return
+        if self.mode=='T265_PRIMARY_WHEEL_SUSPECT':return
         t=self.wheels[-1][0];w=self._wheel_at(t)
         xy=self.anchor+w[:2]-self.anchor_wheel
+        if self.history and t<self.history[-1][0]:return
         if self.history and t==self.history[-1][0]:self.history.pop()
         self.history.append((t,*xy,0.))
 
-    def observe_walls(self,scan_id,axes):
-        if self.mode=='WHEEL_FALLBACK' and scan_id!=self.last_wall:
+    def _publish_vio(self,t,xy):
+        if self.history and t<self.history[-1][0]:return
+        if self.history and t==self.history[-1][0]:self.history.pop()
+        self.history.append((int(t),*(xy+self.bias),0.))
+
+    def _select_wall_supported_vio(self,t,raw_poses):
+        previous_mode=self.mode
+        # Anchor at the scan capture time, then replace only subsequent motion
+        # with real VIO increments. The caller applies that wall posterior once.
+        # Anchoring at fit completion would leave the wheel slip in its tail.
+        selected=sample(self.history or raw_poses,t)[:2]
+        raw=sample(raw_poses,t)[:2]
+        self.bias=selected-raw
+        while self.history and self.history[-1][0]>=t:self.history.pop()
+        self.history.append((int(t),*selected,0.))
+        for pose in raw_poses:
+            if pose[0]>t:self._publish_vio(pose[0],np.asarray(pose[1:3]))
+        self.anchor=selected.copy();self.anchor_wheel=self._wheel_at(t)[:2]
+        self.mode='T265_PRIMARY_WHEEL_SUSPECT';self.wheel_suspect=True
+        self.reason='two_axis_walls_support_T265_over_wheel'
+        self.recovery_window=None;self.recovery_travel=0.;self.wall_fixes=0
+        self.events.append(dict(event='motion_source_changed',sample_monotonic_ns=t,
+            previous_source=previous_mode,motion_source=self.mode,reason=self.reason,
+            wheel_input_pause_requested=True,wall_motion_evidence=dict(self.wall_evidence)))
+
+    def _select_wall_supported_wheel(self,t):
+        selected=sample(self.history,t)[:2];w=self._wheel_at(t)
+        while self.history and self.history[-1][0]>=t:self.history.pop()
+        self.history.append((int(t),*selected,0.))
+        for row in self.wheels:
+            if row[0]>t:
+                xy=selected+self._wheel_at(row[0])[:2]-w[:2]
+                self.history.append((int(row[0]),*xy,0.))
+        self.wheel_suspect=False
+        self._fallback('two_axis_walls_support_wheel_over_T265',t)
+        self.previous=None;self.window=None
+
+    def observe_walls(self,scan_id,axes,*,reference_ns=None,center_xy=None,raw_poses=None,reacquired=False):
+        if (self.mode=='WHEEL_FALLBACK' or self.wheel_suspect) and scan_id!=self.last_wall:
             self.last_wall=scan_id
             self.wall_fixes=self.wall_fixes+1 if set(axes)=={'x','y'} else 0
+        if reference_ns is None:return  # Existing geometry-only callers/fixtures.
+        if scan_id==self.last_evidence_scan:return
+        self.last_evidence_scan=scan_id
+        if (set(axes)!={'x','y'} or center_xy is None or self.reference is None or
+                not raw_poses or not self.wheels):
+            self.wall_window=None;self.evidence_verdict=None;self.evidence_confirmations=0
+            self.wall_evidence=dict(status='NO_FULL_XY_WALL_EVIDENCE',scan_id=scan_id)
+            return
+        t=int(reference_ns)
+        # Equal-interval displacement comparison needs actual interpolation
+        # support. Missing support suppresses ONLY this source verdict; it
+        # never rejects feedback/poses, clears VALID, stops, or gates injection.
+        if not (raw_poses[0][0]<=t<=raw_poses[-1][0] and self.wheels[0][0]<=t<=self.wheels[-1][0]):
+            self.wall_window=None;self.evidence_verdict=None;self.evidence_confirmations=0
+            self.wall_evidence=dict(status='NO_COMMON_INTERVAL_SUPPORT',scan_id=scan_id)
+            return
+        angle=self.reference['vio_rotation'];c,s=math.cos(angle),math.sin(angle)
+        r=np.array([[c,-s],[s,c]])
+        vio=r@(sample(raw_poses,t)[:2]-self.reference['pose_origin'])+self.reference['start_center_xy_m']
+        wheel=self._wheel_at(t);wxy=r@wheel[:2]
+        now=(t,np.asarray(center_xy,float),vio,wxy,wheel[2])
+        if self.wall_window is None or reacquired:
+            self.wall_window=now;self.evidence_verdict=None;self.evidence_confirmations=0
+            self.wall_evidence=dict(status='WALL_MOTION_BASELINE',scan_id=scan_id,reference_ns=t)
+            return
+        old=self.wall_window
+        if t<=old[0]:return
+        wall_delta=now[1]-old[1];vio_delta=vio-old[2];wheel_delta=wxy-old[3]
+        activity=max(float(np.linalg.norm(wall_delta)),float(np.linalg.norm(vio_delta)),wheel[2]-old[4])
+        if activity<POLICY['comparison_travel_m']:return
+        ve=float(np.linalg.norm(vio_delta-wall_delta));we=float(np.linalg.norm(wheel_delta-wall_delta))
+        good=POLICY['recovery_residual_m'];bad=POLICY['displacement_conflict_m']
+        verdict=('WHEEL_SUSPECT' if ve<=good and we>bad else
+                 'T265_SUSPECT' if we<=good and ve>bad else
+                 'BOTH_AGREE' if max(ve,we)<=good else 'AMBIGUOUS')
+        self.evidence_confirmations=self.evidence_confirmations+1 if verdict==self.evidence_verdict else 1
+        self.evidence_verdict=verdict
+        self.wall_evidence=dict(status=verdict,scan_id=scan_id,reference_ns=t,baseline_ns=old[0],
+            movement_m=activity,t265_wall_displacement_error_m=ve,wheel_wall_displacement_error_m=we,
+            confirmations=self.evidence_confirmations,t265_depends_on_sdk_wheel_input=True,
+            walls_depend_on_primary_yaw_and_selected_deskew=True,independent_ground_truth=False)
+        if self.evidence_confirmations>=2:
+            if verdict=='WHEEL_SUSPECT' and self.mode!='T265_PRIMARY_WHEEL_SUSPECT':
+                self._select_wall_supported_vio(t,raw_poses)
+            elif verdict=='T265_SUSPECT' and self.wheel_suspect:
+                # Two-axis geometry now specifically supports wheel motion.
+                # Resume real samples only; never reload/reset the estimator.
+                self._select_wall_supported_wheel(t)
+        if activity>=POLICY['recovery_travel_m'] and (self.evidence_confirmations>=2 or verdict=='AMBIGUOUS'):
+            self.wall_window=now  # Spatial window, no age/freshness threshold.
 
-    def snapshot(self):
-        return dict(mode=self.mode,reason=self.reason,spatial_conflict_m=self.last_conflict_m,
+    def snapshot(self,*,include_evidence=True):
+        result=dict(mode=self.mode,reason=self.reason,spatial_conflict_m=self.last_conflict_m,
             last_paired_pose_ns=self.last_paired_ns,last_raw_pose_ns=self.last_raw_ns,
             last_wheel_sample_id=self.last_wheel[1] if self.last_wheel else None,
             wheel_time_basis=self.wheel_time_basis,wheel_yaw_support=self.wheel_yaw_support,
             pending_pose_drops=self.pending_pose_drops,
             recovery_travel_m=self.recovery_travel,recovery_two_axis_fixes=self.wall_fixes,
             t265_translation_rebase_m=self.bias.tolist(),policy=POLICY,
+            wheel_motion_suspect=self.wheel_suspect,wall_motion_evidence=self.wall_evidence,
+            wheel_input_policy=dict(pause_requested=self.wheel_suspect,
+                reason='two_axis_wall_motion_wheel_suspect' if self.wheel_suspect else 'measured_wheel_input_enabled',
+                dependency_persists_after_pause=True),
             wheel_and_gyro_are_sdk_dependencies=True,independent_ground_truth=False)
+        if not include_evidence:result.pop('wall_motion_evidence')
+        return result

@@ -6,6 +6,8 @@ only pending fit requests/control/display snapshots coalesce, without an age gat
 from collections import deque
 import multiprocessing as mp
 import os
+import socket
+import json
 import queue
 import threading
 import time
@@ -153,7 +155,7 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
         offer_latest(updates, dict(state))
 
 
-def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
+def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None):
     # This process owns motion propagation. Its receiver child alone owns lidar.
     display.cancel_join_thread()
     engine=DynamicFence(config['installation']);log=AsyncDebugLog(root)
@@ -172,12 +174,37 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
     reference_request_id=None;requested_lidar_enabled=True
     last_control_key=None
     scheduling=None
+    policy_output=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) if sdk_policy else None
+    if policy_output is not None:policy_output.setblocking(False)
+    last_policy=(False,'measured_wheel_input_enabled');policy_error_reported=False
 
     def event(name,**data):
         log.submit('lidar_worker_events.jsonl',dict(event=name,timestamp_monotonic_ns=time.monotonic_ns(),**data))
 
     def reply(kind,**data):
         replies.put_nowait(dict(kind=kind,**data))
+
+    def publish_sdk_policy():
+        nonlocal last_policy,policy_error_reported
+        if policy_output is None:return
+        with engine.lock:
+            pause=engine.motion.wheel_suspect
+            reason='two_axis_wall_motion_wheel_suspect' if pause else 'measured_wheel_input_enabled'
+            requested=(pause,reason)
+            if requested==last_policy:return
+            evidence=engine.motion.wall_evidence
+        packet=dict(schema=3,kind='wheel_source_policy',session_id=sdk_policy['session_id'],
+            pause=pause,reason=reason,wall_motion_evidence=evidence,dependency_persists_after_pause=True)
+        try:
+            policy_output.sendto(json.dumps(packet,allow_nan=False).encode(),sdk_policy['address'])
+            last_policy=requested;policy_error_reported=False
+            event('wheel_source_policy_requested',**packet,sdk_application_confirmed=False)
+        except OSError as exc:
+            if not policy_error_reported:
+                event('wheel_source_policy_transport_error',reason=str(exc),pause_requested=pause)
+                policy_error_reported=True
+            # Next real motion/fit change may retry; no periodic query/ACK,
+            # data-age gate, MCU handshake, motor STOP or blocking wait.
 
     def consume(first):
         nonlocal reference_request_id,requested_lidar_enabled
@@ -353,7 +380,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
                 counters['fit_requests_coalesced']+=offer_latest(fit_inbox,
                     (latest,engine.revision,reference_request_id))
             changed=drain_fits() or changed
-            if control is not None and changed:publish_control()
+            if changed:
+                if control is not None:publish_control()
+                publish_sdk_policy()
             if time.monotonic()-last_publish>=.05:
                 if times and time.monotonic()-last_percentile>=1.:
                     p95=float(np.percentile(times,95));last_percentile=time.monotonic()
@@ -364,6 +393,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
         try:reply('error',error=error)
         except queue.Full:pass
     finally:
+        if policy_output is not None:policy_output.close()
         stop.set();fitting_stop.set()
         if fitter.ident is not None:fitter.join(timeout=2)
         drain_fits()
@@ -393,10 +423,10 @@ class RadarWorker:
         self.state={};self.input_drops=0;self.pending_reference=None;self.stopped_cleanly=False
         self.scheduling_setup=None
 
-    def start(self,config,port,baud,root):
+    def start(self,config,port,baud,root,*,sdk_policy=None):
         self.scheduling_setup=prepare_realtime()
         self.process=self.context.Process(target=run_worker,args=(config,port,baud,root,
-            self.inbox,self.display,self.replies,self.stop,self.control),name='lidar-geometry-owner')
+            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy),name='lidar-geometry-owner')
         self.process.start()
 
     def send(self,kind,payload):

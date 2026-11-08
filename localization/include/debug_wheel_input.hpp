@@ -33,11 +33,14 @@ public:
     void wire_request(const std::uint8_t *,std::size_t,std::uint64_t before_ns);
     // Also exercised by the existing regression executable with a fake SDK sink.
     bool process(Json packet, std::uint64_t now_ns, const Send &send);
+    // Single input-thread policy consumer; also used by the fake-SDK check.
+    bool source_policy(const Json &);
 private:
     void record(Json);
     void write_logs();
     void wire_packet(const std::uint8_t *,std::size_t,std::uint64_t,bool request);
     void native_loop();
+    void receive_source_policies();
     LocalizationConfig config_;
     std::string session_, status_path_;
     std::ofstream log_;
@@ -50,6 +53,9 @@ private:
     std::uint64_t accepted_ = 0, rejected_ = 0, sdk_failed_samples_ = 0;
     bool config_loaded_=false;
     bool synthetic_input_=false;
+    bool input_paused_=false;
+    std::string input_policy_reason_="measured_wheel_input_enabled";
+    std::uint64_t paused_samples_=0;
     std::uint64_t last_success_ns_=0;
     std::atomic<bool> stopping_{false},logging_stopping_{false},logging_failed_{false};
     std::atomic<std::uint64_t> dropped_logs_{0};
