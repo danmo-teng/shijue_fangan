@@ -16,7 +16,7 @@ namespace omni {
 // Overflow or disk failure is reported as incomplete logging, not a control gate.
 class AsyncCsvLog {
 public:
-    explicit AsyncCsvLog(std::string path) : path_(std::move(path)) {
+    explicit AsyncCsvLog(std::string path, bool append = false) : path_(std::move(path)), append_(append) {
         if (enabled()) thread_ = std::thread([this] { run(); });
     }
     ~AsyncCsvLog() { close(); }
@@ -37,7 +37,7 @@ public:
     bool failed() const { return failed_.load(); }
 private:
     void run() {
-        std::ofstream file(path_, std::ios::trunc);
+        std::ofstream file(path_, append_ ? std::ios::app : std::ios::trunc);
         if (!file) failed_ = true;
         auto flushed = std::chrono::steady_clock::now();
         while (true) {
@@ -63,6 +63,7 @@ private:
         }
     }
     std::string path_;
+    bool append_;
     std::mutex mutex_;
     std::condition_variable ready_;
     std::deque<std::string> rows_;

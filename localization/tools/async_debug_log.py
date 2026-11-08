@@ -3,6 +3,7 @@ Overflow is explicit and makes this run incomplete; it cannot silently certify
 an input or cause a vehicle fault latch. Close drains only at session shutdown.
 """
 import json
+import os
 import queue
 import threading
 import time
@@ -23,8 +24,17 @@ class AsyncDebugLog:
         self.written=0
         self.snapshot_writes=0
         self.snapshots_coalesced=0
-        self.thread=threading.Thread(target=self._run,name="debug-log-writer",daemon=True)
+        self.thread=threading.Thread(target=self._profile_or_run,name="debug-log-writer",daemon=True)
         self.thread.start()
+
+    def _profile_or_run(self):
+        prefix=os.environ.get('RDK_DEBUG_LOG_PROFILE')
+        if not prefix:return self._run()
+        # Explicit latency experiment only; normal runs do not profile records.
+        import cProfile
+        profile=cProfile.Profile()
+        try:profile.runcall(self._run)
+        finally:profile.dump_stats(f'{prefix}_{os.getpid()}_{threading.get_native_id()}.prof')
 
     def submit(self, filename, value, *, atomic=False):
         if self.error:return False

@@ -967,9 +967,21 @@ void test_async_csv_logging()
     const std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     check(content == "header\nfirst\nsecond\n", "CSV row order and contents survive async I/O");
     {
+        omni::AsyncCsvLog appended(path, true);
+        appended.submit("event\n");appended.close();
+        std::ifstream events(path);
+        const std::string complete((std::istreambuf_iterator<char>(events)), std::istreambuf_iterator<char>());
+        check(complete == content + "event\n", "event logging preserves append behavior");
+    }
+    {
         omni::AsyncCsvLog failed(std::string(directory) + "/missing/pose.csv");
         failed.submit("real data\n");failed.close();
         check(failed.failed() && failed.dropped() == 1, "CSV failure is reported without throwing into control");
+    }
+    {
+        omni::AsyncCsvLog full("/dev/full");
+        full.submit("event\n");full.close();
+        check(full.failed(), "disk-full flush failure is reported without stopping control");
     }
     ::unlink(path.c_str());::rmdir(directory);
 }

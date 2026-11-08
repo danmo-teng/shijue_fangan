@@ -23,16 +23,12 @@ from competition_wheel_input import CompetitionWheelInput
 from competition_dynamic_localization import CompetitionDynamicLocalization
 from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
-from motion_log_storage import list_sessions, delete_sessions, read_json, DYNAMIC_SESSION_FILES
+from motion_log_storage import read_json, WHEEL_SESSION_FILES
 from operator_panel import OperatorPanel
 from field_model import initial_pose
 
 WHEEL_OWNER = "competition_wheel_input"
-WHEEL_FILES = frozenset({"metadata.json", "localization.conf", "session_complete.json",
-    "wheel_feedback_requests.bin", "t265_raw_pose.csv", "localization_debug.csv",
-    "localization_events.jsonl", "wheel_sdk_config.json", "wheel_sdk.jsonl", "wheel_sdk_status.json",
-    "wheel_input.jsonl", "wheel_measurements.jsonl", "chassis_identity.json",
-    "chassis_extended.jsonl", "logging_events.jsonl", "final_status.json", "raw_t265_result.json", "control_pose.jsonl", "vision_replay_manifest.json"}) | DYNAMIC_SESSION_FILES
+WHEEL_FILES = WHEEL_SESSION_FILES
 
 
 class CompetitionMapApp(RescueMapApp):
@@ -374,8 +370,8 @@ class CompetitionMapApp(RescueMapApp):
             status['dynamic'] = dynamic.snapshot()
         adapter.bridge.log.submit("final_status.json", status, atomic=True)
         adapter.close()
-        # Log retention is module-local and runs only after a complete saved
-        # session. It cannot block active control or delete test/user data.
+        # Keep the completion boundary for reviewed, module-local manual
+        # cleanup. Expanded SD storage no longer prunes by session count.
         try:
             run_dir = adapter.root
             required = ("metadata.json", "localization_debug.csv", "t265_raw_pose.csv", "final_status.json")
@@ -388,9 +384,6 @@ class CompetitionMapApp(RescueMapApp):
                 index = max((m.get("session_index", 0) for m in markers if m.get("owner") == WHEEL_OWNER), default=0) + 1
                 (run_dir / "session_complete.json").write_text(json.dumps(dict(owner=WHEEL_OWNER,
                     complete=True, session_index=index, accuracy_verified=False)) + "\n")
-                rows = [r for r in list_sessions(run_dir.parent, run_dir, WHEEL_FILES, owner=WHEEL_OWNER) if not r["reason"]]
-                rows.sort(key=lambda r: (r["order"], r["name"]), reverse=True)
-                delete_sessions(run_dir.parent, rows[4:], run_dir, WHEEL_FILES, owner=WHEEL_OWNER)
         except (OSError, ValueError, TypeError) as error:
             print(f"轮速会话收尾失败（原始文件保留）：{error}", file=sys.stderr)
 

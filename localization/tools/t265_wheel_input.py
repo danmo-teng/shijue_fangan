@@ -394,9 +394,20 @@ class SyntheticWheelInputBridge(WheelInputBridge):
         ("ccw_lever_only",[0,0,0],[0,0,.5]),("cw_lever_only",[0,0,0],[0,0,-.5])):
         PHASES.extend([(_name,1.,_body,_omega),(_name+"_zero",.5,[0,0,0],[0,0,0])])
     PHASES.append(("zero_after",2.,[0.,0.,0.],[0.,0.,0.]))
+    PAUSE_RESUME_PHASES=[
+        ("zero_before",2.,[0.,0.,0.],[0.,0.,0.]),
+        ("forward_before_pause",1.,[.2,0.,0.],[0.,0.,0.]),
+        ("pause_after_forward",3.,None,None),
+        ("resume_zero",3.,[0.,0.,0.],[0.,0.,0.]),
+        ("pause_after_zero",3.,None,None),
+        ("resume_left",1.,[0.,.2,0.],[0.,0.,0.]),
+        ("pause_after_left",3.,None,None),
+        ("final_resume_zero",3.,[0.,0.,0.],[0.,0.,0.])]
 
-    def __init__(self,*args,**kwargs):
+    def __init__(self,*args,plan="axes",**kwargs):
         super().__init__(*args,**kwargs)
+        if plan not in ("axes","pause-resume"):raise ValueError("unknown synthetic SDK plan")
+        if plan=="pause-resume":self.PHASES=self.PAUSE_RESUME_PHASES
         self.fixture_start_ns=None;self.fixture_phase=None;self.done=threading.Event()
         self.log.submit("wheel_fixture.jsonl",dict(event="fixture_plan",session_id=self.session_id,
             source="synthetic_test_fixture",actual_measurement=False,motor_commands=False,
@@ -439,7 +450,11 @@ class SyntheticWheelInputBridge(WheelInputBridge):
                 if name!=self.fixture_phase:
                     self.fixture_phase=name
                     self.log.submit("wheel_fixture.jsonl",dict(event="fixture_phase",phase=name,
-                        timestamp_monotonic_ns=now,elapsed_s=elapsed,source="synthetic_test_fixture"))
+                        timestamp_monotonic_ns=now,elapsed_s=elapsed,source="synthetic_test_fixture",
+                        send_enabled=body is not None))
+                # An explicitly requested experiment, never an automatic
+                # production policy. No zero sample, SDK stop or config reload.
+                if body is None:continue
                 packet=self.packet_for(name,body,omega,now);self.next_id+=1
                 try:
                     self.sock.sendto(json.dumps(packet,allow_nan=False).encode(),self.address)

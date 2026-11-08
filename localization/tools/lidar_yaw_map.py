@@ -350,8 +350,7 @@ class LidarYawApp:
             if complete and not self.log_failed and self.scans_seen:
                 (self.run_dir/"session_complete.json").write_text(json.dumps(dict(owner=OWNER,complete=True,
                     session_index=self.session_index,accuracy_verified=False))+"\n")
-                removed=prune_completed_sessions(self.options.output_root,self.run_dir)
-                self.event("session_retention",keep_complete_sessions=5,removed=removed)
+                self.event("session_retention",policy="capacity_warning_manual_review",automatic_deletion=False,removed=[])
 
     def run(self):
         complete=False

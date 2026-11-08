@@ -255,8 +255,8 @@ class ChassisTestClient:
             return event
 
     def _identity_problem(self, d):
-        if (d["board"],d["mode"],d["service"]) != (405,5,1):
-            return "device board/mode/service is not F405 NormalDebug MOTIONDEBUG"
+        if (d["board"],d["mode"]) != (405,5) or d["service"] not in (1,2):
+            return "device feedback is not F405 NormalDebug MOTIONDEBUG/RESCUE_TASK"
         version=(d["protocol_major"],d["protocol_minor"])
         if version not in ((1,0),(1,1),(1,3)):
             return f"device protocol {version[0]}.{version[1]} is not reviewed (supported 1.0/1.1/1.3)"
@@ -357,6 +357,8 @@ class ChassisTestClient:
         with self.lock:
             if self.device_identity is not None:
                 if self.identity_error:return self.identity_error
+                if self.device_identity["service"]!=1:
+                    return "motion commands require MOTIONDEBUG; RESCUE_TASK feedback is read-only here"
                 return None
             if self.require_device_identity:
                 return f"no validated identity at {self.baud}; check matching F405 baud (921600/230400 timed, 115200 legacy) and actual board/mode/service"
@@ -372,8 +374,8 @@ class ChassisTestClient:
                 motion_identity_ready=self.control_identity_problem() is None,
                 reason=self.control_identity_problem(),identity=d,
                 actual_lower_firmware=d["git_commit"] if d else "unconfirmed",
-                actual_lower_mode="NormalDebug" if d and d["mode"]==5 else "unconfirmed",
-                actual_lower_service="MOTIONDEBUG" if d and d["service"]==1 else "unconfirmed",
+                actual_lower_mode=("NormalRun" if d["service"]==2 else "NormalDebug") if d and d["mode"]==5 else "unconfirmed",
+                actual_lower_service=({1:"MOTIONDEBUG",2:"RESCUE_TASK"}.get(d["service"],"unconfirmed") if d else "unconfirmed"),
                 firmware_identity_reported_by_uart=d is not None,cryptographically_attested=False,
                 mcu_boot_epoch=d["boot_epoch"] if d and d["epoch_valid"] else None,
                 contract_document_commit=profile[1] if profile else TIMED_DOCUMENT_COMMIT if self.require_device_identity else DOCUMENT_COMMIT,
@@ -461,7 +463,7 @@ class ChassisTestClient:
             if self.require_device_identity and self.serial is not None and not self.stop_event.is_set() and now_ns>=self.next_identity_query_ns:
                 try:self._request_identity()
                 except (OSError,RuntimeError) as error:self.identity_error=str(error)
-            if self.timed_requested and self.device_identity and self.control_identity_problem(now_ns) is None:
+            if self.timed_requested and self.device_identity and self.identity_error is None:
                 try:
                     if now_ns>=self.next_sync_ns:self._request_timed(timed.SYNC_REQ)
                     if not self.timed_stream_active and now_ns>=self.next_config_ns:

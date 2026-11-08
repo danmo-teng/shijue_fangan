@@ -514,7 +514,10 @@ void write_map_status_json(const std::string &path,
     if (path.empty()) return;
     const std::string temporary = path + ".tmp";
     std::ofstream file(temporary, std::ios::trunc);
-    if (!file) throw std::runtime_error("cannot write map status JSON: " + temporary);
+    if (!file) {
+        std::cerr << "[LOG WARNING] cannot write map status JSON: " << temporary << '\n';
+        return;
+    }
     const double translation_scale = config.t265_translation_scale_enabled
         ? config.t265_translation_scale : 1.0;
     const omni::Pose2d start_pose = configured_start_pose(config);
@@ -553,32 +556,30 @@ void write_map_status_json(const std::string &path,
          << "}\n";
     file.close();
     if (!file || std::rename(temporary.c_str(), path.c_str()) != 0) {
-        throw std::runtime_error("cannot replace map status JSON: " + path);
+        std::cerr << "[LOG WARNING] cannot replace map status JSON: " << path << '\n';
     }
 }
 
 class EventLog {
 public:
-    explicit EventLog(const std::string &path)
-    {
-        if (path.empty()) return;
-        output_.open(path, std::ios::out | std::ios::app);
-        if (!output_) throw std::runtime_error("cannot open localization events log: " + path);
-    }
+    explicit EventLog(const std::string &path) : output_(path, true) {}
 
     void write(const std::string &event, const std::string &data = "{}")
     {
-        if (!output_) return;
-        std::lock_guard<std::mutex> lock(mutex_);
-        output_ << "{\"timestamp_monotonic_ns\":" << monotonic_ns()
+        if (!output_.enabled()) return;
+        std::ostringstream row;
+        row << "{\"timestamp_monotonic_ns\":" << monotonic_ns()
                 << ",\"event\":\"" << json_escape(event)
                 << "\",\"data\":" << (data.empty() ? "{}" : data) << "}\n";
-        output_.flush();
+        output_.submit(row.str());
     }
 
+    void close() { output_.close(); }
+    bool failed() const { return output_.failed(); }
+    std::uint64_t dropped() const { return output_.dropped(); }
+
 private:
-    std::ofstream output_;
-    std::mutex mutex_;
+    omni::AsyncCsvLog output_;
 };
 
 double age_ms(std::uint64_t now_ns, std::uint64_t event_ns)
@@ -2285,6 +2286,7 @@ int main(int argc, char **argv)
             (raw_pose_log.failed() ? "true" : "false") + ",\"raw_json_write_errors\":" +
             std::to_string(raw_snapshot.errors()) + ",\"raw_json_coalesced\":" +
             std::to_string(raw_snapshot.coalesced()) + "}");
+        event_log.close();
         std::cerr << "[SUMMARY] wheel accepted=" << wheel_accepted
                   << " rejected=" << wheel_rejected
                   << " UART frames=" << final_parser_stats.frames_ok
@@ -2298,7 +2300,9 @@ int main(int argc, char **argv)
                   << " status_write_errors="
                   << stm_status_writer->errors()
                   << " status_snapshots_coalesced=" << stm_status_writer->coalesced()
-                  << " queue_dropped=" << encoder_queue.dropped() << '\n';
+                  << " queue_dropped=" << encoder_queue.dropped()
+                  << " event_log_io_failed=" << event_log.failed()
+                  << " event_log_dropped=" << event_log.dropped() << '\n';
         return map_startup_failed ? 4 : (raw_json_errors ? 5 : EXIT_SUCCESS);
     } catch (const rs2::error &error) {
         running.store(false, std::memory_order_relaxed);

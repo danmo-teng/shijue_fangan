@@ -48,7 +48,7 @@ from f407_motion_protocol import (  # noqa: E402
 )
 from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
-from motion_log_storage import StoragePanel, list_sessions, delete_sessions, DYNAMIC_SESSION_FILES
+from motion_log_storage import StoragePanel, list_sessions, delete_sessions, DYNAMIC_SESSION_FILES, WHEEL_SESSION_FILES
 from t265_wheel_input import WheelInputBridge, SyntheticWheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
 
 
@@ -175,7 +175,10 @@ class MotionMapApp:
         self.hitboxes: dict[str, tuple[int, int, int, int]] = {}
         self.message = "启动后仅监听，点击实验按钮发送运动指令"
         self.run_dir: Path | None = None
-        self.storage_panel = StoragePanel(options.output_root, SESSION_FILES)
+        competition_logs=getattr(options,"log_module","test")=="competition"
+        self.storage_panel = StoragePanel(options.output_root,
+            WHEEL_SESSION_FILES if competition_logs else SESSION_FILES,
+            owner="competition_wheel_input" if competition_logs else "t265_f407_motion_map")
         self.localization_json: Path | None = None
         self.motion_status_path: Path | None = None
         self.bridge: F407SerialBridge | None = None
@@ -951,7 +954,8 @@ class MotionMapApp:
         wheel_noise = getattr(self.options, "wheel_noise_std_mps", .10)
         wheel_config = write_sdk_config(self.run_dir / "wheel_sdk_config.json", wheel_noise)
         bridge_type=SyntheticWheelInputBridge if synthetic else WheelInputBridge
-        self.wheel_input = bridge_type(self.run_dir, self.session_config, sdk_session_id, wheel_enabled)
+        self.wheel_input = bridge_type(self.run_dir, self.session_config, sdk_session_id, wheel_enabled,
+            **({"plan":self.options.wheel_fixture} if synthetic else {}))
         if self.bridge:self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry,readonly=True)
         self.wheel_input.start()
         if self.bridge:
@@ -1089,7 +1093,7 @@ class MotionMapApp:
                 actual_lower_firmware="not_opened",actual_lower_mode="not_opened",actual_lower_service="not_opened",
                 lower_identity_source="chassis_not_opened",listen_and_control=False,timed_measurements_requested=False,
                 potential_input_dependency_sources=["synthetic_test_fixture"],chassis_uart_opened=False,
-                fixture_plan=SyntheticWheelInputBridge.PHASES,physical_accuracy_test=False,
+                fixture_plan=self.wheel_input.PHASES,physical_accuracy_test=False,
                 wheel_and_primary_gyro_independent_of_sdk_input=None,wheel_reference=None,
                 lower_measured_body_velocity="chassis_not_opened",motion_enable_policy="disabled_no_chassis_uart",
                 ground_truth_policy="synthetic SDK response only; no independent physical measurement",
@@ -1153,7 +1157,7 @@ class MotionMapApp:
                      and wheel_summary.get("sdk_logging_healthy") is not False)
             self.wheel_input = None
         if getattr(self, "storage_panel", None):
-            self.storage_panel.close()  # Finish manual deletion before automatic retention.
+            self.storage_panel.close()
         if self.run_dir is not None:
             csv_path = self.run_dir / "localization_debug.csv"
             if csv_path.exists():
@@ -1194,11 +1198,8 @@ class MotionMapApp:
                     "owner": "t265_f407_motion_map", "complete": True,
                     "session_index": self.session_index,
                     "accuracy_verified": False}) + "\n", encoding="utf-8")
-                try:
-                    removed = [] if getattr(self.options,"no_log_prune",False) else prune_completed_sessions(self.options.output_root, self.run_dir)
-                    self.record_event("session_retention", {"keep_complete_sessions": 5, "removed": removed})
-                except OSError as error:
-                    self.record_event("session_retention_failed", {"error": str(error)})
+                self.record_event("session_retention", {"policy":"capacity_warning_manual_review",
+                    "automatic_deletion":False,"removed":[]})
 
     def handle_key(self, key: int) -> bool:
         if getattr(self.options, "logs_only", False):
@@ -1365,7 +1366,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--chassis-profile", choices=("auto","legacy","timed"), default="auto")
     parser.add_argument("--check-chassis", action="store_true",help="read-only UART/identity/status check; no T265, GUI or motion")
     parser.add_argument("--timed-measurements",action="store_true",help="explicitly sync and subscribe measured 07/08 for diagnostics; not injection eligibility")
-    parser.add_argument("--no-log-prune",action="store_true",help="preserve all existing sessions during investigation")
+    parser.add_argument("--no-log-prune",action="store_true",help="compatibility flag; automatic pruning is disabled by default")
     parser.add_argument("--t265-usb-recovery",action="store_true",
                         help="fast startup firmware preparation; skip reset in runtime state; no fixed hub-cycle delay")
     parser.add_argument("--fisheye-evidence",action="store_true",help="same SDK owner enables both fisheyes; C records max two 2s/4Hz bursts")
@@ -1374,7 +1375,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice; default pure T265, on uses measured 07/08 with timing diagnostics only")
-    parser.add_argument("--wheel-fixture",choices=("off","axes"),default="off",
+    parser.add_argument("--wheel-fixture",choices=("off","axes","pause-resume"),default="off",
                         help="explicit synthetic SDK-response sequence; headless only, NO chassis UART, not measured feedback")
     parser.add_argument("--wheel-noise-std-mps", type=float, default=.10,
                         help="initial engineering velocity sigma, not calibrated; SDK uses its square")
@@ -1390,9 +1391,15 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--zone", type=int, choices=range(1, 5), default=4)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_RUN_ROOT)
     parser.add_argument("--logs-only", action="store_true", help="只管理已有日志，不启动USB/SDK/UART，不生成测试会话")
+    parser.add_argument("--log-module",choices=("test","competition"),default="test",
+                        help="日志管理选择测试或正式比赛定位会话；competition仅用于--logs-only")
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.log_module=="competition":
+        if not options.logs_only:parser.error("competition日志管理必须使用--logs-only，不启动传感器")
+        if options.output_root==DEFAULT_RUN_ROOT:
+            options.output_root=DEFAULT_RUN_ROOT.parent/"competition_wheel_input"
     if options.logs_only and (options.check_chassis or options.sensor_check_seconds or options.wheel_fixture != "off"):
         parser.error("--logs-only不能与传感器/底盘/人工注入检查组合")
     if options.check_chassis and options.t265_usb_recovery:

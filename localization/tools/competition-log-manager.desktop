@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=比赛定位日志管理
+Comment=查看SD容量，选择清理已分析的完整旧定位会话；不启动传感器或底盘
+Exec=python3 /home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py --logs-only --log-module competition --fullscreen
+Path=/home/sunrise/RDK_X5/shijue_fangan
+Icon=drive-harddisk
+Terminal=false
+StartupNotify=true
+Categories=Utility;

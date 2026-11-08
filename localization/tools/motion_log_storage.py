@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 OWNER = "t265_f407_motion_map"
+WHEEL_OWNER = "competition_wheel_input"
 SESSION_NAME = re.compile(r"\d{8}_\d{6}_interactive(?:_\d+)?")
 SESSION_PATTERNS = {OWNER: SESSION_NAME,
     "competition_wheel_input": re.compile(r"\d{8}_\d{6}_competition_wheel(?:_\d+)?")}
@@ -19,6 +20,12 @@ DYNAMIC_SESSION_FILES = frozenset({"dynamic_events.jsonl", "dynamic_scans.jsonl"
     "dynamic_status.json", "dynamic_summary.json", "pose_motion.jsonl", "lidar_rx.jsonl", "lidar_tx.jsonl",
     "lidar_worker_events.jsonl", "lidar_worker_summary.json", "dynamic_initialization.jsonl",
     "lidar_reader_events.jsonl", "lidar_reader_summary.json"})
+WHEEL_SESSION_FILES = frozenset({"metadata.json", "localization.conf", "session_complete.json",
+    "wheel_feedback_requests.bin", "t265_raw_pose.csv", "localization_debug.csv",
+    "localization_events.jsonl", "wheel_sdk_config.json", "wheel_sdk.jsonl", "wheel_sdk_status.json",
+    "wheel_input.jsonl", "wheel_measurements.jsonl", "chassis_identity.json",
+    "chassis_extended.jsonl", "logging_events.jsonl", "final_status.json", "raw_t265_result.json",
+    "control_pose.jsonl", "vision_replay_manifest.json"}) | DYNAMIC_SESSION_FILES
 
 
 def read_json(path):
@@ -169,8 +176,9 @@ class StoragePanel:
     """One background I/O task at a time; rendering never scans/deletes logs."""
     PAGE_SIZE = 7
 
-    def __init__(self, root, allowed_files):
+    def __init__(self, root, allowed_files, *, owner=OWNER):
         self.root, self.allowed_files = root, allowed_files
+        self.owner=owner
         self.open = False
         self.rows, self.selected, self.boxes = [], set(), {}
         self.page, self.confirm = 0, False
@@ -211,12 +219,12 @@ class StoragePanel:
             self.future = None
         if self.pending_delete is not None:
             self.job = "delete"
-            self.future = self.executor.submit(delete_sessions, self.root, self.pending_delete, current, self.allowed_files)
+            self.future = self.executor.submit(delete_sessions, self.root, self.pending_delete, current, self.allowed_files, owner=self.owner)
             self.pending_delete = None
         elif self.scan_requested:
             self.scan_requested = False
             self.job = "scan"
-            self.future = self.executor.submit(list_sessions, self.root, current, self.allowed_files)
+            self.future = self.executor.submit(list_sessions, self.root, current, self.allowed_files, owner=self.owner)
         elif time.monotonic() >= self.next_refresh:
             self.next_refresh = time.monotonic() + 1.
             self.job = "capacity"
@@ -255,6 +263,10 @@ class StoragePanel:
             label = f"日志盘剩余 {size_label(free)} / 总计 {size_label(total)}"
             if free < max(2**30, total*.1):
                 color = (70,170,255)
+                label += "  容量告警，请清理已分析日志"
+            if free < 2**30:
+                color = (60,70,255)
+                label += "（低于1GiB）"
         elif self.error:
             label, color = "日志盘容量读取失败（不影响运动）", (70,170,255)
         text.add(label, (40,1003), 18, color, anchor="lm", max_width=660)
@@ -262,7 +274,7 @@ class StoragePanel:
         if not self.open:
             return
         cv2.rectangle(canvas, (30,60), (880,910), (28,29,34), -1)
-        text.add("选择旧日志会话", (50,78), 24, bold=True)
+        text.add("比赛定位日志" if self.owner=="competition_wheel_input" else "测试定位日志", (50,78), 24, bold=True)
         button("close", "返回地图", (700,76,855,119))
         text.add("只删除本模块完整旧会话；当前 / 未完成 / 保护 / 用户文件均保留", (50,134), 15, max_width=800)
         text.add("列表按需刷新，不扫描模型/标定；STOP和S/空格仍有效", (50,166), 15, max_width=800)

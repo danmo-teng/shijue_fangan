@@ -181,7 +181,6 @@ def test_native_line_hypotheses():
         assert np.array_equal(a['normal'],b['normal']) and a['span']==b['span']
 
 
-
 def test_lidar_yaw_diagnostic():
     # Reference parser/timing + static geometry + the SAME chassis client. Only
     # synthetic rays, memory serial and local pseudo-terminals; no real hardware.
@@ -827,6 +826,12 @@ def test_timed_f405_client():
             assert c.control_identity_problem() is None  # Age alone no longer revokes a known compatible identity.
             c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
             c.feed(identity_response(req,epoch=2,service=2),clock[0]);assert c.control_identity_problem() is not None
+            assert c.identity_error is None and c.connection_snapshot()['actual_lower_service']=='RESCUE_TASK'
+            c.start_timed_measurements();c.poll(clock[0])
+            assert any(timed.parse(p)['type']==timed.CONFIG_REQ for p in uart.written if p[:2]==timed.MAGIC)
+            try:c.move_body(100,0);assert False,'TASK accepted MotionDebug control'
+            except RuntimeError:pass
+            c.timed_requested=False
             c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
             c.feed(identity_response(req,epoch=2),clock[0]);assert c.control_identity_problem() is None
             c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
@@ -837,8 +842,10 @@ def test_timed_f405_client():
             c.feed(identity_response(req,epoch=2,commit="ff"*20),clock[0])
             assert c.control_identity_problem() is None  # Compatible layout, actual revision retained without a SHA gate.
             assert c.connection_snapshot()["actual_lower_firmware"]=="ff"*20
-            before=len(uart.written);c.close();assert len(uart.written)==before
-            assert all(timed.parse(p)["type"]==timed.ID_REQ for p in uart.written if p[:2]==timed.MAGIC)
+            before=len(uart.written);c.close();assert len(uart.written)==before+1
+            assert timed.parse(uart.written[-1])['type']==timed.CONFIG_REQ  # Unsubscribe only; no motion.
+            assert all(timed.parse(p)["type"] in (timed.ID_REQ,timed.SYNC_REQ,timed.CONFIG_REQ)
+                       for p in uart.written if p[:2]==timed.MAGIC)
     # Real serial thread and nonce handshake against one local PTY, not hardware.
     import os,select,threading,serial
     with tempfile.TemporaryDirectory() as temporary:
@@ -1271,6 +1278,12 @@ def test_synthetic_wheel_fixture():
             try:b.telemetry(dict(kind='imu',sample={}));assert False,'mixed real and synthetic source'
             except RuntimeError:pass
         finally:b.close()
+        b=SyntheticWheelInputBridge(root,config_values(DEFAULT_CONFIG),uuid.uuid4().hex,True,plan='pause-resume')
+        try:
+            pauses=[p for p in b.PHASES if p[2] is None]
+            assert len(pauses)==3 and all(p[3] is None for p in pauses)
+            assert any(p[0]=='resume_zero' and p[2]==[0.,0.,0.] for p in b.PHASES)
+        finally:b.close()
         with patch('sys.argv',['map','--wheel-fixture','axes','--wheel-input','on','--output-root',str(root)]):options=arguments()
         assert options.sensor_check_seconds==30
         child=SimpleNamespace(pid=123,poll=lambda:0,returncode=0)
@@ -1675,7 +1688,7 @@ def test_t265_usb_recovery():
 def test_motion_log_storage():
     """Deletion only in a temporary root; no UART/SDK or real-log cleanup."""
     from unittest.mock import patch
-    from motion_log_storage import inspect_session, list_sessions, delete_sessions, OWNER
+    from motion_log_storage import inspect_session, list_sessions, delete_sessions, OWNER, WHEEL_OWNER, WHEEL_SESSION_FILES
     from t265_f407_motion_map import SESSION_FILES, prune_completed_sessions, MotionMapApp, arguments
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -2018,7 +2031,7 @@ def test_competition_control_rate():
     competition_control_rate_fixture()
 
 
-def competition_control_rate_fixture(*,require_all=True,lidar_records=None):
+def competition_control_rate_fixture(*,require_all=True,lidar_records=None,interval_count=100):
     import os,pty,socket,threading,uuid
     from async_debug_log import AsyncDebugLog
     from competition_dynamic_localization import CompetitionDynamicLocalization
@@ -2060,7 +2073,7 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None):
                 lidar_producer=threading.Thread(target=replay);lidar_producer.start()
             def produce():
                 start=time.monotonic_ns()
-                for i in range(1,101):
+                for i in range(1,interval_count+1):
                     deadline=start+i*10_000_000
                     delay=(deadline-time.monotonic_ns())/1e9
                     if delay>0:time.sleep(delay)
@@ -2078,9 +2091,9 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None):
             while True:
                 packet=json.loads(sink.recv(32768));stamp=packet['timestamp_monotonic_ns']
                 if stamp in sent and stamp not in received:received[stamp]=time.monotonic_ns()
-                if stamp==now+1_000_000_000:break
+                if stamp==now+interval_count*10_000_000:break
             producer.join()
-            if not lidar_records:assert abs(packet['pose']['x_m']-.1)<1e-9
+            if not lidar_records:assert abs(packet['pose']['x_m']-.001*interval_count)<1e-9
             assert not packet['wheel']['independent_reference']
             latency=[(received[t]-sent[t])/1e6 for t in received]
             metrics=dict(sent_distinct_intervals=len(sent),received_distinct_intervals=len(received),
@@ -2100,6 +2113,12 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None):
             ingested_distinct_intervals=app.radar.state['measured_wheel_ingested'],
             motion_scheduling=app.radar.state.get('motion_scheduling'),
             transport_scheduling=dict(app.scheduling) if hasattr(app,'scheduling') else None)
+        fit_log=root/'dynamic_localization.jsonl'
+        if fit_log.exists():
+            fits=[json.loads(line) for line in fit_log.open()]
+            metrics['fit_stage_ms']={key:dict(median=float(np.median(values)),p95=float(np.percentile(values,95)))
+                for key in ('compute_ms','compute_thread_cpu_ms','snapshot_ms','deskew_ms','fit_ms')
+                if (values:=[row[key] for row in fits if key in row])}
         # The bounded output deliberately coalesces if its consumer is delayed.
         # Check all real input intervals were processed; report actual distinct
         # output and latency instead of making OS scheduling a lossless test.
