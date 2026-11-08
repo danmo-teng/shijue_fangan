@@ -1164,6 +1164,61 @@ def test_dynamic_motion_source():
     assert other.mode=='WHEEL_FALLBACK'  # First post-reference Pose cannot silently move the origin.
 
 
+def test_historical_wall_correction_rebases_updated_endpoint():
+    """Known offline posterior + a real late-Pose update during mocked fitting.
+
+    Tests application of a geometric result, not sensor/ground accuracy.
+    Cover delayed completion, later propagation, nonidentity field rotation
+    and one-wall observability without changing the geometry/source policy.
+    """
+    import math
+    from types import MethodType
+    import numpy as np
+    from lidar_yaw_debug.dynamic import DynamicFence,rotation
+    from lidar_yaw_debug.types import RawScan,TimedPoint
+    from lidar_yaw_debug.diagnostic import load_config
+    mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
+    for angle in (0.,.7):
+        for axes in (['x','y'],['x']):
+            e=DynamicFence(mount);a=1_000_000_000;b=a+100_000_000
+            p=dict(session_id='offline-history',frame_number=1,timestamp_monotonic_ns=a,
+                receive_monotonic_ns=a,x_m=0.,y_m=0.,yaw_rad=0.,tracker_confidence=3)
+            e.ingest_pose(p);e.ingest_yaw(a,0.,{});e.ingest_yaw(b,0.,{})
+            e.align('offline known reference',physical_confirmed=False,center_xy=(.2,-.3),heading_deg=math.degrees(angle))
+            def wheel(i,start,end):
+                e.ingest_wheel(dict(source='measured_wheel_feedback',measurement_valid=True,
+                    mcu_epoch='fixture',sample_id=i,v_body_mps=[.1,0.,0.],
+                    raw_mcu_sample=dict(t0_us=start//1000,t1_us=end//1000),
+                    interval_start_ns=start,interval_end_ns=end,receive_monotonic_ns=end))
+            wheel(1,a,b)
+            candidate=np.array([.2,-.3])+rotation(angle)@np.array([.01,0.])
+            def fit(self,points,ref,offset,scan_id,revision=None):
+                # Refine the latest history row at b with a Pose captured at
+                # b-10ms. It is within the unchanged .05m conflict policy.
+                self.ingest_pose(dict(p,frame_number=2,timestamp_monotonic_ns=b-10_000_000,
+                    receive_monotonic_ns=b+1,x_m=.049,y_m=.02))
+                # Then actual feedback advances beyond the scan reference.
+                self.ingest_yaw(b+100_000_000,0.,{})
+                wheel(2,b,b+100_000_000)
+                return dict(rank_xy=len(axes),position_observed_axes=axes,
+                    inherited_axes=[axis for axis in ('x','y') if axis not in axes],
+                    candidate_center_xy_m=candidate.tolist(),position_reacquired=False,
+                    reason='known_offline_wall_result')
+            e._fit_position=MethodType(fit,e)
+            scan=RawScan('history-rebase',b,tuple(TimedPoint(str(i),b-(7-i)*1_000_000,
+                (1.,0.),raw_angle_deg=215.75) for i in range(8)),'offline','known_synthetic',False)
+            result=e.observe(scan);state=e.snapshot()
+            final=np.array(state['center_xy_m']);tail=rotation(angle)@np.array([.01,0.])
+            corrected_at_scan=final-tail
+            for axis in axes:
+                i=('x','y').index(axis)
+                assert abs(corrected_at_scan[i]-candidate[i])<1e-10
+            if axes==['x']:assert e.offset[1]==0.  # A single wall never fixes Y.
+            assert np.linalg.norm(result['motion_reference_update_m'])>.04
+            assert state['sample_monotonic_ns']==b+100_000_000
+            assert state['motion_selection']['mode']=='T265_WITH_WHEEL_TAIL'
+
+
 def test_synthetic_wheel_fixture():
     from unittest.mock import patch
     import uuid

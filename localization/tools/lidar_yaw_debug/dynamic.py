@@ -305,16 +305,25 @@ class DynamicFence:
             motion_latest_ns=int(latest),timestamp_monotonic_ns=began,reference_revision=revision)
         with self.lock:
             if revision!=self.revision:raise ValueError("reference changed during scan fit")
+            # A delayed Pose can revise the last supported motion endpoint
+            # while geometry runs. Apply the wall posterior at the scan time
+            # against that CURRENT history, then keep subsequent propagation.
+            # Subtracting the frozen pre-fit prior would apply its revision
+            # twice to the vehicle position. No sensor-age decision is made.
+            current=sample(self.motion.history or self.poses,scan.reference_ns)
+            current_xy=(current[:2]-reference['pose_origin'])@rotation(reference['vio_rotation']).T+reference['start_center_xy_m']
             candidate=fit.get('candidate_center_xy_m')
             self.motion.observe_walls(scan.scan_id,fit['position_observed_axes'])
             if candidate is not None:
                 for axis in fit['position_observed_axes']:
-                    i=('x','y').index(axis);self.offset[i]=candidate[i]-ref[i]
+                    i=('x','y').index(axis);self.offset[i]=candidate[i]-current_xy[i]
                 self.fit_count+=1
                 self.has_anchor=True
                 if fit.get('position_reacquired'):self.reacquisition_count+=1
             self.last_scan_ns=scan.reference_ns
-            self.latest_points=(corrected@rotation(ref[2]).T+ref[:2]+self.offset).tolist()
+            self.latest_points=(corrected@rotation(ref[2]).T+current_xy+self.offset).tolist()
+            result['applied_motion_reference_xy_m']=current_xy.tolist()
+            result['motion_reference_update_m']=(current_xy-ref[:2]).tolist()
             result['map_translation_offset_m']=self.offset.tolist()
             result['compute_ms']=(time.monotonic_ns()-began)/1e6
             result['compute_thread_cpu_ms']=(time.thread_time_ns()-cpu_began)/1e6
