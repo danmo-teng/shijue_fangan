@@ -1149,7 +1149,10 @@ def test_dynamic_motion_compensation():
     old=engine.snapshot(origin+5_000_000_000)
     assert old['ready'] and old['motion_age_ms']>4000  # No age admission gate.
     compact=engine.control_snapshot(origin+5_000_000_000)
-    assert compact=={k:v for k,v in old.items() if k not in ('last_fit','points_field')}
+    expected={k:v for k,v in old.items() if k not in ('last_fit','points_field')}
+    expected['motion_selection']=dict(expected['motion_selection'])
+    expected['motion_selection'].pop('wall_motion_evidence')  # Display-only witness, not high-rate control data.
+    assert compact==expected
     engine.align('new physical reference',physical_confirmed=False)
     assert engine.snapshot()['source']=='VIO_FROM_INITIAL_REFERENCE'
     from unittest.mock import patch
@@ -2035,7 +2038,46 @@ def test_competition_control_rate():
     competition_control_rate_fixture()
 
 
-def competition_control_rate_fixture(*,require_all=True,lidar_records=None,interval_count=100):
+class _ControlLatencyFixture:
+    """Opt-in benchmark wrapper; no clocks/fields added to production IPC."""
+    def __init__(self, mailbox):
+        self.mailbox=mailbox;self.times={}
+
+    def put_latest(self,value):
+        return self.mailbox.put_latest(dict(value,_fixture_publish_ns=time.monotonic_ns()))
+
+    def get(self,timeout=None):
+        value=self.mailbox.get(timeout)
+        if value is not None:
+            received=time.monotonic_ns();published=value.pop('_fixture_publish_ns')
+            stamp=value['last'].get('sample_monotonic_ns')
+            if stamp is not None:self.times.setdefault(stamp,(published,received))
+        return value
+
+    def wake(self):
+        self.mailbox.wake()
+
+
+class _MotionLatencyFixture:
+    """Record input ingress in shared storage in this benchmark only."""
+    def __init__(self,inbox,context,capacity):
+        self.inbox=inbox;self.received=context.RawArray('q',capacity)
+
+    def put_nowait(self,value):self.inbox.put_nowait(value)
+
+    def get(self,timeout=None):
+        value=self.inbox.get(timeout)
+        kind,payload=value
+        if kind=='wheel' and 0<=payload['sample_id']<len(self.received):
+            self.received[payload['sample_id']]=time.monotonic_ns()
+        return value
+
+    def get_nowait(self):return self.get(timeout=0)
+    def close(self):self.inbox.close()
+    def cancel_join_thread(self):self.inbox.cancel_join_thread()
+
+
+def competition_control_rate_fixture(*,require_all=True,lidar_records=None,interval_count=100,measure_stages=False):
     import os,pty,socket,threading,uuid
     from async_debug_log import AsyncDebugLog
     from competition_dynamic_localization import CompetitionDynamicLocalization
@@ -2049,6 +2091,9 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
         if lidar_records:
             master,slave=pty.openpty();cfg['lidar']['port']=os.ttyname(slave)
         app=CompetitionDynamicLocalization(root,sid,cfg,dict(x_m=0.,y_m=0.,yaw_deg=0.),log)
+        if measure_stages:
+            app.radar.control=_ControlLatencyFixture(app.radar.control)
+            app.radar.inbox=_MotionLatencyFixture(app.radar.inbox,app.radar.context,interval_count+1)
         sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
         sink.bind(app.control_address);sink.settimeout(5)
         source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
@@ -2111,6 +2156,23 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
                 synthetic_capture_to_output_ms_max=max(capture),
                 producer_schedule_delay_ms_p95=float(np.percentile(lateness,95)),
                 producer_schedule_delay_ms_max=max(lateness))
+            if measure_stages:
+                times=app.radar.control.times
+                stages={name:[] for name in ('input_to_worker_publication','mailbox_delivery','control_to_sink',
+                    'input_to_worker_ingress','worker_ingress_to_publication')}
+                for stamp,end in received.items():
+                    if stamp not in times:continue
+                    publication,delivery=times[stamp]
+                    for name,duration in zip(tuple(stages)[:3],(publication-sent[stamp],delivery-publication,end-delivery)):
+                        stages[name].append(duration/1e6)
+                    index=(stamp-now)//10_000_000
+                    ingress=app.radar.inbox.received[index]
+                    if ingress:
+                        stages['input_to_worker_ingress'].append((ingress-sent[stamp])/1e6)
+                        stages['worker_ingress_to_publication'].append((publication-ingress)/1e6)
+                metrics['fixture_stage_ms']={name:dict(median=float(np.median(values)),
+                    p95=float(np.percentile(values,95)),maximum=max(values),samples=len(values),
+                    negative_samples=sum(v<0 for v in values)) for name,values in stages.items() if values}
         finally:
             if producer is not None:producer.join()
             if lidar_producer is not None:lidar_producer.join()
@@ -2120,7 +2182,8 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
         assert app.error is None and app.radar.stopped_cleanly and log.healthy()
         assert metrics['worker_input_drops']==metrics['output_drops']==0
         metrics.update(lidar_scans=app.radar.state['scans_received'],
-            lidar_fits=app.radar.state['scans'],fit_processing_ms_p95=app.radar.state['scan_processing_ms_p95'],
+            lidar_geometry_calls=app.radar.state['scans'],lidar_accepted_posteriors=app.radar.state['fits'],
+            fit_processing_ms_p95=app.radar.state['scan_processing_ms_p95'],
             ingested_distinct_intervals=app.radar.state['measured_wheel_ingested'],
             motion_scheduling=app.radar.state.get('motion_scheduling'),
             worker_control_updates=app.radar.state.get('control_updates'),

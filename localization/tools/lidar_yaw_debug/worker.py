@@ -371,7 +371,14 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             try:first=inbox.get(timeout=.002)
             except queue.Empty:first=None
             changed=consume(first)
-            changed=drain_reader() or changed
+            # Publish actual motion before probing the reader/scan/fit queues.
+            # Those housekeeping calls may yield the GIL even when empty.
+            # A completed posterior still gets its own update below; the
+            # bounded/latest control mailbox never replays an input backlog.
+            if changed:
+                if control is not None:publish_control()
+                publish_sdk_policy()
+            changed=drain_reader()
             latest=None
             for _ in range(8):
                 try:latest=scans.get_nowait()
