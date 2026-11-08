@@ -953,8 +953,8 @@ def test_timed_f405_client():
             before=len(received);client.close();time.sleep(.03);assert len(received)==before
         finally:
             stop.set();worker.join(timeout=1);client.close();os.close(master);os.close(slave)
-    # The new read-only check uses its own five-session retention, never T265
-    # history. Exercise deletion only in an owned temporary root.
+    # Legacy explicit helper only; normal connection checks must never call it.
+    # Exercise its deletion boundary only in an owned temporary root.
     from f405_connection_check import prune, OWNER as CHECK_OWNER
     with tempfile.TemporaryDirectory() as temporary:
         root=Path(temporary);sessions=[]
@@ -966,6 +966,38 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+    # Default check invocation (without the old --no-log-prune flag) preserves
+    # every historical session. No serial port is opened by this fake client.
+    import f405_connection_check as check
+    fake=SimpleNamespace(log_error=None,timed_stream_active=False,timed_enable_writes=0,
+        timed_disable_writes=0,start=lambda:None,close=lambda:None,poll=lambda:None,
+        status_snapshot=lambda:({'timestamp_monotonic_ns':1_000_000_000},{}),
+        connection_snapshot=lambda:{'motion_identity_ready':True},measurement_snapshot=lambda:{})
+    options=SimpleNamespace(uart='fixture-unused',baud=921600,chassis_profile='timed',
+        actual_lower_firmware='unconfirmed',actual_lower_mode='unconfirmed',actual_lower_service='unconfirmed')
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);old={}
+        for i in range(8):
+            directory=root/f'20261101_00000{i}_check';directory.mkdir()
+            for name,data in (('metadata.json',dict(owner=CHECK_OWNER)),
+                              ('session_complete.json',dict(owner=CHECK_OWNER,complete=True,session_index=i))):
+                file=directory/name;file.write_text(json.dumps(data));old[file]=file.read_bytes()
+        with patch.object(check,'ChassisTestClient',return_value=fake), \
+                patch.object(check,'prune',side_effect=AssertionError('unexpected automatic deletion')) as prune_call, \
+                patch.object(check.subprocess,'check_output',side_effect=['fixture-head\n','']), \
+                patch.object(check.time,'monotonic',side_effect=[0.,2.]), \
+                patch.object(check.time,'monotonic_ns',return_value=1_000_000_000),patch('builtins.print'):
+            assert check.check_connection(options,root)==0
+        prune_call.assert_not_called()
+        assert all(file.read_bytes()==data for file,data in old.items())
+        runs=[directory for directory in root.iterdir() if directory.name not in {file.parent.name for file in old}]
+        assert len(runs)==1
+        result=json.loads((runs[0]/'result.json').read_text())
+        assert result['old_check_sessions_removed']==[]
+        assert result['log_retention']['automatic_deletion'] is False
+        marker=json.loads((runs[0]/'session_complete.json').read_text())
+        assert marker['complete'] is True and marker['owner']==CHECK_OWNER
 
 
 def test_921600_100hz_feedback():

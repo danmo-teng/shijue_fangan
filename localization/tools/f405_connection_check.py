@@ -108,11 +108,14 @@ def check_connection(options, root):
     metadata["stream_subscription_sent"]=client.timed_enable_writes>0
     metadata["stream_subscription_enable_packets_written"]=client.timed_enable_writes
     metadata["stream_subscription_disable_packets_written"]=client.timed_disable_writes
+    # Match the maps' capacity/manual-review policy. Completion does not
+    # authorise removing older measurements, even without --no-log-prune.
+    result["old_check_sessions_removed"]=[]
+    result["log_retention"]=dict(policy="capacity_warning_manual_review",automatic_deletion=False)
     (run/"metadata.json").write_text(json.dumps(metadata,indent=2)+"\n")
     (run/"result.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
     if complete:
         (run/"session_complete.json").write_text(json.dumps(dict(owner=OWNER,complete=True,
             session_index=max(indices,default=0)+1,accuracy_verified=False))+"\n")
-        result["old_check_sessions_removed"]=[] if getattr(options,"no_log_prune",False) else prune(root,run)
     print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
     return 0 if result["connection_ok"] else 2

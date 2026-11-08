@@ -3061,5 +3061,35 @@
       }
     },
     "interpretation": "Isolated CPU saving established; final joint run P95 9.470ms is noisier than earlier 7.984/8.057ms, so no additional end-to-end gain claim. All 1000 intervals processed, zero queue drops and zero native fallbacks."
+  },
+  "latest_nonmotion_chassis_rechecks": [
+    {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/f405_connection_check/20261109_031349_check",
+      "baud": 921600,
+      "connection_ok": false,
+      "uart_rx_bytes": 0,
+      "actual_firmware": "unconfirmed",
+      "motor_commands": 0,
+      "t265_started": false,
+      "measurement_subscription": false,
+      "automatic_cleanup_explicitly_disabled": true
+    },
+    {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/f405_connection_check/20261109_031539_check",
+      "baud": 230400,
+      "connection_ok": false,
+      "uart_rx_bytes": 0,
+      "actual_firmware": "unconfirmed",
+      "motor_commands": 0,
+      "t265_started": false,
+      "measurement_subscription": false,
+      "automatic_cleanup_explicitly_disabled": true
+    }
+  ],
+  "connection_check_retention_fix": {
+    "issue": "Only connection-check entry still called legacy prune by default; maps/formal paths had already disabled it",
+    "change": "Default connection check never deletes old sessions; persisted result includes empty removal list and automatic_deletion=false",
+    "check": "Existing test_timed_f405_client passed; fake client/default options preserves all files in 8 previous sessions and never calls prune",
+    "real_old_log_deletion": false
   }
 }
