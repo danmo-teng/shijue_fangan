@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_072008_interactive",
+  "scope": "Independent read-only raw-log audit of control-probe sample identity, native UART observation loss, startup/tail counters and actual SDK/Pose/YOLO temporal overlap. Stationary real F405/T265 and real YOLO plus historical lidar and synthetic field reference; no motor commands. Does not assert field accuracy, full run completion or 100Hz navigation.",
+  "raw_inputs": [
+    "metadata.json",
+    "events.jsonl",
+    "wheel_sdk.jsonl",
+    "uart_rx.jsonl",
+    "chassis_extended.jsonl",
+    "internal_control_load_probe.jsonl",
+    "pose_motion.jsonl",
+    "vision_load_detections.jsonl",
+    "vision_load_events.jsonl",
+    "dynamic_localization.jsonl",
+    "dynamic_summary.json",
+    "joint_load_result.json"
+  ],
+  "actual": {
+    "upper_commit": "2796d31dca6e1a952b74369bad86020d792a5924",
+    "lower_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "lower_source_dirty": 1,
+    "lower_mode": "NormalDebug",
+    "lower_service": "MOTIONDEBUG",
+    "uart_baud": 921600,
+    "mcu_epoch": "421fc48027cd480e44a9358e1bc20600",
+    "sdk_session_id": "2fd34e81405f4620858b7f814b3041bd"
+  },
+  "method": {
+    "association": "Probe motion_selection.last_wheel_sample_id matched with same-epoch native TYPE07 sample_id; latency is probe receive_monotonic_ns minus native wheel receive_monotonic_ns on the same host clock.",
+    "unknown_clock_mapping_used_for_latency": false,
+    "all_probe_records_associated": true,
+    "unmatched_sample_ids": [],
+    "wall_mapping": "session_started wall_time plus monotonic delta, approximately millisecond resolution.",
+    "raw_pose_reference_age_note": "Uses the SDK-mapped Pose support timestamp and is diagnostic; native wheel RX-to-probe evidence above does not depend on its calibration."
+  },
+  "segments": [
+    {
+      "name": "all_probe",
+      "start_ns": 12287370740465,
+      "end_ns": 12311074981906,
+      "start_wall": "2026-11-09T07:20:11.064",
+      "end_wall": "2026-11-09T07:20:34.768",
+      "window_duration_s": 23.704241441,
+      "probe_rows": 874,
+      "distinct_endpoints": 851,
+      "rows_rate_hz": 36.82885200831684,
+      "distinct_endpoint_rate_hz": 35.858561520125214,
+      "wheel_rx_to_probe_ms": {
+        "n": 874,
+        "min": 6.440447,
+        "median": 1522.1522639999998,
+        "p95": 2170.3433086,
+        "p99": 2237.97662319,
+        "max": 2256.920665
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 874,
+        "min": 0.0,
+        "median": 152.0,
+        "p95": 217.0,
+        "p99": 223.0,
+        "max": 225.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 874,
+        "min": 8.074008,
+        "median": 28.5272215,
+        "p95": 94.84105754999993,
+        "p99": 125.26100608999998,
+        "max": 150.780929
+      }
+    },
+    {
+      "name": "before_first_sampled_YOLO_inference",
+      "start_ns": 12287370740465,
+      "end_ns": 12291171468388,
+      "start_wall": "2026-11-09T07:20:11.064",
+      "end_wall": "2026-11-09T07:20:14.865",
+      "window_duration_s": 3.800727923,
+      "probe_rows": 257,
+      "distinct_endpoints": 243,
+      "rows_rate_hz": 67.61828635084667,
+      "distinct_endpoint_rate_hz": 63.920411316034745,
+      "wheel_rx_to_probe_ms": {
+        "n": 257,
+        "min": 6.440447,
+        "median": 19.246799,
+        "p95": 66.3608832,
+        "p99": 80.76157452,
+        "max": 97.38662
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 257,
+        "min": 0.0,
+        "median": 1.0,
+        "p95": 6.0,
+        "p99": 7.439999999999998,
+        "max": 9.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 257,
+        "min": 8.436338,
+        "median": 17.845236,
+        "p95": 47.0924674,
+        "p99": 73.00043935999999,
+        "max": 75.860502
+      }
+    },
+    {
+      "name": "actual_sampled_YOLO_inference_overlap",
+      "start_ns": 12291171468389,
+      "end_ns": 12308282913094,
+      "start_wall": "2026-11-09T07:20:14.865",
+      "end_wall": "2026-11-09T07:20:31.976",
+      "window_duration_s": 17.111444705,
+      "probe_rows": 509,
+      "distinct_endpoints": 503,
+      "rows_rate_hz": 29.74345543084046,
+      "distinct_endpoint_rate_hz": 29.392154776145492,
+      "wheel_rx_to_probe_ms": {
+        "n": 509,
+        "min": 30.668904,
+        "median": 1675.713058,
+        "p95": 2194.370779,
+        "p99": 2242.851454,
+        "max": 2256.920665
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 509,
+        "min": 3.0,
+        "median": 167.0,
+        "p95": 219.0,
+        "p99": 224.0,
+        "max": 225.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 509,
+        "min": 9.623578,
+        "median": 37.395836,
+        "p95": 98.18741879999999,
+        "p99": 125.84825964000001,
+        "max": 150.780929
+      }
+    },
+    {
+      "name": "after_last_sampled_YOLO_inference",
+      "start_ns": 12308282913095,
+      "end_ns": 12311074981906,
+      "start_wall": "2026-11-09T07:20:31.976",
+      "end_wall": "2026-11-09T07:20:34.768",
+      "window_duration_s": 2.792068811,
+      "probe_rows": 108,
+      "distinct_endpoints": 105,
+      "rows_rate_hz": 38.345581354604846,
+      "distinct_endpoint_rate_hz": 37.2704715969991,
+      "wheel_rx_to_probe_ms": {
+        "n": 108,
+        "min": 1050.820449,
+        "median": 1598.833008,
+        "p95": 2173.686659,
+        "p99": 2215.3883191299997,
+        "max": 2222.099851
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 108,
+        "min": 105.0,
+        "median": 159.0,
+        "p95": 217.0,
+        "p99": 220.93,
+        "max": 222.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 108,
+        "min": 8.074008,
+        "median": 29.077665,
+        "p95": 100.67054044999998,
+        "p99": 130.67929388999997,
+        "max": 138.995589
+      }
+    }
+  ],
+  "probe": {
+    "count": 874,
+    "source_counts": {
+      "T265_WITH_WHEEL_TAIL": 874
+    },
+    "inter_arrival_ms": {
+      "n": 873,
+      "min": 0.193916,
+      "median": 21.220588,
+      "p95": 68.60126259999998,
+      "p99": 98.57019139999996,
+      "max": 160.86951
+    },
+    "endpoint_intervals_ms": {
+      "n": 873,
+      "min": 0.0,
+      "median": 10.36294,
+      "p95": 79.16013539999997,
+      "p99": 197.99503979999923,
+      "max": 500.34987
+    },
+    "control_updates": 1016,
+    "control_updates_coalesced": 139,
+    "control_capacity_errors": 0,
+    "publications_minus_coalesced_minus_probe": 3,
+    "remaining_publications_note": "Three publications are outside recorded probe consumption; no evidence identifies them as input loss. All probe sources are T265_WITH_WHEEL_TAIL, so neither initialization nor a source transition explains sustained backlog."
+  },
+  "native_observation": {
+    "native_type07_count": 2483,
+    "native_first_sample_id": 1387575,
+    "native_last_sample_id": 1390057,
+    "native_sample_id_gaps": 0,
+    "python_decoded_type07_count": 2143,
+    "python_samples_before_first_native_record": 24,
+    "native_ids_present_in_python": 2119,
+    "native_ids_missing_from_python": 364,
+    "missing_id_first": 1388416,
+    "missing_id_last": 1389887,
+    "missing_native_rx_wall_range": [
+      "2026-11-09T07:20:18.873",
+      "2026-11-09T07:20:33.583"
+    ],
+    "native_transport_container_drops": 1548,
+    "first_nonzero_counter_record": {
+      "timestamp_monotonic_ns": 12295207110906,
+      "wall": "2026-11-09T07:20:18.901",
+      "drops": 11
+    },
+    "counter_scope": "All complete CRC-valid container types combined on native-to-Python observation transport, not SDK queue drops. Counter is attached to an original-RX container; it does not timestamp each failed send."
+  },
+  "startup_and_tail": {
+    "motion_queue_drops": 0,
+    "pose_packets": 4749,
+    "pose_ingested": 4749,
+    "primary_yaw_packets": 2074,
+    "primary_yaw_ingested": 2074,
+    "measured_wheel_ingested": 2033,
+    "pre_sdk_discard_events": [
+      {
+        "before_sdk_start": 49,
+        "queue_overflow": 0,
+        "log_monotonic_ns": 12286763534828
+      }
+    ],
+    "pre_sdk_scope": "Complete TYPE07/TYPE08 containers combined before SDK worker starts, not raw fragments and not necessarily wheel samples.",
+    "native_reject_reasons": [
+      "no_gyro_at_interval_start",
+      "no_gyro_at_interval_start"
+    ],
+    "sdk_coalesced_measured_samples": 4,
+    "worker_last_wheel_sample_id": 1389951,
+    "python_decoded_after_worker_last_id": 106,
+    "python_decoded_at_or_before_worker_last_id": 2037,
+    "unresolved_difference_before_worker_last_id": 4,
+    "tail_note": "106 Python-decoded wheels follow the worker last-wheel ID. The remaining four are consistent with subscriber startup boundaries, but per-ingest identity records are absent; do not claim their exact omission time."
+  },
+  "overlap": {
+    "pose_receive_first_wall": "2026-11-09T07:20:10.979",
+    "pose_receive_last_wall": "2026-11-09T07:20:34.766",
+    "yolo_sampled_inference_first_wall": "2026-11-09T07:20:14.865",
+    "yolo_sampled_inference_last_wall": "2026-11-09T07:20:31.976",
+    "sampled_yolo_sdk_pose_overlap_s": 17.111444705,
+    "historical_lidar_fit_completion_first_wall": "2026-11-09T07:20:11.074",
+    "historical_lidar_fit_completion_last_wall": "2026-11-09T07:20:24.691",
+    "yolo_inference_total": 660,
+    "yolo_camera_restarts": 0,
+    "yolo_exit_reason": "duration",
+    "yolo_performance": {
+      "timestamp_monotonic_ns": 12310043754172,
+      "event": "vision_performance",
+      "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+      "model_family": "YOLO26",
+      "warmup_seconds": 5,
+      "metric": "unique frames after tracking/ROI and planner.set_vision",
+      "fps_1s_including_warmup": [
+        38,
+        35,
+        38,
+        36,
+        38,
+        42,
+        41,
+        41,
+        39,
+        39,
+        32,
+        42,
+        39,
+        42,
+        43,
+        36,
+        31
+      ],
+      "measurement_seconds": 12,
+      "frames_after_warmup": 467,
+      "mean_fps": 38.916666666666664,
+      "min_fps_1s": 31,
+      "stable_30fps": false
+    }
+  },
+  "completion": {
+    "entry_returncode": 0,
+    "vision_returncode": 0,
+    "session_complete_file_exists": false,
+    "motion_stream_complete": true,
+    "whole_chain_passed": false,
+    "reason": "session_complete.json is absent, native-to-Python observation transport dropped 1548 containers and control references accumulated 1.5–2.26 seconds of lag; motion_queue_drops=0 only covers the later inbox stage."
+  },
+  "limitations": [
+    "SDK true is only host API return, not a per-sample device ACK or proof of accuracy.",
+    "The experiment uses explicit synthetic field reference and historic lidar; zero accepted wall fixes, no physical field position or motion precision evidence.",
+    "Existing logs have no per-observer-stage processing timestamp; cannot independently split socket retention, Python decode/callback and chassis inbox delays.",
+    "No source, original log, hardware, motor or cleanup operation was performed for this audit."
+  ]
+}

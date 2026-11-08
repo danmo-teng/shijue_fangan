@@ -445,3 +445,26 @@ result.json同时保存空移除列表与automatic_deletion=false。既有test_t
 
 四轮均接收98扫描，末轮仅执行97次几何，不能称几何计算次数完全相同；现有汇总不足以确认少一次发生于收尾还是有界合并。没有稳定P95收益，整条运行候选及其专用断言已撤回，恢复到88b4937原字节；此前f9fa722已通过独立因果对照的四处接收优化不受影响。没有把最大值或端点数量挑成收益，未引入空读系统调用额外成本。
 真实视觉68秒正常退出，热身后62个整秒平均45.34FPS/最低30、相机重启0、日志丢0、CONFIG/开赛/ABORT发送0；四轮均在视觉运行时完成。运动/Pose仍合成、雷达仍历史、无SDK或底盘UART/显示/回放环缓存；不等于实车或真实联合验收。原始结果目录competition_vision_preheat/20261109_043427_motion_inbox_abba，派生报告reports/localization_motion_inbox_abba_20261109.json。
+
+### 供电恢复后：SDK连续，轮反馈的Python转发仍积压
+
+用户确认此前只用10W电源，现换回比赛电源。X5官方规格为USB-C 5V/5A（25W），见[官方硬件说明](https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_x5/)。
+03:37:44和07:26:58内核均记录整个USB2/USB3 Hub及视觉相机/T265断开；之后系统也确曾重新启动。cmdline的COLD_BOOT和空pstore不能独立证明故障瞬间电压，未把推断写成测量结论。此次未执行reboot、Hub复位或启动文件修改，不新增供电/时间资格门。
+
+072008虽SDK2476次true/99.827Hz、原始Pose199.604Hz无缺号，联合控制却仅35.86个不同轮端点/秒，轮RX→probe中位1522/P952170ms；观察通道丢1548个完整容器，故无session_complete。不能拿API频率或后段motion_queue_drops=0当整链完成。
+072648的同SDK send A/B/B/A在首阶段07:26:58整组USB故障后负载消失，比较无效，原日志保留。派生证据见reports/localization_joint_072008_audit_20261109.json及localization_joint_send_abba_20261109.json。
+
+074616换回比赛电源后，同一SDK、真实F405/YOLO与历史雷达PTY/地图绘图四阶段连续运行，未见USB/相机错误。实际F405为14b2a3a/dirty1、MOTIONDEBUG、921600；合成场地参考仅作计算负载，雷达后验接受0，不是实物精度验证。5471次API全true、99.789Hz，轮/gyro配齐→API P950.792ms、wheel物理RX→API P959.320ms；10909个原始Pose、199.593Hz、缺号0。
+
+唯一对照变量为MotionInbox发送采用原Python socket.send或保留GIL的PyDLL MSG_DONTWAIT，方法/容量/原始戳/公式均保持。各阶段10秒；下表另去首2秒作离线描述，运行中未丢旧数据或增加门控；积压会跨阶段继承，去2秒不代表已经清空。
+
+| 阶段 | 发送 | 不同轮端点Hz | 物理wheelRX→probe中位 / P95 ms | 观察容器drop增量 |
+| --- | --- | --- | --- | --- |
+| A1 | 原Python | 23.71 | 2933.61 / 3845.15 | 1592 |
+| B1 | PyDLL NOWAIT | 23.23 | 2104.40 / 3485.72 | 1162 |
+| B2 | PyDLL NOWAIT | 23.78 | 2147.17 / 3250.85 | 1341 |
+| A2 | 原Python | 27.56 | 1800.51 / 2130.62 | 767 |
+
+没有稳定因果收益，最后原A反而最好；候选运行代码及专用断言全部撤回到2796d31原字节，已有f9fa722接收优化保留。独立语义审查/单项功能检查通过不构成性能采用依据。总体观察通道丢7858个容器，控制链未验收、无session_complete；原始Pose多数引用年龄约32～40ms，轮引用却秒级，优先查轮反馈观察/转发支路。现有Python日志沿用C++原始RX戳，不能把它与native戳相等解释为解码零延迟，也无法再精拆具体子段。完整阶段/异常范围见reports/localization_joint_send_stable_supply_20261109.json及localization_joint_074616_sdk_20261109.json。
+
+075253仅为现有入口临时函数剖析，运行代码无常驻新增计时。UART线程26秒中feed包围20.3秒、_publish11.6秒、日志submit7.1秒、deepcopy5.54秒；这些包含重叠/GIL等待，不能直接相加或当CPU时间。主日志线程逐条Queue.get与锁获取及JSON编码也有明显成本。历史PTY发生半包写而提前中止，此轮不算完整联合性能复测；派生函数归因保留在reports/localization_joint_profile_20261109.json。当前仅准备保持FIFO/容量/字段/写盘语义的日志批量队列小候选，实际收益待同负载对照，不靠扩容或删除原始日志降低负载。

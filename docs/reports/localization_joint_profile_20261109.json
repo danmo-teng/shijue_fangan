@@ -1,0 +1,2011 @@
+{
+  "scope": "Temporary cProfile around existing dynamic GUI/UART/yaw/pose threads and existing RDK_DEBUG_LOG_PROFILE. Intrusive wall-time attribution, not CPU-only or production latency acceptance. No runtime profiling remains in source.",
+  "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_075253_interactive",
+  "motor_commands": 0,
+  "raw_logs_modified": false,
+  "caveats": [
+    "Historical PTY replay hit a partial write and stopped early after7553 chunks; not complete equivalent lidar replay.",
+    "Profile times include GIL reacquisition, locks, scheduling and actual function work; do not sum overlapping inclusive times or call them CPU cost.",
+    "Does not establish send optimization benefit, previously withdrawn after valid074616 comparison."
+  ],
+  "profiles": {
+    "gui_main.prof": {
+      "total_calls": 426550,
+      "total_wall_seconds": 28.857780894999998,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 306,
+          "function": "run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 2.7583000000000003e-05,
+          "inclusive_seconds": 28.857910689
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 1353,
+          "function": "run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.019584986000000002,
+          "inclusive_seconds": 28.857883106000003
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 504,
+          "function": "render_screen",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.561169229,
+          "inclusive_seconds": 17.744424049000003
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 165,
+          "function": "render_logical",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.415137189,
+          "inclusive_seconds": 11.577468875000001
+        },
+        {
+          "file": "<string>",
+          "line": 85,
+          "function": "update",
+          "primitive_calls": 50,
+          "calls": 50,
+          "self_seconds": 0.0014262510000000001,
+          "inclusive_seconds": 5.932612871000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 134,
+          "function": "update_data",
+          "primitive_calls": 50,
+          "calls": 50,
+          "self_seconds": 0.020097958000000003,
+          "inclusive_seconds": 5.920179042
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<circle>",
+          "primitive_calls": 3554,
+          "calls": 3554,
+          "self_seconds": 5.893349827000001,
+          "inclusive_seconds": 5.893349827000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 137,
+          "function": "paint",
+          "primitive_calls": 52,
+          "calls": 52,
+          "self_seconds": 0.011313986000000002,
+          "inclusive_seconds": 4.358480428
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 542,
+          "function": "update_data",
+          "primitive_calls": 50,
+          "calls": 50,
+          "self_seconds": 0.08057496900000001,
+          "inclusive_seconds": 3.6483984130000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<resize>",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 3.1066766350000004,
+          "inclusive_seconds": 3.1066766350000004
+        },
+        {
+          "file": "<string>",
+          "line": 96,
+          "function": "stop",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 7.0584e-05,
+          "inclusive_seconds": 2.7472899670000004
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 312,
+          "function": "stop_session",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.0005192490000000001,
+          "inclusive_seconds": 2.7433340520000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method time.sleep>",
+          "primitive_calls": 123,
+          "calls": 123,
+          "self_seconds": 2.68259206,
+          "inclusive_seconds": 2.68259206
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 147,
+          "function": "_raster",
+          "primitive_calls": 58,
+          "calls": 58,
+          "self_seconds": 0.022139122,
+          "inclusive_seconds": 2.6004721760000002
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 74,
+          "function": "read_json",
+          "primitive_calls": 121,
+          "calls": 121,
+          "self_seconds": 0.007167413,
+          "inclusive_seconds": 2.5298569300000002
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1129,
+          "function": "read_text",
+          "primitive_calls": 127,
+          "calls": 127,
+          "self_seconds": 0.005489081000000001,
+          "inclusive_seconds": 2.5226859750000004
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_debug/worker.py",
+          "line": 450,
+          "function": "poll",
+          "primitive_calls": 58,
+          "calls": 58,
+          "self_seconds": 0.043226515,
+          "inclusive_seconds": 2.144719192
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_f407_motion_map.py",
+          "line": 1145,
+          "function": "stop_session",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.051514731,
+          "inclusive_seconds": 2.101568861
+        },
+        {
+          "file": "/usr/lib/python3.10/multiprocessing/queues.py",
+          "line": 134,
+          "function": "get_nowait",
+          "primitive_calls": 341,
+          "calls": 341,
+          "self_seconds": 0.003526042,
+          "inclusive_seconds": 2.101487801
+        },
+        {
+          "file": "/usr/lib/python3.10/multiprocessing/queues.py",
+          "line": 98,
+          "function": "get",
+          "primitive_calls": 341,
+          "calls": 341,
+          "self_seconds": 0.018173395000000002,
+          "inclusive_seconds": 2.097961759
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/motion_log_storage.py",
+          "line": 233,
+          "function": "render",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.234904732,
+          "inclusive_seconds": 2.038731845
+        },
+        {
+          "file": "/usr/lib/python3.10/multiprocessing/connection.py",
+          "line": 208,
+          "function": "recv_bytes",
+          "primitive_calls": 225,
+          "calls": 225,
+          "self_seconds": 0.004426002,
+          "inclusive_seconds": 1.5834438910000002
+        },
+        {
+          "file": "/usr/lib/python3.10/multiprocessing/connection.py",
+          "line": 413,
+          "function": "_recv_bytes",
+          "primitive_calls": 225,
+          "calls": 225,
+          "self_seconds": 0.0060139370000000004,
+          "inclusive_seconds": 1.577776136
+        },
+        {
+          "file": "/usr/lib/python3.10/multiprocessing/connection.py",
+          "line": 374,
+          "function": "_recv",
+          "primitive_calls": 450,
+          "calls": 450,
+          "self_seconds": 0.011542079,
+          "inclusive_seconds": 1.5698308090000002
+        }
+      ]
+    },
+    "read_pose.prof": {
+      "total_calls": 223969,
+      "total_wall_seconds": 25.031993244999995,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 112,
+          "function": "read_pose",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.29404571500000004,
+          "inclusive_seconds": 25.031992495
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_debug/worker.py",
+          "line": 439,
+          "function": "send",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.06576274,
+          "inclusive_seconds": 16.622843254
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'send' of '_socket.socket' objects>",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 16.258626065,
+          "inclusive_seconds": 16.258626065
+        },
+        {
+          "file": "<string>",
+          "line": 24,
+          "function": "baseline_send",
+          "primitive_calls": 2803,
+          "calls": 2803,
+          "self_seconds": 0.057071357,
+          "inclusive_seconds": 9.722943658
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_debug/latest_snapshot.py",
+          "line": 40,
+          "function": "put_nowait",
+          "primitive_calls": 2092,
+          "calls": 2092,
+          "self_seconds": 0.041721166000000004,
+          "inclusive_seconds": 6.834136856000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/local_packet_receiver.py",
+          "line": 47,
+          "function": "recv",
+          "primitive_calls": 4903,
+          "calls": 4903,
+          "self_seconds": 0.055386396000000004,
+          "inclusive_seconds": 6.503000278
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method select.select>",
+          "primitive_calls": 730,
+          "calls": 730,
+          "self_seconds": 5.948978244,
+          "inclusive_seconds": 5.948978244
+        },
+        {
+          "file": "/usr/lib/python3.10/json/__init__.py",
+          "line": 299,
+          "function": "loads",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.105858436,
+          "inclusive_seconds": 0.887437239
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 50,
+          "function": "dlog",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.089692252,
+          "inclusive_seconds": 0.69667725
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 39,
+          "function": "submit",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.122251152,
+          "inclusive_seconds": 0.606984998
+        },
+        {
+          "file": "/usr/lib/python3.10/json/decoder.py",
+          "line": 332,
+          "function": "decode",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.11567423,
+          "inclusive_seconds": 0.592462151
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/local_packet_receiver.py",
+          "line": 34,
+          "function": "_nowait",
+          "primitive_calls": 5625,
+          "calls": 5625,
+          "self_seconds": 0.490260566,
+          "inclusive_seconds": 0.49767554900000005
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 185,
+          "function": "put_nowait",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.036898536,
+          "inclusive_seconds": 0.401641846
+        },
+        {
+          "file": "/usr/lib/python3.10/json/decoder.py",
+          "line": 343,
+          "function": "raw_decode",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.37191718900000004,
+          "inclusive_seconds": 0.37191718900000004
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 122,
+          "function": "put",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.12663860200000002,
+          "inclusive_seconds": 0.36474331000000004
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _pickle.dumps>",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.196784398,
+          "inclusive_seconds": 0.196784398
+        },
+        {
+          "file": "/usr/lib/python3.10/json/__init__.py",
+          "line": 244,
+          "function": "detect_encoding",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.10695433800000001,
+          "inclusive_seconds": 0.149915502
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.028137602,
+          "inclusive_seconds": 0.103271716
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'match' of 're.Pattern' objects>",
+          "primitive_calls": 9790,
+          "calls": 9790,
+          "self_seconds": 0.089370076,
+          "inclusive_seconds": 0.089370076
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.075134114,
+          "inclusive_seconds": 0.075134114
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 92,
+          "function": "qsize",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.053810783,
+          "inclusive_seconds": 0.064374385
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 359,
+          "function": "notify",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.028442477,
+          "inclusive_seconds": 0.054263784
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'startswith' of 'bytes' objects>",
+          "primitive_calls": 14685,
+          "calls": 14685,
+          "self_seconds": 0.038987275,
+          "inclusive_seconds": 0.038987275
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 267,
+          "function": "__exit__",
+          "primitive_calls": 4895,
+          "calls": 4895,
+          "self_seconds": 0.02953791,
+          "inclusive_seconds": 0.035564335
+        }
+      ]
+    },
+    "log_15978_16025.prof": {
+      "total_calls": 537824,
+      "total_wall_seconds": 26.084261032999997,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 68,
+          "function": "_run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.8807826660000001,
+          "inclusive_seconds": 26.084258241
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'acquire' of '_thread.lock' objects>",
+          "primitive_calls": 20301,
+          "calls": 20301,
+          "self_seconds": 7.5479653010000005,
+          "inclusive_seconds": 7.5479653010000005
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 589,
+          "function": "wait",
+          "primitive_calls": 275,
+          "calls": 275,
+          "self_seconds": 0.007293824000000001,
+          "inclusive_seconds": 7.547953668000001
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 288,
+          "function": "wait",
+          "primitive_calls": 275,
+          "calls": 275,
+          "self_seconds": 0.014191462,
+          "inclusive_seconds": 7.537656422
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 193,
+          "function": "get_nowait",
+          "primitive_calls": 19259,
+          "calls": 19259,
+          "self_seconds": 0.13756901600000002,
+          "inclusive_seconds": 4.945614673000001
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 154,
+          "function": "get",
+          "primitive_calls": 19259,
+          "calls": 19259,
+          "self_seconds": 0.303996545,
+          "inclusive_seconds": 4.808045657
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 38518,
+          "calls": 38518,
+          "self_seconds": 0.150577221,
+          "inclusive_seconds": 4.657407044
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 38518,
+          "calls": 38518,
+          "self_seconds": 4.506829823,
+          "inclusive_seconds": 4.506829823
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'flush' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 744,
+          "calls": 744,
+          "self_seconds": 3.814884101,
+          "inclusive_seconds": 3.814884101
+        },
+        {
+          "file": "/usr/lib/python3.10/json/__init__.py",
+          "line": 183,
+          "function": "dumps",
+          "primitive_calls": 19105,
+          "calls": 19105,
+          "self_seconds": 0.457296429,
+          "inclusive_seconds": 3.726172936
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1146,
+          "function": "write_text",
+          "primitive_calls": 121,
+          "calls": 121,
+          "self_seconds": 0.006205250000000001,
+          "inclusive_seconds": 3.2057172570000003
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 182,
+          "function": "encode",
+          "primitive_calls": 19105,
+          "calls": 19105,
+          "self_seconds": 0.42475305100000005,
+          "inclusive_seconds": 3.0916970430000004
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 204,
+          "function": "iterencode",
+          "primitive_calls": 19105,
+          "calls": 19105,
+          "self_seconds": 2.619320413,
+          "inclusive_seconds": 2.619320413
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1111,
+          "function": "open",
+          "primitive_calls": 127,
+          "calls": 127,
+          "self_seconds": 0.0018961310000000001,
+          "inclusive_seconds": 1.946153892
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method io.open>",
+          "primitive_calls": 127,
+          "calls": 127,
+          "self_seconds": 1.9350551100000002,
+          "inclusive_seconds": 1.944203474
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__exit__' of '_io._IOBase' objects>",
+          "primitive_calls": 121,
+          "calls": 121,
+          "self_seconds": 1.274777233,
+          "inclusive_seconds": 1.274777233
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1237,
+          "function": "replace",
+          "primitive_calls": 121,
+          "calls": 121,
+          "self_seconds": 0.004913284,
+          "inclusive_seconds": 0.987645757
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method posix.replace>",
+          "primitive_calls": 121,
+          "calls": 121,
+          "self_seconds": 0.9457817340000001,
+          "inclusive_seconds": 0.9563921930000001
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 57,
+          "function": "task_done",
+          "primitive_calls": 18984,
+          "calls": 18984,
+          "self_seconds": 0.130856368,
+          "inclusive_seconds": 0.714173688
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 104,
+          "function": "__init__",
+          "primitive_calls": 19105,
+          "calls": 19105,
+          "self_seconds": 0.177179464,
+          "inclusive_seconds": 0.177179464
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 267,
+          "function": "__exit__",
+          "primitive_calls": 38518,
+          "calls": 38518,
+          "self_seconds": 0.122346595,
+          "inclusive_seconds": 0.159039687
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'write' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 1352,
+          "calls": 1352,
+          "self_seconds": 0.15475739300000002,
+          "inclusive_seconds": 0.15475739300000002
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 359,
+          "function": "notify",
+          "primitive_calls": 19201,
+          "calls": 19201,
+          "self_seconds": 0.065056415,
+          "inclusive_seconds": 0.14606697000000002
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 279,
+          "function": "_is_owned",
+          "primitive_calls": 19476,
+          "calls": 19476,
+          "self_seconds": 0.050516028000000004,
+          "inclusive_seconds": 0.082237054
+        }
+      ]
+    },
+    "log_15995_16040.prof": {
+      "total_calls": 35728,
+      "total_wall_seconds": 25.266970582000003,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 68,
+          "function": "_run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.103447941,
+          "inclusive_seconds": 25.266968166
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 589,
+          "function": "wait",
+          "primitive_calls": 1106,
+          "calls": 1106,
+          "self_seconds": 0.026454073,
+          "inclusive_seconds": 24.938174391
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 288,
+          "function": "wait",
+          "primitive_calls": 1106,
+          "calls": 1106,
+          "self_seconds": 0.049173178000000005,
+          "inclusive_seconds": 24.900554318
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'acquire' of '_thread.lock' objects>",
+          "primitive_calls": 4552,
+          "calls": 4552,
+          "self_seconds": 24.820318918,
+          "inclusive_seconds": 24.820318918
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'flush' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 389,
+          "calls": 389,
+          "self_seconds": 0.10550123800000001,
+          "inclusive_seconds": 0.10550123800000001
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 193,
+          "function": "get_nowait",
+          "primitive_calls": 1171,
+          "calls": 1171,
+          "self_seconds": 0.011599239,
+          "inclusive_seconds": 0.061528887000000004
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 154,
+          "function": "get",
+          "primitive_calls": 1171,
+          "calls": 1171,
+          "self_seconds": 0.028113375000000003,
+          "inclusive_seconds": 0.049929648
+        },
+        {
+          "file": "/usr/lib/python3.10/json/__init__.py",
+          "line": 183,
+          "function": "dumps",
+          "primitive_calls": 66,
+          "calls": 66,
+          "self_seconds": 0.0018929550000000002,
+          "inclusive_seconds": 0.030297654
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 182,
+          "function": "encode",
+          "primitive_calls": 66,
+          "calls": 66,
+          "self_seconds": 0.002086127,
+          "inclusive_seconds": 0.026937366
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 204,
+          "function": "iterencode",
+          "primitive_calls": 66,
+          "calls": 66,
+          "self_seconds": 0.02451516,
+          "inclusive_seconds": 0.02451516
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 276,
+          "function": "_acquire_restore",
+          "primitive_calls": 1106,
+          "calls": 1106,
+          "self_seconds": 0.008471302,
+          "inclusive_seconds": 0.014595914000000001
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1111,
+          "function": "open",
+          "primitive_calls": 3,
+          "calls": 3,
+          "self_seconds": 0.000122582,
+          "inclusive_seconds": 0.01335741
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method io.open>",
+          "primitive_calls": 3,
+          "calls": 3,
+          "self_seconds": 0.012362661,
+          "inclusive_seconds": 0.013230787
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 2342,
+          "calls": 2342,
+          "self_seconds": 0.008270103000000001,
+          "inclusive_seconds": 0.011599473
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 267,
+          "function": "__exit__",
+          "primitive_calls": 2342,
+          "calls": 2342,
+          "self_seconds": 0.009483921000000001,
+          "inclusive_seconds": 0.010934095000000001
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 209,
+          "function": "_qsize",
+          "primitive_calls": 1172,
+          "calls": 1172,
+          "self_seconds": 0.007894882,
+          "inclusive_seconds": 0.009371625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _thread.allocate_lock>",
+          "primitive_calls": 1106,
+          "calls": 1106,
+          "self_seconds": 0.009235332,
+          "inclusive_seconds": 0.009235332
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 279,
+          "function": "_is_owned",
+          "primitive_calls": 1234,
+          "calls": 1234,
+          "self_seconds": 0.004096377,
+          "inclusive_seconds": 0.006888669
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 273,
+          "function": "_release_save",
+          "primitive_calls": 1106,
+          "calls": 1106,
+          "self_seconds": 0.004667821,
+          "inclusive_seconds": 0.0052620670000000005
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 553,
+          "function": "is_set",
+          "primitive_calls": 2212,
+          "calls": 2212,
+          "self_seconds": 0.003759173,
+          "inclusive_seconds": 0.003759173
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'remove' of 'collections.deque' objects>",
+          "primitive_calls": 1105,
+          "calls": 1105,
+          "self_seconds": 0.0036300570000000003,
+          "inclusive_seconds": 0.0036300570000000003
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 2342,
+          "calls": 2342,
+          "self_seconds": 0.0033293700000000003,
+          "inclusive_seconds": 0.0033293700000000003
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 57,
+          "function": "task_done",
+          "primitive_calls": 65,
+          "calls": 65,
+          "self_seconds": 0.0010312090000000002,
+          "inclusive_seconds": 0.003019711
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 853,
+          "function": "__truediv__",
+          "primitive_calls": 3,
+          "calls": 3,
+          "self_seconds": 2.0708000000000002e-05,
+          "inclusive_seconds": 0.0024389570000000003
+        }
+      ]
+    },
+    "log_16042_16057.prof": {
+      "total_calls": 62429,
+      "total_wall_seconds": 24.298342058999996,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 68,
+          "function": "_run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.170437903,
+          "inclusive_seconds": 24.298340225
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 589,
+          "function": "wait",
+          "primitive_calls": 1083,
+          "calls": 1083,
+          "self_seconds": 0.027943846,
+          "inclusive_seconds": 22.923205097
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 288,
+          "function": "wait",
+          "primitive_calls": 1083,
+          "calls": 1083,
+          "self_seconds": 0.055088348,
+          "inclusive_seconds": 22.885140015
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'acquire' of '_thread.lock' objects>",
+          "primitive_calls": 5595,
+          "calls": 5595,
+          "self_seconds": 22.805857898000003,
+          "inclusive_seconds": 22.805857898000003
+        },
+        {
+          "file": "/usr/lib/python3.10/json/__init__.py",
+          "line": 183,
+          "function": "dumps",
+          "primitive_calls": 1009,
+          "calls": 1009,
+          "self_seconds": 0.01784349,
+          "inclusive_seconds": 0.784897921
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 182,
+          "function": "encode",
+          "primitive_calls": 1009,
+          "calls": 1009,
+          "self_seconds": 0.017038164,
+          "inclusive_seconds": 0.75899464
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 204,
+          "function": "iterencode",
+          "primitive_calls": 1009,
+          "calls": 1009,
+          "self_seconds": 0.7379058970000001,
+          "inclusive_seconds": 0.7379058970000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'flush' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 792,
+          "calls": 792,
+          "self_seconds": 0.18428170100000002,
+          "inclusive_seconds": 0.18428170100000002
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 193,
+          "function": "get_nowait",
+          "primitive_calls": 2091,
+          "calls": 2091,
+          "self_seconds": 0.014633685,
+          "inclusive_seconds": 0.105766176
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'write' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 312,
+          "calls": 312,
+          "self_seconds": 0.092451006,
+          "inclusive_seconds": 0.092451006
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 154,
+          "function": "get",
+          "primitive_calls": 2091,
+          "calls": 2091,
+          "self_seconds": 0.043665741,
+          "inclusive_seconds": 0.09113249100000001
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 359,
+          "function": "notify",
+          "primitive_calls": 1263,
+          "calls": 1263,
+          "self_seconds": 0.0065108150000000005,
+          "inclusive_seconds": 0.019403855
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 279,
+          "function": "_is_owned",
+          "primitive_calls": 2346,
+          "calls": 2346,
+          "self_seconds": 0.013716234,
+          "inclusive_seconds": 0.018456074000000003
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 4182,
+          "calls": 4182,
+          "self_seconds": 0.01169061,
+          "inclusive_seconds": 0.017183752
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 57,
+          "function": "task_done",
+          "primitive_calls": 1008,
+          "calls": 1008,
+          "self_seconds": 0.006930960000000001,
+          "inclusive_seconds": 0.01576582
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 267,
+          "function": "__exit__",
+          "primitive_calls": 4182,
+          "calls": 4182,
+          "self_seconds": 0.012304919000000001,
+          "inclusive_seconds": 0.014923619
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 276,
+          "function": "_acquire_restore",
+          "primitive_calls": 1083,
+          "calls": 1083,
+          "self_seconds": 0.009839775,
+          "inclusive_seconds": 0.013724046
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 209,
+          "function": "_qsize",
+          "primitive_calls": 2092,
+          "calls": 2092,
+          "self_seconds": 0.006669886000000001,
+          "inclusive_seconds": 0.009744607
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1111,
+          "function": "open",
+          "primitive_calls": 5,
+          "calls": 5,
+          "self_seconds": 5.3378e-05,
+          "inclusive_seconds": 0.008482539
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method io.open>",
+          "primitive_calls": 5,
+          "calls": 5,
+          "self_seconds": 0.008223786,
+          "inclusive_seconds": 0.008424745
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 104,
+          "function": "__init__",
+          "primitive_calls": 1009,
+          "calls": 1009,
+          "self_seconds": 0.008059791,
+          "inclusive_seconds": 0.008059791
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 4182,
+          "calls": 4182,
+          "self_seconds": 0.005493142,
+          "inclusive_seconds": 0.005493142
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 273,
+          "function": "_release_save",
+          "primitive_calls": 1083,
+          "calls": 1083,
+          "self_seconds": 0.004043659000000001,
+          "inclusive_seconds": 0.004531296000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'remove' of 'collections.deque' objects>",
+          "primitive_calls": 1082,
+          "calls": 1082,
+          "self_seconds": 0.004368251,
+          "inclusive_seconds": 0.004368251
+        }
+      ]
+    },
+    "_read_loop.prof": {
+      "total_calls": 2706993,
+      "total_wall_seconds": 26.04920704400001,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 563,
+          "function": "_read_loop",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.660897974,
+          "inclusive_seconds": 26.049204711
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 530,
+          "function": "feed",
+          "primitive_calls": 6325,
+          "calls": 6325,
+          "self_seconds": 0.8620954590000001,
+          "inclusive_seconds": 20.289032915
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_protocol.py",
+          "line": 157,
+          "function": "feed",
+          "primitive_calls": 6325,
+          "calls": 6325,
+          "self_seconds": 1.1393268920000001,
+          "inclusive_seconds": 16.167644559
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 430,
+          "function": "_publish",
+          "primitive_calls": 7987,
+          "calls": 7987,
+          "self_seconds": 0.571385231,
+          "inclusive_seconds": 11.606916831000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 284,
+          "function": "_on_extended",
+          "primitive_calls": 3226,
+          "calls": 3226,
+          "self_seconds": 0.193996085,
+          "inclusive_seconds": 8.264463469
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 413,
+          "function": "_log",
+          "primitive_calls": 18980,
+          "calls": 18980,
+          "self_seconds": 0.23256079300000002,
+          "inclusive_seconds": 7.330491661000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 39,
+          "function": "submit",
+          "primitive_calls": 19283,
+          "calls": 19283,
+          "self_seconds": 0.699212391,
+          "inclusive_seconds": 7.1032461190000005
+        },
+        {
+          "file": "/usr/lib/python3.10/copy.py",
+          "line": 128,
+          "function": "deepcopy",
+          "primitive_calls": 7990,
+          "calls": 329992,
+          "self_seconds": 3.381465341,
+          "inclusive_seconds": 5.541838541000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 178,
+          "function": "<lambda>",
+          "primitive_calls": 3099,
+          "calls": 3099,
+          "self_seconds": 0.071187627,
+          "inclusive_seconds": 4.921551781000001
+        },
+        {
+          "file": "/usr/lib/python3.10/copy.py",
+          "line": 227,
+          "function": "_deepcopy_dict",
+          "primitive_calls": 7990,
+          "calls": 7990,
+          "self_seconds": 0.926323357,
+          "inclusive_seconds": 4.890938811000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f407_motion_protocol.py",
+          "line": 285,
+          "function": "feed",
+          "primitive_calls": 3099,
+          "calls": 3099,
+          "self_seconds": 0.398807654,
+          "inclusive_seconds": 4.850364154
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 185,
+          "function": "put_nowait",
+          "primitive_calls": 22976,
+          "calls": 22976,
+          "self_seconds": 0.191252205,
+          "inclusive_seconds": 4.82832399
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 122,
+          "function": "put",
+          "primitive_calls": 22976,
+          "calls": 22976,
+          "self_seconds": 0.5175205230000001,
+          "inclusive_seconds": 4.637071785000001
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 22979,
+          "calls": 22979,
+          "self_seconds": 0.24387477200000002,
+          "inclusive_seconds": 3.234645641
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 22979,
+          "calls": 22979,
+          "self_seconds": 2.9907708690000003,
+          "inclusive_seconds": 2.9907708690000003
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_protocol.py",
+          "line": 30,
+          "function": "parse",
+          "primitive_calls": 6452,
+          "calls": 6452,
+          "self_seconds": 0.31225778800000004,
+          "inclusive_seconds": 2.1002676350000002
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f407_motion_protocol.py",
+          "line": 71,
+          "function": "crc16_modbus",
+          "primitive_calls": 15751,
+          "calls": 15751,
+          "self_seconds": 2.031414345,
+          "inclusive_seconds": 2.031414345
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 92,
+          "function": "qsize",
+          "primitive_calls": 18980,
+          "calls": 18980,
+          "self_seconds": 1.88061893,
+          "inclusive_seconds": 2.0139209950000003
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 449,
+          "function": "_on_imu",
+          "primitive_calls": 1135,
+          "calls": 1135,
+          "self_seconds": 0.025863351000000003,
+          "inclusive_seconds": 1.998879899
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/t265_wheel_input.py",
+          "line": 396,
+          "function": "telemetry",
+          "primitive_calls": 7987,
+          "calls": 7987,
+          "self_seconds": 0.43671038,
+          "inclusive_seconds": 1.839100554
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/native_test_uart.py",
+          "line": 51,
+          "function": "read",
+          "primitive_calls": 6325,
+          "calls": 6325,
+          "self_seconds": 0.264694783,
+          "inclusive_seconds": 1.8128263500000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_test_client.py",
+          "line": 444,
+          "function": "_on_odom",
+          "primitive_calls": 1662,
+          "calls": 1662,
+          "self_seconds": 0.052033618000000004,
+          "inclusive_seconds": 1.575405371
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/local_packet_receiver.py",
+          "line": 47,
+          "function": "recv",
+          "primitive_calls": 6325,
+          "calls": 6325,
+          "self_seconds": 0.206220423,
+          "inclusive_seconds": 1.4898861140000002
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/local_packet_receiver.py",
+          "line": 34,
+          "function": "_nowait",
+          "primitive_calls": 6375,
+          "calls": 6375,
+          "self_seconds": 1.079471668,
+          "inclusive_seconds": 1.085031904
+        }
+      ]
+    },
+    "read_yaw.prof": {
+      "total_calls": 182333,
+      "total_wall_seconds": 25.022618,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 130,
+          "function": "read_yaw",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.027928132,
+          "inclusive_seconds": 25.022615625
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_t265_motion_map.py",
+          "line": 106,
+          "function": "drain_yaw",
+          "primitive_calls": 970,
+          "calls": 970,
+          "self_seconds": 0.13742790000000002,
+          "inclusive_seconds": 15.220279099
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_debug/inputs.py",
+          "line": 7,
+          "function": "forward_motion_event",
+          "primitive_calls": 3996,
+          "calls": 3996,
+          "self_seconds": 0.15281793800000001,
+          "inclusive_seconds": 14.572235438000002
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_debug/worker.py",
+          "line": 439,
+          "function": "send",
+          "primitive_calls": 2964,
+          "calls": 2964,
+          "self_seconds": 0.039631881,
+          "inclusive_seconds": 13.955516439
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'send' of '_socket.socket' objects>",
+          "primitive_calls": 2964,
+          "calls": 2964,
+          "self_seconds": 13.656923141,
+          "inclusive_seconds": 13.656923141
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 589,
+          "function": "wait",
+          "primitive_calls": 971,
+          "calls": 971,
+          "self_seconds": 0.020951808000000002,
+          "inclusive_seconds": 9.774408394
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 288,
+          "function": "wait",
+          "primitive_calls": 970,
+          "calls": 970,
+          "self_seconds": 0.046147439000000005,
+          "inclusive_seconds": 9.744788198
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'acquire' of '_thread.lock' objects>",
+          "primitive_calls": 7876,
+          "calls": 7876,
+          "self_seconds": 9.687016233000001,
+          "inclusive_seconds": 9.687016233000001
+        },
+        {
+          "file": "<string>",
+          "line": 24,
+          "function": "baseline_send",
+          "primitive_calls": 1680,
+          "calls": 1680,
+          "self_seconds": 0.045697301,
+          "inclusive_seconds": 8.028255886
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/lidar_yaw_debug/latest_snapshot.py",
+          "line": 40,
+          "function": "put_nowait",
+          "primitive_calls": 1284,
+          "calls": 1284,
+          "self_seconds": 0.029594161,
+          "inclusive_seconds": 5.887628672
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 193,
+          "function": "get_nowait",
+          "primitive_calls": 4966,
+          "calls": 4966,
+          "self_seconds": 0.032607926,
+          "inclusive_seconds": 0.5106157610000001
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 154,
+          "function": "get",
+          "primitive_calls": 4966,
+          "calls": 4966,
+          "self_seconds": 0.094051993,
+          "inclusive_seconds": 0.47800783500000005
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_measurements.py",
+          "line": 80,
+          "function": "wheel",
+          "primitive_calls": 1451,
+          "calls": 1451,
+          "self_seconds": 0.188016958,
+          "inclusive_seconds": 0.393683899
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 5937,
+          "calls": 5937,
+          "self_seconds": 0.024095384,
+          "inclusive_seconds": 0.298181537
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 5937,
+          "calls": 5937,
+          "self_seconds": 0.274086153,
+          "inclusive_seconds": 0.274086153
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _pickle.dumps>",
+          "primitive_calls": 2964,
+          "calls": 2964,
+          "self_seconds": 0.18137677500000002,
+          "inclusive_seconds": 0.18137677500000002
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_measurements.py",
+          "line": 49,
+          "function": "clock_status",
+          "primitive_calls": 5865,
+          "calls": 5865,
+          "self_seconds": 0.08001930700000001,
+          "inclusive_seconds": 0.09866583300000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_measurements.py",
+          "line": 69,
+          "function": "_base",
+          "primitive_calls": 1451,
+          "calls": 1451,
+          "self_seconds": 0.048254036,
+          "inclusive_seconds": 0.08857766800000001
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_measurements.py",
+          "line": 58,
+          "function": "map_time",
+          "primitive_calls": 4414,
+          "calls": 4414,
+          "self_seconds": 0.017394298000000002,
+          "inclusive_seconds": 0.082821077
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 359,
+          "function": "notify",
+          "primitive_calls": 3996,
+          "calls": 3996,
+          "self_seconds": 0.020612527000000002,
+          "inclusive_seconds": 0.038585916000000005
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.max>",
+          "primitive_calls": 1451,
+          "calls": 1451,
+          "self_seconds": 0.012686881,
+          "inclusive_seconds": 0.028745927
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_measurements.py",
+          "line": 29,
+          "function": "gyro_source_valid",
+          "primitive_calls": 1512,
+          "calls": 1512,
+          "self_seconds": 0.014220340000000001,
+          "inclusive_seconds": 0.028510836
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'update' of 'dict' objects>",
+          "primitive_calls": 1451,
+          "calls": 1451,
+          "self_seconds": 0.024193073000000002,
+          "inclusive_seconds": 0.024193073000000002
+        },
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/f405_timed_measurements.py",
+          "line": 25,
+          "function": "retains_valid_feedback",
+          "primitive_calls": 2963,
+          "calls": 2963,
+          "self_seconds": 0.019375101000000002,
+          "inclusive_seconds": 0.024102282000000003
+        }
+      ]
+    },
+    "log_15978_15994.prof": {
+      "total_calls": 186837,
+      "total_wall_seconds": 26.249084107999998,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 68,
+          "function": "_run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.287263787,
+          "inclusive_seconds": 26.249082483000002
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 589,
+          "function": "wait",
+          "primitive_calls": 778,
+          "calls": 778,
+          "self_seconds": 0.019814546000000002,
+          "inclusive_seconds": 20.591500281000002
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 288,
+          "function": "wait",
+          "primitive_calls": 778,
+          "calls": 778,
+          "self_seconds": 0.043176392,
+          "inclusive_seconds": 20.563533597000003
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'acquire' of '_thread.lock' objects>",
+          "primitive_calls": 9432,
+          "calls": 9432,
+          "self_seconds": 20.515639798000002,
+          "inclusive_seconds": 20.515639798000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'flush' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 500,
+          "calls": 500,
+          "self_seconds": 2.083264106,
+          "inclusive_seconds": 2.083264106
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1146,
+          "function": "write_text",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.034685988,
+          "inclusive_seconds": 1.245031691
+        },
+        {
+          "file": "/usr/lib/python3.10/json/__init__.py",
+          "line": 183,
+          "function": "dumps",
+          "primitive_calls": 5676,
+          "calls": 5676,
+          "self_seconds": 0.10371846900000001,
+          "inclusive_seconds": 1.139161614
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 182,
+          "function": "encode",
+          "primitive_calls": 5676,
+          "calls": 5676,
+          "self_seconds": 0.084784181,
+          "inclusive_seconds": 0.986776274
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 204,
+          "function": "iterencode",
+          "primitive_calls": 5676,
+          "calls": 5676,
+          "self_seconds": 0.8854359890000001,
+          "inclusive_seconds": 0.8854359890000001
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1111,
+          "function": "open",
+          "primitive_calls": 54,
+          "calls": 54,
+          "self_seconds": 0.0009854100000000001,
+          "inclusive_seconds": 0.764808967
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method io.open>",
+          "primitive_calls": 54,
+          "calls": 54,
+          "self_seconds": 0.7527520050000001,
+          "inclusive_seconds": 0.763796264
+        },
+        {
+          "file": "/usr/lib/python3.10/pathlib.py",
+          "line": 1237,
+          "function": "replace",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.002065791,
+          "inclusive_seconds": 0.436181185
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method posix.replace>",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.41858190900000003,
+          "inclusive_seconds": 0.423536778
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__exit__' of '_io._IOBase' objects>",
+          "primitive_calls": 51,
+          "calls": 51,
+          "self_seconds": 0.30961445400000004,
+          "inclusive_seconds": 0.30961445400000004
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 193,
+          "function": "get_nowait",
+          "primitive_calls": 6403,
+          "calls": 6403,
+          "self_seconds": 0.031639382,
+          "inclusive_seconds": 0.28803821300000004
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 154,
+          "function": "get",
+          "primitive_calls": 6403,
+          "calls": 6403,
+          "self_seconds": 0.09426429600000001,
+          "inclusive_seconds": 0.256398831
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'write' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 1237,
+          "calls": 1237,
+          "self_seconds": 0.163813349,
+          "inclusive_seconds": 0.163813349
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 57,
+          "function": "task_done",
+          "primitive_calls": 5625,
+          "calls": 5625,
+          "self_seconds": 0.051000041,
+          "inclusive_seconds": 0.088916408
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 12806,
+          "calls": 12806,
+          "self_seconds": 0.029795066000000002,
+          "inclusive_seconds": 0.065569287
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 359,
+          "function": "notify",
+          "primitive_calls": 6320,
+          "calls": 6320,
+          "self_seconds": 0.025752231,
+          "inclusive_seconds": 0.052316109000000006
+        },
+        {
+          "file": "/usr/lib/python3.10/json/encoder.py",
+          "line": 104,
+          "function": "__init__",
+          "primitive_calls": 5676,
+          "calls": 5676,
+          "self_seconds": 0.048666871,
+          "inclusive_seconds": 0.048666871
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 267,
+          "function": "__exit__",
+          "primitive_calls": 12806,
+          "calls": 12806,
+          "self_seconds": 0.034778041,
+          "inclusive_seconds": 0.043118454
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 12806,
+          "calls": 12806,
+          "self_seconds": 0.035774221,
+          "inclusive_seconds": 0.035774221
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 279,
+          "function": "_is_owned",
+          "primitive_calls": 7098,
+          "calls": 7098,
+          "self_seconds": 0.016727443,
+          "inclusive_seconds": 0.029441770000000003
+        }
+      ]
+    },
+    "log_15978_15991.prof": {
+      "total_calls": 30894,
+      "total_wall_seconds": 27.408358659999994,
+      "top_cumulative": [
+        {
+          "file": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/async_debug_log.py",
+          "line": 68,
+          "function": "_run",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.079445059,
+          "inclusive_seconds": 27.40835716
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 589,
+          "function": "wait",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.02070593,
+          "inclusive_seconds": 27.28039966
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 288,
+          "function": "wait",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.048232407000000005,
+          "inclusive_seconds": 27.248984467000003
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'acquire' of '_thread.lock' objects>",
+          "primitive_calls": 4086,
+          "calls": 4086,
+          "self_seconds": 27.178149188000003,
+          "inclusive_seconds": 27.178149188000003
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 193,
+          "function": "get_nowait",
+          "primitive_calls": 1022,
+          "calls": 1022,
+          "self_seconds": 0.007640788000000001,
+          "inclusive_seconds": 0.040140463
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 154,
+          "function": "get",
+          "primitive_calls": 1022,
+          "calls": 1022,
+          "self_seconds": 0.020288863,
+          "inclusive_seconds": 0.032499675
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 276,
+          "function": "_acquire_restore",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.008101892000000001,
+          "inclusive_seconds": 0.011026302
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 264,
+          "function": "__enter__",
+          "primitive_calls": 2044,
+          "calls": 2044,
+          "self_seconds": 0.008383239,
+          "inclusive_seconds": 0.010962692000000001
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 267,
+          "function": "__exit__",
+          "primitive_calls": 2044,
+          "calls": 2044,
+          "self_seconds": 0.0066092040000000005,
+          "inclusive_seconds": 0.007882941000000001
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 279,
+          "function": "_is_owned",
+          "primitive_calls": 1023,
+          "calls": 1023,
+          "self_seconds": 0.00312401,
+          "inclusive_seconds": 0.005221174
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 273,
+          "function": "_release_save",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.003724073,
+          "inclusive_seconds": 0.004190704
+        },
+        {
+          "file": "/usr/lib/python3.10/queue.py",
+          "line": 209,
+          "function": "_qsize",
+          "primitive_calls": 1023,
+          "calls": 1023,
+          "self_seconds": 0.002909123,
+          "inclusive_seconds": 0.0040644
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'remove' of 'collections.deque' objects>",
+          "primitive_calls": 1020,
+          "calls": 1020,
+          "self_seconds": 0.003194208,
+          "inclusive_seconds": 0.003194208
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _thread.allocate_lock>",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.003100208,
+          "inclusive_seconds": 0.003100208
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.lock' objects>",
+          "primitive_calls": 2044,
+          "calls": 2044,
+          "self_seconds": 0.002579453,
+          "inclusive_seconds": 0.002579453
+        },
+        {
+          "file": "/usr/lib/python3.10/threading.py",
+          "line": 553,
+          "function": "is_set",
+          "primitive_calls": 2042,
+          "calls": 2042,
+          "self_seconds": 0.0024877140000000002,
+          "inclusive_seconds": 0.0024877140000000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'items' of 'dict' objects>",
+          "primitive_calls": 1265,
+          "calls": 1265,
+          "self_seconds": 0.0016088620000000002,
+          "inclusive_seconds": 0.0016088620000000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'flush' of '_io.TextIOWrapper' objects>",
+          "primitive_calls": 244,
+          "calls": 244,
+          "self_seconds": 0.001587379,
+          "inclusive_seconds": 0.001587379
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__exit__' of '_thread.lock' objects>",
+          "primitive_calls": 2290,
+          "calls": 2290,
+          "self_seconds": 0.0014598670000000001,
+          "inclusive_seconds": 0.0014598670000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method time.monotonic>",
+          "primitive_calls": 1265,
+          "calls": 1265,
+          "self_seconds": 0.001413355,
+          "inclusive_seconds": 0.001413355
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.len>",
+          "primitive_calls": 1024,
+          "calls": 1024,
+          "self_seconds": 0.001155777,
+          "inclusive_seconds": 0.001155777
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'append' of 'collections.deque' objects>",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.000903516,
+          "inclusive_seconds": 0.000903516
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'release' of '_thread.lock' objects>",
+          "primitive_calls": 1021,
+          "calls": 1021,
+          "self_seconds": 0.000466631,
+          "inclusive_seconds": 0.000466631
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'values' of 'dict' objects>",
+          "primitive_calls": 245,
+          "calls": 245,
+          "self_seconds": 0.000374621,
+          "inclusive_seconds": 0.000374621
+        }
+      ]
+    }
+  }
+}

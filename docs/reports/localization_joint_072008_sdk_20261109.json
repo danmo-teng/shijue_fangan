@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-09",
+  "scope": "Stationary actual SDK/F405 feedback/YOLO with historical lidar and map-render load; not movement accuracy or formal control transmission",
+  "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_072008_interactive",
+  "sdk": {
+    "attempts": 2476,
+    "results": 2476,
+    "true": 2476,
+    "false": 0,
+    "rate_hz": 99.82669940184708,
+    "paired_to_api_ms": {
+      "median": 0.5139365,
+      "p95": 0.7146445,
+      "maximum": 2.829745
+    },
+    "wheel_rx_to_api_ms": {
+      "median": 5.693365,
+      "p95": 8.914599249999998,
+      "maximum": 13.467601
+    },
+    "rejections": [
+      "no_gyro_at_interval_start",
+      "no_gyro_at_interval_start"
+    ],
+    "startup_discard": [
+      {
+        "before_sdk_start": 49,
+        "config_loaded": true,
+        "device_fusion_confirmed": false,
+        "event": "wheel_native_input_discarded",
+        "input_source": "measured_wheel_feedback",
+        "last_sdk_call_failed": false,
+        "last_sdk_success_ns": 0,
+        "log_monotonic_ns": 12286763534828,
+        "queue_overflow": 0,
+        "rejected_samples": 0,
+        "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+        "sdk_api_failed_samples": 0,
+        "sdk_api_success_samples": 0,
+        "sdk_failure_policy": "continue_with_next_new_sample",
+        "session_id": "2fd34e81405f4620858b7f814b3041bd",
+        "wheel_dependency_present": false,
+        "wheel_dependency_suspect": false,
+        "wheel_input_paused": false,
+        "wheel_input_paused_samples": 0,
+        "wheel_input_policy_reason": "measured_wheel_input_enabled"
+      }
+    ],
+    "coalesced_samples": 4
+  },
+  "pose": {
+    "rows": 4864,
+    "rate_hz": 199.60418375434162,
+    "frame_number_gap_count": 0,
+    "callback_queue_drops_max": 0,
+    "confidence": {
+      "2": 4864
+    },
+    "receive_interval_ms": {
+      "median": 5.005991,
+      "p95": 5.855176599999999,
+      "maximum": 28.088951
+    },
+    "capture_interval_ms": {
+      "median": 5.010009765625,
+      "p95": 5.010986328125,
+      "maximum": 5.04638671875
+    }
+  },
+  "original_logs_modified": false,
+  "motor_commands": 0,
+  "control_forwarded_to_uart": false,
+  "session_complete_file_exists": false
+}
