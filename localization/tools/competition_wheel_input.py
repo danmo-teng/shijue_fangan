@@ -12,6 +12,7 @@ import threading
 
 import f405_timed_protocol as wire
 from t265_wheel_input import NativeWheelObserver, write_sdk_config
+from local_packet_receiver import LocalPacketReceiver
 
 
 def identity_names(identity):
@@ -85,12 +86,14 @@ class CompetitionWheelInput:
             self.telemetry_sink(message)
 
     def _run(self):
+        receiver = None
         while not self.stop_event.is_set():
             try:
                 if self.connection is None:
                     self.connection,_=self.sock.accept();self.connection.settimeout(.05)
                     self.connection.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
-                data = self.connection.recv(512)
+                    receiver = LocalPacketReceiver(self.connection, 512)
+                data = receiver.recv()
                 if not data:
                     self.connection.close();self.connection=None;continue
                 self.accept(data)

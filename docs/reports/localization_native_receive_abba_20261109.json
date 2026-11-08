@@ -1,0 +1,204 @@
+{
+  "scope": "synthetic saturated Python JSON GIL load plus paced historical complete native UART frames over local socketpair; no devices or SDK; not field or complete formal-chain validation",
+  "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_033424_interactive/uart_rx.jsonl",
+  "frames": 1250,
+  "results": [
+    {
+      "path": "original",
+      "received": 913,
+      "source": {
+        "sent": 913,
+        "dropped": 337
+      },
+      "duration_s": 8.063067158,
+      "latency_ms": {
+        "median": 2794.18993,
+        "p95": 4984.6334146,
+        "maximum": 5037.15561
+      }
+    },
+    {
+      "path": "nowait",
+      "received": 1250,
+      "source": {
+        "sent": 1250,
+        "dropped": 0
+      },
+      "duration_s": 3.02612978,
+      "latency_ms": {
+        "median": 4.7095535,
+        "p95": 6.136327399999999,
+        "maximum": 8.831953
+      }
+    },
+    {
+      "path": "nowait",
+      "received": 1250,
+      "source": {
+        "sent": 1250,
+        "dropped": 0
+      },
+      "duration_s": 3.026472898,
+      "latency_ms": {
+        "median": 4.649661,
+        "p95": 6.1125623,
+        "maximum": 6.91671
+      }
+    },
+    {
+      "path": "original",
+      "received": 941,
+      "source": {
+        "sent": 941,
+        "dropped": 309
+      },
+      "duration_s": 7.171111258,
+      "latency_ms": {
+        "median": 2438.482674,
+        "p95": 4127.712504,
+        "maximum": 4166.380969
+      }
+    }
+  ],
+  "abba_scope_note": "A/B/B/A measured the initial equivalent NativeTestUart NOWAIT implementation before moving that same read mechanism into LocalPacketReceiver. Synthetic saturation is not actual field latency.",
+  "final_shared_receiver_control_fixture": {
+    "scope": "existing formal control-rate fixture; synthetic motion and historical lidar, no devices/SDK/motors; shared NOWAIT receiver final source",
+    "metrics": {
+      "sent_distinct_intervals": 1000,
+      "received_distinct_intervals": 993,
+      "processing_ms_median": 5.134556,
+      "processing_ms_p95": 8.871508799999999,
+      "processing_ms_max": 17.798545,
+      "worker_input_drops": 0,
+      "output_drops": 0,
+      "synthetic_capture_to_output_ms_p95": 9.038851600000001,
+      "synthetic_capture_to_output_ms_max": 18.008548,
+      "producer_schedule_delay_ms_p95": 0.9615279999999993,
+      "producer_schedule_delay_ms_max": 3.814202,
+      "fixture_stage_ms": {
+        "input_to_worker_publication": {
+          "median": 3.245875,
+          "p95": 5.6455394,
+          "maximum": 10.486621,
+          "samples": 993,
+          "negative_samples": 0
+        },
+        "mailbox_delivery": {
+          "median": 0.705245,
+          "p95": 2.278741799999999,
+          "maximum": 5.996685,
+          "samples": 993,
+          "negative_samples": 0
+        },
+        "control_to_sink": {
+          "median": 0.9603,
+          "p95": 2.056463599999999,
+          "maximum": 11.569973,
+          "samples": 993,
+          "negative_samples": 0
+        },
+        "input_to_worker_ingress": {
+          "median": 0.399804,
+          "p95": 2.406998399999999,
+          "maximum": 7.888154,
+          "samples": 993,
+          "negative_samples": 0
+        },
+        "worker_ingress_to_publication": {
+          "median": 2.709999,
+          "p95": 3.7370587999999993,
+          "maximum": 7.633974,
+          "samples": 993,
+          "negative_samples": 0
+        }
+      },
+      "lidar_scans": 98,
+      "lidar_geometry_calls": 98,
+      "lidar_accepted_posteriors": 0,
+      "line_geometry": {
+        "backend": "native_streaming_ransac",
+        "load_error": null,
+        "geometry_policy_changed": false,
+        "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+        "extraction_load_error": null,
+        "extraction_calls": 98,
+        "extraction_fallbacks": 0,
+        "extraction_last_error": null
+      },
+      "fit_processing_ms_p95": 25.807200949999963,
+      "ingested_distinct_intervals": 1000,
+      "motion_scheduling": {
+        "requested": true,
+        "requested_priority": 10,
+        "actual_policy": 1,
+        "actual_priority": 10,
+        "error": null
+      },
+      "worker_control_updates": 1020,
+      "worker_control_coalesced": 0,
+      "transport_scheduling": {
+        "motion_input": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        },
+        "pose_input": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        },
+        "control_output": {
+          "requested": true,
+          "requested_priority": 10,
+          "actual_policy": 1,
+          "actual_priority": 10,
+          "error": null
+        }
+      },
+      "fit_stage_ms": {
+        "compute_ms": {
+          "median": 16.969439,
+          "p95": 25.807200949999963
+        },
+        "compute_thread_cpu_ms": {
+          "median": 9.647879,
+          "p95": 11.779535949999996
+        },
+        "snapshot_ms": {
+          "median": 0.21867799999999998,
+          "p95": 0.3513084499999996
+        },
+        "deskew_ms": {
+          "median": 6.120480499999999,
+          "p95": 9.57799269999999
+        },
+        "fit_ms": {
+          "median": 10.4165375,
+          "p95": 17.065108549999994
+        }
+      }
+    }
+  },
+  "necessary_checks": {
+    "passed": 4,
+    "names": [
+      "test_native_test_uart_receive_transport",
+      "test_competition_feedback_adapter",
+      "test_competition_dynamic_transport",
+      "test_dynamic_worker_process"
+    ],
+    "elapsed_seconds": 9.15,
+    "hardware_used": false
+  },
+  "source_sha256": {
+    "localization/tools/local_packet_receiver.py": "b3dceebace782c9941f03560f6bc86bda437b5606059b1459e2085602aeb0832",
+    "localization/tools/native_test_uart.py": "b7df7e6ffb48c89d95d2fb61ce22c4be45190de3f752a35437b685f6d202fd26",
+    "localization/tools/competition_wheel_input.py": "86878eb868868eda8ace9101684aa5c60faff33133a3d33bf234af73d86720a0",
+    "localization/tools/competition_dynamic_localization.py": "d18f73208f2c69b052dfebe45f2da1fe2b646ce188e1a158a6d54d8b3ef62987",
+    "localization/tools/lidar_t265_motion_map.py": "e3a64bf452df7c3e704172e958f20eee8d58bd6f9e479b5f8f5118ea0a1705d5"
+  }
+}

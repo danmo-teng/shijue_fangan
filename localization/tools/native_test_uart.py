@@ -8,6 +8,7 @@ import socket
 import struct
 import threading
 import time
+from local_packet_receiver import LocalPacketReceiver
 
 
 class NativeTestUart:
@@ -48,8 +49,12 @@ class NativeTestUart:
         return 4096
 
     def read(self, _size):
-        try:data=self.rx.recv(4112)
-        except socket.timeout:return b''
+        if getattr(self, '_receiver', None) is None:
+            self._receiver = LocalPacketReceiver(self.rx, 4112)
+        try:
+            data = self._receiver.recv()
+        except socket.timeout:
+            return b''
         if len(data)<16:raise OSError('short native UART receive container')
         self.receive_monotonic_ns,self.dropped_rx_datagrams=struct.unpack('>QQ',data[:16])
         return data[16:]

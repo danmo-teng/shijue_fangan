@@ -1997,7 +1997,7 @@ def test_competition_feedback_adapter():
     """Formal Python is now an observer, never a second SDK packet producer.
     No actual SDK API or motor action; keep actual identities/measurements.
     """
-    import socket, uuid, struct
+    import socket, uuid, struct, threading
     import f405_timed_protocol as wire
     from competition_wheel_input import CompetitionWheelInput
     from t265_f407_motion_map import config_values, DEFAULT_CONFIG
@@ -2009,8 +2009,14 @@ def test_competition_feedback_adapter():
         sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
         sink.bind('\0t265-wheel-'+sid);sink.settimeout(.5)
         adapter=CompetitionWheelInput(root,config_values(DEFAULT_CONFIG),sid)
+        source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        observed=[];arrival=threading.Event()
+        def observe(message):
+            observed.append(message);arrival.set()
+        adapter.telemetry_sink=observe
         try:
             assert type(adapter.bridge) is NativeWheelObserver
+            adapter.start();source.connect(adapter.address)
             wheel=wire.decode(raw('forward'));g=wire.decode(raw('gyro_ccw'))
             p=bytearray(wire.parse(raw('c_module_host_fixture_type_2'))['payload'])
             p[:8]=adapter.identity_nonce.to_bytes(8,'big')
@@ -2019,7 +2025,10 @@ def test_competition_feedback_adapter():
             p[42:44]=bytes((1,3));p[52:56]=(3).to_bytes(4,'big')
             p[56:60]=(0xffffffff).to_bytes(4,'big')
             received=time.monotonic_ns()-5_000_000_000
-            def feed(frame):adapter.accept(struct.pack('>Q',received)+frame)
+            def feed(frame):
+                arrival.clear();source.send(struct.pack('>Q',received)+frame)
+                assert arrival.wait(1),adapter.error
+                assert observed[-1]['sample']['receive_monotonic_ns']==received
             feed(wire.packet(wire.ID_REPLY,0,p))
             for i,t in enumerate((wheel['t0_us'],wheel['t1_us'])):
                 payload=struct.pack('>16sIIqQIIIiQIIIQ',bytes.fromhex(g['boot_epoch']),g['reference_epoch'],i,
@@ -2034,8 +2043,13 @@ def test_competition_feedback_adapter():
             assert state['stats']['sent_to_sdk_owner']==0 and state['sdk_api_success_samples']==0
             assert state['processing_owner']=='native_cpp_sdk_owner' and not state['python_sdk_sender']
             assert state['latest_measured']['v_body_mps']==[wheel['forward_um_s']/1e6,wheel['left_um_s']/1e6,0.]
+            # The formal observer keeps its existing EOF/reaccept behaviour;
+            # each accepted socket receives its own fixed packet buffer.
+            source.close();source=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+            source.connect(adapter.address);feed(raw('forward'))
+            assert adapter.error is None
         finally:
-            adapter.close();sink.close()
+            source.close();adapter.close();sink.close()
 
 
 def test_competition_dynamic_transport():
@@ -2377,6 +2391,96 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
         if require_all:assert metrics['ingested_distinct_intervals']==len(sent),metrics
         print(json.dumps(dict(competition_control_rate=metrics)))
         return metrics
+
+
+def test_native_test_uart_receive_transport():
+    """Queued IPC keeps complete frames/native timestamps; no hardware/clock."""
+    import ctypes, errno, socket, struct
+    from unittest.mock import patch
+    import native_test_uart as transport
+    import local_packet_receiver as packets
+    rx, peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    uart = transport.NativeTestUart.__new__(transport.NativeTestUart)
+    uart.rx = rx
+    uart.receive_monotonic_ns = None
+    uart.dropped_rx_datagrams = 0
+    rx.settimeout(.01)
+    def frame(stamp, drops, data):
+        return struct.pack('>QQ', stamp, drops) + data
+    try:
+        # Same maximum read/truncation semantics; each complete local packet is
+        # returned once, even if serial.read's requested size is one byte.
+        peer.send(frame(123, 7, b'abc'))
+        peer.send(frame(124, 8, bytes(range(256)) * 16 + b'truncated'))
+        peer.send(frame(125, 9, b'last'))
+        original_recv = packets._recv_nowait
+        interrupted = [False]
+        def interrupted_once(fd, buffer, size, flags):
+            assert size == 4112 and flags == socket.MSG_DONTWAIT
+            if not interrupted[0]:
+                interrupted[0] = True
+                ctypes.set_errno(errno.EINTR)
+                return -1
+            return original_recv(fd, buffer, size, flags)
+        with patch.object(packets, '_recv_nowait', interrupted_once), \
+             patch.object(packets.select, 'select', side_effect=AssertionError('queued RX waited')), \
+             patch.object(transport.time, 'monotonic', side_effect=AssertionError('RX read a clock')):
+            assert uart.read(1) == b'abc'
+            assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (123, 7)
+            assert uart.read(1) == bytes(range(256)) * 16
+            assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (124, 8)
+            assert uart.read(4096) == b'last'
+            assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (125, 9)
+        assert uart.read(4096) == b''  # Existing socket timeout, no fake header.
+        assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (125, 9)
+        try:
+            uart._receiver.recv()
+            assert False, 'packet helper must retain socket.timeout'
+        except socket.timeout:
+            pass
+        def arrives_during_wait(readers, writers, errors, timeout):
+            assert readers == [rx] and not writers and not errors and timeout == .01
+            peer.send(frame(126, 10, b'after-empty'))
+            return [rx], [], []
+        with patch.object(packets.select, 'select', arrives_during_wait):
+            assert uart.read(1) == b'after-empty'
+        assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (126, 10)
+        rx.settimeout(None)
+        def arrives_during_indefinite_wait(readers, writers, errors, timeout):
+            assert readers == [rx] and not writers and not errors and timeout is None
+            peer.send(frame(127, 11, b'blocking-socket'))
+            return [rx], [], []
+        with patch.object(packets.select, 'select', arrives_during_indefinite_wait):
+            assert uart.read(1) == b'blocking-socket'
+        rx.settimeout(0)
+        try:
+            uart.read(1)
+            assert False, 'nonblocking empty socket must retain BlockingIOError'
+        except BlockingIOError as error:
+            assert error.errno in (errno.EAGAIN, errno.EWOULDBLOCK)
+        rx.settimeout(.01)
+        peer.send(b'short')
+        try:
+            uart.read(1)
+            assert False, 'short container accepted'
+        except OSError as error:
+            assert str(error) == 'short native UART receive container'
+        peer.close()
+        assert uart._receiver.recv() == b''  # EOF is data for the generic helper.
+        try:
+            uart.read(1)
+            assert False, 'EOF must retain the original transport error'
+        except OSError as error:
+            assert str(error) == 'short native UART receive container'
+        rx.close()
+        try:
+            uart.read(1)
+            assert False, 'closed descriptor accepted'
+        except OSError as error:
+            assert error.errno == errno.EBADF
+    finally:
+        rx.close()
+        peer.close()
 
 
 def test_native_cpp_wheel_input():

@@ -6,7 +6,7 @@
 
 用户已明确桌面不能动车。C++迁移已交付：001339同SDK静止开/关绘图约100Hz真实API输入；004815暂停/续送时约200Hz Pose不断。编译/离线不代替地面精度。现板实际14b2a3a/dirty1、MOTIONDEBUG/service1、921600，100Hz实测区间已收，不重复要求烧录。任何动作均等到楼下明确摆放后才发。
 
-用户随后批准的等价C++提线后端已接入，139帧同支持/法向、相关回归及A/B/B/A回放通过；原入口不增加操作步骤。worker的line_geometry核对extraction_backend与实际调用/回退数。024238底盘0帧，不能拿旧actual或SDK配置代替本轮实时反馈；下次先在同一入口确认反馈恢复，再进行楼下动作，不反复要求烧录。
+用户随后批准的等价C++提线后端已接入，139帧同支持/法向、相关回归及A/B/B/A回放通过；原入口不增加操作步骤。033238/033424实际SDK约99.845Hz、各139次C++调用/0回退、运动输入丢0，先前无反馈已恢复。但033738联合YOLO时USB Hub整组掉线、日志不完整，尚未通过联合负载；楼下动作前先补这一步，不反复要求烧录。worker的line_geometry核对extraction_backend与实际调用/回退数。
 
 ## 楼下：助手操控，用户旁观与测量
 
@@ -27,6 +27,6 @@
 
 ## RT切换准备（现在没有执行切换或重启）
 
-本机已核实Image-rt为Linux6.1.83-rt28，匹配headers的CONFIG_PREEMPT_RT=y、BPU模块vermagic为6.1.83-rt28；当前/boot/boot.cmd仍用Image。11-09从当前boot.cmd重新生成/tmp/rdk_boot_rt_candidate_20261109.cmd及.scr，仅imagefile一行变化，mkimage成功；切换时核对候选仍存在且基于当前原件。不能在普通内核加载RT模块。
+本机已核实Image-rt为Linux6.1.83-rt28，匹配headers的CONFIG_PREEMPT_RT=y、BPU模块vermagic为6.1.83-rt28；当前/boot/boot.cmd仍用Image。外部重启使/tmp候选消失，11-09改生成到localization/build/rt_boot_candidate_20261109/的boot.cmd/boot.scr/manifest.json；清单含当前源文件SHA256，仅imagefile一行变化，mkimage成功。切换时核对候选存在且源SHA仍匹配；这些构建文件未安装到/boot。不能在普通内核加载RT模块。
 
 重启窗口先保存工作、停止程序，并保留/boot/boot.cmd与boot.scr原件。本次用户已选MotionDebug结束后的重启间隙；实测保存、程序退出后再安装候选并重启；恢复用原件即可。启动后核对uname/config、BPU/相机/UART/GPIO，再用同一现有短检查与同一1000区间回放比较。若RT没有明显收益或设备不兼容，回普通Image；不更新miniboot、不刷系统、不换设备树。不在无人不重启阶段修改启动文件。

@@ -1,0 +1,1995 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-09",
+  "purpose": "Independent read-only raw-log analysis of two successful stationary transport/numeric-load checks and one failed real-YOLO/control-load attempt. Original logs unchanged.",
+  "original_log_mutations": false,
+  "motor_commands": false,
+  "preempt_rt_boot_tested": false,
+  "sessions": [
+    {
+      "session": "033238",
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_033238_interactive",
+      "upper_commit": "2f572323ae96a4325432d197f32d2dc13b2bfb7a",
+      "sdk_session_id": "4da6c6524f6c48bea9feeb3d87d2c5fa",
+      "actual_f405": {
+        "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+        "source_dirty": 1,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "uart_baud": 921600,
+        "boot_epoch": "421fc48027cd480e44a9358e1bc20600",
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "drift_bound_ppm": 4294967295
+      },
+      "sensor_check_passed": true,
+      "scope": "actual stationary F405/T265 SDK plus historical lidar PTY; no motor commands or independent field truth",
+      "historical_lidar": {
+        "event": "historical_lidar_pressure_source",
+        "timestamp_monotonic_ns": 18730943131366,
+        "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261108_123640_competition_wheel/lidar_rx.jsonl",
+        "physical_lidar": false,
+        "motor_commands": 0,
+        "synthetic_reference": false
+      },
+      "sdk": {
+        "all": {
+          "returned_true": 1840,
+          "returned_false": 0,
+          "success_stream": {
+            "samples": 1840,
+            "frequency_hz": 99.8436105280044,
+            "interval_ms": {
+              "samples": 1839,
+              "minimum": 2.530036,
+              "median": 10.005186,
+              "p95": 10.5425201,
+              "maximum": 20.043203
+            }
+          },
+          "wheel_gyro_ready_to_api_ms": {
+            "samples": 1840,
+            "minimum": 0.632123,
+            "median": 0.8524355,
+            "p95": 1.23385505,
+            "maximum": 4.397948
+          },
+          "wheel_receive_to_api_ms": {
+            "samples": 1840,
+            "minimum": 1.020415,
+            "median": 6.381798,
+            "p95": 9.4950679,
+            "maximum": 15.117007
+          },
+          "sdk_call_duration_ms": {
+            "samples": 1840,
+            "minimum": 0.132666,
+            "median": 0.28177,
+            "p95": 0.51603055,
+            "maximum": 3.798825
+          },
+          "unmatched_success_frames": []
+        },
+        "config_loaded": true,
+        "sdk_result_scope": "host SDK bool return only; no per-sample device ACK, USB-health or fusion-quality confirmation",
+        "unique_attempt_frames": 1840,
+        "unique_result_frames": 1840,
+        "exception_events": [
+          {
+            "event": "wheel_native_input_discarded",
+            "wall_time": "2026-11-09T03:32:39.005",
+            "relative_session_start_ms": 37.051539,
+            "before_sdk_start": 11,
+            "queue_overflow": 0,
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_native_rejected",
+            "wall_time": "2026-11-09T03:32:39.006",
+            "relative_session_start_ms": 38.031703,
+            "reason": "no_gyro_at_interval_start",
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_native_rejected",
+            "wall_time": "2026-11-09T03:32:39.015",
+            "relative_session_start_ms": 47.559348,
+            "reason": "no_gyro_at_interval_start",
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:32:55.244",
+            "relative_session_start_ms": 16276.052352,
+            "samples": 1,
+            "sdk_api_success_samples": 1621
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:32:55.413",
+            "relative_session_start_ms": 16445.923085,
+            "samples": 1,
+            "sdk_api_success_samples": 1637
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:32:55.573",
+            "relative_session_start_ms": 16605.904174,
+            "samples": 1,
+            "sdk_api_success_samples": 1652
+          }
+        ],
+        "total_coalesced_measurements": 3,
+        "startup_discard_unit": "complete validated extended TYPE07/TYPE08 feedback containers combined; not UART fragments or necessarily wheel intervals (main.cpp F405MixedFrames callback -> debug_wheel_input.cpp wire_packet)",
+        "latency_definitions": {
+          "wheel_gyro_ready_to_api_ms": "(result.last_sdk_success_ns-max(attempt.packet.receive_monotonic_ns,attempt.packet.gyro_receive_ns))/1e6",
+          "wheel_receive_to_api_ms": "(result.last_sdk_success_ns-attempt.packet.receive_monotonic_ns)/1e6"
+        },
+        "snapshot_rate_hz_at_shutdown": 37,
+        "snapshot_rate_is_trailing_one_second": true
+      },
+      "measured_streams": {
+        "wheel": {
+          "receive": {
+            "samples": 1846,
+            "frequency_hz": 100.0186454813117,
+            "interval_ms": {
+              "samples": 1845,
+              "minimum": 1.350288,
+              "median": 9.997435,
+              "p95": 10.323568,
+              "maximum": 18.624207
+            }
+          },
+          "mcu_event": {
+            "samples": 1846,
+            "frequency_hz": 99.999962059635,
+            "interval_ms": {
+              "samples": 1845,
+              "minimum": 9.989,
+              "median": 10.0,
+              "p95": 10.004,
+              "maximum": 10.009
+            }
+          },
+          "invalid": 0,
+          "interval_ms": {
+            "samples": 1846,
+            "minimum": 9.989,
+            "median": 10.0,
+            "p95": 10.004,
+            "maximum": 10.009
+          },
+          "maximum_measured_planar_speed_mps": 0.0
+        },
+        "gyro": {
+          "receive": {
+            "samples": 1844,
+            "frequency_hz": 99.95372154081852,
+            "interval_ms": {
+              "samples": 1843,
+              "minimum": 2.853576,
+              "median": 10.002852,
+              "p95": 10.22156,
+              "maximum": 17.162586
+            }
+          },
+          "mcu_event": {
+            "samples": 1844,
+            "frequency_hz": 99.9522203439376,
+            "interval_ms": {
+              "samples": 1843,
+              "minimum": 9.874,
+              "median": 9.952,
+              "p95": 10.941,
+              "maximum": 10.955
+            }
+          },
+          "invalid": 0
+        }
+      },
+      "raw_pose": {
+        "receive": {
+          "samples": 3585,
+          "frequency_hz": 199.57806629667456,
+          "interval_ms": {
+            "samples": 3584,
+            "minimum": 0.008916,
+            "median": 5.0051345000000005,
+            "p95": 5.35319425,
+            "maximum": 16.62842
+          }
+        },
+        "capture_interval_ms": {
+          "samples": 3584,
+          "minimum": 4.897705078125,
+          "median": 5.010986328125,
+          "p95": 5.01123046875,
+          "maximum": 5.10546875
+        },
+        "frame_number_range": [
+          0,
+          3584
+        ],
+        "missing_frame_numbers": 0,
+        "nonincreasing_frames": 0,
+        "callback_queue_drops_max": 0,
+        "tracker_confidence_counts": {
+          "2": 3585
+        },
+        "first_receive_wall": "2026-11-09T03:32:39.504",
+        "last_receive_wall": "2026-11-09T03:32:57.462",
+        "raw_sdk_net_displacement_m": 0.0004602965781118716
+      },
+      "motion": {
+        "pose_ingested": 3496,
+        "primary_yaw_ingested": 1805,
+        "measured_wheel_ingested": 1804,
+        "pose_packets": 3496,
+        "primary_yaw_packets": 1805,
+        "motion_queue_drops": 0,
+        "motion_stream_complete": true,
+        "control_updates": 0,
+        "control_updates_coalesced": 0,
+        "control_capacity_errors": 0,
+        "fit_requests_coalesced": 0,
+        "capture_chain_present": true,
+        "error": null,
+        "parent_error": null,
+        "worker_stopped_cleanly": true,
+        "receiver_stopped_cleanly": true,
+        "fit_thread_stopped": true,
+        "control_publication_enabled_by_entry": false,
+        "control_validation_note": "Desktop RadarWorker default control_updates=False; these two sessions do not exercise high-rate control mailbox publication."
+      },
+      "geometry": {
+        "line_backend": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 139,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "initialization_records": 139,
+        "initialization_statuses": {
+          "INSUFFICIENT_WALLS": 135,
+          "CONFIRMING_WALL_MATCH": 1,
+          "NO_RECTANGLE_MATCH": 3
+        },
+        "normal_fit_records": 0,
+        "accepted_wall_posteriors": 0,
+        "rank_xy_counts": {},
+        "reference_ready": false,
+        "synthetic_reference": false,
+        "fit_stage_ms": {
+          "compute_ms": null,
+          "compute_thread_cpu_ms": null,
+          "snapshot_ms": null,
+          "deskew_ms": null,
+          "fit_ms": null
+        }
+      },
+      "lidar_reader": {
+        "stats": {
+          "rx_batches": 6477,
+          "rx_bytes": 237986,
+          "scan_packets": 5061,
+          "status_packets": 6,
+          "ack_packets": 2,
+          "crc_errors": 2,
+          "timing_rejections": 3,
+          "sector_rejections": 1,
+          "scans_emitted": 139
+        },
+        "scan_queue_drops": 0,
+        "historical_source_stats_comparison": {
+          "rx_bytes": [
+            237986,
+            237986
+          ],
+          "scan_packets": [
+            5061,
+            5061
+          ],
+          "status_packets": [
+            6,
+            6
+          ],
+          "ack_packets": [
+            2,
+            2
+          ],
+          "crc_errors": [
+            2,
+            2
+          ],
+          "timing_rejections": [
+            3,
+            3
+          ],
+          "sector_rejections": [
+            1,
+            1
+          ],
+          "scans_emitted": [
+            139,
+            139
+          ]
+        },
+        "all_compared_historical_stats_equal": true,
+        "error_provenance": "replayed historical lidar counters; not chassis UART errors"
+      },
+      "chassis_uart_offline_decode": {
+        "stats": {
+          "uart_rx_bytes": 412190,
+          "legacy_frames": 4018,
+          "extended_frames": 3705,
+          "legacy_ack4": 0,
+          "mixed_crc_errors": 0,
+          "mixed_malformed": 0,
+          "discarded_bytes": 0,
+          "partial_timeouts": 0,
+          "buffer_overflows": 0
+        },
+        "remaining_partial_bytes": 2
+      },
+      "logging": {
+        "session_complete_marker": {
+          "owner": "t265_f407_motion_map",
+          "complete": true,
+          "session_index": 16,
+          "accuracy_verified": false
+        },
+        "sdk_logging_healthy": true,
+        "sdk_dropped_records": 0,
+        "diagnostic_csv_status": {
+          "localization_dropped_rows": 0,
+          "localization_io_failed": false,
+          "raw_pose_dropped_rows": 0,
+          "raw_pose_io_failed": false,
+          "raw_json_write_errors": 0,
+          "uart_raw_dropped_rows": 0,
+          "uart_raw_io_failed": false,
+          "raw_json_coalesced": 0
+        },
+        "worker_logging_healthy": true,
+        "worker_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 2,
+          "history_records_written": 144,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "reader_logging_healthy": true,
+        "reader_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 35,
+          "history_records_written": 6620,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "json_integrity": {
+          "wheel_sdk.jsonl": {
+            "records": 7381,
+            "invalid_json_lines": []
+          },
+          "pose_motion.jsonl": {
+            "records": 3496,
+            "invalid_json_lines": []
+          },
+          "dynamic_initialization.jsonl": {
+            "records": 139,
+            "invalid_json_lines": []
+          },
+          "dynamic_scans.jsonl": {
+            "records": 139,
+            "invalid_json_lines": []
+          },
+          "uart_rx_native.jsonl": {
+            "records": 24832,
+            "invalid_json_lines": []
+          },
+          "localization_events.jsonl": {
+            "records": 11,
+            "invalid_json_lines": []
+          },
+          "events.jsonl": {
+            "records": 8,
+            "invalid_json_lines": []
+          }
+        }
+      },
+      "interpretation": "Stationary transport/SDK and numeric load check passed; no field accuracy, successful wall posterior or strict 10ms guarantee."
+    },
+    {
+      "session": "033424",
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_033424_interactive",
+      "upper_commit": "2f572323ae96a4325432d197f32d2dc13b2bfb7a",
+      "sdk_session_id": "673c1a112186422e950884be0fd8bfb2",
+      "actual_f405": {
+        "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+        "source_dirty": 1,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "uart_baud": 921600,
+        "boot_epoch": "421fc48027cd480e44a9358e1bc20600",
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "drift_bound_ppm": 4294967295
+      },
+      "sensor_check_passed": true,
+      "scope": "actual stationary F405/T265 SDK plus historical lidar PTY; no motor commands or independent field truth",
+      "historical_lidar": {
+        "event": "historical_lidar_pressure_source",
+        "timestamp_monotonic_ns": 18836877040637,
+        "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261108_123640_competition_wheel/lidar_rx.jsonl",
+        "physical_lidar": false,
+        "motor_commands": 0,
+        "synthetic_reference": true
+      },
+      "sdk": {
+        "all": {
+          "returned_true": 1839,
+          "returned_false": 0,
+          "success_stream": {
+            "samples": 1839,
+            "frequency_hz": 99.84532448519901,
+            "interval_ms": {
+              "samples": 1838,
+              "minimum": 0.863082,
+              "median": 10.0027055,
+              "p95": 10.5282099,
+              "maximum": 20.954786
+            }
+          },
+          "wheel_gyro_ready_to_api_ms": {
+            "samples": 1839,
+            "minimum": 0.660624,
+            "median": 0.839623,
+            "p95": 1.1705226999999998,
+            "maximum": 12.092473
+          },
+          "wheel_receive_to_api_ms": {
+            "samples": 1839,
+            "minimum": 1.023539,
+            "median": 6.287278,
+            "p95": 9.484782599999997,
+            "maximum": 16.157005
+          },
+          "sdk_call_duration_ms": {
+            "samples": 1839,
+            "minimum": 0.131916,
+            "median": 0.2755,
+            "p95": 0.48446949999999966,
+            "maximum": 11.551932
+          },
+          "unmatched_success_frames": []
+        },
+        "config_loaded": true,
+        "sdk_result_scope": "host SDK bool return only; no per-sample device ACK, USB-health or fusion-quality confirmation",
+        "unique_attempt_frames": 1839,
+        "unique_result_frames": 1839,
+        "exception_events": [
+          {
+            "event": "wheel_native_input_discarded",
+            "wall_time": "2026-11-09T03:34:25.030",
+            "relative_session_start_ms": 37.780166,
+            "before_sdk_start": 11,
+            "queue_overflow": 0,
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_native_rejected",
+            "wall_time": "2026-11-09T03:34:25.034",
+            "relative_session_start_ms": 41.330199,
+            "reason": "no_gyro_at_interval_start",
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_native_rejected",
+            "wall_time": "2026-11-09T03:34:25.043",
+            "relative_session_start_ms": 50.615762,
+            "reason": "no_gyro_at_interval_start",
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:34:43.072",
+            "relative_session_start_ms": 18079.517507,
+            "samples": 1,
+            "sdk_api_success_samples": 1801
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:34:43.242",
+            "relative_session_start_ms": 18249.360337,
+            "samples": 1,
+            "sdk_api_success_samples": 1817
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:34:43.402",
+            "relative_session_start_ms": 18409.598731,
+            "samples": 1,
+            "sdk_api_success_samples": 1832
+          }
+        ],
+        "total_coalesced_measurements": 3,
+        "startup_discard_unit": "complete validated extended TYPE07/TYPE08 feedback containers combined; not UART fragments or necessarily wheel intervals (main.cpp F405MixedFrames callback -> debug_wheel_input.cpp wire_packet)",
+        "latency_definitions": {
+          "wheel_gyro_ready_to_api_ms": "(result.last_sdk_success_ns-max(attempt.packet.receive_monotonic_ns,attempt.packet.gyro_receive_ns))/1e6",
+          "wheel_receive_to_api_ms": "(result.last_sdk_success_ns-attempt.packet.receive_monotonic_ns)/1e6"
+        },
+        "snapshot_rate_hz_at_shutdown": 45,
+        "snapshot_rate_is_trailing_one_second": true
+      },
+      "measured_streams": {
+        "wheel": {
+          "receive": {
+            "samples": 1844,
+            "frequency_hz": 99.99966574718346,
+            "interval_ms": {
+              "samples": 1843,
+              "minimum": 0.135416,
+              "median": 9.995394,
+              "p95": 10.336718699999999,
+              "maximum": 23.543489
+            }
+          },
+          "mcu_event": {
+            "samples": 1844,
+            "frequency_hz": 99.99997829626082,
+            "interval_ms": {
+              "samples": 1843,
+              "minimum": 9.989,
+              "median": 10.0,
+              "p95": 10.004,
+              "maximum": 10.009
+            }
+          },
+          "invalid": 0,
+          "interval_ms": {
+            "samples": 1844,
+            "minimum": 9.989,
+            "median": 10.0,
+            "p95": 10.004,
+            "maximum": 10.009
+          },
+          "maximum_measured_planar_speed_mps": 0.0
+        },
+        "gyro": {
+          "receive": {
+            "samples": 1843,
+            "frequency_hz": 99.95614854304203,
+            "interval_ms": {
+              "samples": 1842,
+              "minimum": 0.135416,
+              "median": 10.0024985,
+              "p95": 10.15848565,
+              "maximum": 20.635537
+            }
+          },
+          "mcu_event": {
+            "samples": 1843,
+            "frequency_hz": 99.95619183839786,
+            "interval_ms": {
+              "samples": 1842,
+              "minimum": 9.944,
+              "median": 9.952,
+              "p95": 10.942,
+              "maximum": 10.955
+            }
+          },
+          "invalid": 0
+        }
+      },
+      "raw_pose": {
+        "receive": {
+          "samples": 3583,
+          "frequency_hz": 199.5771149479467,
+          "interval_ms": {
+            "samples": 3582,
+            "minimum": 0.090292,
+            "median": 5.0066765,
+            "p95": 5.27501065,
+            "maximum": 16.960837
+          }
+        },
+        "capture_interval_ms": {
+          "samples": 3582,
+          "minimum": 4.9375,
+          "median": 5.010986328125,
+          "p95": 5.01123046875,
+          "maximum": 5.040771484375
+        },
+        "frame_number_range": [
+          0,
+          3582
+        ],
+        "missing_frame_numbers": 0,
+        "nonincreasing_frames": 0,
+        "callback_queue_drops_max": 0,
+        "tracker_confidence_counts": {
+          "0": 1,
+          "2": 3582
+        },
+        "first_receive_wall": "2026-11-09T03:34:25.527",
+        "last_receive_wall": "2026-11-09T03:34:43.475",
+        "raw_sdk_net_displacement_m": 0.0006005086537189967
+      },
+      "motion": {
+        "pose_ingested": 3491,
+        "primary_yaw_ingested": 1801,
+        "measured_wheel_ingested": 1802,
+        "pose_packets": 3491,
+        "primary_yaw_packets": 1801,
+        "motion_queue_drops": 0,
+        "motion_stream_complete": true,
+        "control_updates": 0,
+        "control_updates_coalesced": 0,
+        "control_capacity_errors": 0,
+        "fit_requests_coalesced": 0,
+        "capture_chain_present": true,
+        "error": null,
+        "parent_error": null,
+        "worker_stopped_cleanly": true,
+        "receiver_stopped_cleanly": true,
+        "fit_thread_stopped": true,
+        "control_publication_enabled_by_entry": false,
+        "control_validation_note": "Desktop RadarWorker default control_updates=False; these two sessions do not exercise high-rate control mailbox publication."
+      },
+      "geometry": {
+        "line_backend": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 139,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "initialization_records": 0,
+        "initialization_statuses": {},
+        "normal_fit_records": 139,
+        "accepted_wall_posteriors": 0,
+        "rank_xy_counts": {
+          "0": 139
+        },
+        "reference_ready": true,
+        "synthetic_reference": true,
+        "fit_stage_ms": {
+          "compute_ms": {
+            "samples": 139,
+            "minimum": 13.561803,
+            "median": 23.220907,
+            "p95": 38.1512727,
+            "maximum": 56.162124
+          },
+          "compute_thread_cpu_ms": {
+            "samples": 139,
+            "minimum": 8.561424,
+            "median": 11.331914,
+            "p95": 14.418035,
+            "maximum": 21.800374
+          },
+          "snapshot_ms": {
+            "samples": 139,
+            "minimum": 0.202791,
+            "median": 0.261708,
+            "p95": 0.4658944999999998,
+            "maximum": 0.712457
+          },
+          "deskew_ms": {
+            "samples": 139,
+            "minimum": 2.928785,
+            "median": 8.042024,
+            "p95": 13.9006478,
+            "maximum": 26.972356
+          },
+          "fit_ms": {
+            "samples": 139,
+            "minimum": 5.953404,
+            "median": 13.931261,
+            "p95": 27.27160979999999,
+            "maximum": 42.324364
+          }
+        }
+      },
+      "lidar_reader": {
+        "stats": {
+          "rx_batches": 6967,
+          "rx_bytes": 237986,
+          "scan_packets": 5061,
+          "status_packets": 6,
+          "ack_packets": 2,
+          "crc_errors": 2,
+          "timing_rejections": 3,
+          "sector_rejections": 1,
+          "scans_emitted": 139
+        },
+        "scan_queue_drops": 0,
+        "historical_source_stats_comparison": {
+          "rx_bytes": [
+            237986,
+            237986
+          ],
+          "scan_packets": [
+            5061,
+            5061
+          ],
+          "status_packets": [
+            6,
+            6
+          ],
+          "ack_packets": [
+            2,
+            2
+          ],
+          "crc_errors": [
+            2,
+            2
+          ],
+          "timing_rejections": [
+            3,
+            3
+          ],
+          "sector_rejections": [
+            1,
+            1
+          ],
+          "scans_emitted": [
+            139,
+            139
+          ]
+        },
+        "all_compared_historical_stats_equal": true,
+        "error_provenance": "replayed historical lidar counters; not chassis UART errors"
+      },
+      "chassis_uart_offline_decode": {
+        "stats": {
+          "uart_rx_bytes": 411845,
+          "legacy_frames": 4014,
+          "extended_frames": 3702,
+          "legacy_ack4": 0,
+          "mixed_crc_errors": 0,
+          "mixed_malformed": 0,
+          "discarded_bytes": 0,
+          "partial_timeouts": 0,
+          "buffer_overflows": 0
+        },
+        "remaining_partial_bytes": 2
+      },
+      "logging": {
+        "session_complete_marker": {
+          "owner": "t265_f407_motion_map",
+          "complete": true,
+          "session_index": 17,
+          "accuracy_verified": false
+        },
+        "sdk_logging_healthy": true,
+        "sdk_dropped_records": 0,
+        "diagnostic_csv_status": {
+          "localization_dropped_rows": 0,
+          "localization_io_failed": false,
+          "raw_pose_dropped_rows": 0,
+          "raw_pose_io_failed": false,
+          "raw_json_write_errors": 0,
+          "uart_raw_dropped_rows": 0,
+          "uart_raw_io_failed": false,
+          "raw_json_coalesced": 0
+        },
+        "worker_logging_healthy": true,
+        "worker_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 2,
+          "history_records_written": 144,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "reader_logging_healthy": true,
+        "reader_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 32,
+          "history_records_written": 7110,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "json_integrity": {
+          "wheel_sdk.jsonl": {
+            "records": 7376,
+            "invalid_json_lines": []
+          },
+          "pose_motion.jsonl": {
+            "records": 3491,
+            "invalid_json_lines": []
+          },
+          "dynamic_localization.jsonl": {
+            "records": 139,
+            "invalid_json_lines": []
+          },
+          "dynamic_scans.jsonl": {
+            "records": 139,
+            "invalid_json_lines": []
+          },
+          "uart_rx_native.jsonl": {
+            "records": 25018,
+            "invalid_json_lines": []
+          },
+          "localization_events.jsonl": {
+            "records": 11,
+            "invalid_json_lines": []
+          },
+          "events.jsonl": {
+            "records": 8,
+            "invalid_json_lines": []
+          }
+        }
+      },
+      "interpretation": "Stationary transport/SDK and numeric load check passed; no field accuracy, successful wall posterior or strict 10ms guarantee."
+    },
+    {
+      "session": "033738",
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_033738_interactive",
+      "upper_commit": "2f572323ae96a4325432d197f32d2dc13b2bfb7a",
+      "sdk_session_id": "0da8495596734f88a391e6ddd1600ad6",
+      "actual_f405": {
+        "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+        "source_dirty": 1,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "uart_baud": 921600,
+        "boot_epoch": "421fc48027cd480e44a9358e1bc20600",
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "drift_bound_ppm": 4294967295
+      },
+      "sensor_check_passed": false,
+      "scope": "actual stationary F405/T265 SDK plus historical lidar PTY; no motor commands or independent field truth",
+      "historical_lidar": {
+        "event": "historical_lidar_pressure_source",
+        "timestamp_monotonic_ns": 19033589211349,
+        "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261108_123640_competition_wheel/lidar_rx.jsonl",
+        "physical_lidar": false,
+        "motor_commands": 0,
+        "synthetic_reference": true,
+        "real_yolo": true,
+        "control_probe_uart_forwarding": false
+      },
+      "sdk": {
+        "all": {
+          "returned_true": 2835,
+          "returned_false": 0,
+          "success_stream": {
+            "samples": 2835,
+            "frequency_hz": 99.50206209049537,
+            "interval_ms": {
+              "samples": 2834,
+              "minimum": 1.184331,
+              "median": 10.004332999999999,
+              "p95": 10.5624598,
+              "maximum": 38.409712
+            }
+          },
+          "wheel_gyro_ready_to_api_ms": {
+            "samples": 2835,
+            "minimum": 0.654124,
+            "median": 0.80554,
+            "p95": 1.1928396999999997,
+            "maximum": 16.498507
+          },
+          "wheel_receive_to_api_ms": {
+            "samples": 2835,
+            "minimum": 1.012873,
+            "median": 6.651361,
+            "p95": 9.306284399999997,
+            "maximum": 52.387474
+          },
+          "sdk_call_duration_ms": {
+            "samples": 2835,
+            "minimum": 0.146833,
+            "median": 0.222124,
+            "p95": 0.43187389999999976,
+            "maximum": 15.568009
+          },
+          "unmatched_success_frames": []
+        },
+        "config_loaded": true,
+        "sdk_result_scope": "host SDK bool return only; no per-sample device ACK, USB-health or fusion-quality confirmation",
+        "unique_attempt_frames": 2835,
+        "unique_result_frames": 2835,
+        "exception_events": [
+          {
+            "event": "wheel_native_input_discarded",
+            "wall_time": "2026-11-09T03:37:39.311",
+            "relative_session_start_ms": 63.209452,
+            "before_sdk_start": 18,
+            "queue_overflow": 0,
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_native_rejected",
+            "wall_time": "2026-11-09T03:37:39.324",
+            "relative_session_start_ms": 76.248133,
+            "reason": "no_gyro_at_interval_start",
+            "sdk_api_success_samples": 0
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:37:48.750",
+            "relative_session_start_ms": 9502.2259,
+            "samples": 1,
+            "sdk_api_success_samples": 930
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:37:48.880",
+            "relative_session_start_ms": 9632.363004,
+            "samples": 1,
+            "sdk_api_success_samples": 942
+          },
+          {
+            "event": "wheel_requests_coalesced",
+            "wall_time": "2026-11-09T03:37:49.030",
+            "relative_session_start_ms": 9782.120651,
+            "samples": 1,
+            "sdk_api_success_samples": 956
+          }
+        ],
+        "total_coalesced_measurements": 3,
+        "startup_discard_unit": "complete validated extended TYPE07/TYPE08 feedback containers combined; not UART fragments or necessarily wheel intervals (main.cpp F405MixedFrames callback -> debug_wheel_input.cpp wire_packet)",
+        "latency_definitions": {
+          "wheel_gyro_ready_to_api_ms": "(result.last_sdk_success_ns-max(attempt.packet.receive_monotonic_ns,attempt.packet.gyro_receive_ns))/1e6",
+          "wheel_receive_to_api_ms": "(result.last_sdk_success_ns-attempt.packet.receive_monotonic_ns)/1e6"
+        },
+        "snapshot_rate_hz_at_shutdown": 86,
+        "snapshot_rate_is_trailing_one_second": true,
+        "before_first_usb_error": {
+          "returned_true": 549,
+          "returned_false": 0,
+          "success_stream": {
+            "samples": 549,
+            "frequency_hz": 99.96448759753928,
+            "interval_ms": {
+              "samples": 548,
+              "minimum": 1.184331,
+              "median": 10.000229000000001,
+              "p95": 12.117752399999999,
+              "maximum": 21.354415
+            }
+          },
+          "wheel_gyro_ready_to_api_ms": {
+            "samples": 549,
+            "minimum": 0.708916,
+            "median": 0.909331,
+            "p95": 1.6958048000000001,
+            "maximum": 11.854768
+          },
+          "wheel_receive_to_api_ms": {
+            "samples": 549,
+            "minimum": 1.620039,
+            "median": 7.231943,
+            "p95": 9.2686802,
+            "maximum": 18.026838
+          },
+          "sdk_call_duration_ms": {
+            "samples": 549,
+            "minimum": 0.146833,
+            "median": 0.304916,
+            "p95": 0.9405980000000008,
+            "maximum": 11.031977
+          },
+          "unmatched_success_frames": []
+        },
+        "after_first_usb_error": {
+          "returned_true": 2286,
+          "returned_false": 0,
+          "success_stream": {
+            "samples": 2286,
+            "frequency_hz": 99.45799010700505,
+            "interval_ms": {
+              "samples": 2285,
+              "minimum": 1.226623,
+              "median": 10.005022,
+              "p95": 10.3817458,
+              "maximum": 38.409712
+            }
+          },
+          "wheel_gyro_ready_to_api_ms": {
+            "samples": 2286,
+            "minimum": 0.654124,
+            "median": 0.78704,
+            "p95": 1.06810175,
+            "maximum": 16.498507
+          },
+          "wheel_receive_to_api_ms": {
+            "samples": 2286,
+            "minimum": 1.012873,
+            "median": 5.990175,
+            "p95": 9.308740499999999,
+            "maximum": 52.387474
+          },
+          "sdk_call_duration_ms": {
+            "samples": 2286,
+            "minimum": 0.180208,
+            "median": 0.214457,
+            "p95": 0.3227285,
+            "maximum": 15.568009
+          },
+          "unmatched_success_frames": []
+        }
+      },
+      "measured_streams": {
+        "wheel": {
+          "receive": {
+            "samples": 2839,
+            "frequency_hz": 99.6153071722459,
+            "interval_ms": {
+              "samples": 2838,
+              "minimum": 1.755788,
+              "median": 9.999688,
+              "p95": 10.32377445,
+              "maximum": 41.133206
+            }
+          },
+          "mcu_event": {
+            "samples": 2839,
+            "frequency_hz": 99.61390660680286,
+            "interval_ms": {
+              "samples": 2838,
+              "minimum": 9.989,
+              "median": 10.0,
+              "p95": 10.004,
+              "maximum": 40.005
+            }
+          },
+          "invalid": 0,
+          "interval_ms": {
+            "samples": 2839,
+            "minimum": 9.989,
+            "median": 10.0,
+            "p95": 10.004,
+            "maximum": 10.008
+          },
+          "maximum_measured_planar_speed_mps": 0.0
+        },
+        "gyro": {
+          "receive": {
+            "samples": 2839,
+            "frequency_hz": 99.57181707951246,
+            "interval_ms": {
+              "samples": 2838,
+              "minimum": 3.15816,
+              "median": 10.0029165,
+              "p95": 10.3836995,
+              "maximum": 42.053496
+            }
+          },
+          "mcu_event": {
+            "samples": 2839,
+            "frequency_hz": 99.56887519062545,
+            "interval_ms": {
+              "samples": 2838,
+              "minimum": 9.879,
+              "median": 9.952,
+              "p95": 10.942,
+              "maximum": 39.805
+            }
+          },
+          "invalid": 0
+        }
+      },
+      "raw_pose": {
+        "receive": {
+          "samples": 1002,
+          "frequency_hz": 199.5767502287648,
+          "interval_ms": {
+            "samples": 1001,
+            "minimum": 0.007625,
+            "median": 5.007615,
+            "p95": 5.818113,
+            "maximum": 14.52847
+          }
+        },
+        "capture_interval_ms": {
+          "samples": 1001,
+          "minimum": 4.8916015625,
+          "median": 5.010986328125,
+          "p95": 5.01123046875,
+          "maximum": 5.01513671875
+        },
+        "frame_number_range": [
+          0,
+          1001
+        ],
+        "missing_frame_numbers": 0,
+        "nonincreasing_frames": 0,
+        "callback_queue_drops_max": 0,
+        "tracker_confidence_counts": {
+          "0": 1,
+          "2": 1001
+        },
+        "first_receive_wall": "2026-11-09T03:37:39.808",
+        "last_receive_wall": "2026-11-09T03:37:44.824",
+        "raw_sdk_net_displacement_m": 1.3336230793291297
+      },
+      "motion": {
+        "pose_ingested": 1000,
+        "primary_yaw_ingested": 2797,
+        "measured_wheel_ingested": 2799,
+        "pose_packets": 1002,
+        "primary_yaw_packets": 2798,
+        "motion_queue_drops": 3,
+        "motion_stream_complete": false,
+        "control_updates": 2275,
+        "control_updates_coalesced": 62,
+        "control_capacity_errors": 0,
+        "fit_requests_coalesced": 0,
+        "capture_chain_present": true,
+        "error": null,
+        "parent_error": null,
+        "worker_stopped_cleanly": true,
+        "receiver_stopped_cleanly": true,
+        "fit_thread_stopped": true,
+        "drop_event_timeline": [
+          {
+            "wall": "2026-11-09T03:37:40.185",
+            "relative_session_start_ms": 937.559251,
+            "relative_worker_started_ms": -9.959771,
+            "relative_historical_replay_started_ms": -3239.965782,
+            "reported_total": 1,
+            "increment": 1,
+            "timestamp_semantics": "GUI observation of cumulative drop counter, not the instant of each failed send"
+          },
+          {
+            "wall": "2026-11-09T03:37:40.298",
+            "relative_session_start_ms": 1050.616765,
+            "relative_worker_started_ms": 103.097743,
+            "relative_historical_replay_started_ms": -3126.908268,
+            "reported_total": 3,
+            "increment": 2,
+            "timestamp_semantics": "GUI observation of cumulative drop counter, not the instant of each failed send"
+          }
+        ],
+        "drop_phase": "The GUI observed totals 1 then 3 around startup, both before historical lidar/field bind. Exact drop instants are not separately logged; do not infer that the second observation means drops occurred after worker_started.",
+        "missing_inputs_by_count": {
+          "pose": 2,
+          "primary_yaw": 1,
+          "evidence": "Parent sent counts versus worker ingest counts: 1002/1000 Pose, 2798/2797 primary yaw",
+          "individual_failed_send_timestamps_available": false
+        }
+      },
+      "geometry": {
+        "line_backend": {
+          "backend": "native_streaming_ransac",
+          "load_error": null,
+          "geometry_policy_changed": false,
+          "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+          "extraction_load_error": null,
+          "extraction_calls": 139,
+          "extraction_fallbacks": 0,
+          "extraction_last_error": null
+        },
+        "initialization_records": 0,
+        "initialization_statuses": {},
+        "normal_fit_records": 139,
+        "accepted_wall_posteriors": 0,
+        "rank_xy_counts": {
+          "0": 139
+        },
+        "reference_ready": true,
+        "synthetic_reference": true,
+        "fit_stage_ms": {
+          "compute_ms": {
+            "samples": 139,
+            "minimum": 9.593272,
+            "median": 18.476045,
+            "p95": 51.60071789999999,
+            "maximum": 115.094968
+          },
+          "compute_thread_cpu_ms": {
+            "samples": 139,
+            "minimum": 8.224627,
+            "median": 11.412708,
+            "p95": 18.220136500000002,
+            "maximum": 23.127788
+          },
+          "snapshot_ms": {
+            "samples": 139,
+            "minimum": 0.184708,
+            "median": 0.25325,
+            "p95": 0.5700691999999998,
+            "maximum": 1.943329
+          },
+          "deskew_ms": {
+            "samples": 139,
+            "minimum": 2.387078,
+            "median": 5.755947,
+            "p95": 17.1804633,
+            "maximum": 52.261058
+          },
+          "fit_ms": {
+            "samples": 139,
+            "minimum": 4.722323,
+            "median": 11.420684,
+            "p95": 33.3944136,
+            "maximum": 73.846804
+          }
+        }
+      },
+      "lidar_reader": {
+        "stats": {
+          "rx_batches": 5591,
+          "rx_bytes": 237986,
+          "scan_packets": 5061,
+          "status_packets": 6,
+          "ack_packets": 2,
+          "crc_errors": 2,
+          "timing_rejections": 3,
+          "sector_rejections": 1,
+          "scans_emitted": 139
+        },
+        "scan_queue_drops": 0,
+        "historical_source_stats_comparison": {
+          "rx_bytes": [
+            237986,
+            237986
+          ],
+          "scan_packets": [
+            5061,
+            5061
+          ],
+          "status_packets": [
+            6,
+            6
+          ],
+          "ack_packets": [
+            2,
+            2
+          ],
+          "crc_errors": [
+            2,
+            2
+          ],
+          "timing_rejections": [
+            3,
+            3
+          ],
+          "sector_rejections": [
+            1,
+            1
+          ],
+          "scans_emitted": [
+            139,
+            139
+          ]
+        },
+        "all_compared_historical_stats_equal": true,
+        "error_provenance": "replayed historical lidar counters; not chassis UART errors"
+      },
+      "chassis_uart_offline_decode": {
+        "stats": {
+          "uart_rx_bytes": 635159,
+          "legacy_frames": 6185,
+          "extended_frames": 5700,
+          "legacy_ack4": 0,
+          "mixed_crc_errors": 6,
+          "mixed_malformed": 2,
+          "discarded_bytes": 931,
+          "partial_timeouts": 0,
+          "buffer_overflows": 0
+        },
+        "remaining_partial_bytes": 2
+      },
+      "logging": {
+        "session_complete_marker": null,
+        "sdk_logging_healthy": true,
+        "sdk_dropped_records": 0,
+        "diagnostic_csv_status": {
+          "localization_dropped_rows": 0,
+          "localization_io_failed": false,
+          "raw_pose_dropped_rows": 0,
+          "raw_pose_io_failed": false,
+          "raw_json_write_errors": 0,
+          "uart_raw_dropped_rows": 0,
+          "uart_raw_io_failed": false,
+          "raw_json_coalesced": 0
+        },
+        "worker_logging_healthy": true,
+        "worker_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 2,
+          "history_records_written": 145,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "reader_logging_healthy": true,
+        "reader_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 30,
+          "history_records_written": 5734,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "json_integrity": {
+          "wheel_sdk.jsonl": {
+            "records": 11358,
+            "invalid_json_lines": []
+          },
+          "pose_motion.jsonl": {
+            "records": 1002,
+            "invalid_json_lines": []
+          },
+          "dynamic_localization.jsonl": {
+            "records": 139,
+            "invalid_json_lines": []
+          },
+          "dynamic_scans.jsonl": {
+            "records": 139,
+            "invalid_json_lines": []
+          },
+          "uart_rx_native.jsonl": {
+            "records": 38123,
+            "invalid_json_lines": []
+          },
+          "localization_events.jsonl": {
+            "records": 11,
+            "invalid_json_lines": []
+          },
+          "events.jsonl": {
+            "records": 7,
+            "invalid_json_lines": []
+          },
+          "internal_control_load_probe.jsonl": {
+            "records": 2211,
+            "invalid_json_lines": []
+          }
+        }
+      },
+      "usb_failure": {
+        "first": {
+          "monotonic_ns": 19035005686316,
+          "wall": "2026-11-09T03:37:44.842",
+          "status": "IO",
+          "line": " 09/11 03:37:44,842 ERROR [281472191426784] (tm-device.cpp:2080) Stream write error RS2_USB_STATUS_IO"
+        },
+        "first_no_device": {
+          "monotonic_ns": 19035044686316,
+          "wall": "2026-11-09T03:37:44.881",
+          "status": "NO_DEVICE",
+          "line": " 09/11 03:37:44,881 ERROR [281472191426784] (tm-device.cpp:2080) Stream write error RS2_USB_STATUS_NO_DEVICE"
+        },
+        "last": {
+          "monotonic_ns": 19057985686316,
+          "wall": "2026-11-09T03:38:07.822",
+          "status": "NO_DEVICE",
+          "line": " 09/11 03:38:07,822 ERROR [281472832580288] (tm-device.cpp:2038) Bulk request error RS2_USB_STATUS_NO_DEVICE"
+        },
+        "error_lines_by_status": {
+          "IO": 2,
+          "NO_DEVICE": 2287
+        },
+        "wall_to_monotonic_method": "same-session session_started.wall_time minus timestamp_monotonic_ns; millisecond-rounded wall logs, approx 1ms precision",
+        "last_raw_pose_to_first_usb_error_ms": 17.93459,
+        "sdk_true_after_usb_failure_does_not_prove_delivery": true,
+        "pose_resumed_in_session": false,
+        "kernel_evidence_from_primary_agent": {
+          "source": "/var/log/kern.log",
+          "provenance": "Primary agent supplied privileged kernel-log evidence; this subagent direct read was permission denied",
+          "events": [
+            {
+              "wall_time": "2026-11-09T03:37:44",
+              "kernel_uptime_s": 19034.984361,
+              "event": "usb1-1 hub USB disconnect"
+            },
+            {
+              "wall_time": "2026-11-09T03:37:44",
+              "kernel_uptime_s": 19034.984388,
+              "event": "camera1-1.3 disconnect"
+            },
+            {
+              "wall_time": "2026-11-09T03:37:44",
+              "kernel_uptime_s": 19035.022112,
+              "event": "usb2-1 hub disconnect"
+            },
+            {
+              "wall_time": "2026-11-09T03:37:44",
+              "kernel_uptime_s": 19035.02234,
+              "event": "T2652-1.1 disconnect"
+            },
+            {
+              "wall_time": "2026-11-09T03:37:45",
+              "event": "both hubs enumerate again"
+            },
+            {
+              "wall_time": "2026-11-09T03:37:46",
+              "event": "T265 enumerates as03e7:2150/invalid maxpacket64; visual camera re-enumerates"
+            }
+          ],
+          "root_cause": "undetermined: kernel evidence establishes hub/device disconnects, not whether caused by power, physical link or software"
+        }
+      },
+      "control_probe": {
+        "all": {
+          "records": 2211,
+          "unique_sample_endpoints": 2211,
+          "receive_stream": {
+            "samples": 2211,
+            "frequency_hz": 92.370366248717,
+            "interval_ms": {
+              "samples": 2210,
+              "minimum": 0.220833,
+              "median": 9.932021500000001,
+              "p95": 22.12295384999999,
+              "maximum": 101.416165
+            }
+          },
+          "sample_endpoint_stream": {
+            "samples": 2211,
+            "frequency_hz": 92.32409885728161,
+            "interval_ms": {
+              "samples": 2210,
+              "minimum": -27.453736,
+              "median": 10.0137295,
+              "p95": 19.96606875,
+              "maximum": 58.607002
+            }
+          },
+          "mapped_sample_to_probe_receive_ms": {
+            "samples": 2211,
+            "minimum": 2.776619,
+            "median": 11.652018,
+            "p95": 909.1771894999999,
+            "maximum": 1023.009869
+          },
+          "sources": {
+            "VIO_FROM_INITIAL_REFERENCE": 5,
+            "T265_WITH_WHEEL_TAIL": 17,
+            "WHEEL_FALLBACK": 2189
+          }
+        },
+        "before_first_usb_error": {
+          "records": 63,
+          "unique_sample_endpoints": 63,
+          "receive_stream": {
+            "samples": 63,
+            "frequency_hz": 44.19478770850886,
+            "interval_ms": {
+              "samples": 62,
+              "minimum": 0.420833,
+              "median": 19.0317105,
+              "p95": 52.865319249999985,
+              "maximum": 68.902398
+            }
+          },
+          "sample_endpoint_stream": {
+            "samples": 63,
+            "frequency_hz": 82.85345802023285,
+            "interval_ms": {
+              "samples": 62,
+              "minimum": -27.453736,
+              "median": 10.021151499999998,
+              "p95": 20.10765,
+              "maximum": 58.607002
+            }
+          },
+          "mapped_sample_to_probe_receive_ms": {
+            "samples": 63,
+            "minimum": 19.567119,
+            "median": 393.832221,
+            "p95": 621.6723331999999,
+            "maximum": 679.299293
+          },
+          "sources": {
+            "VIO_FROM_INITIAL_REFERENCE": 5,
+            "T265_WITH_WHEEL_TAIL": 17,
+            "WHEEL_FALLBACK": 41
+          }
+        },
+        "after_first_usb_error": {
+          "records": 2148,
+          "unique_sample_endpoints": 2148,
+          "receive_stream": {
+            "samples": 2148,
+            "frequency_hz": 95.37083031087887,
+            "interval_ms": {
+              "samples": 2147,
+              "minimum": 0.220833,
+              "median": 9.74448,
+              "p95": 20.744040899999984,
+              "maximum": 101.416165
+            }
+          },
+          "sample_endpoint_stream": {
+            "samples": 2148,
+            "frequency_hz": 92.62406330340121,
+            "interval_ms": {
+              "samples": 2147,
+              "minimum": 5.959946,
+              "median": 10.013521,
+              "p95": 19.942596299999998,
+              "maximum": 51.293809
+            }
+          },
+          "mapped_sample_to_probe_receive_ms": {
+            "samples": 2148,
+            "minimum": 2.776619,
+            "median": 11.323267999999999,
+            "p95": 911.7346990499999,
+            "maximum": 1023.009869
+          },
+          "sources": {
+            "WHEEL_FALLBACK": 2148
+          }
+        },
+        "producer_updates": 2275,
+        "producer_coalesced": 62,
+        "producer_minus_coalesced_minus_probe_records": 2,
+        "note": "Control continues mostly on WHEEL_FALLBACK after real Pose ceases; not a successful T265 joint-control latency run. Producer/replacement/consumer counts are separate; two additional non-coalesced publications are outside this recorded probe, exact readiness/shutdown disposition not attested by the probe. Mapped sample latency includes unqualified mapping and physical endpoint reception, not isolated compute delay.",
+        "first_wheel_fallback_wall": "2026-11-09T03:37:43.900",
+        "uart_forwarding": false,
+        "physical_wheel_receive_to_probe_ms": {
+          "samples": 2211,
+          "minimum": 2.776619,
+          "median": 11.652018,
+          "p95": 909.1771894999999,
+          "maximum": 1023.009869
+        },
+        "physical_wheel_receive_matching": {
+          "matched": 2211,
+          "probe_records": 2211,
+          "key": "motion_selection.last_wheel_sample_id matched to wheel_native_measurement TYPE07 sample_id in the same single MCU epoch/session",
+          "timestamp": "native wheel receive_monotonic_ns and probe receive_monotonic_ns share the same host monotonic clock, no MCU or SDK capture-time map used",
+          "before_first_usb_error_ms": {
+            "samples": 63,
+            "minimum": 51.814892,
+            "median": 393.832221,
+            "p95": 621.6723331999999,
+            "maximum": 679.299293
+          },
+          "after_first_usb_error_ms": {
+            "samples": 2148,
+            "minimum": 2.776619,
+            "median": 11.323267999999999,
+            "p95": 911.7346990499999,
+            "maximum": 1023.009869
+          },
+          "source_caveat": "The initial5 VIO_FROM_INITIAL_REFERENCE rows name the latest observed wheel as metadata, not the selected position source. The576-row large-lag segment contains only T265_WITH_WHEEL_TAIL/WHEEL_FALLBACK and is wheel-supported; its direct host-RX latency evidence is unaffected."
+        },
+        "segments_physical_wheel_rx_to_probe_above_100ms": [
+          {
+            "records": 1,
+            "first_probe_wall": "2026-11-09T03:37:43.530",
+            "last_probe_wall": "2026-11-09T03:37:43.530",
+            "first_probe_relative_first_usb_error_ms": -1311.366894,
+            "last_probe_relative_first_usb_error_ms": -1311.366894,
+            "physical_wheel_receive_to_probe_ms": {
+              "samples": 1,
+              "minimum": 100.384457,
+              "median": 100.384457,
+              "p95": 100.384457,
+              "maximum": 100.384457
+            },
+            "already_received_wheel_intervals_behind": {
+              "samples": 1,
+              "minimum": 10.0,
+              "median": 10.0,
+              "p95": 10.0,
+              "maximum": 10.0
+            },
+            "probe_receive_interval_ms": null,
+            "sources": {
+              "T265_WITH_WHEEL_TAIL": 1
+            }
+          },
+          {
+            "records": 576,
+            "first_probe_wall": "2026-11-09T03:37:43.562",
+            "last_probe_wall": "2026-11-09T03:37:50.571",
+            "first_probe_relative_first_usb_error_ms": -1279.986084,
+            "last_probe_relative_first_usb_error_ms": 5729.231028,
+            "physical_wheel_receive_to_probe_ms": {
+              "samples": 576,
+              "minimum": 100.985956,
+              "median": 578.234192,
+              "p95": 988.34908775,
+              "maximum": 1023.009869
+            },
+            "already_received_wheel_intervals_behind": {
+              "samples": 576,
+              "minimum": 10.0,
+              "median": 57.0,
+              "p95": 98.0,
+              "maximum": 102.0
+            },
+            "probe_receive_interval_ms": {
+              "samples": 575,
+              "minimum": 0.220833,
+              "median": 10.503144,
+              "p95": 29.705942299999986,
+              "maximum": 68.902398
+            },
+            "sources": {
+              "T265_WITH_WHEEL_TAIL": 13,
+              "WHEEL_FALLBACK": 563
+            }
+          },
+          {
+            "records": 3,
+            "first_probe_wall": "2026-11-09T03:38:00.780",
+            "last_probe_wall": "2026-11-09T03:38:00.812",
+            "first_probe_relative_first_usb_error_ms": 15938.404085,
+            "last_probe_relative_first_usb_error_ms": 15970.596435,
+            "physical_wheel_receive_to_probe_ms": {
+              "samples": 3,
+              "minimum": 102.070247,
+              "median": 107.263402,
+              "p95": 113.39516499999999,
+              "maximum": 114.076472
+            },
+            "already_received_wheel_intervals_behind": {
+              "samples": 3,
+              "minimum": 10.0,
+              "median": 10.0,
+              "p95": 10.9,
+              "maximum": 11.0
+            },
+            "probe_receive_interval_ms": {
+              "samples": 2,
+              "minimum": 15.160385,
+              "median": 16.096175,
+              "p95": 16.938386,
+              "maximum": 17.031965
+            },
+            "sources": {
+              "WHEEL_FALLBACK": 3
+            }
+          }
+        ],
+        "sample_time_reversals": [
+          {
+            "before_source": "VIO_FROM_INITIAL_REFERENCE",
+            "after_source": "T265_WITH_WHEEL_TAIL",
+            "before_probe_wall": "2026-11-09T03:37:43.495",
+            "after_probe_wall": "2026-11-09T03:37:43.512",
+            "sample_step_ms": -27.453736,
+            "context": "Initial selection changed from raw VIO endpoint to the currently processed wheel-supported endpoint. Not treated as an invented new sample."
+          }
+        ],
+        "latency_attribution": "The 576-record delayed segment starts 1.280s before first SDK USB error and continues 5.730s after. It references physical wheel containers already received 100-1023ms earlier, while its maximum consecutive probe-receive gap is only 68.9ms. Ordinary-priority probe scheduling alone cannot explain the full one-second lag. Delay is present in the motion support selected at publication or upstream observer/forwarding/processing. Existing logs have no processing timestamps at each intermediate hop, so they do not isolate UART-relay observer vs chassis queue vs MotionInbox vs worker work/GIL. No unsupported precise CPU/root-cause claim.",
+        "consumer_scheduling": "Ordinary scheduling in this diagnostic probe, unlike the formal control output FIFO10 thread; no per-stage timing proves a precise attribution."
+      },
+      "vision_failure": {
+        "warm_status": {
+          "session_token": "",
+          "ready": true,
+          "competition_started": false
+        },
+        "diagnostics": {
+          "diagnostic_logging": {
+            "queue_capacity": 1024,
+            "pending_records": 0,
+            "pending_snapshots": 1,
+            "records_written": 15,
+            "snapshots_written": 10,
+            "snapshots_coalesced": 3,
+            "dropped": 0,
+            "error": null,
+            "close_timed_out": false,
+            "incomplete": false
+          },
+          "diagnostic_error_count": 0,
+          "approach_range": {
+            "pitch_cdeg": 0,
+            "epoch": 0,
+            "reason": "range_status_unavailable",
+            "source_frame": null,
+            "distance_mm": null
+          },
+          "schema_version": 1,
+          "timestamp_monotonic_ns": 19034938118288,
+          "protocol_context": {
+            "task_id": 42612,
+            "action_id": 25181,
+            "vision_frame": 0,
+            "accepted_task_id": null,
+            "accepted_action_id": null,
+            "accepted_command": null
+          },
+          "state": "WAIT_START",
+          "message": "等待第一帧识别",
+          "event": "",
+          "motion_expected": false,
+          "command_tx_suppressed": false,
+          "suppression_reason": "",
+          "upper_state": "WAIT_START",
+          "upper_reason": "等待第一帧识别",
+          "stm_mode": 0,
+          "stm_fresh": false,
+          "stm_age_ms": null,
+          "stm_gripper_closed": false,
+          "stm_ack": 0,
+          "relay_last_mission_command": null,
+          "relay_last_mission_sequence": null,
+          "relay_last_mission_payload": [],
+          "pose_valid": true,
+          "pose_age_ms": 33.182973,
+          "command_opcode": null,
+          "tx_policy": "no_command",
+          "reason": "等待第一帧识别",
+          "selected_track_ids": [],
+          "target_last_seen_age_ms": null,
+          "expected_stm_mode": [],
+          "stash_has_cargo": false,
+          "stash_checked": false,
+          "danger_event_latched": false,
+          "detour_execution_seen": false,
+          "detour_tx_baseline": null,
+          "detour_command_accepted": false,
+          "stm_fault_waiting": false,
+          "recovery_wait_active": false,
+          "recovery_origin_state": null,
+          "recovery_reference_ready": false,
+          "recovery_task_locked": false,
+          "recovery_abandon_requested": false,
+          "recovery_reason": "",
+          "recovery_interrupted_pickup": null,
+          "delivery_outside_seen": false,
+          "delivery_inside_hits": 0,
+          "delivery_window_frames": 0,
+          "delivery_window_misses": 0,
+          "delivery_window_started_s": null,
+          "delivery_observation_attempt": 0,
+          "delivery_observation_elapsed_s": null,
+          "delivery_visual_frame_age_ms": null,
+          "delivery_visual_confirmed": false,
+          "delivery_lateral_aligned": false,
+          "delivery_target_point": null,
+          "confirmed_delivery_destination": null,
+          "delivery_completion_basis": "",
+          "delivery_timeout_reason": "",
+          "delivery_conflict_frames": 0,
+          "safe_zone_freeze_hits": 0,
+          "safe_zone_freeze_frame_floor": null,
+          "locked_safe_bbox": null,
+          "locked_safe_target_x_px": null,
+          "safe_zone_visual_pixel_error": 0,
+          "safe_zone_visual_locked": false,
+          "safe_zone_fallback": false,
+          "safe_sweep_attempts": 0,
+          "safe_sweep_command_accepted": false,
+          "safe_sweep_execution_seen": false,
+          "safe_sweep_reaudit_active": false,
+          "safe_sweep_control": "pixel_approach",
+          "safe_sweep_observation": {
+            "key": null,
+            "elapsed_s": null,
+            "start_pose": null,
+            "mechanical_subphase_available": false
+          },
+          "safe_sweep_pickup": null,
+          "enter_distance_source": "f407_encoder",
+          "carried_manifest": [],
+          "carried_total_count": 0,
+          "carried_has_green": false,
+          "carried_has_core": false,
+          "carried_green_core_mixed": false,
+          "search_yaw_accum_deg": 0.0,
+          "search_candidate_hits": 0,
+          "search_min_turn_deg": 720.0,
+          "pending_audit_stable": null,
+          "pending_audit_tx_baseline": null,
+          "pose": {
+            "valid": true,
+            "x_m": 0.134299909,
+            "y_m": 0.685008322,
+            "yaw_deg": 0.145096356,
+            "age_ms": 33.182973,
+            "wheel_progress_m": 0.0
+          },
+          "stm": {
+            "mode": 0,
+            "context_valid": false,
+            "task_id": 0,
+            "action_id": 0,
+            "accepted_command": 0,
+            "action_status": 0,
+            "rejected_action_id": 0,
+            "audit_ready": false,
+            "flags": 0,
+            "camera_pitch_cdeg": 0,
+            "age_ms": null,
+            "fault_code": 0,
+            "acknowledged_sequence": 0,
+            "claw_visible": false,
+            "gripper_closed": false,
+            "audit_valid": false,
+            "motors_active": false,
+            "distance_done": false,
+            "relay_tx_frames": 0,
+            "relay_tx_errors": 0,
+            "relay_last_sequence": null,
+            "relay_last_tx_age_ms": null,
+            "relay_mission_tx_frames": 0,
+            "relay_last_mission_command": null,
+            "relay_last_mission_sequence": null,
+            "relay_last_mission_payload": [],
+            "relay_last_mission_tx_monotonic_ns": 0,
+            "relay_last_mission_tx_age_ms": null
+          },
+          "vision": {
+            "frame_sequence": 51,
+            "observed_monotonic_s": 19034.869134306,
+            "age_ms": 66.72077799885301,
+            "cargo_count": 0,
+            "danger_ahead": false,
+            "danger_side": "unknown",
+            "delivery_target_found": false,
+            "delivery_target_inside_safe_zone": false,
+            "delivery_target_outside_safe_zone": false,
+            "safe_zone_filter_blocked": false,
+            "safe_corridor_polygon": [],
+            "safe_sweep_search_polygon": [],
+            "safe_corridor_obstacle_class": null,
+            "safe_corridor_obstacle_distance_mm": null,
+            "safe_corridor_obstacle_track_id": null,
+            "safe_corridor_obstacle_bbox": null,
+            "safe_corridor_status": "CLEAR",
+            "ground_localizer_calibrated": false,
+            "safe_sweep_capture_count": 0,
+            "low_conf_green_seen": false
+          },
+          "initial_stash_enabled": true,
+          "opening_strategy": "attack",
+          "stash_point_m": [
+            0.15,
+            -0.69
+          ],
+          "max_material_batch_count": 1,
+          "initial_stash_done": false,
+          "first_common_delivered": false,
+          "first_green_bump_used": false,
+          "first_fault_code": null,
+          "delivery_count": 0,
+          "disperse_attempts": 0,
+          "separation_keep_side": null,
+          "separation_side_attempts": 0,
+          "separation_request_epoch": 0,
+          "disperse_expected_done_mode": 35,
+          "disperse_relay_tx_baseline": null,
+          "disperse_context": "observe",
+          "disperse_observe_attempts": 0,
+          "disperse_command_accepted": false,
+          "cluster_id": 0,
+          "cluster_signature": null,
+          "cluster_target_class": null,
+          "cluster_target_track_id": null,
+          "cluster_target_bbox": null,
+          "cluster_bbox": null,
+          "cluster_keep_side": null,
+          "cluster_keep_side_count": 0,
+          "cluster_audit_active": false,
+          "cluster_initial_ack": null,
+          "cluster_relay_tx_baseline": null,
+          "cluster_command_accepted": false,
+          "cluster_execution_seen": false,
+          "cluster_align_turn_deg": 0.0,
+          "cluster_command_frame": 0,
+          "cluster_command_age_ms": null,
+          "deferred_cluster_ids": [],
+          "approach_initial_ack": null,
+          "approach_command_accepted": false,
+          "pending_audit_initial_ack": null,
+          "grab_initial_ack": null,
+          "navigation_initial_ack": null,
+          "staging_zero_initial_ack": null,
+          "staging_zero_tx_baseline": null,
+          "staging_zero_accepted": false,
+          "last_tx_opcode": null,
+          "last_tx_seq": null,
+          "relay_tx_frames": 0,
+          "relay_last_payload": [],
+          "staging_stm_mode": 0,
+          "staging_stm_ack": 0,
+          "staging_distance_done": false,
+          "staging_gripper_closed": false,
+          "staging_camera_pitch_cdeg": 0,
+          "enter_initial_ack": null,
+          "enter_command_accepted": false,
+          "task_complete_initial_ack": null,
+          "return_initial_ack": null,
+          "return_relay_tx_baseline": null,
+          "return_command_accepted": false,
+          "return_search_frame_floor": null,
+          "return_search_mode_seen": false,
+          "cargo_recheck_pending": false,
+          "cargo_recheck_context": "none",
+          "post_grab_audit_active": false,
+          "transport_audit_camera_ready": false,
+          "transport_audit_frame_floor": 0,
+          "post_grab_camera_ready": null,
+          "audit_hits": 0,
+          "audit_wire_mode": null,
+          "audit_wire_mode_started_s": null,
+          "audit_last_evidence_s": null,
+          "capture_observation_valid": false,
+          "capture_observation_reason": "",
+          "safe_sweep_observation_valid": false,
+          "safe_sweep_observation_reason": "",
+          "missing_committed_audit_mode": null,
+          "committed_audit_handoff_mode": null,
+          "invalid_release_side": "both",
+          "invalid_release_final": false,
+          "invalid_release_context": "none",
+          "invalid_release_tx_baseline": null,
+          "invalid_backoff_tx_baseline": null,
+          "batch": null,
+          "audit": null,
+          "command": null
+        },
+        "matching_log_lines": [
+          "[ERROR] 摄像头启动失败，设备可能被占用"
+        ],
+        "competition_started": false,
+        "physical_camera_stream_stayed_healthy": false
+      },
+      "interpretation": "FAILED/incomplete joint-load run: 3 startup motion-input drops plus T265 USB IO/NO_DEVICE and camera allocation failure. Later true SDK returns are not delivery/fusion evidence; no physical precision or hard-real-time conclusion."
+    }
+  ],
+  "conclusions": [
+    "033238/033424 establish restored real F405 plus ~100Hz host SDK input under initialisation/normal numerical load; raw Pose ~200Hz and zero motion-input drops in those sessions.",
+    "033738 is separately failed: startup input overflow, cessation of raw Pose and USB IO/NO_DEVICE, camera allocation failure. Host SDK bool remains true afterward, illustrating absence of per-sample device ACK.",
+    "Control probe mostly exercises existing wheel fallback, not a successful full healthy YOLO/T265/lidar joint chain.",
+    "No movement or independent field measurement: none of these sessions proves field precision or strict every-10ms delivery.",
+    "Lidar CRC/timing/sector counters match historical source; chassis raw offline CRC parsing stays separate.",
+    "Failed third run reveals a real host wheel-receive-to-control-probe tail up to1.023s in one576-record segment. This is not explained away by unknown MCU time quality; its stage/root cause remains to be isolated. It must not be hidden by an overall ~100Hz SDK bool-return count."
+  ],
+  "external_restart_after_checks": {
+    "source": "primary agent privileged kernel/system evidence",
+    "wall_time": "2026-11-09T03:55",
+    "boot_id_prefix": "3952b6eb",
+    "trigger": "external; this work did not write /boot or issue reboot",
+    "temporary_reports_lost": true
+  },
+  "later_readonly_f405_check_from_primary_agent": {
+    "label": "040159",
+    "actual_git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "source_dirty": 1,
+    "service": "MOTIONDEBUG",
+    "baud": 921600,
+    "wheel_packets": 202,
+    "gyro_packets": 202,
+    "chassis_crc_errors": 0,
+    "source": "primary agent report; independent static checks above remain distinct"
+  }
+}

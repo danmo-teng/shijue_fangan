@@ -22,6 +22,7 @@ from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.worker import RadarWorker
 from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
+from local_packet_receiver import LocalPacketReceiver
 
 class DynamicMapApp(base.MotionMapApp):
     def __init__(self,options):
@@ -106,12 +107,14 @@ class DynamicMapApp(base.MotionMapApp):
 
     def read_pose(self):
         connection=None
+        receiver=None
         while not self.dynamic_stop.is_set():
             try:
                 if connection is None:
                     connection,_=self.pose_socket.accept();connection.settimeout(.05)
                     connection.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
-                data=connection.recv(16384)
+                    receiver=LocalPacketReceiver(connection,16384)
+                data=receiver.recv()
                 if not data:break
             except socket.timeout:continue
             except OSError:break

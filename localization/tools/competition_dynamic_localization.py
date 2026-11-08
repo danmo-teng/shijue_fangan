@@ -13,6 +13,7 @@ from f405_timed_measurements import TimedMeasurements
 from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.worker import RadarWorker
 from low_latency_scheduling import set_realtime_thread
+from local_packet_receiver import LocalPacketReceiver
 
 
 class CompetitionDynamicLocalization:
@@ -132,6 +133,7 @@ class CompetitionDynamicLocalization:
     def _read_pose(self):
         self._schedule_thread('pose_input')
         connection = None
+        receiver = None
         try:
             while not self.stop_event.is_set():
                 try:
@@ -139,7 +141,8 @@ class CompetitionDynamicLocalization:
                         connection, _ = self.pose_socket.accept()
                         connection.settimeout(.005)
                         connection.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 262144)
-                    data = connection.recv(16384)
+                        receiver = LocalPacketReceiver(connection, 16384)
+                    data = receiver.recv()
                     if data:
                         pose = json.loads(data)
                         if pose['session_id'] == self.session_id:
