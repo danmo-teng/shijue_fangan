@@ -148,37 +148,112 @@ def test_official_wheel_input():
 
 
 def test_native_line_hypotheses():
-    """Same pairs, strict threshold and first-max ties across both scorers."""
+    """Numeric parity and all-or-original fallback, without physical devices."""
+    import ctypes
+    import os
+    import runpy
     import numpy as np
     from unittest.mock import patch
-    from lidar_yaw_debug.native_geometry import best_hypothesis,backend_status
-    from lidar_yaw_debug import static
-    if backend_status()['backend']!='native_streaming_ransac':return
+    from lidar_yaw_debug import native_geometry as native, static
     rng=np.random.default_rng(82)
     for n in (12,32,131,500):
         ordered=np.sort(rng.normal(size=n));indices=np.arange(n)
         assert np.array_equal([static._ordered_quantile(ordered,indices,q) for q in (.05,.95)],
                               np.percentile(ordered,[5,95]))
-    for n in (12,50,200,1000):
-        for scale in (1.,1e6):
-            points=rng.normal(size=(n,2))*scale
-            pairs=rng.integers(n,size=(160,2),dtype=np.int64)
-            p=points[pairs[:,0]];t=points[pairs[:,1]]-p
-            lengths=np.linalg.norm(t,axis=1)
-            normal=np.column_stack((-t[:,1],t[:,0]))/np.maximum(lengths[:,None],1e-12)
-            delta=points[:,None,:]-p[None,:,:]
-            masks=(abs(delta[:,:,0]*normal[None,:,0]+delta[:,:,1]*normal[None,:,1])<.025)&(lengths>=.15)
-            expected=masks[:,int(np.argmax(masks.sum(axis=0)))]
-            assert np.array_equal(best_hypothesis(points,pairs,.025),expected)
+    if native.backend_status()["backend"]=="native_streaming_ransac":
+        for n in (12,50,200,1000):
+            for scale in (1.,1e6):
+                points=rng.normal(size=(n,2))*scale
+                pairs=rng.integers(n,size=(160,2),dtype=np.int64)
+                p=points[pairs[:,0]];t=points[pairs[:,1]]-p
+                lengths=np.linalg.norm(t,axis=1)
+                normal=np.column_stack((-t[:,1],t[:,0]))/np.maximum(lengths[:,None],1e-12)
+                delta=points[:,None,:]-p[None,:,:]
+                masks=(abs(delta[:,:,0]*normal[None,:,0]+delta[:,:,1]*normal[None,:,1])<.025)&(lengths>=.15)
+                expected=masks[:,int(np.argmax(masks.sum(axis=0)))]
+                assert np.array_equal(native.best_hypothesis(points,pairs,.025),expected)
+
+    def reference(points,**kwargs):
+        # Bypass BOTH complete extraction and optional native scorer. Patching
+        # only best_hypothesis on static.extract_lines would compare C++ to itself.
+        with patch.object(static,"best_hypothesis",return_value=None):
+            return static._extract_lines_python(points,**kwargs)
+
+    def same_lines(actual,expected,label):
+        assert len(actual)==len(expected),label
+        for a,b in zip(actual,expected):
+            assert np.array_equal(a["points"],b["points"]),label
+            assert np.array_equal(a["normal"],b["normal"]),label
+            assert abs(a["span"]-b["span"])<=5e-15,label
+
     x=np.linspace(-1.4,1.4,180)
-    points=np.vstack((np.column_stack((x,np.full_like(x,1.5))),
-                      np.column_stack((np.full_like(x,1.5),x)),rng.uniform(-1.4,1.4,(25,2))))
-    native=static.extract_lines(points)
-    with patch.object(static,'best_hypothesis',return_value=None):reference=static.extract_lines(points)
-    assert len(native)==len(reference)
-    for a,b in zip(native,reference):
-        assert np.array_equal(a['points'],b['points'])
-        assert np.array_equal(a['normal'],b['normal']) and a['span']==b['span']
+    walls=np.vstack((np.column_stack((x,np.full_like(x,1.5))),
+                     np.column_stack((np.full_like(x,1.5),x))))
+    points=np.vstack((walls,rng.uniform(-1.4,1.4,(25,2))))
+    expected=reference(points)
+    # Optional-library behavior is checked even on a machine without a build.
+    for env,missing in (({"RDK_LIDAR_NATIVE":"0"},False),
+                        ({"RDK_LIDAR_NATIVE":"1","RDK_LIDAR_EXTRACT_NATIVE":"0"},False),
+                        ({"RDK_LIDAR_NATIVE":"1"},True)):
+        with patch.dict(os.environ,env):
+            if missing:
+                with patch.object(ctypes,"CDLL",side_effect=OSError("fixture missing library")):
+                    optional=runpy.run_path(native.__file__)
+            else:optional=runpy.run_path(native.__file__)
+        assert optional["backend_status"]()["extraction_backend"]=="python"
+        with patch.object(static,"_native_extract_lines",optional["extract_lines"]):
+            same_lines(static.extract_lines(points),expected,"unavailable backend")
+    if native.backend_status()["extraction_backend"]=="python":return
+
+    cases=[("dual walls",points),("equal projections",np.repeat(walls,3,axis=0)),
+           ("empty",np.empty((0,2))),
+           ("nonfinite only",np.array([[np.nan,0],[0,np.inf],[-np.inf,1]])),
+           ("nonfinite mixed",np.vstack((points,[[np.nan,0],[0,np.inf]])))]
+    for delta in (-1e-12,1e-12):
+        span=np.linspace(0,.35/.9+delta,120)
+        cases.append(("span edge "+str(delta),np.column_stack((span,np.ones_like(span)))))
+        left=np.linspace(-.6,0,90);right=np.linspace(.15+delta,.75+delta,90)
+        both=np.r_[left,right]
+        cases.append(("gap edge "+str(delta),np.column_stack((both,np.ones_like(both)))))
+    for label,cloud in cases:
+        for seed in (0,23):
+            same_lines(static.extract_lines(cloud,seed=seed),reference(cloud,seed=seed),label)
+
+    # A native error may have touched its private output. No partial native
+    # line is permitted to escape; re-run the original seed from the beginning.
+    def failed_extract(*args):
+        out,_,count=args[-3:]
+        out[0].count=12;out[0].span=999
+        ctypes.cast(count,ctypes.POINTER(ctypes.c_size_t))[0]=1
+        return -6
+    before=native.backend_status()["extraction_fallbacks"]
+    with patch.object(native,"_extract",side_effect=failed_extract):
+        same_lines(static.extract_lines(points),expected,"native error has partial output")
+    assert native.backend_status()["extraction_fallbacks"]==before+1
+
+    original_order=np.argsort
+    calls=[0]
+    def fail_first_order(values,*args,**kwargs):
+        calls[0]+=1
+        if calls[0]==1:raise ValueError("fixture order callback")
+        return original_order(values,*args,**kwargs)
+    with patch.object(np,"argsort",side_effect=fail_first_order):
+        same_lines(static.extract_lines(points),expected,"order callback fallback")
+    assert "fixture order callback" in native.backend_status()["extraction_last_error"]
+
+    # Pair callback errors also unwind through C++ before falling back. The
+    # fresh Python run must reconstruct the same RNG, not continue consumed state.
+    real_rng=np.random.default_rng
+    bad_rng=SimpleNamespace(integers=lambda *a,**k: (_ for _ in ()).throw(ValueError("fixture pairs callback")))
+    with patch.object(np.random,"default_rng",side_effect=[bad_rng,real_rng(0)]):
+        same_lines(static.extract_lines(points),expected,"pairs callback fallback")
+    assert "fixture pairs callback" in native.backend_status()["extraction_last_error"]
+
+    for error in (KeyboardInterrupt("fixture cancel"),SystemExit(37)):
+        with patch.object(np,"argsort",side_effect=error):
+            try:native.extract_lines(points)
+            except BaseException as actual:assert actual is error
+            else:raise AssertionError("ctypes swallowed cancellation")
 
 
 def test_lidar_yaw_diagnostic():
@@ -2223,6 +2298,7 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
         assert metrics['worker_input_drops']==metrics['output_drops']==0
         metrics.update(lidar_scans=app.radar.state['scans_received'],
             lidar_geometry_calls=app.radar.state['scans'],lidar_accepted_posteriors=app.radar.state['fits'],
+            line_geometry=app.radar.state.get('line_geometry'),
             fit_processing_ms_p95=app.radar.state['scan_processing_ms_p95'],
             ingested_distinct_intervals=app.radar.state['measured_wheel_ingested'],
             motion_scheduling=app.radar.state.get('motion_scheduling'),

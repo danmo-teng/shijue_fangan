@@ -1,5 +1,5 @@
 {
-  "scope": "joint static measured SDK input and historical geometry/render load only",
+  "scope": "Measured stationary SDK input, historical geometry/render load and offline production numeric backend evaluation; no motor or field accuracy validation",
   "actual_kernel": "6.1.83 PREEMPT, not PREEMPT_RT",
   "sessions": [
     {
@@ -73,6 +73,30 @@
       "raw_session_marker_complete": true,
       "analysis_motion_stream_complete": true,
       "note": "Actual stationary T265/F405 plus historical lidar via PTY. First session had unsuccessful global initialization; second uses a synthetic field reference. Neither proves field accuracy.",
+      "motor_commands": 0,
+      "YOLO_included": false
+    },
+    {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_024238_interactive",
+      "sensor_check_passed": false,
+      "validation_error": "No actual SDK wheel acceptance; chassis UART received zero frames",
+      "SDK": {
+        "api_success": 0,
+        "api_failed": 0
+      },
+      "pose": {
+        "samples": 3770,
+        "hz": 199.5973795588417,
+        "frame_number_gaps": 0
+      },
+      "geometry_calls": 0,
+      "accepted_wall_posteriors": 0,
+      "historical_lidar_scans_received": 139,
+      "primary_yaw_packets": 0,
+      "motion_input_drops": 0,
+      "raw_session_marker_complete": true,
+      "analysis_motion_stream_complete": true,
+      "note": "Attempted no-motion hardware pressure rerun before production backend; no F405/yaw/wheel input, therefore initialization never ran. Log completion is not sensor-check pass. Originals unchanged.",
       "motor_commands": 0,
       "YOLO_included": false
     }
@@ -1769,13 +1793,16 @@
     "docs/reports/prototypes/lidar_extract_overlay_20261109.py": "7eaec06f93e43a9fb6f498668896295ab15aa137dc698cbbfff7ddab3fe293c9"
   },
   "runtime_changes": {
-    "production_geometry_switched": false,
+    "production_geometry_switched": true,
     "nonblocking_motion_inbox_read": "PyDLL recv with explicit MSG_DONTWAIT; same size/capacity/serialization; blocking wait still uses select with GIL released",
     "control_publication": "after bounded motion-input consume, before maintenance queue probes; completed fit can publish the subsequent correction",
     "no_new_production_timers_or_time_admission_checks": true,
     "SDK_UART_ownership_and_localization_formulas_unchanged": true,
     "notification_socket_experiment_adopted": false,
-    "pruning_experiment_adopted": false
+    "pruning_experiment_adopted": false,
+    "geometry_policy_changed": false,
+    "production_numerical_backend": "cpp_v1_numpy_rng_sort_tls; original Python available via RDK_LIDAR_EXTRACT_NATIVE=0 or unavailable/error fallback",
+    "fixed_yaw_solver_lock": "Original local/reacquisition numerical solve outside motion lock, same revision checked for pending-state commit"
   },
   "related_checks": {
     "IPC_and_formal_transport": "2 passed",
@@ -1783,7 +1810,8 @@
     "prototype_dynamic_motion_compensation": "geometry assertions passed; stale display/control snapshot equality assertion corrected for omitted display-only witness; rerun passed",
     "ground_accuracy": "not tested; no motors",
     "hard_RT": "not booted; current normal 6.1.83 PREEMPT",
-    "prototype_sort_preserved_existing_geometry": "2 passed: global_wall_initialization and dynamic_motion_compensation"
+    "prototype_sort_preserved_existing_geometry": "2 passed: global_wall_initialization and dynamic_motion_compensation",
+    "production_cpp": "6 relevant targets passed in existing regression entry: native_line_hypotheses, global_wall_initialization, dynamic_motion_compensation, dynamic_worker_process, competition_dynamic_transport, wall_supported_source_arbitration; CMake lidar_geometry build and C99 header check passed"
   },
   "interpretation": [
     "Isolated extraction median 7.919606 to 2.598411ms (~3.05x); P95 12.421562 to 4.653417ms (~2.67x).",
@@ -2154,5 +2182,554 @@
     "historical_hardware_pressure_rerun": false,
     "zero_input_drop_guarantee": false,
     "hard_10ms_guarantee": false
+  },
+  "prototype_results_historical_as_of": "8e6a5ab; production adoption approved in the following user message",
+  "production_cpp_extraction": {
+    "source": "rescue_map/runtime/history/t265_f407_motion_map/20261109_011628_interactive/dynamic_scans.jsonl",
+    "scans": 139,
+    "lines": 143,
+    "rounds": 2,
+    "support_exact": true,
+    "max_normal_difference": 0.0,
+    "max_span_difference_m": 2.220446049250313e-16,
+    "timing_ms": {
+      "python": {
+        "median": 7.0823825,
+        "p95": 10.63502215,
+        "maximum": 14.201098
+      },
+      "cpp": {
+        "median": 2.806966,
+        "p95": 4.3889602,
+        "maximum": 7.814046
+      }
+    },
+    "backend": {
+      "backend": "native_streaming_ransac",
+      "load_error": null,
+      "geometry_policy_changed": false,
+      "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+      "extraction_load_error": null,
+      "extraction_calls": 281,
+      "extraction_fallbacks": 0,
+      "extraction_last_error": null
+    },
+    "actual_sdk": false,
+    "motor_commands": false
+  },
+  "production_cpp_joint_runs": {
+    "lidar_source": "rescue_map/runtime/history/competition_wheel_input/20261108_123640_competition_wheel/lidar_rx.jsonl",
+    "synthetic_motion": true,
+    "intervals": 1000,
+    "runs": [
+      {
+        "index": 0,
+        "full_cpp": false,
+        "metrics": {
+          "sent_distinct_intervals": 1000,
+          "received_distinct_intervals": 926,
+          "processing_ms_median": 5.694514,
+          "processing_ms_p95": 13.123479499999998,
+          "processing_ms_max": 71.5602,
+          "worker_input_drops": 0,
+          "output_drops": 0,
+          "synthetic_capture_to_output_ms_p95": 15.18175525,
+          "synthetic_capture_to_output_ms_max": 133.148081,
+          "producer_schedule_delay_ms_p95": 20.526832199999955,
+          "producer_schedule_delay_ms_max": 116.394363,
+          "fixture_stage_ms": {
+            "input_to_worker_publication": {
+              "median": 3.5027745,
+              "p95": 7.312569,
+              "maximum": 28.821946,
+              "samples": 926,
+              "negative_samples": 0
+            },
+            "mailbox_delivery": {
+              "median": 0.8089545,
+              "p95": 3.93173125,
+              "maximum": 17.893539,
+              "samples": 926,
+              "negative_samples": 0
+            },
+            "control_to_sink": {
+              "median": 1.0185575,
+              "p95": 4.24203225,
+              "maximum": 64.577192,
+              "samples": 926,
+              "negative_samples": 0
+            },
+            "input_to_worker_ingress": {
+              "median": 0.5294145,
+              "p95": 3.5183585,
+              "maximum": 26.439874,
+              "samples": 926,
+              "negative_samples": 0
+            },
+            "worker_ingress_to_publication": {
+              "median": 2.8178409999999996,
+              "p95": 4.62834275,
+              "maximum": 12.905188,
+              "samples": 926,
+              "negative_samples": 0
+            }
+          },
+          "lidar_scans": 98,
+          "lidar_geometry_calls": 98,
+          "lidar_accepted_posteriors": 0,
+          "line_geometry": {
+            "backend": "native_streaming_ransac",
+            "load_error": null,
+            "geometry_policy_changed": false,
+            "extraction_backend": "python",
+            "extraction_load_error": null,
+            "extraction_calls": 0,
+            "extraction_fallbacks": 0,
+            "extraction_last_error": null
+          },
+          "fit_processing_ms_p95": 60.77854764999998,
+          "ingested_distinct_intervals": 1000,
+          "motion_scheduling": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "worker_control_updates": 993,
+          "worker_control_coalesced": 6,
+          "transport_scheduling": {
+            "motion_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "pose_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "control_output": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            }
+          },
+          "fit_stage_ms": {
+            "compute_ms": {
+              "median": 32.349949499999994,
+              "p95": 60.77854764999998
+            },
+            "compute_thread_cpu_ms": {
+              "median": 17.362752,
+              "p95": 22.400461949999997
+            },
+            "snapshot_ms": {
+              "median": 0.2220825,
+              "p95": 0.3250606499999996
+            },
+            "deskew_ms": {
+              "median": 7.669401000000001,
+              "p95": 13.988271299999997
+            },
+            "fit_ms": {
+              "median": 22.4816015,
+              "p95": 42.74348804999998
+            }
+          }
+        }
+      },
+      {
+        "index": 1,
+        "full_cpp": true,
+        "metrics": {
+          "sent_distinct_intervals": 1000,
+          "received_distinct_intervals": 991,
+          "processing_ms_median": 4.867436,
+          "processing_ms_p95": 8.05692,
+          "processing_ms_max": 23.205807,
+          "worker_input_drops": 0,
+          "output_drops": 0,
+          "synthetic_capture_to_output_ms_p95": 8.480290499999999,
+          "synthetic_capture_to_output_ms_max": 23.339103,
+          "producer_schedule_delay_ms_p95": 1.0693665499999991,
+          "producer_schedule_delay_ms_max": 7.396041,
+          "fixture_stage_ms": {
+            "input_to_worker_publication": {
+              "median": 3.071861,
+              "p95": 5.003393,
+              "maximum": 14.808972,
+              "samples": 991,
+              "negative_samples": 0
+            },
+            "mailbox_delivery": {
+              "median": 0.684705,
+              "p95": 2.060136,
+              "maximum": 10.361867,
+              "samples": 991,
+              "negative_samples": 0
+            },
+            "control_to_sink": {
+              "median": 0.912579,
+              "p95": 1.759054,
+              "maximum": 11.167613,
+              "samples": 991,
+              "negative_samples": 0
+            },
+            "input_to_worker_ingress": {
+              "median": 0.404373,
+              "p95": 2.2558015,
+              "maximum": 9.881454,
+              "samples": 991,
+              "negative_samples": 0
+            },
+            "worker_ingress_to_publication": {
+              "median": 2.564029,
+              "p95": 3.474004,
+              "maximum": 4.927518,
+              "samples": 991,
+              "negative_samples": 0
+            }
+          },
+          "lidar_scans": 98,
+          "lidar_geometry_calls": 98,
+          "lidar_accepted_posteriors": 0,
+          "line_geometry": {
+            "backend": "native_streaming_ransac",
+            "load_error": null,
+            "geometry_policy_changed": false,
+            "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+            "extraction_load_error": null,
+            "extraction_calls": 98,
+            "extraction_fallbacks": 0,
+            "extraction_last_error": null
+          },
+          "fit_processing_ms_p95": 25.3931923,
+          "ingested_distinct_intervals": 1000,
+          "motion_scheduling": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "worker_control_updates": 1032,
+          "worker_control_coalesced": 0,
+          "transport_scheduling": {
+            "motion_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "pose_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "control_output": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            }
+          },
+          "fit_stage_ms": {
+            "compute_ms": {
+              "median": 17.877936,
+              "p95": 25.3931923
+            },
+            "compute_thread_cpu_ms": {
+              "median": 10.040897000000001,
+              "p95": 13.0015974
+            },
+            "snapshot_ms": {
+              "median": 0.20633200000000002,
+              "p95": 0.33484719999999996
+            },
+            "deskew_ms": {
+              "median": 7.170237,
+              "p95": 10.282134000000001
+            },
+            "fit_ms": {
+              "median": 9.662225,
+              "p95": 16.3073247
+            }
+          }
+        }
+      },
+      {
+        "index": 2,
+        "full_cpp": true,
+        "metrics": {
+          "sent_distinct_intervals": 1000,
+          "received_distinct_intervals": 995,
+          "processing_ms_median": 4.696894,
+          "processing_ms_p95": 7.984391499999999,
+          "processing_ms_max": 15.008345,
+          "worker_input_drops": 0,
+          "output_drops": 0,
+          "synthetic_capture_to_output_ms_p95": 8.222872399999998,
+          "synthetic_capture_to_output_ms_max": 15.112332,
+          "producer_schedule_delay_ms_p95": 0.7849951999999999,
+          "producer_schedule_delay_ms_max": 3.306745,
+          "fixture_stage_ms": {
+            "input_to_worker_publication": {
+              "median": 2.989027,
+              "p95": 5.038576,
+              "maximum": 9.478039,
+              "samples": 995,
+              "negative_samples": 0
+            },
+            "mailbox_delivery": {
+              "median": 0.65558,
+              "p95": 1.7464336999999992,
+              "maximum": 4.824477,
+              "samples": 995,
+              "negative_samples": 0
+            },
+            "control_to_sink": {
+              "median": 0.884704,
+              "p95": 1.9275285999999998,
+              "maximum": 5.047517,
+              "samples": 995,
+              "negative_samples": 0
+            },
+            "input_to_worker_ingress": {
+              "median": 0.364457,
+              "p95": 2.3507682999999973,
+              "maximum": 7.03655,
+              "samples": 995,
+              "negative_samples": 0
+            },
+            "worker_ingress_to_publication": {
+              "median": 2.516404,
+              "p95": 3.3601919999999996,
+              "maximum": 5.763389,
+              "samples": 995,
+              "negative_samples": 0
+            }
+          },
+          "lidar_scans": 98,
+          "lidar_geometry_calls": 98,
+          "lidar_accepted_posteriors": 0,
+          "line_geometry": {
+            "backend": "native_streaming_ransac",
+            "load_error": null,
+            "geometry_policy_changed": false,
+            "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+            "extraction_load_error": null,
+            "extraction_calls": 98,
+            "extraction_fallbacks": 0,
+            "extraction_last_error": null
+          },
+          "fit_processing_ms_p95": 24.0939698,
+          "ingested_distinct_intervals": 1000,
+          "motion_scheduling": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "worker_control_updates": 1028,
+          "worker_control_coalesced": 0,
+          "transport_scheduling": {
+            "motion_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "pose_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "control_output": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            }
+          },
+          "fit_stage_ms": {
+            "compute_ms": {
+              "median": 16.846774,
+              "p95": 24.0939698
+            },
+            "compute_thread_cpu_ms": {
+              "median": 9.6592085,
+              "p95": 11.772582599999998
+            },
+            "snapshot_ms": {
+              "median": 0.207062,
+              "p95": 0.25541595
+            },
+            "deskew_ms": {
+              "median": 6.773468,
+              "p95": 9.902507349999999
+            },
+            "fit_ms": {
+              "median": 9.16629,
+              "p95": 15.190530599999999
+            }
+          }
+        }
+      },
+      {
+        "index": 3,
+        "full_cpp": false,
+        "metrics": {
+          "sent_distinct_intervals": 1000,
+          "received_distinct_intervals": 992,
+          "processing_ms_median": 4.931976499999999,
+          "processing_ms_p95": 8.7880173,
+          "processing_ms_max": 14.126642,
+          "worker_input_drops": 0,
+          "output_drops": 0,
+          "synthetic_capture_to_output_ms_p95": 9.26181159999999,
+          "synthetic_capture_to_output_ms_max": 14.224452,
+          "producer_schedule_delay_ms_p95": 0.9929740499999989,
+          "producer_schedule_delay_ms_max": 5.154443,
+          "fixture_stage_ms": {
+            "input_to_worker_publication": {
+              "median": 3.049319,
+              "p95": 5.46946585,
+              "maximum": 10.343951,
+              "samples": 992,
+              "negative_samples": 0
+            },
+            "mailbox_delivery": {
+              "median": 0.7114335,
+              "p95": 2.5321254999999994,
+              "maximum": 5.74664,
+              "samples": 992,
+              "negative_samples": 0
+            },
+            "control_to_sink": {
+              "median": 0.9258295,
+              "p95": 1.9825113499999998,
+              "maximum": 5.772223,
+              "samples": 992,
+              "negative_samples": 0
+            },
+            "input_to_worker_ingress": {
+              "median": 0.3913525,
+              "p95": 2.64619165,
+              "maximum": 7.987796,
+              "samples": 992,
+              "negative_samples": 0
+            },
+            "worker_ingress_to_publication": {
+              "median": 2.5143424999999997,
+              "p95": 3.5124085499999995,
+              "maximum": 6.744426,
+              "samples": 992,
+              "negative_samples": 0
+            }
+          },
+          "lidar_scans": 98,
+          "lidar_geometry_calls": 98,
+          "lidar_accepted_posteriors": 0,
+          "line_geometry": {
+            "backend": "native_streaming_ransac",
+            "load_error": null,
+            "geometry_policy_changed": false,
+            "extraction_backend": "python",
+            "extraction_load_error": null,
+            "extraction_calls": 0,
+            "extraction_fallbacks": 0,
+            "extraction_last_error": null
+          },
+          "fit_processing_ms_p95": 40.84618839999999,
+          "ingested_distinct_intervals": 1000,
+          "motion_scheduling": {
+            "requested": true,
+            "requested_priority": 10,
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "error": null
+          },
+          "worker_control_updates": 1028,
+          "worker_control_coalesced": 0,
+          "transport_scheduling": {
+            "motion_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "pose_input": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            },
+            "control_output": {
+              "requested": true,
+              "requested_priority": 10,
+              "actual_policy": 1,
+              "actual_priority": 10,
+              "error": null
+            }
+          },
+          "fit_stage_ms": {
+            "compute_ms": {
+              "median": 25.7578365,
+              "p95": 40.84618839999999
+            },
+            "compute_thread_cpu_ms": {
+              "median": 15.5167495,
+              "p95": 19.9064697
+            },
+            "snapshot_ms": {
+              "median": 0.2063955,
+              "p95": 0.26917575
+            },
+            "deskew_ms": {
+              "median": 7.061342,
+              "p95": 10.97445434999999
+            },
+            "fit_ms": {
+              "median": 18.454662499999998,
+              "p95": 30.18730084999999
+            }
+          }
+        }
+      }
+    ],
+    "actual_sdk": false,
+    "motor_commands": false
+  },
+  "production_cpp_limitations": [
+    "Retains NumPy RNG and argsort callbacks and exact NumPy-linked ILP64 SVD, not completely Python-free extraction",
+    "A/B/B/A current production backend has zero input/output drops and zero native fallbacks, but not a strict per-10ms guarantee",
+    "Synthetic 100Hz motion and historical lidar do not validate field precision or SDK input in that load",
+    "No accepted wall posterior in these historical joint timing runs; separate geometric/branch/reacquisition regressions cover geometry",
+    "No PREEMPT_RT boot, motors, or original log cleanup performed"
+  ],
+  "production_cpp_sources": {
+    "localization/include/lidar_line_extraction.h": "2ba2908481bc4d1951b61291b198f7438a2f5bec2717dbcb9c2afed046365aa2",
+    "localization/src/lidar_line_extraction.cpp": "5ad14a6d0c1ae7b05a98f3b1d8f0967f6a4172528b452ecdb59fa270ca8e3f9d",
+    "localization/tools/lidar_yaw_debug/native_geometry.py": "f85789a49f83be388bc5798c388ef5156c346f197583ef70bfc4e566cf6a98e6",
+    "localization/tools/lidar_yaw_debug/static.py": "ee0ecf84643eb447876d4a3076221de49d6c1bd7e6bc91af95dfaa5a14a8c5c5",
+    "localization/tools/lidar_yaw_debug/dynamic.py": "b5ad6d514ccddedff82bcb0984970a8e84c621e1827c99a0adf56f4cd818c73c"
   }
 }

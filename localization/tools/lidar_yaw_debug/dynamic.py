@@ -244,12 +244,9 @@ class DynamicFence:
     def _fit_position(self,points,ref,offset,scan_id,revision=None):
         # Expensive extraction never holds the motion/control lock.
         lines=outer_supported_lines(extract_lines(points))
-        with self.lock:
-            if revision is not None and revision!=self.revision:
-                raise ValueError("reference changed during line extraction")
-            return self._fit_lines_position(points,ref,offset,scan_id,lines)
+        return self._fit_lines_position(points,ref,offset,scan_id,lines,revision=revision)
 
-    def _fit_lines_position(self,points,ref,offset,scan_id,lines):
+    def _fit_lines_position(self,points,ref,offset,scan_id,lines,*,revision=None):
         """Local tracking, or two-scan enclosure reacquisition at fixed yaw.
 
         Share line extraction. A bad wheel/T265 XY prior cannot veto a new
@@ -258,30 +255,41 @@ class DynamicFence:
         not be promoted to the missing arena wall just to complete XY.
         Compare correction offsets, not absolute positions of a moving car.
         """
+        with self.lock:
+            if revision is None:revision=self.revision
+            if revision!=self.revision:
+                raise ValueError("reference changed during line extraction")
         prior=ref[:2]+offset
         local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines)
         local.update(position_reacquired=False,reacquisition_status='LOCAL_TRACKING')
-        if local['rank_xy']>0:
+        found=(None if local['rank_xy']>0 else
+            reacquire_fixed_yaw_position(points,ref[2],_lines=lines))
+        # Only the single fitter establishes candidates. Operator changes
+        # clear them and increment revision; commit after the lock-free solve
+        # only if this still belongs to that same reference.
+        with self.lock:
+            if revision!=self.revision:
+                raise ValueError("reference changed during position solve")
+            if local['rank_xy']>0:
+                self.pending_reacquisition=None
+                return local
+            if found['rank_xy']!=2:
+                self.pending_reacquisition=None
+                return dict(local,reacquisition_status=found['reason'])
+            candidate=np.asarray(found['candidate_center_xy_m'])
+            proposed=candidate-ref[:2]
+            previous=self.pending_reacquisition
+            agrees=(previous is not None and previous['scan_id']!=scan_id and
+                    np.linalg.norm(proposed-previous['offset'])<=REACQUISITION_OFFSET_AGREEMENT_M)
+            if not agrees:
+                self.pending_reacquisition=dict(scan_id=scan_id,offset=proposed)
+                return dict(local,reacquisition_status='CONFIRMING_ENCLOSURE',
+                    reacquisition_candidate_xy_m=candidate.tolist())
             self.pending_reacquisition=None
-            return local
-        found=reacquire_fixed_yaw_position(points,ref[2],_lines=lines)
-        if found['rank_xy']!=2:
-            self.pending_reacquisition=None
-            return dict(local,reacquisition_status=found['reason'])
-        candidate=np.asarray(found['candidate_center_xy_m'])
-        proposed=candidate-ref[:2]
-        previous=self.pending_reacquisition
-        agrees=(previous is not None and previous['scan_id']!=scan_id and
-                np.linalg.norm(proposed-previous['offset'])<=REACQUISITION_OFFSET_AGREEMENT_M)
-        if not agrees:
-            self.pending_reacquisition=dict(scan_id=scan_id,offset=proposed)
-            return dict(local,reacquisition_status='CONFIRMING_ENCLOSURE',
-                reacquisition_candidate_xy_m=candidate.tolist())
-        self.pending_reacquisition=None
-        return dict(found,reason='FIXED_YAW_ENCLOSURE_REACQUIRED',position_reacquired=True,
-            reacquisition_status='REACQUIRED',reacquisition_confirmations=2,
-            correction_m=float(np.linalg.norm(candidate-prior)),
-            local_reason=local['reason'],local_observed_axes=local['position_observed_axes'])
+            return dict(found,reason='FIXED_YAW_ENCLOSURE_REACQUIRED',position_reacquired=True,
+                reacquisition_status='REACQUIRED',reacquisition_confirmations=2,
+                correction_m=float(np.linalg.norm(candidate-prior)),
+                local_reason=local['reason'],local_observed_axes=local['position_observed_axes'])
 
     def observe(self,scan,*,expected_revision=None):
         if self.last_fit and self.last_fit['scan_id']==scan.scan_id:

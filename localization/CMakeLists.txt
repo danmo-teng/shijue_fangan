@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Same RANSAC hypotheses/support decisions, streaming scores without an N*H
-# temporary. ctypes.CDLL releases the Python GIL during this numeric kernel.
-add_library(lidar_geometry SHARED src/lidar_geometry.cpp)
+# Same extraction decisions, NumPy RNG/sort and caller-provided NumPy SVD.
+# Streaming scores avoid an N*H temporary; CDLL releases the GIL for C++ work.
+add_library(lidar_geometry SHARED src/lidar_geometry.cpp src/lidar_line_extraction.cpp)
+target_include_directories(lidar_geometry PRIVATE include)
 target_compile_options(lidar_geometry PRIVATE -O3 -ffp-contract=off)
 
 set(REALSENSE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH
@@ -38,6 +39,7 @@ target_include_directories(debug_wheel_input PUBLIC include "${REALSENSE_INCLUDE
     "${REALSENSE_ROOT}/third_party/librealsense/third-party")
 target_link_libraries(debug_wheel_input PUBLIC omni_localization_core "${REALSENSE_LIBRARY}")
 add_executable(t265_omni_localizer src/main.cpp)
+add_dependencies(t265_omni_localizer lidar_geometry)
 target_include_directories(t265_omni_localizer PRIVATE "${REALSENSE_INCLUDE_DIR}")
 target_link_libraries(t265_omni_localizer PRIVATE
     omni_localization_core debug_wheel_input "${REALSENSE_LIBRARY}")

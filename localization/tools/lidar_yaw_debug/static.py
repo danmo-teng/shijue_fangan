@@ -1,7 +1,7 @@
 """Reviewed geometry. SE2 refinement is for startup only; runtime XY keeps primary yaw."""
 import numpy as np
 from dataclasses import dataclass, asdict
-from .native_geometry import best_hypothesis
+from .native_geometry import best_hypothesis,extract_lines as _native_extract_lines
 
 def polar_points(samples, center_deg=270., fov_deg=180., inverted=True):
     """Raw packet angles are clockwise upright, counterclockwise inverted.
@@ -43,6 +43,12 @@ def _ordered_quantile(values, order, quantile):
 
 def extract_lines(points, seed=0, threshold=.025, min_points=12, min_span=.35):
     """RANSAC followed by TLS, with support length and robust residual checks."""
+    native=_native_extract_lines(points,seed,threshold,min_points,min_span)
+    return _extract_lines_python(points,seed,threshold,min_points,min_span) if native is None else native
+
+
+def _extract_lines_python(points, seed=0, threshold=.025, min_points=12, min_span=.35):
+    """Original extraction, retained for unavailable native builds and A/B."""
     points = np.asarray(points, float).reshape(-1,2)
     points = points[np.isfinite(points).all(axis=1)]
     rng = np.random.default_rng(seed)
