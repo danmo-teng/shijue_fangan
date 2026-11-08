@@ -799,6 +799,9 @@ def test_timed_f405_client():
             c.feed(identity_response(req,nonce_delta=1),clock[0]);assert c.device_identity is None
             c.feed(identity_response(req,sequence_delta=1),clock[0]);assert c.device_identity is None
             c.feed(identity_response(req),clock[0]);assert c.control_identity_problem() is None
+            queries=c.client_stats['identity_queries']
+            c.poll(clock[0]+7_000_000_000)
+            assert c.client_stats['identity_queries']==queries  # No periodic compatible-identity handshake.
             assert c.connection_snapshot()["actual_lower_firmware"]==TIMED_IMPLEMENTATION_COMMIT
             assert not c.capabilities()["sdk_time_qualified"]
             turn=c.turn_ccw(90,60)
@@ -808,14 +811,17 @@ def test_timed_f405_client():
             c.feed(status(2,turn["wire_sequence"],2,2),clock[0])
             assert c.pending is None
             gyro=next(e for e in fixtures["examples"] if e["name"]=="gyro_ccw")
-            c.feed(bytes.fromhex(gyro["hex"]),clock[0])
+            g=timed.parse(bytes.fromhex(gyro['hex']));gp=bytearray(g['payload']);gp[:16]=bytes([1])*16
+            c.feed(timed.packet(timed.GYRO,g['sequence'],gp),clock[0])
             event=published[-1]
             assert event["kind"]=="timed_gyro_diagnostic" and event["sample"]["capture_time_qualified"] is False
             assert event["sample"]["rate_uncertainty_us"]==0xffffffff
             assert not any(e["kind"]=="measured_body_velocity" for e in published)
             # A changed boot cancels correlation, never automatically replays motion.
             turn=c.turn_ccw(-90,30)
-            c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
+            gp[:16]=bytes([2])*16;c.feed(timed.packet(timed.GYRO,g['sequence'],gp),clock[0])
+            req=uart.written[-1];assert timed.parse(req)['type']==timed.ID_REQ
+            clock[0]+=1_000_000
             c.feed(identity_response(req,epoch=2),clock[0])
             assert c.pending is None and c.needs_stop_ack
             assert c.latest_status is None and c.last_action["outcome"].startswith("unknown_device_restart")

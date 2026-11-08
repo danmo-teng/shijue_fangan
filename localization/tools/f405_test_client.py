@@ -328,6 +328,11 @@ class ChassisTestClient:
                 self._publish("timed_stream_state",d)
             q["event"].identity_reply=copy.deepcopy(d);q["event"].set()
         elif d["type"] in (timed.WHEEL,timed.GYRO):
+            # Refresh identity on an observed boot change, not periodically
+            # while compatible feedback is flowing. Never replay an action.
+            if self.device_identity and d['boot_epoch']!=self.device_identity['boot_epoch']:
+                try:self._request_identity()
+                except (OSError,RuntimeError) as error:self._log('chassis_link.jsonl',dict(event='epoch_identity_read_failed',error=str(error)))
             self._publish("timed_wheel_diagnostic" if d["type"]==timed.WHEEL else "timed_gyro_diagnostic",d)
         elif d["type"]==timed.ERROR_REPLY:
             q=self.identity_queries.get(d.get("nonce"))
@@ -460,12 +465,13 @@ class ChassisTestClient:
             if self.pending and now_ns > self.pending["deadline_ns"]:
                 self._finish("unknown_timeout_no_motion_replayed", now_ns)
                 self.needs_stop_ack = True  # Recoverable by a user-requested matching STOPPED.
-            if self.require_device_identity and self.serial is not None and not self.stop_event.is_set() and now_ns>=self.next_identity_query_ns:
+            if (self.require_device_identity and (self.device_identity is None or self.identity_error is not None)
+                    and self.serial is not None and not self.stop_event.is_set() and now_ns>=self.next_identity_query_ns):
                 try:self._request_identity()
                 except (OSError,RuntimeError) as error:self.identity_error=str(error)
             if self.timed_requested and self.device_identity and self.identity_error is None:
                 try:
-                    if now_ns>=self.next_sync_ns:self._request_timed(timed.SYNC_REQ)
+                    if not self.have_sync_exchange and now_ns>=self.next_sync_ns:self._request_timed(timed.SYNC_REQ)
                     if not self.timed_stream_active and now_ns>=self.next_config_ns:
                         self._request_timed(timed.CONFIG_REQ,enable=True)
                 except (OSError,RuntimeError) as error:self.timed_error=str(error)

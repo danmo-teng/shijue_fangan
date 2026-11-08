@@ -8,6 +8,7 @@ wheel input uses IPC to that SAME SDK child and requires qualified capture times
 from __future__ import annotations
 
 import argparse
+import functools
 import copy
 import json
 import math
@@ -135,25 +136,35 @@ class TextPainter:
 
     def paint(self, canvas: np.ndarray) -> np.ndarray:
         image = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
-        draw = ImageDraw.Draw(image)
         for value, xy, size, color, bold, anchor, max_width in self.items:
             if max_width is None and anchor.startswith("l"):
                 max_width = image.width - xy[0] - 12
-            while True:
-                key = (size, bold)
-                if key not in self.fonts:
-                    path = FONT_MEDIUM if bold else FONT_REGULAR
-                    try:
-                        self.fonts[key] = ImageFont.truetype(path, size=size)
-                    except OSError:
-                        self.fonts[key] = ImageFont.load_default()
-                if max_width is None or draw.textlength(value, font=self.fonts[key]) <= max_width or size <= 9:
-                    break
-                size -= 1
-            draw.text(xy, value, font=self.fonts[key],
-                      fill=(color[2], color[1], color[0]), anchor=anchor)
+            tile,origin=self._raster(value,size,tuple(color),bold,anchor,max_width)
+            image.paste(tile,(xy[0]+origin[0],xy[1]+origin[1]),tile)
         self.items.clear()
         return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
+
+    @staticmethod
+    @functools.lru_cache(maxsize=512)
+    def _raster(value,size,color,bold,anchor,max_width):
+        # Repeated Chinese labels used to re-run FreeType under the GIL on
+        # every render, delaying the same-process UART/wheel threads. Cache
+        # only bounded transparent glyph images; positions/background vary.
+        measure=ImageDraw.Draw(Image.new('L',(1,1)))
+        while True:
+            key=(size,bold)
+            if key not in TextPainter._font_cache:
+                try:font=ImageFont.truetype(FONT_MEDIUM if bold else FONT_REGULAR,size=size)
+                except OSError:font=ImageFont.load_default()
+                TextPainter._font_cache[key]=font
+            font=TextPainter._font_cache[key]
+            if max_width is None or measure.textlength(value,font=font)<=max_width or size<=9:break
+            size-=1
+        box=measure.textbbox((0,0),value,font=font,anchor=anchor)
+        tile=Image.new('RGBA',(max(1,box[2]-box[0]),max(1,box[3]-box[1])))
+        ImageDraw.Draw(tile).text((-box[0],-box[1]),value,font=font,
+            fill=(color[2],color[1],color[0],255),anchor=anchor)
+        return tile,(box[0],box[1])
 
 
 # Historical class name retained for existing imports; there is one UART owner.
@@ -162,6 +173,7 @@ F407SerialBridge = ChassisTestClient
 
 class MotionMapApp:
     def __init__(self, options: argparse.Namespace) -> None:
+        cv2.setNumThreads(1)  # Small UI resizes must not spawn competing CPU workers.
         self.options = options
         self.screen_width, self.screen_height = self.detect_screen_size()
         self.render_scale = min(1.0, self.screen_width / LOGICAL_WIDTH,
@@ -1315,7 +1327,8 @@ class MotionMapApp:
                 self.start_session()
             if getattr(self.options,"sensor_check_seconds",0):
                 synthetic=getattr(self.options,"wheel_fixture","off")!="off"
-                deadline=time.monotonic()+self.options.sensor_check_seconds
+                began=time.monotonic();deadline=began+self.options.sensor_check_seconds
+                render_mode=getattr(self.options,'sensor_check_render_mode','on');previous_phase=None
                 frames=0
                 while time.monotonic()<deadline:
                     self.update_data()
@@ -1325,7 +1338,15 @@ class MotionMapApp:
                         if self.localization.get("pose") and (self.wheel_sdk_status or {}).get("config_loaded"):
                             self.wheel_input.activate_fixture()
                         if self.wheel_input.done.is_set():break
-                    else:self.render_screen();frames+=1
+                    else:
+                        phase=min(3,int(4*(time.monotonic()-began)/self.options.sensor_check_seconds)) if render_mode=='compare' else 0
+                        render=(phase in (1,2)) if render_mode=='compare' else render_mode=='on'
+                        if phase!=previous_phase:
+                            self.record_event('sensor_render_phase',dict(phase_index=phase,render_enabled=render,
+                                comparison='off_on_on_off' if render_mode=='compare' else render_mode,
+                                same_sdk_session=True,motion_commands_sent=0))
+                            previous_phase=phase
+                        if render:self.render_screen();frames+=1
                     if self.localizer.poll() is not None:raise RuntimeError("SDK owner exited during sensor lifecycle check")
                     time.sleep(.02)
                 if synthetic and not self.wheel_input.done.is_set():raise RuntimeError("synthetic sequence did not complete before check deadline")
@@ -1372,6 +1393,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fisheye-evidence",action="store_true",help="same SDK owner enables both fisheyes; C records max two 2s/4Hz bursts")
     parser.add_argument("--device-restart-note",default="not_confirmed",help="operator record of an ACTUAL device restart; never automatically inferred from pipeline start")
     parser.add_argument("--sensor-check-seconds",type=float,default=0,help="existing entry's bounded headless sensor/map-render check (0..60s); no motion commands")
+    parser.add_argument('--sensor-check-render-mode',choices=('on','off','compare'),default='on',
+                        help='existing headless check only: same-SDK no-render/render comparison; never sends motion')
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice; default pure T265, on uses measured 07/08 with timing diagnostics only")
@@ -1396,6 +1419,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.sensor_check_render_mode!='on' and not options.sensor_check_seconds:
+        parser.error('--sensor-check-render-mode requires --sensor-check-seconds')
     if options.log_module=="competition":
         if not options.logs_only:parser.error("competition日志管理必须使用--logs-only，不启动传感器")
         if options.output_root==DEFAULT_RUN_ROOT:
