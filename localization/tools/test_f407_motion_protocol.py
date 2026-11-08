@@ -147,6 +147,41 @@ def test_official_wheel_input():
         finally: zero.close(); sink.close()
 
 
+def test_native_line_hypotheses():
+    """Same pairs, strict threshold and first-max ties across both scorers."""
+    import numpy as np
+    from unittest.mock import patch
+    from lidar_yaw_debug.native_geometry import best_hypothesis,backend_status
+    from lidar_yaw_debug import static
+    if backend_status()['backend']!='native_streaming_ransac':return
+    rng=np.random.default_rng(82)
+    for n in (12,32,131,500):
+        ordered=np.sort(rng.normal(size=n));indices=np.arange(n)
+        assert np.array_equal([static._ordered_quantile(ordered,indices,q) for q in (.05,.95)],
+                              np.percentile(ordered,[5,95]))
+    for n in (12,50,200,1000):
+        for scale in (1.,1e6):
+            points=rng.normal(size=(n,2))*scale
+            pairs=rng.integers(n,size=(160,2),dtype=np.int64)
+            p=points[pairs[:,0]];t=points[pairs[:,1]]-p
+            lengths=np.linalg.norm(t,axis=1)
+            normal=np.column_stack((-t[:,1],t[:,0]))/np.maximum(lengths[:,None],1e-12)
+            delta=points[:,None,:]-p[None,:,:]
+            masks=(abs(delta[:,:,0]*normal[None,:,0]+delta[:,:,1]*normal[None,:,1])<.025)&(lengths>=.15)
+            expected=masks[:,int(np.argmax(masks.sum(axis=0)))]
+            assert np.array_equal(best_hypothesis(points,pairs,.025),expected)
+    x=np.linspace(-1.4,1.4,180)
+    points=np.vstack((np.column_stack((x,np.full_like(x,1.5))),
+                      np.column_stack((np.full_like(x,1.5),x)),rng.uniform(-1.4,1.4,(25,2))))
+    native=static.extract_lines(points)
+    with patch.object(static,'best_hypothesis',return_value=None):reference=static.extract_lines(points)
+    assert len(native)==len(reference)
+    for a,b in zip(native,reference):
+        assert np.array_equal(a['points'],b['points'])
+        assert np.array_equal(a['normal'],b['normal']) and a['span']==b['span']
+
+
+
 def test_lidar_yaw_diagnostic():
     # Reference parser/timing + static geometry + the SAME chassis client. Only
     # synthetic rays, memory serial and local pseudo-terminals; no real hardware.
@@ -288,6 +323,7 @@ def test_lidar_yaw_diagnostic():
 
 
 def main() -> None:
+    test_native_line_hypotheses()
     test_motion_log_storage()
     test_global_wall_initialization()
     test_dynamic_worker_process()

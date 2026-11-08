@@ -1,0 +1,29 @@
+{
+  "numpy": {
+    "n": 98,
+    "median_ms": 18.798959500000002,
+    "p95_ms": 20.6986925,
+    "max_ms": 23.523908
+  },
+  "native": {
+    "n": 98,
+    "median_ms": 6.815923,
+    "p95_ms": 9.6372122,
+    "max_ms": 10.865144
+  },
+  "span_difference": 0,
+  "source_session": "20261108_123640_competition_wheel",
+  "replayed_seconds": 10,
+  "geometry_equal": [
+    "line_count",
+    "support_points",
+    "normals",
+    "spans"
+  ],
+  "fixed_yaw_cases": 15,
+  "fixed_yaw_max_abs_difference_m": 2.220446049250313e-16,
+  "hardware_motion": false,
+  "accuracy_verified": false,
+  "complexity": "same O(N*H) scoring, O(N) temporary output instead of O(N*H)",
+  "notes": "Isolated recorded clouds; does not establish 100Hz control or physical accuracy"
+}

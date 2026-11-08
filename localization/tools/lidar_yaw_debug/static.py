@@ -1,6 +1,7 @@
 """Reviewed geometry. SE2 refinement is for startup only; runtime XY keeps primary yaw."""
 import numpy as np
 from dataclasses import dataclass, asdict
+from .native_geometry import best_hypothesis
 
 def polar_points(samples, center_deg=270., fov_deg=180., inverted=True):
     """Raw packet angles are clockwise upright, counterclockwise inverted.
@@ -26,6 +27,20 @@ def transform(points, pose):
     return np.asarray(points) @ np.array([[c,s],[-s,c]]) + [x,y]
 
 
+def _ordered_quantile(values, order, quantile):
+    """NumPy's default linear quantile on an ALREADY sorted support group.
+
+    Keep its nearer-end interpolation arithmetic, without copying, partitioning
+    and validating the sorted group again for each of the two fixed quantiles.
+    """
+    rank=(len(order)-1)*quantile
+    lower=int(rank);fraction=rank-lower
+    a=float(values[order[lower]])
+    b=float(values[order[min(lower+1,len(order)-1)]])
+    difference=b-a
+    return a+difference*fraction if fraction<.5 else b-difference*(1-fraction)
+
+
 def extract_lines(points, seed=0, threshold=.025, min_points=12, min_span=.35):
     """RANSAC followed by TLS, with support length and robust residual checks."""
     points = np.asarray(points, float).reshape(-1,2)
@@ -44,13 +59,15 @@ def extract_lines(points, seed=0, threshold=.025, min_points=12, min_span=.35):
         second=rng.integers(len(remaining)-1,size=160)
         second += second >= first
         pairs=np.column_stack((first,second))
-        p=remaining[pairs[:,0]];tangent=remaining[pairs[:,1]]-p
-        length=np.linalg.norm(tangent,axis=1);valid=length>=.15
-        normal=np.column_stack([-tangent[:,1],tangent[:,0]])/np.maximum(length[:,None],1e-12)
-        delta=remaining[:,None,:]-p[None,:,:]
-        distance=delta[:,:,0]*normal[None,:,0]+delta[:,:,1]*normal[None,:,1]
-        masks=(abs(distance)<threshold)&valid[None,:]
-        best=masks[:,int(np.argmax(masks.sum(axis=0)))]
+        best=best_hypothesis(remaining,pairs,threshold)
+        if best is None:
+            p=remaining[pairs[:,0]];tangent=remaining[pairs[:,1]]-p
+            length=np.linalg.norm(tangent,axis=1);valid=length>=.15
+            normal=np.column_stack([-tangent[:,1],tangent[:,0]])/np.maximum(length[:,None],1e-12)
+            delta=remaining[:,None,:]-p[None,:,:]
+            distance=delta[:,:,0]*normal[None,:,0]+delta[:,:,1]*normal[None,:,1]
+            masks=(abs(distance)<threshold)&valid[None,:]
+            best=masks[:,int(np.argmax(masks.sum(axis=0)))]
         if best.sum()<min_points:
             break
         fit=remaining[best]
@@ -72,7 +89,7 @@ def extract_lines(points, seed=0, threshold=.025, min_points=12, min_span=.35):
         for group in groups:
             if len(group)<min_points:
                 continue
-            lo,hi=np.percentile(projection[group],[5,95])
+            lo,hi=(_ordered_quantile(projection,group,q) for q in (.05,.95))
             if hi-lo < min_span:
                 continue
             support=fit[group[np.linspace(0,len(group)-1,min(32,len(group))).astype(int)]]

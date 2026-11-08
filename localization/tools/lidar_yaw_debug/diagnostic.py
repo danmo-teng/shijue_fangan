@@ -73,15 +73,23 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
     ids = np.concatenate([np.full(len(p),wid,dtype=int) for wid,p in assigned])
     support = np.concatenate([p for _,p in assigned])
     ns = normals[ids]
+    # Fixed primary yaw and axis-aligned walls make the XY normal equations
+    # diagonal. Solve the SAME weighted least squares by two reductions;
+    # no generic SVD or repeated point rotation is needed per IRLS iteration.
+    axes=ids//2
+    rotated=transform(support,[0.,0.,yaw_rad])
+    fixed_residual=rotated[np.arange(len(support)),axes]-distances[ids]
     pose = prior.copy()
     for _ in range(15):
-        residual = np.sum(transform(support,pose)*ns,axis=1)-distances[ids]
+        residual = fixed_residual+pose[axes]
         weights = np.minimum(1.,.02/np.maximum(abs(residual),1e-12))
-        delta = np.linalg.lstsq(ns*np.sqrt(weights[:,None]),-residual*np.sqrt(weights),rcond=1e-5)[0]
+        sums=np.bincount(axes,weights=weights,minlength=2)
+        delta=np.divide(-np.bincount(axes,weights=weights*residual,minlength=2),sums,
+            out=np.zeros(2),where=sums>0)
         pose[:2] += delta
         if np.linalg.norm(delta) < 1e-8:
             break
-    residual = np.sum(transform(support,pose)*ns,axis=1)-distances[ids]
+    residual = fixed_residual+pose[axes]
     rms = float(np.sqrt(np.mean(residual**2)))
     result.update(residual_rms_m=rms,wall_ids=sorted(set(ids.tolist())),
                   correction_m=float(np.linalg.norm(pose[:2]-prior[:2])),

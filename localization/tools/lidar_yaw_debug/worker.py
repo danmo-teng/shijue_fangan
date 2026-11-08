@@ -19,6 +19,7 @@ from .lidar_reader import LidarStream
 from .lidar_timing import LidarTimingError
 from .latest_snapshot import LatestSnapshot, MotionInbox
 from .protocol import command_frame
+from .native_geometry import backend_status
 
 
 def make_reader(config):
@@ -256,7 +257,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
             lidar_requested_enabled=requested_lidar_enabled,
             lidar_corrections_enabled=engine.lidar_corrections_enabled,
-            logging_healthy=log.healthy(),motion_scheduling=scheduling,
+            logging_healthy=log.healthy(),motion_scheduling=scheduling,line_geometry=backend_status(),
             accuracy_verified=False,full_speed_physical_validation=False)
 
     def drain_reader():
@@ -296,7 +297,17 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None):
                 # A geometry failure cannot terminate motion propagation.
                 event('scan_fit_error',scan_id=scan.scan_id,reason=str(exc))
 
-    fitter=threading.Thread(target=fit_loop,name='lidar-fit',daemon=True)
+    def run_fit():
+        # Explicit developer profiling of the existing worker only. Disabled
+        # in normal operation; no extra per-sample timers or log records.
+        path=os.environ.get('RDK_LIDAR_FIT_PROFILE')
+        if not path:return fit_loop()
+        import cProfile
+        profiler=cProfile.Profile()
+        try:profiler.runcall(fit_loop)
+        finally:profiler.dump_stats(path)
+
+    fitter=threading.Thread(target=run_fit,name='lidar-fit',daemon=True)
 
     def drain_fits():
         nonlocal reference_request_id

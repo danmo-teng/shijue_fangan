@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Same RANSAC hypotheses/support decisions, streaming scores without an N*H
+# temporary. ctypes.CDLL releases the Python GIL during this numeric kernel.
+add_library(lidar_geometry SHARED src/lidar_geometry.cpp)
+target_compile_options(lidar_geometry PRIVATE -O3 -ffp-contract=off)
+
 set(REALSENSE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH
     "Directory containing third_party/librealsense and build-250")
 set(REALSENSE_INCLUDE_DIR "${REALSENSE_ROOT}/third_party/librealsense/include")
