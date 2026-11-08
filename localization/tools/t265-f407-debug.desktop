@@ -2,8 +2,8 @@
 Version=1.0
 Type=Application
 Name=T265-F407运动定位调试
-Comment=F405 NormalDebugTimed 230400；启动只读查询身份，动作须点击；保留状态检查
-Exec=/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh --baud 230400 --chassis-profile timed --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG
+Comment=F405 MotionDebug 921600；与新固件匹配，启动只读查询身份，动作须点击
+Exec=/home/sunrise/RDK_X5/shijue_fangan/localization/tools/desktop_launcher.sh --baud 921600 --chassis-profile timed --actual-lower-mode NormalDebug --actual-lower-service MOTIONDEBUG
 Icon=applications-engineering
 Terminal=true
 StartupNotify=true

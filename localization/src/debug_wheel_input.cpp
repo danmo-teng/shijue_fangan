@@ -1,6 +1,7 @@
 #include "debug_wheel_input.hpp"
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <poll.h>
 #include <unistd.h>
 #include <cerrno>
 #include <chrono>
@@ -60,15 +61,27 @@ DebugWheelInput::~DebugWheelInput()
 
 void DebugWheelInput::start()
 {
+    if (socket_ < 0 || input_thread_.joinable()) return;
     input_thread_=std::thread([this]{
         while(!stopping_) {
-            try { poll(0); }
+            try {
+                // Readiness wakes immediately; the timeout only bounds idle
+                // shutdown. It is neither a sample delay nor an age gate.
+                pollfd input{socket_, POLLIN, 0};
+                const int ready = ::poll(&input, 1, 50);
+                if (ready < 0) {
+                    if (errno == EINTR) continue;
+                    throw std::runtime_error("wheel socket poll failed");
+                }
+                if (input.revents & (POLLERR | POLLHUP | POLLNVAL))
+                    throw std::runtime_error("wheel socket unavailable");
+                if (input.revents & POLLIN) poll(0);
+            }
             catch(const std::exception &e) {
                 logging_failed_=true;
                 record({{"event","wheel_input_worker_failed"},{"error",e.what()}});
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
     });
 }

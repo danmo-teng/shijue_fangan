@@ -799,7 +799,8 @@ def test_timed_f405_client():
             assert c.connection_snapshot()["actual_lower_firmware"]==TIMED_DOCUMENT_COMMIT
             c._request_identity();req=uart.written[-1];clock[0]+=1_000_000
             c.feed(identity_response(req,epoch=2,commit="ff"*20),clock[0])
-            assert c.control_identity_problem() is not None  # Unknown firmware is not blindly permitted.
+            assert c.control_identity_problem() is None  # Compatible layout, actual revision retained without a SHA gate.
+            assert c.connection_snapshot()["actual_lower_firmware"]=="ff"*20
             before=len(uart.written);c.close();assert len(uart.written)==before
             assert all(timed.parse(p)["type"]==timed.ID_REQ for p in uart.written if p[:2]==timed.MAGIC)
     # Real serial thread and nonce handshake against one local PTY, not hardware.
@@ -841,6 +842,66 @@ def test_timed_f405_client():
         (sessions[1]/"session_complete.json").unlink()
         assert prune(root,sessions[-1])==[sessions[2].name]
         assert sessions[0].exists() and sessions[1].exists() and sessions[-1].exists()
+
+
+def test_921600_100hz_feedback():
+    """Existing 1.3 frames, 100 distinct 10 ms intervals -> SDK-owner IPC.
+    Memory UART and socket sink only; not a physical baud/rate or SDK test.
+    """
+    import math, socket, struct, uuid
+    from unittest.mock import patch
+    import f405_timed_protocol as wire
+    from f405_test_client import ChassisTestClient
+    from t265_f407_motion_map import DEFAULT_CONFIG, config_values
+    from t265_wheel_input import WheelInputBridge
+
+    examples=json.loads((Path(__file__).with_name('contracts')/'f405_timed_examples_20261031.json').read_text())['examples']
+    fixture=bytes.fromhex(next(x['hex'] for x in examples if x['name']=='c_module_host_fixture_type_2'))
+    class Memory:
+        def __init__(self):self.written=[]
+        def write(self,data):self.written.append(data);return len(data)
+        def close(self):pass
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp);sid=uuid.uuid4().hex
+        sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);sink.bind('\0t265-wheel-'+sid);sink.settimeout(.2)
+        bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),sid,True)
+        client=ChassisTestClient('MEMORY',921600,root/'status.json',root/'status.jsonl',identity_policy='timed')
+        client.serial=Memory();client.telemetry(bridge.telemetry,readonly=True)
+        clock=[10_000_000_000]
+        try:
+            with patch('f405_test_client.time.monotonic_ns',side_effect=lambda:clock[0]):
+                client._request_identity();req=wire.parse(client.serial.written[-1]);identity=bytearray(wire.parse(fixture)['payload'])
+                identity[:8]=req['payload'];identity[42:44]=bytes((1,3));identity[48:52]=(921600).to_bytes(4,'big')
+                identity[114:134]=bytes.fromhex('aa'*20);epoch=bytes(identity[10:26])
+                clock[0]+=1000;client.feed(wire.packet(wire.ID_REPLY,req['sequence'],identity),clock[0])
+                assert client.control_identity_problem() is None
+                assert client.connection_snapshot()['actual_lower_firmware']=='aa'*20
+                client.start_timed_measurements();client.poll(clock[0]+2000)
+                config=next(wire.parse(p) for p in client.serial.written if wire.parse(p)['type']==wire.CONFIG_REQ)
+                nonce=int.from_bytes(config['payload'][:8],'big')
+                reply=struct.pack('>Q16sIHBBIIII',nonce,epoch,1,0,1,1,921600,10000,10000,921600)
+                client.feed(wire.packet(wire.CONFIG_REPLY,config['sequence'],reply),clock[0]+3000)
+                assert client.measurement_snapshot()['stream_active']
+                speed=round(math.pi*.070/1061.268*20/(math.sqrt(3)*.01)*1e6)
+                for i in range(101):
+                    tick=1_000_000+i*10000
+                    clock[0]+=10_000_000
+                    gyro=struct.pack('>16sIIqQIIIiQIIIQ',epoch,1,i,0,tick,i+1,0x347,0xffffffff,
+                                     0,tick,i+1,0x347,0xffffffff,tick)
+                    client.feed(wire.packet(wire.GYRO,2*i,gyro),clock[0])
+                    if i:
+                        wheel=struct.pack('>16sIIQQiiIIIiiiIII',epoch,1,i,tick-10000,tick,speed,0,
+                            i*10,(-i*10)&0xffffffff,0,10,-10,0,0x81,0xffffffff,1)
+                        client.feed(wire.packet(wire.WHEEL,2*i+1,wheel),clock[0])
+                        bridge.poll();packet=json.loads(sink.recv(16384))
+                        assert packet['sample_id']==i and packet['alignment_end_ns']-packet['alignment_start_ns']==10_000_000
+                        assert packet['v_body_mps']==[speed/1e6,0.,0.] and packet['omega_body_rad_s']==[0.,0.,0.]
+                        assert packet['capture_time_qualified'] is False
+                assert bridge.stats['sent_to_sdk_owner']==100
+                # This is 100 distinct source intervals, not 100 repeats of one measurement.
+                assert bridge.next_id==100 and not bridge.stats.get('duplicate_or_out_of_order_wheel_interval',0)
+        finally:
+            client.close();bridge.close();sink.close()
 
 
 def test_global_wall_initialization():
@@ -1155,7 +1216,7 @@ def test_timed_v11_logging_recovery():
             identity=dict(c.device_identity)
             assert c._identity_problem(dict(identity,protocol_minor=0))
             assert c._identity_problem(dict(identity,protocol_minor=2))
-            assert c._identity_problem(dict(identity,git_commit='ff'*20))
+            assert c._identity_problem(dict(identity,git_commit='ff'*20)) is None
             assert c._identity_problem(dict(identity,capabilities=1023))
             # A real clock-fault flag blocks source-time qualification, not the
             # independently compatible legacy control interface.
@@ -1389,7 +1450,7 @@ def test_timed_v13_feedback():
                 assert not caps['quality_query_available'] and not caps['stats_query_available']
             identity=dict(c.device_identity)
             assert c._identity_problem(dict(identity,protocol_minor=1))
-            assert c._identity_problem(dict(identity,git_commit='ff'*20))
+            assert c._identity_problem(dict(identity,git_commit='ff'*20)) is None
             before=len(c.serial.written)
             recovery=inbound(MSG_IMU,2,(1234).to_bytes(4,'big',signed=True)+(10).to_bytes(2,'big',signed=True)+bytes((255,7)))
             c.feed(recovery,clock[0]);assert c.latest_imu['wire_valid'] and c.latest_imu['recovering']

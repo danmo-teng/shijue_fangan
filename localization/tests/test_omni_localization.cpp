@@ -6,12 +6,15 @@
 #include "dynamic_pose_relay.hpp"
 #include "async_csv_log.hpp"
 #include "async_latest_file.hpp"
+#include "serial_port.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
+#include <fcntl.h>
+#include <termios.h>
 #include <unistd.h>
 #include <vector>
 
@@ -989,8 +992,16 @@ void test_async_latest_snapshot()
         std::unique_lock<std::mutex> lock(mutex);
         ready.wait(lock, [&] { return entered; });
     }
-    latest.submit("old pending"); latest.submit("newest");
+    bool formatted = false;
+    const auto producer = std::this_thread::get_id();
+    latest.submit("old pending");
+    latest.submit([&] {
+        check(std::this_thread::get_id() != producer, "snapshot formatting runs off the UART producer");
+        formatted = true;
+        return std::string("newest");
+    });
     check(latest.coalesced() == 1, "snapshot producer completes while disk is blocked, bounded latest slot");
+    check(!formatted, "blocked SD also defers formatting without blocking the producer");
     { std::lock_guard<std::mutex> lock(mutex); release = true; }
     ready.notify_one(); latest.close();
     check(written == std::vector<std::string>({"first", "newest"}), "close preserves the newest pending snapshot");
@@ -999,8 +1010,38 @@ void test_async_latest_snapshot()
     check(failed.errors() == 1, "snapshot failure is reported without throwing into control");
 }
 
+void test_serial_921600()
+{
+    // Real termios and duplex I/O, using only a PTY (no hardware UART or SDK).
+    const int master = ::posix_openpt(O_RDWR | O_NOCTTY);
+    check(master >= 0, "create serial PTY");
+    if (master < 0) return;
+    if (::grantpt(master) != 0 || ::unlockpt(master) != 0) {
+        check(false, "prepare serial PTY"); ::close(master); return;
+    }
+    const std::string path(::ptsname(master));
+    omni::SerialPort port(path, 921600);
+    port.open_port();
+    const int slave = ::open(path.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+    termios attributes{};
+    check(slave >= 0 && ::tcgetattr(slave, &attributes) == 0 &&
+          ::cfgetispeed(&attributes) == B921600 && ::cfgetospeed(&attributes) == B921600,
+          "921600 is actually applied to termios");
+    const std::uint8_t packet[]{0xd4, 0x4d, 1, 7, 0xe4};
+    std::uint8_t buffer[sizeof(packet)]{};
+    check(::write(master, packet, sizeof(packet)) == sizeof(packet) &&
+          port.read_some(buffer, sizeof(buffer), 100) == sizeof(packet) &&
+          std::equal(std::begin(packet), std::end(packet), std::begin(buffer)), "921600 PTY RX bytes unchanged");
+    check(port.write_all(packet, sizeof(packet), 100) &&
+          ::read(master, buffer, sizeof(buffer)) == sizeof(packet) &&
+          std::equal(std::begin(packet), std::end(packet), std::begin(buffer)), "921600 PTY TX bytes unchanged");
+    if (slave >= 0) ::close(slave);
+    ::close(master);
+}
+
 int main()
 {
+    test_serial_921600();
     test_async_latest_snapshot();
     test_async_csv_logging();
     test_dynamic_pose_relay();

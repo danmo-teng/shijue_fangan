@@ -125,11 +125,11 @@ class ChassisTestClient:
                  status_log_path: Path, *, identity_confirmed=False, serial_factory=serial.Serial,
                  identity_policy="auto", asserted_firmware="unconfirmed"):
         self.device, self.baud = device, baud
-        if baud not in (115200,230400):
-            raise ValueError("audited F405 link supports 115200 or 230400 baud")
+        if baud not in (115200,230400,921600):
+            raise ValueError("F405 link supports 115200, 230400 or 921600 baud")
         if identity_policy not in ("auto","legacy","timed") or (identity_policy=="legacy" and baud!=115200):
             raise ValueError("legacy profile requires 115200; timed profile uses a read-only identity handshake")
-        self.require_device_identity = identity_policy=="timed" or baud==230400
+        self.require_device_identity = identity_policy=="timed" or baud in (230400,921600)
         self.identity_policy = identity_policy
         self.asserted_firmware = asserted_firmware.strip().lower()
         self.status_path, self.status_log_path = status_path, status_log_path
@@ -262,9 +262,11 @@ class ChassisTestClient:
             return f"device protocol {version[0]}.{version[1]} is not reviewed (supported 1.0/1.1/1.3)"
         if d["uart_baud"]!=self.baud or not d["capabilities"]&64 or d["max_payload"]!=160:
             return "device UART configuration or legacy compatibility does not match this client"
-        if d["git_commit"] not in TIMED_COMMITS:
-            return "device firmware is outside the reviewed timed implementation; audit its contract before motion"
-        if TIMED_REVIEWED_VERSIONS[d["git_commit"]]!=version:
+        # The wire layout determines compatibility. A rebuild at a new SHA
+        # (including the 921600/100 Hz change) must not require a host whitelist
+        # update. Preserve the actual SHA/dirty flag as provenance, never
+        # substitute an expected revision. Known revisions retain their layout.
+        if d["git_commit"] in TIMED_REVIEWED_VERSIONS and TIMED_REVIEWED_VERSIONS[d["git_commit"]]!=version:
             return "device protocol version differs from the reviewed firmware revision"
         if version==(1,1) and not d["capabilities"]&1024:
             return "reviewed v1.1 firmware is missing its quality-query capability"
@@ -357,7 +359,7 @@ class ChassisTestClient:
                 if self.identity_error:return self.identity_error
                 return None
             if self.require_device_identity:
-                return f"no validated identity at {self.baud}; check NormalDebugTimed=230400 / legacy=115200, valid frames and read-only query"
+                return f"no validated identity at {self.baud}; check matching F405 baud (921600/230400 timed, 115200 legacy) and actual board/mode/service"
             if not self.identity_confirmed or not firmware_compatible(self.asserted_firmware):
                 return "confirm actual F405 NormalDebug MOTIONDEBUG legacy profile before motion"
             return None

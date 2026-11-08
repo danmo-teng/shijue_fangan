@@ -24,6 +24,11 @@ public:
     }
     ~AsyncLatestFile() { close(); }
     void submit(std::string snapshot) {
+        submit([snapshot = std::move(snapshot)]() mutable { return std::move(snapshot); });
+    }
+    // Capture plain values on the producer; formatting and I/O both belong
+    // to the writer. In particular, UART callbacks must not format JSON.
+    void submit(std::function<std::string()> snapshot) {
         if (path_.empty()) return;
         std::lock_guard<std::mutex> lock(mutex_);
         if (stopping_) return;
@@ -46,7 +51,7 @@ public:
 private:
     void run() {
         while (true) {
-            std::string snapshot;
+            std::function<std::string()> snapshot;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 ready_.wait(lock, [this] { return pending_ || stopping_; });
@@ -54,12 +59,13 @@ private:
                 snapshot.swap(latest_); pending_ = false;
             }
             bool ok = false;
-            try { ok = write_(path_, snapshot); } catch (...) {}
+            try { ok = write_(path_, snapshot()); } catch (...) {}
             if (!ok && ++errors_ == 1)
                 std::cerr << "[SNAPSHOT] write failed: " << path_ << "; control continues\n";
         }
     }
-    std::string path_, latest_;
+    std::string path_;
+    std::function<std::string()> latest_;
     Write write_;
     std::mutex mutex_;
     std::condition_variable ready_;

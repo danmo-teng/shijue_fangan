@@ -405,7 +405,7 @@ def arguments():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config",type=Path,default=DEFAULT_CONFIG)
     ap.add_argument("--chassis",default="/dev/ttyS1")
-    ap.add_argument("--chassis-baud",type=int,choices=(115200,230400),default=230400,
+    ap.add_argument("--chassis-baud",type=int,choices=(115200,230400,921600),default=921600,
                     help="F405 UART4; distinct from radar --baud")
     ap.add_argument("--chassis-profile",choices=("auto","legacy","timed"),default="auto")
     ap.add_argument("--lidar",help="default config /dev/ttyS6; must differ from chassis")

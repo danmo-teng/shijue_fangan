@@ -27,6 +27,6 @@ exec python3 "${script_dir}/competition_map_app.py" \
     --disable-t265-translation-scale \
     --t265-translation-scale 1.000 \
     --uart /dev/ttyS1 \
-    --baud 230400 \
+    --baud 921600 \
     --fullscreen \
     "$@"

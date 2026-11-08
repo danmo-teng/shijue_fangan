@@ -1051,7 +1051,7 @@ class MotionMapApp:
             "lower_identity_source": "nonce-correlated device reply" if link["identity"] else "operator profile only; no device reply",
             "firmware_commit_reported_by_uart": link["firmware_identity_reported_by_uart"],
             "firmware_commit_attested_by_uart": False,
-            "motion_enable_policy": "230400/timed requires current compatible device identity plus fresh legacy 0x1A; explicit 115200 legacy retains operator profile",
+            "motion_enable_policy": "921600/230400 timed uses actual compatible board/mode/service and existing motion status; no data-age gate; explicit 115200 legacy retains operator profile",
             "mount_status": "candidate_not_physically_validated",
             "reference_description": self.options.reference_description,
             "ground_truth_policy": "command target and DONE are not ground truth; operator measures signed displacement/turn after settling",
@@ -1361,7 +1361,7 @@ class MotionMapApp:
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="F405 NormalDebug / T265实验地图（保留原桌面入口）")
     parser.add_argument("--uart", default="/dev/ttyS1")
-    parser.add_argument("--baud", type=int, choices=(115200,230400), default=230400)
+    parser.add_argument("--baud", type=int, choices=(115200,230400,921600), default=921600)
     parser.add_argument("--chassis-profile", choices=("auto","legacy","timed"), default="auto")
     parser.add_argument("--check-chassis", action="store_true",help="read-only UART/identity/status check; no T265, GUI or motion")
     parser.add_argument("--timed-measurements",action="store_true",help="explicitly sync and subscribe measured 07/08 for diagnostics; not injection eligibility")

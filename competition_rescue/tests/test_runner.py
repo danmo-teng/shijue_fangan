@@ -970,7 +970,7 @@ def test_formal_wheel_start_and_pose_adoption():
         options = SimpleNamespace(zone=1, side='red', corner_offset_mm=150*2**.5,
             encoder_weight=.25, localization_mode='t265', localization_json=runtime/'pose.json',
             localization_log=None, launch_localization=False, launch_vision=False,
-            uart='/dev/ttyS1', baud=230400, tx_rate=20., fullscreen=False, demo=False,
+            uart='/dev/ttyS1', baud=921600, tx_rate=20., fullscreen=False, demo=False,
             screenshot=None, official_wheel_input=True)
         with patch.object(map_app, 'RUNTIME', runtime), patch.object(formal, 'RUNTIME', runtime):
             app = formal.CompetitionMapApp(options)
@@ -978,6 +978,7 @@ def test_formal_wheel_start_and_pose_adoption():
                 app.start_session()
                 cmd = app.localization_command()
                 assert cmd.count('--uart') == 1 and '--ignore-encoders' in cmd
+                assert cmd[cmd.index('--baud')+1] == '921600'
                 assert all(x in cmd for x in ('--debug-fresh-session', '--debug-test-session',
                     '--enable-pose-jumping', '--t265-only-output', '--wheel-feedback-socket'))
                 conf = Path(cmd[cmd.index('--config')+1]).read_text()
@@ -1020,7 +1021,7 @@ def test_formal_dynamic_start_wiring():
         options = SimpleNamespace(zone=2, side='blue', corner_offset_mm=150*2**.5,
             encoder_weight=.25, localization_mode='t265', localization_json=runtime/'pose.json',
             localization_log=None, launch_localization=False, launch_vision=False,
-            uart='/dev/ttyS1', baud=230400, tx_rate=20., fullscreen=False, demo=False,
+            uart='/dev/ttyS1', baud=921600, tx_rate=20., fullscreen=False, demo=False,
             screenshot=None, official_wheel_input=False, dynamic_localization=True,
             dynamic_config=PROJECT_ROOT/'localization/config/lidar_yaw_debug.json',
             lidar='/dev/ttyS6', lidar_baud=230400)
@@ -1032,6 +1033,7 @@ def test_formal_dynamic_start_wiring():
                 assert start.call_count == 1 and app.official_wheel_input
                 assert app.dynamic.field_start == dict(x_m=1.35,y_m=1.35,yaw_deg=45.)
                 assert cmd.count('--uart') == 1 and cmd[cmd.index('--uart')+1] == '/dev/ttyS1'
+                assert cmd[cmd.index('--baud')+1] == '921600'
                 assert cmd[cmd.index('--dynamic-pose-output')+1] == str(runtime/'pose.json')
                 assert Path(cmd[cmd.index('--output')+1]).name == 'raw_t265_result.json'
                 assert '--debug-pose-socket' in cmd and '--wheel-feedback-socket' in cmd

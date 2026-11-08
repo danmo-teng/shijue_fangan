@@ -606,7 +606,7 @@ const char *quality_name(std::uint8_t tracker_confidence,
     return "LOST";
 }
 
-bool write_stm_status_json(const std::string &path,
+std::string stm_status_json(std::uint64_t received_ns,
                            const omni::StmStatusFrame &status,
                            std::uint64_t relay_frames,
                            std::uint64_t relay_errors,
@@ -614,18 +614,12 @@ bool write_stm_status_json(const std::string &path,
                            std::uint64_t relay_last_tx_ns,
                            const RelayMissionSnapshot &mission)
 {
-    if (path.empty()) return true;
-    const std::uint64_t now_ns = monotonic_ns();
-    const double relay_age_ms = relay_last_tx_ns == 0 ? -1.0 :
-        static_cast<double>(now_ns - relay_last_tx_ns) / 1000000.0;
-    const double mission_age_ms = mission.last_tx_ns == 0 ? -1.0 :
-        static_cast<double>(now_ns - mission.last_tx_ns) / 1000000.0;
-    const std::string temporary = path + ".tmp";
-    std::ofstream file(temporary, std::ios::trunc);
-    if (!file) return false;
+    const double relay_age_ms = age_ms(received_ns, relay_last_tx_ns);
+    const double mission_age_ms = age_ms(received_ns, mission.last_tx_ns);
+    std::ostringstream file;
     file << "{\n"
          << "  \"schema_version\": 1,\n"
-         << "  \"timestamp_monotonic_ns\": " << monotonic_ns() << ",\n"
+         << "  \"timestamp_monotonic_ns\": " << received_ns << ",\n"
          << "  \"sequence\": " << static_cast<unsigned>(status.sequence) << ",\n"
          << "  \"flags\": " << static_cast<unsigned>(status.flags) << ",\n"
          << "  \"mode\": " << static_cast<unsigned>(status.mode) << ",\n"
@@ -666,8 +660,7 @@ bool write_stm_status_json(const std::string &path,
          << ", \"last_mission_tx_monotonic_ns\": " << mission.last_tx_ns
          << ", \"last_mission_tx_age_ms\": " << mission_age_ms << "}\n"
          << "}\n";
-    file.close();
-    return file && std::rename(temporary.c_str(), path.c_str()) == 0;
+    return file.str();
 }
 
 bool read_relay_frame(const std::string &path,
@@ -963,6 +956,7 @@ int main(int argc, char **argv)
     std::atomic<bool> running{true};
     std::thread uart_thread;
     std::thread relay_thread;
+    std::unique_ptr<omni::AsyncLatestFile> stm_status_writer;
     try {
         const Options options = parse_options(argc, argv);
         std::signal(SIGINT, signal_handler);
@@ -1005,7 +999,7 @@ int main(int argc, char **argv)
         std::atomic<std::uint64_t> live_uart_frames{0};
         std::atomic<std::uint64_t> live_crc_errors{0};
         std::atomic<std::uint64_t> live_sequence_gaps{0};
-        std::atomic<std::uint64_t> status_write_errors{0};
+        stm_status_writer.reset(new omni::AsyncLatestFile(options.stm_status_output_path));
         std::atomic<std::int64_t> last_uart_ns{0};
         std::atomic<std::uint64_t> relay_tx_frames{0};
         std::atomic<std::uint64_t> relay_tx_errors{0};
@@ -1052,6 +1046,7 @@ int main(int argc, char **argv)
                       << options.tx_rate_hz
                       << " Hz, mission heartbeat=100 Hz (T265-independent)\n";
             uart_thread = std::thread([&, feedback_tap]() {
+                std::uint64_t received_ns = 0;
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
                     if (!options.ignore_encoders) encoder_queue.push(frame);
                     last_uart_ns.store(static_cast<std::int64_t>(monotonic_ns()),
@@ -1062,17 +1057,17 @@ int main(int argc, char **argv)
                         std::lock_guard<std::mutex> lock(relay_mission_mutex);
                         mission_snapshot = relay_mission_snapshot;
                     }
-                    if (!write_stm_status_json(
-                            options.stm_status_output_path, status,
-                            relay_tx_frames.load(std::memory_order_relaxed),
-                            relay_tx_errors.load(std::memory_order_relaxed),
-                            relay_last_sequence.load(std::memory_order_relaxed),
-                            relay_last_tx_ns.load(std::memory_order_relaxed),
-                            mission_snapshot)) {
-                        status_write_errors.fetch_add(1, std::memory_order_relaxed);
-                    }
+                    // A bounded latest snapshot: neither JSON formatting nor
+                    // SD writes may delay the next wheel/gyro read.
+                    const auto frames = relay_tx_frames.load(std::memory_order_relaxed);
+                    const auto errors = relay_tx_errors.load(std::memory_order_relaxed);
+                    const auto sequence = relay_last_sequence.load(std::memory_order_relaxed);
+                    const auto tx_ns = relay_last_tx_ns.load(std::memory_order_relaxed);
+                    const auto stamp = received_ns;
+                    stm_status_writer->submit([status, frames, errors, sequence, tx_ns, mission_snapshot, stamp] {
+                        return stm_status_json(stamp, status, frames, errors, sequence, tx_ns, mission_snapshot);
+                    });
                 });
-                std::uint64_t received_ns = 0;
                 omni::F405MixedFrames mixed(
                     [&](const std::uint8_t *data, std::size_t size) { parser.feed(data, size); },
                     [&](const std::uint8_t *data, std::size_t size) { feedback_tap->publish(data, size, received_ns); });
@@ -2280,6 +2275,7 @@ int main(int argc, char **argv)
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();
+        stm_status_writer->close();
         csv_log.close();raw_pose_log.close();
         raw_snapshot.close();
         event_log.write("diagnostic_csv_status", "{\"localization_dropped_rows\":" +
@@ -2300,7 +2296,8 @@ int main(int argc, char **argv)
                   << " relay_tx_errors=" << relay_tx_errors.load(std::memory_order_relaxed)
                   << " status_frames=" << final_parser_stats.status_frames
                   << " status_write_errors="
-                  << status_write_errors.load(std::memory_order_relaxed)
+                  << stm_status_writer->errors()
+                  << " status_snapshots_coalesced=" << stm_status_writer->coalesced()
                   << " queue_dropped=" << encoder_queue.dropped() << '\n';
         return map_startup_failed ? 4 : (raw_json_errors ? 5 : EXIT_SUCCESS);
     } catch (const rs2::error &error) {
