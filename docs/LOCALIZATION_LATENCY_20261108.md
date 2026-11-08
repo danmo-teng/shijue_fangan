@@ -301,3 +301,14 @@ V1修正后单轮：雷达线程CPU中位9.575ms；控制处理P958.462ms，计�
 IPC/正式传输必要检查通过；分段计时只在既有回放fixture的measure_stages选项中，未往生产路径加计时或数据门。
 旧fixture字段lidar_fits实际表示几何计算次数，现改为lidar_geometry_calls及lidar_accepted_posteriors；最新回放后验接受0，不能当墙定位精度验证。
 完整真实静止证据、全部对照轮次、失败/弃用试验及原型差异见reports/localization_joint_latency_20261109.json。
+
+## 围栏初始化不再持有运动锁计算
+
+011342丢87个运动输入的压力场景对应另一个明确阻塞：worker在调用try_initialize时持有engine.lock，覆盖整段全局墙匹配。
+现只在锁内冻结Pose/yaw列表及初始化身份，原几何/参考插值在锁外运行，再在短锁内提交三帧确认；
+若期间重新绑定、重新请求初始化或改变雷达可用性，按既有reference revision丢弃旧计算，不是数据年龄门。
+阈值、90°分支、外参、比例及来源仲裁均未改；不依赖尚待人选择的C++后端/独立计算进程方案。
+
+既有global_wall_initialization和dynamic_worker_process两项通过。新增的同入口并发案例先已有两帧确认，
+将第三帧数值计算显式阻塞，证明Pose/yaw输入及新起点绑定仍完成，释放后旧结果不能覆盖新参考；原几何案例保持。
+没有启动SDK/UART/电机、重启或清日志；尚未复跑011342硬件压力，不把消除锁阻塞等同整链零丢失或10ms保证。

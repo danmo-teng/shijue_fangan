@@ -1050,6 +1050,46 @@ def test_global_wall_initialization():
     e.request_initialization('single wall must not locate XY',physical_confirmed=False)
     for i in range(3):e.try_initialize(cloud((.4,-.3),theta,i,one_wall=True))
     assert e.reference is None
+    # Slow initialization must not block real motion ingestion or a new field
+    # bind. Nor may its third confirmation overwrite that newly bound frame.
+    import threading
+    from unittest.mock import patch
+    import lidar_yaw_debug.dynamic as dynamic
+    e.request_initialization('concurrent initialization fixture',physical_confirmed=False)
+    for i in range(2):e.try_initialize(cloud((.4,-.3),theta,20+i))
+    assert e.initialization['confirmations']==2
+    entered=threading.Event();release=threading.Event();updated=threading.Event()
+    original_initialize=dynamic.initialize;errors=[];bound=[]
+    def slow_initialize(*args,**kwargs):
+        entered.set()
+        assert release.wait(5),'fixture did not release initialization'
+        return original_initialize(*args,**kwargs)
+    def finish_initialization():
+        try:e.try_initialize(cloud((.4,-.3),theta,22),expected_revision=e.revision)
+        except Exception as exc:errors.append(exc)
+    def update_motion_and_bind():
+        try:
+            t=origin+500_000_000
+            e.ingest_pose(dict(session_id='fixture',frame_number=101,timestamp_monotonic_ns=t,
+                receive_monotonic_ns=t,x_m=.01,y_m=.02,yaw_rad=0.,tracker_confidence=3))
+            e.ingest_yaw(t,1287.,dict(source='synthetic_gyro'))
+            bound.append(e.align('operator rebound while geometry runs',physical_confirmed=False,
+                center_xy=(.2,-.4),heading_deg=42.))
+            updated.set()
+        except Exception as exc:errors.append(exc)
+    with patch.object(dynamic,'initialize',slow_initialize):
+        fitting=threading.Thread(target=finish_initialization);motion=None
+        try:
+            fitting.start();assert entered.wait(2),'initialization did not start'
+            motion=threading.Thread(target=update_motion_and_bind);motion.start()
+            assert updated.wait(2),'initialization still holds the motion lock'
+            assert e.poses[-1][0]==origin+500_000_000
+        finally:
+            release.set();fitting.join(timeout=5)
+            if motion is not None:motion.join(timeout=5)
+    assert not fitting.is_alive() and motion is not None and not motion.is_alive()
+    assert len(errors)==1 and isinstance(errors[0],ValueError) and 'reference changed' in str(errors[0]),errors
+    assert e.reference==bound[0] and e.reference['field_heading_deg']==42.
 
 
 def test_dynamic_worker_process():

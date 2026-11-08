@@ -124,45 +124,57 @@ class DynamicFence:
             and abs((p.raw_angle_deg-m['center_raw_deg']+180)%360-180)<=m['fov_deg']/2
             and not any(lo<=p.raw_angle_deg<hi for lo,hi in m['excluded_raw_ranges_deg'])]
 
-    def try_initialize(self,scan):
+    def try_initialize(self,scan,*,expected_revision=None):
         """Stationary global wall initialization; no prescribed XY or red/blue.
 
         Raw single-scan wall geometry is valid only under the operator's flat,
         stationary placement declaration. This does not certify calibration.
         """
         with self.lock:
+            revision=self.revision
+            if expected_revision is not None and revision!=expected_revision:
+                raise ValueError("queued initial scan belongs to a previous reference")
             state=self.initialization
             if state is None:return dict(status='INITIALIZATION_NOT_REQUESTED')
             if not self.lidar_corrections_enabled:return dict(status='LIDAR_DISABLED_FOR_OBSTACLE')
             if scan.scan_id==self.last_initial_scan_id:return dict(status='DUPLICATE_INITIAL_SCAN')
             self.last_initial_scan_id=scan.scan_id
-            poses=np.array(self.poses);yaws=np.array(self.yaws)
+            # Freeze support briefly. Geometry and even NumPy array creation
+            # must not hold up the independent 100Hz motion ingestion path.
+            poses=list(self.poses);yaws=list(self.yaws)
             if not len(poses) or not len(yaws):return dict(status='WAITING_MOTION_REFERENCE')
             state['attempts']+=1
+        poses=np.array(poses);yaws=np.array(yaws)
         accepted=self.accepted_points(scan)
         points=np.array([p.point_lidar_m for p in accepted]).reshape(-1,2)
         ext=[*self.mount['extrinsic'][:2],math.radians(self.mount['extrinsic'][2])]
         found,reason=initialize(points,extrinsic=ext)
-        if found is None:
-            self.pending_initial_pose=None;state.update(status=reason,confirmations=0)
-            return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False)
-        t=[scan.reference_ns]
-        raw_yaw=interpolate(yaws[:,0].astype(np.int64),yaws[:,1:2],t)[0,0]
-        pose_values=poses[:,1:4].copy();pose_values[:,2]=np.unwrap(pose_values[:,2])
-        raw_pose=interpolate(poses[:,0].astype(np.int64),pose_values,t)[0]
-        # Choose by heading at the REQUEST, not whichever heading a later scan
-        # happened to have. Hold the first chosen square branch during confirmation.
-        candidate=np.asarray(initial_heading_branch(found,raw_yaw-state['initial_primary_yaw_rad'],self.pending_initial_pose))
-        old=self.pending_initial_pose
-        consistent=old is not None and np.linalg.norm(candidate[:2]-old[:2])<.05 and abs((candidate[2]-old[2]+np.pi)%(2*np.pi)-np.pi)<math.radians(2)
-        state['confirmations']=state['confirmations']+1 if consistent else 1
-        self.pending_initial_pose=candidate
-        state.update(status='CONFIRMING_WALL_MATCH',candidate_center_xy_m=(candidate[:2]-1.5).tolist(),
-            candidate_yaw_deg=math.degrees(candidate[2])%360,support_fraction=found['support_fraction'],
-            equivalent_center_poses=[[q[0]-1.5,q[1]-1.5,math.degrees(q[2])%360] for q in found['equivalent_poses']])
-        if state['confirmations']>=3:
-            theta=float(candidate[2]);xy=(candidate[:2]-1.5).tolist()
-            with self.lock:
+        if found is not None:
+            t=[scan.reference_ns]
+            raw_yaw=interpolate(yaws[:,0].astype(np.int64),yaws[:,1:2],t)[0,0]
+            pose_values=poses[:,1:4].copy();pose_values[:,2]=np.unwrap(pose_values[:,2])
+            raw_pose=interpolate(poses[:,0].astype(np.int64),pose_values,t)[0]
+        with self.lock:
+            # An operator bind, new initialization or availability change can
+            # finish while geometry runs. Never apply its obsolete result to
+            # the new reference; this is reference identity, not an age gate.
+            if revision!=self.revision or state is not self.initialization:
+                raise ValueError("reference changed during wall initialization")
+            if found is None:
+                self.pending_initial_pose=None;state.update(status=reason,confirmations=0)
+                return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False)
+            # Choose by heading at the REQUEST, not whichever heading a later scan
+            # happened to have. Hold the first chosen square branch during confirmation.
+            candidate=np.asarray(initial_heading_branch(found,raw_yaw-state['initial_primary_yaw_rad'],self.pending_initial_pose))
+            old=self.pending_initial_pose
+            consistent=old is not None and np.linalg.norm(candidate[:2]-old[:2])<.05 and abs((candidate[2]-old[2]+np.pi)%(2*np.pi)-np.pi)<math.radians(2)
+            state['confirmations']=state['confirmations']+1 if consistent else 1
+            self.pending_initial_pose=candidate
+            state.update(status='CONFIRMING_WALL_MATCH',candidate_center_xy_m=(candidate[:2]-1.5).tolist(),
+                candidate_yaw_deg=math.degrees(candidate[2])%360,support_fraction=found['support_fraction'],
+                equivalent_center_poses=[[q[0]-1.5,q[1]-1.5,math.degrees(q[2])%360] for q in found['equivalent_poses']])
+            if state['confirmations']>=3:
+                theta=float(candidate[2]);xy=(candidate[:2]-1.5).tolist()
                 self.reference=dict(pose_origin=raw_pose[:2].tolist(),vio_rotation=theta-float(raw_pose[2]),
                     yaw_offset=theta-float(raw_yaw),start_center_xy_m=xy,field_heading_deg=math.degrees(theta)%360,
                     description=state['description'],physical_placement_confirmed=False,
@@ -173,8 +185,8 @@ class DynamicFence:
                 self.offset[:]=0;self.has_anchor=True;self.revision+=1
                 self.motion.configure(self.reference)
                 state['status']='GLOBAL_SYMMETRIC_FIX'
-        return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
-            reference=dict(self.reference) if self.reference else None)
+            return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
+                reference=dict(self.reference) if self.reference else None)
 
     def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False,round_token=None):
         """Known field reference; legacy fixture defaults unchanged, formal start explicit."""

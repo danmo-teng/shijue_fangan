@@ -2134,5 +2134,25 @@
         "p95": 15.140961949999998
       }
     }
+  },
+  "initialization_lock_fix": {
+    "evidence": "worker outer engine.lock covered the complete try_initialize numerical calculation; 011342 had 87 motion input drops, but no claim that the lock explains every drop",
+    "changes": [
+      "Freeze Pose/yaw lists and initialization identity under a brief lock, calculate geometry/interpolation outside it, commit under the same reference revision",
+      "Remove worker outer lock around try_initialize and pass queued reference revision",
+      "Preserve three confirmations, original geometry, branch policy and thresholds"
+    ],
+    "checks": {
+      "command": "python3 -m pytest -q localization/tools/test_f407_motion_protocol.py -k 'global_wall_initialization or dynamic_worker_process'",
+      "passed": 2,
+      "deselected": 22,
+      "concurrency": "During deliberately blocked third-confirmation geometry, actual fixture Pose/yaw ingestion and a new operator reference bind finish; obsolete result raises reference-changed without overwriting the bind"
+    },
+    "actual_sdk_started": false,
+    "chassis_uart_opened": false,
+    "motor_commands": false,
+    "historical_hardware_pressure_rerun": false,
+    "zero_input_drop_guarantee": false,
+    "hard_10ms_guarantee": false
   }
 }

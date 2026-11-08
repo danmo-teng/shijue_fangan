@@ -311,11 +311,11 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 with engine.lock:
                     if revision!=engine.revision:continue
                     initializing=engine.reference is None and request_id is not None
-                    # Initialization has no control reference yet. Keep its
-                    # three-scan state atomic against a new operator bind.
-                    result=engine.try_initialize(scan) if initializing else None
-                if not initializing:
-                    if engine.reference is None:continue
+                    have_reference=engine.reference is not None
+                if initializing:
+                    result=engine.try_initialize(scan,expected_revision=revision)
+                else:
+                    if not have_reference:continue
                     result=engine.observe(scan,expected_revision=revision)
                 fit_done.put((initializing,request_id,result),timeout=.05)
             except ValueError as exc:event('scan_not_fitted',scan_id=scan.scan_id,reason=str(exc))
