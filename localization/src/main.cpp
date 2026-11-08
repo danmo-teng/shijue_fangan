@@ -7,6 +7,7 @@
 #include "serial_port.hpp"
 #include "operator_uart.hpp"
 #include "debug_wheel_input.hpp"
+#include "test_uart_relay.hpp"
 #include "dynamic_pose_relay.hpp"
 #include "debug_fisheye_evidence.hpp"
 #include "async_csv_log.hpp"
@@ -62,6 +63,7 @@ struct Options {
     std::string debug_test_session,debug_fisheye_output,debug_fisheye_request;
     std::string debug_pose_socket;
     std::string wheel_feedback_socket, wheel_feedback_requests;
+    std::string test_uart_socket;
     std::string dynamic_pose_socket, dynamic_pose_output;
     std::string operator_socket;
     bool operator_uart_only = false;
@@ -167,6 +169,17 @@ struct DebugPipelineGuard {
     ~DebugPipelineGuard() {stop();}
 };
 
+struct UartThreadsGuard {
+    std::atomic<bool> &running;
+    std::thread &uart,&relay;
+    std::unique_ptr<omni::TestUartRelay> &test;
+    ~UartThreadsGuard() {
+        test.reset();running=false;
+        if(uart.joinable())uart.join();
+        if(relay.joinable())relay.join();
+    }
+};
+
 class DebugPosePublisher {
 public:
     explicit DebugPosePublisher(const std::string &address) {
@@ -255,6 +268,7 @@ void usage(const char *program)
         << "  --debug-test-session ID    record actual SDK process/session identity\n"
         << "  --wheel-feedback-socket @NAME  formal UART measured-feedback tap\n"
         << "  --wheel-feedback-requests FILE  one identity + one stream request from existing codec\n"
+        << "  --test-uart-socket @NAME  test transport; C++ owns UART, Python retains action pairing\n"
         << "  --debug-fisheye-output DIR --debug-fisheye-request FILE  opt-in bounded same-pipeline evidence\n"
         << "  -h, --help          show help\n";
 }
@@ -339,6 +353,8 @@ Options parse_options(int argc, char **argv)
             options.wheel_feedback_socket = value("--wheel-feedback-socket");
         } else if (argument == "--wheel-feedback-requests") {
             options.wheel_feedback_requests = value("--wheel-feedback-requests");
+        } else if (argument == "--test-uart-socket") {
+            options.test_uart_socket = value("--test-uart-socket");
         } else if (argument == "--ignore-encoders") {
             options.ignore_encoders = true;
         } else if (argument == "--t265-only-output") {
@@ -363,6 +379,10 @@ Options parse_options(int argc, char **argv)
         throw std::invalid_argument("dynamic pose requires separate raw output, Pose IPC and formal wheel owner");
     const bool wheel = !options.debug_wheel_socket.empty();
     const bool competition_wheel = !options.wheel_feedback_socket.empty();
+    const bool test_uart = !options.test_uart_socket.empty();
+    if(test_uart && (options.uart_path.empty() || competition_wheel || options.debug_wheel_synthetic ||
+        options.debug_test_session.empty() || !options.command_file_path.empty() || options.tx_rate_hz!=0))
+        throw std::invalid_argument("test UART transport requires one identified debug session and no formal command/pose TX");
     if (competition_wheel != !options.wheel_feedback_requests.empty() ||
         (competition_wheel && (!wheel || options.uart_path.empty() || options.debug_wheel_synthetic)))
         throw std::invalid_argument("competition wheel feedback needs the C++ UART, measured SDK input and startup requests");
@@ -373,11 +393,11 @@ Options parse_options(int argc, char **argv)
     if (wheel != !options.debug_wheel_config.empty() || wheel != !options.debug_wheel_log.empty() ||
         wheel != !options.debug_wheel_session.empty())
         throw std::invalid_argument("debug wheel input requires socket/config/log/session together");
-    if (wheel && ((!competition_wheel && (!options.uart_path.empty() || options.tx_rate_hz != 0)) ||
+    if (wheel && ((!competition_wheel && !test_uart && (!options.uart_path.empty() || options.tx_rate_hz != 0)) ||
                   !options.ignore_encoders || !options.t265_only_output || options.pose_jumping_override != 1))
         throw std::invalid_argument("wheel input needs direct Pose, ignore-encoders, pose jumping; internal UART only with competition feedback tap");
     if (options.debug_fresh_session && (!options.t265_only_output || !options.ignore_encoders ||
-                                       (!competition_wheel && !options.uart_path.empty()) || options.pose_jumping_override != 1 ||
+                                       (!competition_wheel && !test_uart && !options.uart_path.empty()) || options.pose_jumping_override != 1 ||
                                        !options.t265_map_path.empty()))
         throw std::invalid_argument("fresh debug A/B requires direct Pose, external UART, pose jumping, no imported map");
     if(options.debug_fisheye_output.empty()!=options.debug_fisheye_request.empty())
@@ -958,12 +978,20 @@ int main(int argc, char **argv)
     std::thread uart_thread;
     std::thread relay_thread;
     std::unique_ptr<omni::AsyncLatestFile> stm_status_writer;
+    std::unique_ptr<omni::DebugWheelInput> debug_wheel;
+    std::unique_ptr<omni::SerialPort> uart;
+    std::unique_ptr<omni::TestUartRelay> test_uart_relay;
     try {
         const Options options = parse_options(argc, argv);
         std::signal(SIGINT, signal_handler);
         std::signal(SIGTERM, signal_handler);
         if (options.operator_uart_only) return run_operator_standby(options);
         const omni::LocalizationConfig config = omni::load_config(options.config_path);
+        if(!options.debug_wheel_socket.empty()) {
+            debug_wheel.reset(new omni::DebugWheelInput(config,options.debug_wheel_session,
+                options.debug_wheel_socket,options.debug_wheel_log,options.debug_wheel_synthetic));
+            if(!options.uart_path.empty())debug_wheel->use_native_feedback();
+        }
         rs2::log_to_console(options.debug_sdk ? RS2_LOG_SEVERITY_DEBUG : RS2_LOG_SEVERITY_WARN);
 
         std::cerr << "[CONFIG] start_zone=" << config.start_zone
@@ -1013,7 +1041,6 @@ int main(int argc, char **argv)
         std::atomic<std::uint16_t> navigation_remaining_mm{0};
         std::atomic<std::uint16_t> navigation_heading_cdeg{0};
         std::mutex uart_tx_mutex;
-        std::unique_ptr<omni::SerialPort> uart;
         // Explicit physical-button STOP is scoped to this process/session.
         // It prevents an in-flight model startup or old command file from
         // sending CONFIG/mission heartbeats again after the manual ABORT.
@@ -1021,6 +1048,9 @@ int main(int argc, char **argv)
         std::unique_ptr<omni::OperatorUartRelay> operator_relay;
         auto feedback_tap = std::make_shared<omni::WheelTelemetryTap>(options.wheel_feedback_socket);
         std::vector<std::uint8_t> feedback_requests;
+        const std::string uart_raw_path=options.debug_test_session.empty()||options.uart_path.empty()?"":
+            options.events_path.substr(0,options.events_path.find_last_of('/')+1)+"uart_rx_native.jsonl";
+        omni::AsyncCsvLog uart_raw_log(uart_raw_path);
         if (!options.wheel_feedback_requests.empty()) {
             std::ifstream file(options.wheel_feedback_requests, std::ios::binary);
             feedback_requests.assign(std::istreambuf_iterator<char>(file), {});
@@ -1028,9 +1058,20 @@ int main(int argc, char **argv)
             if (feedback_requests.size() != 42)
                 throw std::invalid_argument("expected one identity and one stream startup request");
         }
+        // Join before local callback targets/mutexes unwind, also on SDK error.
+        UartThreadsGuard uart_threads{running,uart_thread,relay_thread,test_uart_relay};
         if (!options.uart_path.empty()) {
             uart.reset(new omni::SerialPort(options.uart_path, options.baud));
             uart->open_port();
+            if(!options.test_uart_socket.empty()) {
+                test_uart_relay.reset(new omni::TestUartRelay(options.test_uart_socket,
+                    [&](const std::uint8_t *data,std::size_t size) {
+                        std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        const auto before=monotonic_ns();
+                        if(debug_wheel)debug_wheel->wire_request(data,size,before);
+                        return uart->write_all(data,size,50);
+                    }));
+            }
             if (!options.operator_socket.empty()) {
                 operator_relay.reset(new omni::OperatorUartRelay(options.operator_socket,
                     [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
@@ -1070,8 +1111,16 @@ int main(int argc, char **argv)
                     });
                 });
                 omni::F405MixedFrames mixed(
-                    [&](const std::uint8_t *data, std::size_t size) { parser.feed(data, size); },
-                    [&](const std::uint8_t *data, std::size_t size) { feedback_tap->publish(data, size, received_ns); });
+                    [&](const std::uint8_t *data, std::size_t size) {
+                        if(test_uart_relay)test_uart_relay->publish(data,size,received_ns);
+                        if(data[2]==omni::kOdomMessageType||data[2]==omni::kStmStatusMessageType||data[2]==omni::kStatusContextMessageType)
+                            parser.feed(data,size);
+                    },
+                    [&](const std::uint8_t *data, std::size_t size) {
+                        if(debug_wheel)debug_wheel->wire_feedback(data,size,received_ns);
+                        if(test_uart_relay)test_uart_relay->publish(data,size,received_ns);
+                        feedback_tap->publish(data,size,received_ns);
+                    },bool(test_uart_relay));
                 std::uint8_t buffer[256];
                 while (running.load(std::memory_order_relaxed) && !g_stop) {
                     const int count = uart->read_some(buffer, sizeof(buffer), 50);
@@ -1082,7 +1131,13 @@ int main(int argc, char **argv)
                     }
                     if (count > 0) {
                         received_ns = monotonic_ns();
-                        if (!options.wheel_feedback_socket.empty()) mixed.feed(buffer, static_cast<std::size_t>(count));
+                        if(uart_raw_log.enabled()) {
+                            static const char digits[]="0123456789abcdef";
+                            std::string hex;hex.reserve(count*2);
+                            for(int i=0;i<count;++i){hex+=digits[buffer[i]>>4];hex+=digits[buffer[i]&15];}
+                            uart_raw_log.submit("{\"timestamp_monotonic_ns\":"+std::to_string(received_ns)+",\"data_hex\":\""+hex+"\"}\n");
+                        }
+                        if (!options.wheel_feedback_socket.empty() || test_uart_relay || debug_wheel) mixed.feed(buffer, static_cast<std::size_t>(count));
                         else parser.feed(buffer, static_cast<std::size_t>(count));
                     }
                     const omni::ParserStats &stats = parser.stats();
@@ -1095,6 +1150,7 @@ int main(int argc, char **argv)
             if (!feedback_requests.empty()) {
                 // One-shot startup configuration, no reply wait or periodic identity/sync loop.
                 std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                if(debug_wheel)debug_wheel->wire_request(feedback_requests.data(),feedback_requests.size(),monotonic_ns());
                 const bool sent = uart->write_all(feedback_requests.data(), feedback_requests.size(), 50);
                 std::cerr << "[WHEEL FEEDBACK] startup identity/subscription write=" << sent
                           << "; no command/pose admission gate\n";
@@ -1403,7 +1459,6 @@ int main(int argc, char **argv)
                     }
                 });
         }
-        std::unique_ptr<omni::DebugWheelInput> debug_wheel;
         if (options.debug_fresh_session) {
             if (!map_pose_sensor->supports(RS2_OPTION_ENABLE_MAP_PRESERVATION))
                 throw std::runtime_error("SDK does not support disabling map preservation for debug A/B");
@@ -1411,8 +1466,6 @@ int main(int argc, char **argv)
             event_log.write("debug_map_preservation", "{\"value\":0,\"clean_fusion_state_verified\":false}");
         }
         if (!options.debug_wheel_socket.empty()) {
-            debug_wheel.reset(new omni::DebugWheelInput(config, options.debug_wheel_session,
-                options.debug_wheel_socket, options.debug_wheel_log,options.debug_wheel_synthetic));
             // Same resolved pose sensor, BEFORE start. Never a second SDK process.
             debug_wheel->configure(*map_pose_sensor, options.debug_wheel_config);
             event_log.write("t265_wheel_dependencies",options.debug_wheel_synthetic
@@ -2276,15 +2329,17 @@ int main(int argc, char **argv)
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();
+        test_uart_relay.reset();
         stm_status_writer->close();
-        csv_log.close();raw_pose_log.close();
+        csv_log.close();raw_pose_log.close();uart_raw_log.close();
         raw_snapshot.close();
         event_log.write("diagnostic_csv_status", "{\"localization_dropped_rows\":" +
             std::to_string(csv_log.dropped()) + ",\"localization_io_failed\":" +
             (csv_log.failed() ? "true" : "false") + ",\"raw_pose_dropped_rows\":" +
             std::to_string(raw_pose_log.dropped()) + ",\"raw_pose_io_failed\":" +
             (raw_pose_log.failed() ? "true" : "false") + ",\"raw_json_write_errors\":" +
-            std::to_string(raw_snapshot.errors()) + ",\"raw_json_coalesced\":" +
+            std::to_string(raw_snapshot.errors()) + ",\"uart_raw_dropped_rows\":"+std::to_string(uart_raw_log.dropped())+
+            ",\"uart_raw_io_failed\":"+(uart_raw_log.failed()?"true":"false")+",\"raw_json_coalesced\":" +
             std::to_string(raw_snapshot.coalesced()) + "}");
         event_log.close();
         std::cerr << "[SUMMARY] wheel accepted=" << wheel_accepted
@@ -2308,6 +2363,8 @@ int main(int argc, char **argv)
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();
+        test_uart_relay.reset();
+        if(debug_wheel)debug_wheel->stop();
         std::cerr << "[RS2 ERROR] " << error.what() << " ("
                   << error.get_failed_function() << ' ' << error.get_failed_args() << ")\n";
         return 3;
@@ -2315,6 +2372,8 @@ int main(int argc, char **argv)
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();
         if (relay_thread.joinable()) relay_thread.join();
+        test_uart_relay.reset();
+        if(debug_wheel)debug_wheel->stop();
         std::cerr << "[ERROR] " << error.what() << '\n';
         return 1;
     }

@@ -8,8 +8,8 @@
 #include <utility>
 
 namespace omni {
-F405MixedFrames::F405MixedFrames(Callback legacy, Callback extended)
-    : legacy_(std::move(legacy)), extended_(std::move(extended)) {}
+F405MixedFrames::F405MixedFrames(Callback legacy, Callback extended,bool all_legacy)
+    : legacy_(std::move(legacy)), extended_(std::move(extended)),all_legacy_(all_legacy) {}
 
 void F405MixedFrames::feed(const std::uint8_t *data, std::size_t size)
 {
@@ -37,7 +37,7 @@ void F405MixedFrames::feed(const std::uint8_t *data, std::size_t size)
                 buffer_.erase(buffer_.begin()); continue;
             }
             if (extended) extended_(buffer_.data(), length);
-            else if (buffer_[2] == kOdomMessageType || buffer_[2] == kStmStatusMessageType ||
+            else if (all_legacy_ || buffer_[2] == kOdomMessageType || buffer_[2] == kStmStatusMessageType ||
                      buffer_[2] == kStatusContextMessageType) legacy_(buffer_.data(), length);
             buffer_.erase(buffer_.begin(), buffer_.begin()+length);
         }
@@ -49,8 +49,15 @@ WheelTelemetryTap::WheelTelemetryTap(const std::string &address) : address_(addr
     if (address.empty()) return;
     if (address[0] != '@' || address.size() >= sizeof(sockaddr_un{}.sun_path))
         throw std::invalid_argument("wheel feedback tap needs a short @abstract address");
-    fd_ = ::socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    fd_ = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     // Missing consumer/socket is not a reason to stop the competition UART.
+    if(fd_<0)return;
+    sockaddr_un target{};target.sun_family=AF_UNIX;
+    std::memcpy(target.sun_path+1,address.data()+1,address.size()-1);
+    const int budget=262144;::setsockopt(fd_,SOL_SOCKET,SO_SNDBUF,&budget,sizeof(budget));
+    if(::connect(fd_,reinterpret_cast<sockaddr *>(&target),offsetof(sockaddr_un,sun_path)+address.size())!=0) {
+        ::close(fd_);fd_=-1;
+    }
 }
 
 WheelTelemetryTap::~WheelTelemetryTap() { if (fd_ >= 0) ::close(fd_); }
@@ -58,14 +65,10 @@ WheelTelemetryTap::~WheelTelemetryTap() { if (fd_ >= 0) ::close(fd_); }
 void WheelTelemetryTap::publish(const std::uint8_t *data, std::size_t size, std::uint64_t received_ns)
 {
     if (fd_ < 0 || size > 171) return;
-    sockaddr_un target{};
-    target.sun_family = AF_UNIX;
-    std::memcpy(target.sun_path+1, address_.data()+1, address_.size()-1);
     std::uint8_t message[179];
     for (int i = 0; i < 8; ++i) message[i] = static_cast<std::uint8_t>(received_ns >> ((7-i)*8));
     std::memcpy(message+8, data, size);
     // Whole datagram or drop; no replay, growing queue, ACK or retry loop.
-    (void)::sendto(fd_, message, size+8, MSG_DONTWAIT | MSG_NOSIGNAL,
-        reinterpret_cast<const sockaddr *>(&target), offsetof(sockaddr_un, sun_path)+address_.size());
+    (void)::send(fd_,message,size+8,MSG_DONTWAIT|MSG_NOSIGNAL);
 }
 } // namespace omni

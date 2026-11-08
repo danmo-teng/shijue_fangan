@@ -382,6 +382,46 @@ class WheelInputBridge:
         self.log.close()
 
 
+class NativeWheelObserver(WheelInputBridge):
+    """Display/log observer only. C++ receives, pairs, converts and calls SDK.
+
+    No Python queue, conversion worker or second SDK packet producer. The same
+    raw timed telemetry remains available to the independent motion diagnostics.
+    """
+    def start(self):
+        self.log.submit('wheel_input.jsonl',dict(event='native_cpp_input_owner',
+            session_id=self.session_id,requested=self.enabled,
+            time_policy=TIME_POLICY,python_sdk_sender=False))
+
+    def telemetry(self,event):
+        sample=event['sample'];kind=event['kind']
+        with self.lock:
+            if kind=='timed_identity':
+                self.timed_mode=True;self.measurements.set_identity(sample)
+            elif kind=='timed_clock_sync':self.measurements.sync(sample)
+            elif kind=='timed_stream_state':self.stream_state=sample
+            elif kind=='timed_wheel_diagnostic':
+                s=self.measurements.wheel(sample,self.clock())
+                if s is not None:
+                    self.stats['last_reason']='native_cpp_measurement_observed'
+                    self.last_qualification_reasons=s.get('qualification_reasons',[])
+                    self.last_sample_start_ns=s.get('interval_start_ns')
+                    self.latest_measured={k:s.get(k) for k in ('v_body_mps','host_recomputed_v_body_mps',
+                        'receive_monotonic_ns','measurement_valid','capture_time_qualified')}
+            elif kind=='timed_gyro_diagnostic':
+                s=self.measurements.gyro(sample,self.clock())
+                if s is not None:self.last_gyro_reasons=s.get('qualification_reasons',[])
+
+    def snapshot(self,sdk=None):
+        result=super().snapshot(sdk)
+        result.update(processing_owner='native_cpp_sdk_owner',python_sdk_sender=False)
+        for key in ('processing_latency_ms_max','processing_latency_ms_p95','processing_latency_ms_median'):
+            result[key]=None  # Python does not measure the native input worker.
+        if sdk and sdk.get('session_id')==self.session_id and sdk.get('event') in ('wheel_native_rejected','wheel_input_rejected'):
+            result['last_input_rejection']=sdk.get('reason')
+        return result
+
+
 class SyntheticWheelInputBridge(WheelInputBridge):
     """Explicit desktop SDK-response experiment. No UART or measured sources.
     One bounded sequence, generated at <=50Hz without catch-up. Fake omega is

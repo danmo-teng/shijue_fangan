@@ -7,6 +7,9 @@
 #include "async_csv_log.hpp"
 #include "async_latest_file.hpp"
 #include "serial_port.hpp"
+#include "test_uart_relay.hpp"
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <algorithm>
 #include <cmath>
@@ -1051,8 +1054,65 @@ void test_serial_921600()
     ::close(master);
 }
 
-int main()
+int replay_native_wheels(const char *input_path,const char *config_path)
 {
+    using Json=omni::DebugWheelInput::Json;
+    const auto config=omni::load_config(config_path);
+    const bool trace=std::getenv("RDK_WHEEL_REPLAY_TRACE")!=nullptr;
+    omni::F405WheelMeasurements input(config,"parity-check",[&](Json j){if(trace)std::cerr<<j.dump()<<'\n';});
+    std::ifstream file(input_path);if(!file)throw std::runtime_error("missing replay input");
+    std::string line;
+    while(std::getline(file,line)) {
+        const auto event=Json::parse(line);const auto hex=event.at("raw_hex").get<std::string>();
+        std::vector<std::uint8_t> bytes;
+        for(std::size_t i=0;i<hex.size();i+=2)bytes.push_back(std::stoul(hex.substr(i,2),nullptr,16));
+        const auto ns=event.at("timestamp_ns").get<std::uint64_t>();
+        if(event.value("request",false))input.request(bytes.data(),bytes.size(),ns);
+        else input.feedback(bytes.data(),bytes.size(),ns);
+        if(event.value("drain",true)) {
+            const auto ready=input.latest();if(!ready.is_null())std::cout<<ready.dump()<<'\n';
+        }
+    }
+    return 0;
+}
+
+void test_native_uart_relay()
+{
+    const auto name="@test-native-uart-"+std::to_string(::getpid());
+    const auto rxname=name+"-rx";
+    const int peer=::socket(AF_UNIX,SOCK_SEQPACKET,0),receiver=::socket(AF_UNIX,SOCK_SEQPACKET,0);
+    sockaddr_un address{};address.sun_family=AF_UNIX;
+    std::memcpy(address.sun_path+1,rxname.data()+1,rxname.size()-1);
+    timeval timeout{1,0};::setsockopt(peer,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+    ::setsockopt(receiver,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+    std::vector<std::uint8_t> actual;
+    {
+        omni::TestUartRelay relay(name,[&](const std::uint8_t *p,std::size_t n){actual.assign(p,p+n);return true;});
+        check(::connect(receiver,reinterpret_cast<sockaddr *>(&address),offsetof(sockaddr_un,sun_path)+rxname.size())==0,"native transport RX connects");
+        address={};address.sun_family=AF_UNIX;std::memcpy(address.sun_path+1,name.data()+1,name.size()-1);
+        check(::connect(peer,reinterpret_cast<sockaddr *>(&address),offsetof(sockaddr_un,sun_path)+name.size())==0,"native transport connects");
+        std::vector<std::uint8_t> request{0xd4,0x4d,1,1,0,8,0,7,0,0,0,0,0,0,0,5};
+        auto crc=omni::modbus_crc16(request.data()+2,request.size()-2);
+        request.push_back(crc&255);request.push_back(crc>>8);request.push_back(0xe4);
+        check(::send(peer,request.data(),request.size(),0)==static_cast<ssize_t>(request.size()),"native test request sends once");
+        std::uint8_t ack[17];
+        check(::recv(peer,ack,sizeof(ack),0)==sizeof(ack)&&ack[0]==1&&actual==request,"native actual UART write result and bytes");
+        relay.publish(request.data(),request.size(),1234567);
+        std::uint8_t received[256];const auto n=::recv(receiver,received,sizeof(received),0);
+        check(n==static_cast<ssize_t>(request.size()+16)&&std::equal(request.begin(),request.end(),received+16),"native RX retains complete UART bytes");
+        std::uint64_t stamp=0;if(n>=8)for(int i=0;i<8;++i)stamp=(stamp<<8)|received[i];
+        check(stamp==1234567,"native RX retains actual owner receive timestamp");
+        request[3]=0x11;actual.clear();
+        ::send(peer,request.data(),request.size(),0);
+        check(::recv(peer,ack,sizeof(ack),0)==sizeof(ack)&&ack[0]==0&&actual.empty(),"test transport never forwards formal commands or bad CRC");
+    }
+    ::close(peer);::close(receiver);
+}
+
+int main(int argc,char **argv)
+{
+    if(argc==4 && std::string(argv[1])=="--wheel-replay")return replay_native_wheels(argv[2],argv[3]);
+    test_native_uart_relay();
     test_serial_921600();
     test_async_latest_snapshot();
     test_async_csv_logging();

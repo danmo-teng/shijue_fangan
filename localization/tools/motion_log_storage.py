@@ -25,7 +25,7 @@ WHEEL_SESSION_FILES = frozenset({"metadata.json", "localization.conf", "session_
     "localization_events.jsonl", "wheel_sdk_config.json", "wheel_sdk.jsonl", "wheel_sdk_status.json",
     "wheel_input.jsonl", "wheel_measurements.jsonl", "chassis_identity.json",
     "chassis_extended.jsonl", "logging_events.jsonl", "final_status.json", "raw_t265_result.json",
-    "control_pose.jsonl", "vision_replay_manifest.json"}) | DYNAMIC_SESSION_FILES
+    "control_pose.jsonl", "vision_replay_manifest.json", "uart_rx_native.jsonl"}) | DYNAMIC_SESSION_FILES
 
 
 def read_json(path):

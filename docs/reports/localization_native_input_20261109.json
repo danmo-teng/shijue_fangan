@@ -1,0 +1,91 @@
+{
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_001339_interactive",
+  "phases": [
+    {
+      "render": false,
+      "accepted": 595,
+      "hz": 99.96505958632957,
+      "rx_p95_ms": 5.4460717,
+      "rx_max_ms": 7.275502,
+      "paired_p95_ms": 0.9561941999999999,
+      "paired_max_ms": 4.070798
+    },
+    {
+      "render": true,
+      "accepted": 609,
+      "hz": 99.96295644115341,
+      "rx_p95_ms": 7.7405994,
+      "rx_max_ms": 10.09291,
+      "paired_p95_ms": 1.0648874,
+      "paired_max_ms": 3.598001
+    },
+    {
+      "render": true,
+      "accepted": 597,
+      "hz": 99.5904012391142,
+      "rx_p95_ms": 9.6686628,
+      "rx_max_ms": 12.152432,
+      "paired_p95_ms": 1.0418537999999995,
+      "paired_max_ms": 1.669145
+    },
+    {
+      "render": false,
+      "accepted": 592,
+      "hz": 99.96470390078527,
+      "rx_p95_ms": 4.3402049,
+      "rx_max_ms": 8.134427,
+      "paired_p95_ms": 0.9855650999999999,
+      "paired_max_ms": 3.908128
+    }
+  ],
+  "success": 2393,
+  "sdk_fail": 0,
+  "sdk_logging": true,
+  "sdk_dropped_logs": 0,
+  "complete": true,
+  "observer_crc_errors": 0,
+  "observer_discarded_bytes": 0,
+  "observer_rx_drops": 0,
+  "motor_commands": 0,
+  "scope": "static API/transport latency only; not floor precision, full-joint load or hard-real-time guarantee",
+  "normal_kernel": "6.1.83 PREEMPT, not PREEMPT_RT",
+  "actual_wheel_thread": {
+    "policy": "SCHED_FIFO",
+    "priority": 10
+  },
+  "actual_f405": {
+    "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "source_dirty": 1,
+    "service": "MOTIONDEBUG",
+    "baud": 921600
+  },
+  "time_qualification_remains_unknown": true,
+  "camera_mount_and_scale_unchanged": true,
+  "vector_parity": {
+    "samples": 48,
+    "max_abs_error": 4.996003610813204e-16
+  },
+  "formal_component": {
+    "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_001750_competition_wheel",
+    "accepted": 1245,
+    "actual_hz": 99.78379461006102,
+    "rx_sdk_ms_p95": 9.394592,
+    "paired_sdk_ms_p95": 0.9446684,
+    "diagnostic_status": {
+      "localization_dropped_rows": 0,
+      "localization_io_failed": false,
+      "raw_pose_dropped_rows": 0,
+      "raw_pose_io_failed": false,
+      "raw_json_write_errors": 0,
+      "uart_raw_dropped_rows": 0,
+      "uart_raw_io_failed": false,
+      "raw_json_coalesced": 0
+    },
+    "precision_validated": false,
+    "component_static_check_only": true
+  },
+  "preserved_incomplete_observer_sessions": [
+    "20261108_234845_interactive",
+    "20261108_235745_interactive"
+  ]
+}

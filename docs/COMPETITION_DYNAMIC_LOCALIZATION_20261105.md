@@ -15,7 +15,7 @@
 ## 实际调用关系
 
 - 原C++进程仍唯一持有底盘UART和T265 SDK：保持官方wheel_odometer输入、Pose投影、原始日志及0x18/0x1D任务配对。
-- `competition_wheel_input.py`把同一批F405真实07/08反馈同时送入原WheelInputBridge和动态定位；没有新增底盘串口或额外握手。
+- `competition_wheel_input.py`仅观察同一批真实07/08并转发动态定位；2026-11-08起SDK输入配对/换算由原C++ UART/SDK所有者内的F405WheelMeasurements完成，Python不再产生第二路SDK输入。观察通道用有界SEQPACKET保留C++接收时间，没有新增底盘串口或F405握手。
 - `competition_dynamic_localization.py`只负责传输。它复用`RadarWorker`独立工作进程，原`DynamicFence`负责去畸变/围栏约束/位置重获，原`MotionSource`负责T265与轮速来源切换。
 - 测试入口与正式入口共用`lidar_yaw_debug/inputs.py`，该函数从测试入口原样抽出，保持gyro方向、MCU区间计算与实际时间表达。
 - 动态结果送回C++ `DynamicPoseRelay`，从同一快照写正式`localization_result.json`和0x16。独立线程不等待新的SDK Pose帧；原T265独立0x16发送关闭，原T265 JSON另存`raw_t265_result.json`。

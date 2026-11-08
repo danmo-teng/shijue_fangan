@@ -10,10 +10,11 @@ namespace omni {
 class F405MixedFrames {
 public:
     using Callback = std::function<void(const std::uint8_t *, std::size_t)>;
-    F405MixedFrames(Callback legacy, Callback extended);
+    F405MixedFrames(Callback legacy, Callback extended, bool all_legacy=false);
     void feed(const std::uint8_t *, std::size_t);
 private:
     Callback legacy_, extended_;
+    bool all_legacy_;
     std::vector<std::uint8_t> buffer_;
 };
 

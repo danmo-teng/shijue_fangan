@@ -52,7 +52,6 @@ class TimedMeasurements:
         if self.identity and self.identity.get("interface_compatible",True) is not True:missing.append("device_interface_not_reviewed_or_mismatched")
         if not self.syncs:missing.append("no_matched_clock_exchange")
         if self.identity and self.identity.get("drift_bound_ppm",UNKNOWN)==UNKNOWN:missing.append("mcu_clock_drift_bound_unknown")
-        if self.syncs and now-self.syncs[-1]["host_ns"]>2_000_000_000:missing.append("clock_exchange_stale")
         return dict(qualified=not missing,missing=missing,exchanges=len(self.syncs),
                     last_exchange_host_ns=self.syncs[-1]["host_ns"] if self.syncs else None)
 

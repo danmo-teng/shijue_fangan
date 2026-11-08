@@ -1,5 +1,13 @@
 # T265/F407 中心起点定位调试
 
+## 当前入口更新：2026-11-08 C++高频轮速输入
+
+用户选择高频接收/区间配对/外参换算迁入唯一C++ SDK进程。原桌面入口、Python动作/SEQ配对、TURN正负转换和显示保留；测试客户端通过本机SEQPACKET运输原请求，由C++唯一持有底盘UART。其本机写入结果只表示真实UART write，不能当下位机接受或DONE；没有新增F405握手、运动重放或时间门。正式既有C++UART也调用同一F405WheelMeasurements/DebugWheelInput；Python只观察。SDK仍在pipeline.start之前加载配置，输入C点/C轴、T=W=0，安装和比例不变。
+
+测试A关闭轮速输入与B开启仍需独立SDK会话；停止发送不清除融合历史。原始07/08、实测B点速度、gyro积分、杆臂与C点速度由wheel_sdk.jsonl的native_measurement/attempt/result记录，原始Pose与车中心CSV保持。未知漂移/源时差仍未知，不以年龄拒绝，不用SDK成功自证运动精度。真实检查及未完成项见LOCALIZATION_LATENCY_20261108.md；当前在桌面没有运动条件，后续按LOCALIZATION_MOTIONDEBUG_CHECKLIST.md由助手操控简短地面测试。
+
+下文按日期保留历史证据，旧时间门、旧板型/波特率和旧所有权描述不代表当前要求或实现。
+
 > 当前规则以[AGENTS.md](../AGENTS.md)、[项目现状](PROJECT_STATUS.md)和[统一TODO](PROJECT_TODO.md)为准。
 > 2026-11-03用户已撤销以年龄/未知时间质量拒绝数据的前置策略，测试和比赛均适用。
 > 下文“时间不合格不得注入”等为历史实现记录，轮速通道已按TIME-01A修改，其余读取点待TIME-01B。

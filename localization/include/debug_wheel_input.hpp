@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config.hpp"
+#include "f405_wheel_measurements.hpp"
 #include <librealsense2/rs.hpp>
 #include <json.hpp>
 #include <fstream>
@@ -27,11 +28,16 @@ public:
     void poll(std::uint64_t now_ns);
     void start();
     void stop();
+    void use_native_feedback();
+    void wire_feedback(const std::uint8_t *,std::size_t,std::uint64_t receive_ns);
+    void wire_request(const std::uint8_t *,std::size_t,std::uint64_t before_ns);
     // Also exercised by the existing regression executable with a fake SDK sink.
     bool process(Json packet, std::uint64_t now_ns, const Send &send);
 private:
     void record(Json);
     void write_logs();
+    void wire_packet(const std::uint8_t *,std::size_t,std::uint64_t,bool request);
+    void native_loop();
     LocalizationConfig config_;
     std::string session_, status_path_;
     std::ofstream log_;
@@ -51,5 +57,12 @@ private:
     std::mutex log_mutex_;
     std::condition_variable log_ready_;
     std::deque<Json> records_;
+    struct WirePacket {std::vector<std::uint8_t> data;std::uint64_t ns;bool request;};
+    std::unique_ptr<F405WheelMeasurements> native_;
+    std::mutex input_mutex_;
+    std::condition_variable input_ready_;
+    std::deque<WirePacket> input_;
+    std::atomic<bool> started_{false};
+    std::uint64_t input_drops_=0,prestart_feedback_=0;
 };
 } // namespace omni

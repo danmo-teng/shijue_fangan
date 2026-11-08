@@ -1,9 +1,10 @@
 """Single-owner F405 NormalDebug client; legacy + audited timed v1 transport.
 
-No import-time I/O, wheel injection or motion on start/close. Timed startup and
-periodic health checks send ONLY the documented read-only identity request.
+No import-time I/O, wheel injection or motion on start/close. Identity reads
+retry only when missing/failed or an actual boot change is observed.
 Host identities and receive-time estimates are NEVER MCU epochs/capture ticks.
-Subscribers reuse this instance; a second process must not open the chassis UART.
+Subscribers reuse this client; a native test transport can own the physical
+UART in the existing C++ SDK process. No duplicate UART owner is allowed.
 """
 from __future__ import annotations
 
@@ -239,6 +240,12 @@ class ChassisTestClient:
                 if enable:self.timed_enable_attempted=True
             try:
                 if self.serial.write(packet)!=len(packet):raise RuntimeError("partial read-only identity write")
+                native_before=getattr(self.serial,'last_write_before_ns',None)
+                if native_before is not None:
+                    # Same host clock, captured by the physical UART owner.
+                    # Local IPC success alone is not the UART write result.
+                    before=native_before
+                    self.identity_queries[nonce].update(sent_ns=before,deadline_ns=before+1_000_000_000)
                 if kind==timed.CONFIG_REQ:
                     if enable:self.timed_enable_writes+=1
                     else:self.timed_disable_writes+=1
@@ -564,10 +571,15 @@ class ChassisTestClient:
                     self._finish("unknown_link_error_no_replay",time.monotonic_ns())
                     self.needs_stop_ack = True
                 return
-            now = time.monotonic_ns()
+            now = (getattr(self.serial,'receive_monotonic_ns',None) if data else None) or time.monotonic_ns()
             if data:
                 try:
-                    self._log("uart_rx.jsonl",{"timestamp_monotonic_ns":now,"data_hex":data.hex()})
+                    self._log("uart_rx.jsonl",{"timestamp_monotonic_ns":now,"data_hex":data.hex(),
+                        "native_transport_rx_drops":getattr(self.serial,'dropped_rx_datagrams',0),
+                        "record_scope":getattr(self.serial,'receive_record_scope','physical_UART_read_chunk')})
+                    dropped=getattr(self.serial,'dropped_rx_datagrams',0)
+                    if dropped:
+                        self.log_error=f'native Python observer dropped {dropped} UART chunks; C++ SDK input continues'
                 except OSError as error:
                     self.log_error = str(error)
                 self.feed(data,now)
@@ -622,6 +634,12 @@ class ChassisTestClient:
             try:
                 if self.serial.write(packet) != len(packet):
                     raise RuntimeError("partial UART write; action status is unknown, no automatic retransmit")
+                before=getattr(self.serial,'last_write_before_ns',None)
+                if before is not None:
+                    action.update(sent_ns=before,last_matching_ns=before,deadline_ns=before+int(timeout_s*1e9),
+                        uart_write_before_ns=before,uart_write_after_ns=self.serial.last_write_after_ns,
+                        uart_write_result_source='native_physical_UART_owner',lower_action_accepted=None)
+                    self._log('chassis_actions.jsonl',dict(action,event='uart_write_result'))
             except Exception:
                 self._finish("unknown_write_failure_no_replay",time.monotonic_ns())
                 self.needs_stop_ack = True

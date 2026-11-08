@@ -8,6 +8,9 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <pthread.h>
+#include <sched.h>
+#include <cstdlib>
 #include <stdexcept>
 #include <vector>
 
@@ -62,6 +65,8 @@ DebugWheelInput::~DebugWheelInput()
 void DebugWheelInput::start()
 {
     if (socket_ < 0 || input_thread_.joinable()) return;
+    started_=true;
+    if(native_) {input_thread_=std::thread([this]{native_loop();});return;}
     input_thread_=std::thread([this]{
         while(!stopping_) {
             try {
@@ -88,7 +93,57 @@ void DebugWheelInput::start()
 
 void DebugWheelInput::stop()
 {
-    stopping_=true;if(input_thread_.joinable())input_thread_.join();
+    stopping_=true;input_ready_.notify_one();if(input_thread_.joinable())input_thread_.join();
+}
+
+void DebugWheelInput::use_native_feedback() {
+    if(started_||synthetic_input_)throw std::logic_error("native feedback must be selected before SDK input starts");
+    native_.reset(new F405WheelMeasurements(config_,session_,[this](Json j){record(std::move(j));}));
+}
+
+void DebugWheelInput::wire_packet(const std::uint8_t *p,std::size_t n,std::uint64_t ns,bool request) {
+    if(!native_)return;
+    std::lock_guard<std::mutex> lock(input_mutex_);
+    // Retain identity/clock context during SDK startup, never play the
+    // pre-start wheel/rate backlog into a newly started estimator.
+    if(!request && n>=4 && (p[3]==7||p[3]==8) && !started_) {++prestart_feedback_;return;}
+    if(input_.size()>=256) {input_.pop_front();++input_drops_;}
+    input_.push_back({std::vector<std::uint8_t>(p,p+n),ns,request});input_ready_.notify_one();
+}
+void DebugWheelInput::wire_feedback(const std::uint8_t *p,std::size_t n,std::uint64_t ns) {wire_packet(p,n,ns,false);}
+void DebugWheelInput::wire_request(const std::uint8_t *p,std::size_t n,std::uint64_t ns) {wire_packet(p,n,ns,true);}
+
+void DebugWheelInput::native_loop() {
+    ::pthread_setname_np(::pthread_self(),"t265-wheel-in");
+    const char *rt=std::getenv("RDK_LOCALIZATION_RT");
+    const bool requested=!rt || (std::strcmp(rt,"0")&&std::strcmp(rt,"off")&&std::strcmp(rt,"false"));
+    sched_param priority{};priority.sched_priority=10;
+    const int error=requested?::pthread_setschedparam(::pthread_self(),SCHED_FIFO,&priority):0;
+    int policy=0;::pthread_getschedparam(::pthread_self(),&policy,&priority);
+    record({{"event","wheel_native_worker_started"},{"processing_owner","native_cpp_sdk_owner"},
+        {"scheduling",{{"requested",requested},{"error",error},{"actual_policy",policy},{"actual_priority",priority.sched_priority}}}});
+    while(!stopping_) {
+        std::deque<WirePacket> batch;std::uint64_t dropped=0,prestart=0;
+        {
+            std::unique_lock<std::mutex> lock(input_mutex_);
+            input_ready_.wait_for(lock,std::chrono::milliseconds(50),[&]{return !input_.empty()||stopping_;});
+            batch.swap(input_);dropped=input_drops_;input_drops_=0;prestart=prestart_feedback_;prestart_feedback_=0;
+        }
+        if(dropped||prestart)record({{"event","wheel_native_input_discarded"},{"queue_overflow",dropped},{"before_sdk_start",prestart}});
+        try {
+            for(const auto &p:batch) {
+                if(p.request)native_->request(p.data.data(),p.data.size(),p.ns);
+                else native_->feedback(p.data.data(),p.data.size(),p.ns);
+            }
+            auto ready=native_->latest();
+            if(!ready.is_null()) {
+                const auto now=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                process(std::move(ready),now,[&](std::uint32_t frame,const rs2_vector &v){return wheel_->send_wheel_odometry(0,frame,v);});
+            }
+        }catch(const std::exception &e) {
+            record({{"event","wheel_native_rejected"},{"reason","malformed_native_measurement"},{"error",e.what()}});
+        }
+    }
 }
 
 void DebugWheelInput::validate_config(const Json &config)
@@ -108,6 +163,7 @@ void DebugWheelInput::validate_config(const Json &config)
 
 void DebugWheelInput::record(Json event)
 {
+    if(event.value("event",std::string())=="wheel_native_rejected")++rejected_;
     event["log_monotonic_ns"] = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
     event["session_id"] = session_;

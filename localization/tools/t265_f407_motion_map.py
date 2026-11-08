@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Existing desktop map adapted to the audited F405 NormalDebug contract.
 
-ChassisTestClient is the only UART owner. The T265-only child receives no UART;
-raw counts and F405 host cross-checks stay in this test path. Optional official
-wheel input uses IPC to that SAME SDK child and requires qualified capture times.
+C++ owns the sole UART and SDK. ChassisTestClient retains existing action/SEQ
+pairing via local transport; measured interval/gyro conversion and SDK calls
+run without the Python GUI's GIL. Unknown timing quality is not an age gate.
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ from f407_motion_protocol import (  # noqa: E402
 from f405_test_client import ChassisTestClient, IMPLEMENTATION_COMMIT, DOCUMENT_COMMIT, firmware_compatible
 from t265_f407_debug import PROTOCOL, analyze, write_debug_config  # noqa: E402
 from motion_log_storage import StoragePanel, list_sessions, delete_sessions, DYNAMIC_SESSION_FILES, WHEEL_SESSION_FILES
-from t265_wheel_input import WheelInputBridge, SyntheticWheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
+from t265_wheel_input import WheelInputBridge, NativeWheelObserver, SyntheticWheelInputBridge, write_sdk_config, DEPENDENCIES, TIME_POLICY
 
 
 WINDOW_NAME = "t265_f407_motion_map"
@@ -102,7 +102,7 @@ def wrap_degrees(value: float) -> float:
 
 SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_result.json",
     "localization_debug.csv", "t265_raw_pose.csv", "localization_events.jsonl", "localizer.log",
-    "f407_motion_status.json", "f407_motion_status.jsonl", "uart_rx.jsonl", "events.jsonl",
+    "f407_motion_status.json", "f407_motion_status.jsonl", "uart_rx.jsonl", "uart_rx_native.jsonl", "events.jsonl",
     "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json",
     "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
     "wheel_input.jsonl", "wheel_sdk.jsonl", "wheel_sdk_status.json", "wheel_sdk_config.json",
@@ -953,6 +953,8 @@ class MotionMapApp:
             # Before UART subscriptions and the sole SDK process are started.
             usb_recovery=recover_t265(self.run_dir/"t265_usb_recovery.json")
         synthetic=getattr(self.options,"wheel_fixture","off")!="off"
+        sdk_session_id = uuid.uuid4().hex
+        native_address='@t265-test-uart-'+sdk_session_id
         if not synthetic:
             self.bridge = F407SerialBridge(
                 self.options.uart, self.options.baud,
@@ -961,24 +963,21 @@ class MotionMapApp:
                 asserted_firmware=self.options.actual_lower_firmware,
             )
             self.bridge.identity_confirmed = self.motion_identity_confirmed()
-        sdk_session_id = uuid.uuid4().hex
         wheel_enabled = getattr(self.options, "wheel_input", "off") == "on"
         wheel_noise = getattr(self.options, "wheel_noise_std_mps", .10)
         wheel_config = write_sdk_config(self.run_dir / "wheel_sdk_config.json", wheel_noise)
-        bridge_type=SyntheticWheelInputBridge if synthetic else WheelInputBridge
+        bridge_type=SyntheticWheelInputBridge if synthetic else NativeWheelObserver
         self.wheel_input = bridge_type(self.run_dir, self.session_config, sdk_session_id, wheel_enabled,
             **({"plan":self.options.wheel_fixture} if synthetic else {}))
         if self.bridge:self.wheel_unsubscribe = self.bridge.telemetry(self.wheel_input.telemetry,readonly=True)
         self.wheel_input.start()
-        if self.bridge:
-            self.bridge.start()
-            if wheel_enabled or getattr(self.options,"timed_measurements",False):self.bridge.start_timed_measurements()
-            link=self.bridge.connection_snapshot()
-        else:
+        if not self.bridge:
             link=dict(identity=None,motion_identity_ready=False,reason="synthetic SDK experiment; chassis UART not opened",
                 mcu_boot_epoch=None,expected_lower_firmware=None,contract_document_commit=None,firmware_identity_reported_by_uart=False)
         localizer_log_path = self.run_dir / "localizer.log"
         self.localizer_log = localizer_log_path.open("w", encoding="utf-8")
+        from low_latency_scheduling import prepare_realtime
+        scheduling=prepare_realtime()  # Startup-only inherited limit; not a kernel/ready gate.
         command = [
             str(DEFAULT_LOCALIZER_SCRIPT),
             "--config", str(config_path),
@@ -990,7 +989,7 @@ class MotionMapApp:
             "--t265-only-output",
             "--rate", "20",
             "--tx-rate", "0",
-            "--ignore-encoders",  # UART belongs solely to ChassisTestClient.
+            "--ignore-encoders",  # Native measured input; no legacy encoder EKF.
             "--debug-fresh-session",
             "--debug-test-session",sdk_session_id,
 
@@ -1005,12 +1004,20 @@ class MotionMapApp:
                         "--debug-wheel-log", str(self.run_dir / "wheel_sdk.jsonl"),
                         "--debug-wheel-session", sdk_session_id]
         if synthetic:command += ["--debug-wheel-synthetic"]
+        else:command += ['--uart',self.options.uart,'--baud',str(self.options.baud),
+                         '--test-uart-socket',native_address]
         command += self.extra_localizer_args()
         self.localizer = subprocess.Popen(
             command, cwd=str(LOCALIZATION_ROOT),
             stdout=self.localizer_log, stderr=subprocess.STDOUT,
             start_new_session=True,
         )
+        if self.bridge:
+            from native_test_uart import serial_factory
+            self.bridge.serial_factory=serial_factory(native_address,self.localizer)
+            self.bridge.start()
+            if wheel_enabled or getattr(self.options,'timed_measurements',False):self.bridge.start_timed_measurements()
+            link=self.bridge.connection_snapshot()
         metadata = {
             "schema_version": 4,
             "created_local": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -1036,7 +1043,11 @@ class MotionMapApp:
             "fisheye_evidence_enabled":getattr(self.options,"fisheye_evidence",False),
             "wheel_input_requested": wheel_enabled,
             "timed_measurements_requested": wheel_enabled or getattr(self.options,"timed_measurements",False),
-            "wheel_processing": "bounded background worker; no GUI poll dependency; asynchronous logging",
+            "wheel_processing": "native C++ UART/interval-gyro pairing/mount conversion/SDK; Python observer only" if not synthetic else "synthetic fixture IPC",
+            "realtime_setup":scheduling,
+            "chassis_uart_owner": "native_cpp_sdk_owner" if not synthetic else "not_opened",
+            "raw_uart_record":"uart_rx_native.jsonl" if not synthetic else None,
+            "python_uart_observation":"CRC-valid complete containers with native receive timestamp",
             "wheel_input_time_policy": TIME_POLICY,
             "wheel_input_definition": "v_C^C=R_CB*(v_B^B+omega_B^B cross r_BC^B)",
             "wheel_sdk_config": wheel_config,
@@ -1089,6 +1100,7 @@ class MotionMapApp:
                 "analysis": "analysis.json",
                 "localizer_log": localizer_log_path.name,
                 "uart_rx_history": "uart_rx.jsonl",
+                "uart_rx_native":"uart_rx_native.jsonl" if not synthetic else None,
                 "effective_config": "localization.conf",
                 "wheel_input": "wheel_input.jsonl",
                 "wheel_sdk": "wheel_sdk.jsonl",
@@ -1137,6 +1149,12 @@ class MotionMapApp:
                 time.sleep(0.12)
             except (RuntimeError, serial.SerialException):
                 pass
+        if self.bridge is not None:
+            # Disable the requested stream while its C++ transport still lives.
+            # Closing this client never generates STOP/move/reset implicitly.
+            self.bridge.close()
+            logs_ok = logs_ok and self.bridge.log_error is None
+            self.bridge = None
         if self.localizer is not None and self.localizer.poll() is None:
             self.localizer.send_signal(signal.SIGINT)
             try:
@@ -1154,10 +1172,17 @@ class MotionMapApp:
         if self.localizer_log is not None:
             self.localizer_log.close()
             self.localizer_log = None
-        if self.bridge is not None:
-            self.bridge.close()
-            logs_ok = logs_ok and self.bridge.log_error is None
-            self.bridge = None
+        if self.run_dir is not None:
+            try:
+                records=[json.loads(line) for line in (self.run_dir/'localization_events.jsonl').read_text().splitlines()]
+                diagnostics=next((e['data'] for e in reversed(records) if e.get('event')=='diagnostic_csv_status'),None)
+                if diagnostics is not None:
+                    self.record_event('native_diagnostic_log_status',diagnostics)
+                    logs_ok=logs_ok and not any(diagnostics.get(key,0) for key in
+                        ('localization_dropped_rows','localization_io_failed','raw_pose_dropped_rows','raw_pose_io_failed',
+                         'raw_json_write_errors','uart_raw_dropped_rows','uart_raw_io_failed'))
+            except (OSError,ValueError,KeyError):
+                logs_ok=False  # Completeness only; never a motion/input gate.
         if self.wheel_unsubscribe is not None:
             self.wheel_unsubscribe()
             self.wheel_unsubscribe = None

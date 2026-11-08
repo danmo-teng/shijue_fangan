@@ -28,14 +28,15 @@ add_library(omni_localization_core
     src/f405_telemetry.cpp
     src/fusion.cpp
     src/operator_uart.cpp
+    src/test_uart_relay.cpp
     src/serial_port.cpp)
 target_include_directories(omni_localization_core PUBLIC include)
 target_link_libraries(omni_localization_core PUBLIC pthread)
 
-add_library(debug_wheel_input src/debug_wheel_input.cpp src/debug_fisheye_evidence.cpp src/dynamic_pose_relay.cpp)
+add_library(debug_wheel_input src/debug_wheel_input.cpp src/f405_wheel_measurements.cpp src/debug_fisheye_evidence.cpp src/dynamic_pose_relay.cpp)
 target_include_directories(debug_wheel_input PUBLIC include "${REALSENSE_INCLUDE_DIR}"
     "${REALSENSE_ROOT}/third_party/librealsense/third-party")
-target_link_libraries(debug_wheel_input PUBLIC "${REALSENSE_LIBRARY}")
+target_link_libraries(debug_wheel_input PUBLIC omni_localization_core "${REALSENSE_LIBRARY}")
 add_executable(t265_omni_localizer src/main.cpp)
 target_include_directories(t265_omni_localizer PRIVATE "${REALSENSE_INCLUDE_DIR}")
 target_link_libraries(t265_omni_localizer PRIVATE

@@ -272,6 +272,8 @@ class CompetitionMapApp(RescueMapApp):
                         lower_identity_source="chassis_identity.json: actual UART reply, when received",
                         pose_source="t265_direct_with_camera_offset", encoder_fusion_weight=0.0,
                         pose_dependencies=["T265 SDK", "measured wheel feedback", "main gyro angular rate"],
+                        wheel_processing_owner="native_cpp_sdk_owner",
+                        wheel_observer_transport="bounded_SEQPACKET_with_native_receive_timestamp",
                         wheel_reference_note="SDK input dependency, not independent position truth",
                         fresh_session_note="map preservation disabled; not proof of device estimator reset")
         metadata["heading_conventions"]["wheel_reference"] = "no legacy F407 wheel projection; measured F405 velocity is SDK input"

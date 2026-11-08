@@ -1,8 +1,8 @@
 """Competition adapter for the existing tested wheel bridge; no UART or SDK owner.
 
 C++ forwards complete 07/08/identity containers with their host receive time.
-All measurement/gyro pairing, C-frame conversion and SDK ingress remain in the
-same WheelInputBridge/TimedMeasurements/DebugWheelInput used by the test map.
+All measurement/gyro pairing, C-frame conversion and SDK ingress execute in
+that C++ owner. Python observes feedback/status and never produces SDK input.
 """
 import json
 import secrets
@@ -11,7 +11,7 @@ import struct
 import threading
 
 import f405_timed_protocol as wire
-from t265_wheel_input import WheelInputBridge, write_sdk_config
+from t265_wheel_input import NativeWheelObserver, write_sdk_config
 
 
 def identity_names(identity):
@@ -35,10 +35,12 @@ class CompetitionWheelInput:
                                        wire.request(wire.CONFIG_REQ, self.config_nonce, 1, enable=True))
         write_sdk_config(root / "wheel_sdk_config.json", .10)
         self.address = "\0f405-feedback-" + session_id
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         self.sock.bind(self.address)
+        self.sock.listen(1)
+        self.connection=None
         self.sock.settimeout(.05)
-        self.bridge = WheelInputBridge(root, config, session_id, True)
+        self.bridge = NativeWheelObserver(root, config, session_id, True)
         self.identity = None
         self.error = None
         self.stop_event = threading.Event()
@@ -85,7 +87,12 @@ class CompetitionWheelInput:
     def _run(self):
         while not self.stop_event.is_set():
             try:
-                data = self.sock.recv(512)
+                if self.connection is None:
+                    self.connection,_=self.sock.accept();self.connection.settimeout(.05)
+                    self.connection.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
+                data = self.connection.recv(512)
+                if not data:
+                    self.connection.close();self.connection=None;continue
                 self.accept(data)
             except socket.timeout:
                 continue
@@ -110,4 +117,5 @@ class CompetitionWheelInput:
         if self.thread:
             self.thread.join()
         self.sock.close()
+        if self.connection is not None:self.connection.close()
         self.bridge.close()

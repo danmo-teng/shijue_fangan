@@ -1816,14 +1816,14 @@ if __name__ == "__main__":
 
 
 def test_competition_feedback_adapter():
-    """Same existing wire fixtures -> production test bridge -> SDK-owner IPC.
-    No actual SDK API or motor action; old host receive time is not a gate.
+    """Formal Python is now an observer, never a second SDK packet producer.
+    No actual SDK API or motor action; keep actual identities/measurements.
     """
     import socket, uuid, struct
     import f405_timed_protocol as wire
     from competition_wheel_input import CompetitionWheelInput
     from t265_f407_motion_map import config_values, DEFAULT_CONFIG
-    from t265_wheel_input import WheelInputBridge
+    from t265_wheel_input import NativeWheelObserver
     examples=json.loads((Path(__file__).with_name('contracts')/'f405_timed_examples_20261031.json').read_text())['examples']
     def raw(name):return bytes.fromhex(next(x['hex'] for x in examples if x['name']==name))
     with tempfile.TemporaryDirectory() as temporary:
@@ -1832,7 +1832,7 @@ def test_competition_feedback_adapter():
         sink.bind('\0t265-wheel-'+sid);sink.settimeout(.5)
         adapter=CompetitionWheelInput(root,config_values(DEFAULT_CONFIG),sid)
         try:
-            assert type(adapter.bridge) is WheelInputBridge
+            assert type(adapter.bridge) is NativeWheelObserver
             wheel=wire.decode(raw('forward'));g=wire.decode(raw('gyro_ccw'))
             p=bytearray(wire.parse(raw('c_module_host_fixture_type_2'))['payload'])
             p[:8]=adapter.identity_nonce.to_bytes(8,'big')
@@ -1847,17 +1847,15 @@ def test_competition_feedback_adapter():
                 payload=struct.pack('>16sIIqQIIIiQIIIQ',bytes.fromhex(g['boot_epoch']),g['reference_epoch'],i,
                     g['yaw_mdeg'],t,100+i,0x347,0,0,t,100+i,0x347,0,t)
                 feed(wire.packet(wire.GYRO,i,payload))
-            feed(raw('forward'));adapter.bridge.poll()
-            packet=json.loads(sink.recv(16000))
-            assert packet['v_body_mps'][0] == wheel['forward_um_s']/1e6
-            assert packet['v_body_mps'][1] == wheel['left_um_s']/1e6
-            assert abs(packet['v_camera_mps'][0] - packet['v_body_mps'][0]*.8660254) < 1e-7
-            assert abs(packet['v_camera_mps'][2] - packet['v_body_mps'][0]*.5) < 1e-7
-            assert packet['omega_body_rad_s'] == [0.,0.,0.]
-            assert packet['alignment_clock']=='mcu_event' and not packet['capture_time_qualified']
+            feed(raw('forward'))
+            sink.setblocking(False)
+            try:sink.recv(16000);raise AssertionError('Python must not also inject')
+            except BlockingIOError:pass
             assert adapter.identity['service']==2 and adapter.identity['epoch_valid']
             state=adapter.snapshot()
-            assert state['stats']['sent_to_sdk_owner']==1 and state['sdk_api_success_samples']==0
+            assert state['stats']['sent_to_sdk_owner']==0 and state['sdk_api_success_samples']==0
+            assert state['processing_owner']=='native_cpp_sdk_owner' and not state['python_sdk_sender']
+            assert state['latest_measured']['v_body_mps']==[wheel['forward_um_s']/1e6,wheel['left_um_s']/1e6,0.]
         finally:
             adapter.close();sink.close()
 
@@ -2131,3 +2129,89 @@ def competition_control_rate_fixture(*,require_all=True,lidar_records=None,inter
         if require_all:assert metrics['ingested_distinct_intervals']==len(sent),metrics
         print(json.dumps(dict(competition_control_rate=metrics)))
         return metrics
+
+
+def test_native_cpp_wheel_input():
+    """Cross-language wire→interval gyro→C velocity parity, no devices/motors.
+
+    Reuses existing reference codecs/bridge and C++ regression executable;
+    exercises forward/left signs, both spins, combined varying gyro, invalid
+    values, duplicate sources, and coalescing without a timestamp/age gate.
+    """
+    import math, socket, struct, subprocess
+    import f405_timed_protocol as wire
+    from t265_f407_motion_map import config_values,DEFAULT_CONFIG,LOCALIZATION_ROOT
+    from t265_wheel_input import WheelInputBridge
+    examples=json.loads((Path(__file__).with_name('contracts')/'f405_timed_examples_20261031.json').read_text())['examples']
+    raw=lambda name:bytes.fromhex(next(x['hex'] for x in examples if x['name']==name))
+    epoch=bytes.fromhex(wire.decode(raw('forward'))['boot_epoch'])
+    identity=bytearray(wire.parse(raw('c_module_host_fixture_type_2'))['payload'])
+    identity[:8]=(7).to_bytes(8,'big');identity[8:10]=b'\0\0';identity[10:26]=epoch
+    identity[42:44]=bytes((1,3));identity[52:56]=(3).to_bytes(4,'big');identity[56:60]=(0xffffffff).to_bytes(4,'big')
+    events=[]
+    def add(packet,*,request=False,drain=True):
+        events.append(dict(raw_hex=packet.hex(),timestamp_ns=1_000_000_000+len(events)*100_000,request=request,drain=drain))
+    add(wire.request(wire.ID_REQ,7,3),request=True);add(wire.packet(wire.ID_REPLY,3,identity))
+    rate_id=0
+    def gyro(t,rate,flags=0x341,drain=True,duplicate=False):
+        nonlocal rate_id
+        if not duplicate:rate_id+=1
+        payload=struct.pack('>16sIIqQIIIiQIIIQ',epoch,1,rate_id,0,t,rate_id,0x341,0xffffffff,
+                            rate,t,rate_id,flags,0xffffffff,t)
+        add(wire.packet(wire.GYRO,rate_id&65535,payload),drain=drain)
+    t=1_000_000
+    gyro(t-5000,0);gyro(t,0)
+    k=math.pi*.070/1061.268
+    for i in range(1,49):
+        if i==12:
+            add(motion_move_frame(42,0,300,200),request=True)
+        d1,d2,d3=((20,-20,0),(-20,20,0),(12,12,-24),(-12,-12,24),(25,-15,-10),(0,0,0))[i%6]
+        vx=k*(d1-d2)/(math.sqrt(3)*.01);vy=k*(d1+d2-2*d3)/(.03)
+        payload=struct.pack('>16sIIQQiiIIIiiiIII',epoch,1,i,t,t+10000,round(vx*1e6),round(vy*1e6),
+                            i,i,i,d1,d2,d3,0x281,0xffffffff,4)
+        # Waiting for the actual end bracket, with a nonconstant angular rate.
+        add(wire.packet(wire.WHEEL,i,payload),drain=i%7!=0)
+        gyro(t+5000,(-1 if i%2 else 1)*57296,drain=i%7!=0)
+        gyro(t+10000,(-1 if i%3 else 1)*28648)
+        if i%5==0:add(wire.packet(wire.WHEEL,i,payload))  # exact repeated measurement
+        t+=10000
+    # No fake zero: duplicate rate is not a new bracket; an invalid value
+    # interrupts support instead of interpolating through a clipped gyro.
+    gyro(t,0,duplicate=True);gyro(t+5000,0,flags=0x361);gyro(t+10000,0)
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);source=root/'wire.jsonl'
+        source.write_text(''.join(json.dumps(e)+'\n' for e in events))
+        native=[json.loads(line) for line in subprocess.check_output([
+            str(LOCALIZATION_ROOT/'build/test_omni_localization'),'--wheel-replay',str(source),str(DEFAULT_CONFIG)],text=True).splitlines()]
+        sink=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);sink.bind('\0t265-wheel-parity-check');sink.setblocking(False)
+        bridge=WheelInputBridge(root,config_values(DEFAULT_CONFIG),'parity-check',True,clock=lambda:20_000_000_000)
+        reference=[]
+        try:
+            for e in events:
+                if not e['request']:
+                    s=wire.decode(bytes.fromhex(e['raw_hex']));s['receive_monotonic_ns']=e['timestamp_ns']
+                    if s['type']==wire.ID_REPLY:
+                        s.update(epoch_valid=True,interface_compatible=True);kind='timed_identity'
+                    else:kind='timed_wheel_diagnostic' if s['type']==wire.WHEEL else 'timed_gyro_diagnostic'
+                    bridge.telemetry(dict(kind=kind,sample=s))
+                if e['drain']:
+                    bridge.poll()
+                    while True:
+                        try:reference.append(json.loads(sink.recv(16384)))
+                        except BlockingIOError:break
+        finally:bridge.close();sink.close()
+        if len(native)!=len(reference):
+            Path('/tmp/rdk_native_wheel_parity_failed.jsonl').write_text(source.read_text())
+        assert len(native)==len(reference) and len(native)>=40,(len(native),len(reference))
+        exact=('sample_id','alignment_clock','alignment_start_ns','alignment_end_ns','alignment_gyro_start_ns',
+               'alignment_gyro_end_ns','receive_monotonic_ns','gyro_receive_ns','gyro_max_gap_ns','capture_time_qualified')
+        max_error=0.
+        for actual,expected in zip(native,reference):
+            assert all(actual[k]==expected[k] for k in exact),(actual,expected)
+            for key in ('v_body_mps','omega_body_rad_s','lever_body_mps','v_camera_mps'):
+                error=max(abs(a-b) for a,b in zip(actual[key],expected[key]));max_error=max(max_error,error)
+                assert error<1e-12,(key,actual[key],expected[key])
+            if actual['sample_id']>=12:
+                assert actual['motion_wire_request_at_receive']['wire_sequence']==42
+        print(json.dumps(dict(native_cpp_wheel_parity_samples=len(native),max_vector_error=max_error,
+                              unknown_time_bounds_preserved=True,actual_SDK=False,motor_commands=False)))
