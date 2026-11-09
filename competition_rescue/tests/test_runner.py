@@ -968,6 +968,65 @@ if __name__ == "__main__":
     main()
 
 
+def test_formal_t265_mount_is_independent_of_wheel_input():
+    """All T265 modes use one mount; pure Pose never creates injection owners."""
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    import competition_map_app as formal
+    import map_app
+    from competition_dynamic_localization import CompetitionDynamicLocalization
+    mount = dict(camera_offset_forward_m='-0.0346105',
+        camera_offset_left_m='-0.0599471445',
+        camera_robot_forward_axis='0.8660254,0,0.5', camera_robot_up_axis='0,-1,0',
+        t265_translation_scale_enabled='false', t265_translation_scale='1.000')
+    starts = {1: (-1.35, 1.35, 135.), 2: (1.35, 1.35, 45.),
+              3: (-1.35, -1.35, 225.), 4: (1.35, -1.35, 315.)}
+    modes = [(False, False, zone) for zone in starts] + [(True, False, 2), (False, True, 3)]
+    for official, dynamic, zone in modes:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            options = SimpleNamespace(zone=zone, side='blue', corner_offset_mm=150*2**.5,
+                encoder_weight=.25, localization_mode='t265', localization_json=runtime/'pose.json',
+                localization_log=None, launch_localization=False, launch_vision=False,
+                uart='/dev/ttyS1', baud=921600, tx_rate=20., fullscreen=False, demo=False,
+                screenshot=None, official_wheel_input=official, dynamic_localization=dynamic,
+                dynamic_config=PROJECT_ROOT/'localization/config/lidar_yaw_debug.json',
+                lidar='/dev/ttyS6', lidar_baud=230400)
+            with patch.object(map_app, 'RUNTIME', runtime), patch.object(formal, 'RUNTIME', runtime), \
+                    patch.object(formal, 'CompetitionWheelInput', wraps=formal.CompetitionWheelInput) as wheel, \
+                    patch.object(CompetitionDynamicLocalization, 'start') as start:
+                app = formal.CompetitionMapApp(options)
+                try:
+                    app.start_session()
+                    cmd = app.localization_command()
+                    config = dict(line.split('#', 1)[0].strip().split('=', 1) for line in
+                        Path(cmd[cmd.index('--config')+1]).read_text().splitlines()
+                        if '=' in line.split('#', 1)[0])
+                    config = {key.strip(): value.strip() for key, value in config.items()}
+                    assert all(config[key] == value for key, value in mount.items()), config
+                    assert config['start_zone'] == str(zone) and config['start_center_m'] == '1.350000'
+                    assert config['start_heading_offset_deg'] == '0.0'
+                    assert (app.pose.x_m, app.pose.y_m, app.pose.yaw_deg) == starts[zone]
+                    assert '--t265-only-output' in cmd and '--enable-pose-jumping' in cmd
+                    assert wheel.call_count == int(official or dynamic)
+                    assert start.call_count == int(dynamic)
+                    if not (official or dynamic):
+                        assert app.wheel_input is None and app.dynamic is None
+                        assert app.wheel_run_dir is None
+                        assert not any(flag in cmd for flag in ('--debug-wheel-socket',
+                            '--debug-wheel-config', '--wheel-feedback-socket', '--motion-feedback-socket',
+                            '--debug-pose-socket', '--dynamic-pose-socket'))
+                        assert not list(runtime.rglob('wheel_sdk_config.json'))
+                finally:
+                    app.stop_localization()
+            # Explicit legacy fusion mode retains its existing template and tuning.
+            options.localization_mode = 'fusion'
+            options.official_wheel_input = options.dynamic_localization = False
+            app = formal.CompetitionMapApp(options)
+            assert not hasattr(app, 'localization_config_template')
+            assert app.localization_mode == 'fusion' and app.encoder_weight == .25
+
+
 def test_formal_wheel_start_and_pose_adoption():
     """No UART/SDK: formal coordinates, lifecycle and received-pose policy."""
     from unittest.mock import patch

@@ -8,7 +8,7 @@
 
 下位机GitHub main已只读核对至f1cf2a5909f408b28d821b29b0fc6a63d91fb8dc：最新为烧录回执文档，固件实现仍14b2a3a；CMake两个既有preset共用921600。NormalRun应为board405/mode5/service2（RESCUE_TASK），不能只看mode5，因为MotionDebug也为mode5、service1。该信息是源码/构建依据，实际NormalRun尚待用户烧录后读取，不加SHA白名单或时间资格门。无需本轮下位机新功能。
 
-本轮软件就绪检查已通过，未发现当前范围内明确的代码阻断，未改运行代码：
+此前正式软件就绪检查已通过（之后本轮另修纯T265外参入口，见下节；无墙打滑限制仍在）：
 
 - 12个现有相关检查全部通过，`12 passed in 2.70s`：热启动起点绑定、任务/审核与测距交接、mode51、预备点/回中D=0、停止优先和原状态年龄采用政策；仅Mock/临时目录，无真实比赛CONFIG/STOP。
 - 原桌面与登录自动入口均指向当前`run_competition_map.sh`；shell语法、正式地图/runner原入口`--help`、cv2/numpy/PIL/hbm_runtime/Gst导入和雷达配置读取通过。
@@ -33,6 +33,30 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
   competition_rescue/tests/test_state_machine.py::test_safe_staging_arrival_keeps_zero_handoff_and_stash_window \
   competition_rescue/tests/test_state_machine.py::test_return_center_sends_zero_until_search
 ```
+
+## 纯T265入口外参修复及安全区空转边界（2026-11-09）
+
+原`CompetitionMapApp`只有启用官方轮速时才选择当前安装模板；同时关闭动态链和官方轮速，会误用`localization.example.conf`的旧杆臂/轴向。现将模板选择与注入开关解耦：正式`t265`模式统一使用`t265_debug_new_mount_candidate.conf`，默认动态/官方链不变，显式旧`fusion`模式不在本轮修改范围。
+
+当前六项值保持：forward=-0.0346105m，left=-0.0599471445m，forward_C=(0.8660254,0,0.5)，up_C=(0,-1,0)，scale_enabled=false，scale=1.000。正式写配置仍覆盖所选1～4号起点与135°/45°/225°/315°，不会移植测试中心起点。候选文件仅更正“TEST ONLY/正式模板未变”的过时注释。
+
+完全关闭SDK轮速与外部轮式降级的已有纯T265入口是以下双开关组合（仅说明，本轮未启动）：
+
+```bash
+./competition_rescue/run_competition_map.sh --no-dynamic-localization --no-official-wheel-input
+```
+
+只关闭dynamic仍保留官方注入；只关闭official而保留dynamic，会按原设计启用官方注入，均不能称纯T265。模式切换须结束旧SDK会话再启动；新SDK会话也不能冒称设备内部状态已彻底清空。纯模式不创建WheelInput/dynamic组件、SDK轮速配置或注入/反馈socket；原始编码器诊断不等于位置输入。
+
+必要检查在原`test_runner.py`内：`test_formal_t265_mount_is_independent_of_wheel_input`、`test_formal_wheel_start_and_pose_adoption`、`test_formal_dynamic_start_wiring`全部通过，约2.2秒，覆盖纯模式四起点/六参数/pose jumping/无注入组件以及官方/动态原接线。仅Mock/临时目录，不访问UART/SDK/相机，不发电机命令、不清原始日志，没有实车精度结论。修改文件为`competition_map_app.py`、原检查文件及配置注释/本轮文档；无协议或下位机改动，commit/push见Git。
+
+**当前未解决的空转边界：**动态链完全看不到双轴墙时，T265/轮式位移冲突仍可触发`WHEEL_FALLBACK`，不能区分好T265与打滑轮式；恢复亦需要双轴墙及运动一致性。已有墙证据判滑不是无墙安全区预案，不能说原T265备用已自动兜底。
+
+**供人决定的方案，尚未实现：**对安全区有意顶推/退出的风险阶段，暂停SDK新轮速调用，同时排除上位机轮式尾段、轮式冲突/恢复比较；轮计数/gyro及日志继续接收，位置用T265增量＋主yaw，雷达只修可观测方向。退出策略时以当前输出重新建立T265偏置和当前累计轮式锚点，保持输出连续，不补发空转段或伪造零速，不清原始编码器。暂停SDK不立即清除既往轮速影响；若T265也异常且无墙，不能凭软件恢复真实XY。
+
+ENTER从接近即开始，不是接触证据；现有线上反馈没有实际接触或final_push阶段。不能一收到ENTER就冻结XY，也不能把mode17当已确认驶离斜坡。上位机粗阶段屏蔽无需新固件但覆盖较长；若要精确按既有最终顶推/退出子阶段切换，可讨论复用下位机已有状态/保留字段，仍不证明物理接触，不新增传感器判断、中断、握手或年龄门。两种阶段范围和无可用T265时的处理须先说明再决定，本轮未发布F405修改任务。
+
+真正已知贴墙且固定朝向时可讨论墙法向约束；不能冻结仍可能横移/转动的整个XY/yaw。下位机最终顶推和退出自身仍以编码器累计行程限程，轮滑也会影响动作结束；改变上位机注入不能顺带解决这部分，若需修改另作最小提案。
 
 
 2026-11-06更新：9b6a661已完成基于e783f71的迁移，本轮继续修复只读审查发现的四项问题。保留正式1～4号起点和初始航向，不等待围栏初始化才出发；后续定位使用桌面测试同一套实现。源码接入及必要检查已完成，尚未实车跑完整场。

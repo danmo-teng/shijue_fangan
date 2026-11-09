@@ -53,10 +53,11 @@ class CompetitionMapApp(RescueMapApp):
         self.warm_ready_announced = False
         self.warm_error = None
         self.warm_status_path = RUNTIME / 'operator_warm_status.json'
-        if self.official_wheel_input:
-            # Use the same file as the test, but the normal writer sets the
-            # selected competition corner/heading (never the test centre).
+        if self.localization_mode == "t265" or self.official_wheel_input:
+            # Mounting is independent of SDK wheel injection. The normal writer
+            # still sets the selected competition corner/heading, not the test centre.
             self.localization_config_template = PROJECT_ROOT / "localization/config/t265_debug_new_mount_candidate.conf"
+        if self.official_wheel_input:
             self.localization_mode = "t265"
             self.encoder_weight = 0.0
             self.t265_translation_scale_enabled = False
