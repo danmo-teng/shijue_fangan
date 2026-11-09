@@ -152,7 +152,10 @@ class NativeDynamicFence(DynamicFence):
             return state
 
     def _frozen(self,first_ns=None,last_ns=None,*,latest=False):
-        state=self.runtime.snapshot(dict(kind='window',first_ns=first_ns,last_ns=last_ns,latest=latest))
+        # An older native library safely ignores this optional projection and
+        # returns its original superset. No new ABI or readiness negotiation.
+        state=self.runtime.snapshot(dict(kind='window',first_ns=first_ns,last_ns=last_ns,
+                                        latest=latest,geometry_only=True))
         if state.get('reference') is None:raise ValueError('尚未从围栏建立场地参考')
         return (np.asarray(state['poses'],float),np.asarray(state['yaws'],float),state['reference'],
                 np.asarray(state['offset'],float),state['revision'])

@@ -327,6 +327,7 @@ public:
         double first=get<double>(query,"first_ns",-std::numeric_limits<double>::infinity());
         double last=get<double>(query,"last_ns",std::numeric_limits<double>::infinity());
         const bool latest=get<bool>(query,"latest",false),consume=get<bool>(query,"consume_events",false);
+        const bool geometry_only=kind=="window"&&get<bool>(query,"geometry_only",false);
         Json result;History raw_copy,selected_copy,history_copy,wheel_copy,pending_copy;
         Yaws yaw_copy,native_yaw_copy;std::deque<Json> event_copy;
         {
@@ -334,22 +335,26 @@ public:
             // Only bounded native values and the small endpoint metadata are
             // copied under the hot lock. Thousands of row JSON allocations,
             // string encoding and Python decoding occur after releasing it.
-            result=state();event_copy=motion_.events;
+            // Scan geometry needs only selected motion/yaw and its reference.
+            // Avoid building the complete control/display state or copying the
+            // same history into multiple JSON fields under the input lock.
+            result=geometry_only?Json{{"reference",reference_},{"offset",offset_},{"revision",revision_}}:state();
+            if(!geometry_only)event_copy=motion_.events;
             if(kind=="window"){
                 const auto &selected=motion_.history.empty()?poses_:motion_.history;
                 if(latest&&!selected.empty())first=last=selected.back()[0];
-                raw_copy=window_values(poses_,first,last);selected_copy=window_values(selected,first,last);
-                yaw_copy=window_values(yaws_,first,last);history_copy=window_values(motion_.history,first,last);
+                selected_copy=window_values(selected,first,last);yaw_copy=window_values(yaws_,first,last);
+                if(!geometry_only){raw_copy=window_values(poses_,first,last);history_copy=window_values(motion_.history,first,last);}
             }else if(kind=="histories"){
                 raw_copy=poses_;yaw_copy=yaws_;history_copy=motion_.history;wheel_copy=motion_.wheels;
                 native_yaw_copy=motion_.native_yaws;pending_copy=motion_.pending;
             }
             if(consume)motion_.events.clear();
         }
-        result["events"]=Json(event_copy);
+        if(!geometry_only)result["events"]=Json(event_copy);
         if(kind=="window"){
-            result["raw_poses"]=rows(raw_copy);result["poses"]=rows(selected_copy);result["yaws"]=rows(yaw_copy);
-            result["history"]=rows(history_copy);result["motion_history"]=result["history"];
+            result["poses"]=rows(selected_copy);result["yaws"]=rows(yaw_copy);
+            if(!geometry_only){result["raw_poses"]=rows(raw_copy);result["history"]=rows(history_copy);result["motion_history"]=result["history"];}
         }else if(kind=="histories"){
             result["poses"]=rows(raw_copy);result["yaws"]=rows(yaw_copy);result["history"]=rows(history_copy);
             result["motion_history"]=result["history"];result["wheels"]=rows(wheel_copy);

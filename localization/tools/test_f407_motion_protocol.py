@@ -3338,6 +3338,18 @@ def test_native_runtime_historical_wall_parity():
                 for axis in axes:
                     j=('x','y').index(axis);e.offset[j]=candidate[j]-current_xy[j]
                 after=native.snapshot(dict(kind='histories'))
+                # Geometry's narrow projection must preserve the complete
+                # window's exact measured brackets/reference, including the
+                # current posterior and the selected wheel-tail history.
+                for first,last,latest in ((a-20_000_000,a-10_000_000,False),
+                                          (a,b,False),(b-5_000_000,b+5_000_000,False),
+                                          (b+200_000_000,b+300_000_000,False),
+                                          (a,b,True)):
+                    query=dict(kind='window',first_ns=first,last_ns=last,latest=latest)
+                    full=native.snapshot(query)
+                    compact=native.snapshot(dict(query,geometry_only=True))
+                    assert set(compact)=={'poses','yaws','reference','offset','revision'}
+                    assert compact=={key:full[key] for key in compact}
                 assert np.allclose(after['offset'],e.offset,rtol=1e-12,atol=1e-10)
                 assert np.allclose(after['history'],list(e.motion.history),rtol=1e-12,atol=1e-10)
                 selected=np.asarray(after['history'][-1])

@@ -1,0 +1,610 @@
+{
+  "baseline": "d2b8a57",
+  "scope": "LATENCY-05A: optional compact scan history projection; same algorithms, no device access",
+  "window_comparison": [
+    {
+      "phase": "steady",
+      "mode": "T265_WITH_WHEEL_TAIL",
+      "queries_per_mode": 120,
+      "full_ms": {
+        "p50": 1.696907,
+        "p95": 2.3309373,
+        "p99": 2.43280925,
+        "max": 2.534528
+      },
+      "compact_ms": {
+        "p50": 0.3221025,
+        "p95": 0.5796490499999999,
+        "p99": 0.7401174600000002,
+        "max": 0.952953
+      },
+      "full_bytes": 5730,
+      "compact_bytes": 458,
+      "same_geometry_fields": true
+    },
+    {
+      "phase": "jump",
+      "mode": "T265_WITH_WHEEL_TAIL",
+      "queries_per_mode": 120,
+      "full_ms": {
+        "p50": 1.871635,
+        "p95": 2.266671,
+        "p99": 2.41055548,
+        "max": 2.473194
+      },
+      "compact_ms": {
+        "p50": 0.43406,
+        "p95": 0.69099455,
+        "p99": 0.72624427,
+        "max": 0.877371
+      },
+      "full_bytes": 5723,
+      "compact_bytes": 458,
+      "same_geometry_fields": true
+    }
+  ],
+  "receiver_log_abba": [
+    {
+      "trial": "receiver_1794254724488026150",
+      "rows": [
+        {
+          "label": "A1",
+          "mode": "thread",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 11.998428,
+            "p95": 80.48235609999999,
+            "p99": 89.57941225999997,
+            "max": 95.710011
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2077,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 24,
+            "history_records_written": 2181,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.0788435,
+            "p95": 0.14728485000000002,
+            "max": 2.977156
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254724488026150/A1"
+        },
+        {
+          "label": "B1",
+          "mode": "process",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 10.96156,
+            "p95": 71.12199559999998,
+            "p99": 93.91294729999998,
+            "max": 96.839046
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2069,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 26,
+            "history_records_written": 2173,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100,
+            "execution": "spawn_process_original_async_writer",
+            "writer_pid": 132895,
+            "transport_queue_capacity": 4096,
+            "transport_queue_pending": 0,
+            "transport_batch_limit": 128,
+            "sender_stopped": true,
+            "transport_dropped": 0,
+            "writer_dropped": 0,
+            "final_receipt": true
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.082004,
+            "p95": 0.15425090000000016,
+            "max": 2.480252
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254724488026150/B1"
+        },
+        {
+          "label": "B2",
+          "mode": "process",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 10.546354,
+            "p95": 70.16955249999998,
+            "p99": 83.1087185,
+            "max": 84.523912
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2061,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 24,
+            "history_records_written": 2165,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100,
+            "execution": "spawn_process_original_async_writer",
+            "writer_pid": 132949,
+            "transport_queue_capacity": 4096,
+            "transport_queue_pending": 0,
+            "transport_batch_limit": 128,
+            "sender_stopped": true,
+            "transport_dropped": 0,
+            "writer_dropped": 0,
+            "final_receipt": true
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.082437,
+            "p95": 0.16277225000000006,
+            "max": 2.741491
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254724488026150/B2"
+        },
+        {
+          "label": "A2",
+          "mode": "thread",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 11.370266,
+            "p95": 68.30497309999998,
+            "p99": 81.6569081,
+            "max": 82.135594
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2105,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 27,
+            "history_records_written": 2209,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.074269,
+            "p95": 0.1385065,
+            "max": 2.638924
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254724488026150/A2"
+        }
+      ]
+    },
+    {
+      "trial": "receiver_1794254848517687187",
+      "rows": [
+        {
+          "label": "A1",
+          "mode": "thread",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 12.00618,
+            "p95": 78.7299869,
+            "p99": 88.28106527999999,
+            "max": 90.120637
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2032,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 26,
+            "history_records_written": 2136,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.0824725,
+            "p95": 0.17832480000000006,
+            "max": 2.434328
+          },
+          "stage_ms": {
+            "write_to_feed": {
+              "p50": 0.448081,
+              "p95": 1.8978798999999953,
+              "p99": 3.4842190199999843,
+              "max": 7.370998
+            },
+            "feed_wall": {
+              "p50": 3.93881,
+              "p95": 64.088415,
+              "p99": 72.668614,
+              "max": 72.668614
+            },
+            "prepare_log": {
+              "p50": 0.828245,
+              "p95": 1.2616960999999995,
+              "p99": 1.7610591199999988,
+              "max": 2.064571
+            },
+            "queue_delivery": {
+              "p50": 4.713764,
+              "p95": 11.787518199999994,
+              "p99": 14.752617059999968,
+              "max": 22.561701
+            }
+          },
+          "feed_cpu_ms": {
+            "p50": 3.900167,
+            "p95": 62.6863733,
+            "p99": 71.37297734,
+            "max": 71.384166
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254848517687187/A1"
+        },
+        {
+          "label": "B1",
+          "mode": "process",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 10.205315,
+            "p95": 72.24467149999998,
+            "p99": 85.79890965999999,
+            "max": 88.565188
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2078,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 31,
+            "history_records_written": 2182,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100,
+            "execution": "spawn_process_original_async_writer",
+            "writer_pid": 133259,
+            "transport_queue_capacity": 4096,
+            "transport_queue_pending": 0,
+            "transport_batch_limit": 128,
+            "sender_stopped": true,
+            "transport_dropped": 0,
+            "writer_dropped": 0,
+            "final_receipt": true
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.0835455,
+            "p95": 0.15154205000000004,
+            "max": 2.578905
+          },
+          "stage_ms": {
+            "write_to_feed": {
+              "p50": 0.687413,
+              "p95": 1.8778847999999966,
+              "p99": 2.9771409799999824,
+              "max": 7.331623
+            },
+            "feed_wall": {
+              "p50": 3.679979,
+              "p95": 64.018749,
+              "p99": 74.613436,
+              "max": 74.613436
+            },
+            "prepare_log": {
+              "p50": 0.766329,
+              "p95": 1.281742,
+              "p99": 1.5553293199999993,
+              "max": 1.755657
+            },
+            "queue_delivery": {
+              "p50": 4.90593,
+              "p95": 7.4471517999999985,
+              "p99": 8.790951099999992,
+              "max": 10.744978
+            }
+          },
+          "feed_cpu_ms": {
+            "p50": 3.627166,
+            "p95": 63.2781063,
+            "p99": 73.75005934,
+            "max": 73.761003
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254848517687187/B1"
+        },
+        {
+          "label": "B2",
+          "mode": "process",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 11.107851,
+            "p95": 72.53176599999998,
+            "p99": 95.89491119999998,
+            "max": 98.310964
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 2065,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 27,
+            "history_records_written": 2169,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100,
+            "execution": "spawn_process_original_async_writer",
+            "writer_pid": 133291,
+            "transport_queue_capacity": 4096,
+            "transport_queue_pending": 0,
+            "transport_batch_limit": 128,
+            "sender_stopped": true,
+            "transport_dropped": 0,
+            "writer_dropped": 0,
+            "final_receipt": true
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.0851565,
+            "p95": 0.16047650000000002,
+            "max": 3.236185
+          },
+          "stage_ms": {
+            "write_to_feed": {
+              "p50": 0.760204,
+              "p95": 2.203332799999999,
+              "p99": 2.6581904399999807,
+              "max": 7.370248
+            },
+            "feed_wall": {
+              "p50": 3.97656,
+              "p95": 63.916708,
+              "p99": 86.162037,
+              "max": 86.162037
+            },
+            "prepare_log": {
+              "p50": 0.813453,
+              "p95": 1.4310243999999996,
+              "p99": 1.776462139999999,
+              "max": 2.04053
+            },
+            "queue_delivery": {
+              "p50": 5.126261,
+              "p95": 7.9324781999999985,
+              "p99": 9.736795679999995,
+              "max": 10.897394
+            }
+          },
+          "feed_cpu_ms": {
+            "p50": 3.831457,
+            "p95": 63.202139499999994,
+            "p99": 82.44575966000001,
+            "max": 82.456376
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254848517687187/B2"
+        },
+        {
+          "label": "A2",
+          "mode": "thread",
+          "scans": 99,
+          "latency_ms": {
+            "p50": 13.606295,
+            "p95": 67.03793229999998,
+            "p99": 82.08674305999996,
+            "max": 91.395423
+          },
+          "input_chunks": 1212,
+          "input_bytes": 170832,
+          "reader_stats": {
+            "rx_batches": 1959,
+            "rx_bytes": 170832,
+            "scan_packets": 3634,
+            "status_packets": 6,
+            "ack_packets": 0,
+            "crc_errors": 0,
+            "timing_rejections": 0,
+            "sector_rejections": 0,
+            "scans_emitted": 100
+          },
+          "scan_queue_drops": 1,
+          "child_exit": 0,
+          "errors": [],
+          "logging_healthy": true,
+          "logging_statistics": {
+            "queue_capacity": 4096,
+            "queue_pending": 0,
+            "queue_peak": 23,
+            "history_records_written": 2063,
+            "snapshot_writes": 1,
+            "snapshots_coalesced": 0,
+            "dropped": 0,
+            "error": null,
+            "flush_interval_ms": 100
+          },
+          "feeder_lateness_ms": {
+            "p50": 0.090304,
+            "p95": 0.19221520000000009,
+            "max": 6.36753
+          },
+          "stage_ms": {
+            "write_to_feed": {
+              "p50": 0.56883,
+              "p95": 1.7941983999999984,
+              "p99": 3.6165650399999847,
+              "max": 7.43254
+            },
+            "feed_wall": {
+              "p50": 3.880561,
+              "p95": 60.695477,
+              "p99": 73.434028,
+              "max": 73.434028
+            },
+            "prepare_log": {
+              "p50": 0.924453,
+              "p95": 1.2900344000000001,
+              "p99": 1.8210131799999998,
+              "max": 1.865073
+            },
+            "queue_delivery": {
+              "p50": 4.803888,
+              "p95": 11.0004311,
+              "p99": 12.064692359999984,
+              "max": 15.805615
+            }
+          },
+          "feed_cpu_ms": {
+            "p50": 3.782915,
+            "p95": 59.6004705,
+            "p99": 72.109812,
+            "max": 72.120837
+          },
+          "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794254848517687187/A2"
+        }
+      ]
+    }
+  ],
+  "reader_log_decision": "No stable latency improvement from moving receiver logs to another process; not deployed. First trial A1 overlapped the end of a historical analysis; second full instrumented ABBA is separate and supports the same conclusion.",
+  "reader_profile": {
+    "path": "/tmp/rdk_lidar_latency_20261110/reader_profile.prof",
+    "source_duration_s": 10,
+    "scans": 99,
+    "points": 43380,
+    "source_packets": 3616,
+    "profiled_wall_s": 5.116380735998973,
+    "note": "Profiler instrumentation inflates cost; not a normal runtime latency benchmark. TimedPoint allocation/validation, point time reconstruction and sector loop dominate. Exact raw-input timing differs slightly from the real-time replay cut."
+  },
+  "tests": [
+    "Release motion_runtime build passed",
+    "test_native_runtime_historical_wall_parity passed; includes 20 exact compact/full geometry windows",
+    "test_native_runtime_socket_input_and_control_parity passed"
+  ],
+  "fingerprints": {
+    "localization/src/motion_runtime.cpp": "61234b0eb1b338bb433fca049d4e6206014cb8375dc001f3a4a1f7180070c30e",
+    "localization/tools/lidar_yaw_debug/native_motion.py": "16d9c56c5a86cb12416e7ff47f27e2d016de998a97b329054130750a57f89fd8",
+    "localization/tools/test_f407_motion_protocol.py": "265b73f006b8ff76ea8cfe49aca0e9689f471dbba82bb12df595d8c607edec4f",
+    "localization/build/libmotion_runtime.so": "3e7641f8912353e37d496cf3f85728930d1785b87741c6579bae9e779d2b281b"
+  },
+  "hardware_accuracy_verified": false,
+  "raw_logs_modified": false,
+  "motors_started": false,
+  "next": [
+    "stream completed sectors before finishing the rest of a batched receive",
+    "human decision pending for C++ parser/time/sector migration"
+  ]
+}
