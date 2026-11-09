@@ -478,7 +478,7 @@ private:
         double x=point[0]-reference_.at("pose_origin").at(0).get<double>(),y=point[1]-reference_.at("pose_origin").at(1).get<double>();
         return {{c*x-s*y+reference_.at("start_center_xy_m").at(0).get<double>(),s*x+c*y+reference_.at("start_center_xy_m").at(1).get<double>()}};
     }
-    Json current(bool evidence=false)const {
+    Json current(bool evidence=false,bool publish_only=false)const {
         if(reference_.is_null()||poses_.empty()||yaws_.empty())return Json{{"ready",false},{"reason","尚未从围栏建立场地参考"},
             {"scans",scan_count_},{"fixes",fit_count_},{"initialization",nullptr},{"lidar_corrections_enabled",lidar_enabled_}};
         const auto &selected=(motion_.history.empty()?poses_:motion_.history).back();auto t=std::int64_t(selected[0]);
@@ -488,13 +488,25 @@ private:
         double degrees=std::fmod(yaw*180./PI,360.);if(degrees<0)degrees+=360.;
         std::string source=!motion_.history.empty()?motion_.mode:(has_anchor_?"VIO":"VIO_FROM_INITIAL_REFERENCE");
         if(has_anchor_)source="LIDAR_ANCHORED_"+source;
-        auto now=now_ns();return Json{{"source",source},{"motion_selection",motion_.snapshot(evidence)},
-            {"position_reacquisitions",reacquisitions_},{"current_wall_axes",last_fit_.is_null()?Json::array():last_fit_.value("position_observed_axes",Json::array())},
-            {"lidar_corrections_enabled",lidar_enabled_},{"last_scan_age_ms",last_scan_ns_<0?Json(nullptr):Json((now-last_scan_ns_)/1e6)},
-            {"scans",scan_count_},{"fixes",fit_count_},{"ready",true},{"center_xy_m",Json::array({center[0]+offset_[0],center[1]+offset_[1]})},
-            {"t265_center_xy_m",raw},{"yaw_deg",degrees},{"sample_monotonic_ns",t},{"motion_age_ms",(now-t)/1e6},
-            {"motion_boundary_policy","hold_outside_measured_support"},{"raw_t265_sample_ns",std::int64_t(poses_.back()[0])},
-            {"reference",reference_},{"qualified_pose",false},{"accuracy_verified",false},{"control_pose_published",false}};
+        const auto now=publish_only?0:now_ns();Json value{{"source",source},{"motion_selection",motion_.snapshot(evidence)},
+            {"current_wall_axes",last_fit_.is_null()?Json::array():last_fit_.value("position_observed_axes",Json::array())},
+            {"fixes",fit_count_},{"ready",true},{"center_xy_m",Json::array({center[0]+offset_[0],center[1]+offset_[1]})},
+            {"t265_center_xy_m",raw},{"yaw_deg",degrees},{"sample_monotonic_ns",t},
+            {"raw_t265_sample_ns",std::int64_t(poses_.back()[0])}};
+        // 控制只用上述投影；完整显示/查询仍保留原字段和取值。
+        if(!publish_only){
+            value["position_reacquisitions"]=reacquisitions_;
+            value["lidar_corrections_enabled"]=lidar_enabled_;
+            value["last_scan_age_ms"]=last_scan_ns_<0?Json(nullptr):Json((now-last_scan_ns_)/1e6);
+            value["scans"]=scan_count_;
+            value["motion_age_ms"]=(now-t)/1e6;
+            value["motion_boundary_policy"]="hold_outside_measured_support";
+            value["reference"]=reference_;
+            value["qualified_pose"]=false;
+            value["accuracy_verified"]=false;
+            value["control_pose_published"]=false;
+        }
+        return value;
     }
     Json apply_wall(const Json &p) {
         auto expected=get<std::int64_t>(p,"revision",revision_);
@@ -534,7 +546,7 @@ private:
             {"position_reacquisitions",reacquisitions_},{"reference",reference_},{"motion_selection",value.at("motion_selection")}};
     }
     void publish() {
-        publish_policy();auto value=current();
+        publish_policy();auto value=current(false,true);
         static const Json empty_raw=Json::object();
         const Json &raw=last_sample_.is_null()?empty_raw:last_sample_;
         Json key=Json::array({revision_,value.at("ready"),value.value("sample_monotonic_ns",Json(nullptr)),

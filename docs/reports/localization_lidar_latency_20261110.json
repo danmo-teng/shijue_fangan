@@ -5552,5 +5552,448 @@
       "No actual SDK/physical UART/camera/JPU/GUI/motor/ground-truth validation",
       "XY solver migration still awaiting human choice; no formulas or source policy changed"
     ]
+  },
+  "internal_control_projection": {
+    "stage": "05M",
+    "measured_parent_commit": "9bec4c8",
+    "log_root": "/tmp/rdk_lidar_latency_20261110/shared_packet_compare_1794265833444668803",
+    "change": "Private current(publish_only) only builds keys consumed by publish key and format_control. Full public snapshots keep all original fields. No wire/log field removed; no math/source/ownership/qualification change.",
+    "checks": [
+      {
+        "library": "old",
+        "tests": [
+          "existing socket/control parity",
+          "existing historical-wall/window parity",
+          "failed send keeps last successful packet; LOST uses last ready, reconnect/next failure recovery"
+        ],
+        "exact_old_new_bytes": true,
+        "control_bytes_sha256": [
+          "c4dba7c19403aef173bd10b3356a1db51584f70eef717dac5b612a54c01be7d0",
+          "9ffa32d40a2125a5bf4028580e48905de9a90ff5cf79caedb59a3247b0f0d35d",
+          "68521fe60c075a09b66fb2ec63f9082e66badf33983c7717cc6556d492137659",
+          "144c2314926e171a088c08645d0a98b6e9615ed4b545a579d721355ffb7837bc"
+        ]
+      },
+      {
+        "library": "new",
+        "tests": [
+          "existing socket/control parity",
+          "existing historical-wall/window parity",
+          "failed send keeps last successful packet; LOST uses last ready, reconnect/next failure recovery"
+        ],
+        "exact_old_new_bytes": true,
+        "control_bytes_sha256": [
+          "c4dba7c19403aef173bd10b3356a1db51584f70eef717dac5b612a54c01be7d0",
+          "9ffa32d40a2125a5bf4028580e48905de9a90ff5cf79caedb59a3247b0f0d35d",
+          "68521fe60c075a09b66fb2ec63f9082e66badf33983c7717cc6556d492137659",
+          "144c2314926e171a088c08645d0a98b6e9615ed4b545a579d721355ffb7837bc"
+        ]
+      }
+    ],
+    "full_snapshot_checks": {
+      "actual_loaded_paths_verified": true,
+      "states": [
+        "not ready",
+        "reference ready",
+        "two-axis wall applied",
+        "lidar paused",
+        "reference invalidated"
+      ],
+      "full_public_snapshots_exact": true,
+      "excluded_volatile_keys": [
+        "motion_age_ms",
+        "last_scan_age_ms"
+      ],
+      "sha256": "4898bc909e8d3e1d55deb4bc2094c5300b1d8f5ecdeaa05b3cf73c9b8334b805"
+    },
+    "ab_ba": [
+      {
+        "label": "A1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Internal control projection ABBA, same production localization replay plus saved-frame formal YOLO/VSE/tracking; no hardware UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.420291,
+          "p95": 2.601112149999999,
+          "p99": 4.031307499999999,
+          "max": 5.553497
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.6174365000000002,
+          "p95": 3.1864667999999994,
+          "p99": 5.426319329999999,
+          "max": 12.984952
+        },
+        "fits": 100,
+        "packet_to_lidar_result_ms": {
+          "p50": 39.270606,
+          "p95": 65.89298489999999,
+          "p99": 77.21912394000016,
+          "max": 107.306406
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 42.2682375,
+          "p95": 184.43792125,
+          "p99": 272.25603575,
+          "max": 275.396588
+        },
+        "geometry_wall_ms": {
+          "p50": 29.751923,
+          "p95": 39.091289350000004,
+          "p99": 40.99137282,
+          "max": 41.483979
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 14.6982505,
+          "p95": 18.924873399999996,
+          "p99": 20.95147866000001,
+          "max": 22.454958
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.106313,
+          "p95": 1.108843,
+          "p99": 3.816144,
+          "max": 14.731735
+        },
+        "monotonic_realtime_offset_change_ns": 23250,
+        "stopped_cleanly": true,
+        "errors": [],
+        "cpu": {
+          "library": "/tmp/rdk_lidar_latency_20261110/libmotion_runtime_before_control_projection.so",
+          "native_threads": [
+            {
+              "native_tid": 180677,
+              "native_cpu_s": 4.17
+            }
+          ],
+          "user_cpu_s": 8.293163999999999,
+          "system_cpu_s": 1.3058539999999998,
+          "wall_s": 12.646329668
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 105,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 0,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      },
+      {
+        "label": "B1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Internal control projection ABBA, same production localization replay plus saved-frame formal YOLO/VSE/tracking; no hardware UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.2772489999999999,
+          "p95": 2.1757938499999994,
+          "p99": 3.2487267499999994,
+          "max": 5.36233
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.464791,
+          "p95": 2.813444499999998,
+          "p99": 4.650516499999998,
+          "max": 19.81499
+        },
+        "fits": 98,
+        "packet_to_lidar_result_ms": {
+          "p50": 38.8743755,
+          "p95": 56.626518199999985,
+          "p99": 83.74739246000003,
+          "max": 102.029741
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 42.103417,
+          "p95": 145.49015444999964,
+          "p99": 217.19307153000008,
+          "max": 279.018787
+        },
+        "geometry_wall_ms": {
+          "p50": 29.080256499999997,
+          "p95": 37.370477449999996,
+          "p99": 40.568537350000014,
+          "max": 49.502475
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 14.595375,
+          "p95": 19.047808999999997,
+          "p99": 20.22503554,
+          "max": 20.999501
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 98
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.103243,
+          "p95": 0.881525,
+          "p99": 2.401574,
+          "max": 9.286879
+        },
+        "monotonic_realtime_offset_change_ns": 2666,
+        "stopped_cleanly": true,
+        "errors": [],
+        "cpu": {
+          "library": "/tmp/rdk_lidar_latency_20261110/control_projection_build/libmotion_runtime.so",
+          "native_threads": [
+            {
+              "native_tid": 181352,
+              "native_cpu_s": 3.78
+            }
+          ],
+          "user_cpu_s": 7.6620919999999995,
+          "system_cpu_s": 1.2474800000000001,
+          "wall_s": 12.747463905
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 103,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 2,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      },
+      {
+        "label": "B2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Internal control projection ABBA, same production localization replay plus saved-frame formal YOLO/VSE/tracking; no hardware UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.3206655,
+          "p95": 2.3027058499999997,
+          "p99": 2.8415159199999995,
+          "max": 5.684122
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.5111865,
+          "p95": 2.8689837999999996,
+          "p99": 5.03723859,
+          "max": 16.551533
+        },
+        "fits": 98,
+        "packet_to_lidar_result_ms": {
+          "p50": 38.217147,
+          "p95": 59.25586969999996,
+          "p99": 70.65251368,
+          "max": 76.549586
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 42.183525,
+          "p95": 143.6076577999998,
+          "p99": 270.52319256,
+          "max": 270.912019
+        },
+        "geometry_wall_ms": {
+          "p50": 28.569965,
+          "p95": 41.24568509999998,
+          "p99": 46.18976666000001,
+          "max": 51.844015
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 14.368937,
+          "p95": 20.868464049999993,
+          "p99": 24.41991586,
+          "max": 26.489083
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 98
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.104257,
+          "p95": 1.052907,
+          "p99": 2.870582,
+          "max": 11.458566
+        },
+        "monotonic_realtime_offset_change_ns": -625,
+        "stopped_cleanly": true,
+        "errors": [],
+        "cpu": {
+          "library": "/tmp/rdk_lidar_latency_20261110/control_projection_build/libmotion_runtime.so",
+          "native_threads": [
+            {
+              "native_tid": 182030,
+              "native_cpu_s": 3.87
+            }
+          ],
+          "user_cpu_s": 7.920848,
+          "system_cpu_s": 1.0836810000000001,
+          "wall_s": 12.69972034
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 103,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 2,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      },
+      {
+        "label": "A2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Internal control projection ABBA, same production localization replay plus saved-frame formal YOLO/VSE/tracking; no hardware UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.4465615,
+          "p95": 3.141317699999999,
+          "p99": 4.911866579999998,
+          "max": 8.658912
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.8812069999999999,
+          "p95": 5.643389299999998,
+          "p99": 14.051453079999998,
+          "max": 67.313381
+        },
+        "fits": 99,
+        "packet_to_lidar_result_ms": {
+          "p50": 44.287268,
+          "p95": 67.1965483,
+          "p99": 93.11934909999997,
+          "max": 99.523115
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 50.368983,
+          "p95": 162.93189729999983,
+          "p99": 267.00683218,
+          "max": 272.9011
+        },
+        "geometry_wall_ms": {
+          "p50": 33.561899,
+          "p95": 51.285126899999995,
+          "p99": 58.77613001999994,
+          "max": 72.416212
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 15.62975,
+          "p95": 21.4213098,
+          "p99": 22.84551285999999,
+          "max": 25.134835
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 99
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.182537,
+          "p95": 4.354119,
+          "p99": 10.81051,
+          "max": 30.176385
+        },
+        "monotonic_realtime_offset_change_ns": -1792,
+        "stopped_cleanly": true,
+        "errors": [],
+        "cpu": {
+          "library": "/tmp/rdk_lidar_latency_20261110/libmotion_runtime_before_control_projection.so",
+          "native_threads": [
+            {
+              "native_tid": 182710,
+              "native_cpu_s": 4.35
+            }
+          ],
+          "user_cpu_s": 8.231615999999999,
+          "system_cpu_s": 1.534781,
+          "wall_s": 12.671689726
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 104,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 1,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      }
+    ],
+    "common_scan_comparison": {
+      "common_scan_count": 97,
+      "by_phase": {
+        "A1": {
+          "p95_ms": 55.45015619999985,
+          "max_ms": 107.306406
+        },
+        "B1": {
+          "p95_ms": 56.72788059999998,
+          "max_ms": 102.029741
+        },
+        "B2": {
+          "p95_ms": 59.48279459999995,
+          "max_ms": 76.549586
+        },
+        "A2": {
+          "p95_ms": 67.32475659999999,
+          "max_ms": 99.523115
+        }
+      }
+    },
+    "native_thread_cpu_mean_reduction_percent": 10.21126760563379,
+    "worker_process_cpu_mean_reduction_percent": 7.4877356054738105,
+    "vision_log": "/tmp/rdk_lidar_latency_20261110/shared_packet_compare_1794265833444668803/vision/20261110_071034_965872_competition/summary.json",
+    "vision_summary": {
+      "mean_fps": 42.56,
+      "min_fps_1s": 30,
+      "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+      "camera_opened": false,
+      "jpu_used": false,
+      "gui_used": false,
+      "errors": []
+    },
+    "fingerprints": {
+      "old_library": "cfdd2d1884f1c4b4faccd55ab006f71734a9f4b0eb30aaae9219a801faa8ed06",
+      "isolated_new_library": "28f5cdd82b03f3bd567d8683a21b4292afe1168a8c192d46aef3e89761137032",
+      "installed_library": "28f5cdd82b03f3bd567d8683a21b4292afe1168a8c192d46aef3e89761137032",
+      "cpp_source": "747335030569876f9b86f2d8b361f3cc571d3883fdf9e8f22f9b263c49edb0f8"
+    },
+    "installed_binary_matches_tested_library": true,
+    "limits": [
+      "Reference pose/gyro time phase unchanged, physical truth and complete real SDK path still unverified",
+      "All selected scans and common 97 scans reported: common-scan radar P95 overlaps; no claim of consistent radar speedup",
+      "A2 Python terminal observation max67.313381ms retained separately from native kernel delivery max8.658912ms",
+      "Earlier joint vision minimum27FPS and 139ms rare wait remain unresolved facts",
+      "XY solver migration awaits human choice; actual SDK validation awaits USB replug"
+    ]
   }
 }
