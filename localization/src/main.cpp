@@ -725,7 +725,7 @@ bool read_relay_frame(const std::string &path,
     return omni::validate_relay_frame(result.data(), result.size());
 }
 
-void write_atomic_json(const std::string &path,
+std::string pose_snapshot_json(std::uint64_t now_ns,
                        const omni::Pose2d &fused,
                        const omni::T265FieldPose &t265,
                        const omni::PlanarEkf &filter,
@@ -753,12 +753,9 @@ void write_atomic_json(const std::string &path,
                        double t265_position_sigma_multiplier,
                        double t265_innovation_m,
                        double encoder_fusion_weight,
-                       const T265MapStatus &t265_map,
-                       omni::AsyncLatestFile *snapshot_writer = nullptr)
+                       const T265MapStatus &t265_map)
 {
-    if (path.empty()) return;
     std::ostringstream file;
-    const std::uint64_t now_ns = monotonic_ns();
     const omni::Pose2d odom_pose = odometry.pose();
     const omni::WheelIncrement &increment = wheel_debug.latest_increment;
     const bool odom_available = wheel_debug.odom_updates > 0;
@@ -979,11 +976,7 @@ void write_atomic_json(const std::string &path,
          << ", \"pose_tx_frames\": " << pose_tx_frames
          << ", \"pose_tx_errors\": " << pose_tx_errors << "}\n"
          << "}\n";
-    if (snapshot_writer) {
-        snapshot_writer->submit(file.str());
-    } else if (!omni::AsyncLatestFile::atomic_write(path, file.str())) {
-        throw std::runtime_error("cannot replace JSON output: " + path);
-    }
+    return file.str();
 }
 
 }  // namespace
@@ -1298,9 +1291,15 @@ int main(int argc, char **argv)
         }
 
         omni::AsyncCsvLog csv_log(options.csv_path);
-        omni::AsyncLatestFile raw_snapshot(options.dynamic_pose_socket.empty() ? "" : options.output_path);
+        // All entry points use the same bounded asynchronous snapshot path.
+        // Keep stdout separate: a slow terminal must not hold up the GUI JSON.
+        omni::AsyncLatestFile raw_snapshot(options.output_path);
+        omni::AsyncLatestFile pose_stdout("POSE stdout",
+            [](const std::string &, const std::string &line) {
+                std::cout << line;
+                return static_cast<bool>(std::cout);
+            });
         std::ostringstream csv;
-        std::uint64_t raw_json_errors = 0;
         if (!options.csv_path.empty()) {
             csv << "timestamp_monotonic_ns,elapsed_s,t265_timestamp_s,"
                    "raw_tx_m,raw_ty_m,raw_tz_m,raw_vx_mps,raw_vy_mps,raw_vz_mps,"
@@ -2303,15 +2302,20 @@ int main(int argc, char **argv)
             const std::uint64_t uart_frames = live_uart_frames.load(std::memory_order_relaxed);
             const std::uint64_t crc_errors = live_crc_errors.load(std::memory_order_relaxed);
             const std::uint64_t sequence_gaps = live_sequence_gaps.load(std::memory_order_relaxed);
-            try {
-                write_atomic_json(options.output_path, fused, latest_t265, filter, odometry,
+            // Capture this Pose's plain values and timestamp. Formatting and
+            // I/O run on the writers, never borrowing the next mutable Pose.
+            const auto snapshot_ns = monotonic_ns();
+            const auto encoder_fusion_weight = config.encoder_fusion_weight;
+            const auto distance_compensation_enabled = config.navigation_distance_compensation_enabled;
+            raw_snapshot.submit([=] {
+                return pose_snapshot_json(snapshot_ns, fused, latest_t265, filter, odometry,
                               wheel_debug, quality,
                               wheel_gate, uart_fresh, wheel_accepted, wheel_rejected,
                               uart_frames, crc_errors, sequence_gaps,
                               pose_tx_frames, pose_tx_errors,
                               navigation_active, navigation_wheel_primary,
                               navigation_distance_valid,
-                              config.navigation_distance_compensation_enabled,
+                              distance_compensation_enabled,
                               active_navigation_code,
                               active_navigation_remaining_mm,
                               active_navigation_heading_cdeg,
@@ -2319,16 +2323,13 @@ int main(int argc, char **argv)
                               t265_position_corrected,
                               active_t265_position_multiplier,
                               innovation_m,
-                              config.encoder_fusion_weight,
-                              t265_map, options.dynamic_pose_socket.empty() ? nullptr : &raw_snapshot);
-            } catch (const std::exception &error) {
-                if (options.dynamic_pose_socket.empty()) throw;
-                if (++raw_json_errors == 1)
-                    std::cerr << "[RAW T265 LOG] " << error.what()
-                              << "; dynamic control/UART continues\n";
-            }
+                              encoder_fusion_weight,
+                              t265_map);
+            });
 
-            std::cout << std::fixed << std::setprecision(3)
+            pose_stdout.submit([=] {
+                std::ostringstream line;
+                line << std::fixed << std::setprecision(3)
                       << "POSE t=" << elapsed
                       << " field=(" << fused.x_m << ',' << fused.y_m << ')'
                       << " yaw=" << std::setprecision(1) << omni::degrees(fused.yaw_rad)
@@ -2341,13 +2342,15 @@ int main(int argc, char **argv)
                               ? (navigation_wheel_primary ? "wheel_primary" : "t265_primary")
                               : "normal")
                       << " ew=" << std::setprecision(2)
-                      << config.encoder_fusion_weight
+                      << encoder_fusion_weight
                       << " wprog=" << std::setprecision(3)
                       << navigation_wheel_progress_m << "m"
                       << " t265pos=" << (t265_position_corrected ? "correct" : "yaw_only")
                       << " x" << std::setprecision(1)
                       << active_t265_position_multiplier
                       << " sigma=" << std::setprecision(3) << filter.position_sigma_m() << "m\n";
+                return line.str();
+            });
         }
 
         if(debug_pipeline_guard)debug_pipeline_guard->stop();
@@ -2359,6 +2362,7 @@ int main(int argc, char **argv)
         stm_status_writer->close();
         csv_log.close();raw_pose_log.close();uart_raw_log.close();
         raw_snapshot.close();
+        pose_stdout.close();
         event_log.write("diagnostic_csv_status", "{\"localization_dropped_rows\":" +
             std::to_string(csv_log.dropped()) + ",\"localization_io_failed\":" +
             (csv_log.failed() ? "true" : "false") + ",\"raw_pose_dropped_rows\":" +
@@ -2366,7 +2370,9 @@ int main(int argc, char **argv)
             (raw_pose_log.failed() ? "true" : "false") + ",\"raw_json_write_errors\":" +
             std::to_string(raw_snapshot.errors()) + ",\"uart_raw_dropped_rows\":"+std::to_string(uart_raw_log.dropped())+
             ",\"uart_raw_io_failed\":"+(uart_raw_log.failed()?"true":"false")+",\"raw_json_coalesced\":" +
-            std::to_string(raw_snapshot.coalesced()) + "}");
+            std::to_string(raw_snapshot.coalesced()) + ",\"pose_stdout_write_errors\":" +
+            std::to_string(pose_stdout.errors()) + ",\"pose_stdout_coalesced\":" +
+            std::to_string(pose_stdout.coalesced()) + "}");
         if (!options.motion_feedback_socket.empty()) {
             const auto &s = motion_feedback_tap->stats(); // UART publisher is joined.
             event_log.write("motion_feedback_tap_status", "{\"eligible_frames\":" +
@@ -2396,7 +2402,7 @@ int main(int argc, char **argv)
                   << " queue_dropped=" << encoder_queue.dropped()
                   << " event_log_io_failed=" << event_log.failed()
                   << " event_log_dropped=" << event_log.dropped() << '\n';
-        return map_startup_failed ? 4 : (raw_json_errors ? 5 : EXIT_SUCCESS);
+        return map_startup_failed ? 4 : EXIT_SUCCESS;
     } catch (const rs2::error &error) {
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();

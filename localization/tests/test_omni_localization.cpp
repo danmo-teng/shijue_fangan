@@ -1152,17 +1152,34 @@ void test_async_latest_snapshot()
     }
     bool formatted = false;
     const auto producer = std::this_thread::get_id();
-    latest.submit("old pending");
-    latest.submit([&] {
+    const auto submitted_at = std::chrono::steady_clock::now();
+    for (int i = 0; i < 1000; ++i) latest.submit("old pending");
+    omni::Pose2d pose;
+    pose.x_m = 1.25;
+    std::uint64_t stamp = 123456789;
+    latest.submit([&, pose, stamp] {
         check(std::this_thread::get_id() != producer, "snapshot formatting runs off the UART producer");
         formatted = true;
-        return std::string("newest");
+        return std::to_string(stamp) + "," + std::to_string(pose.x_m);
     });
-    check(latest.coalesced() == 1, "snapshot producer completes while disk is blocked, bounded latest slot");
+    const auto submit_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - submitted_at).count();
+    pose.x_m = -99.0; stamp = 987654321;
+    check(latest.coalesced() == 1000, "1001 submissions finish while I/O is blocked, keeping one pending snapshot");
     check(!formatted, "blocked SD also defers formatting without blocking the producer");
+    std::string independent_body;
+    omni::AsyncLatestFile independent("other Pose sink",
+        [&](const std::string &, const std::string &body) { independent_body = body; return true; });
+    independent.submit("current JSON while stdout is blocked");
+    independent.close();
+    check(independent_body == "current JSON while stdout is blocked",
+          "separate Pose sinks progress independently of the blocked writer");
     { std::lock_guard<std::mutex> lock(mutex); release = true; }
     ready.notify_one(); latest.close();
-    check(written == std::vector<std::string>({"first", "newest"}), "close preserves the newest pending snapshot");
+    check(written == std::vector<std::string>({"first", "123456789,1.250000"}),
+          "writer preserves submitted Pose and timestamp despite later producer changes");
+    std::cout << "blocked snapshot writer: 1001 submissions in " << submit_us
+              << " us; 1000 coalesced; other sink completed\n";
     omni::AsyncLatestFile failed("fixture", [](const std::string &, const std::string &) { return false; });
     failed.submit("pose"); failed.close();
     check(failed.errors() == 1, "snapshot failure is reported without throwing into control");
