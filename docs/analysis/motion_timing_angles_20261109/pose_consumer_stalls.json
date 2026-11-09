@@ -1,0 +1,1279 @@
+{
+  "190954": {
+    "pose_before_csv_ms": {
+      "p50": 0.035623000030682306,
+      "p95": 0.05916479985899059,
+      "p99": 0.09199628001624656,
+      "max": 0.3996539999207016
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.562267499977679,
+      "p95": 5.6200005499363215,
+      "p99": 5.800670390067353,
+      "max": 751.3377860000219
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 6179,
+        "callback_s": 1066.504869226,
+        "processing_s": 1067.25173926,
+        "previous_processing_s": 1066.500361434,
+        "processing_gap_ms": 751.3778259999526,
+        "callback_gap_ms": 5.118812000091566,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 746.8700340000396,
+        "previous_frame_body_ms": 0.04003999993074103,
+        "csv_to_next_processing_ms": 751.3377860000219,
+        "callbacks_received_during_gap": 150,
+        "nearest_action": [
+          {
+            "action_id": "ce8a7058c3c44de18a26600afbcfaa70:1",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1066.426281903,
+            "terminal_s": 1068.825591297
+          }
+        ]
+      },
+      {
+        "frame": 12259,
+        "callback_s": 1096.966264885,
+        "processing_s": 1097.584536645,
+        "previous_processing_s": 1096.962078524,
+        "processing_gap_ms": 622.4581210001361,
+        "callback_gap_ms": 4.998667000108981,
+        "sdk_capture_gap_ms": 5.010128021240234,
+        "callback_to_processing_ms": 618.2717599999705,
+        "previous_frame_body_ms": 0.03324900012557919,
+        "csv_to_next_processing_ms": 622.4248720000105,
+        "callbacks_received_during_gap": 124,
+        "nearest_action": [
+          {
+            "action_id": "ce8a7058c3c44de18a26600afbcfaa70:4",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -500,
+              "left_mm": 0,
+              "speed_mm_s": 200
+            },
+            "sent_s": 1105.363201611,
+            "terminal_s": 1108.864856176
+          }
+        ]
+      },
+      {
+        "frame": 18291,
+        "callback_s": 1127.187779067,
+        "processing_s": 1127.562624865,
+        "previous_processing_s": 1127.183589277,
+        "processing_gap_ms": 379.03558800007886,
+        "callback_gap_ms": 4.981808000138699,
+        "sdk_capture_gap_ms": 5.009889602661133,
+        "callback_to_processing_ms": 374.84579800002393,
+        "previous_frame_body_ms": 0.055707000001348206,
+        "csv_to_next_processing_ms": 378.9798810000775,
+        "callbacks_received_during_gap": 75,
+        "nearest_action": [
+          {
+            "action_id": "ce8a7058c3c44de18a26600afbcfaa70:7",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 60.0
+            },
+            "sent_s": 1134.585494989,
+            "terminal_s": 1138.143673842
+          }
+        ]
+      },
+      {
+        "frame": 26336,
+        "callback_s": 1167.495220189,
+        "processing_s": 1167.824616266,
+        "previous_processing_s": 1167.49098397,
+        "processing_gap_ms": 333.63229600013256,
+        "callback_gap_ms": 5.052406000004339,
+        "sdk_capture_gap_ms": 5.0106048583984375,
+        "callback_to_processing_ms": 329.39607699995577,
+        "previous_frame_body_ms": 0.03553999999894586,
+        "csv_to_next_processing_ms": 333.5967560001336,
+        "callbacks_received_during_gap": 66,
+        "nearest_action": [
+          {
+            "action_id": "ce8a7058c3c44de18a26600afbcfaa70:10",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -500,
+              "left_mm": 0,
+              "speed_mm_s": 400
+            },
+            "sent_s": 1145.289024755,
+            "terminal_s": 1147.122448782
+          }
+        ]
+      },
+      {
+        "frame": 19298,
+        "callback_s": 1132.233134438,
+        "processing_s": 1132.530783505,
+        "previous_processing_s": 1132.228957479,
+        "processing_gap_ms": 301.8260260000716,
+        "callback_gap_ms": 5.037599999923259,
+        "sdk_capture_gap_ms": 5.009651184082031,
+        "callback_to_processing_ms": 297.64906700006577,
+        "previous_frame_body_ms": 0.03445700008342101,
+        "csv_to_next_processing_ms": 301.79156899998816,
+        "callbacks_received_during_gap": 60,
+        "nearest_action": [
+          {
+            "action_id": "ce8a7058c3c44de18a26600afbcfaa70:7",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 60.0
+            },
+            "sent_s": 1134.585494989,
+            "terminal_s": 1138.143673842
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.001305999940087,
+      "p95": 5.261573399957342,
+      "p99": 5.504507360028581,
+      "max": 17.800508999926024
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010128021240234,
+      "p95": 5.011081695556641,
+      "p99": 5.011320114135742,
+      "max": 5.115985870361328
+    }
+  },
+  "191242": {
+    "pose_before_csv_ms": {
+      "p50": 0.038585000083912746,
+      "p95": 0.09600199996384617,
+      "p99": 0.16947831008337652,
+      "max": 2.4915120000059687
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.626111999868954,
+      "p95": 5.746131000023524,
+      "p99": 7.885677600097545,
+      "max": 811.439380000138
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 36342,
+        "callback_s": 1384.618224063,
+        "processing_s": 1385.425612312,
+        "previous_processing_s": 1384.61413039,
+        "processing_gap_ms": 811.4819220002119,
+        "callback_gap_ms": 5.197990000169739,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 807.3882490000415,
+        "previous_frame_body_ms": 0.042542000073808595,
+        "csv_to_next_processing_ms": 811.439380000138,
+        "callbacks_received_during_gap": 162,
+        "nearest_action": [
+          {
+            "action_id": "b22fe38a17c54b9aa231b7bd8cf1207b:3",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 500,
+              "left_mm": 0,
+              "speed_mm_s": 200
+            },
+            "sent_s": 1382.435140118,
+            "terminal_s": 1385.620157677
+          }
+        ]
+      },
+      {
+        "frame": 6153,
+        "callback_s": 1233.354037449,
+        "processing_s": 1234.105060158,
+        "previous_processing_s": 1233.350280116,
+        "processing_gap_ms": 754.780041999993,
+        "callback_gap_ms": 4.809351000176321,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 751.0227089999262,
+        "previous_frame_body_ms": 0.03779100006795488,
+        "csv_to_next_processing_ms": 754.7422509999251,
+        "callbacks_received_during_gap": 150,
+        "nearest_action": [
+          {
+            "action_id": "b22fe38a17c54b9aa231b7bd8cf1207b:1",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1356.313782664,
+            "terminal_s": 1359.399866168
+          }
+        ]
+      },
+      {
+        "frame": 18226,
+        "callback_s": 1293.844945083,
+        "processing_s": 1294.589652103,
+        "previous_processing_s": 1293.840049213,
+        "processing_gap_ms": 749.6028900000056,
+        "callback_gap_ms": 5.068875000006301,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 744.7070199998507,
+        "previous_frame_body_ms": 0.08229500008383184,
+        "csv_to_next_processing_ms": 749.5205949999217,
+        "callbacks_received_during_gap": 149,
+        "nearest_action": [
+          {
+            "action_id": "b22fe38a17c54b9aa231b7bd8cf1207b:1",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1356.313782664,
+            "terminal_s": 1359.399866168
+          }
+        ]
+      },
+      {
+        "frame": 12188,
+        "callback_s": 1263.591349351,
+        "processing_s": 1264.352577327,
+        "previous_processing_s": 1263.708731278,
+        "processing_gap_ms": 643.8460490001034,
+        "callback_gap_ms": 4.888023999910729,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 761.2279760001002,
+        "previous_frame_body_ms": 0.05612400013887964,
+        "csv_to_next_processing_ms": 643.7899249999646,
+        "callbacks_received_during_gap": 128,
+        "nearest_action": [
+          {
+            "action_id": "b22fe38a17c54b9aa231b7bd8cf1207b:1",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1356.313782664,
+            "terminal_s": 1359.399866168
+          }
+        ]
+      },
+      {
+        "frame": 30291,
+        "callback_s": 1354.298572293,
+        "processing_s": 1355.054958057,
+        "previous_processing_s": 1354.430410965,
+        "processing_gap_ms": 624.5470920000571,
+        "callback_gap_ms": 5.020585000011124,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 756.3857640000151,
+        "previous_frame_body_ms": 0.04233399999975518,
+        "csv_to_next_processing_ms": 624.5047580000573,
+        "callbacks_received_during_gap": 124,
+        "nearest_action": [
+          {
+            "action_id": "b22fe38a17c54b9aa231b7bd8cf1207b:1",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1356.313782664,
+            "terminal_s": 1359.399866168
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.0029369999720075,
+      "p95": 5.366287500010003,
+      "p99": 7.196421500157146,
+      "max": 94.05475099993055
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010843276977539,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 5.163908004760742
+    }
+  },
+  "191910": {
+    "pose_before_csv_ms": {
+      "p50": 0.24721299996599555,
+      "p95": 0.6582550001439812,
+      "p99": 1.6626882199079691,
+      "max": 8.868996000046536
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.587284999956864,
+      "p95": 5.991083100138894,
+      "p99": 9.062117929936457,
+      "max": 1544.9291360000643
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 12559,
+        "callback_s": 1653.256817732,
+        "processing_s": 1654.79702659,
+        "previous_processing_s": 1653.251871159,
+        "processing_gap_ms": 1545.155431000012,
+        "callback_gap_ms": 5.345161999912307,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 1540.2088580001418,
+        "previous_frame_body_ms": 0.22629499994764046,
+        "csv_to_next_processing_ms": 1544.9291360000643,
+        "callbacks_received_during_gap": 255,
+        "nearest_action": [
+          {
+            "action_id": "0581f3f679ed4366ae02166b435690b1:7",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 700,
+              "left_mm": 0,
+              "speed_mm_s": 700
+            },
+            "sent_s": 1660.211450228,
+            "terminal_s": 1661.743447537
+          }
+        ]
+      },
+      {
+        "frame": 920,
+        "callback_s": 1594.938303808,
+        "processing_s": 1597.160706493,
+        "previous_processing_s": 1595.678844096,
+        "processing_gap_ms": 1481.8623969999862,
+        "callback_gap_ms": 5.013344999952096,
+        "sdk_capture_gap_ms": 5.009889602661133,
+        "callback_to_processing_ms": 2222.4026849999063,
+        "previous_frame_body_ms": 0.6118860001151916,
+        "csv_to_next_processing_ms": 1481.250510999871,
+        "callbacks_received_during_gap": 107,
+        "nearest_action": [
+          {
+            "action_id": "0581f3f679ed4366ae02166b435690b1:1",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 500,
+              "left_mm": 0,
+              "speed_mm_s": 400
+            },
+            "sent_s": 1615.485883306,
+            "terminal_s": 1617.203227351
+          }
+        ]
+      },
+      {
+        "frame": 6255,
+        "callback_s": 1621.669824578,
+        "processing_s": 1622.861623633,
+        "previous_processing_s": 1621.670106291,
+        "processing_gap_ms": 1191.5173419999974,
+        "callback_gap_ms": 4.992459000050076,
+        "sdk_capture_gap_ms": 5.011320114135742,
+        "callback_to_processing_ms": 1191.7990549998194,
+        "previous_frame_body_ms": 0.25788000016291335,
+        "csv_to_next_processing_ms": 1191.2594619998345,
+        "callbacks_received_during_gap": 237,
+        "nearest_action": [
+          {
+            "action_id": "0581f3f679ed4366ae02166b435690b1:3",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 0,
+              "left_mm": 400,
+              "speed_mm_s": 400
+            },
+            "sent_s": 1619.559853698,
+            "terminal_s": 1621.483327424
+          }
+        ]
+      },
+      {
+        "frame": 856,
+        "callback_s": 1594.61771931,
+        "processing_s": 1595.629179199,
+        "previous_processing_s": 1594.613729568,
+        "processing_gap_ms": 1015.4496309999104,
+        "callback_gap_ms": 4.975510999884136,
+        "sdk_capture_gap_ms": 5.0106048583984375,
+        "callback_to_processing_ms": 1011.4598889999797,
+        "previous_frame_body_ms": 0.36725699987982807,
+        "csv_to_next_processing_ms": 1015.0823740000305,
+        "callbacks_received_during_gap": 202,
+        "nearest_action": [
+          {
+            "action_id": "0581f3f679ed4366ae02166b435690b1:1",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 500,
+              "left_mm": 0,
+              "speed_mm_s": 400
+            },
+            "sent_s": 1615.485883306,
+            "terminal_s": 1617.203227351
+          }
+        ]
+      },
+      {
+        "frame": 19777,
+        "callback_s": 1689.423097884,
+        "processing_s": 1690.351515584,
+        "previous_processing_s": 1689.541132741,
+        "processing_gap_ms": 810.3828430000704,
+        "callback_gap_ms": 4.406847000154812,
+        "sdk_capture_gap_ms": 5.009889602661133,
+        "callback_to_processing_ms": 928.4176999999545,
+        "previous_frame_body_ms": 0.2729210000325111,
+        "csv_to_next_processing_ms": 810.1099220000378,
+        "callbacks_received_during_gap": 162,
+        "nearest_action": [
+          {
+            "action_id": "0581f3f679ed4366ae02166b435690b1:10",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -350,
+              "left_mm": -350,
+              "speed_mm_s": 500
+            },
+            "sent_s": 1666.942277736,
+            "terminal_s": 1668.643602071
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.004059999919264,
+      "p95": 6.035294349987908,
+      "p99": 9.036572819977673,
+      "max": 951.9746399998894
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010843276977539,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 952.0070552825928
+    }
+  },
+  "192105": {
+    "pose_before_csv_ms": {
+      "p50": 0.24279499984913855,
+      "p95": 0.6841861000111745,
+      "p99": 1.3883895598473848,
+      "max": 10.292702000015197
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.5799184999850695,
+      "p95": 5.815501749964368,
+      "p99": 8.463481550008911,
+      "max": 1298.849705000066
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 13144,
+        "callback_s": 1771.42965867,
+        "processing_s": 1772.724299464,
+        "previous_processing_s": 1771.425254341,
+        "processing_gap_ms": 1299.0451230000417,
+        "callback_gap_ms": 5.257128000039302,
+        "sdk_capture_gap_ms": 5.011320114135742,
+        "callback_to_processing_ms": 1294.6407940000881,
+        "previous_frame_body_ms": 0.19541799997568887,
+        "csv_to_next_processing_ms": 1298.849705000066,
+        "callbacks_received_during_gap": 255,
+        "nearest_action": [
+          {
+            "action_id": "dbc3bd4adeaa4f7fb52c1e1d40b0add2:5",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 500,
+              "left_mm": 0,
+              "speed_mm_s": 300
+            },
+            "sent_s": 1770.456533293,
+            "terminal_s": 1772.623658065
+          }
+        ]
+      },
+      {
+        "frame": 6836,
+        "callback_s": 1739.822620958,
+        "processing_s": 1741.039276836,
+        "previous_processing_s": 1739.818433999,
+        "processing_gap_ms": 1220.8428369999638,
+        "callback_gap_ms": 4.868549000093481,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 1216.6558779999832,
+        "previous_frame_body_ms": 0.33867000001919223,
+        "csv_to_next_processing_ms": 1220.5041669999446,
+        "callbacks_received_during_gap": 243,
+        "nearest_action": [
+          {
+            "action_id": "dbc3bd4adeaa4f7fb52c1e1d40b0add2:1",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 500,
+              "left_mm": 0,
+              "speed_mm_s": 300
+            },
+            "sent_s": 1743.891399033,
+            "terminal_s": 1746.14365998
+          }
+        ]
+      },
+      {
+        "frame": 19311,
+        "callback_s": 1802.329890083,
+        "processing_s": 1802.980603515,
+        "previous_processing_s": 1802.32578647,
+        "processing_gap_ms": 654.8170450000725,
+        "callback_gap_ms": 5.162578999943435,
+        "sdk_capture_gap_ms": 5.010366439819336,
+        "callback_to_processing_ms": 650.713431999975,
+        "previous_frame_body_ms": 0.22379300003194658,
+        "csv_to_next_processing_ms": 654.5932520000406,
+        "callbacks_received_during_gap": 130,
+        "nearest_action": [
+          {
+            "action_id": "dbc3bd4adeaa4f7fb52c1e1d40b0add2:8",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -500,
+              "left_mm": 0,
+              "speed_mm_s": 300
+            },
+            "sent_s": 1799.32079486,
+            "terminal_s": 1801.683627795
+          }
+        ]
+      },
+      {
+        "frame": 12119,
+        "callback_s": 1766.293636054,
+        "processing_s": 1766.811198021,
+        "previous_processing_s": 1766.289314308,
+        "processing_gap_ms": 521.8837130000793,
+        "callback_gap_ms": 5.024293999895235,
+        "sdk_capture_gap_ms": 5.009651184082031,
+        "callback_to_processing_ms": 517.5619670001197,
+        "previous_frame_body_ms": 0.20887599998786754,
+        "csv_to_next_processing_ms": 521.6748370000914,
+        "callbacks_received_during_gap": 104,
+        "nearest_action": [
+          {
+            "action_id": "dbc3bd4adeaa4f7fb52c1e1d40b0add2:4",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -500,
+              "left_mm": 0,
+              "speed_mm_s": 300
+            },
+            "sent_s": 1767.353563276,
+            "terminal_s": 1769.983645455
+          }
+        ]
+      },
+      {
+        "frame": 18298,
+        "callback_s": 1797.253978968,
+        "processing_s": 1797.713000698,
+        "previous_processing_s": 1797.249992021,
+        "processing_gap_ms": 463.00867700006165,
+        "callback_gap_ms": 4.948995999939143,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 459.02173000013136,
+        "previous_frame_body_ms": 0.27675199999066535,
+        "csv_to_next_processing_ms": 462.731925000071,
+        "callbacks_received_during_gap": 92,
+        "nearest_action": [
+          {
+            "action_id": "dbc3bd4adeaa4f7fb52c1e1d40b0add2:8",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -500,
+              "left_mm": 0,
+              "speed_mm_s": 300
+            },
+            "sent_s": 1799.32079486,
+            "terminal_s": 1801.683627795
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.004780499916706,
+      "p95": 5.6724405998579615,
+      "p99": 8.264695240011404,
+      "max": 55.08734499994716
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010843276977539,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 55.11808395385742
+    }
+  },
+  "192329": {
+    "pose_before_csv_ms": {
+      "p50": 0.2517919999718288,
+      "p95": 0.8047757498843566,
+      "p99": 1.820976650026298,
+      "max": 10.036588000048141
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.591937999975926,
+      "p95": 5.842874399922947,
+      "p99": 8.912718679903262,
+      "max": 1558.332061000101
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 6799,
+        "callback_s": 1882.944786288,
+        "processing_s": 1884.49868416,
+        "previous_processing_s": 1882.939979014,
+        "processing_gap_ms": 1558.7051459999657,
+        "callback_gap_ms": 5.366610000010041,
+        "sdk_capture_gap_ms": 5.011320114135742,
+        "callback_to_processing_ms": 1553.8978720001069,
+        "previous_frame_body_ms": 0.37308499986465904,
+        "csv_to_next_processing_ms": 1558.332061000101,
+        "callbacks_received_during_gap": 255,
+        "nearest_action": [
+          {
+            "action_id": "a9dd8c44c59f45e9a988fb6f62028896:4",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 0,
+              "left_mm": -300,
+              "speed_mm_s": 400
+            },
+            "sent_s": 1881.452270534,
+            "terminal_s": 1882.823439361
+          }
+        ]
+      },
+      {
+        "frame": 13149,
+        "callback_s": 1914.761549148,
+        "processing_s": 1916.239775693,
+        "previous_processing_s": 1914.893007145,
+        "processing_gap_ms": 1346.768548,
+        "callback_gap_ms": 3.5193480000543786,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 1478.2265449998704,
+        "previous_frame_body_ms": 0.30508500003634254,
+        "csv_to_next_processing_ms": 1346.4634629999637,
+        "callbacks_received_during_gap": 228,
+        "nearest_action": [
+          {
+            "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 360.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1897.203541855,
+            "terminal_s": 1903.003267716
+          }
+        ]
+      },
+      {
+        "frame": 19324,
+        "callback_s": 1945.701461085,
+        "processing_s": 1946.518815131,
+        "previous_processing_s": 1945.696723444,
+        "processing_gap_ms": 822.091687000011,
+        "callback_gap_ms": 5.00664199989842,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 817.3540460002187,
+        "previous_frame_body_ms": 0.22350099993673211,
+        "csv_to_next_processing_ms": 821.8681860000743,
+        "callbacks_received_during_gap": 164,
+        "nearest_action": [
+          {
+            "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 360.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1897.203541855,
+            "terminal_s": 1903.003267716
+          }
+        ]
+      },
+      {
+        "frame": 18308,
+        "callback_s": 1940.610790284,
+        "processing_s": 1941.315154516,
+        "previous_processing_s": 1940.688781058,
+        "processing_gap_ms": 626.3734579999891,
+        "callback_gap_ms": 4.309556999942288,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 704.364231999989,
+        "previous_frame_body_ms": 0.2846260001660994,
+        "csv_to_next_processing_ms": 626.088831999823,
+        "callbacks_received_during_gap": 125,
+        "nearest_action": [
+          {
+            "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 360.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1897.203541855,
+            "terminal_s": 1903.003267716
+          }
+        ]
+      },
+      {
+        "frame": 12015,
+        "callback_s": 1909.079472722,
+        "processing_s": 1910.08799232,
+        "previous_processing_s": 1909.557377832,
+        "processing_gap_ms": 530.6144880000829,
+        "callback_gap_ms": 2.2351770001023397,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 1008.5195980000208,
+        "previous_frame_body_ms": 0.35408500002631627,
+        "csv_to_next_processing_ms": 530.2604030000566,
+        "callbacks_received_during_gap": 107,
+        "nearest_action": [
+          {
+            "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 360.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 1897.203541855,
+            "terminal_s": 1903.003267716
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.002711000088311,
+      "p95": 5.785522500218576,
+      "p99": 8.545146050016708,
+      "max": 285.77322500018454
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010843276977539,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 285.60519218444824
+    }
+  },
+  "192842": {
+    "pose_before_csv_ms": {
+      "p50": 0.24550299986003665,
+      "p95": 0.7679955498588241,
+      "p99": 1.9560337499251375,
+      "max": 11.752011999760725
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.593284000293352,
+      "p95": 6.080889399936495,
+      "p99": 9.421845139904688,
+      "max": 1282.1550769999703
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 6146,
+        "callback_s": 2194.924378027,
+        "processing_s": 2196.806171404,
+        "previous_processing_s": 2195.523750491,
+        "processing_gap_ms": 1282.4209129998962,
+        "callback_gap_ms": 4.995716999928845,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 1881.7933770001218,
+        "previous_frame_body_ms": 0.2658359999259119,
+        "csv_to_next_processing_ms": 1282.1550769999703,
+        "callbacks_received_during_gap": 135,
+        "nearest_action": [
+          {
+            "action_id": "997d50393e984145a9a94c3ff57035c0:3",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 0,
+              "left_mm": 300,
+              "speed_mm_s": 400
+            },
+            "sent_s": 2192.843560461,
+            "terminal_s": 2194.443447889
+          }
+        ]
+      },
+      {
+        "frame": 18522,
+        "callback_s": 2256.933139764,
+        "processing_s": 2257.861306986,
+        "previous_processing_s": 2256.962622985,
+        "processing_gap_ms": 898.684000999765,
+        "callback_gap_ms": 4.883459999746265,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 928.1672219999564,
+        "previous_frame_body_ms": 1.1217599999326922,
+        "csv_to_next_processing_ms": 897.5622409998323,
+        "callbacks_received_during_gap": 180,
+        "nearest_action": [
+          {
+            "action_id": "997d50393e984145a9a94c3ff57035c0:13",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 600,
+              "left_mm": 0,
+              "speed_mm_s": 200
+            },
+            "sent_s": 2262.330431336,
+            "terminal_s": 2266.283331303
+          }
+        ]
+      },
+      {
+        "frame": 20573,
+        "callback_s": 2267.209447635,
+        "processing_s": 2268.094316467,
+        "previous_processing_s": 2267.205694644,
+        "processing_gap_ms": 888.6218230004488,
+        "callback_gap_ms": 4.848208999646886,
+        "sdk_capture_gap_ms": 5.009889602661133,
+        "callback_to_processing_ms": 884.868832000393,
+        "previous_frame_body_ms": 0.27396000041335355,
+        "csv_to_next_processing_ms": 888.3478630000354,
+        "callbacks_received_during_gap": 177,
+        "nearest_action": [
+          {
+            "action_id": "997d50393e984145a9a94c3ff57035c0:14",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -600,
+              "left_mm": 0,
+              "speed_mm_s": 200
+            },
+            "sent_s": 2267.081895981,
+            "terminal_s": 2273.803215801
+          }
+        ]
+      },
+      {
+        "frame": 12385,
+        "callback_s": 2226.184341562,
+        "processing_s": 2227.047537057,
+        "previous_processing_s": 2226.179921104,
+        "processing_gap_ms": 867.6159530000405,
+        "callback_gap_ms": 5.055006000020512,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 863.1954950001273,
+        "previous_frame_body_ms": 1.2550950000331795,
+        "csv_to_next_processing_ms": 866.3608580000073,
+        "callbacks_received_during_gap": 173,
+        "nearest_action": [
+          {
+            "action_id": "997d50393e984145a9a94c3ff57035c0:8",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 0,
+              "left_mm": 300,
+              "speed_mm_s": 400
+            },
+            "sent_s": 2224.95660641,
+            "terminal_s": 2226.444021408
+          }
+        ]
+      },
+      {
+        "frame": 26636,
+        "callback_s": 2297.58786894,
+        "processing_s": 2298.357860266,
+        "previous_processing_s": 2297.58333382,
+        "processing_gap_ms": 774.5264459999817,
+        "callback_gap_ms": 4.959040000358073,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 769.9913259998539,
+        "previous_frame_body_ms": 0.24212700009229593,
+        "csv_to_next_processing_ms": 774.2843189998894,
+        "callbacks_received_during_gap": 154,
+        "nearest_action": [
+          {
+            "action_id": "997d50393e984145a9a94c3ff57035c0:14",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -600,
+              "left_mm": 0,
+              "speed_mm_s": 200
+            },
+            "sent_s": 2267.081895981,
+            "terminal_s": 2273.803215801
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.004675000009229,
+      "p95": 6.072297450123187,
+      "p99": 9.27533487004438,
+      "max": 603.2791940001516
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010366439819336,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 611.2532615661621
+    }
+  },
+  "193147": {
+    "pose_before_csv_ms": {
+      "p50": 0.24566499996581115,
+      "p95": 0.6646660000342308,
+      "p99": 1.454353050166901,
+      "max": 13.456461999794556
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.587449000155175,
+      "p95": 6.06074739998803,
+      "p99": 9.365359520234051,
+      "max": 2302.6293329999135
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 24218,
+        "callback_s": 2469.131172501,
+        "processing_s": 2471.429410435,
+        "previous_processing_s": 2469.126563311,
+        "processing_gap_ms": 2302.8471239999817,
+        "callback_gap_ms": 4.964188000030845,
+        "sdk_capture_gap_ms": 5.0106048583984375,
+        "callback_to_processing_ms": 2298.237934000099,
+        "previous_frame_body_ms": 0.21779100006824592,
+        "csv_to_next_processing_ms": 2302.6293329999135,
+        "callbacks_received_during_gap": 255,
+        "nearest_action": [
+          {
+            "action_id": "32af95d7d37149e7ae3694522b398ec1:8",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": -180.0,
+              "rate_deg_s": 60.0
+            },
+            "sent_s": 2440.160850136,
+            "terminal_s": 2443.142514066
+          }
+        ]
+      },
+      {
+        "frame": 11309,
+        "callback_s": 2404.451079604,
+        "processing_s": 2406.184962358,
+        "previous_processing_s": 2404.449907513,
+        "processing_gap_ms": 1735.0548449999224,
+        "callback_gap_ms": 1.3241329997981666,
+        "sdk_capture_gap_ms": 5.010366439819336,
+        "callback_to_processing_ms": 1733.8827540002058,
+        "previous_frame_body_ms": 0.37021099979028804,
+        "csv_to_next_processing_ms": 1734.684634000132,
+        "callbacks_received_during_gap": 255,
+        "nearest_action": [
+          {
+            "action_id": "32af95d7d37149e7ae3694522b398ec1:3",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 500,
+              "left_mm": 0,
+              "speed_mm_s": 300
+            },
+            "sent_s": 2409.765961244,
+            "terminal_s": 2411.963005887
+          }
+        ]
+      },
+      {
+        "frame": 17697,
+        "callback_s": 2436.457958376,
+        "processing_s": 2438.236153157,
+        "previous_processing_s": 2436.565177384,
+        "processing_gap_ms": 1670.9757730000092,
+        "callback_gap_ms": 3.153194999867992,
+        "sdk_capture_gap_ms": 5.010128021240234,
+        "callback_to_processing_ms": 1778.194780999911,
+        "previous_frame_body_ms": 0.23720699982732185,
+        "csv_to_next_processing_ms": 1670.738566000182,
+        "callbacks_received_during_gap": 233,
+        "nearest_action": [
+          {
+            "action_id": "32af95d7d37149e7ae3694522b398ec1:7",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 60.0
+            },
+            "sent_s": 2434.512662196,
+            "terminal_s": 2438.262515713
+          }
+        ]
+      },
+      {
+        "frame": 17796,
+        "callback_s": 2436.954329165,
+        "processing_s": 2439.425937586,
+        "previous_processing_s": 2438.285776365,
+        "processing_gap_ms": 1140.1612210001986,
+        "callback_gap_ms": 4.931271000259585,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 2471.608420999928,
+        "previous_frame_body_ms": 1.5708270002505742,
+        "csv_to_next_processing_ms": 1138.590393999948,
+        "callbacks_received_during_gap": 89,
+        "nearest_action": [
+          {
+            "action_id": "32af95d7d37149e7ae3694522b398ec1:7",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 180.0,
+              "rate_deg_s": 60.0
+            },
+            "sent_s": 2434.512662196,
+            "terminal_s": 2438.262515713
+          }
+        ]
+      },
+      {
+        "frame": 7165,
+        "callback_s": 2383.687428918,
+        "processing_s": 2384.639819452,
+        "previous_processing_s": 2383.683640809,
+        "processing_gap_ms": 956.1786430003849,
+        "callback_gap_ms": 4.831115999877511,
+        "sdk_capture_gap_ms": 5.009651184082031,
+        "callback_to_processing_ms": 952.3905340001875,
+        "previous_frame_body_ms": 0.23383400002785493,
+        "csv_to_next_processing_ms": 955.944809000357,
+        "callbacks_received_during_gap": 191,
+        "nearest_action": [
+          {
+            "action_id": "32af95d7d37149e7ae3694522b398ec1:1",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 400,
+              "left_mm": 0,
+              "speed_mm_s": 400
+            },
+            "sent_s": 2388.919493942,
+            "terminal_s": 2390.383153198
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.002479999802745,
+      "p95": 6.091343800108005,
+      "p99": 9.430840120021458,
+      "max": 1026.9649800002298
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010843276977539,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 1027.1809101104736
+    }
+  },
+  "194149": {
+    "pose_before_csv_ms": {
+      "p50": 0.2558719997978187,
+      "p95": 1.0012082498178643,
+      "p99": 2.3536887998943725,
+      "max": 11.386471999685455
+    },
+    "csv_to_next_processing_ms": {
+      "p50": 4.601035000177944,
+      "p95": 6.586578200131037,
+      "p99": 10.183138279908235,
+      "max": 1077.947525000127
+    },
+    "top_processing_gaps": [
+      {
+        "frame": 7036,
+        "callback_s": 2984.542668021,
+        "processing_s": 2986.022735642,
+        "previous_processing_s": 2984.944562994,
+        "processing_gap_ms": 1078.1726479999634,
+        "callback_gap_ms": 6.271306999678927,
+        "sdk_capture_gap_ms": 5.009651184082031,
+        "callback_to_processing_ms": 1480.0676210002166,
+        "previous_frame_body_ms": 0.2251229998364579,
+        "csv_to_next_processing_ms": 1077.947525000127,
+        "callbacks_received_during_gap": 174,
+        "nearest_action": [
+          {
+            "action_id": "b2d70b9d4a994f54a45bae832cfef421:9",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 50,
+              "left_mm": 0,
+              "speed_mm_s": 120
+            },
+            "sent_s": 2986.549664103,
+            "terminal_s": 2990.453743086
+          }
+        ]
+      },
+      {
+        "frame": 14252,
+        "callback_s": 3020.695374848,
+        "processing_s": 3021.704841456,
+        "previous_processing_s": 3020.690421107,
+        "processing_gap_ms": 1014.42034899992,
+        "callback_gap_ms": 5.144363999988855,
+        "sdk_capture_gap_ms": 5.010843276977539,
+        "callback_to_processing_ms": 1009.4666079999115,
+        "previous_frame_body_ms": 0.20716400013043312,
+        "csv_to_next_processing_ms": 1014.2131849997895,
+        "callbacks_received_during_gap": 202,
+        "nearest_action": [
+          {
+            "action_id": "b2d70b9d4a994f54a45bae832cfef421:17",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": -400,
+              "left_mm": 0,
+              "speed_mm_s": 700
+            },
+            "sent_s": 3020.444864075,
+            "terminal_s": 3021.673141196
+          }
+        ]
+      },
+      {
+        "frame": 6012,
+        "callback_s": 2979.410901012,
+        "processing_s": 2980.327401402,
+        "previous_processing_s": 2979.409022824,
+        "processing_gap_ms": 918.378577999647,
+        "callback_gap_ms": 4.996319999918342,
+        "sdk_capture_gap_ms": 5.011081695556641,
+        "callback_to_processing_ms": 916.5003899997828,
+        "previous_frame_body_ms": 0.7750749996375816,
+        "csv_to_next_processing_ms": 917.6035030000094,
+        "callbacks_received_during_gap": 183,
+        "nearest_action": [
+          {
+            "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": -90.0,
+              "rate_deg_s": 120.0
+            },
+            "sent_s": 2977.092169285,
+            "terminal_s": 2978.733970178
+          }
+        ]
+      },
+      {
+        "frame": 12232,
+        "callback_s": 3010.574447827,
+        "processing_s": 3011.427228429,
+        "previous_processing_s": 3010.570455077,
+        "processing_gap_ms": 856.773351999891,
+        "callback_gap_ms": 5.03694799999721,
+        "sdk_capture_gap_ms": 5.010128021240234,
+        "callback_to_processing_ms": 852.7806020001663,
+        "previous_frame_body_ms": 0.24058100007096073,
+        "csv_to_next_processing_ms": 856.5327709998201,
+        "callbacks_received_during_gap": 171,
+        "nearest_action": [
+          {
+            "action_id": "b2d70b9d4a994f54a45bae832cfef421:12",
+            "name": "move_body",
+            "parameters": {
+              "forward_mm": 0,
+              "left_mm": 50,
+              "speed_mm_s": 200
+            },
+            "sent_s": 3012.627706106,
+            "terminal_s": 3013.31341955
+          }
+        ]
+      },
+      {
+        "frame": 19367,
+        "callback_s": 3046.322598282,
+        "processing_s": 3047.12061022,
+        "previous_processing_s": 3046.31893611,
+        "processing_gap_ms": 801.6741100000218,
+        "callback_gap_ms": 4.624829000022146,
+        "sdk_capture_gap_ms": 5.009889602661133,
+        "callback_to_processing_ms": 798.0119379999451,
+        "previous_frame_body_ms": 0.2937050003311015,
+        "csv_to_next_processing_ms": 801.3804049996907,
+        "callbacks_received_during_gap": 160,
+        "nearest_action": [
+          {
+            "action_id": "b2d70b9d4a994f54a45bae832cfef421:19",
+            "name": "turn_ccw",
+            "parameters": {
+              "angle_ccw_deg": 10.0,
+              "rate_deg_s": 30.0
+            },
+            "sent_s": 3042.688497531,
+            "terminal_s": 3047.092611452
+          }
+        ]
+      }
+    ],
+    "callback_queue_drops_final": 0.0,
+    "callback_gap_ms": {
+      "p50": 5.002159000014217,
+      "p95": 6.444130999852859,
+      "p99": 9.977924659951883,
+      "max": 210.3192230001696
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010128021240234,
+      "p95": 5.011081695556641,
+      "p99": 5.011320114135742,
+      "max": 210.4637622833252
+    }
+  },
+  "191736": {
+    "pose_before_csv_ms": {
+      "p50": 0.26479849998395366,
+      "p95": 1.1825995500203128,
+      "p99": 2.3361983199788487,
+      "max": 11.262465000072552
+    },
+    "callback_gap_ms": {
+      "p50": 5.00318099989272,
+      "p95": 6.3900955000463,
+      "p99": 9.80944004000776,
+      "max": 21.87031699986619
+    },
+    "sdk_capture_gap_ms": {
+      "p50": 5.010843276977539,
+      "p95": 5.011320114135742,
+      "p99": 5.011320114135742,
+      "max": 5.128145217895508
+    },
+    "callback_queue_drops_final": 0.0
+  }
+}

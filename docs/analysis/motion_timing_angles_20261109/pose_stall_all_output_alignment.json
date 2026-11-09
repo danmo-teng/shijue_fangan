@@ -1,0 +1,56 @@
+{
+  "190954": {
+    "processing_gaps_over_100ms": 9,
+    "matched_previous_csv_frame": 9,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 9,
+    "max_stdout_elapsed_difference_ms": 0.49417800001094747
+  },
+  "191242": {
+    "processing_gaps_over_100ms": 20,
+    "matched_previous_csv_frame": 20,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 20,
+    "max_stdout_elapsed_difference_ms": 0.4764819999820702
+  },
+  "191736": {
+    "processing_gaps_over_100ms": 6,
+    "matched_previous_csv_frame": 6,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 6,
+    "max_stdout_elapsed_difference_ms": 0.4573350000001142
+  },
+  "191910": {
+    "processing_gaps_over_100ms": 14,
+    "matched_previous_csv_frame": 14,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 14,
+    "max_stdout_elapsed_difference_ms": 0.3955530000041563
+  },
+  "192105": {
+    "processing_gaps_over_100ms": 11,
+    "matched_previous_csv_frame": 11,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 11,
+    "max_stdout_elapsed_difference_ms": 0.4891669999995685
+  },
+  "192329": {
+    "processing_gaps_over_100ms": 11,
+    "matched_previous_csv_frame": 11,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 11,
+    "max_stdout_elapsed_difference_ms": 0.4633889999894336
+  },
+  "192842": {
+    "processing_gaps_over_100ms": 20,
+    "matched_previous_csv_frame": 20,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 20,
+    "max_stdout_elapsed_difference_ms": 0.4661319999996749
+  },
+  "193147": {
+    "processing_gaps_over_100ms": 14,
+    "matched_previous_csv_frame": 14,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 14,
+    "max_stdout_elapsed_difference_ms": 0.4912759999982086
+  },
+  "194149": {
+    "processing_gaps_over_100ms": 14,
+    "matched_previous_csv_frame": 14,
+    "preceded_by_stdout_output_matching_elapsed_to_0_51ms": 14,
+    "max_stdout_elapsed_difference_ms": 0.47644999999363336
+  }
+}

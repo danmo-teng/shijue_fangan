@@ -20,6 +20,30 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
+## 最新补充：MOTION-TIMING-20261109（只读分析，不是固件修改命令）
+
+本轮依用户要求继续以MotionDebug作受控响应/到角依据、两场正式作联合负载参考。完整数据和表图已提交本仓库以下固定路径；没有修改或烧录F405，没有新增运动/测试代码/ISR/时间门或握手要求。
+
+```text
+深化分析：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_timing_angles_20261109/ANALYSIS.md
+全部34个转动（ID、SEQ、请求、实际yaw/SDK、过冲、起止、FAULT）：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_timing_angles_20261109/turn_angles.csv
+
+MotionDebug实际ac61480/dirty1、service1；正式实际9434608/dirty1、service2，不用新main代替实跑。
+32转动DONE按主yaw终点基本±1°，没有独立地面真值；4次+90再4次-90残余主yaw+3.312°、SDK+3.518°。
++10°@30耗4.404秒，曾过冲3.848°；两个+360分别停356.715/358.995°并报MOTOR5，内部失败子因未记录，不能说已查明。
+请先对照自己当前MotionDebug主行程速率包络、低速输出/助推与修角收敛，只提出局部最小方案及影响，由人决定。
+不要据此放宽容差、删除FAULT或新增诊断/遥测/ISR/测试代码，不要回退/重复正式已更新的开局、FINE和安全区锁角。
+
+上位机另查出测试Pose消费0.75～2.47秒长尾，119次>100ms处理间隙均紧接20Hz输出；正式Pose消费P95约2～3ms。
+旧报告把映射采样端点到接收的时间误标UART RX，已更正：192842真实UART RX→被动接收P95为4.09ms，非6.44ms。
+正常轮RX→SDK API P95约10ms，其中等gyro中位约5ms；没有证据说明SDK正常注入本身积压几秒。
+正式雷达参考→结果P95约102/130ms；实际正式0x16逐包送达延迟未记录，不能用被动接收端宣称已验收。
+```
+
+本轮已读取F405当前固定入口（文件blob54ad68124628fc1f2fc361d82bec4dd342850b61），其中已记录b980c6a后轮纠偏、37b4c00开局/末段及08559cd固定gyro安全区航向的源码更新。这里不把这些更新写成本批已烧录；旧分析只作证据，不恢复为新实施授权。原规则、人类知情/拒绝/选择权保持，RDK窗口对固件只读。
+
 ## 当前可复制提示词：HANDOFF-20261109（操作说明＋联合分析）
 
 用户要求将当前交接提示词放在本固定入口，不再依赖聊天中的临时文本。以下整段可直接交给F405负责人/AI阅读；它是阅读与方案审查任务，不是新增固件功能授权。
@@ -40,6 +64,9 @@ RDK下载目录副本：/home/sunrise/下载/RDK_开机自启与按键操作说�
 此前两场轨迹和97个MotionDebug动作的联合分析已完成：
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/README.md
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/ANALYSIS.md
+
+后续延迟分层、控制时间标签更正、Pose消费长尾及34转动到角深化：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_timing_angles_20261109/ANALYSIS.md
 
 该批实际F405为9434608/dirty1、NormalRun/TASK、921600，不能用新main或expected代替实跑身份。
 先核对自己当前main/dirty改动，已做过的后轮死区、末段或送物航向修改不要照旧报告重复实施、回退。

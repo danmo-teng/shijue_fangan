@@ -4,6 +4,7 @@
 
 阅读入口：
 
+- [后续延迟/到角深化及更正](../motion_timing_angles_20261109/ANALYSIS.md)：34转动、119次测试输出尾段停顿、控制时间作用域更正；旧数据不是性能先后对比。
 - [完整分析及推荐取舍](ANALYSIS.md)：响应/链路延迟、有效轮臂、到位慢调、开局偏移、送物航向、来源降级和雷达长尾。
 - [机器可读证据](evidence_summary.json)：两场实际身份/token、逐段统计、来源切换及97动作汇总。
 - [97个已发MotionDebug动作](motion_actions.csv)：ID、SEQ、请求、起止、DONE/FAULT及回执；不是独立地面真值。

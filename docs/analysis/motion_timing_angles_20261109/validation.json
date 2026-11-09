@@ -1,0 +1,16 @@
+{
+  "turn_rows": 34,
+  "done": 32,
+  "faults": 2,
+  "all_motion_actions": 97,
+  "pose_consumer_long_gaps": 119,
+  "gaps_preceded_by_20hz_output": 119,
+  "original_file_hashes_matched": 77,
+  "original_hashed_bytes": 317466824,
+  "source_git_blobs_matched": 8,
+  "derived_json_and_relative_links_valid": true,
+  "figures_visually_reviewed": 3,
+  "runtime_code_tests_run": false,
+  "hardware_started": false,
+  "raw_log_cleanup_run": false
+}

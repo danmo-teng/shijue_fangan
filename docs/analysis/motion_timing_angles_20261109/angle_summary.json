@@ -1,0 +1,276 @@
+{
+  "counts": {
+    "turns": 34,
+    "done": 32,
+    "faults": 2,
+    "done_post": 31,
+    "done_sdk": 25
+  },
+  "done_abs_gyro_error_settled_deg": {
+    "n": 31,
+    "mean": 0.5485967741935435,
+    "min": 0.07699999999999818,
+    "median": 0.6099999999999,
+    "p95": 0.897000000000105,
+    "max": 0.9669999999998709
+  },
+  "done_gyro_error_terminal_deg": {
+    "n": 32,
+    "mean": 0.5578906249999953,
+    "min": 0.07699999999999818,
+    "median": 0.6234999999999218,
+    "p95": 0.8941500000000928,
+    "max": 0.9669999999998709
+  },
+  "done_abs_sdk_minus_gyro_deg": {
+    "n": 25,
+    "mean": 0.2091435128475993,
+    "min": 0.023157614608535937,
+    "median": 0.14791332756408337,
+    "p95": 0.48376339733960094,
+    "max": 0.5962493105517979
+  },
+  "done_peak_overshoot_deg": {
+    "n": 32,
+    "mean": 0.7335312500000057,
+    "min": 0.0,
+    "median": 0.0,
+    "p95": 3.029800000000022,
+    "max": 3.8479999999999563
+  },
+  "done_90_deg": {
+    "abs_endpoint_error": {
+      "n": 12,
+      "mean": 0.509583333333334,
+      "min": 0.08199999999987995,
+      "median": 0.5720000000001164,
+      "p95": 0.7953999999999724,
+      "max": 0.8350000000000364
+    },
+    "overshoot": {
+      "n": 12,
+      "mean": 1.1311666666666724,
+      "min": 0.0,
+      "median": 1.2660000000000764,
+      "p95": 2.8516000000000155,
+      "max": 3.538000000000011
+    }
+  },
+  "done_180_deg": {
+    "abs_endpoint_error": {
+      "n": 17,
+      "mean": 0.5430882352940885,
+      "min": 0.07699999999999818,
+      "median": 0.6369999999999436,
+      "p95": 0.8661999999999807,
+      "max": 0.9669999999998709
+    },
+    "overshoot": {
+      "n": 17,
+      "mean": 0.2937058823529509,
+      "min": 0.0,
+      "median": 0.0,
+      "p95": 2.1404000000000445,
+      "max": 2.6140000000000327
+    }
+  },
+  "done_10_deg": {
+    "abs_endpoint_error": {
+      "n": 2,
+      "mean": 0.8295000000001664,
+      "min": 0.706000000000131,
+      "median": 0.8295000000001664,
+      "p95": 0.9406500000001984,
+      "max": 0.9530000000002019
+    },
+    "overshoot": {
+      "n": 2,
+      "mean": 2.4529999999999745,
+      "min": 1.0579999999999927,
+      "median": 2.4529999999999745,
+      "p95": 3.708499999999958,
+      "max": 3.8479999999999563
+    }
+  },
+  "rate_30": {
+    "count": 2,
+    "measured_peak_dps": {
+      "n": 2,
+      "mean": 56.6095,
+      "min": 52.978,
+      "median": 56.6095,
+      "p95": 59.87785,
+      "max": 60.241
+    }
+  },
+  "rate_60": {
+    "count": 13,
+    "measured_peak_dps": {
+      "n": 13,
+      "mean": 104.00807692307693,
+      "min": 80.749,
+      "median": 97.29,
+      "p95": 138.51279999999997,
+      "max": 150.451
+    }
+  },
+  "rate_120": {
+    "count": 19,
+    "measured_peak_dps": {
+      "n": 19,
+      "mean": 148.97352631578946,
+      "min": 118.469,
+      "median": 155.761,
+      "p95": 165.80139999999997,
+      "max": 179.809
+    }
+  },
+  "yaw_rate_area_ratio": {
+    "n": 33,
+    "mean": 0.9947293078601345,
+    "min": 0.9932763408827286,
+    "median": 0.9947316172661211,
+    "p95": 0.9949979342646857,
+    "max": 0.9950296252977798
+  },
+  "yaw_rate_area_ratio_ge90": {
+    "n": 31,
+    "mean": 0.994773535353546,
+    "min": 0.9945903048441052,
+    "median": 0.9947316172661211,
+    "p95": 0.9949998037185613,
+    "max": 0.9950296252977798
+  },
+  "eight_90_cumulative": {
+    "positive_sum_deg": 362.5820000000001,
+    "negative_sum_deg": -359.2700000000002,
+    "net_delta_sum_deg": 3.311999999999898,
+    "gyro_first_baseline_to_final_deg": 3.311999999999898,
+    "sdk_first_baseline_to_final_deg": 3.518289268908667,
+    "each_gyro_delta_deg": [
+      90.41200000000003,
+      90.83500000000004,
+      90.75199999999995,
+      90.58300000000008,
+      -90.56100000000015,
+      -90.08199999999988,
+      -89.3900000000001,
+      -89.23700000000008
+    ]
+  },
+  "faults": [
+    {
+      "session": "190754",
+      "action_id": "4c64976260514a10ad84dfb0de5aa9a7:3",
+      "wire_sequence": 239,
+      "name": "turn_ccw",
+      "parameters": {
+        "angle_ccw_deg": 360.0,
+        "rate_deg_s": 60.0
+      },
+      "outcome": "reported_fault",
+      "sent_s": 957.027305209,
+      "terminal_s": 964.7914958,
+      "duration_s": 7.764190590999988,
+      "command_time_basis": "host_submit_no_native_write_stamp",
+      "submit_to_uart_ms": null,
+      "post_window": [
+        964.9414958,
+        965.1414958
+      ],
+      "gyro_delta_at_terminal_deg": 356.715,
+      "gyro_delta_settled_estimate_deg": 356.715,
+      "sdk_quaternion_delta_deg": null,
+      "gyro_baseline_rate_dps": 0.0,
+      "gyro_post_rate_dps": 0.0,
+      "raw_status_progress": -3567,
+      "reported_fault": 5,
+      "first_running_feedback_after_command_ms": 6.468450999932429,
+      "gyro_rate_abs_peak_dps": 90.576,
+      "requested_deg": 360.0,
+      "requested_rate_dps": 60.0,
+      "gyro_error_at_terminal_deg": -3.285000000000025,
+      "gyro_error_settled_deg": -3.285000000000025,
+      "sdk_error_settled_deg": null,
+      "status_progress_ccw_deg": 356.70000000000005,
+      "status_progress_error_deg": -3.2999999999999545,
+      "max_overshoot_wrt_command_deg": 0.0,
+      "gyro_rate_integral_deg": 354.92014844501057,
+      "rate_integral_minus_yaw_deg": -1.7948515549894068,
+      "gyro_sustained_3dps_after_command_ms": 62.910183999974834,
+      "gyro_sustained_10dps_after_command_ms": 83.09166200001528,
+      "last2s_abs_rate_below1_fraction": 0.8040201005025126
+    },
+    {
+      "session": "192329",
+      "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+      "wire_sequence": 231,
+      "name": "turn_ccw",
+      "parameters": {
+        "angle_ccw_deg": 360.0,
+        "rate_deg_s": 120.0
+      },
+      "outcome": "reported_fault",
+      "sent_s": 1897.203541855,
+      "terminal_s": 1903.003267716,
+      "duration_s": 5.79972586100007,
+      "command_time_basis": "native_uart_write_before",
+      "submit_to_uart_ms": 0.910462,
+      "post_window": [
+        1903.153267716,
+        1903.353267716
+      ],
+      "gyro_delta_at_terminal_deg": 358.9949999999999,
+      "gyro_delta_settled_estimate_deg": 358.9949999999999,
+      "sdk_quaternion_delta_deg": 357.2322155432057,
+      "gyro_baseline_rate_dps": 0.0,
+      "gyro_post_rate_dps": 0.0,
+      "raw_status_progress": -3589,
+      "reported_fault": 5,
+      "first_running_feedback_after_command_ms": 19.789673000104813,
+      "gyro_rate_abs_peak_dps": 161.865,
+      "requested_deg": 360.0,
+      "requested_rate_dps": 120.0,
+      "gyro_error_at_terminal_deg": -1.0050000000001091,
+      "gyro_error_settled_deg": -1.0050000000001091,
+      "sdk_error_settled_deg": -2.7677844567942884,
+      "status_progress_ccw_deg": 358.90000000000003,
+      "status_progress_error_deg": -1.099999999999966,
+      "sdk_minus_gyro_deg": -1.7627844567941793,
+      "max_overshoot_wrt_command_deg": 0.0,
+      "gyro_rate_integral_deg": 357.15559515250334,
+      "rate_integral_minus_yaw_deg": -1.839404847496553,
+      "gyro_sustained_3dps_after_command_ms": 86.93826900002932,
+      "gyro_sustained_10dps_after_command_ms": 95.47189099998832,
+      "last2s_abs_rate_below1_fraction": 0.825
+    }
+  ],
+  "command_to_running_ms": {
+    "n": 34,
+    "mean": 10.456352088256688,
+    "min": 1.7472839999754797,
+    "median": 9.963528500065877,
+    "p95": 20.029843000031633,
+    "max": 21.725384000092163
+  },
+  "command_to_3dps_ms": {
+    "n": 34,
+    "mean": 96.40187138235072,
+    "min": 52.162462999831405,
+    "median": 74.8219560000507,
+    "p95": 224.23218794999627,
+    "max": 504.1891379999015
+  },
+  "command_time_basis_counts": {
+    "host_submit_no_native_write_stamp": 3,
+    "native_uart_write_before": 31
+  },
+  "submit_to_uart_ms": {
+    "n": 31,
+    "mean": 1.773265451612903,
+    "min": 0.586441,
+    "median": 0.977538,
+    "p95": 4.7139875,
+    "max": 5.165084
+  }
+}

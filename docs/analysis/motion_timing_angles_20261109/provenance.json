@@ -1,0 +1,24 @@
+{
+  "analysis_baseline": "2a29699",
+  "actual_motion_lower": "ac61480cf44e24c314988f2be4ff3996d9b1ee93",
+  "actual_motion_source_dirty": 1,
+  "actual_race_lower": "9434608a8c395d8506b36accf1753b9bf92dad24",
+  "actual_race_source_dirty": 1,
+  "actual_race_upper": "4cfaba9",
+  "current_upper_sources_git_blobs": {
+    "localization/src/main.cpp": "8f362875e9cd533e77954e6d58258baaa04c50e0",
+    "localization/include/async_latest_file.hpp": "ea73a5fa104297414d84a59d595fd0f22f9f2413",
+    "localization/include/async_csv_log.hpp": "d6f8203ee3181abc8b15c546fcb0854db6d7e695",
+    "localization/src/f405_wheel_measurements.cpp": "eabf916273fcbfbc14734df4f4ddc514d2464012",
+    "localization/src/debug_wheel_input.cpp": "e79d12af8241f180ee998dcc8a8d7287593e8e94",
+    "localization/src/motion_runtime.cpp": "de6e17826e22f27947bb4ecccc9e4ac6251205c6",
+    "localization/src/dynamic_pose_relay.cpp": "4174259a080c9d985f35a2e5f4a45ad15ccb1fa9",
+    "localization/src/fusion.cpp": "7ba3cc853952bf69c97da38da910ef475e834d8c"
+  },
+  "pose_output_sources_unchanged_since_actual_race_upper": true,
+  "lower_cross_repo_requests_blob_read_this_turn": "54ad68124628fc1f2fc361d82bec4dd342850b61",
+  "lower_actual_imu_blob": "77dc6a61061ea937c1d5b3308444c27f5e2849a4",
+  "method_script_sha256": "2beac66f220686925bb94998da00a3eda8111af0bddf193882db53e2905dccd0",
+  "raw_logs_read_only": true,
+  "no_new_runtime_timing_or_gate": true
+}

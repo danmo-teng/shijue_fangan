@@ -525,7 +525,10 @@
           "p95": 17.400566500100467,
           "p99": 34.47248310003487,
           "max": 67.87520600005337
-        }
+        },
+        "time_basis": "mapped_sample_endpoint_to_host_control_receiver_ms",
+        "motion_membership_basis": "mapped_sample_timestamp",
+        "host_rx_reanalysis": "../motion_timing_angles_20261109/motion_timings.json"
       }
     },
     "192531": {
@@ -660,7 +663,10 @@
           "p95": 6.440782200252214,
           "p99": 9.916018660205735,
           "max": 17.00440000013259
-        }
+        },
+        "time_basis": "mapped_sample_endpoint_to_host_control_receiver_ms",
+        "motion_membership_basis": "mapped_sample_timestamp",
+        "host_rx_reanalysis": "../motion_timing_angles_20261109/motion_timings.json"
       }
     },
     "193147": {
@@ -742,7 +748,10 @@
           "p95": 7.83970990016769,
           "p99": 12.887218410078287,
           "max": 41.10182700014775
-        }
+        },
+        "time_basis": "mapped_sample_endpoint_to_host_control_receiver_ms",
+        "motion_membership_basis": "mapped_sample_timestamp",
+        "host_rx_reanalysis": "../motion_timing_angles_20261109/motion_timings.json"
       }
     },
     "194149": {
@@ -821,7 +830,10 @@
           "p95": 5.71021019982254,
           "p99": 10.042031680022774,
           "max": 20.993493999867496
-        }
+        },
+        "time_basis": "mapped_sample_endpoint_to_host_control_receiver_ms",
+        "motion_membership_basis": "mapped_sample_timestamp",
+        "host_rx_reanalysis": "../motion_timing_angles_20261109/motion_timings.json"
       }
     }
   },
@@ -2323,5 +2335,7 @@
       "fit_hz": 9.983137886104066,
       "accepted_fraction": 0.9405560882070949
     }
-  }
+  },
+  "followup_analysis": "../motion_timing_angles_20261109/ANALYSIS.md",
+  "timing_scope_correction": "control_receive all_ms/motion_ms are mapped wheel interval endpoint to host receiver, not host UART RX; original values retained. New analysis joins the original 07 measurement_id to first produced control packet and groups motion by raw UART RX."
 }
