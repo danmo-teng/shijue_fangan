@@ -48,9 +48,59 @@ class MotionSource:
         self.wheel_yaw_support=None
         self.pending_pose_drops=0
         self.last_raw_xy=None
+        self.last_tracked_ns=None;self.last_tracked_xy=None
+        self.phase_wheel_suppressed=False;self.phase_wheel_reason=''
+        self.resume_anchor_ns=None;self.resume_anchor_xy=None
         self.wheel_suspect=False
         self.wall_window=None;self.wall_evidence=None
         self.evidence_verdict=None;self.evidence_confirmations=0;self.last_evidence_scan=None
+
+    def wheel_input_paused(self):
+        return self.phase_wheel_suppressed or self.wheel_suspect
+
+    def wheel_input_reason(self):
+        return (self.phase_wheel_reason if self.phase_wheel_suppressed else
+                'two_axis_wall_motion_wheel_suspect' if self.wheel_suspect else 'measured_wheel_input_enabled')
+
+    def set_wheel_suppressed(self, suppressed, reason):
+        suppressed=bool(suppressed)
+        if suppressed==self.phase_wheel_suppressed:
+            if suppressed:self.phase_wheel_reason=str(reason);self.reason=str(reason)
+            return
+        previous_mode=self.mode
+        self.phase_wheel_suppressed=suppressed
+        self.phase_wheel_reason=str(reason) if suppressed else ''
+        selected=(np.asarray(self.history[-1][1:3],float) if self.history else
+                  self.last_tracked_xy.copy() if self.last_tracked_xy is not None else None)
+        t=self.history[-1][0] if self.history else self.last_tracked_ns
+        if selected is not None and self.last_tracked_xy is not None:
+            self.bias=selected-self.last_tracked_xy
+        self.pending.clear();self.previous=None;self.window=None;self.recovery_window=None
+        self.recovery_travel=0.;self.wall_fixes=0;self.last_wall=None
+        self.wall_window=None;self.wall_evidence=None
+        self.evidence_verdict=None;self.evidence_confirmations=0;self.last_evidence_scan=None
+        self.resume_anchor_ns=None;self.resume_anchor_xy=None
+        if suppressed:
+            self.mode='T265_PHASE_NO_WHEEL';self.reason=str(reason)
+            if not self.history and self.reference is not None and self.last_tracked_ns is not None:
+                self._publish_vio(self.last_tracked_ns,self.last_tracked_xy)
+        elif self.wheel_suspect:
+            self.mode='T265_PRIMARY_WHEEL_SUSPECT'
+            self.reason='two_axis_walls_support_T265_over_wheel'
+        elif self.reference is not None and selected is not None:
+            # Wait for actual wheel support when Pose is ahead. The excluded
+            # wheel total is an anchor only, never motion to catch up later.
+            self.resume_anchor_ns=max(t,self.wheels[-1][0]) if self.wheels else t
+            self.resume_anchor_xy=selected.copy()
+            self.anchor=None;self.anchor_wheel=None
+            self.mode='T265_WITH_WHEEL_TAIL';self.reason='phase_exit_rebased'
+            self._process()
+        else:
+            self.mode='T265_NO_WHEEL_REFERENCE';self.reason='no_measured_wheel_reference'
+        self.events.append(dict(event='wheel_phase_suppression_changed',sample_monotonic_ns=t,
+            previous_source=previous_mode,motion_source=self.mode,suppressed=suppressed,reason=str(reason),
+            selected_anchor_m=self.anchor.tolist() if self.anchor is not None else None,
+            wheel_anchor_m=self.anchor_wheel.tolist() if self.anchor_wheel is not None else None))
 
     def yaw(self, host_ns, yaw_rad, source):
         raw=source.get('raw',{})
@@ -68,10 +118,16 @@ class MotionSource:
         self.reason='no_measured_wheel_reference'
         self.wheel_suspect=False;self.wall_window=None;self.wall_evidence=None
         self.evidence_verdict=None;self.evidence_confirmations=0;self.last_evidence_scan=None
+        self.resume_anchor_ns=None;self.resume_anchor_xy=None
         angle=reference['yaw_offset']-reference['vio_rotation']
         c,s=math.cos(angle),math.sin(angle);self.basis=np.array([[c,-s],[s,c]])
         t=reference.get('reference_sample_ns',reference.get('timestamp_monotonic_ns',0))
         self.pending=deque((p for p in self.pending if p[0]>=t),maxlen=4096)
+        if self.phase_wheel_suppressed:
+            self.pending.clear();self.mode='T265_PHASE_NO_WHEEL';self.reason=self.phase_wheel_reason
+            if self.last_tracked_ns is not None and self.last_tracked_ns>=t:
+                self._publish_vio(self.last_tracked_ns,self.last_tracked_xy)
+            return
         self._process()
 
     def pose(self, p):
@@ -80,6 +136,12 @@ class MotionSource:
         if self.last_raw_ns is not None and t<=self.last_raw_ns:return
         raw_step=(_norm2(xy-self.last_raw_xy) if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.last_raw_xy is not None else 0.)
         self.last_raw_ns=t;self.last_raw_xy=xy;self.last_confidence=p['tracker_confidence']
+        if p['tracker_confidence']>0:self.last_tracked_ns=t;self.last_tracked_xy=xy.copy()
+        if self.phase_wheel_suppressed:
+            if p['tracker_confidence']>0 and self.reference is not None:self._publish_vio(t,xy)
+            return
+        if self.resume_anchor_ns is not None and p['tracker_confidence']>0:
+            self._publish_vio(t,xy)
         if len(self.pending)==self.pending.maxlen:self.pending_pose_drops+=1
         self.pending.append((t,*xy,int(p['tracker_confidence'])))
         if p['tracker_confidence']<=0 and self.anchor is not None:
@@ -132,6 +194,7 @@ class MotionSource:
         return result
 
     def _fallback(self,reason,t):
+        if self.phase_wheel_suppressed:return
         if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.wheels and self.history:
             end=self.wheels[-1][0]
             self.anchor=sample(self.history,end)[:2]
@@ -144,7 +207,15 @@ class MotionSource:
         self.recovery_window=None;self.recovery_travel=0.;self.wall_fixes=0
 
     def _process(self):
+        if self.phase_wheel_suppressed:return
         if self.reference is None or not self.wheels:return
+        if self.resume_anchor_ns is not None:
+            if self.wheels[-1][0]<self.resume_anchor_ns:return
+            t=max(self.resume_anchor_ns,self.wheels[0][0])
+            self.anchor=(sample(self.history,t)[:2] if self.history else self.resume_anchor_xy.copy())
+            self.anchor_wheel=self._wheel_at(t)[:2]
+            self.pending=deque((p for p in self.pending if p[0]>=t),maxlen=4096)
+            self.resume_anchor_ns=None;self.resume_anchor_xy=None
         ref_ns=self.reference.get('reference_sample_ns',self.reference.get('timestamp_monotonic_ns',0))
         if self.anchor is None and self.wheels[0][0]<=ref_ns<=self.wheels[-1][0]:
             # The established wall reference is already an anchor. Do not
@@ -209,6 +280,7 @@ class MotionSource:
         self._publish()
 
     def _publish(self):
+        if self.phase_wheel_suppressed or self.resume_anchor_ns is not None:return
         if self.anchor is None or not self.wheels:return
         if self.mode=='T265_PRIMARY_WHEEL_SUSPECT':return
         t=self.wheels[-1][0];w=self._wheel_at(t)
@@ -223,6 +295,7 @@ class MotionSource:
         self.history.append((int(t),*(xy+self.bias),0.))
 
     def _select_wall_supported_vio(self,t,raw_poses):
+        if self.phase_wheel_suppressed:return
         previous_mode=self.mode
         # Anchor at the scan capture time, then replace only subsequent motion
         # with real VIO increments. The caller applies that wall posterior once.
@@ -243,6 +316,7 @@ class MotionSource:
             wheel_input_pause_requested=True,wall_motion_evidence=dict(self.wall_evidence)))
 
     def _select_wall_supported_wheel(self,t):
+        if self.phase_wheel_suppressed:return
         selected=sample(self.history,t)[:2];w=self._wheel_at(t)
         while self.history and self.history[-1][0]>=t:self.history.pop()
         self.history.append((int(t),*selected,0.))
@@ -255,6 +329,7 @@ class MotionSource:
         self.previous=None;self.window=None
 
     def observe_walls(self,scan_id,axes,*,reference_ns=None,center_xy=None,raw_poses=None,reacquired=False):
+        if self.phase_wheel_suppressed:return  # Outer geometric correction still applies normally.
         if (self.mode=='WHEEL_FALLBACK' or self.wheel_suspect) and scan_id!=self.last_wall:
             self.last_wall=scan_id
             self.wall_fixes=self.wall_fixes+1 if set(axes)=={'x','y'} else 0
@@ -318,8 +393,9 @@ class MotionSource:
             recovery_travel_m=self.recovery_travel,recovery_two_axis_fixes=self.wall_fixes,
             t265_translation_rebase_m=self.bias.tolist(),policy=POLICY,
             wheel_motion_suspect=self.wheel_suspect,wall_motion_evidence=self.wall_evidence,
-            wheel_input_policy=dict(pause_requested=self.wheel_suspect,
-                reason='two_axis_wall_motion_wheel_suspect' if self.wheel_suspect else 'measured_wheel_input_enabled',
+            phase_wheel_suppressed=self.phase_wheel_suppressed,
+            phase_wheel_suppression_reason=self.phase_wheel_reason,
+            wheel_input_policy=dict(pause_requested=self.wheel_input_paused(),reason=self.wheel_input_reason(),
                 dependency_persists_after_pause=True),
             wheel_and_gyro_are_sdk_dependencies=True,independent_ground_truth=False)
         if not include_evidence:result.pop('wall_motion_evidence')

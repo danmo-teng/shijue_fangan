@@ -1079,6 +1079,113 @@ def test_formal_wheel_start_and_pose_adoption():
             assert not (app.wheel_run_dir/'session_complete.json').exists()
 
 
+def test_safe_zone_wheel_policy_preserves_phase_and_requires_own_departure():
+    import socket
+    import uuid
+    from protocol import CMD_PAUSE, CMD_RETURN_CENTER
+    from state_machine import STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER
+    from run_competition_rescue import LocalizationWheelPolicy
+    address = '\0test-wheel-policy-' + uuid.uuid4().hex
+    receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    receiver.bind(address)
+    receiver.settimeout(.03)
+    policy = LocalizationWheelPolicy('@' + address[1:], 'fixture-session')
+
+    def update(state, *, mode=0, task=11, valid=False, matched=False, accepted=0, opcode=CMD_RETURN_CENTER):
+        output = CompetitionOutput(state, CommandRequest(opcode), 'fixture')
+        policy.update(output, StmSnapshot(mode=mode, context_valid=valid,
+            task_id=task, context_matches=matched, accepted_command=accepted), 11, 22)
+
+    def read():
+        return json.loads(receiver.recv(4096))
+
+    def empty():
+        try:
+            receiver.recv(4096)
+        except socket.timeout:
+            return
+        raise AssertionError('unchanged phase must not resend')
+
+    try:
+        update(CompetitionState.NAVIGATE)
+        first = read()
+        assert first['suppressed'] is False and first['sequence'] == 0
+        update(CompetitionState.INITIAL_STASH_NAV)
+        empty()  # High-speed staging/opening routes remain unchanged.
+        for state in LocalizationWheelPolicy.SAFE_ZONE_STATES:
+            update(state)
+        second = read()
+        assert second['suppressed'] is True and second['reason'] == 'safe_zone_low_speed'
+        assert second['task_id'] == 11 and second['action_id'] == 22
+        assert second['session_id'] == 'fixture-session' and second['sequence'] == 1
+        empty()
+        update(CompetitionState.RETURN_CENTER, mode=STM_MODE_EXIT_SAFE_ZONE, valid=True)
+        update(CompetitionState.RECOVERY_WAIT, opcode=CMD_PAUSE)
+        update(CompetitionState.FAULT, opcode=CMD_HOLD)
+        update(CompetitionState.RETURN_CENTER, mode=STM_MODE_FACE_FIELD_CENTER, task=99, valid=True)
+        update(CompetitionState.RETURN_CENTER, mode=STM_MODE_FACE_FIELD_CENTER, valid=True, opcode=CMD_PAUSE)
+        empty()
+        update(CompetitionState.TASK_COMPLETE, mode=STM_MODE_FACE_FIELD_CENTER, valid=True)
+        assert read()['suppressed'] is False
+        update(CompetitionState.TASK_COMPLETE, mode=runner_module.STM_MODE_SEARCH, valid=True)
+        empty()  # The same completed delivery cannot immediately re-enter suppression.
+        update(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE)
+        assert read()['suppressed'] is True
+        # A skipped mode17 can use the existing accepted return action in SEARCH.
+        update(CompetitionState.SEARCH, mode=runner_module.STM_MODE_SEARCH, valid=True,
+               matched=True, accepted=CMD_RETURN_CENTER)
+        assert read()['suppressed'] is False
+        update(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE)
+        assert read()['suppressed'] is True
+        policy.close()
+        update(CompetitionState.RETURN_CENTER, mode=STM_MODE_FACE_FIELD_CENTER, valid=True)
+        empty()  # Exit/STOP closes only: never send a resume into the old SDK session.
+    finally:
+        policy.close()
+        receiver.close()
+
+
+def test_safe_zone_wheel_policy_retry_does_not_block_existing_task_publish():
+    import socket
+    import uuid
+    from run_competition_rescue import LocalizationWheelPolicy
+    from protocol import CMD_NAVIGATE_WAYPOINT, CMD_RETURN_CENTER
+    address = '\0test-wheel-policy-' + uuid.uuid4().hex
+    receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    receiver.settimeout(.2)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        planner = CompetitionPlanner(CompetitionMission(CompetitionSettings(side='red')),
+            root/'pose', root/'stm', root/'command', root/'diagnostic', JsonlLog(root/'events'), 50)
+        policy = LocalizationWheelPolicy('@' + address[1:], 'fixture-session')
+        planner.localization_wheel_policy = policy
+        output = CompetitionOutput(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+                                   CommandRequest(CMD_NAVIGATE_WAYPOINT), 'fixture')
+        try:
+            # No listener yet: policy fails, but the unchanged paired mission frame is written.
+            planner._publish(output, stm=StmSnapshot())
+            assert policy.error and policy.last_sent is None
+            assert len((root/'command').read_bytes()) == 30 and planner.sequence == 1
+            receiver.bind(address)
+            planner._publish(output, stm=StmSnapshot())
+            packet = json.loads(receiver.recv(4096))
+            assert packet['suppressed'] is True and packet['sequence'] == 0
+            assert packet['task_id'] == planner.protocol_task
+            assert policy.error is None and policy.last_sent is True
+            assert len((root/'command').read_bytes()) == 30 and planner.sequence == 2
+            # Raw loaded STM does not precompute context_matches; use the
+            # planner's existing task/action ownership before the next publish.
+            returning = CompetitionOutput(CompetitionState.RETURN_CENTER,
+                                         CommandRequest(CMD_RETURN_CENTER), 'fixture')
+            planner._publish(returning, stm=StmSnapshot(mode=runner_module.STM_MODE_NAVIGATE,
+                context_valid=True, task_id=planner.protocol_task,
+                action_id=planner.protocol_action, accepted_command=CMD_RETURN_CENTER))
+            assert json.loads(receiver.recv(4096))['suppressed'] is False
+        finally:
+            policy.close()
+            receiver.close()
+
+
 def test_formal_dynamic_start_wiring():
     """Launcher wiring only; mock worker start, no UART/SDK and no runtime files."""
     from unittest.mock import patch
@@ -1112,6 +1219,9 @@ def test_formal_dynamic_start_wiring():
                 assert app.dynamic.native_feedback and app.dynamic.radar.feedback_socket.fileno()>=0
                 assert cmd.count('--motion-feedback-socket')==1
                 assert cmd[cmd.index('--motion-feedback-socket')+1]=='@'+app.dynamic.radar.feedback_address[1:]
+                vision = app.vision_command()
+                assert vision[vision.index('--localization-wheel-policy-socket')+1] == '@'+app.dynamic.wheel_policy_address[1:]
+                assert vision[vision.index('--localization-wheel-policy-session')+1] == app.dynamic.session_id
                 # Parent diagnostics must not resend the direct raw 07/08 stream.
                 with patch.object(app.dynamic.radar,'send',return_value=True) as send:
                     for kind in ('timed_wheel_diagnostic','timed_gyro_diagnostic'):
@@ -1475,7 +1585,8 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
             app = formal.CompetitionMapApp(options)
             owner = Mock(); owner.poll.return_value = None
             vision = Mock(); vision.poll.return_value = None
-            dynamic = SimpleNamespace(radar=SimpleNamespace(state={}),state={},request_start=Mock())
+            dynamic = SimpleNamespace(radar=SimpleNamespace(state={}),state={},request_start=Mock(),
+                wheel_policy_address='\0competition-wheel-policy-fixture',session_id='fixture')
             def cold_prepare(_):
                 app.session_started = True
                 app.localization_process = owner

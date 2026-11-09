@@ -258,6 +258,7 @@ public:
         try {
             feedback_fd_=duplicate(get<int>(config,"feedback_fd",-1));
             pose_fd_=duplicate(get<int>(config,"pose_fd",-1));
+            wheel_policy_fd_=duplicate(get<int>(config,"wheel_policy_fd",-1));
             wake_=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);if(wake_<0)throw std::runtime_error(std::strerror(errno));
             control_.open(get<std::string>(config,"control_address",""));policy_.open(get<std::string>(config,"sdk_policy_address",""));
             auto root=get<std::string>(config,"log_root",get<std::string>(config,"root",""));
@@ -287,6 +288,10 @@ public:
         else if(kind=="pose")ingest_pose(p);
         else if(kind=="yaw")ingest_yaw(p.at("time_ns").get<std::int64_t>(),p.at("yaw_deg").get<double>(),p.at("source"));
         else if(kind=="wheel"){motion_.wheel(p,yaws_);++wheels_ingested_;}
+        else if(kind=="wheel_suppression"){
+            motion_.set_wheel_suppressed(p.at("suppressed").get<bool>(),get<std::string>(p,"reason","safe_zone_low_speed"));
+        }
+        else if(kind=="competition_wheel_policy")apply_competition_wheel_policy(p);
         else if(kind=="walls"){
             History raw=poses_;if(has(p,"raw_poses")){raw.clear();for(const auto &row:p.at("raw_poses"))raw.push_back(
                 Source::Row{{row.at(0).get<double>(),row.at(1).get<double>(),row.at(2).get<double>(),row.at(3).get<double>()}});}
@@ -354,7 +359,7 @@ public:
     }
 private:
     RuntimeMutex mutex_;std::thread thread_;std::atomic<bool> stopping_{false};
-    int feedback_fd_=-1,pose_fd_=-1,feedback_connection_=-1,pose_connection_=-1,wake_=-1;
+    int feedback_fd_=-1,pose_fd_=-1,wheel_policy_fd_=-1,feedback_connection_=-1,pose_connection_=-1,wake_=-1;
     Datagram control_,policy_;std::string session_,pose_session_,policy_session_;
     std::unique_ptr<omni::AsyncCsvLog> feedback_log_,pose_log_,control_log_,events_log_;
     Source motion_;History poses_;Yaws yaws_;ClockMap clock_;
@@ -366,11 +371,12 @@ private:
     std::uint64_t frames_=0,wheel_frames_=0,gyro_frames_=0,decode_errors_=0,poses_ingested_=0,wheels_ingested_=0,yaws_ingested_=0;
     std::uint64_t scan_count_=0,fit_count_=0,reacquisitions_=0,control_updates_=0,packets_sent_=0,output_drops_=0;
     Json last_packet_=nullptr,last_ready_packet_=nullptr,last_key_=nullptr;
-    bool last_policy_pause_=false,policy_error_reported_=false;Json scheduling_=Json::object();
+    bool last_policy_pause_=false,policy_error_reported_=false;std::string last_policy_reason_="measured_wheel_input_enabled";
+    Json scheduling_=Json::object(),competition_wheel_policy_=nullptr;
     static int duplicate(int fd) {if(fd<0)return -1;int result=fcntl(fd,F_DUPFD_CLOEXEC,0);if(result<0)throw std::runtime_error(std::strerror(errno));return result;}
     void cleanup_fds() {
-        for(auto fd:{feedback_connection_,pose_connection_,feedback_fd_,pose_fd_,wake_})if(fd>=0)::close(fd);
-        feedback_connection_=pose_connection_=feedback_fd_=pose_fd_=wake_=-1;
+        for(auto fd:{feedback_connection_,pose_connection_,feedback_fd_,pose_fd_,wheel_policy_fd_,wake_})if(fd>=0)::close(fd);
+        feedback_connection_=pose_connection_=feedback_fd_=pose_fd_=wheel_policy_fd_=wake_=-1;
     }
     static std::vector<std::string> axes(const Json &p,const char *key) {
         return has(p,key)?p.at(key).get<std::vector<std::string>>():std::vector<std::string>{};
@@ -378,8 +384,32 @@ private:
     void event(const std::string &name,Json fields=Json::object()) {
         fields["event"]=name;fields["timestamp_monotonic_ns"]=now_ns();events_log_->submit(fields.dump()+"\n");
     }
+    void restore_competition_wheel_policy() {
+        if(!competition_wheel_policy_.is_null())motion_.set_wheel_suppressed(
+            competition_wheel_policy_.at("suppressed").get<bool>(),competition_wheel_policy_.at("reason").get<std::string>());
+    }
+    void apply_competition_wheel_policy(const Json &packet) {
+        // A local business-phase request, never an MCU handshake/contact claim
+        // or a sample-age qualification. One runner publishes only transitions.
+        if(get<int>(packet,"schema",0)!=1||get<std::string>(packet,"kind","")!="competition_wheel_policy"||
+                get<std::string>(packet,"session_id","")!=session_||
+                !has(packet,"suppressed")||!packet.at("suppressed").is_boolean())return;
+        const auto reason=get<std::string>(packet,"reason","safe_zone_low_speed");
+        competition_wheel_policy_=packet;competition_wheel_policy_["reason"]=reason;
+        restore_competition_wheel_policy();
+        event("competition_wheel_policy_applied",competition_wheel_policy_);
+    }
+    bool receive_wheel_policy() {
+        if(wheel_policy_fd_<0)return false;
+        char data[4096];ssize_t count;
+        do{count=recv(wheel_policy_fd_,data,sizeof data,MSG_DONTWAIT|MSG_TRUNC);}while(count<0&&errno==EINTR);
+        if(count<0){if(errno==EAGAIN||errno==EWOULDBLOCK)return false;throw std::runtime_error(std::strerror(errno));}
+        if(count>static_cast<ssize_t>(sizeof data))throw std::invalid_argument("oversize local wheel policy");
+        apply_competition_wheel_policy(Json::parse(data,data+count));publish();return true;
+    }
     void invalidate(const std::string &reason,std::int64_t revision) {
         reference_=nullptr;revision_=revision;yaws_.clear();last_fit_=nullptr;motion_=Source();has_anchor_=false;
+        restore_competition_wheel_policy();
         event("reference_invalidated",Json{{"reason",reason}});
     }
     void ingest_pose(const Json &sample) {
@@ -388,6 +418,7 @@ private:
         if(!last_sample_.is_null()){
             if(sample.at("session_id")!=last_sample_.at("session_id")){
                 reference_=nullptr;++revision_;poses_.clear();motion_=Source();
+                restore_competition_wheel_policy();
             }else if(sample.at("frame_number").get<std::uint64_t>()<=last_sample_.at("frame_number").get<std::uint64_t>())return;
         }
         auto t=sample.at("timestamp_monotonic_ns").get<std::int64_t>();
@@ -515,13 +546,14 @@ private:
         ++control_updates_;last_key_=std::move(key);
     }
     void publish_policy() {
-        if(policy_.fd<0||motion_.wheel_suspect==last_policy_pause_)return;
-        bool pause=motion_.wheel_suspect;
+        bool pause=motion_.wheel_input_paused();
+        const auto reason=motion_.wheel_input_reason();
+        if(policy_.fd<0||(pause==last_policy_pause_&&reason==last_policy_reason_))return;
         Json packet={{"schema",3},{"kind","wheel_source_policy"},{"session_id",policy_session_},{"pause",pause},
-            {"reason",pause?"two_axis_wall_motion_wheel_suspect":"measured_wheel_input_enabled"},
+            {"reason",reason},
             {"wall_motion_evidence",motion_.wall_evidence},{"dependency_persists_after_pause",true}};
         if(policy_.send(packet.dump())){
-            last_policy_pause_=pause;policy_error_reported_=false;packet["sdk_application_confirmed"]=false;event("wheel_source_policy_requested",packet);
+            last_policy_pause_=pause;last_policy_reason_=reason;policy_error_reported_=false;packet["sdk_application_confirmed"]=false;event("wheel_source_policy_requested",packet);
         }else if(!policy_error_reported_){
             event("wheel_source_policy_transport_error",Json{{"reason",std::strerror(errno)},{"pause_requested",pause}});policy_error_reported_=true;
         }
@@ -543,6 +575,7 @@ private:
             {"pose_ingested",poses_ingested_},{"measured_wheel_ingested",wheels_ingested_},{"primary_yaw_ingested",yaws_ingested_},
             {"control_updates",control_updates_},{"native_feedback",feedback},{"motion_selection",motion_.snapshot()},
             {"reference",reference_},{"offset",offset_},{"revision",revision_},{"has_anchor",has_anchor_},
+            {"competition_wheel_policy",competition_wheel_policy_},
             {"fixes",fit_count_},{"reacquisitions",reacquisitions_},{"scans",scan_count_},{"last_scan_ns",last_scan_ns_<0?Json(nullptr):Json(last_scan_ns_)},
             {"direct_output",Json{{"packets_sent",packets_sent_},{"output_drops",output_drops_},{"last_packet",last_packet_}}},
             {"logging",logs},{"pose_input_error",pose_error_},{"motion_scheduling",scheduling_},{"error",thread_error_},
@@ -595,6 +628,13 @@ private:
             {"mutex_protocol_error",mutex_.protocol_error()?Json(std::strerror(mutex_.protocol_error())):Json(nullptr)}};}
         while(!stopping_.load()){
             bool changed=false;
+            // Phase changes wake this same owner directly; GUI/disk/geometry
+            // are not on the request path. Drain only a bounded transition set.
+            for(int i=0;i<16;++i){
+                try{std::lock_guard<RuntimeMutex> guard(mutex_);if(!receive_wheel_policy())break;changed=true;}
+                catch(const std::exception &e){std::lock_guard<RuntimeMutex> guard(mutex_);
+                    event("competition_wheel_policy_error",Json{{"reason",e.what()}});break;}
+            }
             for(int i=0;i<16&&!stopping_.load();++i){
                 bool active=false;
                 for(bool feedback:{true,false}){
@@ -609,11 +649,12 @@ private:
                 if(!active)break;
             }
             if(changed)continue;
-            pollfd waits[3];int count=0;
+            pollfd waits[4];int count=0;
             {std::lock_guard<RuntimeMutex> guard(mutex_);
                 waits[count++]={wake_,POLLIN,0};
                 if(feedback_fd_>=0)waits[count++]={feedback_connection_>=0?feedback_connection_:feedback_fd_,POLLIN,0};
                 if(pose_fd_>=0)waits[count++]={pose_connection_>=0?pose_connection_:pose_fd_,POLLIN,0};
+                if(wheel_policy_fd_>=0)waits[count++]={wheel_policy_fd_,POLLIN,0};
             }
             int ready;do{ready=poll(waits,count,-1);}while(ready<0&&errno==EINTR&&!stopping_.load());
             if(ready<0){std::lock_guard<RuntimeMutex> guard(mutex_);thread_error_=std::strerror(errno);break;}

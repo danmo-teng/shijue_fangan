@@ -408,6 +408,7 @@ class CompetitionMapApp(RescueMapApp):
             mode = state.get('motion_selection', {}).get('mode', 'WAIT')
             label = {'WHEEL_FALLBACK': '轮速＋主yaw降级',
                      'T265_PRIMARY_WHEEL_SUSPECT': 'T265＋主yaw（轮式可疑）',
+                     'T265_PHASE_NO_WHEEL': 'T265＋主yaw（安全区停轮式）',
                      'T265_WITH_WHEEL_TAIL': 'T265＋轮反馈续推'}.get(mode, mode)
             axes = '/'.join(state.get('current_wall_axes', [])) or '暂无约束'
             text.add('当前来源：' + label, (920, 455), 17, (80, 205, 245))
@@ -522,6 +523,11 @@ class CompetitionMapApp(RescueMapApp):
         ]
         if self.operator is not None:
             command += ['--operator-control', str(self.operator.control_path)]
+        if self.dynamic is not None:
+            address = self.dynamic.wheel_policy_address
+            command += ['--localization-wheel-policy-socket',
+                        '@' + address[1:] if address.startswith('\0') else address,
+                        '--localization-wheel-policy-session', self.dynamic.session_id]
         if self.prewarm_enabled:
             command += ['--wait-for-operator', '--warm-status', str(self.warm_status_path)]
         if getattr(self.options, 'headless', False):

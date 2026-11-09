@@ -45,6 +45,9 @@ public:
     };
 
     void configure(const Json &configuration);
+    void set_wheel_suppressed(bool suppressed, const std::string &reason);
+    bool wheel_input_paused() const noexcept { return phase_wheel_suppressed || wheel_suspect; }
+    std::string wheel_input_reason() const;
     void pose(const Json &sample);
     void yaw(std::int64_t host_ns, double yaw_rad, const Json &source);
     void wheel(const Json &sample, const YawHistory &host_yaws);
@@ -77,6 +80,10 @@ public:
     Json wheel_time_basis = nullptr, wheel_yaw_support = nullptr;
     std::uint64_t pending_pose_drops = 0;
     NativeMotionValue<Vec2> last_raw_xy;
+    NativeMotionValue<std::int64_t> last_tracked_ns, resume_anchor_ns;
+    NativeMotionValue<Vec2> last_tracked_xy, resume_anchor_xy;
+    bool phase_wheel_suppressed = false;
+    std::string phase_wheel_reason;
     bool wheel_suspect = false;
     NativeMotionValue<WallWindow> wall_window;
     Json wall_evidence = nullptr;

@@ -22,6 +22,7 @@ class CompetitionDynamicLocalization:
         self.root, self.session_id, self.config = root, session_id, config
         self.field_start, self.log = field_start, log
         self.radar = RadarWorker(control_updates=True)
+        self.wheel_policy_address = self.radar.enable_competition_wheel_policy(session_id)
         self.native_feedback = bool(native_feedback)
         if self.native_feedback:self.radar.enable_native_feedback()
         self.clock_map = TimedMeasurements()

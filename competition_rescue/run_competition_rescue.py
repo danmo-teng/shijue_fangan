@@ -19,6 +19,7 @@ import math
 import re
 import secrets
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -93,6 +94,9 @@ from state_machine import (  # noqa: E402
     VisionSnapshot,
     STM_MODE_TRANSPORT_AUDIT,
     STM_MODE_RECOVERY_WAIT,
+    STM_MODE_NAVIGATE,
+    STM_MODE_FACE_FIELD_CENTER,
+    STM_MODE_SEARCH,
     cargo_in_front_region,
 )
 
@@ -138,6 +142,9 @@ def arguments() -> argparse.Namespace:
                         help="实体按键会话控制文件；与reset-session-token匹配的stop结束本轮运动并保留观察")
     parser.add_argument("--wait-for-operator", action="store_true", help="预热模型/相机，等匹配的本地开赛请求才发CONFIG")
     parser.add_argument("--warm-status", type=Path, help="一次实际推理完成及开赛状态")
+    parser.add_argument("--localization-wheel-policy-socket", default="",
+                        help="现有定位所有者的本地安全区轮式策略接口，@表示abstract socket")
+    parser.add_argument("--localization-wheel-policy-session", default="")
     parser.add_argument("--window-mode", choices=("fullscreen", "normal"), default="normal")
     parser.add_argument("--display-fps", type=float, default=10.0)
     parser.add_argument(
@@ -161,7 +168,10 @@ def arguments() -> argparse.Namespace:
         help="兼容旧启动参数；视觉扫障不再使用此距离偏移",
     )
     parser.add_argument("--camera-retries", type=int, default=1)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if bool(args.localization_wheel_policy_socket) != bool(args.localization_wheel_policy_session):
+        parser.error("localization-wheel-policy-socket/session需要同时提供")
+    return args
 
 
 def load_json(path: Path) -> dict | None:
@@ -1055,6 +1065,103 @@ def stm_dict(stm: StmSnapshot) -> dict:
     }
 
 
+class LocalizationWheelPolicy:
+    """One-way business-stage policy; owns neither chassis UART nor SDK."""
+    SAFE_ZONE_STATES = frozenset({
+        CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+        CompetitionState.ACQUIRE_SAFE_ZONE,
+        CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+        CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+        CompetitionState.CLEAR_SAFE_ZONE,
+        CompetitionState.WAIT_SAFE_ZONE_CLEAR,
+        CompetitionState.ENTER_SAFE_ZONE,
+        CompetitionState.DELIVERY_VERIFY,
+        CompetitionState.TASK_COMPLETE,
+    })
+
+    def __init__(self, address: str, session_id: str, events_log=None):
+        self.address = '\0' + address[1:] if address.startswith('@') else address
+        if (not session_id or not self.address.startswith('\0') or
+                not 1 < len(self.address.encode()) <= 108):
+            raise ValueError('轮式阶段策略需要本轮session和abstract socket地址')
+        self.session_id, self.events_log = session_id, events_log
+        self.socket = None
+        self.closed = False
+        self.suppressed = False
+        self.last_sent = None
+        self.sequence = 0
+        self.contact_task_ids = set()
+        self.safe_cycle_departed = False
+        self.last_state = None
+        self.error = None
+
+    def _event(self, name, **data):
+        if self.events_log is not None:
+            try:
+                self.events_log.write(name, data)
+            except (OSError, ValueError):
+                pass  # A diagnostic write must not block command publication.
+
+    def update(self, output, stm, task_id, action_id):
+        if self.closed:
+            return
+        entering = (output.state in self.SAFE_ZONE_STATES and
+                    (not self.safe_cycle_departed or
+                     (output.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE and
+                      self.last_state != CompetitionState.ALIGN_SAFE_ZONE_BY_POSE)))
+        if entering:
+            self.suppressed = True
+            self.safe_cycle_departed = False
+        if self.suppressed and output.state in self.SAFE_ZONE_STATES:
+            self.contact_task_ids.add(task_id)
+        command = output.command
+        overlay = (output.suppress_command_tx or command is None or
+                   command.opcode in {CMD_HOLD, CMD_PAUSE, CMD_ABORT})
+        belongs = stm.context_valid and stm.task_id in self.contact_task_ids
+        face_center = (output.state in {CompetitionState.TASK_COMPLETE, CompetitionState.RETURN_CENTER}
+                       and stm.mode == STM_MODE_FACE_FIELD_CENTER and belongs)
+        later_navigation = (
+            output.state in {CompetitionState.RETURN_CENTER, CompetitionState.NAVIGATE, CompetitionState.SEARCH}
+            and stm.mode in {STM_MODE_NAVIGATE, STM_MODE_SEARCH}
+            and stm.context_valid and stm.context_matches
+            and stm.accepted_command in {CMD_RETURN_CENTER, CMD_NAVIGATE_WAYPOINT}
+            and (belongs or stm.task_id == task_id))
+        if self.suppressed and not overlay and (face_center or later_navigation):
+            self.suppressed = False
+            self.safe_cycle_departed = True
+            self.contact_task_ids.clear()
+        self.last_state = output.state
+        # mode16 only announces EXIT_SAFE_ZONE, not departure from the ramp.
+        # HOLD/PAUSE/recovery/FAULT do not imply that contact risk has ended.
+        if self.last_sent == self.suppressed:
+            return
+        packet = dict(schema=1, kind='competition_wheel_policy', session_id=self.session_id,
+                      sequence=self.sequence, suppressed=self.suppressed,
+                      reason='safe_zone_low_speed' if self.suppressed else 'normal_motion',
+                      state=output.state.value, task_id=task_id, action_id=action_id)
+        try:
+            if self.socket is None:
+                self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+                self.socket.setblocking(False)
+            self.socket.sendto(json.dumps(packet, separators=(',', ':')).encode(), self.address)
+        except OSError as error:
+            if self.error != str(error):
+                self._event('localization_wheel_policy_send_failed', error=str(error), policy=packet)
+            self.error = str(error)
+            return  # Retry the current phase next planner cycle; never wait for an ACK.
+        self.error = None
+        self.last_sent = self.suppressed
+        self.sequence += 1
+        self._event('localization_wheel_policy_sent', policy=packet)
+
+    def close(self):
+        self.closed = True
+        if self.socket is not None:
+            self.socket.close()
+            self.socket = None
+        # STOP/error/exit never resumes wheel input in the remaining SDK session.
+
+
 class CompetitionPlanner:
     def __init__(
         self,
@@ -1075,6 +1182,7 @@ class CompetitionPlanner:
         self.diagnostics_path = diagnostics_path
         self.events_log = events_log
         self.replay_event_sink = None
+        self.localization_wheel_policy = None
         self.period_s = 1.0 / rate_hz
         self.lock = threading.Lock()
         self.latest_vision = VisionSnapshot()
@@ -1282,6 +1390,8 @@ class CompetitionPlanner:
         self.running = False
         if self.thread.is_alive():
             self.thread.join(timeout=2.0)
+        if self.localization_wheel_policy is not None:
+            self.localization_wheel_policy.close()
         abort_command = CommandRequest(CMD_ABORT, self.mission._side_flags())
         abort_sequence = self.sequence
         abort_frame = abort_command.to_frame(abort_sequence)
@@ -1341,7 +1451,12 @@ class CompetitionPlanner:
         from protocol import mission_frame
         return mission_frame(self.sequence, CMD_HOLD)
 
-    def _publish(self, output: CompetitionOutput) -> None:
+    def _publish(self, output: CompetitionOutput, *, stm: StmSnapshot | None = None) -> None:
+        if self.localization_wheel_policy is not None and stm is not None:
+            matched = (stm.context_valid and stm.task_id == self.protocol_task and
+                       stm.action_id == self.protocol_action)
+            self.localization_wheel_policy.update(output, replace(stm, context_matches=matched),
+                self.protocol_task, self.protocol_action)
         if output.suppress_command_tx:
             return
         command = output.command or CommandRequest(CMD_HOLD)
@@ -2184,7 +2299,7 @@ class CompetitionPlanner:
                     paused = self.paused
                 pending_task, pending_action = self.protocol_task, self.protocol_action
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
-                self._publish(output)
+                self._publish(output, stm=stm)
                 self._record_replay_event(output, pose, stm, vision, started)
                 try:
                     self._update_grab_waitnav_diagnostic(
@@ -2598,6 +2713,10 @@ def main() -> int:
         events,
         args.planner_fps,
     )
+    wheel_policy = (LocalizationWheelPolicy(args.localization_wheel_policy_socket,
+        args.localization_wheel_policy_session, events)
+        if args.localization_wheel_policy_socket else None)
+    planner.localization_wheel_policy = wheel_policy
 
     # Launching this runner is an explicit start request from the operator.
     # Prepare model/camera first: the first CONFIG starts F405 autonomous motion.
@@ -2640,6 +2759,8 @@ def main() -> int:
         })
         if not args.wait_for_operator:
             planner.stop("setup_exception")
+        if wheel_policy is not None:
+            wheel_policy.close()
         detector.close()
         raise
     camera_decoder = args.decoder
@@ -2733,6 +2854,7 @@ def main() -> int:
             safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)
+        planner.localization_wheel_policy = wheel_policy
         if replay is not None:
             planner.replay_event_sink = replay.record_event
         tracker = MultiFrameTracker(config)
@@ -3133,6 +3255,8 @@ def main() -> int:
         if replay is not None: replay.request_close()
         if config_sent or competition_started or operator_stopped or not args.wait_for_operator:
             planner.stop(exit_reason)
+        if wheel_policy is not None:
+            wheel_policy.close()
         if replay is not None:
             events.write('vision_replay_closed', replay.close())
         detector.close()

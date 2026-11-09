@@ -2524,6 +2524,24 @@ def test_competition_dynamic_transport():
             assert not recovered['lidar_corrections_enabled']
             app.set_lidar_enabled(True)
             wait_packet(lambda p:p['lidar_corrections_enabled'])
+            # The same formal supervisor passes its bound phase socket through
+            # spawn. Exercise the original Python fallback owner too.
+            with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as phase:
+                def policy(suppressed):
+                    phase.sendto(json.dumps(dict(schema=1,kind='competition_wheel_policy',session_id=sid,
+                        suppressed=suppressed,reason='safe_zone_low_speed')).encode(),app.wheel_policy_address)
+                policy(True)
+                paused=wait_packet(lambda p:p['motion_source']=='T265_PHASE_NO_WHEEL')
+                assert paused['pose']==moved['pose']
+                app.radar.send('wheel',wheel(3,end,end+100_000_000,5.))
+                source.send(json.dumps(dict(session_id=sid,frame_number=3,timestamp_monotonic_ns=end+100_000_000,
+                    receive_monotonic_ns=end+100_000_000,x_m=-1.30,y_m=1.32,
+                    yaw_rad=math.radians(135),tracker_confidence=3)).encode())
+                still=wait_packet(lambda p:p['timestamp_monotonic_ns']==end+100_000_000)
+                assert still['pose']==paused['pose'] and still['motion_source']=='T265_PHASE_NO_WHEEL'
+                policy(False)
+                resumed=wait_packet(lambda p:p['motion_source']=='T265_WITH_WHEEL_TAIL')
+                assert resumed['pose']==still['pose']
         finally:
             source.close();sink.close();app.close();log.close()
             for fd in (master,slave):
@@ -3087,13 +3105,14 @@ def test_native_runtime_motion_source_parity():
             assert math.isclose(float(expected),float(actual),rel_tol=1e-12,abs_tol=1e-10), (path,expected,actual)
 
     class Playback:
-        def __init__(self, angle=0.):
+        def __init__(self, angle=0., configure=True):
             self.native=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1))
             self.m=MotionSource();self.origin=1_000_000_000;self.raw=deque();self.yaws=deque();self.i=0
             self.start=np.array([.2,-.3]);c,s=math.cos(angle),math.sin(angle);self.r=np.array([[c,-s],[s,c]])
             self.reference=dict(pose_origin=[0.,0.],vio_rotation=angle,yaw_offset=angle,
                 reference_sample_ns=self.origin,start_center_xy_m=self.start.tolist())
-            self.m.configure(self.reference);self.native.command('configure',self.reference);self.check()
+            if configure:self.m.configure(self.reference);self.native.command('configure',self.reference)
+            self.check()
             self.pose(0.,self.origin)
         def check(self):
             state=self.native.snapshot(dict(kind='histories'))
@@ -3104,7 +3123,7 @@ def test_native_runtime_motion_source_parity():
                 assert len(actual)==len(expected),(key,len(actual),len(expected))
                 if expected:
                     assert np.array_equal(np.asarray(actual)[:,0],np.asarray(expected)[:,0]),key
-                    assert np.allclose(np.asarray(actual)[:,1:],np.asarray(expected)[:,1:],rtol=1e-12,atol=1e-10),key
+                    assert np.allclose(np.asarray(actual)[:,1:],np.asarray(expected)[:,1:],rtol=1e-12,atol=1e-10),(key,actual[-3:],expected[-3:])
             return state
         def pose(self,x,t,confidence=3):
             p=dict(session_id='native-parity',frame_number=t-self.origin,timestamp_monotonic_ns=t,
@@ -3121,13 +3140,20 @@ def test_native_runtime_motion_source_parity():
             self.native.command('yaw',dict(time_ns=t,yaw_deg=math.degrees(angle),source=source));self.check()
         def wheel(self,p):
             self.m.wheel(p,self.yaws);self.native.command('wheel',p);self.check()
-        def tick(self,v,x):
+        def wheel_tick(self,v):
             self.i+=1;t=self.origin+self.i*10_000_000;self.yaw(t)
             self.wheel(dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='fixture',sample_id=self.i,
                 raw_mcu_sample=dict(t0_us=(t-10_000_000)//1000,t1_us=t//1000),v_body_mps=[v,0.,0.],
                 interval_start_ns=t-10_000_000,interval_end_ns=t,receive_monotonic_ns=t))
+            return t
+        def tick(self,v,x):
+            t=self.wheel_tick(v)
             self.pose(x,t)
             if self.i==1:self.wall(0.,index=0)
+        def suppress(self,value):
+            reason='fixture_safe_zone' if value else 'fixture_phase_exit'
+            self.m.set_wheel_suppressed(value,reason)
+            self.native.command('wheel_suppression',dict(suppressed=value,reason=reason));self.check()
         def wall(self,x,axes=('x','y'),index=None,reacquired=False):
             i=self.i if index is None else index
             p=dict(scan_id='scan-'+str(i),axes=list(axes),reference_ns=self.origin+i*10_000_000,
@@ -3199,6 +3225,74 @@ def test_native_runtime_motion_source_parity():
         assert p.m.mode=='WHEEL_FALLBACK'
     finally:p.close()
 
+    # The phase excludes both arbitrarily bad wheel tails and source verdicts,
+    # while retaining raw wheel integration. Enter/exit cover either sample order.
+    for order in ('pose_ahead','wheel_ahead'):
+        p=Playback(.7)
+        try:
+            for i in range(1,11):p.tick(1.,i*.01)
+            if order=='pose_ahead':p.pose(.102,p.origin+105_000_000)
+            else:p.wheel_tick(4.)
+            before=p.m.history[-1][1];raw=p.m.last_tracked_xy[0]
+            p.suppress(True)
+            count=len(p.m.events);bias=p.m.bias.copy()
+            p.suppress(True)  # Repeated business state must not re-anchor motion.
+            assert len(p.m.events)==count and np.array_equal(p.m.bias,bias)
+            for _ in range(20):
+                raw+=.001;p.tick(4.,raw)
+            assert p.m.mode=='T265_PHASE_NO_WHEEL' and abs(p.m.history[-1][1]-before-.02)<1e-10
+            assert p.m.wheels[-1][1]>.8 and p.m.snapshot()['wheel_input_policy']['pause_requested']
+            p.wall(3.);p.wall(4.);p.wall(5.)  # Cannot reinstate wheel through wall arbitration.
+            assert p.m.mode=='T265_PHASE_NO_WHEEL' and p.m.evidence_confirmations==0
+            held=list(p.m.history)
+            p.pose(90.,p.origin+p.i*10_000_000+1,confidence=0)
+            for _ in range(15):p.wheel_tick(4.)
+            assert list(p.m.history)==held  # No fake stationary samples or confidence-zero motion.
+            if order=='pose_ahead':
+                raw+=.003;p.pose(raw,p.origin+p.i*10_000_000+5_000_000)
+            exit_xy=np.array(p.m.history[-1][1:3]);exit_ns=max(p.m.history[-1][0],p.m.wheels[-1][0])
+            p.suppress(False)
+            assert np.allclose(p.m.history[-1][1:3],exit_xy,rtol=0,atol=1e-10)
+            assert not p.m.snapshot()['wheel_input_policy']['pause_requested']
+            end=p.wheel_tick(1.)
+            expected=exit_xy+p.m._wheel_at(end)[:2]-p.m._wheel_at(exit_ns)[:2]
+            assert np.allclose(p.m.history[-1][1:3],expected,rtol=0,atol=1e-10)
+        finally:p.close()
+
+    # A reference established during suppression must not resume injection;
+    # with no reference/wheels there is no manufactured selected trajectory.
+    p=Playback(configure=False)
+    try:
+        p.suppress(True)
+        p.pose(.2,p.origin+5_000_000)
+        assert not p.m.history
+        p.m.configure(p.reference);p.native.command('configure',p.reference);p.check()
+        assert p.m.mode=='T265_PHASE_NO_WHEEL' and p.m.snapshot()['wheel_input_policy']['pause_requested']
+        assert len(p.m.history)==1 and p.m.history[-1][0]==p.origin+5_000_000
+        p.pose(.5,p.origin+6_000_000)  # Phase adds no new jump rejection threshold.
+        assert abs(p.m.history[-1][1]-.5)<1e-10
+        p.suppress(False);p.wheel_tick(1.)
+        assert np.linalg.norm(np.asarray(p.m.history[-1][1:3])-[.5,0.])<.01
+    finally:p.close()
+
+    # Exiting a business phase cannot clear an existing wall-supported slip.
+    p=Playback()
+    try:
+        for i in range(1,51):
+            p.tick(1.,0.)
+            if i%10==0:p.wall(0.)
+        assert p.m.wheel_suspect
+        p.suppress(True)
+        p.tick(4.,.001);before=p.m.history[-1][1]
+        p.suppress(False)
+        policy=p.m.snapshot()['wheel_input_policy']
+        assert p.m.mode=='T265_PRIMARY_WHEEL_SUSPECT' and p.m.wheel_suspect
+        assert policy['pause_requested'] and policy['reason']=='two_axis_wall_motion_wheel_suspect'
+        assert p.m.history[-1][1]==before
+        p.pose(.002,p.origin+p.i*10_000_000+5_000_000)
+        assert abs(p.m.history[-1][1]-before-.001)<1e-10
+    finally:p.close()
+
 
 def test_native_runtime_historical_wall_parity():
     """Delayed posterior uses current history and preserves later motion."""
@@ -3254,6 +3348,106 @@ def test_native_runtime_historical_wall_parity():
                 if axes==['x']:assert after['offset'][1]==0.
                 assert int(selected[0])==b+100_000_000
             finally:native.close()
+
+
+def test_native_runtime_competition_wheel_policy():
+    """Local phase socket and real native owner; no UART, SDK or motors."""
+    import socket
+    import uuid
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime
+    sid=uuid.uuid4().hex
+    phase=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+    sdk=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+    sender=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+    phase_address='\0test-competition-phase-'+sid
+    sdk_address='\0test-competition-sdk-policy-'+sid
+    phase.bind(phase_address);phase.setblocking(False)
+    sdk.bind(sdk_address);sdk.settimeout(1.)
+    runtime=None
+    with tempfile.TemporaryDirectory() as temporary:
+        try:
+            runtime=NativeMotionRuntime(dict(session_id=sid,feedback_fd=-1,pose_fd=-1,
+                wheel_policy_fd=phase.fileno(),sdk_policy_address='@'+sdk_address[1:],log_root=temporary))
+            t=1_000_000_000;i=0
+            reference=dict(pose_origin=[0.,0.],vio_rotation=0.,yaw_offset=0.,
+                reference_sample_ns=t,start_center_xy_m=[0.,0.])
+
+            def pose(x,confidence=3):
+                runtime.command('pose',dict(session_id=sid,frame_number=t,
+                    timestamp_monotonic_ns=t,receive_monotonic_ns=t,x_m=x,y_m=0.,yaw_rad=0.,
+                    tracker_confidence=confidence,mapper_confidence=1))
+
+            def wheel(v):
+                nonlocal t,i
+                t+=10_000_000;i+=1
+                runtime.command('yaw',dict(time_ns=t,yaw_deg=0.,source=dict(raw=dict(yaw_receive_us=t//1000))))
+                runtime.command('wheel',dict(source='measured_wheel_feedback',measurement_valid=True,
+                    mcu_epoch='fixture',sample_id=i,v_body_mps=[v,0.,0.],
+                    raw_mcu_sample=dict(t0_us=(t-10_000_000)//1000,t1_us=t//1000),
+                    interval_start_ns=t-10_000_000,interval_end_ns=t,receive_monotonic_ns=t))
+
+            def send(suppressed,sequence,session=sid):
+                sender.sendto(json.dumps(dict(schema=1,kind='competition_wheel_policy',session_id=session,
+                    sequence=sequence,suppressed=suppressed,reason='safe_zone_low_speed' if suppressed else 'normal_motion',
+                    state='fixture',task_id=7,action_id=8)).encode(),phase_address)
+
+            def wait(sequence):
+                deadline=time.monotonic()+1.
+                while time.monotonic()<deadline:
+                    state=runtime.snapshot(dict(kind='histories'))
+                    if (state.get('competition_wheel_policy') or {}).get('sequence')==sequence:return state
+                    time.sleep(.001)
+                raise AssertionError('local native phase input did not finish')
+
+            runtime.command('yaw',dict(time_ns=t,yaw_deg=0.,source=dict(raw=dict(yaw_receive_us=t//1000))))
+            pose(0.);runtime.command('field_reference',dict(reference=reference,revision=1))
+            wheel(1.);pose(.01)
+            send(True,0,session='old-session');send(False,1)
+            assert not wait(1)['motion_selection']['phase_wheel_suppressed']
+            sender.sendto(b'{malformed',phase_address)
+            send(True,2)
+            paused=wait(2)
+            assert paused['motion_selection']['mode']=='T265_PHASE_NO_WHEEL'
+            policy=json.loads(sdk.recv(4096))
+            assert policy['pause'] is True and policy['reason']=='safe_zone_low_speed'
+            assert policy['session_id']==sid and policy['dependency_persists_after_pause'] is True
+            for _ in range(30):wheel(5.);pose(.01)
+            state=runtime.snapshot(dict(kind='histories'))
+            assert abs(state['last']['center_xy_m'][0]-.01)<1e-12
+            assert state['wheels'][-1][1]>1.5  # Original wheel evidence remains.
+            previous_sample=state['last']['sample_monotonic_ns']
+            wheel(5.);pose(99.,confidence=0)
+            held=runtime.snapshot()
+            assert held['last']['sample_monotonic_ns']==previous_sample
+            assert held['last']['center_xy_m']==state['last']['center_xy_m']
+            # Accepted single-wall correction remains active with wheel disabled.
+            runtime.command('apply_wall',dict(revision=1,scan_id='fixture-wall',reference_ns=previous_sample,
+                candidate_center_xy_m=[.31,99.],position_observed_axes=['x']))
+            corrected=runtime.snapshot()
+            assert abs(corrected['last']['center_xy_m'][0]-.31)<1e-12
+            assert corrected['last']['center_xy_m'][1]==0.
+            assert corrected['motion_selection']['phase_wheel_suppressed']
+            send(False,3);resumed=wait(3)
+            assert abs(resumed['last']['center_xy_m'][0]-.31)<1e-12, (resumed['motion_selection'],resumed['history'][-3:],resumed['wheels'][-3:])
+            assert json.loads(sdk.recv(4096))['pause'] is False
+            wheel(.1);pose(.011)
+            assert abs(runtime.snapshot()['last']['center_xy_m'][0]-.311)<1e-10
+            # Resetting a source/reference cannot silently re-enable phase wheel input.
+            send(True,4);wait(4);assert json.loads(sdk.recv(4096))['pause'] is True
+            runtime.command('invalidate',dict(reason='fixture reference reset',revision=2))
+            assert runtime.snapshot()['motion_selection']['phase_wheel_suppressed']
+            runtime.command('field_reference',dict(reference=reference,revision=3))
+            assert runtime.snapshot()['motion_selection']['wheel_input_policy']['pause_requested']
+            assert runtime.snapshot()['error'] is None
+            runtime.close()
+            receipt=runtime.snapshot()
+            assert all(not item['failed'] and not item['dropped'] for item in receipt['logging'].values())
+            events=[json.loads(line) for line in (Path(temporary)/'native_motion_events.jsonl').read_text().splitlines()]
+            assert any(e['event']=='competition_wheel_policy_error' for e in events)
+            assert len([e for e in events if e['event']=='competition_wheel_policy_applied'])==4
+        finally:
+            if runtime is not None:runtime.close()
+            sender.close();phase.close();sdk.close()
 
 
 def test_native_runtime_socket_input_and_control_parity():

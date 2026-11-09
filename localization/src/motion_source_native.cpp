@@ -86,6 +86,50 @@ void NativeMotionSource::yaw(std::int64_t host_ns, double yaw_rad, const Json &s
     append_bounded(native_yaws, std::array<double, 2>{{static_cast<double>(t), yaw_rad}});
 }
 
+std::string NativeMotionSource::wheel_input_reason() const {
+    return phase_wheel_suppressed ? phase_wheel_reason : wheel_suspect
+        ? "two_axis_wall_motion_wheel_suspect" : "measured_wheel_input_enabled";
+}
+
+void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string &why) {
+    if (suppressed == phase_wheel_suppressed) {
+        if (suppressed) { phase_wheel_reason = why; reason = why; }
+        return;
+    }
+    const auto previous_mode = mode;
+    phase_wheel_suppressed = suppressed; phase_wheel_reason = suppressed ? why : "";
+    NativeMotionValue<Vec2> selected;
+    NativeMotionValue<std::int64_t> t;
+    if (!history.empty()) {
+        selected = Vec2{{history.back()[1], history.back()[2]}};
+        t = static_cast<std::int64_t>(history.back()[0]);
+    } else if (last_tracked_xy) { selected = *last_tracked_xy; t = *last_tracked_ns; }
+    if (selected && last_tracked_xy) bias = subtract(*selected, *last_tracked_xy);
+    pending.clear(); previous.reset(); window.reset(); recovery_window.reset();
+    recovery_travel = 0.; wall_fixes = 0; last_wall.reset();
+    wall_window.reset(); wall_evidence = nullptr;
+    evidence_verdict.reset(); evidence_confirmations = 0; last_evidence_scan.reset();
+    resume_anchor_ns.reset(); resume_anchor_xy.reset();
+    if (suppressed) {
+        mode = "T265_PHASE_NO_WHEEL"; reason = why;
+        if (history.empty() && !reference.is_null() && last_tracked_ns)
+            publish_vio(*last_tracked_ns, *last_tracked_xy);
+    } else if (wheel_suspect) {
+        mode = "T265_PRIMARY_WHEEL_SUSPECT"; reason = "two_axis_walls_support_T265_over_wheel";
+    } else if (!reference.is_null() && selected) {
+        // Anchor only once actual wheel support reaches the selected Pose.
+        // Excluded wheel totals are never replayed as a post-phase tail.
+        resume_anchor_ns = wheels.empty() ? *t : std::max(*t, static_cast<std::int64_t>(wheels.back()[0]));
+        resume_anchor_xy = *selected;
+        anchor.reset(); anchor_wheel.reset();
+        mode = "T265_WITH_WHEEL_TAIL"; reason = "phase_exit_rebased";
+        process();
+    } else { mode = "T265_NO_WHEEL_REFERENCE"; reason = "no_measured_wheel_reference"; }
+    event({{"event", "wheel_phase_suppression_changed"}, {"sample_monotonic_ns", optional_json(t)},
+        {"previous_source", previous_mode}, {"motion_source", mode}, {"suppressed", suppressed}, {"reason", why},
+        {"selected_anchor_m", optional_json(anchor)}, {"wheel_anchor_m", optional_json(anchor_wheel)}});
+}
+
 void NativeMotionSource::configure(const Json &configuration) {
     reference = configuration; history.clear(); anchor.reset();
     bias = {{0., 0.}}; previous.reset(); window.reset(); recovery_window.reset();
@@ -94,12 +138,18 @@ void NativeMotionSource::configure(const Json &configuration) {
     reason = "no_measured_wheel_reference";
     wheel_suspect = false; wall_window.reset(); wall_evidence = nullptr;
     evidence_verdict.reset(); evidence_confirmations = 0; last_evidence_scan.reset();
+    resume_anchor_ns.reset(); resume_anchor_xy.reset();
     const double angle = reference.at("yaw_offset").get<double>() - reference.at("vio_rotation").get<double>();
     const double c = std::cos(angle), s = std::sin(angle);
     basis = {{Vec2{{c, -s}}, Vec2{{s, c}}}};
     const auto t = reference_time(reference);
     pending.erase(std::remove_if(pending.begin(), pending.end(),
         [t](const Row &p) { return p[0] < t; }), pending.end());
+    if (phase_wheel_suppressed) {
+        pending.clear(); mode = "T265_PHASE_NO_WHEEL"; reason = phase_wheel_reason;
+        if (last_tracked_ns && *last_tracked_ns >= t) publish_vio(*last_tracked_ns, *last_tracked_xy);
+        return;
+    }
     process();
 }
 
@@ -111,6 +161,12 @@ void NativeMotionSource::pose(const Json &p) {
         ? norm2(subtract(xy, *last_raw_xy)) : 0.;
     const int confidence = p.at("tracker_confidence").get<int>();
     last_raw_ns = t; last_raw_xy = xy; last_confidence = confidence;
+    if (confidence > 0) { last_tracked_ns = t; last_tracked_xy = xy; }
+    if (phase_wheel_suppressed) {
+        if (confidence > 0 && !reference.is_null()) publish_vio(t, xy);
+        return;
+    }
+    if (resume_anchor_ns && confidence > 0) publish_vio(t, xy);
     if (pending.size() == 4096) ++pending_pose_drops;
     append_bounded(pending, Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
     if (confidence <= 0 && anchor) fallback("SDK_tracking_lost", t);
@@ -171,6 +227,7 @@ NativeMotionSource::Vec3 NativeMotionSource::wheel_at(double t) const {
 }
 
 void NativeMotionSource::fallback(const std::string &why, double t) {
+    if (phase_wheel_suppressed) return;
     if (mode == "T265_PRIMARY_WHEEL_SUSPECT" && !wheels.empty() && !history.empty()) {
         const double end = wheels.back()[0];
         anchor = first2(sample(history, end)); anchor_wheel = first2(wheel_at(end));
@@ -183,7 +240,17 @@ void NativeMotionSource::fallback(const std::string &why, double t) {
 }
 
 void NativeMotionSource::process() {
+    if (phase_wheel_suppressed) return;
     if (reference.is_null() || wheels.empty()) return;
+    if (resume_anchor_ns) {
+        if (wheels.back()[0] < *resume_anchor_ns) return;
+        const double t = std::max(static_cast<double>(*resume_anchor_ns), wheels.front()[0]);
+        anchor = history.empty() ? *resume_anchor_xy : first2(sample(history, t));
+        anchor_wheel = first2(wheel_at(t));
+        pending.erase(std::remove_if(pending.begin(), pending.end(),
+            [t](const Row &p) { return p[0] < t; }), pending.end());
+        resume_anchor_ns.reset(); resume_anchor_xy.reset();
+    }
     const auto ref_ns = reference_time(reference);
     if (!anchor && wheels.front()[0] <= ref_ns && ref_ns <= wheels.back()[0]) {
         const Vec2 xy = xy_json(reference.at("pose_origin")); const Vec3 w = wheel_at(ref_ns);
@@ -246,6 +313,7 @@ void NativeMotionSource::process() {
 }
 
 void NativeMotionSource::publish() {
+    if (phase_wheel_suppressed || resume_anchor_ns) return;
     if (!anchor || wheels.empty() || mode == "T265_PRIMARY_WHEEL_SUSPECT") return;
     const double t = wheels.back()[0]; const Vec3 w = wheel_at(t);
     const Vec2 xy = subtract(add(*anchor, first2(w)), *anchor_wheel);
@@ -262,6 +330,7 @@ void NativeMotionSource::publish_vio(double t, const Vec2 &xy) {
 }
 
 void NativeMotionSource::select_wall_supported_vio(double t, const History &raw_poses) {
+    if (phase_wheel_suppressed) return;
     const auto previous_mode = mode;
     const Vec2 selected = first2(sample(history.empty() ? raw_poses : history, t));
     const Vec2 raw = first2(sample(raw_poses, t));
@@ -279,6 +348,7 @@ void NativeMotionSource::select_wall_supported_vio(double t, const History &raw_
 }
 
 void NativeMotionSource::select_wall_supported_wheel(double t) {
+    if (phase_wheel_suppressed) return;
     const Vec2 selected = first2(sample(history, t)); const Vec3 w = wheel_at(t);
     while (!history.empty() && history.back()[0] >= t) history.pop_back();
     append_bounded(history, Row{{static_cast<double>(static_cast<std::int64_t>(t)), selected[0], selected[1], 0.}});
@@ -292,6 +362,7 @@ void NativeMotionSource::select_wall_supported_wheel(double t) {
 
 void NativeMotionSource::observe_walls(const std::string &scan_id, const std::vector<std::string> &axes,
         std::int64_t reference_ns, const Json &center_xy, const History &raw_poses, bool reacquired) {
+    if (phase_wheel_suppressed) return; // The outer geometric correction still applies.
     const bool full_xy = std::set<std::string>(axes.begin(), axes.end()) == std::set<std::string>{"x", "y"};
     if ((mode == "WHEEL_FALLBACK" || wheel_suspect) && !equal_optional(last_wall, scan_id)) {
         last_wall = scan_id; wall_fixes = full_xy ? wall_fixes + 1 : 0;
@@ -348,8 +419,9 @@ NativeMotionSource::Json NativeMotionSource::snapshot(bool include_evidence) con
         {"pending_pose_drops", pending_pose_drops}, {"recovery_travel_m", recovery_travel},
         {"recovery_two_axis_fixes", wall_fixes}, {"t265_translation_rebase_m", bias}, {"policy", policy()},
         {"wheel_motion_suspect", wheel_suspect}, {"wall_motion_evidence", wall_evidence},
-        {"wheel_input_policy", {{"pause_requested", wheel_suspect},
-            {"reason", wheel_suspect ? "two_axis_wall_motion_wheel_suspect" : "measured_wheel_input_enabled"},
+        {"phase_wheel_suppressed", phase_wheel_suppressed}, {"phase_wheel_suppression_reason", phase_wheel_reason},
+        {"wheel_input_policy", {{"pause_requested", wheel_input_paused()},
+            {"reason", wheel_input_reason()},
             {"dependency_persists_after_pause", true}}},
         {"wheel_and_gyro_are_sdk_dependencies", true}, {"independent_ground_truth", false}};
     if (!include_evidence) result.erase("wall_motion_evidence");

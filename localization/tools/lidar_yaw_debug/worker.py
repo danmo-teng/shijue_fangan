@@ -179,7 +179,7 @@ def run_geometry_jobs(connection):
     finally:connection.close()
 
 
-def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None,native_feedback=None,control_output=None,pose_input=None):
+def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None,native_feedback=None,control_output=None,pose_input=None,wheel_policy_input=None):
     # This process owns motion propagation. Its receiver child alone owns lidar.
     # Own a process group before spawning any children. The external UART/SDK
     # owner stays outside it; a stuck shutdown can reclaim this whole subtree.
@@ -219,6 +219,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     native_updates=0
     published_native_updates=0
     latest_raw_pose={}
+    competition_wheel_policy=None
     last_output_packet=None
     direct_output=dict(packets_sent=0,output_drops=0,last_packet=None)
     direct_socket=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) if control_output else None
@@ -311,13 +312,40 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             if pose_connection is not None:pose_connection.close();pose_connection=None
             return False
 
+    def restore_wheel_policy():
+        if competition_wheel_policy is not None:
+            engine.motion.set_wheel_suppressed(competition_wheel_policy['suppressed'],
+                                               competition_wheel_policy['reason'])
+
+    def receive_wheel_policy():
+        nonlocal competition_wheel_policy
+        if wheel_policy_input is None or native_runtime is not None:return False
+        changed=False
+        for _ in range(16):
+            try:
+                data=wheel_policy_input['socket'].recv(4096)
+                packet=json.loads(data)
+                if (not isinstance(packet,dict) or packet.get('schema')!=1 or packet.get('kind')!='competition_wheel_policy'
+                        or packet.get('session_id')!=wheel_policy_input['session_id']
+                        or not isinstance(packet.get('suppressed'),bool)):
+                    continue
+                packet.setdefault('reason','safe_zone_low_speed')
+                if not isinstance(packet['reason'],str):continue
+                competition_wheel_policy=packet
+                with engine.lock:restore_wheel_policy()
+                event('competition_wheel_policy_applied',**packet)
+                changed=True
+            except BlockingIOError:break
+            except (OSError,ValueError,TypeError,KeyError) as exc:
+                event('competition_wheel_policy_error',reason=str(exc))
+        return changed
+
     def publish_sdk_policy():
         nonlocal last_policy,policy_error_reported
         if native_runtime is not None:return  # The same native motion owner publishes source decisions.
         if policy_output is None:return
         with engine.lock:
-            pause=engine.motion.wheel_suspect
-            reason='two_axis_wall_motion_wheel_suspect' if pause else 'measured_wheel_input_enabled'
+            pause=engine.motion.wheel_input_paused();reason=engine.motion.wheel_input_reason()
             requested=(pause,reason)
             if requested==last_policy:return
             evidence=engine.motion.wall_evidence
@@ -383,6 +411,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 engine.set_lidar_enabled(requested_lidar_enabled and reader_state['lidar_connected'])
                 event('operator_lidar_availability',enabled=payload['enabled'],reason=payload['reason'])
         with engine.lock:
+            if native_runtime is None:restore_wheel_policy()
             while engine.motion.events:
                 change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
         return changed
@@ -540,6 +569,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                     feedback_fd=native_feedback.fileno(),pose_fd=pose_input['socket'].fileno(),
                     control_address=address(control_output['address']) if control_output else '',
                     sdk_policy_address=address(sdk_policy['address']) if sdk_policy else '',
+                    wheel_policy_fd=wheel_policy_input['socket'].fileno() if wheel_policy_input else -1,
                     log_root=str(root)))
                 engine=NativeDynamicFence(config['installation'],native_runtime);engine.geometry=compute_geometry
             except Exception as exc:
@@ -564,6 +594,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             try:first=inbox.get_nowait()
             except queue.Empty:first=None
             changed=consume(first)
+            changed=receive_wheel_policy() or changed
             # Drain real queued inputs fairly, publishing actual endpoints
             # between them. No replay, stale-data rejection or synthetic ticks.
             # Housekeeping runs after a bounded quantum instead of after every
@@ -572,6 +603,10 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 incoming=False
                 if native_feedback is not None:incoming=receive_native() or incoming
                 if pose_input is not None:incoming=receive_pose() or incoming
+                if wheel_policy_input is not None:
+                    # Pose/session invalidation may replace the original
+                    # Python fallback source; retain the current phase policy.
+                    with engine.lock:restore_wheel_policy()
                 if not incoming:break
                 changed=True
                 if control is not None:publish_control()
@@ -608,6 +643,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 waiting=[inbox._reader,updates._reader,scans._reader]
                 if native_feedback is not None and native_runtime is None:waiting.append(native_connection or native_feedback)
                 if pose_input is not None and native_runtime is None:waiting.append(pose_connection or pose_input['socket'])
+                if wheel_policy_input is not None and native_runtime is None:waiting.append(wheel_policy_input['socket'])
                 select.select(waiting,[],[],.002)
     except Exception as exc:
         error=str(exc);event('worker_error',reason=error)
@@ -619,6 +655,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         native_state['connected']=False
         if pose_input is not None:pose_input['socket'].close()
         if native_feedback is not None:native_feedback.close()
+        if wheel_policy_input is not None:wheel_policy_input['socket'].close()
         if policy_output is not None:policy_output.close()
         if direct_socket is not None:direct_socket.close()
         stop.set();fitting_stop.set()
@@ -670,6 +707,14 @@ class RadarWorker:
         self.state={};self.input_drops=0;self.pending_reference=None;self.stopped_cleanly=False
         self.scheduling_setup=None
         self.feedback_socket=None;self.feedback_address=None
+        self.wheel_policy_input=None
+
+    def enable_competition_wheel_policy(self,session_id):
+        address='\0competition-wheel-policy-'+session_id
+        channel=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        channel.setblocking(False);channel.bind(address)
+        self.wheel_policy_input=dict(socket=channel,session_id=session_id)
+        return address
 
     def enable_native_feedback(self):
         # Bind before the sole C++ UART owner starts. No consumer-ready ACK.
@@ -680,7 +725,7 @@ class RadarWorker:
     def start(self,config,port,baud,root,*,sdk_policy=None,control_output=None,pose_input=None):
         self.scheduling_setup=prepare_realtime()
         self.process=self.context.Process(target=run_worker,args=(config,port,baud,root,
-            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy,self.feedback_socket,control_output,pose_input),name='lidar-geometry-owner')
+            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy,self.feedback_socket,control_output,pose_input,self.wheel_policy_input),name='lidar-geometry-owner')
         self.process.start()
 
     def send(self,kind,payload):
@@ -735,3 +780,4 @@ class RadarWorker:
         for channel in (self.inbox,self.display,self.replies):
             channel.cancel_join_thread();channel.close()
         if self.feedback_socket is not None:self.feedback_socket.close()
+        if self.wheel_policy_input is not None:self.wheel_policy_input['socket'].close()
