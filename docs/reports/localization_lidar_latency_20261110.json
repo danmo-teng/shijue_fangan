@@ -4193,7 +4193,7 @@
     },
     "sample_table": "analysis/localization_latency_20261110/formal_relay_samples.csv",
     "sample_table_rows": 1999,
-    "sample_table_sha256": "51454fe37199fddd47339f2a3f7e40e4f134b185dc4af9b9b60d16e72d2daa02",
+    "sample_table_sha256": "ba55d67d17da0d5e028ceb74a5b3b01aa4a122a1c0d85e9810f9ba5be151c989",
     "fingerprints": {
       "localization/src/dynamic_pose_relay.cpp": "63131d0f109b8ac2d8406bde726de69e460b499bbff958b17db49510c77990a1",
       "localization/src/serial_port.cpp": "ab9f5043d70b53c1af6f30642f2b5d9f0a596713c41854e0f3dae8b11d15a13c",
