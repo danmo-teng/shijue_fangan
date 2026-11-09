@@ -36,19 +36,31 @@
     "rejections": [
       "no_gyro_at_interval_start"
     ],
-    "paired_to_api_ms": {
+    "coalesced_samples": 11,
+    "paired_to_process_start_ms": {
       "median": 0.563583,
       "p95": 0.7918535,
       "maximum": 7.167592,
       "count": 5471
     },
-    "wheel_rx_to_api_ms": {
+    "wheel_rx_to_process_start_ms": {
       "median": 5.037374,
       "p95": 9.3198995,
       "maximum": 22.695567,
       "count": 5471
     },
-    "coalesced_samples": 11
+    "paired_to_api_return_ms": {
+      "median": 1.094418,
+      "p95": 1.8917285000000001,
+      "maximum": 15.885743,
+      "count": 5471
+    },
+    "wheel_rx_to_api_return_ms": {
+      "median": 5.678548,
+      "p95": 9.9592405,
+      "maximum": 23.053276,
+      "count": 5471
+    }
   },
   "pose": {
     "rows": 10909,
@@ -76,5 +88,11 @@
   "control_forwarded_to_uart": false,
   "session_complete_file_exists": false,
   "supply_note": "User reported earlier supply10W; current competition supply. Voltage/current transients not measured.",
-  "boot_id": "d2f938b4-1bcf-453a-aa48-ebbb78034a06"
+  "boot_id": "d2f938b4-1bcf-453a-aa48-ebbb78034a06",
+  "sdk_timing_definitions": {
+    "process_start": "wheel_sdk_attempt.timestamp_monotonic_ns is the process(now) argument, before checks/attempt logging; not the actual API call start.",
+    "api_return": "wheel_sdk_result.last_sdk_success_ns: process(now)+steady elapsed since process entry through successful send return. Retains existing timestamps; exact absolute call_start is not logged.",
+    "paired_ready": "max(packet.receive_monotonic_ns, packet.gyro_receive_ns), same-host native RX, not an MCU/SDK clock mapping.",
+    "rate_hz": "Original attempt/process start span, practically ~100Hz. Bool is host API result, not device ACK."
+  }
 }

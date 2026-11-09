@@ -8,16 +8,6 @@
     "true": 2476,
     "false": 0,
     "rate_hz": 99.82669940184708,
-    "paired_to_api_ms": {
-      "median": 0.5139365,
-      "p95": 0.7146445,
-      "maximum": 2.829745
-    },
-    "wheel_rx_to_api_ms": {
-      "median": 5.693365,
-      "p95": 8.914599249999998,
-      "maximum": 13.467601
-    },
     "rejections": [
       "no_gyro_at_interval_start",
       "no_gyro_at_interval_start"
@@ -46,7 +36,29 @@
         "wheel_input_policy_reason": "measured_wheel_input_enabled"
       }
     ],
-    "coalesced_samples": 4
+    "coalesced_samples": 4,
+    "paired_to_process_start_ms": {
+      "median": 0.5139365,
+      "p95": 0.7146445,
+      "maximum": 2.829745
+    },
+    "wheel_rx_to_process_start_ms": {
+      "median": 5.693365,
+      "p95": 8.914599249999998,
+      "maximum": 13.467601
+    },
+    "paired_to_api_return_ms": {
+      "median": 1.0006435,
+      "p95": 1.80066375,
+      "maximum": 12.207229,
+      "count": 2476
+    },
+    "wheel_rx_to_api_return_ms": {
+      "median": 6.2312805,
+      "p95": 9.74722275,
+      "maximum": 18.561175,
+      "count": 2476
+    }
   },
   "pose": {
     "rows": 4864,
@@ -70,5 +82,11 @@
   "original_logs_modified": false,
   "motor_commands": 0,
   "control_forwarded_to_uart": false,
-  "session_complete_file_exists": false
+  "session_complete_file_exists": false,
+  "sdk_timing_definitions": {
+    "process_start": "wheel_sdk_attempt.timestamp_monotonic_ns is the process(now) argument, before checks/attempt logging; not the actual API call start.",
+    "api_return": "wheel_sdk_result.last_sdk_success_ns: process(now)+steady elapsed since process entry through successful send return. Retains existing timestamps; exact absolute call_start is not logged.",
+    "paired_ready": "max(packet.receive_monotonic_ns, packet.gyro_receive_ns), same-host native RX, not an MCU/SDK clock mapping.",
+    "rate_hz": "Original attempt/process start span, practically ~100Hz. Bool is host API result, not device ACK."
+  }
 }

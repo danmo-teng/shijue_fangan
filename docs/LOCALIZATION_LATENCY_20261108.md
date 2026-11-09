@@ -454,7 +454,7 @@ result.json同时保存空移除列表与automatic_deletion=false。既有test_t
 072008虽SDK2476次true/99.827Hz、原始Pose199.604Hz无缺号，联合控制却仅35.86个不同轮端点/秒，轮RX→probe中位1522/P952170ms；观察通道丢1548个完整容器，故无session_complete。不能拿API频率或后段motion_queue_drops=0当整链完成。
 072648的同SDK send A/B/B/A在首阶段07:26:58整组USB故障后负载消失，比较无效，原日志保留。派生证据见reports/localization_joint_072008_audit_20261109.json及localization_joint_send_abba_20261109.json。
 
-074616换回比赛电源后，同一SDK、真实F405/YOLO与历史雷达PTY/地图绘图四阶段连续运行，未见USB/相机错误。实际F405为14b2a3a/dirty1、MOTIONDEBUG、921600；合成场地参考仅作计算负载，雷达后验接受0，不是实物精度验证。5471次API全true、99.789Hz，轮/gyro配齐→API P950.792ms、wheel物理RX→API P959.320ms；10909个原始Pose、199.593Hz、缺号0。
+074616换回比赛电源后，同一SDK、真实F405/YOLO与历史雷达PTY/地图绘图四阶段连续运行，未见USB/相机错误。实际F405为14b2a3a/dirty1、MOTIONDEBUG、921600；合成场地参考仅作计算负载，雷达后验接受0，不是实物精度验证。5471次API全true、99.789Hz，轮/gyro配齐→API返回P95 1.892ms、wheel物理RX→API返回P95 9.959ms；10909个原始Pose、199.593Hz、缺号0。
 
 唯一对照变量为MotionInbox发送采用原Python socket.send或保留GIL的PyDLL MSG_DONTWAIT，方法/容量/原始戳/公式均保持。各阶段10秒；下表另去首2秒作离线描述，运行中未丢旧数据或增加门控；积压会跨阶段继承，去2秒不代表已经清空。
 
@@ -467,4 +467,22 @@ result.json同时保存空移除列表与automatic_deletion=false。既有test_t
 
 没有稳定因果收益，最后原A反而最好；候选运行代码及专用断言全部撤回到2796d31原字节，已有f9fa722接收优化保留。独立语义审查/单项功能检查通过不构成性能采用依据。总体观察通道丢7858个容器，控制链未验收、无session_complete；原始Pose多数引用年龄约32～40ms，轮引用却秒级，优先查轮反馈观察/转发支路。现有Python日志沿用C++原始RX戳，不能把它与native戳相等解释为解码零延迟，也无法再精拆具体子段。完整阶段/异常范围见reports/localization_joint_send_stable_supply_20261109.json及localization_joint_074616_sdk_20261109.json。
 
-075253仅为现有入口临时函数剖析，运行代码无常驻新增计时。UART线程26秒中feed包围20.3秒、_publish11.6秒、日志submit7.1秒、deepcopy5.54秒；这些包含重叠/GIL等待，不能直接相加或当CPU时间。主日志线程逐条Queue.get与锁获取及JSON编码也有明显成本。历史PTY发生半包写而提前中止，此轮不算完整联合性能复测；派生函数归因保留在reports/localization_joint_profile_20261109.json。当前仅准备保持FIFO/容量/字段/写盘语义的日志批量队列小候选，实际收益待同负载对照，不靠扩容或删除原始日志降低负载。
+075253仅为现有入口临时函数剖析，运行代码无常驻新增计时。UART线程26秒中feed包围20.3秒、_publish11.6秒、日志submit7.1秒、deepcopy5.54秒；这些包含重叠/GIL等待，不能直接相加或当CPU时间。主日志线程逐条Queue.get与锁获取及JSON编码也有明显成本。历史PTY发生半包写而提前中止，此轮不算完整联合性能复测；派生函数归因保留在reports/localization_joint_profile_20261109.json。
+
+### 日志队列批处理候选：中位改善，仍不足以采用
+
+候选只将原Queue的入队取size、最多512条取出及task_done改单锁批操作，JSON/写盘留锁外，容量/顺序/字段/原20ms及100ms节奏保持。两项直接相关检查通过，包含原日志溢出不阻断轮速输入；批取后编码错误仍明确不完整，独立并发语义审查无重大问题。
+075738回放在主Python线程受阻后发生PTY短写，只作失败记录；没有拿它与完整阶段相减。075954使用临时独立回放进程，每阶段同样8978个完整原始记录/0短写，最大源调度迟到17.53/10.99/15.16/13.36ms；四阶段真实SDK/YOLO连续，392扫描全部计算、C++392次/0回退、扫描队列丢0。合成参考与墙后验接受0的限制继续保留。
+
+| 阶段 | 日志队列 | 不同轮端点Hz | wheel物理RX→probe中位 / P95 ms | 观察容器drop增量 |
+| --- | --- | --- | --- | --- |
+| A1 | 原逐条锁 | 27.93 | 1700.92 / 2312.29 | 733 |
+| B1 | 单锁批处理 | 28.45 | 1553.22 / 2369.67 | 457 |
+| B2 | 单锁批处理 | 28.29 | 1464.27 / 1630.16 | 253 |
+| A2 | 原逐条锁 | 27.76 | 1847.33 / 2236.84 | 980 |
+
+同样仅在离线统计去阶段首2秒，全阶段结果也保留。B中位和丢弃均有改善，但P95收益未在两次B重复、控制仍约28Hz/秒级，原有积压也会跨阶段继承。没有用功能检查或少锁理论替代实际收益，候选运行代码和55行专用断言全部撤回到fa0c3c2原字节，不继续累加微小改法。
+全程SDK5448次true/0false、99.847Hz，配齐→API返回P95 1.838ms、wheelRX→API返回P95 9.891ms；10796原始Pose199.576Hz/缺号0。观察通道仍丢2959个容器，后段队列0与motion_stream_complete不代表整链完整；没有session_complete。
+报告见reports/localization_joint_log_batch_abba_20261109.json及localization_joint_075954_sdk_20261109.json。下一步提出C++直接向定位工作进程发送07/08、绕过主Python诊断支路，或先隔离显示/诊断；关乎本机接口及生命周期，已向用户说明代价、等待选择，没有提前实现。无需F405修改，不动公式/降级或新增门控。
+
+计时口径复核：debug_wheel_input.cpp中attempt.timestamp_monotonic_ns是process(now)入参，不是后面实际call_start；成功result.last_sdk_success_ns包含process内校验、attempt记录及SDK调用。当前072008/074616/075954派生报告分别保留到处理开始和到API返回的分布，文中新增联合结果采用返回口径。旧文若仅以attempt计算“到API”，应理解为到处理开始，不能当精确调用时间；没有为此新增运行时计时/数据年龄门。SDK返回仍不是设备融合ACK。
