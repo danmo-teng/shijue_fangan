@@ -5,6 +5,7 @@ Explicit buttons are the only source of chassis motion. No competition output.
 import argparse
 import json
 import math
+import multiprocessing as mp
 from pathlib import Path
 import queue
 import socket
@@ -22,6 +23,28 @@ from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.worker import RadarWorker
 from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
+from local_packet_receiver import LocalPacketReceiver
+
+def capture_control(connection, root, stop, packets):
+    """Test-only passive receiver, isolated from the map/CSV parsing GIL."""
+    connection.settimeout(.05)  # spawn socket reconstruction does not preserve Python timeout.
+    log=AsyncDebugLog(root)
+    receiver=LocalPacketReceiver(connection,16384)
+    error=None
+    try:
+        while not stop.is_set():
+            try:data=receiver.recv()
+            except socket.timeout:continue
+            received=time.monotonic_ns()
+            packet=json.loads(data)
+            packets.value+=1
+            log.submit('control_received.jsonl',dict(packet_id=packet['packet_id'],
+                sample_monotonic_ns=packet['timestamp_monotonic_ns'],receive_monotonic_ns=received))
+    except (OSError,ValueError,KeyError) as exc:error=str(exc)
+    finally:
+        log.submit('control_capture_summary.json',dict(packets=packets.value,error=error,logging_healthy=log.healthy()),atomic=True)
+        log.close();connection.close()
+
 
 class DynamicMapApp(base.MotionMapApp):
     def __init__(self,options):
@@ -40,9 +63,35 @@ class DynamicMapApp(base.MotionMapApp):
         self.dynamic_error=None;self.dynamic_snapshot={};self.path=[];self.vio_path=[]
         self.last_worker_input_drops=0
         self.last_dynamic_stamp=0;self.exit_requested=False
+        self.control_socket=None;self.control_process=None
+        self.control_context=None;self.control_stop=None;self.control_packets=None
+        self.control_address='\0motion-lab-control-'+uuid.uuid4().hex
         self.capture_chain_present=False
         self.auto_reference_requested=False
         self.speed_mm_s=200;self.turn_rate_deg_s=60;self.distance_mm=500
+
+    def motion_lab_command(self, request):
+        # Reuse the GUI reference action for the existing stdio field test.
+        if isinstance(request, dict) and request.get('op') == 'align':
+            if self.bridge.pending:
+                raise RuntimeError('先结束当前动作再建立起点')
+            request_id = self.radar.align('operator stationary field placement; wall XY/yaw; initial-heading +X symmetry branch')
+            self.devent('field_reference_requested', request_id=request_id)
+            return dict(request_id=request_id, reference_pending=True)
+        if isinstance(request, dict) and request.get('op') == 'lidar':
+            enabled=request.get('enabled')
+            if not isinstance(enabled,bool):raise ValueError('enabled must be boolean')
+            sent=self.radar.send('lidar_enabled',dict(enabled=enabled,reason='explicit motion-lab obstacle availability test'))
+            self.devent('operator_lidar_availability_requested',enabled=enabled,ipc_sent=sent)
+            return dict(ipc_sent=sent,enabled_requested=enabled)
+        result = super().motion_lab_command(request)
+        if isinstance(request, dict) and request.get('op') == 'status':
+            result['dynamic'] = self.dynamic_snapshot
+            result['radar'] = self.radar.state
+            result['control_capture'] = dict(packets=self.control_packets.value if self.control_packets else 0,
+                execution='isolated_readonly_process',
+                exitcode=self.control_process.exitcode if self.control_process else None)
+        return result
 
     def extra_localizer_args(self):
         return ['--debug-pose-socket','@'+self.pose_address[1:],
@@ -61,8 +110,19 @@ class DynamicMapApp(base.MotionMapApp):
         self.dynamic_log=AsyncDebugLog(self.run_dir)
         sdk_policy=(dict(session_id=self.wheel_input.session_id,address='\0t265-wheel-'+self.wheel_input.session_id)
                     if self.options.wheel_input=='on' else None)
+        control_output=None
+        if self.options.motion_lab_stdio:
+            self.control_context=mp.get_context('spawn')
+            self.control_stop=self.control_context.Event()
+            self.control_packets=self.control_context.Value('Q',0,lock=False)
+            self.control_socket=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+            self.control_socket.bind(self.control_address);self.control_socket.settimeout(.05)
+            control_output=dict(session_id=self.wheel_input.session_id,address=self.control_address)
+            self.control_process=self.control_context.Process(target=capture_control,
+                args=(self.control_socket,self.run_dir,self.control_stop,self.control_packets),name='motion-lab-control-capture')
+            self.control_process.start()
         self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy,
-            pose_input=dict(socket=self.pose_socket,session_id=self.wheel_input.session_id))
+            control_output=control_output,pose_input=dict(socket=self.pose_socket,session_id=self.wheel_input.session_id))
 
     def start_session(self):
         self.message='建议场地中心无遮挡处，静止后点自动定位'
@@ -85,6 +145,11 @@ class DynamicMapApp(base.MotionMapApp):
             pose_transport='same-SDK Unix SEQPACKET directly to motion process',dynamic_time_policy='timing_diagnostic_not_admission',
             qualification=self.dynamic_config['qualification'],control_pose_published=False,
             hardware_speed_accuracy_verified=False,maximum_test_command_speed_mm_s=700)
+        m['motion_lab_control_capture']=dict(enabled=bool(self.control_process),
+            execution='isolated_readonly_process' if self.control_process else None,
+            pid=self.control_process.pid if self.control_process else None,
+            pose_sent_to_chassis=False,control_formula='unchanged native/formal publisher',
+            receive_clock='host monotonic; compare with mapped sample time, not physical ground truth')
         m['wheel_and_primary_gyro_independent_of_sdk_input']=False if self.options.wheel_input=='on' else None
         m['sdk_device_internal_state_clean_verified']=False
         m['lidar_execution']='dedicated_spawn_process_parser_deskew_fit'
@@ -312,11 +377,21 @@ class DynamicMapApp(base.MotionMapApp):
                 worker.join(timeout=3)
                 if worker.is_alive():self.logging_failed=True;self.dynamic_error='处理线程退出未完成'
         self.radar.close()
+        if self.control_process:
+            self.control_stop.set();self.control_process.join(timeout=3)
+            if self.control_process.is_alive():
+                self.logging_failed=True
+                self.control_process.terminate();self.control_process.join(timeout=1)
+            if self.control_process.exitcode!=0:self.logging_failed=True
+            receipt=base.read_json(self.run_dir/'control_capture_summary.json')
+            if not receipt or receipt.get('error') or not receipt.get('logging_healthy'):self.logging_failed=True
         self.pose_socket.close()
+        if self.control_socket:self.control_socket.close()
         if self.dynamic_log:
             summary=dict(self.radar.state,pose_packets=self.radar.state.get('pose_ingested',self.pose_packets),primary_yaw_packets=self.imu_packets,
                 motion_queue_drops=self.radar.input_drops,worker_stopped_cleanly=self.radar.stopped_cleanly,
-                parent_error=self.dynamic_error)
+                parent_error=self.dynamic_error,control_capture_packets=self.control_packets.value if self.control_packets else 0,
+                control_capture_exitcode=self.control_process.exitcode if self.control_process else None)
             # Raw UART/Pose may be complete while online motion inputs were
             # lost. Do not certify that session as an intact analysis chain.
             # This affects final log completeness only, never live control.
