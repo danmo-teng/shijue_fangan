@@ -341,7 +341,50 @@ python3 -m py_compile run_editor.py run_detector.py calibrate_ground.py rescue_v
 合成测试通过只说明代码和基本颜色规则正常；现场阈值仍需使用真实材料校准。
 
 
-## YOLO26n 640×640 实时测速（2026-10-26）
+## YOLO26n 640×640 新模型对比（2026-11-09）
+
+桌面“YOLO26-640实时测速”仍使用原入口 `benchmark_yolo26_x5.py`，默认模型改为：
+`/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin`。
+仅替换独立测速模型，正式比赛入口、模型文件、类别表及公共识别实现保持原样。
+默认读取模型旁 `classes.txt`，将 `blueteam/redteam` 显式映射为 `safe_blue/safe_red`；
+`common/kernel/risk/wound` 使用原正式别名映射。模型目录是用户提供的外部依赖，不复制或覆盖原模型。
+
+识别直接复用正式 `Yolo26Pipeline` 的 spawn 推理进程、三个图像槽、JPU/NV12/VSE、
+640×640等比例补边、LTRB/NMS、原生1280×1024坐标、多帧跟踪，以及正式
+`make_detection`、`safe_bbox_from_detections`、`capture_image_quality`、`make_vision_snapshot`。
+默认相机180FPS、解码60FPS、提交50FPS、置信度0.20、NMS0.45、BPU核0，均与正式默认相同。
+保留正式配置、当前用户ROI和可用标定；不创建比赛规划器、定位或串口进程。
+未连接下位机状态时相机角度/合爪条件保持未知，不伪造合爪审核通过；本工具不是完整比赛负载或动作验收。
+
+预览独立进程，使用单个共享内存槽传递最新的“图像＋同帧结果”，跳过预览不阻塞识别。
+它复用正式ROI/跟踪绘制，并标注原始类别框、置信度、唯一识别FPS、BPU耗时、结果/预览延迟。
+预览传输与正式原队列方式不同，优化仅在本测速文件内，不改变正式程序。
+默认预热5秒、测量60秒；Q或Esc退出。`--duration 0`持续显示，退出时保存统计。
+
+```bash
+python3 vision/benchmark_yolo26_x5.py
+# 用原正式模型作同一测速链的人工对照：
+python3 vision/benchmark_yolo26_x5.py --model /home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin --labels /home/sunrise/RDK_X5/shijue_fangan/vision/config/yolo_labels.txt
+```
+
+日志仍在 `vision/captures/yolo26_benchmark/<时间>_competition/`：`metadata.json`记录模型、类别映射、
+配置/共享源码指纹和实际后端；`frames.csv`逐唯一结果记录推理、跟踪/ROI及交付延迟；
+`detections.jsonl`约每秒采样真实检测框和轨迹；`summary.json`记录完整1秒FPS、分位延迟、错误和预览指标；
+`last_preview.jpg`/`display.json`保留带框画面和显示统计。原始记录不清理。
+延迟起点为主机收到MJPEG的时刻，终点为完成正式视觉快照，预览另计到imshow调用前；
+不等于曝光到屏幕的物理延迟。至少30秒且每个完整1秒窗口均≥30新结果才标记 `stable_30fps=true`。
+不降低阈值、不缩小推理输入、不重复画面凑帧。实测回执见 `docs/reports/yolo26_new_model_benchmark_20261109.json`。
+
+当前真实摄像头＋现场物资最终实测：预热5秒后测60秒，2549个唯一结果，平均42.48FPS、
+最低完整1秒40，识别稳定30检查通过。MJPEG主机接收→跟踪/ROI快照P50/P95为61.20/71.22ms，
+BPU推理P95为15.01ms；预览19.62FPS，调用imshow前P95为101.20ms，显示帧率与识别帧率分别统计。
+最大结果间隔91.15ms，不等于每帧硬截止33.3ms；未运行比赛联合负载。三种现场物资有检出，
+纸箱背景仍产生约0.4～0.5的伤员类框；没有标注集，不宣称识别精度、召回率或比旧模型更好。
+最终目录：`vision/captures/yolo26_benchmark/20261109_211230_398072_competition/`。
+
+## 2026-10-26 历史测速（旧模型/旧测速进程，仅供追溯）
+
+以下参数、命令和结果属于当时版本，当前入口行为以上述2026-11-09说明为准。
 
 独立程序 `benchmark_yolo26_x5.py`，不修改比赛使用的YOLOv8模型/后处理，不启动比赛，不读写UART。
 默认模型为 `yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin`，文件由用户提供、不纳入本次代码提交。
