@@ -1,0 +1,913 @@
+{
+  "date": "2026-11-10",
+  "analysis_parent_commit": "d64c3a7",
+  "sensor_order": [
+    "编码器",
+    "T265",
+    "雷达",
+    "陀螺仪"
+  ],
+  "method": "Use T265 as a temporary common reference for the three directly measured pair lags, then subtract each action minimum. Aggregate row takes each channel median relative to T265 before subtracting the minimum; it is not the column median of per-action normalized rows.",
+  "time_bases": {
+    "receive": "Original encoder/gyro UART receive, SDK callback receive, and raw ray packet final-byte receive batch. Temporal response is fitted to the same raw motion/wall geometry; this is not exposure-to-callback or absolute hardware transport latency.",
+    "source": "Original estimated-source phase results from d64c3a7; no new calibration."
+  },
+  "aggregate_receive_earliest_zero_ms": [
+    0.0,
+    4.5000000000003375,
+    3.6607591433533884,
+    28.500000000000025
+  ],
+  "aggregate_source_earliest_zero_ms": [
+    1.9999999999996687,
+    0.0,
+    2.266996533185389,
+    27.99999999999969
+  ],
+  "rows": [
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:5",
+      "wire_sequence": 178,
+      "angle_ccw_deg": 90.0,
+      "rate_deg_s": 60.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        -7.000000000000339,
+        0.0,
+        0.7152178352483475,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -11.000000000000343,
+        0.0,
+        3.3644029015832753,
+        22.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.0,
+        7.000000000000339,
+        7.715217835248687,
+        35.00000000000003
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        11.000000000000343,
+        14.364402901583619,
+        34.00000000000003
+      ],
+      "receive_lidar_raw_wall_rms_mm": 6.23996369188016
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:6",
+      "wire_sequence": 179,
+      "angle_ccw_deg": -90.0,
+      "rate_deg_s": 60.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        6.999999999999673,
+        0.0,
+        2.3788704033243935,
+        28.999999999999694
+      ],
+      "receive_relative_to_t265_ms": [
+        2.9999999999996696,
+        0.0,
+        0.07596635130778227,
+        24.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        6.999999999999673,
+        0.0,
+        2.3788704033243935,
+        28.999999999999694
+      ],
+      "receive_earliest_zero_ms": [
+        2.9999999999996696,
+        0.0,
+        0.07596635130778227,
+        24.999999999999687
+      ],
+      "receive_lidar_raw_wall_rms_mm": 4.465211919777124
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:5",
+      "wire_sequence": 81,
+      "angle_ccw_deg": -180.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        6.999999999999673,
+        0.0,
+        2.525343806512721,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        1.9999999999996687,
+        0.0,
+        -0.8778865070821792,
+        22.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        6.999999999999673,
+        0.0,
+        2.525343806512721,
+        27.99999999999969
+      ],
+      "receive_earliest_zero_ms": [
+        2.877886507081848,
+        0.8778865070821792,
+        0.0,
+        23.877886507081868
+      ],
+      "receive_lidar_raw_wall_rms_mm": 7.328636014453176
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:6",
+      "wire_sequence": 82,
+      "angle_ccw_deg": 180.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        2.9999999999996696,
+        0.0,
+        1.4410030537426544,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -4.000000000000337,
+        0.0,
+        -1.5158846462565707,
+        22.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        2.9999999999996696,
+        0.0,
+        1.4410030537426544,
+        27.99999999999969
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        4.000000000000337,
+        2.484115353743766,
+        27.000000000000025
+      ],
+      "receive_lidar_raw_wall_rms_mm": 6.165477929490728
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:5",
+      "wire_sequence": 249,
+      "angle_ccw_deg": 180.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        5.999999999999672,
+        0.0,
+        3.2211752985809396,
+        28.999999999999694
+      ],
+      "receive_relative_to_t265_ms": [
+        0.9999999999996678,
+        0.0,
+        -2.3061410970702654,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        5.999999999999672,
+        0.0,
+        3.2211752985809396,
+        28.999999999999694
+      ],
+      "receive_earliest_zero_ms": [
+        3.306141097069933,
+        2.3061410970702654,
+        0.0,
+        26.306141097069954
+      ],
+      "receive_lidar_raw_wall_rms_mm": 9.32951824371137
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:6",
+      "wire_sequence": 250,
+      "angle_ccw_deg": -180.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        8.999999999999675,
+        0.0,
+        2.9291303642732522,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        3.9999999999996705,
+        0.0,
+        -2.945811673768284,
+        22.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        8.999999999999675,
+        0.0,
+        2.9291303642732522,
+        27.99999999999969
+      ],
+      "receive_earliest_zero_ms": [
+        6.945811673767954,
+        2.945811673768284,
+        0.0,
+        25.94581167376797
+      ],
+      "receive_lidar_raw_wall_rms_mm": 8.468496553245297
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:1",
+      "wire_sequence": 19,
+      "angle_ccw_deg": 90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        -4.000000000000337,
+        0.0,
+        1.3883064717892803,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -9.000000000000341,
+        0.0,
+        -0.8005952062117188,
+        22.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.0,
+        4.000000000000337,
+        5.388306471789617,
+        32.00000000000003
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        9.000000000000341,
+        8.199404793788622,
+        32.00000000000003
+      ],
+      "receive_lidar_raw_wall_rms_mm": 6.191894813666638
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:2",
+      "wire_sequence": 20,
+      "angle_ccw_deg": 90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        -8.000000000000341,
+        0.0,
+        4.03823604813149,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -12.000000000000345,
+        0.0,
+        3.127366856412223,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.0,
+        8.000000000000341,
+        12.038236048131832,
+        36.00000000000003
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        12.000000000000345,
+        15.127366856412568,
+        36.00000000000003
+      ],
+      "receive_lidar_raw_wall_rms_mm": 7.714812966809028
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:3",
+      "wire_sequence": 21,
+      "angle_ccw_deg": 90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        -7.000000000000339,
+        0.0,
+        -2.0919784130703865,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -11.000000000000343,
+        0.0,
+        -5.3304316549421245,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.0,
+        7.000000000000339,
+        4.908021586929953,
+        35.00000000000003
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        11.000000000000343,
+        5.669568345058218,
+        35.00000000000003
+      ],
+      "receive_lidar_raw_wall_rms_mm": 6.835514506114063
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:4",
+      "wire_sequence": 22,
+      "angle_ccw_deg": 90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        -2.000000000000335,
+        0.0,
+        2.155122663046384,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -6.000000000000338,
+        0.0,
+        -1.1447312375415186,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.0,
+        2.000000000000335,
+        4.155122663046718,
+        30.000000000000025
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        6.000000000000338,
+        4.85526876245882,
+        30.000000000000025
+      ],
+      "receive_lidar_raw_wall_rms_mm": 6.55887213299549
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:5",
+      "wire_sequence": 23,
+      "angle_ccw_deg": -90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        -10.000000000000341,
+        0.0,
+        2.39905570295556,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -14.000000000000345,
+        0.0,
+        -0.13458438184217872,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.0,
+        10.000000000000341,
+        12.399055702955902,
+        38.00000000000003
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        14.000000000000345,
+        13.865415618158165,
+        38.00000000000003
+      ],
+      "receive_lidar_raw_wall_rms_mm": 6.551424358101203
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:6",
+      "wire_sequence": 24,
+      "angle_ccw_deg": -90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        0.9999999999996678,
+        0.0,
+        2.4107002190432727,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -5.0000000000003375,
+        0.0,
+        2.714051818466925,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        0.9999999999996678,
+        0.0,
+        2.4107002190432727,
+        27.99999999999969
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        5.0000000000003375,
+        7.714051818467262,
+        29.000000000000025
+      ],
+      "receive_lidar_raw_wall_rms_mm": 8.40596405889629
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:7",
+      "wire_sequence": 25,
+      "angle_ccw_deg": -90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        4.999999999999671,
+        0.0,
+        -3.8123260935169463,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -3.3306690738754696e-13,
+        0.0,
+        -6.689217876073912,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        8.812326093516617,
+        3.8123260935169463,
+        0.0,
+        31.81232609351664
+      ],
+      "receive_earliest_zero_ms": [
+        6.689217876073579,
+        6.689217876073912,
+        0.0,
+        30.6892178760736
+      ],
+      "receive_lidar_raw_wall_rms_mm": 7.180690270958472
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+      "wire_sequence": 26,
+      "angle_ccw_deg": -90.0,
+      "rate_deg_s": 120.0,
+      "channel_order": [
+        "encoder",
+        "t265",
+        "lidar",
+        "gyro"
+      ],
+      "source_relative_to_t265_ms": [
+        4.999999999999671,
+        0.0,
+        0.7003977478655533,
+        27.99999999999969
+      ],
+      "receive_relative_to_t265_ms": [
+        -3.3306690738754696e-13,
+        0.0,
+        0.3105797826316473,
+        23.999999999999687
+      ],
+      "source_earliest_zero_ms": [
+        4.999999999999671,
+        0.0,
+        0.7003977478655533,
+        27.99999999999969
+      ],
+      "receive_earliest_zero_ms": [
+        0.0,
+        3.3306690738754696e-13,
+        0.3105797826319804,
+        24.00000000000002
+      ],
+      "receive_lidar_raw_wall_rms_mm": 8.361147751306893
+    }
+  ],
+  "lidar_receive_wall_fits": [
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:5",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": 3.3644029015832753,
+      "field_yaw_nuisance_offset_deg": 0.2356846804008005,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006239963691880159,
+      "rmse_no_shift_m": 0.006453823252141527,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4863,
+        "supported_points": 4831
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": 0.07596635130778227,
+      "field_yaw_nuisance_offset_deg": 0.25230837428212344,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.004465211919777124,
+      "rmse_no_shift_m": 0.004465616419364668,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4689,
+        "supported_points": 4652
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:5",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -0.8778865070821792,
+      "field_yaw_nuisance_offset_deg": 0.05411034196970859,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007328636014453176,
+      "rmse_no_shift_m": 0.0073421662874232855,
+      "support": {
+        "scans": 33,
+        "scans_with_support": 33,
+        "raw_points": 5725,
+        "supported_points": 5643
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:6",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -1.5158846462565707,
+      "field_yaw_nuisance_offset_deg": -0.24204351514439737,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006165477929490728,
+      "rmse_no_shift_m": 0.006258618052351005,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7812,
+        "supported_points": 7753
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:5",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -2.3061410970702654,
+      "field_yaw_nuisance_offset_deg": -0.19369038204156097,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.009329518243711369,
+      "rmse_no_shift_m": 0.009495434231155044,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5376,
+        "supported_points": 5270
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:6",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -2.945811673768284,
+      "field_yaw_nuisance_offset_deg": 0.26186941796487834,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008468496553245298,
+      "rmse_no_shift_m": 0.008662461082392985,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6600,
+        "supported_points": 6451
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:1",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -0.8005952062117188,
+      "field_yaw_nuisance_offset_deg": 0.008683465045024005,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006191894813666637,
+      "rmse_no_shift_m": 0.0062660146436545406,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4680,
+        "supported_points": 4573
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:2",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": 3.127366856412223,
+      "field_yaw_nuisance_offset_deg": 0.2296160232171366,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.0077148129668090275,
+      "rmse_no_shift_m": 0.007802183258649631,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4515,
+        "supported_points": 4498
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:3",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -5.3304316549421245,
+      "field_yaw_nuisance_offset_deg": -0.07325735947384394,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006835514506114064,
+      "rmse_no_shift_m": 0.007375217715162822,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5383,
+        "supported_points": 5355
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:4",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -1.1447312375415186,
+      "field_yaw_nuisance_offset_deg": -0.29957640178197514,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.00655887213299549,
+      "rmse_no_shift_m": 0.006596404807733759,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4160,
+        "supported_points": 4087
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:5",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -0.13458438184217872,
+      "field_yaw_nuisance_offset_deg": -0.01986847411291166,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.0065514243581012025,
+      "rmse_no_shift_m": 0.006552299527928906,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4511,
+        "supported_points": 4383
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": 2.714051818466925,
+      "field_yaw_nuisance_offset_deg": -0.09111757410318366,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008405964058896289,
+      "rmse_no_shift_m": 0.008567815070038072,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4338,
+        "supported_points": 4217
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:7",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": -6.689217876073912,
+      "field_yaw_nuisance_offset_deg": -0.21651781593003927,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007180690270958472,
+      "rmse_no_shift_m": 0.007814462493490576,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4165,
+        "supported_points": 4131
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "host_actual_RX_event_response",
+      "lidar_delay_after_reference_ms": 0.3105797826316473,
+      "field_yaw_nuisance_offset_deg": -0.29218345264589307,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008361147751306893,
+      "rmse_no_shift_m": 0.008369234884388463,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4339,
+        "supported_points": 4290
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "notes": "Each raw ray assigned to RX batch containing its packet final byte; SDK uses callback RX; interval-average wheel/gyro source pairing retained in separate existing results."
+    }
+  ]
+}
