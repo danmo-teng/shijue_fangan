@@ -22,7 +22,6 @@ from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.worker import RadarWorker
 from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
-from local_packet_receiver import LocalPacketReceiver
 
 class DynamicMapApp(base.MotionMapApp):
     def __init__(self,options):
@@ -30,6 +29,7 @@ class DynamicMapApp(base.MotionMapApp):
         super().__init__(options)
         self.dynamic_config=load_config(options.dynamic_config)
         self.radar=RadarWorker()
+        self.radar.enable_native_feedback()
         self.pose_address='\0lidar-vio-'+uuid.uuid4().hex
         self.pose_socket=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
         self.pose_socket.bind(self.pose_address);self.pose_socket.listen(1);self.pose_socket.settimeout(.05)
@@ -45,7 +45,8 @@ class DynamicMapApp(base.MotionMapApp):
         self.speed_mm_s=200;self.turn_rate_deg_s=60;self.distance_mm=500
 
     def extra_localizer_args(self):
-        return ['--debug-pose-socket','@'+self.pose_address[1:]]
+        return ['--debug-pose-socket','@'+self.pose_address[1:],
+                '--motion-feedback-socket','@'+self.radar.feedback_address[1:]]
 
     def dlog(self,name,value):
         if self.dynamic_log:self.dynamic_log.submit(name,value)
@@ -60,24 +61,28 @@ class DynamicMapApp(base.MotionMapApp):
         self.dynamic_log=AsyncDebugLog(self.run_dir)
         sdk_policy=(dict(session_id=self.wheel_input.session_id,address='\0t265-wheel-'+self.wheel_input.session_id)
                     if self.options.wheel_input=='on' else None)
-        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy)
+        self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy,
+            pose_input=dict(socket=self.pose_socket,session_id=self.wheel_input.session_id))
 
     def start_session(self):
         self.message='建议场地中心无遮挡处，静止后点自动定位'
         self.render_screen()  # Prepare static glyphs before any sensor threads.
         super().start_session()
         self.dynamic_unsubscribe=self.bridge.telemetry(self.dynamic_telemetry,readonly=True)
-        if self.bridge.device_identity:self.clock_map.set_identity(self.bridge.device_identity)
+        # Keep the original client's matched clock exchange, including the
+        # actual UART write time. Do not infer it from a passive SYNC reply.
+        with self.wheel_input.lock:
+            context=dict(identity=self.wheel_input.measurements.identity,
+                         syncs=list(self.wheel_input.measurements.syncs))
+        self.radar.send('feedback_context',dict(kind='clock_context',sample=context))
         self.bridge.start_timed_measurements()  # Sync is diagnostic; primary yaw keeps its native sign.
-        self.pose_thread=threading.Thread(target=self.read_pose,name='dynamic-pose-receiver',daemon=True)
-        self.pose_thread.start()
         self.yaw_thread=threading.Thread(target=self.read_yaw,name='dynamic-yaw-forwarder',daemon=True)
         self.yaw_thread.start()
         m=base.read_json(self.run_dir/'metadata.json')
         m.update(localization_mode='lidar_t265_dynamic_debug',initial_pose=dict(known=False,source='waiting_for_lidar_global_initialization'),
             physical_placement_confirmed=False,lidar_port=self.options.lidar,lidar_baud=self.options.lidar_baud,
             lidar_installation=self.dynamic_config['installation'],motion_compensation='SE2_per_point_translation_and_primary_yaw',
-            pose_transport='bounded nonblocking same-SDK Unix SEQPACKET',dynamic_time_policy='timing_diagnostic_not_admission',
+            pose_transport='same-SDK Unix SEQPACKET directly to motion process',dynamic_time_policy='timing_diagnostic_not_admission',
             qualification=self.dynamic_config['qualification'],control_pose_published=False,
             hardware_speed_accuracy_verified=False,maximum_test_command_speed_mm_s=700)
         m['wheel_and_primary_gyro_independent_of_sdk_input']=False if self.options.wheel_input=='on' else None
@@ -100,6 +105,8 @@ class DynamicMapApp(base.MotionMapApp):
     def dynamic_telemetry(self,event):
         if event['kind'] not in ('imu','timed_identity','timed_clock_sync','timed_gyro_diagnostic',
                                  'timed_wheel_diagnostic','device_identity_changed'):return
+        if event['kind'] in ('timed_wheel_diagnostic','timed_gyro_diagnostic'):return
+        if event['kind']=='imu' and self.radar.state.get('native_feedback',{}).get('timed_yaw_seen'):return
         try:self.chassis_inbox.put_nowait(event)
         except queue.Full:self.dynamic_error='底盘反馈队列溢出；已计为数据缺口'
 
@@ -107,25 +114,7 @@ class DynamicMapApp(base.MotionMapApp):
         for _ in range(2048):
             try:event=self.chassis_inbox.get_nowait()
             except queue.Empty:break
-            forward_motion_event(self,event)
-
-    def read_pose(self):
-        connection=None
-        receiver=None
-        while not self.dynamic_stop.is_set():
-            try:
-                if connection is None:
-                    connection,_=self.pose_socket.accept();connection.settimeout(.05)
-                    connection.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
-                    receiver=LocalPacketReceiver(connection,16384)
-                data=receiver.recv()
-                if not data:break
-            except socket.timeout:continue
-            except OSError:break
-            try:
-                p=json.loads(data);self.radar.send('pose',p);self.pose_packets+=1;self.dlog('pose_motion.jsonl',p)
-            except (ValueError,KeyError,TypeError) as e:self.dynamic_error='Pose解析: '+str(e)
-        if connection is not None:connection.close()
+            self.radar.send('feedback_context',event)
 
     def read_yaw(self):
         while not self.dynamic_stop.wait(.005):
@@ -142,6 +131,8 @@ class DynamicMapApp(base.MotionMapApp):
             elif message['kind']=='reference_rejected':self.message=message['error']
             elif message['kind']=='error':raise RuntimeError('雷达进程：'+message['error'])
         state=self.radar.state;self.dynamic_snapshot=state.get('last',{})
+        self.imu_packets=state.get('primary_yaw_ingested',0)
+        self.pose_packets=state.get('pose_ingested',0)
         if (self.radar.process is not None and self.radar.process.exitcode is not None
                 and not self.dynamic_stop.is_set()):
             self.logging_failed=True
@@ -323,13 +314,16 @@ class DynamicMapApp(base.MotionMapApp):
         self.radar.close()
         self.pose_socket.close()
         if self.dynamic_log:
-            summary=dict(self.radar.state,pose_packets=self.pose_packets,primary_yaw_packets=self.imu_packets,
+            summary=dict(self.radar.state,pose_packets=self.radar.state.get('pose_ingested',self.pose_packets),primary_yaw_packets=self.imu_packets,
                 motion_queue_drops=self.radar.input_drops,worker_stopped_cleanly=self.radar.stopped_cleanly,
                 parent_error=self.dynamic_error)
             # Raw UART/Pose may be complete while online motion inputs were
             # lost. Do not certify that session as an intact analysis chain.
             # This affects final log completeness only, never live control.
-            summary['motion_stream_complete']=self.radar.input_drops==0
+            native=summary.get('native_feedback',{})
+            summary['motion_stream_complete']=(self.radar.input_drops==0 and
+                native.get('motion_input_drops',0)==0 and native.get('decode_errors',0)==0 and
+                not native.get('error') and not summary.get('pose_input_error'))
             self.capture_chain_present=bool(summary.get('capture_chain_present'))
             self.logging_failed=(self.logging_failed or not self.radar.stopped_cleanly
                 or not summary.get('logging_healthy',False) or not summary['motion_stream_complete'])

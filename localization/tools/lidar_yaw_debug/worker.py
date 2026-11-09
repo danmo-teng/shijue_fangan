@@ -7,14 +7,18 @@ from collections import deque
 import multiprocessing as mp
 import os
 import socket
+import select
+import struct
 import json
 import queue
+import signal
 import threading
 import time
 import uuid
 import numpy as np
 import serial
-from async_debug_log import AsyncDebugLog
+from async_debug_log import AsyncDebugLog,ProcessDebugLog
+from local_packet_receiver import LocalPacketReceiver,LocalDatagramSender,readable_nowait
 from low_latency_scheduling import prepare_realtime, set_realtime_thread
 from .dynamic import DynamicFence
 from .lidar_reader import LidarStream
@@ -22,6 +26,8 @@ from .lidar_timing import LidarTimingError
 from .latest_snapshot import LatestSnapshot, MotionInbox
 from .protocol import command_frame
 from .native_geometry import backend_status
+from .inputs import NativeFeedbackAdapter
+from .control_packet import format_control_packet
 
 
 def make_reader(config):
@@ -155,11 +161,38 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
         offer_latest(updates, dict(state))
 
 
-def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None):
+def run_geometry_jobs(connection):
+    """One numerical owner; no UART, SDK, estimator state or control output."""
+    from .scan_geometry import geometry_job
+    try:
+        while True:
+            request=connection.recv()
+            if request is None:break
+            try:
+                args,kwargs=request
+                result=geometry_job(*args,**kwargs)
+                connection.send((True,result,backend_status()))
+            except Exception as exc:
+                connection.send((False,str(exc),backend_status()))
+    except (EOFError,OSError):pass
+    finally:connection.close()
+
+
+def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None,native_feedback=None,control_output=None,pose_input=None):
     # This process owns motion propagation. Its receiver child alone owns lidar.
+    # Own a process group before spawning any children. The external UART/SDK
+    # owner stays outside it; a stuck shutdown can reclaim this whole subtree.
+    os.setsid()
     display.cancel_join_thread()
-    engine=DynamicFence(config['installation']);log=AsyncDebugLog(root)
+    profile=None
+    if os.environ.get('RDK_LIDAR_MOTION_PROFILE'):
+        import cProfile
+        profile=cProfile.Profile(timer=time.thread_time);profile.enable()
+    engine=DynamicFence(config['installation']);log=ProcessDebugLog(root)
     context=mp.get_context('spawn')
+    geometry_parent,geometry_child=context.Pipe()
+    geometry_process=context.Process(target=run_geometry_jobs,args=(geometry_child,),name='lidar-numerical-owner')
+    geometry_backend=None
     scans=context.Queue(maxsize=2);updates=context.Queue(maxsize=8)
     receiver=context.Process(target=run_lidar_receiver,
         args=(config,port,baud,root,scans,updates,stop),name='lidar-serial-receiver')
@@ -177,12 +210,104 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     policy_output=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) if sdk_policy else None
     if policy_output is not None:policy_output.setblocking(False)
     last_policy=(False,'measured_wheel_input_enabled');policy_error_reported=False
+    native_adapter=None;native_connection=None;native_reader=None
+    pose_connection=None;pose_reader=None;pose_error=None
+    native_state=dict(enabled=native_feedback is not None,connected=False,
+                      decode_errors=0,motion_input_drops=0,error=None)
+    native_updates=0
+    published_native_updates=0
+    latest_raw_pose={}
+    last_output_packet=None
+    direct_output=dict(packets_sent=0,output_drops=0,last_packet=None)
+    direct_socket=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) if control_output else None
+    if direct_socket is not None:direct_socket.setblocking(False)
+    direct_sender=LocalDatagramSender(direct_socket,control_output['address']) if direct_socket is not None else None
+
+    def compute_geometry(*args,**kwargs):
+        nonlocal geometry_backend
+        geometry_parent.send((args,kwargs))
+        while not geometry_parent.poll(.05):
+            if stop.is_set() or not geometry_process.is_alive():
+                raise RuntimeError('lidar numerical process stopped; motion propagation continues')
+        success,result,status=geometry_parent.recv()
+        geometry_backend=status
+        if not success:raise ValueError(result)
+        return result
+
+    engine.geometry=compute_geometry
 
     def event(name,**data):
         log.submit('lidar_worker_events.jsonl',dict(event=name,timestamp_monotonic_ns=time.monotonic_ns(),**data))
 
     def reply(kind,**data):
         replies.put_nowait(dict(kind=kind,**data))
+
+    def native_send(kind,payload):
+        nonlocal native_updates
+        # Already in the motion process: do not serialize, send and receive
+        # these measurements a second time through its own local socket.
+        if kind=='wheel':engine.ingest_wheel(payload);counters['measured_wheel_ingested']+=1
+        elif kind=='yaw':
+            engine.ingest_yaw(payload['time_ns'],payload['yaw_deg'],payload['source'])
+            counters['primary_yaw_ingested']+=1
+        elif kind=='invalidate':engine.invalidate_reference(payload['reason'])
+        else:raise ValueError('unsupported native motion input')
+        # The input must never wait for a GUI/control consumer's mailbox lock.
+        # The original publication owner observes this revision on its next
+        # input/idle wake, publishing latest state without replaying samples.
+        native_updates+=1
+        return True
+
+    def receive_native():
+        nonlocal native_connection,native_reader
+        try:
+            if native_connection is None:
+                if not readable_nowait(native_feedback.fileno()):return False
+                native_connection,_=native_feedback.accept();native_connection.setblocking(False)
+                native_connection.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
+                native_reader=LocalPacketReceiver(native_connection,179)
+                native_state['connected']=True
+            packet=native_reader.recv()
+            if not packet:
+                native_connection.close();native_connection=None;native_state['connected']=False
+                return False
+            native_adapter.accept(packet)
+            return True
+        except (BlockingIOError,socket.timeout):return False
+        except (ValueError,KeyError,TypeError,struct.error) as exc:
+            native_state['decode_errors']+=1;native_state['error']=str(exc)
+            event('native_motion_feedback_decode_error',reason=str(exc));return False
+        except OSError as exc:
+            native_state['error']=str(exc);event('native_motion_feedback_error',reason=str(exc))
+            if native_connection is not None:native_connection.close();native_connection=None
+            native_state['connected']=False
+            return False
+
+    def receive_pose():
+        nonlocal latest_raw_pose,native_updates,pose_connection,pose_reader,pose_error
+        try:
+            if pose_connection is None:
+                if not readable_nowait(pose_input['socket'].fileno()):return False
+                pose_connection,_=pose_input['socket'].accept();pose_connection.setblocking(False)
+                pose_connection.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
+                pose_reader=LocalPacketReceiver(pose_connection,16384)
+            data=pose_reader.recv()
+            if not data:
+                pose_connection.close();pose_connection=None;return False
+            pose=json.loads(data)
+            if pose['session_id']!=pose_input['session_id']:return False
+            latest_raw_pose=pose
+            engine.ingest_pose(pose);counters['pose_ingested']+=1
+            native_updates+=1
+            log.submit('pose_motion.jsonl',pose)
+            return True
+        except (BlockingIOError,socket.timeout):return False
+        except (ValueError,KeyError,TypeError) as exc:
+            pose_error=str(exc);event('pose_input_error',reason=str(exc));return False
+        except OSError as exc:
+            pose_error=str(exc);event('pose_input_error',reason=str(exc))
+            if pose_connection is not None:pose_connection.close();pose_connection=None
+            return False
 
     def publish_sdk_policy():
         nonlocal last_policy,policy_error_reported
@@ -207,20 +332,24 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             # data-age gate, MCU handshake, motor STOP or blocking wait.
 
     def consume(first):
-        nonlocal reference_request_id,requested_lidar_enabled
+        nonlocal reference_request_id,requested_lidar_enabled,latest_raw_pose
         changed=False
-        for _ in range(256):
+        for _ in range(16):
             if first is not None:
                 kind,payload=first;first=None
             else:
                 try:kind,payload=inbox.get_nowait()
                 except queue.Empty:break
             changed=True
-            if kind=='pose':engine.ingest_pose(payload);counters['pose_ingested']+=1
+            if kind=='pose':
+                latest_raw_pose=payload
+                engine.ingest_pose(payload);counters['pose_ingested']+=1
             elif kind=='yaw':
                 engine.ingest_yaw(payload['time_ns'],payload['yaw_deg'],payload['source'])
                 counters['primary_yaw_ingested']+=1
             elif kind=='wheel':engine.ingest_wheel(payload);counters['measured_wheel_ingested']+=1
+            elif kind=='feedback_context' and native_adapter is not None:
+                native_adapter.context(payload)
             elif kind=='invalidate':
                 engine.invalidate_reference(payload['reason']);event('reference_invalidated',**payload)
             elif kind=='align':
@@ -251,7 +380,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         return changed
 
     def publish_control():
-        nonlocal last_control_key
+        nonlocal last_control_key,last_output_packet
         # Small, coherent latest value. No scan points, percentile calculation,
         # display queue or file write is on this publication path.
         value=dict(last=engine.control_snapshot(),have_tracked_pose=bool(engine.poses),
@@ -268,9 +397,28 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             value['have_tracked_pose'],value['have_primary_yaw'],
             value['lidar_connected'],value['lidar_error'])
         if key==last_control_key:return
-        try:
-            counters['control_updates_coalesced']+=control.put_latest(value)
+        if direct_socket is not None:
+            packet=format_control_packet(pose,latest_raw_pose,control_output['session_id'],
+                direct_output['packets_sent'],last_output_packet,lidar_state=value)
+            if pose.get('ready'):last_output_packet=packet
+            if packet is not None:
+                try:
+                    direct_sender.send(json.dumps(packet,allow_nan=False).encode())
+                    direct_output['packets_sent']+=1;direct_output['last_packet']=packet
+                    log.submit('control_pose.jsonl',packet)
+                except (BlockingIOError,FileNotFoundError,ConnectionRefusedError):
+                    direct_output['output_drops']+=1
+            # Native control has already reached its sole consumer. UI state
+            # uses the existing 20Hz display snapshot; Event.notify handshakes
+            # must not sit on the 100Hz control path.
             counters['control_updates']+=1
+            last_control_key=key
+            return
+        try:
+            coalesced=control.put_latest(value)
+            if coalesced is not None:
+                counters['control_updates_coalesced']+=coalesced
+                counters['control_updates']+=1
             last_control_key=key
         except ValueError as exc:
             counters['control_capacity_errors']+=1
@@ -284,13 +432,16 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
             lidar_requested_enabled=requested_lidar_enabled,
             lidar_corrections_enabled=engine.lidar_corrections_enabled,
-            logging_healthy=log.healthy(),motion_scheduling=scheduling,line_geometry=backend_status(),
+            logging_healthy=log.healthy(),motion_scheduling=scheduling,line_geometry=geometry_backend or backend_status(),
+            geometry_pid=geometry_process.pid,geometry_execution='independent_process_original_algorithm',
+            native_feedback=dict(native_state,**(native_adapter.snapshot() if native_adapter else {})),
+            direct_output=dict(direct_output) if direct_socket is not None else None,pose_input_error=pose_error,
             accuracy_verified=False,full_speed_physical_validation=False)
 
     def drain_reader():
         nonlocal reader_state
         dirty=False
-        while True:
+        while readable_nowait(updates._reader.fileno()):
             try:value=updates.get_nowait()
             except queue.Empty:break
             changed=(value['lidar_connected']!=reader_state['lidar_connected'] or
@@ -358,6 +509,11 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         return changed
 
     try:
+        geometry_process.start();geometry_child.close()
+        if native_feedback is not None:
+            native_feedback.setblocking(False)
+            native_adapter=NativeFeedbackAdapter(native_send,event,log)
+        if pose_input is not None:pose_input['socket'].setblocking(False)
         receiver.start();fitter.start()
         # Start display/reply feeder threads under normal scheduling too.
         offer_latest(display,state())
@@ -368,9 +524,24 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         while not stop.is_set():
             # Queue arrival wakes motion immediately; the 2ms idle timeout only
             # services scan/results/stop when there is no motion input.
-            try:first=inbox.get(timeout=.002)
+            try:first=inbox.get_nowait()
             except queue.Empty:first=None
             changed=consume(first)
+            # Drain real queued inputs fairly, publishing actual endpoints
+            # between them. No replay, stale-data rejection or synthetic ticks.
+            # Housekeeping runs after a bounded quantum instead of after every
+            # individual wire frame (there are two frames per wheel interval).
+            for _ in range(16):
+                incoming=False
+                if native_feedback is not None:incoming=receive_native() or incoming
+                if pose_input is not None:incoming=receive_pose() or incoming
+                if not incoming:break
+                changed=True
+                if control is not None:publish_control()
+                publish_sdk_policy()
+            if native_updates!=published_native_updates:
+                published_native_updates=native_updates
+                changed=True
             # Publish actual motion before probing the reader/scan/fit queues.
             # Those housekeeping calls may yield the GIL even when empty.
             # A completed posterior still gets its own update below; the
@@ -378,16 +549,17 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             if changed:
                 if control is not None:publish_control()
                 publish_sdk_policy()
-            changed=drain_reader()
+            housekeeping_changed=drain_reader()
             latest=None
             for _ in range(8):
+                if not readable_nowait(scans._reader.fileno()):break
                 try:latest=scans.get_nowait()
                 except queue.Empty:break
             if latest is not None:
                 counters['fit_requests_coalesced']+=offer_latest(fit_inbox,
                     (latest,engine.revision,reference_request_id))
-            changed=drain_fits() or changed
-            if changed:
+            housekeeping_changed=drain_fits() or housekeeping_changed
+            if housekeeping_changed:
                 if control is not None:publish_control()
                 publish_sdk_policy()
             if time.monotonic()-last_publish>=.05:
@@ -395,14 +567,36 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                     p95=float(np.percentile(times,95));last_percentile=time.monotonic()
                 counters['display_updates_coalesced']+=offer_latest(display,state())
                 last_publish=time.monotonic()
+            if not changed and not housekeeping_changed and latest is None:
+                waiting=[inbox._reader,updates._reader,scans._reader]
+                if native_feedback is not None:waiting.append(native_connection or native_feedback)
+                if pose_input is not None:waiting.append(pose_connection or pose_input['socket'])
+                select.select(waiting,[],[],.002)
     except Exception as exc:
         error=str(exc);event('worker_error',reason=error)
         try:reply('error',error=error)
         except queue.Full:pass
     finally:
+        if native_connection is not None:native_connection.close()
+        if pose_connection is not None:pose_connection.close()
+        native_state['connected']=False
+        if pose_input is not None:pose_input['socket'].close()
+        if native_feedback is not None:native_feedback.close()
         if policy_output is not None:policy_output.close()
+        if direct_socket is not None:direct_socket.close()
         stop.set();fitting_stop.set()
         if fitter.ident is not None:fitter.join(timeout=2)
+        if geometry_process.pid is not None:
+            if fitter.is_alive():
+                if geometry_process.is_alive():geometry_process.terminate()
+                geometry_process.join(timeout=1)
+                fitter.join(timeout=1)
+            elif geometry_process.is_alive():
+                try:geometry_parent.send(None)
+                except (EOFError,OSError,BrokenPipeError):pass
+            geometry_process.join(timeout=2)
+            if geometry_process.is_alive():geometry_process.terminate();geometry_process.join(timeout=1)
+        geometry_parent.close()
         drain_fits()
         if receiver.pid is not None:
             deadline=time.monotonic()+2
@@ -411,14 +605,18 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             drain_reader()
             if receiver.is_alive():receiver.terminate();receiver.join(timeout=1)
         if times:p95=float(np.percentile(times,95))
-        final=state();log.submit('lidar_worker_summary.json',final,atomic=True);log.close()
-        final['logging_healthy']=log.healthy() and reader_state.get('reader_logging_healthy',False)
-        final['logging_statistics']=log.statistics()
+        final=state()
         final['receiver_stopped_cleanly']=receiver.exitcode==0
         final['fit_thread_stopped']=not fitter.is_alive()
+        final['geometry_stopped_cleanly']=geometry_process.exitcode==0
+        log.submit('lidar_worker_summary.json',final,atomic=True);log.close()
+        final['logging_healthy']=log.healthy() and reader_state.get('reader_logging_healthy',False)
+        final['logging_statistics']=log.statistics()
         try:reply('stopped',summary=final)
         except queue.Full:pass
         for channel in (scans,updates):channel.cancel_join_thread();channel.close()
+        if profile is not None:
+            profile.disable();profile.dump_stats(os.environ['RDK_LIDAR_MOTION_PROFILE'])
 
 
 class RadarWorker:
@@ -429,11 +627,18 @@ class RadarWorker:
         self.control=LatestSnapshot(self.context) if control_updates else None
         self.state={};self.input_drops=0;self.pending_reference=None;self.stopped_cleanly=False
         self.scheduling_setup=None
+        self.feedback_socket=None;self.feedback_address=None
 
-    def start(self,config,port,baud,root,*,sdk_policy=None):
+    def enable_native_feedback(self):
+        # Bind before the sole C++ UART owner starts. No consumer-ready ACK.
+        self.feedback_address='\0motion-feedback-'+uuid.uuid4().hex
+        self.feedback_socket=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        self.feedback_socket.bind(self.feedback_address);self.feedback_socket.listen(1)
+
+    def start(self,config,port,baud,root,*,sdk_policy=None,control_output=None,pose_input=None):
         self.scheduling_setup=prepare_realtime()
         self.process=self.context.Process(target=run_worker,args=(config,port,baud,root,
-            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy),name='lidar-geometry-owner')
+            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy,self.feedback_socket,control_output,pose_input),name='lidar-geometry-owner')
         self.process.start()
 
     def send(self,kind,payload):
@@ -461,7 +666,7 @@ class RadarWorker:
                 self.pending_reference=None
             if message['kind']=='stopped':
                 self.state=message['summary']
-                self.stopped_cleanly=bool(self.state.get('receiver_stopped_cleanly') and self.state.get('fit_thread_stopped'))
+                self.stopped_cleanly=bool(self.state.get('receiver_stopped_cleanly') and self.state.get('fit_thread_stopped') and self.state.get('geometry_stopped_cleanly'))
             results.append(message)
         return results
 
@@ -474,7 +679,17 @@ class RadarWorker:
                 self.poll();self.process.join(timeout=.05)
             self.poll()
             if self.process.is_alive():
-                self.process.terminate();self.process.join(timeout=1)
+                # The normal five-second drain has already expired. Killing
+                # only the worker can leave its numerical/reader/log children
+                # alive (including a suspended child). Reclaim only its owned
+                # group, never the GUI, SDK/UART owner or caller's group.
+                try:
+                    if os.getpgid(self.process.pid)==self.process.pid:
+                        os.killpg(self.process.pid,signal.SIGKILL)
+                    else:self.process.kill()
+                except ProcessLookupError:pass
+                self.process.join(timeout=1)
                 self.state['error']='雷达进程未能正常退出';self.stopped_cleanly=False
         for channel in (self.inbox,self.display,self.replies):
             channel.cancel_join_thread();channel.close()
+        if self.feedback_socket is not None:self.feedback_socket.close()

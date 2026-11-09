@@ -289,7 +289,8 @@ class CompetitionMapApp(RescueMapApp):
             if self.options.lidar == self.options.uart:
                 raise ValueError("雷达与底盘不能共用同一UART")
             self.dynamic = CompetitionDynamicLocalization(run_dir, session_id, dynamic_config,
-                metadata['initial_pose'], self.wheel_input.bridge.log,defer_reference=self.prewarm_enabled)
+                metadata['initial_pose'], self.wheel_input.bridge.log,defer_reference=self.prewarm_enabled,
+                native_feedback=True)
             self.wheel_input.telemetry_sink = self.dynamic.telemetry
             metadata['heading_conventions']['pose'] = 'primary gyro, fixed selected field start reference, CCW positive'
             metadata['pose_dependencies'].append('STL50B2 observable fence constraints')
@@ -299,6 +300,8 @@ class CompetitionMapApp(RescueMapApp):
                 lidar_installation=dynamic_config['installation'],
                 qualification=dynamic_config['qualification'],
                 control_pose_publish_enabled=True, accuracy_verified=False,
+                motion_feedback_transport='native_cpp_complete_frames_direct_to_motion_worker',
+                control_pose_producer='motion_worker_direct_to_sole_cpp_relay',
                 motion_source_policy=dict(MOTION_SOURCE_POLICY),
                 obstacle_policy='operator_lidar_pause_resume_same_as_desktop_test',
                 prewarm_enabled=self.prewarm_enabled,
@@ -325,7 +328,8 @@ class CompetitionMapApp(RescueMapApp):
             # C++ raw output is diagnostic only. Its dynamic relay writes the
             # formal JSON and 0x16 from the exact same worker snapshot.
             command[command.index('--output') + 1] = str(run_dir / 'raw_t265_result.json')
-            command += ['--debug-pose-socket', '@' + self.dynamic.pose_address[1:],
+            command += ['--motion-feedback-socket','@' + self.dynamic.radar.feedback_address[1:],
+                        '--debug-pose-socket', '@' + self.dynamic.pose_address[1:],
                         '--dynamic-pose-socket', '@' + self.dynamic.control_address[1:],
                         '--dynamic-pose-output', str(self.localization_json)]
         self.wheel_command = list(command)

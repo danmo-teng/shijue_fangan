@@ -1154,6 +1154,46 @@ def test_global_wall_initialization():
             e.set_lidar_enabled(False);assert e.pending_reacquisition is None
             e.set_lidar_enabled(True)
             assert not e._fit_position(body2,ref,offset,'after-obstacle')['position_reacquired']
+    # The isolated numerical job has no pending confirmations or coordinate
+    # branch of its own; the original engine must make identical decisions.
+    from lidar_yaw_debug.scan_geometry import geometry_job
+    plain=DynamicFence(mount);isolated=DynamicFence(mount,geometry=geometry_job)
+    for target in (plain,isolated):
+        for i in range(101):
+            t=origin-200_000_000+i*5_000_000
+            target.ingest_pose(dict(session_id='geometry-parity',frame_number=i,timestamp_monotonic_ns=t,
+                receive_monotonic_ns=t,x_m=0.,y_m=0.,yaw_rad=0.,tracker_confidence=3))
+            target.ingest_yaw(t,1287.,dict(source='synthetic_gyro'))
+        target.request_initialization('same numerical fixture',physical_confirmed=False)
+    timing={'started_ns','timestamp_monotonic_ns','compute_ms','compute_thread_cpu_ms',
+            'snapshot_ms','deskew_ms','fit_ms','geometry_compute_cpu_ms','geometry_roundtrip_ms'}
+    def numerical(value):
+        if isinstance(value,dict):return {k:numerical(v) for k,v in value.items() if k not in timing}
+        if isinstance(value,np.ndarray):return numerical(value.tolist())
+        if isinstance(value,(list,tuple)):return [numerical(v) for v in value]
+        return value
+    angle=math.radians(13.)
+    for i in range(3):
+        scan=cloud((.4,-.3),angle,i)
+        assert numerical(plain.try_initialize(scan))==numerical(isolated.try_initialize(scan))
+    for scan in (cloud((.4,-.3),angle,3),cloud((.4,-.3),angle,4,one_wall=True),
+                 cloud((.75,.1),angle,5),cloud((.75,.1),angle,6)):
+        assert numerical(plain.observe(scan))==numerical(isolated.observe(scan))
+        assert numerical(plain.snapshot(origin+5_000_000_000))==numerical(isolated.snapshot(origin+5_000_000_000))
+    assert plain.reacquisition_count==isolated.reacquisition_count==1
+    assert numerical(plain.observe(scan))==numerical(isolated.observe(scan))  # duplicate does not confirm again
+    for target in (plain,isolated):target.set_lidar_enabled(False)
+    scan=cloud((.75,.1),angle,7)
+    assert numerical(plain.observe(scan))==numerical(isolated.observe(scan))
+    # An insufficient cloud clears the real engine's pending reacquisition,
+    # including the callback path; no numerical child can own that state.
+    small=RawScan('too-few',scan.points[3].time_ns,scan.points[:4],'fixture','known_synthetic')
+    for target in (plain,isolated):
+        target.pending_reacquisition=dict(scan_id='pending',offset=np.ones(2))
+        try:target.observe(small)
+        except ValueError as error:assert str(error)=='可用雷达点不足'
+        else:raise AssertionError('insufficient scan accepted')
+        assert target.pending_reacquisition is None
     e.request_initialization('single wall must not locate XY',physical_confirmed=False)
     for i in range(3):e.try_initialize(cloud((.4,-.3),theta,i,one_wall=True))
     assert e.reference is None
@@ -1245,6 +1285,46 @@ def test_dynamic_worker_process():
         assert worker.state['logging_healthy'] and (root/'lidar_worker_summary.json').exists()
         assert not (root/'commands.jsonl').exists()
 
+    # Reuse this lifecycle fixture: a suspended numerical child cannot be
+    # reaped by SIGTERM alone. The existing parent deadline must reclaim the
+    # complete worker group without touching the caller's group or hardware.
+    import signal
+    master,slave=pty.openpty();worker=RadarWorker();child=None
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            worker.start(cfg,os.ttyname(slave),230400,Path(tmp))
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline and not worker.state.get('geometry_pid'):
+                worker.poll();time.sleep(.01)
+            child=worker.state['geometry_pid']
+            # This X5 kernel omits /proc/PID/task/PID/children. Use the
+            # standard PPID field, and tolerate unrelated processes exiting.
+            children=[]
+            for path in Path('/proc').glob('[0-9]*/stat'):
+                try:fields=path.read_text().split(') ',1)[1].split()
+                except (OSError,IndexError):continue
+                if int(fields[1])==worker.process.pid:children.append(int(path.parent.name))
+            assert os.getpgid(worker.process.pid)==worker.process.pid
+            assert os.getpgid(child)==worker.process.pid!=os.getpgrp()
+            assert child in children and all(os.getpgid(pid)==worker.process.pid for pid in children)
+            os.kill(child,signal.SIGSTOP)
+            began=time.monotonic()
+            worker.close()
+            assert time.monotonic()-began<6.5
+            assert not worker.process.is_alive() and not worker.stopped_cleanly
+            assert worker.state['error']=='雷达进程未能正常退出'
+            deadline=time.monotonic()+1
+            def running(pid):
+                try:return not Path(f'/proc/{pid}/stat').read_text().split(') ',1)[1].startswith('Z')
+                except FileNotFoundError:return False
+            while any(running(pid) for pid in children) and time.monotonic()<deadline:
+                time.sleep(.01)
+            assert not any(running(pid) for pid in children)
+            assert not (Path(tmp)/'commands.jsonl').exists()
+        finally:
+            if worker.process is not None and worker.process.is_alive():worker.close()
+            os.close(master);os.close(slave)
+
 
 def test_dynamic_motion_compensation():
     import math
@@ -1281,14 +1361,16 @@ def test_dynamic_motion_compensation():
         selected=filter_engine.accepted_points(filter_scan)
         assert [point.raw_point_id for point in selected]==[point.raw_point_id for point in expected]
         assert all(a is b for a,b in zip(selected,expected))
-    engine=DynamicFence(mount);origin=1_000_000_000
+    from lidar_yaw_debug.scan_geometry import geometry_job
+    engine=DynamicFence(mount);isolated=DynamicFence(mount,geometry=geometry_job);origin=1_000_000_000
     def pose(t):return np.array([-1.35+.7*t/math.sqrt(2),1.35-.7*t/math.sqrt(2),math.radians(135)+2*math.pi*t])
     for i in range(41):
         t=i*.005;p=pose(t);ns=origin+round(t*1e9)
-        engine.ingest_pose(dict(session_id='offline',frame_number=i,timestamp_monotonic_ns=ns,
-            receive_monotonic_ns=ns,x_m=p[0],y_m=p[1],yaw_rad=p[2],tracker_confidence=3))
-        engine.ingest_yaw(ns,360*t,dict(source='independent_synthetic_motion'))
-        if i==0:engine.align('offline known trajectory',physical_confirmed=False)
+        for target in (engine,isolated):
+            target.ingest_pose(dict(session_id='offline',frame_number=i,timestamp_monotonic_ns=ns,
+                receive_monotonic_ns=ns,x_m=p[0],y_m=p[1],yaw_rad=p[2],tracker_confidence=3))
+            target.ingest_yaw(ns,360*t,dict(source='independent_synthetic_motion'))
+            if i==0:target.align('offline known trajectory',physical_confirmed=False)
     ext=np.array([*mount['extrinsic'][:2],math.radians(mount['extrinsic'][2])]);points=[];walls=[]
     for i,(t,a) in enumerate(zip(np.linspace(.12,.16,400),np.linspace(143.25,288.25,400))):
         p=pose(t);angle=p[2]+ext[2]+math.radians(a);direction=np.array([math.cos(angle),math.sin(angle)])
@@ -1315,11 +1397,21 @@ def test_dynamic_motion_compensation():
     world=corrected@rotation(reference[2]).T+reference[:2]
     assert max(abs(world[i,axis]-border) for i,(axis,border) in enumerate(walls))<1e-8
     result=engine.observe(scan)
+    offloaded=isolated.observe(scan)
+    for key in ('rank_xy','position_observed_axes','candidate_center_xy_m','used_points',
+                'prior_center_xy_m','map_translation_offset_m','motion_selection','primary_yaw_field_rad'):
+        assert offloaded[key]==result[key],key
+    assert isolated.latest_points==engine.latest_points
+    assert offloaded['geometry_compute_cpu_ms']>=0 and offloaded['geometry_roundtrip_ms']>=0
     assert result['rank_xy']>0 and result['deskew_applied'] and not result['deskew_qualified']
     assert np.linalg.norm(np.array(result['candidate_center_xy_m'])-pose(.16)[:2])<1e-6
     dominant=max(set(walls),key=walls.count);single=[p for p,w in zip(points,walls) if w==dominant]
     single_scan=RawScan('single',single[-1].time_ns,tuple(single),'offline','known_synthetic',False)
     one=engine.observe(single_scan);assert one['rank_xy']==1
+    offloaded_single=isolated.observe(single_scan)
+    assert offloaded_single['position_observed_axes']==one['position_observed_axes']
+    assert offloaded_single['candidate_center_xy_m']==one['candidate_center_xy_m']
+    assert np.array_equal(isolated.offset,engine.offset)
     assert len(one['position_observed_axes'])==1 and len(one['inherited_axes'])==1
     old=engine.snapshot(origin+5_000_000_000)
     assert old['ready'] and old['motion_age_ms']>4000  # No age admission gate.
@@ -1467,12 +1559,19 @@ def test_dynamic_consumer_starts_before_sdk_and_failed_spawn_closes_it():
                     self.state = dict(logging_healthy=True)
                     self.input_drops = 0
                     self.stopped_cleanly = False
-                def start(self, config, port, baud, directory, *, sdk_policy):
+                def enable_native_feedback(self):
+                    self.feedback_address='\0fixture-motion-feedback'
+                def send(self, kind, payload):
+                    assert kind=='feedback_context'
+                    return True
+                def start(self, config, port, baud, directory, *, sdk_policy, pose_input):
                     app = holder[0]
                     assert directory == app.run_dir and directory.is_dir()
                     assert (directory / 'localization.conf').is_file()
                     assert sdk_policy['session_id'] == app.wheel_input.session_id
                     assert sdk_policy['address'] == '\0t265-wheel-' + app.wheel_input.session_id
+                    assert pose_input['socket'] is app.pose_socket
+                    assert pose_input['session_id'] == app.wheel_input.session_id
                     assert app.localizer is None and app.bridge.serial is None
                     order.append('radar_spawn')
                     self.process = SimpleNamespace(pid=987)
@@ -1491,6 +1590,7 @@ def test_dynamic_consumer_starts_before_sdk_and_failed_spawn_closes_it():
                 assert order == ['radar_spawn']
                 assert '--debug-pose-socket' in command
                 assert command[command.index('--debug-pose-socket') + 1] == '@' + app.pose_address[1:]
+                assert command[command.index('--motion-feedback-socket') + 1] == '@fixture-motion-feedback'
                 assert command[command.index('--debug-wheel-session') + 1] == app.wheel_input.session_id
                 assert not (app.run_dir / 'metadata.json').exists()
                 order.append('sdk_spawn')
@@ -1520,7 +1620,8 @@ def test_dynamic_consumer_starts_before_sdk_and_failed_spawn_closes_it():
                     try:
                         app.start_session()
                         assert order == ['radar_spawn', 'sdk_spawn', 'bridge_start',
-                                         'dynamic-pose-receiver', 'dynamic-yaw-forwarder']
+                                         'dynamic-yaw-forwarder']
+                        assert app.pose_thread is None  # The worker is the sole SDK Pose reader.
                         metadata = json.loads((app.run_dir / 'metadata.json').read_text())
                         assert metadata['lidar_worker_pid'] == 987
                         assert metadata['sdk_session_id'] == app.wheel_input.session_id
@@ -1646,6 +1747,58 @@ def test_timed_v11_logging_recovery():
         assert logger.statistics()['snapshots_coalesced']==99 and logger.statistics()['snapshot_writes']==1
         assert [json.loads(line)['timestamp_monotonic_ns'] for line in (root/'raw.jsonl').read_text().splitlines()]==list(range(100))
         assert json.loads((root/'status.json').read_text())['timestamp_monotonic_ns']==99
+    from async_debug_log import ProcessDebugLog
+    import multiprocessing as mp
+    import os
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);logger=ProcessDebugLog(root)
+        try:
+            for i in range(1000):
+                assert logger.submit('raw.jsonl',dict(timestamp_monotonic_ns=i))
+                assert logger.submit('status.json',dict(timestamp_monotonic_ns=i),atomic=True)
+        finally:logger.close()
+        assert logger.process.pid!=os.getpid() and not logger.process.is_alive()
+        assert logger.healthy() and logger.statistics()['final_receipt']
+        assert logger.statistics()['history_records_written']==1000 and logger.dropped==0
+        assert logger.statistics()['sender_stopped'] and not logger.thread.is_alive()
+        assert [json.loads(line)['timestamp_monotonic_ns'] for line in (root/'raw.jsonl').read_text().splitlines()]==list(range(1000))
+        assert json.loads((root/'status.json').read_text())['timestamp_monotonic_ns']==999
+    with tempfile.TemporaryDirectory() as temporary:
+        release=threading.Event();original_send=ProcessDebugLog._send
+        def paused_send(logger):release.wait(2);original_send(logger)
+        with patch.object(ProcessDebugLog,'_send',paused_send):
+            logger=ProcessDebugLog(Path(temporary),capacity=1)
+        try:
+            assert logger.submit('full.jsonl',dict(value='accepted'))
+            assert not logger.submit('full.jsonl',dict(value=1))
+            assert logger.dropped==1 and not logger.healthy()
+        finally:release.set();logger.close()
+        assert not logger.process.is_alive() and logger.statistics()['transport_dropped']==1
+        assert json.loads((Path(temporary)/'full.jsonl').read_text())['value']=='accepted'
+    for failure in ('missing-directory','dev-full'):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            if failure=='missing-directory':root=root/'missing'
+            else:(root/'raw.jsonl').symlink_to('/dev/full')
+            logger=ProcessDebugLog(root)
+            assert logger.submit('raw.jsonl',dict(value='x'*131072))
+            logger.close()
+            assert not logger.healthy() and logger.error
+            assert logger.statistics()['final_receipt'] and not logger.process.is_alive()
+    with tempfile.TemporaryDirectory() as temporary:
+        logger=ProcessDebugLog(Path(temporary))
+        logger.process.terminate();logger.process.join(timeout=2)
+        logger.close()
+        assert not logger.healthy() and logger.error and not logger.process.is_alive()
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary)
+        with patch.object(mp.get_context('spawn').Process,'start',side_effect=OSError('fixture spawn failure')):
+            logger=ProcessDebugLog(root)
+        assert logger.submit('raw.jsonl',dict(value='thread fallback'))
+        logger.close()
+        assert logger.healthy() and logger.statistics()['execution']=='thread_fallback'
+        assert json.loads((root/'raw.jsonl').read_text())['value']=='thread fallback'
+        assert json.loads((root/'logging_events.jsonl').read_text())['event']=='process_log_start_failed_thread_fallback'
 
 
 def test_timed_measurement_pipeline():
@@ -2143,6 +2296,63 @@ def test_competition_feedback_adapter():
             source.close();adapter.close();sink.close()
 
 
+def test_native_motion_feedback_transport():
+    """Same real wire codec and original conversion; no UART/SDK or motor."""
+    import math,struct
+    from f405_timed_measurements import TimedMeasurements
+    from lidar_yaw_debug.inputs import NativeFeedbackAdapter,forward_motion_event
+    import f405_timed_protocol as wire
+    old=[];new=[];logged=[]
+    def collect(target):
+        def send(kind,payload):target.append((kind,payload));return True
+        return send
+    reference=SimpleNamespace(clock_map=TimedMeasurements(),radar=SimpleNamespace(send=collect(old)),
+        timed_yaw_seen=False,last_yaw_id=None,imu_packets=0,devent=lambda *a,**k:None)
+    adapter=NativeFeedbackAdapter(collect(new),lambda *a,**k:None,
+        SimpleNamespace(submit=lambda filename,value:logged.append((filename,value))))
+    epoch=bytes.fromhex('11'*16)
+    identity=dict(boot_epoch=epoch.hex(),epoch_valid=True,interface_compatible=True,
+                  protocol_major=1,protocol_minor=3,drift_bound_ppm=0xffffffff)
+    sync=dict(boot_epoch=epoch.hex(),epoch_valid=1,nonce=7,host_write_before_ns=1_000_000_000,
+        receive_monotonic_ns=1_001_000_000,receive_event_us=1_000_100,
+        response_prepare_us=1_000_200,tick_resolution_us=1)
+    def context(kind,sample):
+        event=dict(kind=kind,sample=sample)
+        forward_motion_event(reference,event);adapter.context(event)
+    context('timed_identity',identity);context('timed_clock_sync',sync)
+    context('imu',dict(wire_valid=True,timestamp_monotonic_ns=1_002_000_000,yaw_deg=12.))
+    scale=math.pi*.070/1061.268
+    for index,sign in enumerate((1,-1),1):
+        a=1_010_000+index*10_000;b=a+10_000
+        delta=(10*sign,-10*sign,0)
+        raw=wire.packet(wire.WHEEL,index,struct.pack('>16sIIQQiiIIIiiiIII',epoch,1,index,a,b,
+            round(scale*(delta[0]-delta[1])/(math.sqrt(3)*.01)*1e6),0,1,2,3,*delta,129,0xffffffff,3))
+        gyro=wire.packet(wire.GYRO,index,struct.pack('>16sIIqQIIIiQIIIQ',epoch,1,index,
+            sign*90000,b,index,835,0xffffffff,sign*1000,b,index,835,0xffffffff,b+100))
+        for packet,kind in ((raw,'timed_wheel_diagnostic'),(gyro,'timed_gyro_diagnostic')):
+            receive=b*1000+1_000_000
+            sample=wire.decode(packet)
+            sample.update(receive_monotonic_ns=receive,capture_time_qualified=False,sdk_time_qualified=False)
+            forward_motion_event(reference,dict(kind=kind,sample=sample))
+            adapter.accept(struct.pack('>Q',receive)+packet)
+            # Actual duplicate samples cannot become extra motion updates.
+            forward_motion_event(reference,dict(kind=kind,sample=sample))
+            adapter.accept(struct.pack('>Q',receive)+packet)
+    context('imu',dict(wire_valid=True,timestamp_monotonic_ns=1_050_000_000,yaw_deg=99.))
+    assert old==new and len(new)==5  # legacy before timed, 2 wheel + 2 timed yaw
+    assert adapter.timed_yaw_seen and adapter.snapshot()['wheel_frames']==4
+    assert len(logged)==8 and all(name=='motion_feedback.jsonl' for name,_ in logged)
+    # An already matched clock snapshot remains an exact context copy, not a
+    # reconstructed exchange or a duplicate-wheel baseline from the observer.
+    bootstrap=NativeFeedbackAdapter(lambda *a:True,lambda *a,**k:None,SimpleNamespace(submit=lambda *a:None))
+    bootstrap.context(dict(kind='clock_context',sample=dict(identity=identity,syncs=list(reference.clock_map.syncs))))
+    assert bootstrap.clock_map.identity==reference.clock_map.identity
+    assert list(bootstrap.clock_map.syncs)==list(reference.clock_map.syncs)
+    assert bootstrap.clock_map.last_wheel is None
+    context('device_identity_changed',dict(new_boot_epoch='22'*16))
+    assert old==new and new[-1][0]=='invalidate' and not adapter.timed_yaw_seen
+
+
 def test_competition_dynamic_transport():
     """Real worker/IPC through a PTY; no camera, chassis, motors or raw log edits."""
     import math, os, pty, socket, uuid
@@ -2499,11 +2709,13 @@ def test_native_test_uart_receive_transport():
     def frame(stamp, drops, data):
         return struct.pack('>QQ', stamp, drops) + data
     try:
+        assert not packets.readable_nowait(rx.fileno())
         # Same maximum read/truncation semantics; each complete local packet is
         # returned once, even if serial.read's requested size is one byte.
         peer.send(frame(123, 7, b'abc'))
         peer.send(frame(124, 8, bytes(range(256)) * 16 + b'truncated'))
         peer.send(frame(125, 9, b'last'))
+        assert packets.readable_nowait(rx.fileno())
         original_recv = packets._recv_nowait
         interrupted = [False]
         def interrupted_once(fd, buffer, size, flags):
@@ -2522,6 +2734,7 @@ def test_native_test_uart_receive_transport():
             assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (124, 8)
             assert uart.read(4096) == b'last'
             assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (125, 9)
+        assert not packets.readable_nowait(rx.fileno())
         assert uart.read(4096) == b''  # Existing socket timeout, no fake header.
         assert (uart.receive_monotonic_ns, uart.dropped_rx_datagrams) == (125, 9)
         try:
@@ -2557,6 +2770,7 @@ def test_native_test_uart_receive_transport():
         except OSError as error:
             assert str(error) == 'short native UART receive container'
         peer.close()
+        assert packets.readable_nowait(rx.fileno())
         assert uart._receiver.recv() == b''  # EOF is data for the generic helper.
         try:
             uart.read(1)
@@ -2572,6 +2786,55 @@ def test_native_test_uart_receive_transport():
     finally:
         rx.close()
         peer.close()
+    import uuid
+    address='\0local-send-'+uuid.uuid4().hex
+    with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as output, \
+            socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as endpoint:
+        output.setblocking(False);endpoint.setblocking(False);endpoint.bind(address)
+        sender=packets.LocalDatagramSender(output,address)
+        payload=b'unchanged\0local\xffpayload'
+        assert output.sendto(payload,address)==len(payload)
+        assert endpoint.recv(65536)==payload
+        assert sender.send(payload)==len(payload)
+        assert endpoint.recv(65536)==payload
+        original_sendto=packets._sendto_nowait
+        interrupted_send=[False]
+        def interrupted_sendto_once(*args):
+            if not interrupted_send[0]:
+                interrupted_send[0]=True;ctypes.set_errno(errno.EINTR);return -1
+            return original_sendto(*args)
+        with patch.object(packets,'_sendto_nowait',interrupted_sendto_once):
+            assert sender.send(payload)==len(payload)
+        assert endpoint.recv(65536)==payload
+        assert not packets.readable_nowait(endpoint.fileno())  # EINTR did not duplicate the datagram.
+        with patch.object(packets,'_sendto_nowait',return_value=len(payload)-1):
+            try:sender.send(payload)
+            except OSError as error:assert error.errno==errno.EIO
+            else:raise AssertionError('short datagram send claimed success')
+        missing=address+'-unbound'
+        failures=[]
+        for send in (lambda:output.sendto(payload,missing),
+                     lambda:packets.LocalDatagramSender(output,missing).send(payload)):
+            try:send()
+            except OSError as error:failures.append(error.errno)
+            else:raise AssertionError('unbound destination accepted')
+        assert len(failures)==2 and failures[0]==failures[1]
+        for _ in range(1000):
+            try:sender.send(payload)
+            except BlockingIOError as error:
+                assert error.errno in (errno.EAGAIN,errno.EWOULDBLOCK)
+                break
+        else:raise AssertionError('local datagram capacity must remain bounded')
+        try:output.sendto(payload,address)
+        except BlockingIOError as error:assert error.errno in (errno.EAGAIN,errno.EWOULDBLOCK)
+        else:raise AssertionError('original sendto disagrees about full destination')
+        for invalid in ('','\0','pathname','\0'+'x'*108):
+            try:packets.LocalDatagramSender(output,invalid)
+            except ValueError:pass
+            else:raise AssertionError('invalid abstract destination accepted')
+        try:sender.send(b'x'*65537)
+        except ValueError:pass
+        else:raise AssertionError('oversized local datagram accepted')
 
 
 def test_native_cpp_wheel_input():

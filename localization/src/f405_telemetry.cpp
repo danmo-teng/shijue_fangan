@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <cerrno>
 #include <cstring>
 #include <stdexcept>
 #include <utility>
@@ -70,5 +71,73 @@ void WheelTelemetryTap::publish(const std::uint8_t *data, std::size_t size, std:
     std::memcpy(message+8, data, size);
     // Whole datagram or drop; no replay, growing queue, ACK or retry loop.
     (void)::send(fd_,message,size+8,MSG_DONTWAIT|MSG_NOSIGNAL);
+}
+
+MotionTelemetryTap::MotionTelemetryTap(const std::string &address)
+    : enabled_(!address.empty())
+{
+    if (!enabled_) return;
+    if (address[0] != '@' || address.size() >= sizeof(sockaddr_un{}.sun_path))
+        throw std::invalid_argument("motion feedback tap needs a short @abstract address");
+    fd_ = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd_ < 0) {
+        stats_.connection_error = stats_.last_error = errno;
+        return;
+    }
+    sockaddr_un target{};
+    target.sun_family = AF_UNIX;
+    std::memcpy(target.sun_path + 1, address.data() + 1, address.size() - 1);
+    const int budget = 262144;
+    ::setsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &budget, sizeof(budget));
+    if (::connect(fd_, reinterpret_cast<sockaddr *>(&target),
+                  offsetof(sockaddr_un, sun_path) + address.size()) != 0) {
+        stats_.connection_error = stats_.last_error = errno;
+        ::close(fd_);
+        fd_ = -1;
+        return;
+    }
+    stats_.connected = true;
+}
+
+MotionTelemetryTap::~MotionTelemetryTap() { if (fd_ >= 0) ::close(fd_); }
+
+void MotionTelemetryTap::publish(const std::uint8_t *data, std::size_t size,
+                                 std::uint64_t received_ns)
+{
+    if (!enabled_) return;
+    // The caller already checked CRC. Keep that work single, and send only
+    // passive identity/clock/stream state and real measured wheel/gyro frames.
+    if (!data || size < 11 || size > 171 || data[0] != 0xd4 || data[1] != 0x4d ||
+        data[2] != 1 || data[size - 1] != 0xe4 ||
+        ((std::size_t(data[4]) << 8) | data[5]) + 11 != size ||
+        (data[3] != 2 && data[3] != 4 && data[3] != 6 && data[3] != 7 && data[3] != 8)) {
+        ++stats_.filtered_frames;
+        return;
+    }
+    ++stats_.eligible_frames;
+    if (fd_ < 0) {
+        ++stats_.dropped_frames;
+        return;
+    }
+    std::uint8_t message[179];
+    for (int i = 0; i < 8; ++i)
+        message[i] = static_cast<std::uint8_t>(received_ns >> ((7 - i) * 8));
+    std::memcpy(message + 8, data, size);
+    // One nonblocking atomic packet or an explicit drop; never replay old
+    // feedback or let a blocked Python observer hold this control-input lane.
+    const auto written = ::send(fd_, message, size + 8, MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (written == static_cast<ssize_t>(size + 8)) {
+        ++stats_.sent_frames;
+    } else {
+        ++stats_.dropped_frames;
+        ++stats_.send_errors;
+        stats_.last_error = written < 0 ? errno : EIO;
+        if (stats_.last_error == EPIPE || stats_.last_error == ECONNRESET ||
+            stats_.last_error == ENOTCONN) {
+            stats_.connected = false;
+            ::close(fd_);
+            fd_ = -1;
+        }
+    }
 }
 } // namespace omni

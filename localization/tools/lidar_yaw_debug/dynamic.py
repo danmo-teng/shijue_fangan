@@ -47,8 +47,34 @@ def deskew_points(points,times,reference_ns,trajectory,extrinsic):
     return (world-ref[:2])@rotation(ref[2]),ref
 
 
+def accepted_points(scan,mount):
+    """Original valid/FOV/half-open mask, shared with numerical-only jobs."""
+    m=mount
+    # Same union of half-open bad-angle intervals. Prepare once per scan
+    # (so a changed installation still takes effect), rather than creating
+    # a Python generator and checking every interval for every point.
+    merged=[]
+    for lo,hi in sorted((lo,hi) for lo,hi in m['excluded_raw_ranges_deg'] if lo<hi):
+        if merged and lo<=merged[-1][1]:merged[-1][1]=max(merged[-1][1],hi)
+        else:merged.append([lo,hi])
+    bounds=tuple(x for interval in merged for x in interval)
+    return [p for p in scan.points if p.valid_return and p.raw_angle_deg is not None
+        and abs((p.raw_angle_deg-m['center_raw_deg']+180)%360-180)<=m['fov_deg']/2
+        and bisect_right(bounds,p.raw_angle_deg)%2==0]
+
+
+def solve_lines_position(points,ref,offset,lines):
+    """Original stateless local/reacquisition solves over frozen scan support."""
+    prior=ref[:2]+offset
+    local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines)
+    local.update(position_reacquired=False,reacquisition_status='LOCAL_TRACKING')
+    found=(None if local['rank_xy']>0 else
+        reacquire_fixed_yaw_position(points,ref[2],_lines=lines))
+    return local,found
+
 class DynamicFence:
-    def __init__(self,installation):
+    def __init__(self,installation,geometry=None):
+        self.geometry=geometry;self.geometry_backend=None
         self.mount=installation;self.poses=deque(maxlen=4096);self.yaws=deque(maxlen=4096)
         self.lock=threading.RLock();self.reference=None;self.revision=0
         self.offset=np.zeros(2);self.last_fit=None;self.scan_count=0;self.fit_count=0
@@ -119,18 +145,7 @@ class DynamicFence:
             if self.initialization:self.initialization['confirmations']=0
 
     def accepted_points(self,scan):
-        m=self.mount
-        # Same union of half-open bad-angle intervals. Prepare once per scan
-        # (so a changed installation still takes effect), rather than creating
-        # a Python generator and checking every interval for every point.
-        merged=[]
-        for lo,hi in sorted((lo,hi) for lo,hi in m['excluded_raw_ranges_deg'] if lo<hi):
-            if merged and lo<=merged[-1][1]:merged[-1][1]=max(merged[-1][1],hi)
-            else:merged.append([lo,hi])
-        bounds=tuple(x for interval in merged for x in interval)
-        return [p for p in scan.points if p.valid_return and p.raw_angle_deg is not None
-            and abs((p.raw_angle_deg-m['center_raw_deg']+180)%360-180)<=m['fov_deg']/2
-            and bisect_right(bounds,p.raw_angle_deg)%2==0]
+        return accepted_points(scan,self.mount)
 
     def try_initialize(self,scan,*,expected_revision=None):
         """Stationary global wall initialization; no prescribed XY or red/blue.
@@ -153,10 +168,16 @@ class DynamicFence:
             if not len(poses) or not len(yaws):return dict(status='WAITING_MOTION_REFERENCE')
             state['attempts']+=1
         poses=np.array(poses);yaws=np.array(yaws)
-        accepted=self.accepted_points(scan)
-        points=np.array([p.point_lidar_m for p in accepted]).reshape(-1,2)
-        ext=[*self.mount['extrinsic'][:2],math.radians(self.mount['extrinsic'][2])]
-        found,reason=initialize(points,extrinsic=ext)
+        if self.geometry is None:
+            accepted=self.accepted_points(scan)
+            points=np.array([p.point_lidar_m for p in accepted]).reshape(-1,2)
+            ext=[*self.mount['extrinsic'][:2],math.radians(self.mount['extrinsic'][2])]
+            found,reason=initialize(points,extrinsic=ext)
+            geometry_result=None
+        else:
+            geometry_result=self.geometry('initialize',self.mount,scan)
+            found,reason=geometry_result['found'],geometry_result['reason']
+            self.geometry_backend=geometry_result['backend']
         if found is not None:
             t=[scan.reference_ns]
             raw_yaw=interpolate(yaws[:,0].astype(np.int64),yaws[:,1:2],t)[0,0]
@@ -168,6 +189,8 @@ class DynamicFence:
             # the new reference; this is reference identity, not an age gate.
             if revision!=self.revision or state is not self.initialization:
                 raise ValueError("reference changed during wall initialization")
+            if geometry_result is not None:
+                state['geometry_compute_cpu_ms']=geometry_result['child_geometry_cpu_ms']
             if found is None:
                 self.pending_initial_pose=None;state.update(status=reason,confirmations=0)
                 return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False)
@@ -254,7 +277,7 @@ class DynamicFence:
         lines=outer_supported_lines(extract_lines(points))
         return self._fit_lines_position(points,ref,offset,scan_id,lines,revision=revision)
 
-    def _fit_lines_position(self,points,ref,offset,scan_id,lines,*,revision=None):
+    def _fit_lines_position(self,points,ref,offset,scan_id,lines,*,revision=None,solved=None):
         """Local tracking, or two-scan enclosure reacquisition at fixed yaw.
 
         Share line extraction. A bad wheel/T265 XY prior cannot veto a new
@@ -268,10 +291,7 @@ class DynamicFence:
             if revision!=self.revision:
                 raise ValueError("reference changed during line extraction")
         prior=ref[:2]+offset
-        local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines)
-        local.update(position_reacquired=False,reacquisition_status='LOCAL_TRACKING')
-        found=(None if local['rank_xy']>0 else
-            reacquire_fixed_yaw_position(points,ref[2],_lines=lines))
+        local,found=solve_lines_position(points,ref,offset,lines) if solved is None else solved
         # Only the single fitter establishes candidates. Operator changes
         # clear them and increment revision; commit after the lock-free solve
         # only if this still belongs to that same reference.
@@ -307,19 +327,34 @@ class DynamicFence:
         if expected_revision is not None and revision!=expected_revision:
             raise ValueError("queued scan belongs to a previous reference")
         copied=time.monotonic_ns()
-        query=self.trajectory(poses,yaws,reference);m=self.mount
-        accepted=self.accepted_points(scan)
-        if len(accepted)<8:
-            self.pending_reacquisition=None
-            raise ValueError("可用雷达点不足")
-        points=np.array([p.point_lidar_m for p in accepted]);times=np.array([p.time_ns for p in accepted],np.int64)
-        ext=np.array([*m['extrinsic'][:2],math.radians(m['extrinsic'][2])])
-        corrected,ref=deskew_points(points,times,scan.reference_ns,query,ext)
+        geometry_result=None
+        if self.geometry is None:
+            query=self.trajectory(poses,yaws,reference);m=self.mount
+            accepted=self.accepted_points(scan);accepted_count=len(accepted)
+            if accepted_count<8:
+                self.pending_reacquisition=None
+                raise ValueError("可用雷达点不足")
+            points=np.array([p.point_lidar_m for p in accepted]);times=np.array([p.time_ns for p in accepted],np.int64)
+            ext=np.array([*m['extrinsic'][:2],math.radians(m['extrinsic'][2])])
+            corrected,ref=deskew_points(points,times,scan.reference_ns,query,ext)
+        else:
+            geometry_result=self.geometry('observe',self.mount,scan,poses,yaws,reference,
+                offset=offset,extract=self.lidar_corrections_enabled)
+            self.geometry_backend=geometry_result['backend']
+            accepted_count=geometry_result['accepted_count']
+            if accepted_count<8:
+                self.pending_reacquisition=None
+                raise ValueError("可用雷达点不足")
+            corrected,ref=geometry_result['corrected'],geometry_result['ref']
         deskew_done=time.monotonic_ns()
-        fit=(self._fit_position(corrected,ref,offset,scan.scan_id,revision) if self.lidar_corrections_enabled
-            else dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
+        if self.lidar_corrections_enabled:
+            fit=(self._fit_position(corrected,ref,offset,scan.scan_id,revision) if geometry_result is None else
+                self._fit_lines_position(corrected,ref,offset,scan.scan_id,geometry_result['lines'],
+                    revision=revision,solved=(geometry_result['local'],geometry_result['found'])))
+        else:
+            fit=dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
                 inherited_axes=['x','y'],covariance=None,qualified_pose=False,
-                reason='OPERATOR_OBSTACLE_NO_LIDAR_CORRECTION'))
+                reason='OPERATOR_OBSTACLE_NO_LIDAR_CORRECTION')
         fitted=time.monotonic_ns()
         latest=max(poses[-1,0],yaws[-1,0]);oldest=max(poses[0,0],yaws[0,0])
         result=dict(fit,scan_id=scan.scan_id,reference_ns=scan.reference_ns,
@@ -328,7 +363,7 @@ class DynamicFence:
             time_policy='adopt_received_data_timing_diagnostic_only',motion_source=self.motion.mode,
             motion_selection=self.motion.snapshot(),motion_boundary_policy='hold_outside_measured_support',
             primary_yaw_field_rad=float(ref[2]),prior_center_xy_m=(ref[:2]+offset).tolist(),
-            physical_points=len(scan.points),used_points=len(accepted),scan_span_ms=(scan.last_point_ns-scan.first_point_ns)/1e6,
+            physical_points=len(scan.points),used_points=accepted_count,scan_span_ms=(scan.last_point_ns-scan.first_point_ns)/1e6,
             motion_unsupported_span_ns=max(0,int(scan.reference_ns-min(poses[-1,0],yaws[-1,0])),int(oldest-scan.first_point_ns)),
             motion_latest_ns=int(latest),timestamp_monotonic_ns=began,reference_revision=revision)
         with self.lock:
@@ -360,6 +395,13 @@ class DynamicFence:
             result['snapshot_ms']=(copied-began)/1e6
             result['deskew_ms']=(deskew_done-copied)/1e6
             result['fit_ms']=(fitted-deskew_done)/1e6
+            if geometry_result is not None:
+                # Parent fitting CPU is separate from the numerical child's
+                # CPU; IPC/wait time must not be mistaken for either quantity.
+                result['geometry_compute_cpu_ms']=geometry_result['child_geometry_cpu_ms']
+                result['geometry_roundtrip_ms']=(deskew_done-copied)/1e6
+                result['deskew_ms']=geometry_result['deskew_ms']
+                result['fit_ms']+=geometry_result['extract_ms']+geometry_result['solve_ms']
             self.last_fit=result
         return result
 

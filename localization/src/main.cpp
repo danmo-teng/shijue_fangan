@@ -63,6 +63,7 @@ struct Options {
     std::string debug_test_session,debug_fisheye_output,debug_fisheye_request;
     std::string debug_pose_socket;
     std::string wheel_feedback_socket, wheel_feedback_requests;
+    std::string motion_feedback_socket;
     std::string test_uart_socket;
     std::string dynamic_pose_socket, dynamic_pose_output;
     std::string operator_socket;
@@ -267,6 +268,7 @@ void usage(const char *program)
         << "  --debug-fresh-session      disable map preservation for debug A/B\n"
         << "  --debug-test-session ID    record actual SDK process/session identity\n"
         << "  --wheel-feedback-socket @NAME  formal UART measured-feedback tap\n"
+        << "  --motion-feedback-socket @NAME  independent passive measured-feedback lane to localization worker\n"
         << "  --wheel-feedback-requests FILE  one identity + one stream request from existing codec\n"
         << "  --test-uart-socket @NAME  test transport; C++ owns UART, Python retains action pairing\n"
         << "  --debug-fisheye-output DIR --debug-fisheye-request FILE  opt-in bounded same-pipeline evidence\n"
@@ -351,6 +353,8 @@ Options parse_options(int argc, char **argv)
             options.dynamic_pose_output = value("--dynamic-pose-output");
         } else if (argument == "--wheel-feedback-socket") {
             options.wheel_feedback_socket = value("--wheel-feedback-socket");
+        } else if (argument == "--motion-feedback-socket") {
+            options.motion_feedback_socket = value("--motion-feedback-socket");
         } else if (argument == "--wheel-feedback-requests") {
             options.wheel_feedback_requests = value("--wheel-feedback-requests");
         } else if (argument == "--test-uart-socket") {
@@ -370,9 +374,12 @@ Options parse_options(int argc, char **argv)
     if ((!options.operator_socket.empty() && options.uart_path.empty()) ||
         (options.operator_uart_only && (options.operator_socket.empty() ||
          !options.command_file_path.empty() || !options.dynamic_pose_socket.empty() ||
-         !options.wheel_feedback_socket.empty() || !options.debug_wheel_socket.empty() ||
+         !options.wheel_feedback_socket.empty() || !options.motion_feedback_socket.empty() || !options.debug_wheel_socket.empty() ||
          options.tx_rate_hz != 0)))
         throw std::invalid_argument("operator UART-only needs UART/socket and no localization/task streams");
+    if (!options.motion_feedback_socket.empty() &&
+        (options.uart_path.empty() || options.debug_wheel_synthetic))
+        throw std::invalid_argument("motion feedback tap needs the existing measured UART owner");
     if (options.dynamic_pose_socket.empty() != options.dynamic_pose_output.empty() ||
         (!options.dynamic_pose_socket.empty() && (options.dynamic_pose_output == options.output_path ||
           options.debug_pose_socket.empty() || options.wheel_feedback_socket.empty())))
@@ -1047,6 +1054,7 @@ int main(int argc, char **argv)
         std::atomic<bool> operator_stopped{false};
         std::unique_ptr<omni::OperatorUartRelay> operator_relay;
         auto feedback_tap = std::make_shared<omni::WheelTelemetryTap>(options.wheel_feedback_socket);
+        auto motion_feedback_tap = std::make_shared<omni::MotionTelemetryTap>(options.motion_feedback_socket);
         std::vector<std::uint8_t> feedback_requests;
         const std::string uart_raw_path=options.debug_test_session.empty()||options.uart_path.empty()?"":
             options.events_path.substr(0,options.events_path.find_last_of('/')+1)+"uart_rx_native.jsonl";
@@ -1087,7 +1095,7 @@ int main(int argc, char **argv)
                       << " 8N1, RX TYPE=0x15/0x17, TX TYPE=0x16 @ "
                       << options.tx_rate_hz
                       << " Hz, mission heartbeat=100 Hz (T265-independent)\n";
-            uart_thread = std::thread([&, feedback_tap]() {
+            uart_thread = std::thread([&, feedback_tap, motion_feedback_tap]() {
                 std::uint64_t received_ns = 0;
                 omni::F407FrameParser parser([&](const omni::EncoderFrame &frame) {
                     if (!options.ignore_encoders) encoder_queue.push(frame);
@@ -1118,6 +1126,7 @@ int main(int argc, char **argv)
                     },
                     [&](const std::uint8_t *data, std::size_t size) {
                         if(debug_wheel)debug_wheel->wire_feedback(data,size,received_ns);
+                        motion_feedback_tap->publish(data,size,received_ns);
                         if(test_uart_relay)test_uart_relay->publish(data,size,received_ns);
                         feedback_tap->publish(data,size,received_ns);
                     },bool(test_uart_relay));
@@ -1137,7 +1146,7 @@ int main(int argc, char **argv)
                             for(int i=0;i<count;++i){hex+=digits[buffer[i]>>4];hex+=digits[buffer[i]&15];}
                             uart_raw_log.submit("{\"timestamp_monotonic_ns\":"+std::to_string(received_ns)+",\"data_hex\":\""+hex+"\"}\n");
                         }
-                        if (!options.wheel_feedback_socket.empty() || test_uart_relay || debug_wheel) mixed.feed(buffer, static_cast<std::size_t>(count));
+                        if (!options.wheel_feedback_socket.empty() || !options.motion_feedback_socket.empty() || test_uart_relay || debug_wheel) mixed.feed(buffer, static_cast<std::size_t>(count));
                         else parser.feed(buffer, static_cast<std::size_t>(count));
                     }
                     const omni::ParserStats &stats = parser.stats();
@@ -2341,6 +2350,18 @@ int main(int argc, char **argv)
             std::to_string(raw_snapshot.errors()) + ",\"uart_raw_dropped_rows\":"+std::to_string(uart_raw_log.dropped())+
             ",\"uart_raw_io_failed\":"+(uart_raw_log.failed()?"true":"false")+",\"raw_json_coalesced\":" +
             std::to_string(raw_snapshot.coalesced()) + "}");
+        if (!options.motion_feedback_socket.empty()) {
+            const auto &s = motion_feedback_tap->stats(); // UART publisher is joined.
+            event_log.write("motion_feedback_tap_status", "{\"eligible_frames\":" +
+                std::to_string(s.eligible_frames) + ",\"sent_frames\":" +
+                std::to_string(s.sent_frames) + ",\"dropped_frames\":" +
+                std::to_string(s.dropped_frames) + ",\"filtered_frames\":" +
+                std::to_string(s.filtered_frames) + ",\"send_errors\":" +
+                std::to_string(s.send_errors) + ",\"connection_error\":" +
+                std::to_string(s.connection_error) + ",\"last_error\":" +
+                std::to_string(s.last_error) + ",\"connected\":" +
+                (s.connected ? "true" : "false") + "}");
+        }
         event_log.close();
         std::cerr << "[SUMMARY] wheel accepted=" << wheel_accepted
                   << " rejected=" << wheel_rejected

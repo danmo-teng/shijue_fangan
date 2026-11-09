@@ -17,11 +17,18 @@ POLICY = dict(single_increment_conflict_m=.05, displacement_conflict_m=.05,
 
 def sample(history, t):
     """Interpolate actual samples; outside support hold the endpoint, not velocity."""
+    if t<=history[0][0]:return np.asarray(history[0][1:],float)
+    if t>=history[-1][0]:return np.asarray(history[-1][1:],float)
     i=bisect_left(history,t,key=lambda x:x[0])
     if i==0:return np.asarray(history[0][1:],float)
     if i==len(history):return np.asarray(history[-1][1:],float)
     a,b=history[i-1],history[i];f=(t-a[0])/(b[0]-a[0])
     return np.asarray(a[1:],float)*(1-f)+np.asarray(b[1:],float)*f
+
+
+def _norm2(vector):
+    """Euclidean 2D magnitude without NumPy dot's tiny-array GIL release."""
+    return math.hypot(float(vector[0]),float(vector[1]))
 
 
 class MotionSource:
@@ -71,7 +78,7 @@ class MotionSource:
         t=int(p['timestamp_monotonic_ns']);xy=np.array([p['x_m'],p['y_m']],float)
         if not np.isfinite(xy).all():return
         if self.last_raw_ns is not None and t<=self.last_raw_ns:return
-        raw_step=(float(np.linalg.norm(xy-self.last_raw_xy)) if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.last_raw_xy is not None else 0.)
+        raw_step=(_norm2(xy-self.last_raw_xy) if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.last_raw_xy is not None else 0.)
         self.last_raw_ns=t;self.last_raw_xy=xy;self.last_confidence=p['tracker_confidence']
         if len(self.pending)==self.pending.maxlen:self.pending_pose_drops+=1
         self.pending.append((t,*xy,int(p['tracker_confidence'])))
@@ -113,13 +120,16 @@ class MotionSource:
         delta=dt*np.array([math.cos(angle)*v[0]-math.sin(angle)*v[1],
                            math.sin(angle)*v[0]+math.cos(angle)*v[1]])
         if not self.wheels:self.wheels.append((int(start),0.,0.,0.))
-        old=self.wheels[-1];xy=np.array(old[1:3])+delta;travel=old[3]+float(np.linalg.norm(v))*dt
+        old=self.wheels[-1];xy=np.array(old[1:3])+delta;travel=old[3]+_norm2(v)*dt
         if end==old[0]:self.wheels.pop()
         self.wheels.append((int(end),*xy,travel));self.last_wheel=key
         self._process()
 
     def _wheel_at(self,t):
-        w=sample(self.wheels,t);return np.r_[self.basis@w[:2],w[2]]
+        w=sample(self.wheels,t)
+        result=np.empty(3,dtype=float)
+        result[:2]=self.basis@w[:2];result[2]=w[2]
+        return result
 
     def _fallback(self,reason,t):
         if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.wheels and self.history:
@@ -159,9 +169,9 @@ class MotionSource:
             elif self.previous is None:
                 self.previous=(xy,w);self.window=(xy,w)
             else:
-                prev,wp=self.previous;step=float(np.linalg.norm((xy-prev)-(w[:2]-wp[:2])))
+                prev,wp=self.previous;step=_norm2((xy-prev)-(w[:2]-wp[:2]))
                 base,wb=self.window
-                conflict=float(np.linalg.norm((xy-base)-(w[:2]-wb[:2])))
+                conflict=_norm2((xy-base)-(w[:2]-wb[:2]))
                 self.last_conflict_m=max(step,conflict)
                 bad=step>POLICY['single_increment_conflict_m'] or conflict>POLICY['displacement_conflict_m']
                 if bad:
@@ -176,7 +186,7 @@ class MotionSource:
                 else:
                     if self.recovery_window is None:self.recovery_window=(xy,w)
                     rb,rw=self.recovery_window
-                    residual=float(np.linalg.norm((xy-rb)-(w[:2]-rw[:2])))
+                    residual=_norm2((xy-rb)-(w[:2]-rw[:2]))
                     if residual>POLICY['recovery_residual_m']:
                         self.recovery_window=(xy,w);self.recovery_travel=0.
                     elif w[2]-rw[2]>=POLICY['comparison_travel_m']:

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cerrno>
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
@@ -1126,9 +1127,92 @@ void test_native_uart_relay()
     ::close(peer);::close(receiver);
 }
 
+void test_motion_feedback_tap()
+{
+    const auto name="@test-motion-feedback-"+std::to_string(::getpid());
+    const int server=::socket(AF_UNIX,SOCK_SEQPACKET|SOCK_NONBLOCK,0);
+    sockaddr_un address{};address.sun_family=AF_UNIX;
+    std::memcpy(address.sun_path+1,name.data()+1,name.size()-1);
+    const auto length=offsetof(sockaddr_un,sun_path)+name.size();
+    if (server<0 || ::bind(server,reinterpret_cast<sockaddr *>(&address),length)!=0 ||
+        ::listen(server,1)!=0) {
+        check(false,"motion feedback fixture binds local listener");
+        if(server>=0)::close(server);
+        return;
+    }
+    auto frame=[](unsigned type) {
+        std::vector<std::uint8_t> result{0xd4,0x4d,1,static_cast<std::uint8_t>(type),0,8,0,9,
+                                       0x55,0,0x12,0x34,0x56,0x78,0x90,0};
+        const auto crc=omni::modbus_crc16(result.data()+2,result.size()-2);
+        result.push_back(crc&255);result.push_back(crc>>8);result.push_back(0xe4);
+        return result;
+    };
+    {
+        omni::MotionTelemetryTap tap(name);
+        const int peer=::accept4(server,nullptr,nullptr,SOCK_NONBLOCK);
+        check(peer>=0 && tap.stats().connected,"motion feedback independently connects");
+        if(peer>=0) {
+            std::uint8_t received[179];
+            check(::recv(peer,received,sizeof(received),MSG_DONTWAIT)<0 &&
+                  (errno==EAGAIN || errno==EWOULDBLOCK),"motion feedback sends no MCU or local handshake");
+            const std::uint64_t stamp=0x0102030405060708ULL;
+            int legacy=0;
+            omni::F405MixedFrames mixed(
+                [&](const std::uint8_t *,std::size_t){++legacy;},
+                [&](const std::uint8_t *p,std::size_t n){tap.publish(p,n,stamp);});
+            for(unsigned type: {2u,4u,6u,7u,8u}) {
+                const auto raw=frame(type);
+                for(auto byte:raw)mixed.feed(&byte,1);
+                const auto n=::recv(peer,received,sizeof(received),MSG_DONTWAIT);
+                check(n==static_cast<ssize_t>(raw.size()+8) &&
+                      std::equal(raw.begin(),raw.end(),received+8),"motion feedback keeps full original extended bytes");
+                std::uint64_t actual=0;
+                if(n>=8)for(int i=0;i<8;++i)actual=(actual<<8)|received[i];
+                check(actual==stamp,"motion feedback retains original big-endian UART receive time");
+            }
+            const auto filtered=frame(10);
+            mixed.feed(filtered.data(),filtered.size());
+            auto corrupt=frame(7);corrupt[8]^=1;
+            mixed.feed(corrupt.data(),corrupt.size());
+            const auto counts=omni::build_encoder_frame(omni::EncoderFrame{});
+            mixed.feed(counts.data(),counts.size());
+            check(::recv(peer,received,sizeof(received),MSG_DONTWAIT)<0 &&
+                  (errno==EAGAIN || errno==EWOULDBLOCK),"motion feedback excludes stats, bad CRC and legacy frames");
+            check(tap.stats().eligible_frames==5 && tap.stats().sent_frames==5 &&
+                  tap.stats().filtered_frames==1 && legacy==1,"motion feedback counts only passive allowed extended frames");
+            const auto wheel=frame(7);
+            for(int i=0;i<4096 && !tap.stats().dropped_frames;++i)
+                tap.publish(wheel.data(),wheel.size(),stamp);
+            check(tap.stats().dropped_frames>0 && tap.stats().send_errors>0 &&
+                  tap.stats().connected,"full motion feedback socket drops without blocking UART publisher");
+            const auto dropped=tap.stats().dropped_frames;
+            ::close(peer);
+            tap.publish(wheel.data(),wheel.size(),stamp);
+            check(tap.stats().dropped_frames==dropped+1 && !tap.stats().connected,
+                  "disconnected motion consumer never blocks or replays feedback");
+        }
+    }
+    ::close(server);
+    {
+        omni::MotionTelemetryTap missing(name+"-absent");
+        const auto wheel=frame(7);
+        missing.publish(wheel.data(),wheel.size(),1);
+        check(!missing.stats().connected && missing.stats().connection_error!=0 &&
+              missing.stats().eligible_frames==1 && missing.stats().dropped_frames==1,
+              "missing motion consumer is counted without a UART/SDK gate");
+    }
+    {
+        omni::MotionTelemetryTap disabled("");
+        const auto wheel=frame(7);disabled.publish(wheel.data(),wheel.size(),1);
+        check(disabled.stats().eligible_frames==0 && disabled.stats().dropped_frames==0,
+              "unspecified motion lane preserves previous behaviour");
+    }
+}
+
 int main(int argc,char **argv)
 {
     if(argc==4 && std::string(argv[1])=="--wheel-replay")return replay_native_wheels(argv[2],argv[3]);
+    test_motion_feedback_tap();
     test_native_uart_relay();
     test_serial_921600();
     test_async_latest_snapshot();

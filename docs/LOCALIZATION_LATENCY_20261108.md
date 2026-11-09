@@ -483,6 +483,42 @@ result.json同时保存空移除列表与automatic_deletion=false。既有test_t
 
 同样仅在离线统计去阶段首2秒，全阶段结果也保留。B中位和丢弃均有改善，但P95收益未在两次B重复、控制仍约28Hz/秒级，原有积压也会跨阶段继承。没有用功能检查或少锁理论替代实际收益，候选运行代码和55行专用断言全部撤回到fa0c3c2原字节，不继续累加微小改法。
 全程SDK5448次true/0false、99.847Hz，配齐→API返回P95 1.838ms、wheelRX→API返回P95 9.891ms；10796原始Pose199.576Hz/缺号0。观察通道仍丢2959个容器，后段队列0与motion_stream_complete不代表整链完整；没有session_complete。
-报告见reports/localization_joint_log_batch_abba_20261109.json及localization_joint_075954_sdk_20261109.json。下一步提出C++直接向定位工作进程发送07/08、绕过主Python诊断支路，或先隔离显示/诊断；关乎本机接口及生命周期，已向用户说明代价、等待选择，没有提前实现。无需F405修改，不动公式/降级或新增门控。
+报告见reports/localization_joint_log_batch_abba_20261109.json及localization_joint_075954_sdk_20261109.json。当时提出直接通路而未实施；用户随后要求直接修好，本轮实现及最终完整联合负载结果见下节。此历史候选的未通过结论不代表当前实现仍在等待决定。无需F405修改，不动公式/降级或新增门控。
 
 计时口径复核：debug_wheel_input.cpp中attempt.timestamp_monotonic_ns是process(now)入参，不是后面实际call_start；成功result.last_sdk_success_ns包含process内校验、attempt记录及SDK调用。当前072008/074616/075954派生报告分别保留到处理开始和到API返回的分布，文中新增联合结果采用返回口径。旧文若仅以attempt计算“到API”，应理解为到处理开始，不能当精确调用时间；没有为此新增运行时计时/数据年龄门。SDK返回仍不是设备融合ACK。
+
+
+### 11-09最终交付：反馈和控制直达，保留已有C++
+
+用户要求修复约1.5～1.8秒控制积压。原始075954的SDK约100Hz/Pose约200Hz而轮反馈引用约28Hz且秒级延迟，重点不是重写几何或增加F405检测。撤回的是MotionInbox发送方式和Python日志Queue单锁批操作两项失败微实验；已有C++ SDK轮速处理、C++流式RANSAC/提线及原数学后端都保留。
+
+实际新增/调整：
+
+- C++ `MotionTelemetryTap` 在唯一UART原CRC解析回调中、旧Python诊断转发前，被动发送完整02/04/06/07/08帧。新增本机CLI `--motion-feedback-socket @NAME`，AF_UNIX SEQPACKET，每包8字节大端原host RX_ns＋原wire frame；有界非阻塞，满/断开明确计数，不回放、不新建UART/握手/时钟。高频实际测量为07/08，ID/SYNC不能代替原客户端已配对的时钟上下文。
+- 原 `forward_motion_event` 和 `TimedMeasurements` 在同一运动进程接收原始07/08；GUI只转发低频实际identity/匹配SYNC及原legacy yaw后备。SDK Pose由该进程直接读取；原session、epoch、重复样本及符号处理保持，时间资格未知仍写false，但不借此拒绝真实数据。
+- 运动主循环统一输入摄入和输出，去掉再次发送到自身inbox及输入线程间GIL/锁交棒。原正式JSON格式提成纯函数，由运动进程直接发送给原C++控制转发器；正式GUI不再第二次生产控制报文。原正式起点/预热按3绑定、quality/LOST及packet_id语义保持。
+- 高频 `LatestSnapshot` 的跨进程Event通知原来占用大量等待；直达控制不再触碰该通知，显示仍原20Hz。仅在真实端点/支持/参考变化时发布，不以重复旧速度或时钟tick凑100Hz。
+- 雷达受管数值进程执行原坏角/FOV筛点、SE2去畸变、C++提线和原fixed-yaw/reacquire纯求解。frozen history/offset/reference原样传入，原engine负责revision复核、三扫描初始化/两扫描重获、单墙观测、来源仲裁和当前历史后验应用，未移植一个替代估计器。
+- 运动日志写盘独立进程继续使用原 `AsyncDebugLog`。生产者标准Queue非阻塞入队，sender每批≤128通过单向Pipe传输；子进程执行原JSON/文件格式和100ms刷新。传输及原写盘队列各有界4096，额外进程/队列内存是明确代价。日志完整性看最终落盘回执、丢弃/错误和退出状态，不看IPC发送成功；失败只标日志不完整，无控制FAULT/STOP。
+- 运动history端点查询用O(1)边界路径；2D范数改math.hypot避免NumPy微小dot释放GIL。不是数学公式/阈值修改；2560向量差至多1ULP（此范围≤7.1e-15m），原25/50mm决策边界附近核对无分类变化。历史插值和轮基变换原样保留。
+
+主要文件：src/f405_telemetry.cpp、src/main.cpp、tools/lidar_yaw_debug/{worker,inputs,dynamic,motion_source,scan_geometry,control_packet}.py、tools/{async_debug_log,local_packet_receiver,competition_dynamic_localization,lidar_t265_motion_map}.py及competition_rescue/competition_map_app.py。协议变化仅本机进程接口；F405现有线上合同不变，SDK的B→C/零速度源外参与原Pose→车中心关系不变。
+
+### 最终完整联合记录与局限
+
+原始会话 `rescue_map/runtime/history/t265_f407_motion_map/20261109_102643_interactive/`；SDK会话 `6a20473472e44b4ab1802fd4882061da`。实际14b2a3a/dirty1、MOTIONDEBUG、921600；真实T265/F405/YOLO、原地图绘图，历史雷达流10秒/8978原始chunks全部写入PTY。明确合成场地参考仅作计算负载，未验证真实墙后验或坐标精度。没有电机、STOP/reset、TASK CONFIG或底盘0x16发送。控制终端是独立进程，接收原正式JSON报文，并离线以last_wheel_sample_id逐包匹配原始C++UART解码后的真实RX戳，不是GUI自计时。
+
+| 范围 | 控制报文 / 不同轮端点 | 不同轮端点频率 | 物理wheel RX→独立控制终端 中位 / P95 / 最大 |
+| --- | --- | --- | --- |
+| 全段 | 3936 / 2360 | 约100Hz | 6.83 / 22.10 / 43.70ms |
+| 历史雷达＋显示负载段 | 1650 / 1001 | 约100Hz | 10.70 / 27.60 / 43.70ms |
+
+频率按不同轮端点计，不能把Pose/gyro引发的额外包加成“200Hz独立里程计”。接收延迟不是MCU采样到电机执行的总延迟；下位机控制执行/真实0x16线缆尚未测。普通PREEMPT内核，最大43.7ms说明未保证每10ms硬交付。
+
+完整会话运动进程摄入2418个wheel、2418个gyro、4713个Pose，native解码错误/输入丢弃0；实际运行期完整性及退出tail由派生报告按原始ID区分。日志实际落盘13563行历史、0drop、最终回执true、写盘/数值/雷达/运动正常退出且session_complete存在；原始UART2个CRC错误、107个被解析器丢弃的字节明确保留。98扫描接收、73次实际几何/C++提线、25拟合请求依原最新值策略合并，扫描队列丢0，不声称98帧均10Hz计算或墙面后验全部成功。
+
+102643之前的无日志归因版仅用来定位JSON/写盘的GIL影响，不能交付；首次独立日志传输逐条mp.Queue仍丢2096条，也未通过。最终改标准Queue＋单向Pipe批传后保留全日志，性能和完整性才同时达到以上结果。中间退化版及其原始记录没有删除，完整派生比较、SDK/Pose/YOLO、最终源码SHA见reports/localization_direct_motion_feedback_20261109.json。
+
+必要检查：C++本地编译/原CTest、真实wire与原转换数值对照、原动态几何/历史修正/来源检查，以及现有正式启动配对/无双生产者/PTY传输/日志溢出故障和收尾检查通过。最终3项启动/传输检查通过后，独立审查发现异常退出的内部清理可能超过父原5秒期限；补充专用worker进程组，在原期限耗尽后只回收其雷达/数值/日志子树，SDK/UART及GUI不在组内。该收尾补丁在102643之后，仅用原PTY生命周期检查补SIGSTOP子进程场景；没有把102643冒称为补丁后的硬件复测，也不增加运行时数据门控或正常等待。
+
+结论：此前秒级反馈积压在当前真实静止联合负载中已消除，测试和正式入口均接同一新传输。不能扩展为比赛高速精度/全程稳定/硬实时通过；剩余地面、实际0x16控制和RT对照只按LOCALIZATION_MOTIONDEBUG_CHECKLIST做集中必要验证，本轮没有自动发车或恢复其他TODO。

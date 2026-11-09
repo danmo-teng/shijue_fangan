@@ -14,13 +14,16 @@ from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.worker import RadarWorker
 from low_latency_scheduling import set_realtime_thread
 from local_packet_receiver import LocalPacketReceiver
+from lidar_yaw_debug.control_packet import format_control_packet
 
 
 class CompetitionDynamicLocalization:
-    def __init__(self, root, session_id, config, field_start, log, *, defer_reference=False):
+    def __init__(self, root, session_id, config, field_start, log, *, defer_reference=False, native_feedback=False):
         self.root, self.session_id, self.config = root, session_id, config
         self.field_start, self.log = field_start, log
         self.radar = RadarWorker(control_updates=True)
+        self.native_feedback = bool(native_feedback)
+        if self.native_feedback:self.radar.enable_native_feedback()
         self.clock_map = TimedMeasurements()
         self.timed_yaw_seen = False
         self.last_yaw_id = None
@@ -56,6 +59,16 @@ class CompetitionDynamicLocalization:
             timestamp_monotonic_ns=time.monotonic_ns(), **data))
 
     def telemetry(self, event):
+        if self.native_feedback:
+            if (event['kind']=='imu' and
+                    self.radar.state.get('native_feedback',{}).get('timed_yaw_seen')):
+                return  # Same worker already uses versioned yaw; adapter also retains the original rule.
+            # Complete 07/08 frames already go from the sole C++ UART owner to
+            # the motion worker. Only matched identity/clock context and the
+            # existing legacy-yaw fallback pass through this diagnostic parent.
+            if event['kind'] in ('timed_identity','timed_clock_sync','device_identity_changed','imu'):
+                if not self.radar.send('feedback_context',event):self.input_drops += 1
+            return
         try:
             self.chassis_inbox.put_nowait(event)
         except queue.Full:
@@ -63,12 +76,17 @@ class CompetitionDynamicLocalization:
 
     def start(self):
         self.radar.start(self.config, self.config['lidar']['port'], self.config['lidar']['baud'], self.root,
-            sdk_policy=dict(session_id=self.session_id,address='\0t265-wheel-'+self.session_id))
+            sdk_policy=dict(session_id=self.session_id,address='\0t265-wheel-'+self.session_id),
+            control_output=(dict(session_id=self.session_id,address=self.control_address)
+                            if self.native_feedback else None),
+            pose_input=(dict(socket=self.pose_socket,session_id=self.session_id)
+                        if self.native_feedback else None))
         self.devent('realtime_permission_setup',**self.radar.scheduling_setup)
-        self.input_threads = [
-            threading.Thread(target=self._read_chassis, name='dynamic-motion-input', daemon=True),
-            threading.Thread(target=self._read_pose, name='dynamic-pose-input', daemon=True),
-            threading.Thread(target=self._publish_status, name='dynamic-display-status', daemon=True)]
+        self.input_threads = [threading.Thread(target=self._publish_status, name='dynamic-display-status', daemon=True)]
+        if not self.native_feedback:
+            self.input_threads.insert(0,threading.Thread(target=self._read_pose,name='dynamic-pose-input',daemon=True))
+            self.input_threads.insert(0,threading.Thread(target=self._read_chassis,
+                name='dynamic-motion-input',daemon=True))
         for thread in self.input_threads:
             thread.start()
         self.thread = threading.Thread(target=self._run, name='competition-dynamic-transport', daemon=True)
@@ -87,36 +105,10 @@ class CompetitionDynamicLocalization:
         self.radar.control.wake()
 
     def control_packet(self, state):
-        if not state.get('ready'):
-            if self.last_control is None:
-                return None
-            # Same reference-invalid state as the test, not a data-age gate.
-            return dict(self.last_control, packet_id=self.packet_id, quality='LOST',
-                        reference_invalid_reason=state.get('reason', 'reference unavailable'))
-        x, y = state['center_xy_m']
-        mode = state['motion_selection']['mode']
-        raw = self.latest_pose
-        self.last_control = dict(schema_version=1, session_id=self.session_id, packet_id=self.packet_id,
-            frame='field', timestamp_monotonic_ns=state['sample_monotonic_ns'],
-            quality='DEGRADED',  # usable estimator output, not an accuracy certificate
-            pose=dict(x_m=x, y_m=y, yaw_deg=state['yaw_deg']),
-            pose_source=state['source'], motion_source=mode,
-            t265=dict(tracker_confidence=raw.get('tracker_confidence', 0),
-                mapper_confidence=raw.get('mapper_confidence', 0),
-                travel_from_start_m=raw.get('travel_from_start_m', 0.),
-                translation_scale=1., translation_scale_enabled=False,
-                raw_center_xy_m=state['t265_center_xy_m'],
-                sample_monotonic_ns=state['raw_t265_sample_ns']),
-            wheel=dict(fusion_weight=0., official_sdk_input=True, independent_reference=False),
-            navigation=dict(distance_compensation_enabled=False, wheel_progress_m=None),
-            qualified_pose=False, accuracy_verified=False,
-            current_wall_axes=state['current_wall_axes'],
-            lidar_corrections_enabled=state['lidar_corrections_enabled'],
-            lidar_connected=self.control_state.get('lidar_connected',False),
-            lidar_error=self.control_state.get('lidar_error'),
-            position_reacquisitions=state['position_reacquisitions'],
-            reference=state['reference'], motion_selection=state['motion_selection'])
-        return self.last_control
+        packet=format_control_packet(state,self.latest_pose,self.session_id,self.packet_id,
+            self.last_control,lidar_state=self.control_state)
+        if state.get('ready'):self.last_control=packet
+        return packet
 
     def _read_chassis(self):
         self._schedule_thread('motion_input')
@@ -169,11 +161,20 @@ class CompetitionDynamicLocalization:
         try:
             while not self.stop_event.is_set():
                 value = self.radar.control.get(timeout=.05)
+                if self.native_feedback:
+                    # Control goes straight from worker to C++; this loop only
+                    # handles display/reference requests at the existing 20Hz.
+                    value=self.radar.state or None
                 if self.stop_event.is_set():
                     break
                 if value is not None:
                     self.control_state = value
                     self.state = value['last']
+                    if self.native_feedback:
+                        direct=value.get('direct_output',{})
+                        self.packet_id=direct.get('packets_sent',self.packet_id)
+                        self.output_drops=direct.get('output_drops',self.output_drops)
+                        if direct.get('last_packet') is not None:self.last_control=direct['last_packet']
                 state = self.control_state
                 if (not self.defer_reference and not self.reference_requested and state.get('have_tracked_pose')
                         and state.get('have_primary_yaw')):
@@ -189,6 +190,8 @@ class CompetitionDynamicLocalization:
                     break  # Do not invent a replacement position or send STOP.
                 if value is None:
                     continue  # Idle wakeups/start requests are not sensor updates.
+                if self.native_feedback:
+                    continue  # Worker is the only control producer; parent only observes/binds the start.
                 packet = self.control_packet(self.state)
                 if packet is not None:
                     try:
@@ -225,12 +228,14 @@ class CompetitionDynamicLocalization:
         state.update(control)
         if self.defer_reference and self.start_request is None:
             state.update(reason='预热接收中；等待按3绑定正式起点',reference_phase='prewarm_waiting_for_operator')
-        return dict(state, transport_error=self.error, pose_packets=self.pose_packets,
+        return dict(state, transport_error=self.error, pose_packets=(self.radar.state.get('pose_ingested',0) if self.native_feedback else self.pose_packets),
             have_tracked_pose=bool(self.control_state.get('have_tracked_pose')),
             have_primary_yaw=bool(self.control_state.get('have_primary_yaw')),
             lidar_connected=self.control_state.get('lidar_connected',False),
             lidar_error=self.control_state.get('lidar_error'),
-            primary_yaw_packets=self.imu_packets, input_drops=self.input_drops,
+            primary_yaw_packets=(self.radar.state.get('primary_yaw_ingested',0)
+                if self.native_feedback else self.imu_packets),input_drops=self.input_drops,
+            native_feedback=self.radar.state.get('native_feedback',{}) if self.native_feedback else None,
             worker_input_drops=self.radar.input_drops, output_drops=self.output_drops,
             control_packets_sent=self.packet_id, control_pose_publish_enabled=True,
             thread_scheduling=dict(self.scheduling),
@@ -244,6 +249,13 @@ class CompetitionDynamicLocalization:
         for thread in self.input_threads:
             thread.join()
         self.radar.close()
+        if self.native_feedback:
+            # End-of-session counters come from the stopped owner, not the
+            # last 20Hz UI observation. This is reporting, never an input gate.
+            direct=self.radar.state.get('direct_output') or {}
+            self.packet_id=direct.get('packets_sent',self.packet_id)
+            self.output_drops=direct.get('output_drops',self.output_drops)
+            if direct.get('last_packet') is not None:self.last_control=direct['last_packet']
         self.pose_socket.close()
         self.output.close()
         self.log.submit('dynamic_summary.json', dict(self.snapshot(),

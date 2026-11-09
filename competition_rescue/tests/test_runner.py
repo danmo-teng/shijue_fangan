@@ -1027,6 +1027,8 @@ def test_formal_dynamic_start_wiring():
     import competition_map_app as formal
     import map_app
     from competition_dynamic_localization import CompetitionDynamicLocalization
+    import competition_dynamic_localization as transport
+    real_start=CompetitionDynamicLocalization.start
     with tempfile.TemporaryDirectory() as directory:
         runtime = Path(directory)
         options = SimpleNamespace(zone=2, side='blue', corner_offset_mm=150*2**.5,
@@ -1048,12 +1050,89 @@ def test_formal_dynamic_start_wiring():
                 assert cmd[cmd.index('--dynamic-pose-output')+1] == str(runtime/'pose.json')
                 assert Path(cmd[cmd.index('--output')+1]).name == 'raw_t265_result.json'
                 assert '--debug-pose-socket' in cmd and '--wheel-feedback-socket' in cmd
+                assert app.dynamic.native_feedback and app.dynamic.radar.feedback_socket.fileno()>=0
+                assert cmd.count('--motion-feedback-socket')==1
+                assert cmd[cmd.index('--motion-feedback-socket')+1]=='@'+app.dynamic.radar.feedback_address[1:]
+                # Parent diagnostics must not resend the direct raw 07/08 stream.
+                with patch.object(app.dynamic.radar,'send',return_value=True) as send:
+                    for kind in ('timed_wheel_diagnostic','timed_gyro_diagnostic'):
+                        app.dynamic.telemetry(dict(kind=kind,sample={}))
+                    send.assert_not_called()
+                    for kind in ('timed_identity','timed_clock_sync','device_identity_changed','imu'):
+                        event=dict(kind=kind,sample={})
+                        app.dynamic.telemetry(event)
+                        send.assert_called_with('feedback_context',event)
+                    assert send.call_count==4 and app.dynamic.chassis_inbox.empty()
+                    app.dynamic.radar.state['native_feedback']=dict(timed_yaw_seen=True)
+                    app.dynamic.telemetry(dict(kind='imu',sample={}))
+                    assert send.call_count==4
                 assert app.wheel_input.telemetry_sink == app.dynamic.telemetry
                 assert app.localization_command() == cmd and start.call_count == 1
                 metadata = json.loads((runtime/'session.json').read_text())
                 assert metadata['pose_source'] == 'lidar_t265_measured_wheel_fallback'
                 assert metadata['qualification']['translation_compensated'] is False
                 assert metadata['accuracy_verified'] is False
+                assert metadata['motion_feedback_transport']=='native_cpp_complete_frames_direct_to_motion_worker'
+                from lidar_yaw_debug.control_packet import format_control_packet
+                selected=dict(mode='WHEEL_FALLBACK',reason='fixture conflict')
+                reference=dict(round_token='fixture-reference')
+                state=dict(ready=True,center_xy_m=[.1,.2],yaw_deg=45.,sample_monotonic_ns=123,
+                    source='LIDAR_ANCHORED_WHEEL_FALLBACK',motion_selection=selected,
+                    t265_center_xy_m=[.3,.4],raw_t265_sample_ns=120,current_wall_axes=['x'],
+                    lidar_corrections_enabled=True,position_reacquisitions=2,reference=reference)
+                raw=dict(tracker_confidence=0,mapper_confidence=2,travel_from_start_m=.75)
+                lidar=dict(lidar_connected=True,lidar_error=None)
+                expected=dict(schema_version=1,session_id=app.dynamic.session_id,packet_id=3,
+                    frame='field',timestamp_monotonic_ns=123,quality='DEGRADED',
+                    pose=dict(x_m=.1,y_m=.2,yaw_deg=45.),pose_source='LIDAR_ANCHORED_WHEEL_FALLBACK',
+                    motion_source='WHEEL_FALLBACK',t265=dict(tracker_confidence=0,mapper_confidence=2,
+                        travel_from_start_m=.75,translation_scale=1.,translation_scale_enabled=False,
+                        raw_center_xy_m=[.3,.4],sample_monotonic_ns=120),
+                    wheel=dict(fusion_weight=0.,official_sdk_input=True,independent_reference=False),
+                    navigation=dict(distance_compensation_enabled=False,wheel_progress_m=None),
+                    qualified_pose=False,accuracy_verified=False,current_wall_axes=['x'],
+                    lidar_corrections_enabled=True,lidar_connected=True,lidar_error=None,
+                    position_reacquisitions=2,reference=reference,motion_selection=selected)
+                assert format_control_packet(state,raw,app.dynamic.session_id,3,lidar_state=lidar)==expected
+                app.dynamic.latest_pose=raw;app.dynamic.control_state=lidar;app.dynamic.packet_id=3
+                assert app.dynamic.control_packet(state)==expected
+                missing=dict(ready=False,reason='fixture reference reset')
+                assert format_control_packet(missing,raw,app.dynamic.session_id,4) is None
+                assert format_control_packet(missing,raw,app.dynamic.session_id,4,expected)==dict(
+                    expected,packet_id=4,quality='LOST',reference_invalid_reason='fixture reference reset')
+                assert expected['quality']=='DEGRADED' and expected['packet_id']==3
+                # The worker is the only native control publisher. Startup
+                # passes its original C++ destination and skips the old chassis thread.
+                threads=[]
+                def fake_thread(**kwargs):
+                    threads.append(kwargs)
+                    return SimpleNamespace(start=lambda:None,join=lambda:None)
+                def prepare_worker(*args,**kwargs):app.dynamic.radar.scheduling_setup={}
+                with patch.object(transport,'threading',SimpleNamespace(Thread=fake_thread)), \
+                        patch.object(app.dynamic.radar,'start',side_effect=prepare_worker) as worker_start:
+                    real_start(app.dynamic)
+                assert worker_start.call_args.kwargs['control_output']==dict(
+                    session_id=app.dynamic.session_id,address=app.dynamic.control_address)
+                assert 'dynamic-motion-input' not in {entry['name'] for entry in threads}
+                last_packet=dict(packet_id=6,quality='DEGRADED',pose=dict(x_m=.1,y_m=.2,yaw_deg=45.))
+                value=dict(last=dict(ready=False,reason='fixture'),have_tracked_pose=False,
+                    have_primary_yaw=False,direct_output=dict(packets_sent=7,output_drops=2,last_packet=last_packet))
+                app.dynamic.radar.state=value  # Existing 20Hz display snapshot; control slot stays idle.
+                waits=[0]
+                def next_control(timeout):
+                    assert timeout==.05
+                    waits[0]+=1
+                    if waits[0]>1:app.dynamic.stop_event.set()
+                    return None
+                with patch.object(app.dynamic.radar.control,'get',side_effect=next_control), \
+                        patch.object(app.dynamic.radar,'process',SimpleNamespace(exitcode=None)), \
+                        patch.object(app.dynamic,'_schedule_thread'), \
+                        patch.object(app.dynamic,'control_packet',side_effect=AssertionError('parent formatted native control')), \
+                        patch.object(app.dynamic,'output',SimpleNamespace(sendto=lambda *a: (_ for _ in ()).throw(
+                            AssertionError('parent sent duplicate native control')))):
+                    app.dynamic._run()
+                assert app.dynamic.packet_id==7 and app.dynamic.output_drops==2
+                assert app.dynamic.last_control is last_packet
             finally:
                 app.stop_localization()
             assert app.dynamic is None and app.wheel_input is None

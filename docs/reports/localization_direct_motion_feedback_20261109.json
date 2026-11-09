@@ -1,0 +1,2052 @@
+{
+  "schema_version": 1,
+  "iteration": 1,
+  "scope": "First direct native C++ telemetry-to-original motion-worker implementation. Stationary real F405/T265/YOLO plus independent10-second historic lidar replay and drawing, explicit synthetic field reference, no motion or UART0x16 publication. Original conversion/formulas/source arbitration retained; this iteration still uses an unnecessary same-worker MotionInbox socket/pickle hop after direct receipt. Offline report only, no device/test/source/raw-log mutation.",
+  "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_092713_interactive",
+  "raw_inputs": [
+    "metadata.json",
+    "joint_load_result.json",
+    "joint_send_phases.jsonl",
+    "joint_replay_phases.jsonl",
+    "uart_rx_native.jsonl",
+    "motion_feedback.jsonl",
+    "wheel_sdk.jsonl",
+    "internal_control_load_probe.jsonl",
+    "t265_raw_pose.csv",
+    "pose_motion.jsonl",
+    "chassis_extended.jsonl",
+    "uart_rx.jsonl",
+    "localization_events.jsonl",
+    "vision_load_events.jsonl",
+    "vision_load_detections.jsonl",
+    "dynamic_summary.json"
+  ],
+  "actual": {
+    "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+    "lower_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "lower_dirty": 1,
+    "mode": "NormalDebug",
+    "service": "MOTIONDEBUG",
+    "uart_baud": 921600,
+    "mcu_epoch": "38613807ded2ea86d76999b3175c1879",
+    "sdk_session_id": "5dd50ece8f5143d9a1236c74d219c8cc",
+    "candidate_source_sha256": "7f6ac8445272c593eb0673a6e4a45362a1e4f0b1873b55723b664ffd8f3b6869"
+  },
+  "method": {
+    "latency": "Match probe last_wheel_sample_id with same-epoch native TYPE07.sample_id. Subtract original physical UART host receive timestamp from probe host receive timestamp; unknown MCU/SDK mapping is not used in this latency.",
+    "unmatched_probe_sample_ids": [],
+    "endpoint_hz": "(distinct selected wheel IDs -1)/(last probe host receive -first probe host receive). Count/window duration also reported.",
+    "raw_pose_reference_age": "Diagnostic SDK/host-mapped Pose timestamp; absolute clock calibration remains unproved.",
+    "tap_shutdown": "Decode original raw UART capture with existing MixedStream. Compare complete CRC-valid container identities through the final direct frame, then count all valid containers occurring afterward. This distinguishes active input completeness from publisher shutdown totals.",
+    "api_endpoints": "paired_to_process_start uses wheel_sdk_attempt.timestamp_monotonic_ns; paired_to_api_return uses wheel_sdk_result.last_sdk_success_ns. Exact SDK call_start absolute timestamp is not logged; never conflate the two."
+  },
+  "segments": [
+    {
+      "name": "all_recorded_control_probe",
+      "start_ns": 6863692152253,
+      "end_ns": 6887528775680,
+      "start_wall": "2026-11-09T09:27:14.707",
+      "end_wall": "2026-11-09T09:27:38.544",
+      "duration_s": 23.836623427,
+      "probe_rows": 1172,
+      "distinct_wheel_ids": 1015,
+      "distinct_support_endpoints": 1015,
+      "distinct_wheel_endpoint_rate_hz": 42.53958213284399,
+      "distinct_wheel_count_over_window_hz": 42.5815343816817,
+      "wheel_rx_to_probe_ms": {
+        "n": 1172,
+        "min": 2.483872,
+        "median": 17.664496,
+        "p95": 551.85645275,
+        "p99": 700.3810792699999,
+        "max": 740.100147
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 1172,
+        "min": 0.0,
+        "median": 1.0,
+        "p95": 55.0,
+        "p99": 70.0,
+        "max": 74.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 1172,
+        "min": 7.343577,
+        "median": 20.764979500000003,
+        "p95": 101.45619985000006,
+        "p99": 468.6099762899993,
+        "max": 619.590104
+      },
+      "probe_inter_arrival_ms": {
+        "n": 1171,
+        "min": 0.212375,
+        "median": 12.888232,
+        "p95": 58.1154815,
+        "p99": 87.57916169999991,
+        "max": 173.10476
+      },
+      "native_sdk_wheel_samples": 2383,
+      "direct_feedback_wheel_samples": 2383,
+      "native_ids_missing_from_direct_feedback": [],
+      "old_python_wheel_samples": 2363,
+      "native_ids_missing_from_old_python": 20,
+      "old_python_container_drop_increment": 105,
+      "pose_packets": 4757,
+      "pose_frame_gaps": 0,
+      "yolo_detection_log_rows": 167,
+      "lidar_fit_results": 76
+    },
+    {
+      "name": "actual_10s_historical_lidar_replay",
+      "start_ns": 6869545746339,
+      "end_ns": 6879563279220,
+      "start_wall": "2026-11-09T09:27:20.560",
+      "end_wall": "2026-11-09T09:27:30.578",
+      "duration_s": 10.017532881,
+      "probe_rows": 254,
+      "distinct_wheel_ids": 254,
+      "distinct_support_endpoints": 254,
+      "distinct_wheel_endpoint_rate_hz": 25.370466010137722,
+      "distinct_wheel_count_over_window_hz": 25.35554442568942,
+      "wheel_rx_to_probe_ms": {
+        "n": 254,
+        "min": 20.30043,
+        "median": 433.7517745,
+        "p95": 694.3167215999999,
+        "p99": 728.32491132,
+        "max": 740.100147
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 254,
+        "min": 2.0,
+        "median": 43.0,
+        "p95": 69.0,
+        "p99": 72.0,
+        "max": 74.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 254,
+        "min": 10.305429,
+        "median": 36.398944,
+        "p95": 85.35013919999999,
+        "p99": 112.49431507999998,
+        "max": 142.332105
+      },
+      "probe_inter_arrival_ms": {
+        "n": 253,
+        "min": 0.262958,
+        "median": 35.497159,
+        "p95": 77.42280159999993,
+        "p99": 119.75859191999989,
+        "max": 173.10476
+      },
+      "native_sdk_wheel_samples": 1002,
+      "direct_feedback_wheel_samples": 1002,
+      "native_ids_missing_from_direct_feedback": [],
+      "old_python_wheel_samples": 1002,
+      "native_ids_missing_from_old_python": 0,
+      "old_python_container_drop_increment": 0,
+      "pose_packets": 1999,
+      "pose_frame_gaps": 0,
+      "yolo_detection_log_rows": 87,
+      "lidar_fit_results": 75
+    },
+    {
+      "name": "replay_trimmed_first_2s",
+      "start_ns": 6871545746339,
+      "end_ns": 6879563279220,
+      "start_wall": "2026-11-09T09:27:22.560",
+      "end_wall": "2026-11-09T09:27:30.578",
+      "duration_s": 8.017532881,
+      "probe_rows": 189,
+      "distinct_wheel_ids": 189,
+      "distinct_support_endpoints": 189,
+      "distinct_wheel_endpoint_rate_hz": 23.658383508872028,
+      "distinct_wheel_count_over_window_hz": 23.57333643718424,
+      "wheel_rx_to_probe_ms": {
+        "n": 189,
+        "min": 345.941978,
+        "median": 461.125527,
+        "p95": 701.1257498,
+        "p99": 729.49513748,
+        "max": 740.100147
+      },
+      "already_received_wheel_intervals_behind": {
+        "n": 189,
+        "min": 34.0,
+        "median": 46.0,
+        "p95": 70.0,
+        "p99": 72.12,
+        "max": 74.0
+      },
+      "raw_pose_reference_age_ms": {
+        "n": 189,
+        "min": 10.305429,
+        "median": 38.906465,
+        "p95": 86.17692179999999,
+        "p99": 122.28083412000002,
+        "max": 142.332105
+      },
+      "probe_inter_arrival_ms": {
+        "n": 188,
+        "min": 0.262958,
+        "median": 38.491155000000006,
+        "p95": 81.07112570000001,
+        "p99": 129.66552726999984,
+        "max": 173.10476
+      },
+      "native_sdk_wheel_samples": 802,
+      "direct_feedback_wheel_samples": 802,
+      "native_ids_missing_from_direct_feedback": [],
+      "old_python_wheel_samples": 802,
+      "native_ids_missing_from_old_python": 0,
+      "old_python_container_drop_increment": 0,
+      "pose_packets": 1600,
+      "pose_frame_gaps": 0,
+      "yolo_detection_log_rows": 69,
+      "lidar_fit_results": 60
+    }
+  ],
+  "direct_input_integrity": {
+    "worker_native_feedback": {
+      "enabled": true,
+      "connected": false,
+      "decode_errors": 0,
+      "motion_input_drops": 0,
+      "error": null,
+      "frames": 4898,
+      "wheel_frames": 2448,
+      "gyro_frames": 2447,
+      "timed_yaw_seen": true,
+      "conversion": "original_forward_motion_event",
+      "identity_present": true
+    },
+    "direct_logged_wheel_frames": 2448,
+    "direct_logged_gyro_frames": 2447,
+    "direct_input_rx_wall_range": [
+      "2026-11-09T09:27:14.094",
+      "2026-11-09T09:27:38.581"
+    ],
+    "all_valid07_08_in_raw_capture_through_last_direct": 4895,
+    "missing_valid07_08_through_last_direct": [],
+    "direct_wheel_measurement_id_gaps": 1,
+    "direct_wheel_id_gap_note": "One missing physical measurement ID is present in the valid-frame stream itself; not a missing delivered tap container. See raw parser anomaly.",
+    "native_motion_input_drops": 0,
+    "shared_motion_inbox_drops": 0,
+    "pose_sent": 4773,
+    "pose_ingested": 4771,
+    "measured_wheel_ingested": 2446,
+    "primary_yaw_ingested": 2432,
+    "old_python_primary_yaw_packets_counter": 2374,
+    "counter_note": "Legacy parent observer counters are not the new direct-worker ingestion counters. Sent-versus-ingested tail differences are retained, not silently counted as full delivery."
+  },
+  "shutdown_tap": {
+    "final_event": {
+      "timestamp_monotonic_ns": 6888772467067,
+      "event": "motion_feedback_tap_status",
+      "data": {
+        "eligible_frames": 4992,
+        "sent_frames": 4898,
+        "dropped_frames": 94,
+        "filtered_frames": 0,
+        "send_errors": 1,
+        "connection_error": 0,
+        "last_error": 32,
+        "connected": false
+      }
+    },
+    "raw_total_valid_extended_containers": 4992,
+    "raw_containers_after_last_direct": 94,
+    "raw_after_last_direct_types": {
+      "8": 47,
+      "7": 46,
+      "6": 1
+    },
+    "raw_after_last_direct_wall_range": [
+      "2026-11-09T09:27:38.584",
+      "2026-11-09T09:27:39.046"
+    ],
+    "matches_all_reported_tap_drops": true,
+    "explanation": "Exactly94 valid containers follow the last direct delivery:47 gyro,46 wheel and1 stream-disable CONFIG_REPLY. All valid07/08 before that boundary were delivered. Worker receiver closes before the continuing C++ UART/SDK publisher in the existing cleanup; do not report these94 as active-run tap loss. No per-failed-send timestamp is provided by the final counter."
+  },
+  "raw_uart_capture": {
+    "offline_parser_stats": {
+      "uart_rx_bytes": 556105,
+      "legacy_frames": 5457,
+      "extended_frames": 4992,
+      "legacy_ack4": 0,
+      "mixed_crc_errors": 1,
+      "mixed_malformed": 0,
+      "discarded_bytes": 64,
+      "partial_timeouts": 0,
+      "buffer_overflows": 0
+    },
+    "crc_anomalies": [
+      {
+        "raw_log_line": 5324,
+        "receive_monotonic_ns": 6867135374010,
+        "wall": "2026-11-09T09:27:18.150",
+        "buffer_hex": "d44d01070054032938613807ded2ea86d76999b3175c1879000000010000d6ac0000000020c965800000000020c98c9000a3b315ac000cfff5fffa0a07cfd8c3d44d01070054032b38613807ded2ea86d76999b3175c1879000000010000d6ad00000000"
+      }
+    ],
+    "crc_anomaly_note": "One incomplete TYPE07 container prefix (SEQ0x0329, measurement54956) is followed by a valid legacy0x15 container before completion and then extended SEQ0x032B. This raw-capture anomaly explains a candidate physical-frame gap; root cause is not proven and it does not explain seconds of prior observer backlog. No F405 task or protection is added."
+  },
+  "old_python_observer": {
+    "container_drop_total": 105,
+    "decoded_wheel_frames": 2474,
+    "not_used_as_direct_integrity": "Old Python observer may still drop diagnostic containers. These counters are separate from direct tap/worker input and SDK accepted samples."
+  },
+  "sdk_pose_yolo": {
+    "sdk_api_true": 2484,
+    "sdk_api_false": 0,
+    "sdk_api_rate_hz": 99.87475061491475,
+    "paired_to_process_start_ms": {
+      "n": 2484,
+      "min": 0.343125,
+      "median": 0.511916,
+      "p95": 0.7089527,
+      "p99": 0.8630193600000006,
+      "max": 1.515206
+    },
+    "paired_to_api_return_ms": {
+      "n": 2484,
+      "min": 0.635791,
+      "median": 1.0056655,
+      "p95": 1.6065478999999994,
+      "p99": 2.537024920000003,
+      "max": 6.451949
+    },
+    "wheel_rx_to_api_return_ms": {
+      "n": 2484,
+      "min": 1.038457,
+      "median": 5.279535,
+      "p95": 9.62266555,
+      "p99": 11.2132547,
+      "max": 14.626438
+    },
+    "raw_pose_csv_rows": 4912,
+    "raw_pose_receive_rate_hz": 199.57135675500504,
+    "raw_pose_missing_frames": 0,
+    "raw_pose_nonincreasing_frames": 0,
+    "raw_pose_callback_drops_max": 0,
+    "pose_ipc_rows": 4773,
+    "pose_ipc_drop_max": 0,
+    "raw_pose_receive_wall_range": [
+      "2026-11-09T09:27:14.657",
+      "2026-11-09T09:27:39.265"
+    ],
+    "usb_error_lines": [],
+    "camera_error_events": [],
+    "camera_restarts": 0,
+    "yolo_performance": {
+      "timestamp_monotonic_ns": 6888287836519,
+      "event": "vision_performance",
+      "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+      "model_family": "YOLO26",
+      "warmup_seconds": 5,
+      "metric": "unique frames after tracking/ROI and planner.set_vision",
+      "fps_1s_including_warmup": [
+        41,
+        42,
+        36,
+        38,
+        37,
+        40,
+        37,
+        39,
+        41,
+        39,
+        39,
+        40,
+        42,
+        42,
+        40,
+        42,
+        43,
+        42,
+        40
+      ],
+      "measurement_seconds": 14,
+      "frames_after_warmup": 566,
+      "mean_fps": 40.42857142857143,
+      "min_fps_1s": 37,
+      "stable_30fps": false
+    },
+    "yolo_sampled_inference_wall_range": [
+      "2026-11-09T09:27:18.508",
+      "2026-11-09T09:27:37.607"
+    ]
+  },
+  "lidar_control": {
+    "replay": {
+      "index": 1,
+      "mode": "native_motion_feedback_direct",
+      "records": 8978,
+      "partial_writes": 0,
+      "max_lateness_ms": 10.551229
+    },
+    "scans_received": 98,
+    "reader_scan_queue_drops": 0,
+    "fit_requests_coalesced": 22,
+    "scans_fitted": 76,
+    "accepted_fixes": 0,
+    "cpp_extraction_calls": 76,
+    "cpp_fallbacks": 0,
+    "control_updates": 1415,
+    "control_coalesced": 239,
+    "control_probe_rows": 1172,
+    "control_capacity_errors": 0,
+    "source_counts": {
+      "T265_WITH_WHEEL_TAIL": 1172
+    }
+  },
+  "completion": {
+    "joint_load_result": {
+      "experiment": "native C++ 07/08 directly to original motion worker; real SDK/F405/YOLO plus independent historical lidar/display, stationary",
+      "motor_commands": 0,
+      "control_forwarded_to_uart": false,
+      "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+      "historical_lidar": true,
+      "physical_field_accuracy_verified": false,
+      "clean_device_internal_state_verified": false,
+      "supply_operator_note": "Earlier10W replaced with normal competition supply per user; voltage transient not measured",
+      "candidate_source_sha256": "7f6ac8445272c593eb0673a6e4a45362a1e4f0b1873b55723b664ffd8f3b6869",
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_092713_interactive",
+      "sdk_session_id": "5dd50ece8f5143d9a1236c74d219c8cc",
+      "vision_pid": 36362,
+      "vision_start_monotonic_ns": 6863691015463,
+      "phase_controller_complete": true,
+      "replayed_uart_chunks": 8978,
+      "probe_records_submitted": 1172,
+      "entry_returncode": 0,
+      "vision_returncode": 0,
+      "replay_process_returncode": 0,
+      "field_reference_sent": true,
+      "command_file_exists": false,
+      "motion_commands_log_exists": false
+    },
+    "session_complete_file_exists": false,
+    "motion_stream_complete": true,
+    "whole_chain_100Hz_accepted": false
+  },
+  "conclusion": "Direct07/08 delivery removes the old missing-container bottleneck over the active input interval. It does not complete the100Hz control chain: all-probe distinct wheel endpoints42.54Hz, replay phase25.37Hz and host RX-to-probe P95 up to694ms. Iteration1 is preserved as causal evidence before removing the unnecessary same-worker socket/pickle hop; planned changes are not claimed implemented here.",
+  "limitations": [
+    "Stationary test, synthetic field reference and historic lidar cannot establish dynamic field precision.",
+    "SDK true is host API return only, not per-sample device ACK.",
+    "No voltage/current transient measurement; no electrical root-cause claim.",
+    "Final tap drops belong to the receiver-close tail as bounded by raw log comparison; no new runtime timing checks or admission gates were added."
+  ],
+  "subsequent_iterations": [
+    {
+      "iteration": 2,
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_093012_interactive",
+      "behavior": "Rejected regression: native receive directly ingests but synchronously publishes control, coupling reception to snapshot/mailbox contention. Not deliverable; raw evidence retained independently from later iterations.",
+      "accepted_as100Hz_chain": false,
+      "source_sha256": "ae9003aa3428897ed38c3b9471184657741adf8c47cb57bc31e46135bd2c519b",
+      "status": "intermediate_not_accepted",
+      "key_segments": [
+        {
+          "name": "all_control_probe",
+          "received_records": 1326,
+          "distinct_wheel_hz": 50.86257784312292,
+          "wheel_rx_to_terminal_ms": {
+            "n": 1326,
+            "min": 2.624497,
+            "median": 1978.8153045,
+            "p95": 6346.2841287500005,
+            "p99": 6599.0652825,
+            "max": 6697.903142
+          }
+        },
+        {
+          "name": "actual_10s_replay",
+          "received_records": 355,
+          "distinct_wheel_hz": 35.53580112652548,
+          "wheel_rx_to_terminal_ms": {
+            "n": 355,
+            "min": 750.897441,
+            "median": 3476.277954,
+            "p95": 6358.9884606,
+            "p99": 6476.89773358,
+            "max": 6513.136722
+          }
+        }
+      ],
+      "valid_raw07_08_missing_before_last_consumed": 970,
+      "tap_sent_minus_worker_received": 555,
+      "conclusion": "Rejected regression: native receive directly ingests but synchronously publishes control, coupling reception to snapshot/mailbox contention. Not deliverable; raw evidence retained independently from later iterations."
+    },
+    {
+      "iteration": 3,
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_093357_interactive",
+      "behavior": "Native receive directly calls original engine ingest and increments native_updates; final publication remains in original worker loop. Same-worker input socket hop removed and receive-thread synchronous publication removed. Still below100Hz final control; not a final accepted result.",
+      "accepted_as100Hz_chain": false,
+      "source_sha256": "5911b64ad7220875152f5c72c248a367f221ec8e3e8fddc89f679a81442ada77",
+      "status": "intermediate_not_accepted",
+      "key_segments": [
+        {
+          "name": "all_control_probe",
+          "received_records": 983,
+          "distinct_wheel_hz": 35.21945302516995,
+          "wheel_rx_to_terminal_ms": {
+            "n": 983,
+            "min": 2.649206,
+            "median": 16.033361,
+            "p95": 467.98712049999983,
+            "p99": 644.1064416399998,
+            "max": 691.850163
+          }
+        },
+        {
+          "name": "actual_10s_replay",
+          "received_records": 162,
+          "distinct_wheel_hz": 16.04078354619507,
+          "wheel_rx_to_terminal_ms": {
+            "n": 162,
+            "min": 9.005617,
+            "median": 346.46247900000003,
+            "p95": 649.12324495,
+            "p99": 684.0971157099999,
+            "max": 691.850163
+          }
+        }
+      ],
+      "valid_raw07_08_missing_before_last_consumed": 0,
+      "tap_sent_minus_worker_received": 0,
+      "conclusion": "Native receive directly calls original engine ingest and increments native_updates; final publication remains in original worker loop. Same-worker input socket hop removed and receive-thread synchronous publication removed. Still below100Hz final control; not a final accepted result."
+    },
+    {
+      "iteration": 4,
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_093734_interactive",
+      "behavior": "Independent terminal process receives the unchanged formal control formatter datagrams directly from worker; GUI internal probe retained as a separate observer. UART0x16 and motor commands disabled. Numerical fit still shares worker Python interpreter.",
+      "accepted_as100Hz_chain": false,
+      "source_sha256": "68c9d3c528ca9ddd49140b966ab42c1290803ca0f1af2560541094ab143e3f34",
+      "status": "intermediate_not_accepted",
+      "key_segments": [
+        {
+          "name": "all_independent_direct_terminal",
+          "received_records": 1207,
+          "distinct_wheel_hz": 43.366182442663224,
+          "wheel_rx_to_terminal_ms": {
+            "n": 1207,
+            "min": 2.209165,
+            "median": 10.283366,
+            "p95": 147.49231410000058,
+            "p99": 713.5643455400001,
+            "max": 802.521554
+          }
+        },
+        {
+          "name": "replay_independent_direct_terminal",
+          "received_records": 220,
+          "distinct_wheel_hz": 21.638118455987154,
+          "wheel_rx_to_terminal_ms": {
+            "n": 220,
+            "min": 6.092578,
+            "median": 33.7242835,
+            "p95": 723.0929380999999,
+            "p99": 781.35778478,
+            "max": 802.521554
+          }
+        }
+      ],
+      "valid_raw07_08_missing_before_last_consumed": 0,
+      "tap_sent_minus_worker_received": null,
+      "conclusion": "Independent actual terminal confirms insufficient publication:43.4 selected wheel endpoints/s overall and21.7/s under historic lidar, with replay RX-to-terminal P95 about724ms. All direct terminal packets are received, ruling out GUI sampling as the sole explanation. Not deliverable as100Hz/low-latency localization; no field-accuracy claim.",
+      "independent_terminal_evidence": {
+        "sent": 1207,
+        "received": 1207,
+        "packet_id_gaps": 0,
+        "whole_selected_wheel_hz": 43.366182442663224,
+        "replay_selected_wheel_hz": 21.638118455987154
+      },
+      "fit_compute_medians_ms": {
+        "wall": 80.462222,
+        "thread_cpu": 16.951884
+      }
+    },
+    {
+      "iteration": 5,
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_094319_interactive",
+      "behavior": "Pure deskew/line numeric solve moved to an independent child process, while Pose and native receive/ingest still ran in separate Python threads sharing engine lock. Parent identified severe shared-lock regression; subsequent single-owner receive/ingest/publication change is not evaluated here.",
+      "accepted_as100Hz_chain": false,
+      "source_sha256": "f17b948cce5bf175e7ca8e814d446a041761fa99efe1e22c9b6fc0172f705bfe",
+      "status": "rejected_regression_not_final",
+      "key_segments": [
+        {
+          "name": "all_independent_terminal",
+          "received_records": 1075,
+          "distinct_wheel_hz": 42.94142804197713,
+          "wheel_rx_to_terminal_ms": {
+            "n": 1075,
+            "min": 2.404206,
+            "median": 1148.481316,
+            "p95": 3511.9526716,
+            "p99": 3599.51035474,
+            "max": 3615.597848
+          }
+        },
+        {
+          "name": "replay_independent_terminal",
+          "received_records": 342,
+          "distinct_wheel_hz": 32.38405407881797,
+          "wheel_rx_to_terminal_ms": {
+            "n": 342,
+            "min": 120.491389,
+            "median": 2375.1478965,
+            "p95": 3504.8289885,
+            "p99": 3567.55209754,
+            "max": 3598.78528
+          }
+        }
+      ],
+      "valid_raw07_08_missing_before_last_consumed": 221,
+      "tap_sent_minus_worker_received": 534,
+      "conclusion": "Rejected iteration5 regression: geometry isolation alone does not remove contention in shared Pose/native receive/ingest/publication. Independent terminal packets still reference seconds-old measured wheel input and active native losses occur. No successful100Hz or precision conclusion."
+    }
+  ],
+  "latest_audited_iteration": 5,
+  "latest_audit_conclusion": [
+    "All3936 independent terminal packet IDs are contiguous and every selected wheel ID matches valid same-epoch physical UART data. Distinct real endpoint rate99.988Hz; one selected-range wheel ID is absent from CRC-valid raw input, recorded explicitly rather than fabricated. Lidar phase1001 distinct IDs has no holes.",
+    "Worker history transport and child writer both drop0, final receipt exists, all raw07/08 through last consumed frame have matching full motion logs. Late tap EPIPE/drop is shutdown tail, not active runtime loss.",
+    "Real SDK returns about100Hz and raw Pose about200Hz during actual YOLO and historical lidar load. No USB/camera errors in this run.",
+    "This accepts stationary full-log transport behavior only; not motor movement, navigation field accuracy, NormalRun formal mode or hard-real-time deadlines. Geometry processed73/98 scans and25 coalesced, so geometry throughput remains belowfull10Hz."
+  ],
+  "intermediate_followups": [
+    {
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_094739_interactive",
+      "original_log_directory_present": true,
+      "status": "intermediate_regression_not_final",
+      "scope": "Compact parent-supplied index only; not independently re-parsed, to avoid competing with current live benchmark.",
+      "conclusion": "Intermediate profile implementation, not accepted as final100Hz delivery."
+    },
+    {
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_094930_interactive",
+      "original_log_directory_present": true,
+      "status": "intermediate_regression_not_final",
+      "scope": "Parent supplied exact cProfile evidence; this audit does not re-run or re-parse benchmark.",
+      "profile_path": "/tmp/rdk_motion_direct_20261109.prof",
+      "profile_metrics_seconds": {
+        "main_total": 18.094,
+        "LatestSnapshot.put_latest": 6.19,
+        "Event.set": 5.643,
+        "notify": 4.638
+      },
+      "profile_interpretation": "High-frequency GUI mailbox/Event notification is a demonstrated main-loop cost in this profile. Parent subsequently removed that event from the native high-frequency path; existing20Hz display remains for GUI/reference requests. No algorithm or data-age gate change is implied."
+    },
+    {
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_095032_interactive",
+      "original_log_directory_present": true,
+      "status": "improved_but_not_final",
+      "scope": "Approximate parent-reported real test result only; no independent recomputation in this entry.",
+      "reported_endpoint_rates_hz": {
+        "overall_approximate": 90,
+        "replay_approximate": 79
+      },
+      "conclusion": "GUI event removal improves rate substantially, but accumulation remains and100Hz low-latency objective is not yet accepted."
+    }
+  ],
+  "pending_followup": "Stationary complete-logging direct transport verified by102643; field MotionDebug/NormalRun accuracy and hardware realtime comparison remain external unverified scope.",
+  "nolog_attribution": {
+    "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_100923_interactive",
+    "status": "explicit_incomplete_logging_diagnostic_not_final_acceptance",
+    "actual": {
+      "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+      "source_sha256": "4f2c28d86df158339ae2b7a9e4070319ddb4e98e1cb324516baac6da2cce8fcd",
+      "lower_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+      "lower_dirty": 1,
+      "uart_baud": 921600,
+      "mcu_epoch": "38613807ded2ea86d76999b3175c1879",
+      "sdk_session_id": "1afc50adcaa64448b7f0e54d8bcd1d99"
+    },
+    "method": "Original C++ raw UART bytes re-decoded with existing MixedStream; same-epoch TYPE07 measurement_id is associated with independent terminal selected-wheel ID. Physical same-host RX timestamps are used; no worker feedback log or mapped MCU clock is fabricated.",
+    "segments": [
+      {
+        "name": "all",
+        "start_ns": 9394268702403,
+        "end_ns": 9417700169274,
+        "duration_s": 23.431466871,
+        "received_terminal_packets": 4144,
+        "distinct_wheel_ids": 2344,
+        "distinct_wheel_hz": 99.99373974319175,
+        "physical_wheel_rx_to_terminal_ms": {
+          "n": 4144,
+          "min": 1.685874,
+          "median": 5.232184,
+          "p95": 12.390136649999999,
+          "p99": 17.601775999999997,
+          "max": 34.243475
+        },
+        "received_intervals_behind": {
+          "n": 4144,
+          "min": 0,
+          "median": 0.0,
+          "p95": 1.0,
+          "p99": 1.0,
+          "max": 3
+        },
+        "distinct_wheel_count_over_terminal_span_hz": 100.0364173956643,
+        "distinct_wheel_count_over_analysis_window_hz": 100.03641739139499
+      },
+      {
+        "name": "replay",
+        "start_ns": 9400250902025,
+        "end_ns": 9410254632847,
+        "duration_s": 10.003730822,
+        "received_terminal_packets": 1729,
+        "distinct_wheel_ids": 1000,
+        "distinct_wheel_hz": 99.99209655062042,
+        "physical_wheel_rx_to_terminal_ms": {
+          "n": 1729,
+          "min": 2.045916,
+          "median": 6.019954,
+          "p95": 13.735265399999994,
+          "p99": 18.246283760000004,
+          "max": 24.828107
+        },
+        "received_intervals_behind": {
+          "n": 1729,
+          "min": 0,
+          "median": 0.0,
+          "p95": 1.0,
+          "p99": 1.0,
+          "max": 2
+        },
+        "distinct_wheel_count_over_terminal_span_hz": 100.09218873935978,
+        "distinct_wheel_count_over_analysis_window_hz": 99.9627056938418
+      },
+      {
+        "name": "replay_trim2s",
+        "start_ns": 9402250902025,
+        "end_ns": 9410254632847,
+        "duration_s": 8.003730822,
+        "received_terminal_packets": 1346,
+        "distinct_wheel_ids": 800,
+        "distinct_wheel_hz": 99.99651476477702,
+        "physical_wheel_rx_to_terminal_ms": {
+          "n": 1346,
+          "min": 2.045916,
+          "median": 5.8200164999999995,
+          "p95": 12.90779275,
+          "p99": 16.023099199999997,
+          "max": 21.704193
+        },
+        "received_intervals_behind": {
+          "n": 1346,
+          "min": 0,
+          "median": 0.0,
+          "p95": 1.0,
+          "p99": 1.0,
+          "max": 2
+        },
+        "distinct_wheel_count_over_terminal_span_hz": 100.12166684833744,
+        "distinct_wheel_count_over_analysis_window_hz": 99.95338646335101
+      }
+    ],
+    "unmatched_terminal_sample_ids": [],
+    "parser_stats": {
+      "uart_rx_bytes": 549254,
+      "legacy_frames": 5353,
+      "extended_frames": 4936,
+      "legacy_ack4": 0,
+      "mixed_crc_errors": 0,
+      "mixed_malformed": 1,
+      "discarded_bytes": 93,
+      "partial_timeouts": 0,
+      "buffer_overflows": 0
+    },
+    "worker_logging_healthy": false,
+    "worker_logging_statistics": {
+      "disabled_for_explicit_attribution_only": true
+    },
+    "deliberately_absent_logs": [
+      "motion_feedback.jsonl",
+      "dynamic_localization.jsonl",
+      "lidar_worker_summary.json"
+    ],
+    "preserved_raw_inputs": [
+      "uart_rx_native.jsonl",
+      "t265_raw_pose.csv",
+      "wheel_sdk.jsonl",
+      "direct_control_probe.jsonl"
+    ],
+    "joint_result": {
+      "experiment": "native C++ 07/08 directly to original motion worker; real SDK/F405/YOLO plus independent historical lidar/display, stationary",
+      "motor_commands": 0,
+      "control_forwarded_to_uart": false,
+      "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+      "historical_lidar": true,
+      "physical_field_accuracy_verified": false,
+      "clean_device_internal_state_verified": false,
+      "supply_operator_note": "Earlier10W replaced with normal competition supply per user; voltage transient not measured",
+      "candidate_source_sha256": "4f2c28d86df158339ae2b7a9e4070319ddb4e98e1cb324516baac6da2cce8fcd",
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_100923_interactive",
+      "sdk_session_id": "1afc50adcaa64448b7f0e54d8bcd1d99",
+      "vision_pid": 56633,
+      "vision_start_monotonic_ns": 9394257518078,
+      "phase_controller_complete": true,
+      "replayed_uart_chunks": 8978,
+      "probe_records_submitted": 0,
+      "entry_returncode": 0,
+      "vision_returncode": 0,
+      "replay_process_returncode": 0,
+      "field_reference_sent": true,
+      "command_file_exists": false,
+      "motion_commands_log_exists": false
+    },
+    "source_scope": "Temporary worker-log no-op hook only; cannot be delivered in place of complete logging.",
+    "sensor_load": {
+      "usb_errors": [],
+      "camera_errors": [],
+      "camera_restarts": 0,
+      "yolo_performance": {
+        "timestamp_monotonic_ns": 9419262045107,
+        "event": "vision_performance",
+        "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+        "model_family": "YOLO26",
+        "warmup_seconds": 5,
+        "metric": "unique frames after tracking/ROI and planner.set_vision",
+        "fps_1s_including_warmup": [
+          41,
+          42,
+          37,
+          39,
+          42,
+          37,
+          38,
+          37,
+          40,
+          38,
+          38,
+          39,
+          41,
+          36,
+          37,
+          40,
+          43,
+          43,
+          39
+        ],
+        "measurement_seconds": 14,
+        "frames_after_warmup": 546,
+        "mean_fps": 39.0,
+        "min_fps_1s": 36,
+        "stable_30fps": false
+      },
+      "reader_scans": 98,
+      "reader_scan_drops": 0,
+      "cpp_calls": 96,
+      "cpp_fallbacks": 0
+    },
+    "conclusion": "Independent physical-RX association reproduces about100Hz and replay P95 about13.7ms after disabling worker logging. This is strong intervention evidence that the remaining bottleneck lies on the worker logging path; source/profile evidence motivates moving JSON serialization and writer work to a separate process. It is not final acceptance: worker logging_healthy=false and required worker history files are intentionally absent. Full logging must be restored and validated before delivery.",
+    "causal_limit": "This no-log run removes the worker logging path as a whole; it alone does not numerically split JSON serialization, queue synchronization and writer scheduling/GIL costs. Separate-source/profile evidence and the full-logging process-writer run are needed for the narrower attribution.",
+    "rate_definition_note": "distinct_wheel_hz uses(N−1)/first-to-last terminal time; count-over-terminal-span usesN/span and reproduces parent100.036/100.092Hz. The difference is endpoint counting, not a measurement disagreement."
+  },
+  "baseline_reference": {
+    "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_072008_interactive",
+    "derived_report": "docs/reports/localization_joint_072008_audit_20261109.json",
+    "wheel_rx_to_GUI_probe_median_ms": 1522.152264,
+    "wheel_rx_to_GUI_probe_p95_ms": 2170.3433086,
+    "distinct_wheel_endpoint_hz": 35.858561520125214,
+    "observer_container_drops": 1548,
+    "scope": "Earlier original GUI observation path. Independent terminal did not yet exist; do not call this a measured formal-terminal latency."
+  },
+  "report_compaction": "Detailed intermediate iterations2–5 were reduced to raw-directory/source/core-metric indices as requested. Original raw files remain unchanged; key nodes retained are original baseline, native-input iteration1, Event profile, incomplete no-log attribution, and the subsequent full-logging acceptance node when available.",
+  "waiting_for_final_full_logging": false,
+  "full_logging_attempts": [
+    {
+      "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_101959_interactive",
+      "status": "rejected_full_logging_attempt_transport_loss",
+      "implementation": "First ProcessDebugLog: multiprocessing.Queue feeder serializes and sends individual records to child AsyncDebugLog writer.",
+      "actual": {
+        "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+        "source_sha256": "2d2dd208e23c4773d7687cca2fb576bf84943a706e3e921d0b4512635ffaf8db",
+        "lower_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+        "lower_dirty": 1,
+        "uart_baud": 921600,
+        "mcu_epoch": "38613807ded2ea86d76999b3175c1879",
+        "sdk_session_id": "8dcb565e43d244e2987229d713ff45f1"
+      },
+      "control_method": "Decode original C++ UART with existing MixedStream; exact same-epoch TYPE07 measurement_id to selected wheel ID in independent terminal. Do not use incomplete motion_feedback.jsonl as the sample census.",
+      "control_segments": [
+        {
+          "name": "all",
+          "duration_s": 23.399157782,
+          "terminal_packets": 3966,
+          "distinct_wheel_ids": 2341,
+          "distinct_wheel_interval_rate_hz": 100.0035993560447,
+          "distinct_wheel_count_over_terminal_span_hz": 100.04633593696609,
+          "physical_wheel_rx_to_terminal_ms": {
+            "n": 3966,
+            "min": 1.834415,
+            "median": 6.405829000000001,
+            "p95": 22.996256,
+            "p99": 72.43411889999993,
+            "max": 125.351504
+          },
+          "received_wheel_intervals_behind": {
+            "n": 3966,
+            "min": 0.0,
+            "median": 0.0,
+            "p95": 2.0,
+            "p99": 7.0,
+            "max": 12.0
+          }
+        },
+        {
+          "name": "replay",
+          "duration_s": 10.006144722,
+          "terminal_packets": 1630,
+          "distinct_wheel_ids": 1000,
+          "distinct_wheel_interval_rate_hz": 99.96709905651167,
+          "distinct_wheel_count_over_terminal_span_hz": 100.0671662227344,
+          "physical_wheel_rx_to_terminal_ms": {
+            "n": 1630,
+            "min": 2.18554,
+            "median": 10.107244,
+            "p95": 33.45812844999998,
+            "p99": 86.66043386000001,
+            "max": 125.351504
+          },
+          "received_wheel_intervals_behind": {
+            "n": 1630,
+            "min": 0.0,
+            "median": 1.0,
+            "p95": 3.0,
+            "p99": 8.0,
+            "max": 12.0
+          }
+        },
+        {
+          "name": "replay_trim2s",
+          "duration_s": 8.006144722,
+          "terminal_packets": 1329,
+          "distinct_wheel_ids": 801,
+          "distinct_wheel_interval_rate_hz": 100.10468674102798,
+          "distinct_wheel_count_over_terminal_span_hz": 100.22981759945426,
+          "physical_wheel_rx_to_terminal_ms": {
+            "n": 1329,
+            "min": 2.18554,
+            "median": 10.735993,
+            "p95": 41.186757799999995,
+            "p99": 96.25564956000014,
+            "max": 125.351504
+          },
+          "received_wheel_intervals_behind": {
+            "n": 1329,
+            "min": 0.0,
+            "median": 1.0,
+            "p95": 4.0,
+            "p99": 9.0,
+            "max": 12.0
+          }
+        }
+      ],
+      "unmatched_terminal_sample_ids": [],
+      "terminal_integrity": {
+        "packets_sent": 3966,
+        "packets_received": 3966,
+        "output_drops": 0,
+        "first_packet_id": 0,
+        "last_packet_id": 3965,
+        "packet_id_gaps": 0
+      },
+      "logging_integrity": {
+        "healthy": false,
+        "statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 212,
+          "history_records_written": 11446,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 2096,
+          "error": null,
+          "flush_interval_ms": 100,
+          "execution": "spawn_process_original_async_writer",
+          "writer_pid": 59254,
+          "transport_queue_capacity": 4096,
+          "transport_queue_pending": 0,
+          "transport_dropped": 2096,
+          "writer_dropped": 0,
+          "final_receipt": true
+        },
+        "motion_feedback_expected_type07_08_records": 4814,
+        "motion_feedback_written_records": 4133,
+        "motion_feedback_missing_records": 681,
+        "motion_feedback_expected_type07": 2407,
+        "motion_feedback_written_type07": 2104,
+        "motion_feedback_expected_type08": 2407,
+        "motion_feedback_written_type08": 2029,
+        "jsonl_line_counts": {
+          "lidar_tx.jsonl": 3,
+          "vision_load_events.jsonl": 6,
+          "wheel_sdk.jsonl": 10330,
+          "uart_rx_native.jsonl": 31622,
+          "chassis_telemetry.jsonl": 13386,
+          "lidar_rx.jsonl": 3256,
+          "localization_events.jsonl": 12,
+          "chassis_link.jsonl": 9,
+          "imu_telemetry.jsonl": 2591,
+          "wheel_input.jsonl": 1,
+          "joint_replay_phases.jsonl": 1,
+          "dynamic_scans.jsonl": 98,
+          "events.jsonl": 7,
+          "chassis_extended.jsonl": 5179,
+          "control_pose.jsonl": 3253,
+          "dynamic_localization.jsonl": 56,
+          "lidar_reader_events.jsonl": 1,
+          "pose_motion.jsonl": 3999,
+          "vision_load_detections.jsonl": 166,
+          "lidar_worker_events.jsonl": 5,
+          "motion_feedback.jsonl": 4133,
+          "f407_motion_status.jsonl": 432,
+          "direct_control_probe.jsonl": 3966,
+          "uart_rx.jsonl": 10794,
+          "joint_send_phases.jsonl": 2
+        },
+        "writer_drop_zero_is_not_whole_path_zero": true,
+        "note": "transport_dropped2096 is real history loss before the child writer, despite writer_dropped0 and final_receipt=true. motion_feedback gaps must not be called missing physical measurements or fewer actual control endpoint updates."
+      },
+      "input_and_shutdown": {
+        "raw_parser_stats": {
+          "uart_rx_bytes": 576324,
+          "legacy_frames": 5619,
+          "extended_frames": 5179,
+          "legacy_ack4": 0,
+          "mixed_crc_errors": 1,
+          "mixed_malformed": 0,
+          "discarded_bytes": 88,
+          "partial_timeouts": 0,
+          "buffer_overflows": 0
+        },
+        "worker_native_feedback": {
+          "enabled": true,
+          "connected": false,
+          "decode_errors": 0,
+          "motion_input_drops": 0,
+          "error": null,
+          "frames": 4817,
+          "wheel_frames": 2407,
+          "gyro_frames": 2407,
+          "timed_yaw_seen": true,
+          "conversion": "original_forward_motion_event",
+          "identity_present": true
+        },
+        "worker_last_wheel_id": 373543,
+        "valid_raw_containers_through_last_worker_wheel": 4816,
+        "tap_status": {
+          "timestamp_monotonic_ns": 10055290126796,
+          "event": "motion_feedback_tap_status",
+          "data": {
+            "eligible_frames": 5179,
+            "sent_frames": 4817,
+            "dropped_frames": 362,
+            "filtered_frames": 0,
+            "send_errors": 1,
+            "connection_error": 0,
+            "last_error": 32,
+            "connected": false
+          }
+        },
+        "valid_raw_containers_after_last_worker_wheel": 363,
+        "after_types": {
+          "8": 181,
+          "7": 181,
+          "6": 1
+        },
+        "received_frame_counter_matches_tap_sent": true,
+        "tap_tail_count_matches": false,
+        "boundary_correction": {
+          "last_worker_wheel_rx_ns": 10052966383724,
+          "last_received_gyro_logged_rx_ns": 10052970660471,
+          "last_received_gyro_sequence": 10220,
+          "raw_valid_containers_through_last_received_gyro": 4817,
+          "raw_valid_containers_after_last_received_gyro": 362,
+          "matches_worker_received_and_tap_sent": true,
+          "tail_matches_tap_drops_after_last_received_gyro": true,
+          "note": "The last-wheel timestamp falls immediately before one final received gyro; using that wheel alone counts363 later containers, of which the first was consumed. Last received gyro restores exact4817 active/362 tail partition. Worker log loss681 is separate from these input counters."
+        }
+      },
+      "sdk_pose": {
+        "SDK_true": 2577,
+        "SDK_false": 0,
+        "raw_pose_rows": 5056,
+        "raw_pose_frame_gaps": 0,
+        "raw_pose_callback_drops_max": 0,
+        "usb_errors": [],
+        "camera_errors": [],
+        "camera_restarts": 0,
+        "yolo_performance": {
+          "timestamp_monotonic_ns": 10054813835139,
+          "event": "vision_performance",
+          "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+          "model_family": "YOLO26",
+          "warmup_seconds": 5,
+          "metric": "unique frames after tracking/ROI and planner.set_vision",
+          "fps_1s_including_warmup": [
+            40,
+            40,
+            39,
+            38,
+            36,
+            37,
+            35,
+            35,
+            39,
+            41,
+            36,
+            39,
+            41,
+            42,
+            40,
+            41,
+            41,
+            42,
+            41
+          ],
+          "measurement_seconds": 14,
+          "frames_after_warmup": 550,
+          "mean_fps": 39.285714285714285,
+          "min_fps_1s": 35,
+          "stable_30fps": false
+        }
+      },
+      "replay": {
+        "index": 1,
+        "mode": "native_motion_feedback_direct",
+        "records": 8978,
+        "partial_writes": 0,
+        "max_lateness_ms": 9.502214
+      },
+      "completion": {
+        "joint": {
+          "experiment": "native C++ 07/08 directly to original motion worker; real SDK/F405/YOLO plus independent historical lidar/display, stationary",
+          "motor_commands": 0,
+          "control_forwarded_to_uart": false,
+          "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+          "historical_lidar": true,
+          "physical_field_accuracy_verified": false,
+          "clean_device_internal_state_verified": false,
+          "supply_operator_note": "Earlier10W replaced with normal competition supply per user; voltage transient not measured",
+          "candidate_source_sha256": "2d2dd208e23c4773d7687cca2fb576bf84943a706e3e921d0b4512635ffaf8db",
+          "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_101959_interactive",
+          "sdk_session_id": "8dcb565e43d244e2987229d713ff45f1",
+          "vision_pid": 59277,
+          "vision_start_monotonic_ns": 10029566723610,
+          "phase_controller_complete": true,
+          "replayed_uart_chunks": 8978,
+          "probe_records_submitted": 0,
+          "entry_returncode": 0,
+          "vision_returncode": 0,
+          "replay_process_returncode": 0,
+          "field_reference_sent": true,
+          "command_file_exists": false,
+          "motion_commands_log_exists": false
+        },
+        "session_complete_file_exists": false,
+        "accepted": false
+      },
+      "conclusion": "Control latency can be audited from preserved C++ raw UART and independent terminal despite worker log loss. This version is explicitly not deliverable:2096 records lost in logging transport, worker logging_healthy=false. Child writer zero-drop alone does not restore complete history; batch transport must be revalidated with full logs."
+    }
+  ],
+  "final_full_logging": {
+    "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_102643_interactive",
+    "status": "stationary_joint_transport_and_full_logging_verified_no_motion_accuracy_claim",
+    "scope": {
+      "actual_hardware": "single real F405 UART + single T265 SDK + YOLO camera",
+      "historical_lidar_pty_replay": true,
+      "synthetic_field_reference": true,
+      "motor_commands": 0,
+      "control_forwarded_to_uart": false,
+      "no_0x16": true,
+      "field_motion_accuracy_verified": false,
+      "hard_realtime_or_deadline_guarantee_verified": false,
+      "device_clean_internal_state_verified": false
+    },
+    "actual": {
+      "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+      "actual_lower_identity": {
+        "version": 1,
+        "type": 2,
+        "sequence": 7782,
+        "nonce": 5868623377763070149,
+        "epoch_fault": 0,
+        "boot_epoch": "38613807ded2ea86d76999b3175c1879",
+        "reference_epoch": 1,
+        "capabilities": 991,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "protocol_major": 1,
+        "protocol_minor": 3,
+        "tick_hz": 1000000,
+        "uart_baud": 921600,
+        "clock_flags": 3,
+        "drift_bound_ppm": 4294967295,
+        "mcu_uid": "002c00203335470434383831",
+        "device_idcode": 269444115,
+        "cpu_id": 1091551809,
+        "flash_kib": 1024,
+        "firmware_id": "6839200f0d0354e8decaa242632e7b637e3d709e349ce3164844a9bf39543c21",
+        "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+        "source_dirty": 1,
+        "max_payload": 160,
+        "receive_monotonic_ns": 10433122022958,
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "epoch_valid": true,
+        "interface_compatible": true
+      },
+      "actual_lower_mode": "NormalDebug",
+      "actual_lower_service": "MOTIONDEBUG",
+      "expected_is_not_actual": true,
+      "sdk_session_id": "6a20473472e44b4ab1802fd4882061da",
+      "sdk_session": {
+        "clean_fusion_state_verified": false,
+        "device_boot_epoch": null,
+        "firmware": "0.2.0.951",
+        "librealsense_api_version": 25000,
+        "librealsense_compile_time": "2.50.0",
+        "pid": 62056,
+        "profiles": [
+          {
+            "format": "6DOF",
+            "fps": 200,
+            "index": 0,
+            "stream": "Pose"
+          }
+        ],
+        "serial": "944222110255",
+        "session_id": "6a20473472e44b4ab1802fd4882061da"
+      }
+    },
+    "method": {
+      "delay": "Independent terminal receive_monotonic_ns minus matching same-boot-epoch native CRC-valid TYPE07 host UART completion RX timestamp. No capture-time assumption or SEQ-as-time substitution.",
+      "packet_ids": "Validate contiguous packet_id and all selected last_wheel_sample_id against original C++ raw UART census.",
+      "frequency": "Distinct real wheel endpoint frequency uses (N-1)/(last distinct endpoint first terminal receipt-first distinct endpoint first terminal receipt). Duplicate formal packets are reported separately. Raw source interval rate also reported.",
+      "offline_trim_only": "First2s trim is additional offline reporting only, no runtime gate."
+    },
+    "control_segments": [
+      {
+        "name": "all",
+        "start_ns": 10433733447834,
+        "end_ns": 10457326201891,
+        "duration_s": 23.592754057,
+        "terminal_packets": 3936,
+        "terminal_packet_interval_hz": 166.78849745532276,
+        "distinct_wheel_ids": 2360,
+        "distinct_wheel_first_receipt_interval_hz": 99.98832668287328,
+        "distinct_wheel_source_rx_interval_hz": 99.95783106226794,
+        "distinct_wheel_n_minus_1_over_terminal_span_hz": 99.98832668287328,
+        "wheel_id_min": 411619,
+        "wheel_id_max": 413979,
+        "missing_wheel_ids_within_selected_range": 1,
+        "physical_wheel_rx_to_terminal_ms": {
+          "n": 3936,
+          "min": 2.035791,
+          "median": 6.833104,
+          "p95": 22.09511475,
+          "p99": 31.16894955,
+          "max": 43.701916
+        },
+        "latest_received_wheel_intervals_behind": {
+          "n": 3936,
+          "min": 0.0,
+          "median": 0.0,
+          "p95": 2.0,
+          "p99": 3.0,
+          "max": 4.0
+        },
+        "original_pose_reference_to_terminal_ms": {
+          "n": 3936,
+          "min": 7.003502,
+          "median": 11.535478,
+          "p95": 25.6662065,
+          "p99": 36.47035170000001,
+          "max": 50.341285
+        },
+        "motion_modes": {
+          "T265_WITH_WHEEL_TAIL": 3936
+        }
+      },
+      {
+        "name": "lidar_replay",
+        "start_ns": 10439914331480,
+        "end_ns": 10449923743851,
+        "duration_s": 10.009412371,
+        "terminal_packets": 1650,
+        "terminal_packet_interval_hz": 164.86365175232535,
+        "distinct_wheel_ids": 1001,
+        "distinct_wheel_first_receipt_interval_hz": 99.97795739983346,
+        "distinct_wheel_source_rx_interval_hz": 99.99982461030761,
+        "distinct_wheel_n_minus_1_over_terminal_span_hz": 99.97795739983346,
+        "wheel_id_min": 412238,
+        "wheel_id_max": 413238,
+        "missing_wheel_ids_within_selected_range": 0,
+        "physical_wheel_rx_to_terminal_ms": {
+          "n": 1650,
+          "min": 2.480625,
+          "median": 10.704520500000001,
+          "p95": 27.599714799999997,
+          "p99": 35.192851,
+          "max": 43.701916
+        },
+        "latest_received_wheel_intervals_behind": {
+          "n": 1650,
+          "min": 0.0,
+          "median": 1.0,
+          "p95": 2.0,
+          "p99": 3.0,
+          "max": 4.0
+        },
+        "original_pose_reference_to_terminal_ms": {
+          "n": 1650,
+          "min": 7.567963,
+          "median": 14.070427500000001,
+          "p95": 31.783612949999995,
+          "p99": 40.24553682999999,
+          "max": 50.341285
+        },
+        "motion_modes": {
+          "T265_WITH_WHEEL_TAIL": 1650
+        }
+      },
+      {
+        "name": "lidar_replay_trim_first_2s_offline_only",
+        "start_ns": 10441914331480,
+        "end_ns": 10449923743851,
+        "duration_s": 8.009412371,
+        "terminal_packets": 1314,
+        "terminal_packet_interval_hz": 164.23677482714007,
+        "distinct_wheel_ids": 803,
+        "distinct_wheel_first_receipt_interval_hz": 100.31827373295228,
+        "distinct_wheel_source_rx_interval_hz": 99.99997125935988,
+        "distinct_wheel_n_minus_1_over_terminal_span_hz": 100.31827373295228,
+        "wheel_id_min": 412436,
+        "wheel_id_max": 413238,
+        "missing_wheel_ids_within_selected_range": 0,
+        "physical_wheel_rx_to_terminal_ms": {
+          "n": 1314,
+          "min": 2.658083,
+          "median": 10.819416,
+          "p95": 28.329628499999977,
+          "p99": 35.53978095999998,
+          "max": 43.701916
+        },
+        "latest_received_wheel_intervals_behind": {
+          "n": 1314,
+          "min": 0.0,
+          "median": 1.0,
+          "p95": 2.0,
+          "p99": 3.0,
+          "max": 4.0
+        },
+        "original_pose_reference_to_terminal_ms": {
+          "n": 1314,
+          "min": 7.567963,
+          "median": 14.298045,
+          "p95": 32.813280899999995,
+          "p99": 41.4575034099999,
+          "max": 50.341285
+        },
+        "motion_modes": {
+          "T265_WITH_WHEEL_TAIL": 1314
+        }
+      }
+    ],
+    "terminal_integrity": {
+      "packets_sent": 3936,
+      "packets_received": 3936,
+      "first_packet_id": 0,
+      "last_packet_id": 3935,
+      "packet_id_gap_or_repeat_count": 0,
+      "unmatched_wheel_ids": [],
+      "sdk_session_ids": [
+        "6a20473472e44b4ab1802fd4882061da"
+      ],
+      "output_drops": 0
+    },
+    "input_and_shutdown": {
+      "raw_parser_stats": {
+        "uart_rx_bytes": 554909,
+        "legacy_frames": 5406,
+        "extended_frames": 4987,
+        "legacy_ack4": 0,
+        "mixed_crc_errors": 2,
+        "mixed_malformed": 0,
+        "discarded_bytes": 107,
+        "partial_timeouts": 0,
+        "buffer_overflows": 0
+      },
+      "raw_extended_containers": 4987,
+      "raw_type_counts": {
+        "2": 1,
+        "4": 1,
+        "6": 2,
+        "8": 2492,
+        "7": 2491
+      },
+      "raw_partial_bytes_at_close": 2,
+      "native_feedback": {
+        "enabled": true,
+        "connected": false,
+        "decode_errors": 0,
+        "motion_input_drops": 0,
+        "error": null,
+        "frames": 4839,
+        "wheel_frames": 2418,
+        "gyro_frames": 2418,
+        "timed_yaw_seen": true,
+        "conversion": "original_forward_motion_event",
+        "identity_present": true
+      },
+      "motion_feedback_records": 4836,
+      "motion_feedback_types": {
+        "8": 2418,
+        "7": 2418
+      },
+      "last_consumed_motion_rx_ns": 10457323055474,
+      "runtime_complete_containers": 4839,
+      "runtime_07_08_missing": [],
+      "extra_worker_07_08": [],
+      "max_worker_vs_native_rx_timestamp_difference_ns": 0,
+      "tail_complete_containers": 148,
+      "tail_types": {
+        "8": 74,
+        "7": 73,
+        "6": 1
+      },
+      "tap_status": {
+        "timestamp_monotonic_ns": 10458614009105,
+        "event": "motion_feedback_tap_status",
+        "data": {
+          "eligible_frames": 4987,
+          "sent_frames": 4839,
+          "dropped_frames": 148,
+          "filtered_frames": 0,
+          "send_errors": 1,
+          "connection_error": 0,
+          "last_error": 32,
+          "connected": false
+        }
+      },
+      "tail_equals_tap_drop": true,
+      "native_received_frames_equals_tap_sent": true,
+      "old_python_observer_max_transport_rx_drops": 0,
+      "old_observer_scope": "GUI/diagnostic observer is separate from direct native control input and raw SDK path; any observer loss is not silently treated as runtime direct input loss.",
+      "invalid_extended_frame_candidates": [
+        {
+          "host_chunk_rx_ns": 10452012746060,
+          "length": 95,
+          "error": "bad extended envelope",
+          "type_untrusted": 7,
+          "sequence_untrusted": 14357,
+          "raw_hex": "d44d01070054381538613807ded2ea86d76999b3175c18790000000100064f080000000000f676ef4200000000f677165000000000000000000000006dffffffe90000001700000000000000000000000000000081ffffffff000000020c87",
+          "measurement_id_untrusted": 413448
+        }
+      ],
+      "selected_range_missing_wheel_ids": [
+        413448
+      ],
+      "selected_range_missing_ids_absent_from_valid_raw_uart": [
+        413448
+      ],
+      "crc_scope_note": "MixedStream increments mixed_crc_errors for invalid legacy or extended envelopes; raw candidate413448 is an invalid TYPE07 envelope (missing terminal0xe4), not a decoder/runtime sample omission. No new request or repair was performed."
+    },
+    "sdk": {
+      "attempts": 2480,
+      "results": 2480,
+      "true_results": 2480,
+      "false_results": 0,
+      "actual_api_return_interval_hz": 99.86542758985846,
+      "paired_receive_to_attempt_entry_ms": {
+        "n": 2480,
+        "min": 0.348167,
+        "median": 0.519333,
+        "p95": 0.7238003,
+        "p99": 0.8479881100000002,
+        "max": 5.295833
+      },
+      "paired_receive_to_api_return_ms": {
+        "n": 2480,
+        "min": 0.682793,
+        "median": 1.0248125,
+        "p95": 1.662681249999999,
+        "p99": 2.9317843500000027,
+        "max": 6.270749
+      },
+      "wheel_rx_to_api_return_ms": {
+        "n": 2480,
+        "min": 1.085,
+        "median": 5.712187,
+        "p95": 9.51174215,
+        "p99": 11.821036890000004,
+        "max": 20.591125
+      },
+      "non_sample_events": [
+        {
+          "before_sdk_start": 15,
+          "config_loaded": true,
+          "device_fusion_confirmed": false,
+          "event": "wheel_native_input_discarded",
+          "input_source": "measured_wheel_feedback",
+          "last_sdk_call_failed": false,
+          "last_sdk_success_ns": 0,
+          "log_monotonic_ns": 10433212673458,
+          "queue_overflow": 0,
+          "rejected_samples": 0,
+          "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+          "sdk_api_failed_samples": 0,
+          "sdk_api_success_samples": 0,
+          "sdk_failure_policy": "continue_with_next_new_sample",
+          "session_id": "6a20473472e44b4ab1802fd4882061da",
+          "wheel_dependency_present": false,
+          "wheel_dependency_suspect": false,
+          "wheel_input_paused": false,
+          "wheel_input_paused_samples": 0,
+          "wheel_input_policy_reason": "measured_wheel_input_enabled"
+        },
+        {
+          "config_loaded": true,
+          "device_fusion_confirmed": false,
+          "event": "wheel_native_rejected",
+          "input_source": "measured_wheel_feedback",
+          "last_sdk_call_failed": false,
+          "last_sdk_success_ns": 0,
+          "log_monotonic_ns": 10433215895417,
+          "reason": "no_gyro_at_interval_start",
+          "rejected_samples": 1,
+          "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+          "sample": {
+            "alignment_clock": "mcu_event",
+            "alignment_end_ns": 4116199632000,
+            "alignment_start_ns": 4116189632000,
+            "boot_epoch": "38613807ded2ea86d76999b3175c1879",
+            "capture_time_qualified": false,
+            "capture_window_us": 2,
+            "delta1": 0,
+            "delta2": 0,
+            "delta3": 0,
+            "flags": 129,
+            "forward_um_s": 0,
+            "host_recomputed_v_body_mps": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "interval_end_ns": 10433211622771,
+            "interval_start_ns": 10433201622771,
+            "left_um_s": 0,
+            "mcu_epoch": "38613807ded2ea86d76999b3175c1879",
+            "measurement_id": 411568,
+            "measurement_valid": true,
+            "motion_wire_request_at_receive": null,
+            "qualification_reasons": [
+              "source_and_clock_bounds_not_calibrated"
+            ],
+            "raw1_u32": 109,
+            "raw2_u32": 4294967273,
+            "raw3_u32": 23,
+            "receive_monotonic_ns": 10433212976542,
+            "reference_epoch": 1,
+            "sample_id": 411568,
+            "sequence": 10598,
+            "source": "measured_wheel_feedback",
+            "source_uncertainty_us": 4294967295,
+            "t0_us": 4116189632,
+            "t1_us": 4116199632,
+            "time_uncertainty_ns": null,
+            "type": 7,
+            "v_body_mps": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "version": 1
+          },
+          "sdk_api_failed_samples": 0,
+          "sdk_api_success_samples": 0,
+          "sdk_failure_policy": "continue_with_next_new_sample",
+          "session_id": "6a20473472e44b4ab1802fd4882061da",
+          "wheel_dependency_present": false,
+          "wheel_dependency_suspect": false,
+          "wheel_input_paused": false,
+          "wheel_input_paused_samples": 0,
+          "wheel_input_policy_reason": "measured_wheel_input_enabled"
+        },
+        {
+          "config_loaded": true,
+          "device_fusion_confirmed": false,
+          "event": "wheel_native_rejected",
+          "input_source": "measured_wheel_feedback",
+          "last_sdk_call_failed": false,
+          "last_sdk_success_ns": 0,
+          "log_monotonic_ns": 10433225883042,
+          "reason": "no_gyro_at_interval_start",
+          "rejected_samples": 2,
+          "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+          "sample": {
+            "alignment_clock": "mcu_event",
+            "alignment_end_ns": 4116209636000,
+            "alignment_start_ns": 4116199632000,
+            "boot_epoch": "38613807ded2ea86d76999b3175c1879",
+            "capture_time_qualified": false,
+            "capture_window_us": 2,
+            "delta1": 0,
+            "delta2": 0,
+            "delta3": 0,
+            "flags": 129,
+            "forward_um_s": 0,
+            "host_recomputed_v_body_mps": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "interval_end_ns": 10433221626771,
+            "interval_start_ns": 10433211622771,
+            "left_um_s": 0,
+            "mcu_epoch": "38613807ded2ea86d76999b3175c1879",
+            "measurement_id": 411569,
+            "measurement_valid": true,
+            "motion_wire_request_at_receive": null,
+            "qualification_reasons": [
+              "source_and_clock_bounds_not_calibrated"
+            ],
+            "raw1_u32": 109,
+            "raw2_u32": 4294967273,
+            "raw3_u32": 23,
+            "receive_monotonic_ns": 10433223064500,
+            "reference_epoch": 1,
+            "sample_id": 411569,
+            "sequence": 10600,
+            "source": "measured_wheel_feedback",
+            "source_uncertainty_us": 4294967295,
+            "t0_us": 4116199632,
+            "t1_us": 4116209636,
+            "time_uncertainty_ns": null,
+            "type": 7,
+            "v_body_mps": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "version": 1
+          },
+          "sdk_api_failed_samples": 0,
+          "sdk_api_success_samples": 0,
+          "sdk_failure_policy": "continue_with_next_new_sample",
+          "session_id": "6a20473472e44b4ab1802fd4882061da",
+          "wheel_dependency_present": false,
+          "wheel_dependency_suspect": false,
+          "wheel_input_paused": false,
+          "wheel_input_paused_samples": 0,
+          "wheel_input_policy_reason": "measured_wheel_input_enabled"
+        },
+        {
+          "config_loaded": true,
+          "device_fusion_confirmed": false,
+          "event": "wheel_requests_coalesced",
+          "input_source": "measured_wheel_feedback",
+          "last_sdk_call_failed": false,
+          "last_sdk_success_ns": 10447065185525,
+          "log_monotonic_ns": 10447077200233,
+          "processing_owner": "native_cpp_sdk_owner",
+          "rejected_samples": 2,
+          "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+          "samples": 1,
+          "sdk_api_failed_samples": 0,
+          "sdk_api_success_samples": 1383,
+          "sdk_failure_policy": "continue_with_next_new_sample",
+          "session_id": "6a20473472e44b4ab1802fd4882061da",
+          "wheel_dependency_present": true,
+          "wheel_dependency_suspect": false,
+          "wheel_input_paused": false,
+          "wheel_input_paused_samples": 0,
+          "wheel_input_policy_reason": "measured_wheel_input_enabled"
+        },
+        {
+          "config_loaded": true,
+          "device_fusion_confirmed": false,
+          "event": "wheel_requests_coalesced",
+          "input_source": "measured_wheel_feedback",
+          "last_sdk_call_failed": false,
+          "last_sdk_success_ns": 10447225378856,
+          "log_monotonic_ns": 10447234936605,
+          "processing_owner": "native_cpp_sdk_owner",
+          "rejected_samples": 2,
+          "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+          "samples": 1,
+          "sdk_api_failed_samples": 0,
+          "sdk_api_success_samples": 1398,
+          "sdk_failure_policy": "continue_with_next_new_sample",
+          "session_id": "6a20473472e44b4ab1802fd4882061da",
+          "wheel_dependency_present": true,
+          "wheel_dependency_suspect": false,
+          "wheel_input_paused": false,
+          "wheel_input_paused_samples": 0,
+          "wheel_input_policy_reason": "measured_wheel_input_enabled"
+        }
+      ],
+      "scope": "True is host SDK call return only, no per-sample device fusion ACK and no motion precision evidence. Coalesced measurements not sent are explicitly separate from runtime input drops."
+    },
+    "pose": {
+      "raw_rows": 4861,
+      "raw_receive_interval_hz": 199.58346981593277,
+      "raw_receive_interval_ms": {
+        "n": 4860,
+        "min": 0.051041,
+        "median": 5.0062085,
+        "p95": 5.73991875,
+        "p99": 7.892521809999997,
+        "max": 14.977292
+      },
+      "frame_first": 0,
+      "frame_last": 4860,
+      "missing_frame_numbers": 0,
+      "nonincreasing_frame_steps": 0,
+      "callback_queue_drops_max": 0,
+      "tracker_confidence_counts": {
+        "2": 4861
+      },
+      "worker_pose_packets": 4713,
+      "pose_motion_written": 4713,
+      "pose_motion_ipc_drops_max": 0,
+      "raw_bounds_ns": [
+        10433713946334,
+        10458064660371
+      ],
+      "raw_pose_vs_motion_difference_note": "Raw SDK capture continues during orderly worker shutdown; full-raw rows and worker pose count are distinct endpoints.",
+      "worker_pose_first_last_frame": [
+        0,
+        4712
+      ],
+      "worker_pose_missing_frame_numbers": 0,
+      "raw_pose_rows_after_last_worker_frame": 148
+    },
+    "yolo": {
+      "events_errors": [],
+      "usb_or_camera_log_errors": [],
+      "performance": {
+        "timestamp_monotonic_ns": 10458740790852,
+        "event": "vision_performance",
+        "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+        "model_family": "YOLO26",
+        "warmup_seconds": 5,
+        "metric": "unique frames after tracking/ROI and planner.set_vision",
+        "fps_1s_including_warmup": [
+          39,
+          41,
+          34,
+          37,
+          38,
+          36,
+          37,
+          39,
+          37,
+          39,
+          36,
+          37,
+          41,
+          40,
+          39,
+          42,
+          43,
+          42,
+          40
+        ],
+        "measurement_seconds": 14,
+        "frames_after_warmup": 548,
+        "mean_fps": 39.142857142857146,
+        "min_fps_1s": 36,
+        "stable_30fps": false
+      },
+      "stop": {
+        "timestamp_monotonic_ns": 10458741296351,
+        "event": "competition_stopped",
+        "state": "WAIT_START",
+        "delivery_count": 0,
+        "first_common_delivered": false,
+        "first_fault_code": null,
+        "exit_reason": "duration",
+        "tx_policy": "termination_abort",
+        "termination_abort": {
+          "attempted": false,
+          "reason": "",
+          "command_file_written": false,
+          "transmitted": false,
+          "confirmed": false,
+          "confirmation_status": "unconfirmed",
+          "timeout": false,
+          "sequence": null
+        },
+        "inference_frames": 38,
+        "inference_total": 747,
+        "camera_decoder": "jpu",
+        "camera_restarts": 0,
+        "camera_recovery_pending": false,
+        "display_enabled": false,
+        "competition_started": false,
+        "config_sent": false,
+        "operator_stopped": false
+      },
+      "sampled_frame_bounds_ns": [
+        10437850734616,
+        10457043887398
+      ],
+      "sampled_frame_records": 169,
+      "sampled_frame_gap_ms": {
+        "n": 168,
+        "min": 100.008082,
+        "median": 115.33266449999999,
+        "p95": 126.59245055000001,
+        "p99": 133.22473197000002,
+        "max": 136.721541
+      },
+      "replay_phase_inside_yolo_sample_and_pose_and_sdk_bounds": true
+    },
+    "lidar": {
+      "historical_phase_start_ns": 10439914331480,
+      "historical_phase_end_ns": 10449923743851,
+      "replay_result": [
+        {
+          "index": 1,
+          "mode": "native_motion_feedback_direct",
+          "records": 8978,
+          "partial_writes": 0,
+          "max_lateness_ms": 11.558746
+        }
+      ],
+      "scans_received": 98,
+      "scans_processed": 73,
+      "fit_requests_coalesced": 25,
+      "scan_queue_drops": 0,
+      "reader_stats": {
+        "rx_batches": 3157,
+        "rx_bytes": 169360,
+        "scan_packets": 3601,
+        "status_packets": 5,
+        "ack_packets": 2,
+        "crc_errors": 2,
+        "timing_rejections": 3,
+        "sector_rejections": 1,
+        "scans_emitted": 98
+      },
+      "line_geometry": {
+        "backend": "native_streaming_ransac",
+        "load_error": null,
+        "geometry_policy_changed": false,
+        "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+        "extraction_load_error": null,
+        "extraction_calls": 73,
+        "extraction_fallbacks": 0,
+        "extraction_last_error": null
+      },
+      "position_fits_accepted": 0,
+      "numerical_compute_ms": {
+        "n": 73,
+        "min": 49.86825,
+        "median": 129.984957,
+        "p95": 211.216746,
+        "p99": 238.86971272000002,
+        "max": 249.896872
+      },
+      "geometry_cpu_ms": {
+        "n": 73,
+        "min": 8.353625,
+        "median": 11.880792,
+        "p95": 14.295232399999998,
+        "p99": 15.86804672,
+        "max": 16.938416
+      },
+      "geometry_roundtrip_ms": {
+        "n": 73,
+        "min": 48.079749,
+        "median": 126.133498,
+        "p95": 203.75607179999994,
+        "p99": 236.07324896,
+        "max": 243.635288
+      },
+      "scope": "73 of98 scans numerically processed,25 coalesced; not full10Hz geometry completion. Historical reader CRC2/timing3/sector1 must not be called live chassis UART errors. No physical field posterior accepted."
+    },
+    "completion": {
+      "session_complete": {
+        "owner": "t265_f407_motion_map",
+        "complete": true,
+        "session_index": 23,
+        "accuracy_verified": false
+      },
+      "joint_load_result": {
+        "experiment": "native C++ 07/08 directly to original motion worker; real SDK/F405/YOLO plus independent historical lidar/display, stationary",
+        "motor_commands": 0,
+        "control_forwarded_to_uart": false,
+        "upper_commit": "0831960fb98c9564262af7708efab6963628a038",
+        "historical_lidar": true,
+        "physical_field_accuracy_verified": false,
+        "clean_device_internal_state_verified": false,
+        "supply_operator_note": "Earlier10W replaced with normal competition supply per user; voltage transient not measured",
+        "candidate_source_sha256": "2d2dd208e23c4773d7687cca2fb576bf84943a706e3e921d0b4512635ffaf8db",
+        "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_102643_interactive",
+        "sdk_session_id": "6a20473472e44b4ab1802fd4882061da",
+        "vision_pid": 62126,
+        "vision_start_monotonic_ns": 10433738391834,
+        "phase_controller_complete": true,
+        "replayed_uart_chunks": 8978,
+        "probe_records_submitted": 0,
+        "entry_returncode": 0,
+        "vision_returncode": 0,
+        "replay_process_returncode": 0,
+        "field_reference_sent": true,
+        "command_file_exists": false,
+        "motion_commands_log_exists": false
+      },
+      "logging_healthy": true,
+      "logging_statistics": {
+        "queue_capacity": 4096,
+        "queue_pending": 0,
+        "queue_peak": 212,
+        "history_records_written": 13563,
+        "snapshot_writes": 1,
+        "snapshots_coalesced": 0,
+        "dropped": 0,
+        "error": null,
+        "flush_interval_ms": 100,
+        "execution": "spawn_process_original_async_writer",
+        "writer_pid": 62103,
+        "transport_queue_capacity": 4096,
+        "transport_queue_pending": 0,
+        "transport_batch_limit": 128,
+        "sender_stopped": true,
+        "transport_dropped": 0,
+        "writer_dropped": 0,
+        "final_receipt": true
+      },
+      "reader_logging_healthy": true,
+      "reader_logging_statistics": {
+        "queue_capacity": 4096,
+        "queue_pending": 0,
+        "queue_peak": 28,
+        "history_records_written": 3259,
+        "snapshot_writes": 1,
+        "snapshots_coalesced": 0,
+        "dropped": 0,
+        "error": null,
+        "flush_interval_ms": 100
+      },
+      "diagnostic_csv_status": {
+        "timestamp_monotonic_ns": 10458613979647,
+        "event": "diagnostic_csv_status",
+        "data": {
+          "localization_dropped_rows": 0,
+          "localization_io_failed": false,
+          "raw_pose_dropped_rows": 0,
+          "raw_pose_io_failed": false,
+          "raw_json_write_errors": 0,
+          "uart_raw_dropped_rows": 0,
+          "uart_raw_io_failed": false,
+          "raw_json_coalesced": 0
+        }
+      },
+      "competition_logging_status": {
+        "queue_capacity": 1024,
+        "pending_records": 0,
+        "pending_snapshots": 0,
+        "records_written": 175,
+        "snapshots_written": 158,
+        "snapshots_coalesced": 30,
+        "dropped": 0,
+        "error": null,
+        "close_timed_out": false,
+        "incomplete": false
+      },
+      "jsonl_parse_errors": {},
+      "jsonl_line_counts": {
+        "lidar_tx.jsonl": 3,
+        "vision_load_events.jsonl": 6,
+        "wheel_sdk.jsonl": 9938,
+        "uart_rx_native.jsonl": 30666,
+        "chassis_telemetry.jsonl": 12883,
+        "lidar_rx.jsonl": 3157,
+        "localization_events.jsonl": 12,
+        "chassis_link.jsonl": 9,
+        "imu_telemetry.jsonl": 2494,
+        "wheel_input.jsonl": 1,
+        "joint_replay_phases.jsonl": 1,
+        "dynamic_scans.jsonl": 98,
+        "events.jsonl": 8,
+        "chassis_extended.jsonl": 4987,
+        "control_pose.jsonl": 3936,
+        "dynamic_localization.jsonl": 73,
+        "lidar_reader_events.jsonl": 1,
+        "pose_motion.jsonl": 4713,
+        "vision_load_detections.jsonl": 169,
+        "lidar_worker_events.jsonl": 5,
+        "motion_feedback.jsonl": 4836,
+        "f407_motion_status.jsonl": 416,
+        "direct_control_probe.jsonl": 3936,
+        "uart_rx.jsonl": 10390,
+        "joint_send_phases.jsonl": 2
+      },
+      "receiver_stopped_cleanly": true,
+      "worker_stopped_cleanly": true,
+      "geometry_stopped_cleanly": true,
+      "fit_thread_stopped": true,
+      "motion_stream_complete": true,
+      "parent_error": null
+    },
+    "source_fingerprints": {
+      "algorithm": "sha256",
+      "run_recorded_worker": "2d2dd208e23c4773d7687cca2fb576bf84943a706e3e921d0b4512635ffaf8db",
+      "audit_current_worker_matches_run_recorded": false,
+      "audit_head": "0831960fb98c9564262af7708efab6963628a038",
+      "sha256": {
+        "localization/tools/lidar_yaw_debug/worker.py": "eb8f4afbffd9da427f4bfb292bd175918b31de9ab0beda49387cbce399ddff11",
+        "localization/tools/async_debug_log.py": "93579b30d2051f31ac999fd9b4570bc399c328f881929d0f73e7573c4cca7558",
+        "localization/tools/lidar_yaw_debug/dynamic.py": "907d407ff03f2ed5ccd3631c9b32e69b51034c3c1a79ebe3129d5599ab0523e5",
+        "localization/tools/lidar_yaw_debug/scan_geometry.py": "cb50667716b149dbfe66de90095e3aadd000a1d75131dbe0d66342af3ebd86c5",
+        "localization/tools/lidar_yaw_debug/motion_source.py": "69a94196a242f983721bf9b7488fc0eae23ce24bc55a857138279dc355d6f949",
+        "localization/tools/lidar_yaw_debug/inputs.py": "c2bc2200404d7627c671f15096a82882f5e1569645ea2bdfe9f38dda2695412f",
+        "localization/tools/lidar_yaw_debug/latest_snapshot.py": "2535df4a9e5ef905def6699883319b633718f64cb400276a139557542df4ca15",
+        "localization/tools/lidar_yaw_debug/control_packet.py": "55fe91d03cbeacf923114d17023d52aaf0ddcf2e4a049e68e07d2e63678400dc",
+        "localization/tools/lidar_yaw_debug/native_geometry.py": "f85789a49f83be388bc5798c388ef5156c346f197583ef70bfc4e566cf6a98e6",
+        "localization/tools/local_packet_receiver.py": "c604d38f9982beae0b1c7803a6b2d88818f341490f1e67e646cf0af8d0a89e36",
+        "localization/tools/competition_dynamic_localization.py": "bb8e835d5666f0a17b587e57aa0702b4e6733567ee3c443873ef157ea5281ee3",
+        "localization/tools/lidar_t265_motion_map.py": "d65745911818f0f1683ec49e90ee6b1bb125dfa80c24bcd9f6f8d3b76cb6c150",
+        "localization/tools/f405_timed_protocol.py": "b43ffd41a17c69d0fdc638d22b5ff9922cbed9bdeb59d0d1aab7a7f1fa0af602",
+        "localization/tools/t265_f407_motion_map.py": "ceb84b4402479adfc94d412eac02d64a4375c340a9ac0b07eeb6b0d238fa974a",
+        "localization/src/main.cpp": "9d935cfe59ab48ce39d000c2b7e0ea750129eed13c2dcc99042c30c1b60bd8b0",
+        "localization/src/f405_telemetry.cpp": "37a9065d4ecae3e573b2ca3e0c4d42e75e84d19cb3350caee0bf3a21ed1620bd",
+        "localization/include/f405_telemetry.hpp": "0c7e621690d97ab2b968c767d5edb39617a0b8a1271548911758bed58fb7aab3",
+        "localization/src/debug_wheel_input.cpp": "e63852637d19731a89bd3d75b990189985ab4096ad94188d663482950b9034e7",
+        "localization/src/fusion.cpp": "30fbec444ee4c544f2aa0f58ac9aafafed4711f239a4423c1b36649f55428ce4",
+        "localization/build/t265_omni_localizer": "2bb3e6515161c981108e191f0a14d1f8956d73cf8cd0cff718e0fa0c27631036",
+        "localization/src/lidar_geometry.cpp": "c86e7bdf86abdc36446d51838de321f28c37df0ef91fa8ea21b8f3403052e3bc",
+        "localization/build/liblidar_geometry.so": "d8161f8ccc09d05bd3a66e1fcbef086c92f1ed7eecada7417f286e492d65c63e",
+        "localization/src/lidar_line_extraction.cpp": "5ad14a6d0c1ae7b05a98f3b1d8f0967f6a4172528b452ecdb59fa270ca8e3f9d",
+        "localization/tools/f405_test_client.py": "844b596d12cd8567d9b063d50f633410969a7bfca90ec674f21bd2855d422793",
+        "localization/tools/native_test_uart.py": "b7df7e6ffb48c89d95d2fb61ce22c4be45190de3f752a35437b685f6d202fd26",
+        "localization/tools/t265_wheel_input.py": "216901333b9995327757450a254accb6acbcb18263d31101b55a96354eed6a1b",
+        "localization/include/debug_wheel_input.hpp": "75f38792f7b08fe01ae47a4e9350162c217760e29c2eafa527f3b6626184a082",
+        "localization/CMakeLists.txt": "232da8965416ae68d7547d97fca5c1a0a6b4a45a42153894fa24d373170e0a24",
+        "localization/tools/lidar_yaw_debug/lidar_reader.py": "9ddc5f182d8304e56fb7cc696ebf73754e47bc48a0b43790bc140a6fab7ab96f",
+        "localization/tools/low_latency_scheduling.py": "1605a458d58e305af0b928f97bfc5adf930a990756a00c8314aed1901cf7804d"
+      },
+      "attestation_scope": "Run recorded worker SHA only. Other listed hashes are current final working-tree/binary fingerprints at audit, not retrospectively attested in-session hashes. Worker now includes explicitly recorded post-measurement lifecycle-only patch. Parent confirms async_debug_log/dynamic/scan_geometry were already final during102643 and differ from rejected101959 even though its worker SHA matched.",
+      "post_measurement_lifecycle_change": {
+        "measured_worker_sha256": "2d2dd208e23c4773d7687cca2fb576bf84943a706e3e921d0b4512635ffaf8db",
+        "final_working_tree_worker_sha256": "eb8f4afbffd9da427f4bfb292bd175918b31de9ab0beda49387cbce399ddff11",
+        "difference": "After102643 only worker lifecycle was changed: establish dedicated process group with setsid and kill that owned group after original5s close timeout. The102643 delay measurements do not cover this exit-only patch.",
+        "reported_parent_validation": "existing test_dynamic_worker_process including normal PTY and SIGSTOP numerical child passed1/12.04s; parent reports clean child-group reclamation and no commands. Not independently rerun by this auditor."
+      },
+      "captured_at_utc": "2026-11-09T02:39:55.191467+00:00"
+    },
+    "conclusion": [
+      "All3936 independent terminal packet IDs are contiguous and every selected wheel ID matches valid same-epoch physical UART data. Distinct real endpoint rate99.988Hz; one selected-range wheel ID is absent from CRC-valid raw input, recorded explicitly rather than fabricated. Lidar phase1001 distinct IDs has no holes.",
+      "Worker history transport and child writer both drop0, final receipt exists, all raw07/08 through last consumed frame have matching full motion logs. Late tap EPIPE/drop is shutdown tail, not active runtime loss.",
+      "Real SDK returns about100Hz and raw Pose about200Hz during actual YOLO and historical lidar load. No USB/camera errors in this run.",
+      "This accepts stationary full-log transport behavior only; not motor movement, navigation field accuracy, NormalRun formal mode or hard-real-time deadlines. Geometry processed73/98 scans and25 coalesced, so geometry throughput remains belowfull10Hz."
+    ]
+  },
+  "latest_audited_run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_102643_interactive",
+  "latest_audited_stage": "final_full_logging_102643"
+}

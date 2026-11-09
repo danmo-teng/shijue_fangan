@@ -16,6 +16,85 @@ _recv_nowait.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, ctypes.
 _recv_nowait.restype = ctypes.c_ssize_t
 
 
+class _PollFd(ctypes.Structure):
+    _fields_ = [('fd', ctypes.c_int), ('events', ctypes.c_short),
+                ('revents', ctypes.c_short)]
+
+
+_poll_nowait = ctypes.PyDLL(None, use_errno=True).poll
+_poll_nowait.argtypes = [ctypes.POINTER(_PollFd), ctypes.c_ulong, ctypes.c_int]
+_poll_nowait.restype = ctypes.c_int
+
+
+def readable_nowait(fd):
+    """Probe one local descriptor without waiting or relinquishing the GIL."""
+    probe = _PollFd(fd, select.POLLIN, 0)
+    while True:
+        result = _poll_nowait(ctypes.byref(probe), 1, 0)
+        if result >= 0:
+            if probe.revents & select.POLLNVAL:
+                raise OSError(errno.EBADF, os.strerror(errno.EBADF))
+            # HUP/ERR must reach the caller's original read/error handling.
+            return bool(probe.revents & (select.POLLIN | select.POLLHUP | select.POLLERR))
+        error = ctypes.get_errno()
+        if error == errno.EINTR:
+            continue
+        raise OSError(error, os.strerror(error))
+
+
+class _SockaddrUn(ctypes.Structure):
+    _fields_ = [('family', ctypes.c_ushort), ('path', ctypes.c_ubyte * 108)]
+
+
+_sendto_nowait = ctypes.PyDLL(None, use_errno=True).sendto
+_sendto_nowait.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t,
+                          ctypes.c_int, ctypes.POINTER(_SockaddrUn), ctypes.c_uint]
+_sendto_nowait.restype = ctypes.c_ssize_t
+
+
+class LocalDatagramSender:
+    """One cached Linux abstract destination on a caller-owned local socket.
+
+    Every call sends the original bytes once without waiting or releasing the
+    GIL. The caller retains its drop/error policy and socket ownership.
+    """
+    def __init__(self, connection, address):
+        if connection.family != socket.AF_UNIX or connection.type != socket.SOCK_DGRAM:
+            raise ValueError('local AF_UNIX datagram socket required')
+        if isinstance(address, str):
+            address = os.fsencode(address)
+        if not isinstance(address, bytes):
+            raise TypeError('abstract local address must be str or bytes')
+        if not 1 < len(address) <= 108 or address[0] != 0:
+            raise ValueError('nonempty Linux abstract local address of at most 108 bytes required')
+        self.connection = connection
+        self._address = _SockaddrUn(socket.AF_UNIX)
+        self._address.path[:len(address)] = address
+        self._address_pointer = ctypes.pointer(self._address)
+        self._address_size = _SockaddrUn.path.offset + len(address)
+
+    def send(self, data):
+        if not isinstance(data, bytes):
+            view = memoryview(data)
+            if not view.c_contiguous:
+                raise BufferError('local datagram requires a C-contiguous buffer')
+            data = bytes(view)
+        if len(data) > 65536:
+            raise ValueError('local datagram exceeds 65536 bytes')
+        while True:
+            sent = _sendto_nowait(self.connection.fileno(), data, len(data),
+                socket.MSG_DONTWAIT | socket.MSG_NOSIGNAL,
+                self._address_pointer, self._address_size)
+            if sent >= 0:
+                if sent != len(data):
+                    raise OSError(errno.EIO, os.strerror(errno.EIO))
+                return sent
+            error = ctypes.get_errno()
+            if error == errno.EINTR:
+                continue
+            raise OSError(error, os.strerror(error))
+
+
 class LocalPacketReceiver:
     """One reader per local SEQPACKET socket, with the original recv limit.
 

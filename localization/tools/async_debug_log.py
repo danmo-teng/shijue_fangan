@@ -3,6 +3,7 @@ Overflow is explicit and makes this run incomplete; it cannot silently certify
 an input or cause a vehicle fault latch. Close drains only at session shutdown.
 """
 import json
+import multiprocessing as mp
 import os
 import queue
 import threading
@@ -112,3 +113,146 @@ class AsyncDebugLog:
     def close(self):
         self.stop.set();self.thread.join(timeout=5)
         if self.thread.is_alive():self.error="log writer did not drain before shutdown deadline"
+
+
+def _process_debug_log(root, capacity, requests, reply, bad, dropped, error):
+    """Keep the original JSON/file writer entirely outside the motion GIL."""
+    logger=None;statistics={}
+    def status():
+        if logger is None:return
+        dropped.value=logger.dropped
+        if not logger.healthy():bad.value=1
+        if logger.error:error.value=logger.error.encode('utf-8')[:1023]
+    try:
+        logger=AsyncDebugLog(root,capacity)
+        while True:
+            try:batch=requests.recv()
+            except EOFError:break
+            if batch is None:break
+            for name,value,atomic in batch:
+                logger.submit(name,value,atomic=atomic);status()
+    except Exception as exc:
+        bad.value=1;error.value=str(exc).encode('utf-8')[:1023]
+    finally:
+        if logger is not None:
+            try:logger.close()
+            except Exception as exc:bad.value=1;error.value=str(exc).encode('utf-8')[:1023]
+            status();statistics=logger.statistics()
+        try:reply.send(dict(statistics=statistics,healthy=not bool(bad.value)))
+        except (OSError,EOFError):pass
+        reply.close();requests.close()
+
+
+class ProcessDebugLog:
+    """Bounded logging transport; only the child executes AsyncDebugLog IO.
+
+    A successful submit is IPC acceptance, not a persistence acknowledgement.
+    Failures affect log completeness and never wait in a producer/control call.
+    """
+    def __init__(self, root, capacity=4096):
+        context=mp.get_context('spawn')
+        self.queue=queue.Queue(maxsize=capacity)
+        requests,self._requests=context.Pipe(duplex=False)
+        self._reply,reply=context.Pipe(duplex=False)
+        self._bad=context.RawValue('b',0);self._writer_dropped=context.RawValue('Q',0)
+        self._child_error=context.RawArray('c',1024)
+        self._dropped=0;self._error=None;self._final=None;self._closed=False
+        self._fallback=None;self._start_error=None
+        self.process=context.Process(target=_process_debug_log,args=(root,capacity,requests,
+            reply,self._bad,self._writer_dropped,self._child_error),name='motion-log-writer')
+        self.thread=threading.Thread(target=self._send,name='motion-log-sender',daemon=True)
+        try:
+            self.process.start();requests.close();self.thread.start()
+        except Exception as exc:
+            self._start_error=str(exc)
+            self._requests.close();self._reply.close()
+            if self.process.pid is not None:
+                if self.process.is_alive():self.process.terminate()
+                self.process.join(timeout=1)
+            self._fallback=AsyncDebugLog(root,capacity)
+            self._fallback.submit('logging_events.jsonl',dict(event='process_log_start_failed_thread_fallback',
+                error=self._start_error,latency_validated=False))
+        finally:reply.close();requests.close()
+
+    def _send(self):
+        """Batch only transport/pickling; JSON and disk stay in the child."""
+        try:
+            finished=False
+            while not finished:
+                record=self.queue.get();batch=[];taken=1
+                if record is None:finished=True
+                else:batch.append(record)
+                while not finished and len(batch)<128:
+                    try:record=self.queue.get_nowait();taken+=1
+                    except queue.Empty:break
+                    if record is None:finished=True
+                    else:batch.append(record)
+                try:
+                    if batch:self._requests.send(batch)
+                    if finished:self._requests.send(None)
+                finally:
+                    for _ in range(taken):self.queue.task_done()
+        except Exception as exc:self._fail('log sender: '+str(exc))
+        finally:self._requests.close()
+
+    def _fail(self, message):
+        self._error=message;self._bad.value=1
+
+    @property
+    def error(self):
+        if self._fallback is not None:return self._fallback.error
+        return self._error or self._child_error.value.decode('utf-8',errors='replace') or None
+
+    @property
+    def dropped(self):
+        if self._fallback is not None:return self._fallback.dropped
+        return self._dropped+self._writer_dropped.value
+
+    def submit(self, filename, value, *, atomic=False):
+        if self._fallback is not None:return self._fallback.submit(filename,value,atomic=atomic)
+        if self._closed or self.error:return False
+        try:self.queue.put_nowait((filename,dict(value),atomic));return True
+        except queue.Full:self._dropped+=1;self._bad.value=1;return False
+        except (OSError,ValueError) as exc:self._fail(str(exc));return False
+
+    def healthy(self):
+        if self._fallback is not None:return self._fallback.healthy()
+        return not self._bad.value and not self.dropped
+
+    def statistics(self):
+        if self._fallback is not None:
+            return dict(self._fallback.statistics(),execution='thread_fallback',process_start_error=self._start_error)
+        statistics=dict(self._final or {})
+        statistics.update(execution='spawn_process_original_async_writer',writer_pid=self.process.pid,
+            transport_queue_capacity=self.queue.maxsize,transport_queue_pending=self.queue.qsize(),
+            transport_batch_limit=128,sender_stopped=not self.thread.is_alive(),
+            transport_dropped=self._dropped,writer_dropped=self._writer_dropped.value,
+            dropped=self.dropped,error=self.error,final_receipt=self._final is not None)
+        return statistics
+
+    def close(self):
+        if self._closed:return
+        self._closed=True
+        if self._fallback is not None:self._fallback.close();return
+        deadline=time.monotonic()+5
+        def remaining():return max(0.,deadline-time.monotonic()-.2)
+        try:
+            if self.thread.is_alive():self.queue.put(None,timeout=remaining())
+            self.thread.join(timeout=remaining())
+            if self.thread.is_alive():
+                self._fail('log sender did not drain before shutdown deadline')
+                if self.process.is_alive():self.process.terminate()
+                self.process.join(timeout=max(0.,deadline-time.monotonic()))
+                self._requests.close()
+            if self._reply.poll(remaining()):
+                receipt=self._reply.recv();self._final=receipt['statistics']
+                if not receipt['healthy']:self._bad.value=1
+            else:self._fail('log process did not acknowledge complete drain before shutdown deadline')
+        except (OSError,EOFError,queue.Full,ValueError) as exc:self._fail('log process close: '+str(exc))
+        self.process.join(timeout=remaining())
+        if self.process.is_alive():
+            self._fail('log process did not exit before shutdown deadline')
+            self.process.terminate();self.process.join(timeout=max(0.,deadline-time.monotonic()))
+        if self.process.exitcode!=0:self._fail('log process exited '+str(self.process.exitcode))
+        self.thread.join(timeout=max(0.,deadline-time.monotonic()))
+        self._requests.close();self._reply.close()
