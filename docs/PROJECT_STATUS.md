@@ -1,6 +1,14 @@
 # 项目当前状态
 
-更新：2026-11-09中午。只维护当前快照；协作规则见AGENTS.md和CHANGE_WORKFLOW.md。旧任务、补丁及另一端AI要求不自动恢复为实施授权。
+更新：2026-11-09。只维护当前快照；协作规则见AGENTS.md和CHANGE_WORKFLOW.md。旧任务、补丁及另一端AI要求不自动恢复为实施授权。
+
+## 当前方向：先完成正式比赛就绪
+
+2026-11-09用户将C++导航执行迁移降为低优先级；欠着的MotionDebug暂不跑，不作为发车前置。当前只准备既有正式入口，用户稍后烧录NormalRun后直接下地跑比赛。本轮不切内核、不增加新鲜度/握手/资格限制，不改变既有比赛策略或自动发车。
+
+正式软件就绪检查通过：12个现有针对性检查全部通过（2.70s），覆盖热启动/起点绑定、原任务审核和测距交接、mode51、预备点/回中D=0及停止优先。桌面/自动启动入口、shell语法、原程序--help、Python/原生库依赖、模型/配置和设备访问均已核对；10项源码/ELF与115931实测指纹一致，当前无SDK/UART/相机进程占用。未发现本轮范围内的明确软件阻断，无需为准备比赛另改运行代码。具体回执见COMPETITION_DYNAMIC_LOCALIZATION_20261105.md。
+
+本轮没有打开设备或启动预热，T265仅核对到USB枚举，不能当作当前SDK已出Pose。NormalRun实际烧录身份、实板反馈与整场比赛仍须在用户部署后确认；按原入口记录service2/版本/921600，不拿expected替代actual，不要求先完成MotionDebug。
 
 ## 当前交付：高频定位与控制迁入C++
 
@@ -16,7 +24,7 @@
 
 实板自报14b2a3a9077e6980a540631ce94345e61eb0487d、dirty1、NormalDebug/MOTIONDEBUG/service1、921600；expected不替代actual。SDK固件0.2.0.951/librealsense2.50.0，2475次真实API全部true、约99.91Hz；4864 Pose帧连续约199.57Hz、confidence均2。API true只是主机返回，不是融合ACK或精度证书。雷达负载段配齐wheel/gyro→API返回P95 2.811ms/最大11.600ms；仅wheel接收→API返回含等待区间gyro，P95 10.558ms/最大24.858ms，不能宣称整个SDK链均小于10ms。
 
-当前用户桌面没有运动条件，本轮没有电机、STOP/reset、TASK CONFIG或实际底盘0x16发送。针对性编译、原/新逐输入数值/历史/来源/全历史初始化及本地socket检查通过；正式C++消费线程在假UART下验证FIFO10及普通调度、保持原0x16帧，未冒充真实下位机执行。地面短往返、旋转、原降级/围栏重获及正式NormalRun仍待原入口集中实测，见LOCALIZATION_MOTIONDEBUG_CHECKLIST.md；无需本轮下位机新功能或重复烧录。
+当前用户桌面没有运动条件，本轮没有电机、STOP/reset、TASK CONFIG或实际底盘0x16发送。针对性编译、原/新逐输入数值/历史/来源/全历史初始化及本地socket检查通过；正式C++消费线程在假UART下验证FIFO10及普通调度、保持原0x16帧，未冒充真实下位机执行。用户当前直接安排NormalRun正式实测，不补独立MotionDebug作为前置。原MotionDebug清单保留为暂缓参考；真实降级/围栏重获及完整投送仍待正式比赛日志确认，无需下位机新功能。
 
 普通6.1.83 PREEMPT下运动线程实际FIFO10、共享锁及UART发送锁实际PTHREAD_PRIO_INHERIT；权限不足保留普通调度，不阻断数据。局部FIFO/PI不是PREEMPT_RT或最坏延迟保证。本轮未重启/修改启动文件，已有RT候选保留；何时对照以当次用户安排为准，不自动执行旧重启计划。
 
@@ -33,4 +41,4 @@
 - 日志容量告警及按完整会话手动清理，不再自动仅保留5次；本轮未清任何日志。日志失败不转全车FAULT。清理/64GB迁移见LOG_STORAGE_AND_TF_MIGRATION_20261104.md；拍摄和ROI入口见vision/README.md。
 - 用户vision/config/capture_roi.json修改、vision/456及雷达与融合资料保留，不夹带提交；下位机默认只读。
 
-当前唯一任务表为PROJECT_TODO.md；本轮只交付原生高频路径，不自动恢复其他历史任务，不宣称总体goal完成。
+当前唯一任务表为PROJECT_TODO.md；当前只准备正式比赛就绪，C++导航低优先级、MotionDebug暂缓，不自动恢复其他历史任务，不宣称总体goal或整场验收完成。

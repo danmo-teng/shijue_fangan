@@ -1,5 +1,7 @@
 # 定位：一次集中MotionDebug验证
 
+> 当前暂缓（2026-11-09用户决定）：先烧录NormalRun并跑正式比赛，本文MotionDebug动作不作为前置，不自动执行。C++导航迁移低优先级；旧RT切换时机也不自动恢复。以下保留为未来具体问题需要时的参考，不代表当前排期或动作授权。
+
 更新2026-11-09。本表是用户回来后同一次布置完成的操作单；不是自动动作脚本。桌面没有运动条件，不发电机命令。复用现有T265地图和动态地图，任意时刻只有一个底盘UART及一个T265 SDK拥有者。
 
 ## 现在：桌面没有运动条件
@@ -8,7 +10,7 @@
 
 高频轮/gyro/Pose处理、原MotionSource传播/仲裁/历史及控制JSON已迁C++；原SDK输入/提线保持，GUI不再中转。115931真实静止F405/SDK/YOLO＋历史雷达PTY/绘图：约100Hz不同轮端点，雷达负载段UART接收→原生报文内核入队P95 2.442ms/max4.464ms，→独立Python终端P95 5.831ms/max17.123ms。4692包匹配、诊断日志完整/零观察丢失；98/98扫描计算，但合成参考全rank0，不证明XY定位。
 
-原生FIFO10/PI已实读生效；正式C++消费线程在假UART下RT开/关均检查通过，实际正式0x16及地面精度/刹停未验。SDK轮/gyro配齐→API在雷达负载段P95 2.811ms，wheel接收→API含等待区间gyro、P95 10.558ms，不保证全链每10ms截止。完整边界及失败会话见LOCALIZATION_NATIVE_CONTROL_20261109.md。本轮桌面不发电机、STOP、reset、TASK CONFIG或底盘0x16，不因本表自动恢复旧重启/实车动作授权；下一步只按当次明确摆放与安排执行以下必要短运动。
+原生FIFO10/PI已实读生效；正式C++消费线程在假UART下RT开/关均检查通过，实际正式0x16及地面精度/刹停未验。SDK轮/gyro配齐→API在雷达负载段P95 2.811ms，wheel接收→API含等待区间gyro、P95 10.558ms，不保证全链每10ms截止。完整边界及失败会话见LOCALIZATION_NATIVE_CONTROL_20261109.md。本轮桌面不发电机、STOP、reset、TASK CONFIG或底盘0x16，不因本表自动恢复旧重启/实车动作授权；以下短运动当前已暂缓，仅未来有具体安排时复用。
 
 ## 楼下：助手操控，用户旁观与测量
 
@@ -31,4 +33,4 @@
 
 本机已核实Image-rt为Linux6.1.83-rt28，匹配headers的CONFIG_PREEMPT_RT=y、BPU模块vermagic为6.1.83-rt28；当前/boot/boot.cmd仍用Image。外部重启使/tmp候选消失，11-09改生成到localization/build/rt_boot_candidate_20261109/的boot.cmd/boot.scr/manifest.json；清单含当前源文件SHA256，仅imagefile一行变化，mkimage成功。切换时核对候选存在且源SHA仍匹配；这些构建文件未安装到/boot。不能在普通内核加载RT模块。
 
-重启窗口先保存工作、停止程序，并保留/boot/boot.cmd与boot.scr原件。本次用户已选MotionDebug结束后的重启间隙；实测保存、程序退出后再安装候选并重启；恢复用原件即可。启动后核对uname/config、BPU/相机/UART/GPIO，再用同一现有短检查与同一1000区间回放比较。若RT没有明显收益或设备不兼容，回普通Image；不更新miniboot、不刷系统、不换设备树。不在无人不重启阶段修改启动文件。
+重启窗口先保存工作、停止程序，并保留/boot/boot.cmd与boot.scr原件。旧计划曾选MotionDebug结束后的重启间隙；当前MotionDebug暂缓，该时机不自动执行，切换须按当次安排；恢复用原件即可。启动后核对uname/config、BPU/相机/UART/GPIO，再用同一现有短检查与同一1000区间回放比较。若RT没有明显收益或设备不兼容，回普通Image；不更新miniboot、不刷系统、不换设备树。不在无人不重启阶段修改启动文件。

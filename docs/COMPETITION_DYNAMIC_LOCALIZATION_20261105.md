@@ -1,5 +1,40 @@
 # 正式比赛复用桌面动态定位链
 
+## 当前正式测试准备（2026-11-09）
+
+用户决定直接烧录NormalRun后跑正式比赛，独立MotionDebug暂缓，不作为前置；C++导航迁移列低优先级。当前b70538a已将高频传播/来源/历史/位姿发布迁C++，正式入口与测试共用native实现，Python比赛决策仍按原逻辑；见LOCALIZATION_NATIVE_CONTROL_20261109.md。下文带日期内容保留历史边界，不能据旧板速或旧清理策略覆盖当前入口。
+
+原桌面“智能救援完整比赛流程”：底盘/dev/ttyS1、921600；雷达/dev/ttyS6、230400；官方轮速输入＋雷达/T265/轮速主yaw降级链，YOLO26与所选正式起点不变。原待机预热后按3绑定当前Pose/gyro到所选起点并放行，按4仍走原人工停止。此轮不自动发车。
+
+下位机GitHub main已只读核对至f1cf2a5909f408b28d821b29b0fc6a63d91fb8dc：最新为烧录回执文档，固件实现仍14b2a3a；CMake两个既有preset共用921600。NormalRun应为board405/mode5/service2（RESCUE_TASK），不能只看mode5，因为MotionDebug也为mode5、service1。该信息是源码/构建依据，实际NormalRun尚待用户烧录后读取，不加SHA白名单或时间资格门。无需本轮下位机新功能。
+
+本轮软件就绪检查已通过，未发现当前范围内明确的代码阻断，未改运行代码：
+
+- 12个现有相关检查全部通过，`12 passed in 2.70s`：热启动起点绑定、任务/审核与测距交接、mode51、预备点/回中D=0、停止优先和原状态年龄采用政策；仅Mock/临时目录，无真实比赛CONFIG/STOP。
+- 原桌面与登录自动入口均指向当前`run_competition_map.sh`；shell语法、正式地图/runner原入口`--help`、cv2/numpy/PIL/hbm_runtime/Gst导入和雷达配置读取通过。
+- 定位ELF、`libmotion_runtime.so`、`liblidar_geometry.so`、JPU/VSE库、YOLO26模型/标签/ROI/配置齐全，动态链接无缺失；10项候选源码/ELF与115931实测SHA完全一致。RealSense实际链接为`/home/sunrise/文档/ChatGPT/T265/build-250/librealsense/librealsense2.so.2.50.0`。
+- 当前ttyS1/ttyS6/video0/jpu/bpu可访问，没有正式/测试/SDK/视觉进程争用；GPIO控制器存在，T265 USB枚举为8087:0b37。这不代表当前SDK已输出Pose或按键已实按。
+- 现阶段仅完成软件就绪。用户烧录NormalRun后，重开原桌面入口进行正常待机预热，按原遥测记录actual身份与07/08/SDK结果，再在实际起点按3跑正式流程。预热不启动比赛任务；不把历史MotionDebug身份代替NormalRun。现有自动入口已安装，本轮未启动监听/预热、未打开设备或发送运动，原始日志未修改/清理。没有整场实车通过结论。
+
+本轮12项必要检查的可重复命令（不访问真实设备）：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
+  competition_rescue/tests/test_runner.py::test_formal_dynamic_start_wiring \
+  competition_rescue/tests/test_runner.py::test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner \
+  competition_rescue/tests/test_runner.py::test_warm_start_stop_wins_before_release_and_failure_does_not_retry \
+  competition_rescue/tests/test_runner.py::test_warm_config_partial_start_remembers_abort_obligation \
+  competition_rescue/tests/test_state_machine.py::test_start_handshake_suppresses_task_frames_until_start_clear \
+  competition_rescue/tests/test_runner.py::test_published_post_grab_audit_survives_changed_frame_before_paired_done \
+  competition_rescue/tests/test_runner.py::test_range_move_camera_handoff_never_rearms_pixel_approach \
+  competition_rescue/tests/test_runner.py::test_received_status_age_does_not_pause_navigation_but_claw_audit_keeps_check \
+  competition_rescue/tests/test_runner.py::test_mode51_context_priority_and_separation_rejection \
+  competition_rescue/tests/test_state_machine.py::test_mode51_reference_audit_exits_and_budget \
+  competition_rescue/tests/test_state_machine.py::test_safe_staging_arrival_keeps_zero_handoff_and_stash_window \
+  competition_rescue/tests/test_state_machine.py::test_return_center_sends_zero_until_search
+```
+
+
 2026-11-06更新：9b6a661已完成基于e783f71的迁移，本轮继续修复只读审查发现的四项问题。保留正式1～4号起点和初始航向，不等待围栏初始化才出发；后续定位使用桌面测试同一套实现。源码接入及必要检查已完成，尚未实车跑完整场。
 
 ## 本轮异常路径修复
@@ -33,7 +68,7 @@ T265外参、比例1.000/关闭、pose jumping、SDK速度源T/W=0、0.1m/s工�
 
 ## 使用及日志
 
-重开原桌面“智能救援完整比赛流程”，默认`--dynamic-localization --official-wheel-input`，底盘/dev/ttyS1、雷达/dev/ttyS6，均230400。原起点/阵营选择保持；无需新增桌面入口。`--no-dynamic-localization`保留既有纯T265＋官方轮速对照入口，需要新SDK会话，不支持热切换。
+重开原桌面“智能救援完整比赛流程”，默认`--dynamic-localization --official-wheel-input`，底盘/dev/ttyS1为921600，雷达/dev/ttyS6为230400。原起点/阵营选择保持；无需新增桌面入口。`--no-dynamic-localization`保留既有纯T265＋官方轮速对照入口，需要新SDK会话，不支持热切换。
 
 地图显示当前T265/轮速来源与雷达可观轴，保留测试的“越障暂停/恢复雷达”按钮及L键。自动识别减速带遮挡尚未实现；没有为了迁移擅自新增自动屏蔽规则。比赛期间不可操作电脑的限制意味着该人工按钮不能被当作自动越障能力。
 
@@ -44,7 +79,7 @@ T265外参、比例1.000/关闭、pose jumping、SDK速度源T/W=0、0.1m/s工�
 - `control_pose.jsonl`保存送给C++的动态快照，`dynamic_status.json`/`dynamic_summary.json`记录来源、可观轴、位置重获及处理错误。
 - 正式JSON/0x16中继写盘失败不终止UART；动态路径的原始T265诊断JSON失败也不退出控制循环。会话结束时此类原始JSON错误返回非零，避免标成完整会话。没有宣称所有旧日志写盘路径都已重构。
 
-完整会话保留最近5次，保护当前/不完整/用户文件。回放文件仅按同一SDK会话的完成清单识别；未知文件保留。本轮没有清理原始日志。
+当前按容量告警和完整会话手动清理，不再自动仅保留5次；保护当前/不完整/用户文件。回放文件仅按同一SDK会话的完成清单识别；未知文件保留。本轮没有清理原始日志。
 
 ## 安全区无框回放（不改业务动作）
 

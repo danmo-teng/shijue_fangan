@@ -1,6 +1,6 @@
 # 两端最新修改要求
 
-更新：2026-11-08。只维护当前相关请求和回执；旧请求按Git历史取证，不自动恢复任务。
+更新：2026-11-09。只维护当前相关请求和回执；旧请求按Git历史取证，不自动恢复任务。
 发布、读取、镜像要求均不等于审核通过或实施授权。接收方先审实际代码，向人说明影响，
 可以接受、缩小、替代或拒绝。人保留知情、拒绝和选择权；已明确批准范围不重复审批。
 协作约束见本仓库AGENTS.md和docs/CHANGE_WORKFLOW.md，不增加时间门、握手或故障锁存。
@@ -19,6 +19,12 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 已记录人的知情/拒绝/选择权、请求不等于授权以及直接读取对端GitHub的规则。
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
+
+## 当前部署安排（2026-11-09，无新增固件要求）
+
+用户安排稍后烧录NormalRun，直接下地跑既有正式比赛；MotionDebug暂缓，C++导航迁移低优先级，不作为烧录或比赛前置。本轮RDK不要求下位机新增功能、诊断或测试程序。
+
+已只读核对对端main=f1cf2a5909f408b28d821b29b0fc6a63d91fb8dc的固定入口与CMake，最新提交为MotionDebug烧录/读回文档，固件实现仍14b2a3a。NormalRun和MotionDebug都为board405/mode5、UART4=921600；NormalRun为service2/RESCUE_TASK，MotionDebug为service1/MOTIONDEBUG。应使用既有NormalRun构建，不能拿mode5或expected SHA冒充已运行NormalRun。实际烧录身份留待部署后读取，原未知字段如实保留，不新增握手或时间检查。完整比赛地面结果尚未验收。
 
 ## RDK → F405：UART-100HZ-01
 
