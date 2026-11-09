@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Same extraction decisions, NumPy RNG/sort and caller-provided NumPy SVD.
 # Streaming scores avoid an N*H temporary; CDLL releases the GIL for C++ work.
-add_library(lidar_geometry SHARED src/lidar_geometry.cpp src/lidar_line_extraction.cpp)
+add_library(lidar_geometry SHARED src/lidar_geometry.cpp src/lidar_line_extraction.cpp src/lidar_reader.cpp)
 target_include_directories(lidar_geometry PRIVATE include)
 target_compile_options(lidar_geometry PRIVATE -O3 -ffp-contract=off)
 

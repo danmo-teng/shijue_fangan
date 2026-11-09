@@ -21,7 +21,7 @@ from async_debug_log import AsyncDebugLog,ProcessDebugLog
 from local_packet_receiver import LocalPacketReceiver,LocalDatagramSender,readable_nowait
 from low_latency_scheduling import prepare_realtime, set_realtime_thread
 from .dynamic import DynamicFence
-from .lidar_reader import LidarStream
+from .native_lidar_reader import make_lidar_stream, NativeReaderError
 from .lidar_timing import LidarTimingError
 from .latest_snapshot import LatestSnapshot, MotionInbox
 from .protocol import command_frame
@@ -31,14 +31,14 @@ from .control_packet import format_control_packet
 from .native_motion import NativeDynamicFence,NativeMotionRuntime
 
 
-def make_reader(config):
+def make_reader(config, *, native=True):
     mount=config['installation'];timing=dict(config['packet_timing'])
     timing['max_receive_gap_ns']=2**62
-    return LidarStream(dict(bearing_sign=1,bearing_zero_deg=0.,physical_direction=1,
+    return make_lidar_stream(dict(bearing_sign=1,bearing_zero_deg=0.,physical_direction=1,
         center_raw_deg=mount['center_raw_deg'],fov_deg=mount['display_fov_deg'],
         packet_timing=timing,max_batch_span_ns=2**62,
         sector_limits=dict(max_span_ns=2**62,max_point_gap_ns=2**62,max_stall_ns=2**62)),
-        sensor_epoch=uuid.uuid4().hex)
+        sensor_epoch=uuid.uuid4().hex, native=native)
 
 
 def offer_latest(channel, value):
@@ -65,9 +65,11 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
     scans.cancel_join_thread()
     log = AsyncDebugLog(root)
     lidar = reader = None
+    native_reader = True
     totals = {}
     state = dict(lidar_connected=False, lidar_error=None, lidar_open_attempts=0,
-                 scans_received=0, scan_queue_drops=0, reader_stats={}, receiver_pid=os.getpid())
+                 scans_received=0, scan_queue_drops=0, reader_stats={}, receiver_pid=os.getpid(),
+                 reader_backend=None, reader_backend_error=None)
     next_open = last_publish = 0.
 
     def event(name, **data):
@@ -79,6 +81,7 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
         if reader:
             for k, v in reader.stats.items():
                 stats[k] = stats.get(k, 0) + v
+            state.update(reader_backend=reader.backend, reader_backend_error=reader.backend_error)
         state['reader_stats'] = stats
         state['reader_logging_healthy'] = log.healthy()
         offer_latest(updates, dict(state))
@@ -90,14 +93,21 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
             points=[vars(p).copy() for p in scan.points]))
         state['scan_queue_drops'] += offer_latest(scans, scan)
 
+    def release_reader():
+        nonlocal reader
+        if reader:
+            for k, v in reader.stats.items(): totals[k] = totals.get(k, 0) + v
+            close = getattr(reader, 'close', None)
+            if close is not None: close()
+        reader = None
+
     def disconnect(exc):
         nonlocal lidar, reader, next_open
         if lidar is not None:
             try: lidar.close()
             except (OSError, serial.SerialException): pass
-        if reader:
-            for k, v in reader.stats.items(): totals[k] = totals.get(k, 0) + v
-        lidar = reader = None
+        release_reader()
+        lidar = None
         state.update(lidar_connected=False, lidar_error=str(exc))
         event('lidar_connection_error', reason=str(exc), motion_propagation_continues=True)
         next_open = time.monotonic() + 1.
@@ -117,7 +127,7 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
                         log.submit('lidar_tx.jsonl', dict(timestamp_monotonic_ns=time.monotonic_ns(), data_hex=packet.hex()))
                         if lidar.write(packet) != len(packet):
                             raise serial.SerialException('雷达启动命令写入不完整')
-                    reader = make_reader(config)
+                    reader = make_reader(config, native=native_reader)
                     state.update(lidar_connected=True, lidar_error=None)
                     event('lidar_connected', port=port, open_attempt=state['lidar_open_attempts'])
                     publish()
@@ -134,10 +144,20 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
                 log.submit('lidar_rx.jsonl', dict(timestamp_monotonic_ns=received, data_hex=data.hex()))
                 try:
                     reader.feed(data, received, on_scan=publish_scan)
+                except NativeReaderError as exc:
+                    # Keep the same serial owner and already delivered scans.
+                    # Do not replay this partially consumed batch or keep an
+                    # incomplete sector across different implementations.
+                    event('lidar_reader_fallback', reason=str(exc), backend='python',
+                          motion_propagation_continues=True)
+                    native_reader = False
+                    release_reader()
+                    reader = make_reader(config, native=False)
+                    reader.backend_error = str(exc)
                 except LidarTimingError as exc:
                     event('lidar_segment_restart', reason=str(exc))
-                    for k, v in reader.stats.items(): totals[k] = totals.get(k, 0) + v
-                    reader = make_reader(config)
+                    release_reader()
+                    reader = make_reader(config, native=native_reader)
             if time.monotonic() - last_publish >= .05:
                 publish()
                 last_publish = time.monotonic()
@@ -155,6 +175,7 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
             except (OSError, serial.SerialException): pass
         state['lidar_connected'] = False
         publish()
+        release_reader()
         log.submit('lidar_reader_summary.json', dict(state), atomic=True)
         log.close()
         state['reader_logging_healthy'] = log.healthy()

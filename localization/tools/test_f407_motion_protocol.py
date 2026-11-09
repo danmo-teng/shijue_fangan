@@ -690,6 +690,219 @@ def main() -> None:
     print("F405 test client / existing motion protocol checks PASS")
 
 
+def test_native_lidar_reader():
+    # Byte-identical input, same source epoch and RX times; the existing Python
+    # path is the oracle, including malformed input and segment/epoch recovery.
+    from unittest.mock import patch
+    from lidar_yaw_debug.lidar_reader import LidarStream
+    from lidar_yaw_debug.lidar_timing import AffineClockMap, LidarTimingError
+    from lidar_yaw_debug.native_lidar_reader import make_lidar_stream, NativeLidarStream, NativeReaderError
+    from lidar_yaw_debug.protocol import crc8, command_frame
+
+    def packet(index, direction=1, *, tick=None, count=12, first=None, last=None):
+        first = (direction * index * 11) % 360 if first is None else first
+        last = (first + direction * 10) % 360 if last is None else last
+        data = bytearray((0x54, 0x20 | count)) + (3600).to_bytes(2, 'little')
+        data += round(first * 100).to_bytes(2, 'little')
+        for j in range(count):
+            data += (0 if j == 3 else 1000 + j).to_bytes(2, 'little') + bytes((30 + j,))
+        data += round(last * 100).to_bytes(2, 'little')
+        data += ((65520 + index * 3) % 65536 if tick is None else tick).to_bytes(2, 'little')
+        data.append(crc8(data))
+        return bytes(data)
+
+    base = dict(bearing_sign=1, bearing_zero_deg=0., physical_direction=1,
+        center_raw_deg=215.75, fov_deg=147., max_batch_span_ns=2**62)
+
+    def compare(records, cfg=None):
+        cfg = base if cfg is None else cfg
+        readers = [LidarStream(cfg, sensor_epoch='native-parity'),
+                   make_lidar_stream(cfg, sensor_epoch='native-parity')]
+        assert isinstance(readers[1], NativeLidarStream), readers[1].backend_error
+        scans, early = 0, False
+        for data, arrival in records:
+            outcomes = []
+            for reader in readers:
+                delivered, callback_counts = [], []
+                def emit(scan):
+                    delivered.append(scan)
+                    callback_counts.append(reader.stats['scan_packets'])
+                try:
+                    result = reader.feed(data, arrival, on_scan=emit)
+                    assert result == delivered
+                    outcome = (delivered, None)
+                except ValueError as error:
+                    outcome = (delivered, (type(error), str(error)))
+                outcomes.append(outcome)
+                early |= any(n < reader.stats['scan_packets'] for n in callback_counts)
+            assert outcomes[0] == outcomes[1], outcomes
+            assert readers[0].stats == readers[1].stats
+            assert readers[0].needs_new_epoch == readers[1].needs_new_epoch
+            assert readers[0].last_error == readers[1].last_error
+            scans += len(outcomes[0][0])
+            if outcomes[0][1]:
+                break
+        readers[1].close()
+        return scans, early, readers[0].stats
+
+    for direction in (1, -1):
+        cfg = dict(base, physical_direction=direction, bearing_sign=-direction,
+                   bearing_zero_deg=17.5, center_raw_deg=0.)
+        raw = b''.join(packet(i, direction) for i in range(200))
+        for chunk_size in (1, 19, 47, 1410):
+            records = [(raw[i:i+chunk_size], 3_000_000_000 + i * 100_000)
+                       for i in range(0, len(raw), chunk_size)]
+            scans, early, stats = compare(records, cfg)
+            assert scans >= 5 and stats['timing_rejections'] == stats['sector_rejections'] == 0
+            if chunk_size == 1410:
+                assert early
+
+    # Both observed status layouts, ordinary A1 length 0/1 and other ACKs;
+    # corrupted lengths/CRCs must resynchronise one byte, then regain sectors.
+    short = bytes.fromhex('54a1b77a57541f00000041')
+    ack0 = bytes((0x54, 0xa1, 0)); ack0 += bytes((crc8(ack0),))
+    ack1 = bytes((0x54, 0xa1, 1, 27)); ack1 += bytes((crc8(ack1),))
+    packets = [packet(i) for i in range(200)]
+    damaged = bytearray(packets[40]); damaged[9] ^= 1; packets[40] = bytes(damaged)
+    packets[80] = b'junk\x54\x00' + short + ack0 + ack1 + command_frame(0xa2, 3600) + packets[80]
+    raw = b''.join(packets)
+    records = [(raw[i:i+173], 4_000_000_000 + i * 100_000) for i in range(0, len(raw), 173)]
+    scans, _, stats = compare(records)
+    assert scans >= 4 and stats['crc_errors'] >= 1
+    assert stats['status_packets'] == 2 and stats['ack_packets'] == 3
+
+    normal = [(packet(i), 5_000_000_000 + i*3_000_000) for i in range(100)]
+    for change in (dict(sector_limits=dict(max_points=4)),
+                   dict(sector_limits=dict(max_span_ns=1)),
+                   dict(sector_limits=dict(max_point_gap_ns=1)),
+                   dict(sector_limits=dict(max_angle_step_deg=.1))):
+        assert compare(normal, dict(base, **change))[2]['sector_rejections'] > 0
+    # Interpolation loss, malformed angle, repeated/reset counter, first-batch
+    # ambiguity, RX reversal, buffer bound and unrepresentable mapped time.
+    cases = [normal[:45] + [(packet(46), 5_138_000_000)] + normal[47:],
+        normal[:45] + [(packet(45, first=400), 5_135_000_000)] + normal[46:],
+        normal[:45] + [(packet(44), 5_135_000_000)],
+        [(packet(0)+packet(0), 5_000_000_000)],
+        normal[:10] + [(packet(10), 1)],
+        [(bytes(65537), 5_000_000_000)],
+        [(packet(0)+packet(1), 0)]]
+    for records in cases:
+        compare(records)
+    compare([(packet(i, tick=i+1, count=1), 5_000_000_000+i*3_000_000) for i in range(80)])
+
+    # The old reader remains selectable and is used if a build/ABI is absent or
+    # a supplied calibration map needs its original full implementation.
+    with patch.dict('os.environ', {'RDK_LIDAR_READER_NATIVE': '0'}):
+        assert type(make_lidar_stream(base, sensor_epoch='off')) is LidarStream
+    with patch('lidar_yaw_debug.native_lidar_reader._load', side_effect=NativeReaderError('old build')):
+        fallback = make_lidar_stream(base, sensor_epoch='old-build')
+        assert type(fallback) is LidarStream and fallback.backend_error == 'old build'
+    clock = AffineClockMap(0, 10**9, 10**6, 'explicit-map')
+    fallback = make_lidar_stream(base, sensor_epoch='calibrated-path', clock_map=clock)
+    assert type(fallback) is LidarStream and fallback.adapter.clock_map is clock
+    for cls in (LidarStream, make_lidar_stream):
+        reader = cls(base, sensor_epoch='callback-failure')
+        try:
+            for data, arrival in normal:
+                reader.feed(data, arrival, on_scan=lambda scan: (_ for _ in ()).throw(RuntimeError('consumer')))
+        except RuntimeError as error:
+            assert str(error) == 'consumer'
+        else:
+            raise AssertionError('callback exception was swallowed')
+
+
+def test_native_lidar_receiver_recovery():
+    # Real local PTYs only: a native failure must retain delivered sectors,
+    # continue on Python, and survive a subsequent serial disconnect/reopen.
+    import os
+    import pty
+    import queue
+    import threading
+    from unittest.mock import patch
+    from lidar_yaw_debug import worker
+    from lidar_yaw_debug.native_lidar_reader import NativeReaderError
+    from lidar_yaw_debug.protocol import crc8
+
+    class Channel(queue.Queue):
+        def cancel_join_thread(self): pass
+
+    def packets(start):
+        output = bytearray()
+        for i in range(start, start + 150):
+            first = i * 11 % 360; last = (first + 10) % 360
+            data = bytearray((0x54, 0x2c)) + (3600).to_bytes(2, 'little')
+            data += (first * 100).to_bytes(2, 'little') + b'\xe8\x03\x64' * 12
+            data += (last * 100).to_bytes(2, 'little') + ((i * 3) % 65536).to_bytes(2, 'little')
+            data.append(crc8(data)); output.extend(data)
+        return output
+
+    original_make = worker.make_reader
+    failed = []
+    def make(config, *, native=True):
+        reader = original_make(config, native=native)
+        if native:
+            assert reader.backend == 'cpp_bytes_timing_sector_v1'
+            original_feed = reader.feed
+            def feed(*args, **kwargs):
+                result = original_feed(*args, **kwargs)
+                if result and not failed:
+                    failed.append(True)
+                    raise NativeReaderError('fixture native failure after delivered sector')
+                return result
+            reader.feed = feed
+        return reader
+
+    scans, updates, stop = Channel(64), Channel(8), threading.Event()
+    state = {}
+    def wait_for(predicate):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try: state.update(updates.get(timeout=.02))
+            except queue.Empty: pass
+            if predicate(state): return
+        raise AssertionError(state)
+
+    config = json.loads((Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json').read_text())
+    descriptors = []
+    with tempfile.TemporaryDirectory() as tmp, patch.object(worker, 'make_reader', make):
+        root = Path(tmp); port = root/'lidar'
+        master, slave = pty.openpty(); descriptors.extend((master, slave)); port.symlink_to(os.ttyname(slave))
+        thread = threading.Thread(target=worker.run_lidar_receiver,
+            args=(config, str(port), 230400, root, scans, updates, stop))
+        thread.start()
+        try:
+            wait_for(lambda s: s.get('lidar_connected'))
+            os.write(master, packets(0))
+            wait_for(lambda s: s.get('reader_backend') == 'python')
+            assert failed and 'fixture native failure' in state['reader_backend_error']
+            before = state['scans_received']
+            os.write(master, packets(150))
+            wait_for(lambda s: s.get('scans_received', 0) > before)
+            os.close(master); descriptors.remove(master)
+            wait_for(lambda s: not s.get('lidar_connected'))
+            port.unlink()
+            master, slave = pty.openpty(); descriptors.extend((master, slave)); port.symlink_to(os.ttyname(slave))
+            wait_for(lambda s: s.get('lidar_connected') and s.get('lidar_open_attempts', 0) >= 2)
+            before = state['scans_received']
+            os.write(master, packets(300))
+            wait_for(lambda s: s.get('scans_received', 0) > before)
+        finally:
+            stop.set(); thread.join(timeout=3)
+            for descriptor in descriptors: os.close(descriptor)
+        assert not thread.is_alive()
+        events = [json.loads(line) for line in (root/'lidar_reader_events.jsonl').read_text().splitlines()]
+        assert sum(e['event'] == 'lidar_reader_fallback' for e in events) == 1
+        assert sum(e['event'] == 'lidar_connected' for e in events) == 2
+        assert any(e['event'] == 'lidar_connection_error' for e in events)
+        raw = [json.loads(line) for line in (root/'dynamic_scans.jsonl').read_text().splitlines()]
+        assert len({s['scan_id'] for s in raw}) == len(raw) >= 3
+        assert len({s['scan_id'].split(':')[0] for s in raw}) == 3
+        assert all(not s['time_qualified'] for s in raw)
+        summary = json.loads((root/'lidar_reader_summary.json').read_text())
+        assert summary['reader_backend'] == 'python' and summary['reader_logging_healthy']
+        assert not (root/'commands.jsonl').exists()
+
+
 def test_f405_client():
     import math
     from unittest.mock import patch
