@@ -715,11 +715,14 @@ def test_native_lidar_reader():
         center_raw_deg=215.75, fov_deg=147., max_batch_span_ns=2**62)
 
     def compare(records, cfg=None):
+        import pickle
+        from dataclasses import FrozenInstanceError
         cfg = base if cfg is None else cfg
         readers = [LidarStream(cfg, sensor_epoch='native-parity'),
                    make_lidar_stream(cfg, sensor_epoch='native-parity')]
         assert isinstance(readers[1], NativeLidarStream), readers[1].backend_error
         scans, early = 0, False
+        copied_checked = False
         for data, arrival in records:
             outcomes = []
             for reader in readers:
@@ -739,6 +742,17 @@ def test_native_lidar_reader():
             assert readers[0].stats == readers[1].stats
             assert readers[0].needs_new_epoch == readers[1].needs_new_epoch
             assert readers[0].last_error == readers[1].last_error
+            if outcomes[1][0] and not copied_checked:
+                scan = outcomes[1][0][0]
+                restored = pickle.loads(pickle.dumps(scan))
+                assert restored == scan and vars(restored) == vars(scan)
+                try:
+                    restored.points[0].time_ns = 0
+                except FrozenInstanceError:
+                    pass
+                else:
+                    raise AssertionError('native copy lost frozen point semantics')
+                copied_checked = True
             scans += len(outcomes[0][0])
             if outcomes[0][1]:
                 break

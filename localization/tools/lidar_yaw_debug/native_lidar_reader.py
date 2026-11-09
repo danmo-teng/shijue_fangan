@@ -141,16 +141,32 @@ class NativeLidarStream:
         def emit(_user, raw_points, count):
             try:
                 points = []
+                previous_offset = None
                 for index in range(count):
                     point = raw_points[index]
-                    packet_id = f'byte:{point.packet_offset}'
-                    uid = f'{self.sensor_epoch}:{packet_id}:{point.point_index}'
-                    points.append(TimedPoint(uid, point.time_ns, (point.x, point.y),
-                        packet_id, point.point_index, point.intensity, False,
-                        point.raw_angle_deg, bool(point.valid_return)))
+                    if point.packet_offset != previous_offset:
+                        previous_offset = point.packet_offset
+                        packet_id = f'byte:{previous_offset}'
+                        prefix = f'{self.sensor_epoch}:{packet_id}:'
+                    # The native reader has already checked these scalars and
+                    # sector time order/resource bounds. Copy owned immutable
+                    # Python values once, without re-running per-ray NumPy/type
+                    # and sequence checks at the complete-scan boundary.
+                    # Other callers still use the normal validating dataclasses.
+                    copied = object.__new__(TimedPoint)
+                    object.__setattr__(copied, '__dict__', dict(
+                        raw_point_id=prefix + str(point.point_index), time_ns=point.time_ns,
+                        point_lidar_m=(point.x, point.y), packet_id=packet_id,
+                        point_index=point.point_index, intensity=point.intensity,
+                        time_qualified=False, raw_angle_deg=point.raw_angle_deg,
+                        valid_return=bool(point.valid_return)))
+                    points.append(copied)
                 uid = f'{self.sensor_epoch}:sector:{points[0].raw_point_id}:{points[-1].raw_point_id}'
-                scan = RawScan(uid, points[-1].time_ns, tuple(points), self.sensor_epoch,
-                    self.time_map_version, False)
+                scan = object.__new__(RawScan)
+                object.__setattr__(scan, '__dict__', dict(scan_id=uid,
+                    reference_ns=points[-1].time_ns, points=tuple(points),
+                    sensor_epoch=self.sensor_epoch, time_map_version=self.time_map_version,
+                    timing_qualified=False))
                 output.append(scan)
                 if on_scan is not None:
                     self._status()
