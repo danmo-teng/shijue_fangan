@@ -1,6 +1,6 @@
 {
   "baseline": "d2b8a57",
-  "scope": "LATENCY-05A: optional compact scan history projection; same algorithms, no device access",
+  "scope": "LATENCY-05 staged software, input-equivalence and scoped replay receipts; per-stage scopes and actual hardware limits are explicit below",
   "window_comparison": [
     {
       "phase": "steady",
@@ -4851,5 +4851,163 @@
       "cause": "Unknown. Not reproduced in subsequent split trace; cannot attribute to math, BLAS or a particular syscall."
     },
     "scope": "Offline traces and saved-frame vision compute replay only; no production timing monitors, BLAS setting, mathematics, source arbitration, devices, motors, reboot or log pruning changes."
+  },
+  "reader_state_forwarding": {
+    "stage": "05K",
+    "measured_parent_commit": "400297c",
+    "log_root": "/tmp/rdk_lidar_latency_20261110/reader_state_1794264283416838491",
+    "change": "Retain every reader statistics update, forward connected/error to native only when those same fields change. No received sensor feedback is rejected or gated.",
+    "worker_source_sha256": "81a37c6d76fb392f24645be881181f6734759e38aecb6d2249e79483b056a314",
+    "performance": {
+      "label": "K0",
+      "reader": "native",
+      "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+      "window": [
+        4064000000000,
+        4074000000000
+      ],
+      "profiled": false,
+      "scope": "Production localization replay plus real saved-frame formal YOLO/VSE/tracking; no physical UART/SDK/camera/JPU/GUI/motors",
+      "wheel_samples": 1000,
+      "wheel_ids_with_control": 1000,
+      "missing_wheel_ids": [],
+      "socket_injection_to_control_kernel_ms": {
+        "p50": 1.4727185,
+        "p95": 2.6678330999999993,
+        "p99": 4.193480319999998,
+        "max": 5.811251
+      },
+      "socket_injection_to_observer_ms": {
+        "p50": 1.698197,
+        "p95": 4.241620649999999,
+        "p99": 7.122813879999995,
+        "max": 19.031159
+      },
+      "fits": 99,
+      "packet_to_lidar_result_ms": {
+        "p50": 41.920125,
+        "p95": 62.5868481,
+        "p99": 74.05130569999996,
+        "max": 81.931471
+      },
+      "reference_to_lidar_result_ms": {
+        "p50": 47.369881,
+        "p95": 164.29411629999987,
+        "p99": 274.62902202,
+        "max": 275.311446
+      },
+      "geometry_wall_ms": {
+        "p50": 31.640571,
+        "p95": 45.20662279999999,
+        "p99": 48.79662767999998,
+        "max": 53.249879
+      },
+      "geometry_child_cpu_ms": {
+        "p50": 15.308372,
+        "p95": 20.4312503,
+        "p99": 22.940116499999995,
+        "max": 24.132164
+      },
+      "rank_xy_counts": {
+        "0": 0,
+        "1": 0,
+        "2": 99
+      },
+      "feeder_lateness_ms": {
+        "p50": 0.111454,
+        "p95": 1.558798,
+        "p99": 6.011625,
+        "max": 19.770351
+      },
+      "monotonic_realtime_offset_change_ns": 15958,
+      "stopped_cleanly": true,
+      "errors": [],
+      "worker_cpu_and_calls": {
+        "mode": "new",
+        "native_calls": {
+          "snapshot:state": 329,
+          "command:lidar_state": 4,
+          "command:context": 1,
+          "command:field_reference": 1,
+          "snapshot:window": 104,
+          "command:apply_wall": 104
+        },
+        "process_user_cpu_s": 8.340767,
+        "process_system_cpu_s": 1.45224,
+        "wall_s": 12.751825019
+      },
+      "final_counts": {
+        "scans_received": 105,
+        "fits": 104,
+        "scan_queue_drops": 0,
+        "fit_requests_coalesced": 1,
+        "logging_healthy": true,
+        "reader_logging_healthy": true
+      }
+    },
+    "lifecycle": {
+      "observed": [
+        {
+          "lidar_connected": true,
+          "lidar_error": null,
+          "lidar_open_attempts": 1,
+          "motion_execution": "native_cpp_owner"
+        },
+        {
+          "lidar_connected": false,
+          "lidar_error": "device reports readiness to read but returned no data (device disconnected or multiple access on port?)",
+          "lidar_open_attempts": 1,
+          "motion_execution": "native_cpp_owner"
+        },
+        {
+          "lidar_connected": true,
+          "lidar_error": null,
+          "lidar_open_attempts": 2,
+          "motion_execution": "native_cpp_owner"
+        }
+      ],
+      "forwarded": [
+        {
+          "connected": true,
+          "error": null
+        },
+        {
+          "connected": false,
+          "error": "device reports readiness to read but returned no data (device disconnected or multiple access on port?)"
+        },
+        {
+          "connected": true,
+          "error": null
+        },
+        {
+          "connected": false,
+          "error": null
+        }
+      ],
+      "stopped_cleanly": true,
+      "scope": "Existing native RadarWorker with fake lidar PTY disconnect/reconnect, no sensor measurements or hardware UART/SDK/motors"
+    },
+    "fixture_notes": [
+      "Initial lifecycle assertion omitted normal shutdown connected=false/error=None; corrected only the fixture.",
+      "A first lifecycle-only rerun used stdin and could not spawn; moved that wrapper to this file. Failed logs retained, no production changes."
+    ],
+    "vision_log": "/tmp/rdk_lidar_latency_20261110/reader_state_1794264283416838491/vision/20261110_064444_051546_competition/summary.json",
+    "vision_summary": {
+      "mean_fps": 43.885714285714286,
+      "min_fps_1s": 34,
+      "camera_opened": false,
+      "jpu_used": false,
+      "gui_used": false,
+      "errors": []
+    },
+    "conclusions": "Repeated native lidar_state calls reduced from 213/214 to 4 (actual connection and enable transitions including normal shutdown). One extra load replay verifies delivery, not a causal tail-speedup or hardware precision claim.",
+    "unchanged": [
+      "all reader statistics and raw data",
+      "existing connect/error/reconnect and normal shutdown",
+      "existing Python fallback",
+      "geometry/source arbitration/extrinsics/scale",
+      "sole hardware owners",
+      "no freshness/handshake/stop changes"
+    ]
   }
 }

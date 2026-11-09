@@ -517,7 +517,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             changed=(value['lidar_connected']!=reader_state['lidar_connected'] or
                      value['lidar_error']!=reader_state['lidar_error'])
             reader_state=value
-            if native_runtime is not None:
+            # 统计快照仍全部接收，仅连接/错误实际变化时转发这两个原生字段。
+            if native_runtime is not None and changed:
                 native_runtime.command('lidar_state',dict(connected=value['lidar_connected'],error=value['lidar_error']))
             if changed:
                 dirty=True
