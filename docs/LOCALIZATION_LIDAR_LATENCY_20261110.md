@@ -163,3 +163,12 @@
 正式代码审查确认：competition_map_app声明native控制直达唯一C++relay，DynamicPoseRelay独立线程接收后直接编码0x16；GUI快照不在UART发送前等待，动态模式绕过main.cpp原定频Pose发送。poll(50ms)是无数据时阻塞上限，有数据即唤醒，不是50ms限速。代码请求relay FIFO10，但本轮未启动实际SDK/relay写真实UART，不能用motion线程的实读调度冒充relay已实测。
 
 下一项已向用户提出：固定主yaw XY求解原样迁C++，保持公式、阈值/围栏重获和Python回退，冻结输入/边界/端到端核对后再启用；或先保留数学模块验收当前版。此为新数值改法，等待人选择，当前求解代码完全未改。其余实机SDK/真实UART→0x16、相机/JPU/绘图、全速及绝对精度仍待原入口必要实测。详细指纹/源图像/45秒视觉回执见JSON的vision_load_and_numeric_profile。
+
+
+## 05H：一次正常SDK启动流程核对（未得到Pose）
+
+占用检查未见其它T265拥有者，USB为03e7:2150。首先直接启动现有ELF的纯T265静止读取，返回no running T265、0帧；此调用绕过run_localization.sh的固件准备，不能当完整启动流程失败的证据。随后按现有t265_usb_recovery.recover_t265设备管理顺序只检查一次：已有t265_boot使用256KiB块、1秒传输上限，实际LIBUSB_ERROR_TIMEOUT，transferred=0/9323648、elapsed=1.000秒；管理流程总1.431秒，未得到runtime/Pose，没有第二个SDK拥有者。
+
+两个独立尝试目录为/tmp/rdk_lidar_latency_20261110/sdk_static_1794261849312927353/和sdk_managed_1794261987216478229/；实际基线17d6cd8、ELF/config指纹及完整请求/结果在JSON的stationary_sdk_start_attempt。没有打开底盘UART、请求轮速输入、发送运动、复位USB、固定断电等待或恢复循环；没有改SDK/USB程序。保留候选外参/比例/pose jumping。首次直接ELF和正常管理流程的结果分开记录，不能把固件加载器返回成功或本轮离线回放当真实SDK验证，本次也没有加载成功。
+
+真实SDK消费/输出长尾验证仍未完成，不妨碍独立解析/数值/控制回放的已测结果；不从这个现象自动恢复旧USB修复任务或新增定位限制。当前新的XY数值迁移仍待人选择，现有公式未改。

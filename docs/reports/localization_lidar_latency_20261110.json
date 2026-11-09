@@ -3681,5 +3681,236 @@
       "raw_logs_changed": false,
       "model_or_vision_code_changed": false
     }
+  },
+  "stationary_sdk_start_attempt": {
+    "phase": "05H",
+    "direct_ELF_without_explicit_boot_preparation": {
+      "directory": "/tmp/rdk_lidar_latency_20261110/sdk_static_1794261849312927353",
+      "receipt": {
+        "purpose": "One stationary SDK read via existing owner; no UART or wheel input, no USB reset",
+        "session_id": "latency-sdk-1794261849313431309",
+        "args": [
+          "/home/sunrise/RDK_X5/shijue_fangan/localization/build/t265_omni_localizer",
+          "--config",
+          "/home/sunrise/RDK_X5/shijue_fangan/localization/config/t265_debug_new_mount_candidate.conf",
+          "--output",
+          "/tmp/rdk_lidar_latency_20261110/sdk_static_1794261849312927353/pose.json",
+          "--csv",
+          "/tmp/rdk_lidar_latency_20261110/sdk_static_1794261849312927353/localization_debug.csv",
+          "--raw-pose-csv",
+          "/tmp/rdk_lidar_latency_20261110/sdk_static_1794261849312927353/t265_raw_pose.csv",
+          "--events",
+          "/tmp/rdk_lidar_latency_20261110/sdk_static_1794261849312927353/localization_events.jsonl",
+          "--duration",
+          "12",
+          "--ignore-encoders",
+          "--t265-only-output",
+          "--enable-pose-jumping",
+          "--debug-test-session",
+          "latency-sdk-1794261849313431309"
+        ],
+        "upper_commit": "17d6cd89d22246d7452993e998cfaa1e576f89d0",
+        "binary_sha256": "c0a3eaf1c4834b0b8ad251c1b740d4ab3f1a485d5d96d9e0bb4557aba6302921",
+        "config_sha256": "e2d6818850d0145f4616617be4161b3cc5490eb45959488dcb8bd7e1a0a58500",
+        "uart_opened": false,
+        "wheel_input_requested": false,
+        "clean_internal_estimator_state_verified": false,
+        "physical_accuracy_verified": false,
+        "exit_code": 1,
+        "forced_stop": false,
+        "raw_pose_rows": 0
+      },
+      "note": "The normal launcher prepares boot PID first; direct ELF alone is not proof that the complete startup path failed."
+    },
+    "normal_existing_device_manager": {
+      "directory": "/tmp/rdk_lidar_latency_20261110/sdk_managed_1794261987216478229",
+      "receipt": {
+        "purpose": "Existing normal firmware-preparation manager then sole SDK owner, stationary and no UART",
+        "session_id": "latency-managed-1794261987216923102",
+        "upper_commit": "17d6cd89d22246d7452993e998cfaa1e576f89d0",
+        "uart_requested": false,
+        "wheel_input_requested": false,
+        "usb_reset_requested": false,
+        "SDK_owner_started": false,
+        "physical_accuracy_verified": false,
+        "error": "T265启动准备：T265固件启动失败；未执行无效的重复断电循环。[ERROR] firmware transfer failed: LIBUSB_ERROR_TIMEOUT (Operation timed out), transferred=0/9323648, elapsed=1.000 s",
+        "raw_pose_rows": 0
+      },
+      "boot_preparation": {
+        "method": "existing_boot_tool_no_forced_cycle",
+        "requested": true,
+        "result_scope": "firmware/runtime enumeration only; caller must verify actual SDK Pose",
+        "command_completed": false,
+        "vbus_power_off_verified": false,
+        "reboot_fault_recovery_verified": false,
+        "sdk_pose_verified": false,
+        "forced_power_cycle": false,
+        "fixed_wait_seconds": 0,
+        "commands": [
+          {
+            "argv": [
+              "sudo",
+              "-n",
+              "/usr/bin/fuser",
+              "/dev/bus/usb/001/003"
+            ],
+            "returncode": 1,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "argv": [
+              "/home/sunrise/RDK_X5/shijue_fangan/t265_trajectory/build/t265_boot",
+              "--timeout-ms",
+              "1000",
+              "--chunk-kib",
+              "256"
+            ],
+            "returncode": 3,
+            "stdout": "[BOOT] firmware=/home/sunrise/文档/ChatGPT/T265/build-250/librealsense/common/fw/target-0.2.0.951.mvcmd\n[BOOT] bytes=9323648 endpoint=0x1 interface=0 timeout_per_chunk=1000 ms chunk=262144 bytes\n",
+            "stderr": "[ERROR] firmware transfer failed: LIBUSB_ERROR_TIMEOUT (Operation timed out), transferred=0/9323648, elapsed=1.000 s\n"
+          }
+        ],
+        "before": [
+          {
+            "name": "1-1",
+            "idVendor": "05e3",
+            "idProduct": "0610",
+            "busnum": "1",
+            "devnum": "2",
+            "product": "USB2.1 Hub"
+          },
+          {
+            "name": "1-1.1",
+            "idVendor": "03e7",
+            "idProduct": "2150",
+            "busnum": "1",
+            "devnum": "3",
+            "product": "Movidius MA2X5X",
+            "serial": "03e72150"
+          },
+          {
+            "name": "1-1.3",
+            "idVendor": "1bcf",
+            "idProduct": "28c4",
+            "busnum": "1",
+            "devnum": "4",
+            "product": "DHZJ Camera",
+            "serial": "01.00.00"
+          },
+          {
+            "name": "2-1",
+            "idVendor": "05e3",
+            "idProduct": "0626",
+            "busnum": "2",
+            "devnum": "2",
+            "product": "USB3.1 Hub"
+          },
+          {
+            "name": "usb1",
+            "idVendor": "1d6b",
+            "idProduct": "0002",
+            "busnum": "1",
+            "devnum": "1",
+            "product": "xHCI Host Controller",
+            "serial": "xhci-hcd.2.auto"
+          },
+          {
+            "name": "usb2",
+            "idVendor": "1d6b",
+            "idProduct": "0003",
+            "busnum": "2",
+            "devnum": "1",
+            "product": "xHCI Host Controller",
+            "serial": "xhci-hcd.2.auto"
+          }
+        ],
+        "host_boot_id": "7d11d287-34b8-4c87-bdfb-4211bd46171f",
+        "started_monotonic_ns": 35556175463543,
+        "target": {
+          "camera": {
+            "name": "1-1.1",
+            "idVendor": "03e7",
+            "idProduct": "2150",
+            "busnum": "1",
+            "devnum": "3",
+            "product": "Movidius MA2X5X",
+            "serial": "03e72150"
+          },
+          "hub": {
+            "name": "1-1",
+            "idVendor": "05e3",
+            "idProduct": "0610",
+            "busnum": "1",
+            "devnum": "2",
+            "product": "USB2.1 Hub"
+          },
+          "location": "1-1",
+          "port": 1,
+          "force_known_rdk_ganged": true,
+          "may_affect_shared_usb_camera": true
+        },
+        "action": "firmware_upload",
+        "after": [
+          {
+            "name": "1-1",
+            "idVendor": "05e3",
+            "idProduct": "0610",
+            "busnum": "1",
+            "devnum": "2",
+            "product": "USB2.1 Hub"
+          },
+          {
+            "name": "1-1.1",
+            "idVendor": "03e7",
+            "idProduct": "2150",
+            "busnum": "1",
+            "devnum": "3",
+            "product": "Movidius MA2X5X",
+            "serial": "03e72150"
+          },
+          {
+            "name": "1-1.3",
+            "idVendor": "1bcf",
+            "idProduct": "28c4",
+            "busnum": "1",
+            "devnum": "4",
+            "product": "DHZJ Camera",
+            "serial": "01.00.00"
+          },
+          {
+            "name": "2-1",
+            "idVendor": "05e3",
+            "idProduct": "0626",
+            "busnum": "2",
+            "devnum": "2",
+            "product": "USB3.1 Hub"
+          },
+          {
+            "name": "usb1",
+            "idVendor": "1d6b",
+            "idProduct": "0002",
+            "busnum": "1",
+            "devnum": "1",
+            "product": "xHCI Host Controller",
+            "serial": "xhci-hcd.2.auto"
+          },
+          {
+            "name": "usb2",
+            "idVendor": "1d6b",
+            "idProduct": "0003",
+            "busnum": "2",
+            "devnum": "1",
+            "product": "xHCI Host Controller",
+            "serial": "xhci-hcd.2.auto"
+          }
+        ],
+        "runtime_enumerated": false,
+        "error": "T265固件启动失败；未执行无效的重复断电循环。[ERROR] firmware transfer failed: LIBUSB_ERROR_TIMEOUT (Operation timed out), transferred=0/9323648, elapsed=1.000 s",
+        "finished_monotonic_ns": 35557606304981,
+        "elapsed_s": 1.430841438
+      }
+    },
+    "conclusion": "Existing manager failed real firmware USB upload, 0/9323648 bytes in 1s; no Pose or live SDK output latency validation. No UART, wheel input or motor command, reset or recovery cycle was run. Current parser/replay results remain separately valid. No SDK/USB code was changed."
   }
 }
