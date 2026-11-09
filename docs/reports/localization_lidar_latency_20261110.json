@@ -3174,5 +3174,512 @@
       }
     ],
     "decision": "Keep production default; 1ms had no sufficiently clear consistent tail benefit over 5ms; no production scheduling change."
+  },
+  "vision_load_and_numeric_profile": {
+    "phase": "05G",
+    "measurement_commit": "e9913c5",
+    "directory": "/tmp/rdk_lidar_latency_20261110/joint_1794260788392651544",
+    "phases": [
+      {
+        "label": "V1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Offline production localization worker with formal YOLO26 BPU/VSE, tracking and ROI on saved NV12 frames; no real UART/SDK/camera/JPU/GUI or physical accuracy claim",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.4466415,
+          "p95": 2.664560349999999,
+          "p99": 3.638084239999998,
+          "max": 5.290774
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.60314,
+          "p95": 3.3328699,
+          "p99": 4.63557317,
+          "max": 9.721258
+        },
+        "fits": 99,
+        "packet_to_lidar_result_ms": {
+          "p50": 36.493458,
+          "p95": 57.55569809999996,
+          "p99": 75.02883441999997,
+          "max": 81.021555
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 40.339624,
+          "p95": 166.9744404999999,
+          "p99": 270.83482635999997,
+          "max": 281.939028
+        },
+        "geometry_wall_ms": {
+          "p50": 28.414361,
+          "p95": 36.6500494,
+          "p99": 43.65305377999999,
+          "max": 44.675722
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 14.137666,
+          "p95": 17.897624699999998,
+          "p99": 19.25054129999999,
+          "max": 20.793958
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 99
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.100572,
+          "p95": 0.923444,
+          "p99": 2.413246,
+          "max": 9.685753
+        },
+        "monotonic_realtime_offset_change_ns": 16875,
+        "stopped_cleanly": true,
+        "errors": [],
+        "vision_results_during_window": 442,
+        "vision_fps_during_window": 44.194761024836794,
+        "state_receipt": {
+          "scans_received": 105,
+          "scans": 104,
+          "fits": 104,
+          "fit_requests_coalesced": 1,
+          "scan_queue_drops": 0,
+          "motion_execution": "native_cpp_owner",
+          "motion_scheduling": {
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "applied": true,
+            "error": null,
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+            "query_error": null,
+            "requested": true,
+            "requested_policy": "SCHED_FIFO",
+            "requested_priority": 10
+          },
+          "logging_healthy": true,
+          "receiver_stopped_cleanly": true,
+          "geometry_stopped_cleanly": true
+        }
+      },
+      {
+        "label": "V2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Offline production localization worker with formal YOLO26 BPU/VSE, tracking and ROI on saved NV12 frames; no real UART/SDK/camera/JPU/GUI or physical accuracy claim",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.3773485,
+          "p95": 2.4990517499999996,
+          "p99": 3.53280234,
+          "max": 5.539231
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.558224,
+          "p95": 2.9161465499999997,
+          "p99": 3.9522559099999977,
+          "max": 5.761605
+        },
+        "fits": 97,
+        "packet_to_lidar_result_ms": {
+          "p50": 37.38933,
+          "p95": 51.84946379999999,
+          "p99": 68.45180623999991,
+          "max": 78.412772
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 40.669243,
+          "p95": 132.5637333999999,
+          "p99": 269.40427556,
+          "max": 275.231033
+        },
+        "geometry_wall_ms": {
+          "p50": 28.066571,
+          "p95": 35.62792799999998,
+          "p99": 40.65353487999999,
+          "max": 41.725732
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 13.74375,
+          "p95": 18.484898199999996,
+          "p99": 19.734047,
+          "max": 19.953167
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 97
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.100666,
+          "p95": 0.921689,
+          "p99": 2.363439,
+          "max": 10.692542
+        },
+        "monotonic_realtime_offset_change_ns": -500,
+        "stopped_cleanly": true,
+        "errors": [],
+        "vision_results_during_window": 447,
+        "vision_fps_during_window": 44.698337414045085,
+        "state_receipt": {
+          "scans_received": 105,
+          "scans": 102,
+          "fits": 102,
+          "fit_requests_coalesced": 3,
+          "scan_queue_drops": 0,
+          "motion_execution": "native_cpp_owner",
+          "motion_scheduling": {
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "applied": true,
+            "error": null,
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+            "query_error": null,
+            "requested": true,
+            "requested_policy": "SCHED_FIFO",
+            "requested_priority": 10
+          },
+          "logging_healthy": true,
+          "receiver_stopped_cleanly": true,
+          "geometry_stopped_cleanly": true
+        }
+      }
+    ],
+    "vision": {
+      "source": "saved_training_images_as_NV12_replay",
+      "pipeline": "competition",
+      "seconds": 45.0,
+      "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+      "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+      "unique_results": 1997,
+      "mean_fps": 44.37777777777778,
+      "fps_1s": [
+        43,
+        41,
+        45,
+        46,
+        43,
+        44,
+        45,
+        45,
+        44,
+        43,
+        45,
+        44,
+        44,
+        45,
+        42,
+        42,
+        44,
+        45,
+        45,
+        45,
+        44,
+        45,
+        45,
+        45,
+        44,
+        44,
+        45,
+        44,
+        47,
+        46,
+        46,
+        47,
+        46,
+        48,
+        47,
+        47,
+        47,
+        46,
+        47,
+        47,
+        38,
+        39,
+        30,
+        47,
+        46
+      ],
+      "min_fps_1s": 30,
+      "stable_30fps": true,
+      "max_result_gap_ms": 57.18438700569095,
+      "display_fps": 0.0,
+      "capture_to_preview_ms": null,
+      "display_fps_1s": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dropped_including_warmup": {
+        "submit_full": 7,
+        "preview_busy": 0
+      },
+      "detection_class_frame_counts": {
+        "green_supply": 1557
+      },
+      "camera_captured": null,
+      "camera_decoded": null,
+      "errors": [],
+      "latency_reference": "replay publication to tracked snapshot; excludes real camera/JPU",
+      "preprocess_ms": {
+        "p50": 4.398734999995213,
+        "p95": 5.340839999553281,
+        "p99": 6.753988682175986
+      },
+      "inference_ms": {
+        "p50": 13.080579999950714,
+        "p95": 16.15174460312118,
+        "p99": 26.870450677524776
+      },
+      "postprocess_ms": {
+        "p50": 2.777948997390922,
+        "p95": 3.6956201976863667,
+        "p99": 4.674405355181079
+      },
+      "snapshot_ms": {
+        "p50": 2.062533996650018,
+        "p95": 3.0982308002421606,
+        "p99": 5.117415953718589
+      },
+      "latency_ms": {
+        "p50": 44.60185900097713,
+        "p95": 52.159717398171765,
+        "p99": 65.89117739873473
+      },
+      "camera_opened": false,
+      "jpu_used": false,
+      "gui_used": false,
+      "physical_accuracy_evaluated": false,
+      "source_frames": [
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1721.jpg",
+          "sha256": "9520e5a3e0091318e7a63dbf33d5555f8135f609cc2a3647e7dcca2994f9eaea"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1722.jpg",
+          "sha256": "65fd0f676c81cb63d7b7ee886dd1cc79842b9b6a875557577815321fb3082172"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1723.jpg",
+          "sha256": "c883c7e7469d65b4508ec34b48f4d429c903e26dd393a539f30417d722b4e8ae"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1724.jpg",
+          "sha256": "525aef1f4021f42bc55b7186953e8d9dfe5d6d6c796ede35891da6a852ed7097"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1725.jpg",
+          "sha256": "67b47fe0d02bd2886fb37bf5947cd47366bc37b17e6ddf1e2d9b619545e47465"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1726.jpg",
+          "sha256": "f092a6aef5cf392ef41284f3e6d11a5bd59f7c3cfcf71d4b1c0f8a3e95928e8d"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1727.jpg",
+          "sha256": "ab307b56355918d9e6eca2633d08d4091c03bd63efbe61b5a3526fb87a897997"
+        },
+        {
+          "file": "vision/captures/training/session_20261108_184846_046564/A1728.jpg",
+          "sha256": "84b5643c842255ca518804cc03f7974c7908a5438dde703fed622e040781a31a"
+        }
+      ],
+      "replay_generated_frames": 8459
+    },
+    "vision_preprocess": "vse",
+    "vision_shared_code_sha256": {
+      "vision/benchmark_yolo26_x5.py": "677f1243ef181feb030de8e393b30b219a562e952d13a9e926fa2a7aaefdb2ac",
+      "competition_rescue/run_competition_rescue.py": "b72703af2754c5cda90b525e34374ce217786f96dd0b90fe81e1e806573c9ec2",
+      "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+      "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+      "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+      "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e"
+    },
+    "vision_sources": [
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1721.jpg",
+        "sha256": "9520e5a3e0091318e7a63dbf33d5555f8135f609cc2a3647e7dcca2994f9eaea"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1722.jpg",
+        "sha256": "65fd0f676c81cb63d7b7ee886dd1cc79842b9b6a875557577815321fb3082172"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1723.jpg",
+        "sha256": "c883c7e7469d65b4508ec34b48f4d429c903e26dd393a539f30417d722b4e8ae"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1724.jpg",
+        "sha256": "525aef1f4021f42bc55b7186953e8d9dfe5d6d6c796ede35891da6a852ed7097"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1725.jpg",
+        "sha256": "67b47fe0d02bd2886fb37bf5947cd47366bc37b17e6ddf1e2d9b619545e47465"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1726.jpg",
+        "sha256": "f092a6aef5cf392ef41284f3e6d11a5bd59f7c3cfcf71d4b1c0f8a3e95928e8d"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1727.jpg",
+        "sha256": "ab307b56355918d9e6eca2633d08d4091c03bd63efbe61b5a3526fb87a897997"
+      },
+      {
+        "file": "vision/captures/training/session_20261108_184846_046564/A1728.jpg",
+        "sha256": "84b5643c842255ca518804cc03f7974c7908a5438dde703fed622e040781a31a"
+      }
+    ],
+    "numeric_profile": {
+      "directory": "/tmp/rdk_lidar_latency_20261110/joint_1794260169785046021/B0",
+      "geometry_jobs": 103,
+      "instrumented_wall_s": 1.368,
+      "hotspots_instrumented_s": {
+        "fixed_yaw_position": 0.496,
+        "line_extraction": 0.4,
+        "deskew": 0.144,
+        "accepted_points": 0.108,
+        "outer_supported_lines": 0.118
+      },
+      "not_a_nonprofiled_latency_measurement": true,
+      "counter_check": {
+        "received": 105,
+        "fitted": 103,
+        "coalesced": 2
+      }
+    },
+    "plot": {
+      "directory": "docs/analysis/localization_latency_20261110",
+      "common_raw_scans_per_phase": 97,
+      "groups": {
+        "Python reader": {
+          "control_count": 2000,
+          "control_ms": {
+            "p50": 1.2113705000000001,
+            "p95": 2.13453255,
+            "max": 4.760567
+          },
+          "common_fit_count": 194,
+          "radar_common_ms": {
+            "p50": 40.398517,
+            "p95": 93.54081889999999,
+            "max": 130.122812
+          }
+        },
+        "Native reader": {
+          "control_count": 2000,
+          "control_ms": {
+            "p50": 1.2445374999999999,
+            "p95": 2.2290482499999995,
+            "max": 5.870104
+          },
+          "common_fit_count": 194,
+          "radar_common_ms": {
+            "p50": 32.2676935,
+            "p95": 52.30450869999998,
+            "max": 70.24724
+          }
+        },
+        "Native + YOLO replay": {
+          "control_count": 2000,
+          "control_ms": {
+            "p50": 1.4146825,
+            "p95": 2.57590285,
+            "max": 5.539231
+          },
+          "common_fit_count": 194,
+          "radar_common_ms": {
+            "p50": 36.981519000000006,
+            "p95": 54.93624814999999,
+            "max": 81.021555
+          }
+        }
+      }
+    },
+    "failed_fixture_start": {
+      "directory": "/tmp/rdk_lidar_latency_20261110/joint_1794260713811192587",
+      "reason": "temporary replay wrapper parsed main arguments in spawn child; fixed main-only frame preparation, no production vision change; excluded as never started valid joint run"
+    },
+    "formal_relay_audit": {
+      "files": [
+        "localization/src/dynamic_pose_relay.cpp",
+        "localization/src/main.cpp",
+        "competition_rescue/competition_map_app.py"
+      ],
+      "direct_native_to_cpp_relay": true,
+      "gui_rate_gate_found": false,
+      "periodic_tx_gate_found": false,
+      "requested_relay_policy": "SCHED_FIFO 10",
+      "actual_relay_UART_not_run": true
+    },
+    "next_decision": "Fixed-primary-yaw XY numerical solver C++ migration asked asynchronously; no solver changes or deployment pending human choice.",
+    "scope": {
+      "bpu_vse_real": true,
+      "camera_jpu_sdk_chassis_uart_gui": false,
+      "physical_accuracy_claim": false,
+      "raw_logs_changed": false,
+      "model_or_vision_code_changed": false
+    }
   }
 }

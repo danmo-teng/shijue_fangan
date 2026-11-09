@@ -1,0 +1,48 @@
+{
+  "common_raw_scan_count_per_phase": 97,
+  "groups": {
+    "Python reader": {
+      "control_count": 2000,
+      "control_ms": {
+        "p50": 1.2113705000000001,
+        "p95": 2.13453255,
+        "max": 4.760567
+      },
+      "common_fit_count": 194,
+      "radar_common_ms": {
+        "p50": 40.398517,
+        "p95": 93.54081889999999,
+        "max": 130.122812
+      }
+    },
+    "Native reader": {
+      "control_count": 2000,
+      "control_ms": {
+        "p50": 1.2445374999999999,
+        "p95": 2.2290482499999995,
+        "max": 5.870104
+      },
+      "common_fit_count": 194,
+      "radar_common_ms": {
+        "p50": 32.2676935,
+        "p95": 52.30450869999998,
+        "max": 70.24724
+      }
+    },
+    "Native + YOLO replay": {
+      "control_count": 2000,
+      "control_ms": {
+        "p50": 1.4146825,
+        "p95": 2.57590285,
+        "max": 5.539231
+      },
+      "common_fit_count": 194,
+      "radar_common_ms": {
+        "p50": 36.981519000000006,
+        "p95": 54.93624814999999,
+        "max": 81.021555
+      }
+    }
+  },
+  "scope": "Recorded sensor data in production worker. Live BPU/VSE uses saved frames; no camera/JPU/SDK/chassis UART/GUI/physical precision validation. All 6000 motion IDs included. Common-scan plot is additional to all-fit tables; coalesced scans not hidden."
+}
