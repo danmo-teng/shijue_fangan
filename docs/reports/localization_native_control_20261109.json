@@ -1,0 +1,1219 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-09",
+  "baseline_commit": "93d6538ccede45cf08b07cb95637b0b069186825",
+  "candidate_note": "Measured uncommitted source/ELF identified by SHA256 below. Delivery commit is the Git commit containing this report; recorded upper_commit remains the actual baseline at measurement.",
+  "accepted_session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_115931_interactive",
+  "source_and_elf_sha256": {
+    "localization/src/motion_runtime.cpp": "c02e8557895c49cab6be0db9733d1af8c8ddc55350d0ca60839a1009826c5e1a",
+    "localization/src/motion_source_native.cpp": "d5ebcb30cd82582bb0fbea8ebbd85aa28019ca34aa56e77c5ddb8a2a84f3faa0",
+    "localization/tools/lidar_yaw_debug/native_motion.py": "520416fe0e0b911300f17551f9ee163fc8392ccf07e687fead331c6b7a92fabb",
+    "localization/tools/lidar_yaw_debug/worker.py": "712c77f6b2c0734c6ec91f2cae0ad9334771121991814955324b85c6d3e34ec1",
+    "localization/build/libmotion_runtime.so": "7f4f265c72721167828c05d03f36e103abb69f61e9ab8e0a9bcf6258766ba406",
+    "localization/include/priority_inheritance_mutex.hpp": "8993f1a7a6d9bea274f934c25a6ca651856d1efd2db0cb1f8723bbf053403876",
+    "localization/src/main.cpp": "6c4d4d22917bd09d211852a00635365e3a560d2c31b694ed2b6c205c6d3d7426",
+    "localization/src/dynamic_pose_relay.cpp": "63131d0f109b8ac2d8406bde726de69e460b499bbff958b17db49510c77990a1",
+    "localization/build/t265_omni_localizer": "79daa2be2f5e0386537cab0c1bbbd3c394f5f3c661449a893447f05aa7acbd3d",
+    "localization/tools/f405_test_client.py": "668e9969773a956d8ae7624dd531ade122b05744772668ab66524d57a4ff8730"
+  },
+  "control": {
+    "run_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_115931_interactive",
+    "method": {
+      "matching": "Original C++ raw UART -> existing MixedStream CRC-valid TYPE07; metadata actual boot_epoch + terminal selected last_wheel_sample_id. Host RX is physical host callback completion, not mapped capture timestamp.",
+      "kernel_timestamp": "Actual SO_TIMESTAMPNS recvmsg ancillary timestamp generated on datagram enqueue; the terminal saved both original realtime stamp and noisy per-packet monotonic estimate.",
+      "uniform_offset": "offset_i=kernel_timestamp_realtime_ns-kernel_enqueue_monotonic_ns. Interval_i=[offset_i-ceil(clock_offset_uncertainty_ns/2)-1,offset_i+ceil(clock_offset_uncertainty_ns/2)+1] in integer nanoseconds. Intersect every interval and use integer midpoint for all packets; no outlier removal.",
+      "offset_assumption": "A common realtime-minus-monotonic offset over this short session, consistent with all collected brackets. This is a local Linux clock mapping, not MCU capture-time qualification or a new runtime gate.",
+      "limits": "Producer RX->kernel is native processing plus local IPC enqueue, not MCU physical acquisition latency; consumer includes Python terminal scheduling/reading/handling. Formal C++ consumer and UART0x16 output are not exercised. Component percentiles are not added; end-to-end computed per original sample.",
+      "retention": "All packets retained. First unique wheel ID separated from later same-ID Pose refresh references.",
+      "probe_implementation_change": "Unlike102643/114804, receive loop only stores original datagram bytes plus existing timing fields in bounded8192-record memory. JSON decoding/encoding/disk occurs after capture. Thus full end-to-end comparison includes observer implementation changes and production changes; do not attribute all improvement to native production code."
+    },
+    "clock_mapping": {
+      "packets": 4692,
+      "all_kernel_stamps_present": true,
+      "offset_intersection_lower_ns": 1794180771015264010,
+      "offset_intersection_upper_ns": 1794180771015265304,
+      "offset_intersection_width_ns": 1294,
+      "uniform_offset_midpoint_ns": 1794180771015264657,
+      "uniform_offset_max_rounding_error_bound_ns": 647,
+      "per_packet_clock_bracket_uncertainty_max_ns": 3008079,
+      "negative_consumer_delays_after_uniform_map": 0
+    },
+    "segments": [
+      {
+        "name": "full",
+        "window_by": "actual Python terminal receive host monotonic, same as previous audits",
+        "start_ns": 16001574985111,
+        "end_ns": 16025378408943,
+        "packets": 4692,
+        "distinct_wheel_endpoints": 2381,
+        "distinct_endpoint_kernel_hz": 99.99499324228542,
+        "distinct_endpoint_terminal_hz": 99.9858253708305,
+        "distinct_endpoint_source_rx_hz": 100.00098756437458,
+        "all_packet_terminal_hz": 197.0724897858467,
+        "missing_selected_ids": [],
+        "first_per_wheel_id": {
+          "producer_physical_rx_to_kernel_enqueue": {
+            "n": 2381,
+            "min_ms": 0.959894,
+            "median_ms": 1.465435,
+            "p95_ms": 2.335725,
+            "p99_ms": 2.8971996,
+            "max_ms": 4.464223,
+            "over_10ms_pct": 0.0
+          },
+          "consumer_kernel_enqueue_to_python_receive": {
+            "n": 2381,
+            "min_ms": 0.039729,
+            "median_ms": 0.153937,
+            "p95_ms": 2.599225,
+            "p99_ms": 7.063685599999998,
+            "max_ms": 15.83704,
+            "over_10ms_pct": 0.16799664006719867
+          },
+          "end_to_end_physical_rx_to_python_receive": {
+            "n": 2381,
+            "min_ms": 1.027998,
+            "median_ms": 1.741165,
+            "p95_ms": 4.582369,
+            "p99_ms": 8.581869999999963,
+            "max_ms": 17.123225,
+            "over_10ms_pct": 0.41999160016799664
+          },
+          "per_sample_sum_residual_ns_max": 0
+        },
+        "all_packets_including_same_wheel_pose_refreshes": {
+          "producer_physical_rx_to_kernel_enqueue": {
+            "n": 4692,
+            "min_ms": 0.959894,
+            "median_ms": 2.402184,
+            "p95_ms": 6.089478150000001,
+            "p99_ms": 8.249814810000002,
+            "max_ms": 11.754253,
+            "over_10ms_pct": 0.3836317135549872
+          },
+          "consumer_kernel_enqueue_to_python_receive": {
+            "n": 4692,
+            "min_ms": 0.023854,
+            "median_ms": 0.147833,
+            "p95_ms": 2.472097199999998,
+            "p99_ms": 6.508273750000008,
+            "max_ms": 19.173744,
+            "over_10ms_pct": 0.1918158567774936
+          },
+          "end_to_end_physical_rx_to_python_receive": {
+            "n": 4692,
+            "min_ms": 1.027998,
+            "median_ms": 2.8849125,
+            "p95_ms": 7.269041749999998,
+            "p99_ms": 10.549058850000002,
+            "max_ms": 26.635796,
+            "over_10ms_pct": 1.3640238704177323
+          },
+          "per_sample_sum_residual_ns_max": 0
+        },
+        "first_kernel_interval": {
+          "n": 2380,
+          "min_ms": 1.756539,
+          "median_ms": 10.0061945,
+          "p95_ms": 11.542710449999998,
+          "p99_ms": 13.963227680000012,
+          "max_ms": 20.430096,
+          "over_10ms_pct": 50.79831932773109
+        },
+        "first_python_receive_interval": {
+          "n": 2380,
+          "min_ms": 0.077292,
+          "median_ms": 9.9825065,
+          "p95_ms": 13.513305299999997,
+          "p99_ms": 17.518754,
+          "max_ms": 24.620506,
+          "over_10ms_pct": 49.03361344537815
+        }
+      },
+      {
+        "name": "lidar",
+        "window_by": "actual Python terminal receive host monotonic, same as previous audits",
+        "start_ns": 16007505407331,
+        "end_ns": 16017512956792,
+        "packets": 1957,
+        "distinct_wheel_endpoints": 1001,
+        "distinct_endpoint_kernel_hz": 99.9983883459747,
+        "distinct_endpoint_terminal_hz": 100.01110245250767,
+        "distinct_endpoint_source_rx_hz": 100.00459352099466,
+        "all_packet_terminal_hz": 195.60190056586686,
+        "missing_selected_ids": [],
+        "first_per_wheel_id": {
+          "producer_physical_rx_to_kernel_enqueue": {
+            "n": 1001,
+            "min_ms": 1.078894,
+            "median_ms": 1.528727,
+            "p95_ms": 2.442183,
+            "p99_ms": 2.996558,
+            "max_ms": 4.464223,
+            "over_10ms_pct": 0.0
+          },
+          "consumer_kernel_enqueue_to_python_receive": {
+            "n": 1001,
+            "min_ms": 0.081354,
+            "median_ms": 0.197979,
+            "p95_ms": 3.914724,
+            "p99_ms": 7.465677,
+            "max_ms": 15.83704,
+            "over_10ms_pct": 0.2997002997002997
+          },
+          "end_to_end_physical_rx_to_python_receive": {
+            "n": 1001,
+            "min_ms": 1.188956,
+            "median_ms": 1.897581,
+            "p95_ms": 5.83145,
+            "p99_ms": 9.410403,
+            "max_ms": 17.123225,
+            "over_10ms_pct": 0.5994005994005994
+          },
+          "per_sample_sum_residual_ns_max": 0
+        },
+        "all_packets_including_same_wheel_pose_refreshes": {
+          "producer_physical_rx_to_kernel_enqueue": {
+            "n": 1957,
+            "min_ms": 1.078894,
+            "median_ms": 2.53985,
+            "p95_ms": 6.438411799999995,
+            "p99_ms": 8.20259100000001,
+            "max_ms": 11.639712,
+            "over_10ms_pct": 0.5109862033725089
+          },
+          "consumer_kernel_enqueue_to_python_receive": {
+            "n": 1957,
+            "min_ms": 0.023854,
+            "median_ms": 0.19423,
+            "p95_ms": 3.4484579999999947,
+            "p99_ms": 7.200431040000005,
+            "max_ms": 19.173744,
+            "over_10ms_pct": 0.3065917220235054
+          },
+          "end_to_end_physical_rx_to_python_receive": {
+            "n": 1957,
+            "min_ms": 1.188956,
+            "median_ms": 3.106704,
+            "p95_ms": 7.875463999999996,
+            "p99_ms": 11.008104040000001,
+            "max_ms": 26.635796,
+            "over_10ms_pct": 1.788451711803781
+          },
+          "per_sample_sum_residual_ns_max": 0
+        },
+        "first_kernel_interval": {
+          "n": 1000,
+          "min_ms": 1.756539,
+          "median_ms": 10.0160895,
+          "p95_ms": 11.776792749999998,
+          "p99_ms": 15.011078419999997,
+          "max_ms": 20.430096,
+          "over_10ms_pct": 51.9
+        },
+        "first_python_receive_interval": {
+          "n": 1000,
+          "min_ms": 0.077292,
+          "median_ms": 9.982048500000001,
+          "p95_ms": 14.466746349999996,
+          "p99_ms": 17.92708483,
+          "max_ms": 24.620506,
+          "over_10ms_pct": 49.2
+        }
+      }
+    ],
+    "baseline_102643_comparison": [
+      {
+        "segment": "full",
+        "endpoint": "same-epoch native CRC-valid wheel physical hostRX to first Python terminal receipt, each wheelID once",
+        "old_n": 2360,
+        "new_n": 2381,
+        "old_median_ms": 5.2965824999999995,
+        "new_median_ms": 1.741165,
+        "old_p95_ms": 19.519345499999964,
+        "new_p95_ms": 4.582369,
+        "old_p99_ms": 28.509551279999997,
+        "new_p99_ms": 8.581869999999963,
+        "old_max_ms": 41.451416,
+        "new_max_ms": 17.123225,
+        "old_over10ms_pct": 20.76271186440678,
+        "new_over10ms_pct": 0.41999160016799664,
+        "p95_reduction_percent": 76.5239618305849
+      },
+      {
+        "segment": "lidar",
+        "endpoint": "same-epoch native CRC-valid wheel physical hostRX to first Python terminal receipt, each wheelID once",
+        "old_n": 1001,
+        "new_n": 1001,
+        "old_median_ms": 8.836,
+        "new_median_ms": 1.897581,
+        "old_p95_ms": 24.428291,
+        "new_p95_ms": 5.83145,
+        "old_p99_ms": 32.114624,
+        "new_p99_ms": 9.410403,
+        "old_max_ms": 41.451416,
+        "new_max_ms": 17.123225,
+        "old_over10ms_pct": 42.65734265734265,
+        "new_over10ms_pct": 0.5994005994005994,
+        "p95_reduction_percent": 76.12829321543614
+      }
+    ],
+    "integrity": {
+      "control_received": 4692,
+      "terminal_probe": {
+        "records": 4692,
+        "overflow": 0,
+        "capacity": 8192,
+        "recording": "raw bytes in bounded memory during measurement; JSON/disk after receive window"
+      },
+      "control_log_count": 4692,
+      "control_log_equals_terminal": true,
+      "first_packet_id": 0,
+      "last_packet_id": 4691,
+      "nonconsecutive_packet_ids": 0,
+      "unmatched_wheel_ids": [],
+      "raw_uart_parser": {
+        "uart_rx_bytes": 553750,
+        "legacy_frames": 5412,
+        "extended_frames": 4975,
+        "legacy_ack4": 0,
+        "mixed_crc_errors": 0,
+        "mixed_malformed": 0,
+        "discarded_bytes": 0,
+        "partial_timeouts": 0,
+        "buffer_overflows": 0
+      },
+      "native_feedback": {
+        "enabled": true,
+        "connected": false,
+        "decode_errors": 0,
+        "motion_input_drops": 0,
+        "error": null,
+        "conversion": "original_forward_motion_event",
+        "frames": 4887,
+        "gyro_frames": 2442,
+        "identity_present": true,
+        "timed_yaw_seen": true,
+        "wheel_frames": 2442
+      },
+      "valid07_08_through_last_consumed": 4884,
+      "motion_feedback_records": 4884,
+      "missing_valid07_08_in_runtime": [],
+      "rx_timestamp_mismatches": 0,
+      "shutdown_tail_count": 88,
+      "shutdown_tail_types": {
+        "7": 44,
+        "8": 43,
+        "6": 1
+      },
+      "tap_status": {
+        "timestamp_monotonic_ns": 16026419935895,
+        "event": "motion_feedback_tap_status",
+        "data": {
+          "eligible_frames": 4975,
+          "sent_frames": 4887,
+          "dropped_frames": 88,
+          "filtered_frames": 0,
+          "send_errors": 1,
+          "connection_error": 0,
+          "last_error": 32,
+          "connected": false
+        }
+      },
+      "tail_equals_tap_drop": true,
+      "direct_output_sent": 4692,
+      "direct_output_drops": 0,
+      "native_logging": {
+        "control_pose": {
+          "dropped": 0,
+          "failed": false
+        },
+        "events": {
+          "dropped": 0,
+          "failed": false
+        },
+        "motion_feedback": {
+          "dropped": 0,
+          "failed": false
+        },
+        "pose_motion": {
+          "dropped": 0,
+          "failed": false
+        }
+      },
+      "worker_logging": {
+        "queue_capacity": 4096,
+        "queue_pending": 0,
+        "queue_peak": 8,
+        "history_records_written": 103,
+        "snapshot_writes": 1,
+        "snapshots_coalesced": 0,
+        "dropped": 0,
+        "error": null,
+        "flush_interval_ms": 100,
+        "execution": "spawn_process_original_async_writer",
+        "writer_pid": 82814,
+        "transport_queue_capacity": 4096,
+        "transport_queue_pending": 0,
+        "transport_batch_limit": 128,
+        "sender_stopped": true,
+        "transport_dropped": 0,
+        "writer_dropped": 0,
+        "final_receipt": true
+      },
+      "chassis_diagnostic_logging": {
+        "queue_capacity": 4096,
+        "queue_pending": 0,
+        "queue_peak": 431,
+        "history_records_written": 31113,
+        "snapshot_writes": 209,
+        "snapshots_coalesced": 206,
+        "dropped": 0,
+        "error": null,
+        "flush_interval_ms": 100,
+        "execution": "spawn_process_original_async_writer",
+        "writer_pid": 82795,
+        "transport_queue_capacity": 4096,
+        "transport_queue_pending": 0,
+        "transport_batch_limit": 128,
+        "sender_stopped": true,
+        "transport_dropped": 0,
+        "writer_dropped": 0,
+        "final_receipt": true
+      },
+      "python_observer_native_transport_rx_drops_max": 0,
+      "logging_healthy": true,
+      "motion_stream_complete": true,
+      "session_complete": {
+        "owner": "t265_f407_motion_map",
+        "complete": true,
+        "session_index": 27,
+        "accuracy_verified": false
+      },
+      "diagnostic_csv_status": {
+        "timestamp_monotonic_ns": 16026419912270,
+        "event": "diagnostic_csv_status",
+        "data": {
+          "localization_dropped_rows": 0,
+          "localization_io_failed": false,
+          "raw_pose_dropped_rows": 0,
+          "raw_pose_io_failed": false,
+          "raw_json_write_errors": 0,
+          "uart_raw_dropped_rows": 0,
+          "uart_raw_io_failed": false,
+          "raw_json_coalesced": 0
+        }
+      },
+      "vision_logging_status": {
+        "queue_capacity": 1024,
+        "pending_records": 0,
+        "pending_snapshots": 0,
+        "records_written": 171,
+        "snapshots_written": 158,
+        "snapshots_coalesced": 29,
+        "dropped": 0,
+        "error": null,
+        "close_timed_out": false,
+        "incomplete": false
+      }
+    },
+    "actual": {
+      "motion_execution": "native_cpp_owner",
+      "scheduling": {
+        "actual_policy": 1,
+        "actual_priority": 10,
+        "applied": true,
+        "error": null,
+        "mutex_priority_inheritance": true,
+        "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+        "mutex_protocol_error": null,
+        "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+        "query_error": null,
+        "requested": true,
+        "requested_policy": "SCHED_FIFO",
+        "requested_priority": 10
+      },
+      "uart_tx_mutex_protocol": {
+        "timestamp_monotonic_ns": 16000926846043,
+        "event": "uart_tx_mutex_protocol",
+        "data": {
+          "mutex_priority_inheritance": true,
+          "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+          "mutex_protocol_error": null,
+          "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT"
+        }
+      },
+      "formal_control_relay_exercised_in_this_hardware_run": false,
+      "f405_identity": {
+        "version": 1,
+        "type": 2,
+        "sequence": 51480,
+        "nonce": 10559587651031997973,
+        "epoch_fault": 0,
+        "boot_epoch": "38613807ded2ea86d76999b3175c1879",
+        "reference_epoch": 1,
+        "capabilities": 991,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "protocol_major": 1,
+        "protocol_minor": 3,
+        "tick_hz": 1000000,
+        "uart_baud": 921600,
+        "clock_flags": 3,
+        "drift_bound_ppm": 4294967295,
+        "mcu_uid": "002c00203335470434383831",
+        "device_idcode": 269444115,
+        "cpu_id": 1091551809,
+        "flash_kib": 1024,
+        "firmware_id": "6839200f0d0354e8decaa242632e7b637e3d709e349ce3164844a9bf39543c21",
+        "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+        "source_dirty": 1,
+        "max_payload": 160,
+        "receive_monotonic_ns": 16000936943528,
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "epoch_valid": true,
+        "interface_compatible": true
+      },
+      "lower_mode": "NormalDebug",
+      "lower_service": "MOTIONDEBUG",
+      "sdk_session_id": "e79e3918e4a44885a726b6b25dcea534",
+      "upper_commit": "93d6538ccede45cf08b07cb95637b0b069186825",
+      "source_sha256": {
+        "localization/src/motion_runtime.cpp": "c02e8557895c49cab6be0db9733d1af8c8ddc55350d0ca60839a1009826c5e1a",
+        "localization/src/motion_source_native.cpp": "d5ebcb30cd82582bb0fbea8ebbd85aa28019ca34aa56e77c5ddb8a2a84f3faa0",
+        "localization/tools/lidar_yaw_debug/native_motion.py": "520416fe0e0b911300f17551f9ee163fc8392ccf07e687fead331c6b7a92fabb",
+        "localization/tools/lidar_yaw_debug/worker.py": "712c77f6b2c0734c6ec91f2cae0ad9334771121991814955324b85c6d3e34ec1",
+        "localization/build/libmotion_runtime.so": "7f4f265c72721167828c05d03f36e103abb69f61e9ab8e0a9bcf6258766ba406",
+        "localization/include/priority_inheritance_mutex.hpp": "8993f1a7a6d9bea274f934c25a6ca651856d1efd2db0cb1f8723bbf053403876",
+        "localization/src/main.cpp": "6c4d4d22917bd09d211852a00635365e3a560d2c31b694ed2b6c205c6d3d7426",
+        "localization/src/dynamic_pose_relay.cpp": "63131d0f109b8ac2d8406bde726de69e460b499bbff958b17db49510c77990a1",
+        "localization/build/t265_omni_localizer": "79daa2be2f5e0386537cab0c1bbbd3c394f5f3c661449a893447f05aa7acbd3d",
+        "localization/tools/f405_test_client.py": "668e9969773a956d8ae7624dd531ade122b05744772668ab66524d57a4ff8730"
+      }
+    },
+    "sensors": {
+      "SDK_results": 2475,
+      "SDK_true": 2475,
+      "SDK_false": 0,
+      "SDK_true_hz": 99.9073492357184,
+      "raw_pose_rows": 4864,
+      "raw_pose_hz": 199.5742979514162,
+      "raw_pose_missing_frames": 0,
+      "raw_pose_callback_drop_max": 0,
+      "vision_performance": {
+        "timestamp_monotonic_ns": 16026555412069,
+        "event": "vision_performance",
+        "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+        "model_family": "YOLO26",
+        "warmup_seconds": 5,
+        "metric": "unique frames after tracking/ROI and planner.set_vision",
+        "fps_1s_including_warmup": [
+          39,
+          41,
+          31,
+          36,
+          37,
+          34,
+          30,
+          35,
+          37,
+          33,
+          31,
+          36,
+          40,
+          41,
+          39,
+          41,
+          43,
+          41,
+          39
+        ],
+        "measurement_seconds": 14,
+        "frames_after_warmup": 520,
+        "mean_fps": 37.142857142857146,
+        "min_fps_1s": 30,
+        "stable_30fps": false
+      },
+      "vision_errors": []
+    },
+    "scope": {
+      "motor_commands": 0,
+      "control_forwarded_to_uart": false,
+      "entry_returncode": 0,
+      "vision_returncode": 0,
+      "replay_process_returncode": 0,
+      "historical_lidar": true,
+      "physical_field_accuracy_verified": false,
+      "clean_device_internal_state_verified": false,
+      "scans_received": 98,
+      "scans_processed": 98,
+      "scan_coalesced": 0,
+      "line_geometry": {
+        "backend": "native_streaming_ransac",
+        "load_error": null,
+        "geometry_policy_changed": false,
+        "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+        "extraction_load_error": null,
+        "extraction_calls": 98,
+        "extraction_fallbacks": 0,
+        "extraction_last_error": null
+      },
+      "reader_stats": {
+        "rx_batches": 3909,
+        "rx_bytes": 169360,
+        "scan_packets": 3601,
+        "status_packets": 5,
+        "ack_packets": 2,
+        "crc_errors": 2,
+        "timing_rejections": 3,
+        "sector_rejections": 1,
+        "scans_emitted": 98
+      }
+    },
+    "conclusion": [
+      "Stationary joint hardware input and kernel-enqueue producer latency verified against original CRC-valid native UART, complete logs and actual100Hz endpoints.",
+      "Probe capture recording was changed to raw bounded memory, so end-to-end improvement cannot all be attributed to production migration. All packets/slow samples retained, no control queue enlargement.",
+      "No UART0x16 or motors exercised, no NormalRun formal whole-match/motion accuracy or hard-real-time deadline guarantee. Host SDKtrue is not per-sample device fusion ACK."
+    ]
+  },
+  "sensors": {
+    "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_115931_interactive",
+    "sdk_session_id": "e79e3918e4a44885a726b6b25dcea534",
+    "upper_commit": "93d6538ccede45cf08b07cb95637b0b069186825",
+    "source_fingerprints": {
+      "localization/src/motion_runtime.cpp": {
+        "recorded": "c02e8557895c49cab6be0db9733d1af8c8ddc55350d0ca60839a1009826c5e1a",
+        "current": "c02e8557895c49cab6be0db9733d1af8c8ddc55350d0ca60839a1009826c5e1a",
+        "matches": true
+      },
+      "localization/src/motion_source_native.cpp": {
+        "recorded": "d5ebcb30cd82582bb0fbea8ebbd85aa28019ca34aa56e77c5ddb8a2a84f3faa0",
+        "current": "d5ebcb30cd82582bb0fbea8ebbd85aa28019ca34aa56e77c5ddb8a2a84f3faa0",
+        "matches": true
+      },
+      "localization/tools/lidar_yaw_debug/native_motion.py": {
+        "recorded": "520416fe0e0b911300f17551f9ee163fc8392ccf07e687fead331c6b7a92fabb",
+        "current": "520416fe0e0b911300f17551f9ee163fc8392ccf07e687fead331c6b7a92fabb",
+        "matches": true
+      },
+      "localization/tools/lidar_yaw_debug/worker.py": {
+        "recorded": "712c77f6b2c0734c6ec91f2cae0ad9334771121991814955324b85c6d3e34ec1",
+        "current": "712c77f6b2c0734c6ec91f2cae0ad9334771121991814955324b85c6d3e34ec1",
+        "matches": true
+      },
+      "localization/build/libmotion_runtime.so": {
+        "recorded": "7f4f265c72721167828c05d03f36e103abb69f61e9ab8e0a9bcf6258766ba406",
+        "current": "7f4f265c72721167828c05d03f36e103abb69f61e9ab8e0a9bcf6258766ba406",
+        "matches": true
+      },
+      "localization/include/priority_inheritance_mutex.hpp": {
+        "recorded": "8993f1a7a6d9bea274f934c25a6ca651856d1efd2db0cb1f8723bbf053403876",
+        "current": "8993f1a7a6d9bea274f934c25a6ca651856d1efd2db0cb1f8723bbf053403876",
+        "matches": true
+      },
+      "localization/src/main.cpp": {
+        "recorded": "6c4d4d22917bd09d211852a00635365e3a560d2c31b694ed2b6c205c6d3d7426",
+        "current": "6c4d4d22917bd09d211852a00635365e3a560d2c31b694ed2b6c205c6d3d7426",
+        "matches": true
+      },
+      "localization/src/dynamic_pose_relay.cpp": {
+        "recorded": "63131d0f109b8ac2d8406bde726de69e460b499bbff958b17db49510c77990a1",
+        "current": "63131d0f109b8ac2d8406bde726de69e460b499bbff958b17db49510c77990a1",
+        "matches": true
+      },
+      "localization/build/t265_omni_localizer": {
+        "recorded": "79daa2be2f5e0386537cab0c1bbbd3c394f5f3c661449a893447f05aa7acbd3d",
+        "current": "79daa2be2f5e0386537cab0c1bbbd3c394f5f3c661449a893447f05aa7acbd3d",
+        "matches": true
+      },
+      "localization/tools/f405_test_client.py": {
+        "recorded": "668e9969773a956d8ae7624dd531ade122b05744772668ab66524d57a4ff8730",
+        "current": "668e9969773a956d8ae7624dd531ade122b05744772668ab66524d57a4ff8730",
+        "matches": true
+      }
+    },
+    "phase_ns": {
+      "start": 16007505407331,
+      "end": 16017512956792
+    },
+    "sdk": {
+      "calls": 2475,
+      "results": 2475,
+      "true": 2475,
+      "false": 0,
+      "unique_sample_ids": 2475,
+      "missing_pair_ids": [],
+      "wrong_rx_ids": [],
+      "unbracketed_ids": [],
+      "zero_input_samples": 2475,
+      "capture_qualified_samples": 0,
+      "coalesced": 2,
+      "rejected": [
+        {
+          "reason": "no_gyro_at_interval_start",
+          "sample_id": 968355
+        }
+      ],
+      "scopes": {
+        "all": {
+          "rate_hz": 99.90502371027432,
+          "wheel_rx_to_sdk_return_ms": {
+            "n": 2475,
+            "median": 6.929323,
+            "p95": 10.168784899999999,
+            "p99": 12.864031919999995,
+            "max": 24.85838
+          },
+          "paired_rx_to_sdk_return_ms": {
+            "n": 2475,
+            "median": 1.097207,
+            "p95": 2.3200382,
+            "p99": 5.467353999999981,
+            "max": 11.599609
+          },
+          "sdk_duration_ms": {
+            "n": 2475,
+            "median": 0.385083,
+            "p95": 1.5077058999999968,
+            "p99": 4.276908839999934,
+            "max": 10.918026
+          }
+        },
+        "lidar_load": {
+          "rate_hz": 99.83606779617993,
+          "wheel_rx_to_sdk_return_ms": {
+            "n": 999,
+            "median": 4.808702,
+            "p95": 10.557709699999997,
+            "p99": 12.732420999999997,
+            "max": 24.85838
+          },
+          "paired_rx_to_sdk_return_ms": {
+            "n": 999,
+            "median": 1.180206,
+            "p95": 2.8112786999999972,
+            "p99": 6.449343519999997,
+            "max": 11.599609
+          },
+          "sdk_duration_ms": {
+            "n": 999,
+            "median": 0.427166,
+            "p95": 2.0482723,
+            "p99": 5.269614319999994,
+            "max": 10.918026
+          }
+        },
+        "lidar_load_after_2s": {
+          "rate_hz": 99.80694190639991,
+          "wheel_rx_to_sdk_return_ms": {
+            "n": 799,
+            "median": 4.294827,
+            "p95": 9.816506599999997,
+            "p99": 12.385569319999998,
+            "max": 14.136521
+          },
+          "paired_rx_to_sdk_return_ms": {
+            "n": 799,
+            "median": 1.171623,
+            "p95": 2.6897007999999953,
+            "p99": 5.449081479999998,
+            "max": 11.599609
+          },
+          "sdk_duration_ms": {
+            "n": 799,
+            "median": 0.413624,
+            "p95": 2.009121399999998,
+            "p99": 4.213039499999992,
+            "max": 10.918026
+          }
+        }
+      }
+    },
+    "pose": {
+      "rows": 4864,
+      "first_frame": 0,
+      "last_frame": 4863,
+      "frame_gaps": [],
+      "receive_hz": 199.5742979514162,
+      "capture_hz": 199.57238942263675,
+      "callback_queue_drops": 0,
+      "confidence": {
+        "2": 4864
+      },
+      "mapper_confidence": {
+        "0": 4864
+      },
+      "receive_interval_ms": {
+        "n": 4863,
+        "median": 5.007118,
+        "p95": 6.242032399999999,
+        "p99": 9.260825000000006,
+        "max": 16.235935
+      },
+      "processing_ms": {
+        "n": 4864,
+        "median": 0.6482075,
+        "p95": 1.6016479999999977,
+        "p99": 5.045407669999985,
+        "max": 75.946641
+      },
+      "processing_lidar_load_ms": {
+        "n": 1997,
+        "median": 0.646749,
+        "p95": 1.8569635999999976,
+        "p99": 4.226337679999997,
+        "max": 10.904776
+      },
+      "finite": true,
+      "step_mm": {
+        "n": 4863,
+        "median": 0.02389736425478726,
+        "p95": 0.15542761002893682,
+        "p99": 0.2374864988856644,
+        "max": 2.210956696200623
+      },
+      "axis_range_mm": [
+        0.32243557507172227,
+        2.4147305375663564,
+        0.40828292185324244
+      ]
+    },
+    "geometry": {
+      "received": 98,
+      "logged": 98,
+      "computed": 98,
+      "unique_ids": 98,
+      "missing_ids": 0,
+      "coalesced": 0,
+      "queue_drops": 0,
+      "accepted_xy_fixes": 0,
+      "ranks": {
+        "0": 98
+      },
+      "reasons": {
+        "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 98
+      },
+      "backend": {
+        "backend": "native_streaming_ransac",
+        "load_error": null,
+        "geometry_policy_changed": false,
+        "extraction_backend": "cpp_v1_numpy_rng_sort_tls",
+        "extraction_load_error": null,
+        "extraction_calls": 98,
+        "extraction_fallbacks": 0,
+        "extraction_last_error": null
+      },
+      "ms": {
+        "compute_ms": {
+          "n": 98,
+          "median": 41.437212,
+          "p95": 56.30863049999999,
+          "p99": 67.21578448,
+          "max": 67.443653
+        },
+        "compute_thread_cpu_ms": {
+          "n": 98,
+          "median": 14.7829795,
+          "p95": 16.5197167,
+          "p99": 17.19130024,
+          "max": 17.466497
+        },
+        "snapshot_ms": {
+          "n": 98,
+          "median": 5.2690135,
+          "p95": 10.49905815,
+          "p99": 13.761332940000008,
+          "max": 20.993845
+        },
+        "deskew_ms": {
+          "n": 98,
+          "median": 4.064598,
+          "p95": 7.0996318999999986,
+          "p99": 13.01514421,
+          "max": 13.580855
+        },
+        "fit_ms": {
+          "n": 98,
+          "median": 10.732630499999999,
+          "p95": 20.44527339999999,
+          "p99": 22.895403200000004,
+          "max": 23.988632000000003
+        },
+        "geometry_compute_cpu_ms": {
+          "n": 98,
+          "median": 12.053833000000001,
+          "p95": 15.209764099999997,
+          "p99": 16.16511499,
+          "max": 16.277958
+        },
+        "geometry_roundtrip_ms": {
+          "n": 98,
+          "median": 27.2911485,
+          "p95": 41.048887199999996,
+          "p99": 45.12909123000001,
+          "max": 51.08076
+        }
+      },
+      "reader": {
+        "lidar_connected": false,
+        "lidar_error": null,
+        "lidar_open_attempts": 1,
+        "scans_received": 98,
+        "scan_queue_drops": 0,
+        "reader_stats": {
+          "rx_batches": 3909,
+          "rx_bytes": 169360,
+          "scan_packets": 3601,
+          "status_packets": 5,
+          "ack_packets": 2,
+          "crc_errors": 2,
+          "timing_rejections": 3,
+          "sector_rejections": 1,
+          "scans_emitted": 98
+        },
+        "receiver_pid": 82829,
+        "reader_logging_healthy": true
+      }
+    },
+    "vision": {
+      "performance": [
+        {
+          "timestamp_monotonic_ns": 16026555412069,
+          "event": "vision_performance",
+          "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+          "model_family": "YOLO26",
+          "warmup_seconds": 5,
+          "metric": "unique frames after tracking/ROI and planner.set_vision",
+          "fps_1s_including_warmup": [
+            39,
+            41,
+            31,
+            36,
+            37,
+            34,
+            30,
+            35,
+            37,
+            33,
+            31,
+            36,
+            40,
+            41,
+            39,
+            41,
+            43,
+            41,
+            39
+          ],
+          "measurement_seconds": 14,
+          "frames_after_warmup": 520,
+          "mean_fps": 37.142857142857146,
+          "min_fps_1s": 30,
+          "stable_30fps": false
+        }
+      ],
+      "replay_closed": [
+        {
+          "timestamp_monotonic_ns": 16025061128872,
+          "event": "vision_replay_closed",
+          "dropped_frames": 2,
+          "error": null,
+          "pending_events": 0,
+          "event_overflow_count": 0,
+          "manifest": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_115931_interactive/vision_replay_manifest.json"
+        }
+      ],
+      "logging": {
+        "queue_capacity": 1024,
+        "pending_records": 0,
+        "pending_snapshots": 0,
+        "records_written": 171,
+        "snapshots_written": 158,
+        "snapshots_coalesced": 29,
+        "dropped": 0,
+        "error": null,
+        "close_timed_out": false,
+        "incomplete": false
+      },
+      "detection_records": 165,
+      "frames_increasing": true,
+      "ms": {
+        "total_ms": {
+          "n": 165,
+          "median": 23.051550999298343,
+          "p95": 32.14296259975526,
+          "p99": 37.74574752031184,
+          "max": 45.627643001353135
+        },
+        "inference_ms": {
+          "n": 165,
+          "median": 14.996187001088401,
+          "p95": 20.893170198905864,
+          "p99": 24.471386519362557,
+          "max": 36.11940700102423
+        },
+        "capture_to_publish": {
+          "n": 165,
+          "median": 69.49410900051589,
+          "p95": 98.98250820006065,
+          "p99": 105.9047534007549,
+          "max": 131.61347800087242
+        },
+        "previous_log_write": {
+          "n": 165,
+          "median": 0.4859159998886753,
+          "p95": 1.0257813995849558,
+          "p99": 2.3589212390652383,
+          "max": 4.231203000017558
+        }
+      }
+    },
+    "health": {
+      "session_complete": {
+        "owner": "t265_f407_motion_map",
+        "complete": true,
+        "session_index": 27,
+        "accuracy_verified": false
+      },
+      "raw_uart_parser": {
+        "uart_rx_bytes": 553750,
+        "legacy_frames": 5412,
+        "extended_frames": 4975,
+        "legacy_ack4": 0,
+        "mixed_crc_errors": 0,
+        "mixed_malformed": 0,
+        "discarded_bytes": 0,
+        "partial_timeouts": 0,
+        "buffer_overflows": 0
+      },
+      "raw_uart_tail_bytes": 2,
+      "tap_missing": {
+        "count": 87,
+        "before": 0,
+        "interior": 0,
+        "after": 87
+      },
+      "final_csv_tap_events": [
+        {
+          "timestamp_monotonic_ns": 16026419912270,
+          "event": "diagnostic_csv_status",
+          "data": {
+            "localization_dropped_rows": 0,
+            "localization_io_failed": false,
+            "raw_pose_dropped_rows": 0,
+            "raw_pose_io_failed": false,
+            "raw_json_write_errors": 0,
+            "uart_raw_dropped_rows": 0,
+            "uart_raw_io_failed": false,
+            "raw_json_coalesced": 0
+          }
+        },
+        {
+          "timestamp_monotonic_ns": 16026419935895,
+          "event": "motion_feedback_tap_status",
+          "data": {
+            "eligible_frames": 4975,
+            "sent_frames": 4887,
+            "dropped_frames": 88,
+            "filtered_frames": 0,
+            "send_errors": 1,
+            "connection_error": 0,
+            "last_error": 32,
+            "connected": false
+          }
+        }
+      ],
+      "logging": {
+        "native_logging": {
+          "control_pose": {
+            "dropped": 0,
+            "failed": false
+          },
+          "events": {
+            "dropped": 0,
+            "failed": false
+          },
+          "motion_feedback": {
+            "dropped": 0,
+            "failed": false
+          },
+          "pose_motion": {
+            "dropped": 0,
+            "failed": false
+          }
+        },
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 8,
+          "history_records_written": 103,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100,
+          "execution": "spawn_process_original_async_writer",
+          "writer_pid": 82814,
+          "transport_queue_capacity": 4096,
+          "transport_queue_pending": 0,
+          "transport_batch_limit": 128,
+          "sender_stopped": true,
+          "transport_dropped": 0,
+          "writer_dropped": 0,
+          "final_receipt": true
+        },
+        "reader_logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 27,
+          "history_records_written": 4011,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        }
+      },
+      "motion_scheduling": {
+        "actual_policy": 1,
+        "actual_priority": 10,
+        "applied": true,
+        "error": null,
+        "mutex_priority_inheritance": true,
+        "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+        "mutex_protocol_error": null,
+        "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+        "query_error": null,
+        "requested": true,
+        "requested_policy": "SCHED_FIFO",
+        "requested_priority": 10
+      },
+      "native_motion_error": null,
+      "uart_tx_mutex_startup": [
+        {
+          "timestamp_monotonic_ns": 16000926846043,
+          "event": "uart_tx_mutex_protocol",
+          "data": {
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT"
+          }
+        }
+      ],
+      "motion_states": {
+        "IDLE": 414
+      },
+      "faults": {
+        "0": 414
+      },
+      "noactions": {
+        "motor_commands": 0,
+        "control_forwarded_to_uart": false,
+        "command_file_exists": false,
+        "motion_commands_log_exists": false,
+        "entry_returncode": 0,
+        "vision_returncode": 0,
+        "replay_process_returncode": 0
+      },
+      "chassis_diagnostic_logging": {
+        "queue_capacity": 4096,
+        "queue_pending": 0,
+        "queue_peak": 431,
+        "history_records_written": 31113,
+        "snapshot_writes": 209,
+        "snapshots_coalesced": 206,
+        "dropped": 0,
+        "error": null,
+        "flush_interval_ms": 100,
+        "execution": "spawn_process_original_async_writer",
+        "writer_pid": 82795,
+        "transport_queue_capacity": 4096,
+        "transport_queue_pending": 0,
+        "transport_batch_limit": 128,
+        "sender_stopped": true,
+        "transport_dropped": 0,
+        "writer_dropped": 0,
+        "final_receipt": true
+      }
+    },
+    "limitations": [
+      "Stationary measured inputs are all zero; not dynamic sign/scale/slip or precision proof.",
+      "Historical lidar plus synthetic reference: rank0 solves are compute coverage, not accepted XY positioning.",
+      "Host physical RX to SDK return excludes uncalibrated sensor/MCU internal acquisition delay; API true is not device fusion ACK.",
+      "FIFO10 and PI are not hard real-time guarantees."
+    ]
+  },
+  "same_probe_first_native_comparison": {
+    "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_112218_interactive",
+    "comparison": [
+      {
+        "segment": "full",
+        "old_first_p95_ms": 19.519345499999964,
+        "new_first_p95_ms": 5.195011399999999,
+        "p95_reduction_percent": 73.38531970756904,
+        "old_first_over10_pct": 20.76271186440678,
+        "new_first_over10_pct": 1.0096760622633572
+      },
+      {
+        "segment": "lidar",
+        "old_first_p95_ms": 24.428291,
+        "new_first_p95_ms": 6.265077949999997,
+        "p95_reduction_percent": 74.35318766261628,
+        "old_first_over10_pct": 42.65734265734265,
+        "new_first_over10_pct": 1.6
+      }
+    ],
+    "note": "102643 versus112218 used the same old Python terminal recorder. Final115931 also changes diagnostic logger and terminal recording; final full end-to-end gain is not solely attributable to native production code."
+  },
+  "intermediate_sessions": [
+    {
+      "session": "20261109_112131_interactive",
+      "accepted": false,
+      "reason": "Inline harness stdin/spawn import failure; not code acceptance."
+    },
+    {
+      "session": "20261109_112218_interactive",
+      "accepted_complete": true,
+      "role": "First native owner, same terminal recorder as baseline."
+    },
+    {
+      "session": "20261109_113228_interactive",
+      "accepted_complete": true,
+      "role": "PI/fair-interleave candidate, no significant PI-specific P95 gain claimed."
+    },
+    {
+      "session": "20261109_113746_interactive",
+      "accepted_complete": true,
+      "role": "SO_TIMESTAMPNS separates producer from terminal scheduling."
+    },
+    {
+      "session": "20261109_114804_interactive",
+      "accepted": false,
+      "session_complete": false,
+      "reason": "Original passive Python observer lost76 containers; retained unchanged, not a complete acceptance run."
+    },
+    {
+      "session": "20261109_115931_interactive",
+      "accepted_complete": true,
+      "role": "Final native owner, process diagnostic logging, bounded in-memory terminal measurement."
+    }
+  ],
+  "validation_scope": {
+    "hardware_stationary": true,
+    "actual_f405_sdk_yolo": true,
+    "historical_lidar_pty": true,
+    "synthetic_field_reference": true,
+    "motors_started": false,
+    "formal_chassis_0x16_sent": false,
+    "physical_accuracy_verified": false,
+    "all_10ms_deadlines_verified": false,
+    "PREEMPT_RT": false,
+    "raw_logs_modified": false,
+    "logs_cleaned": false,
+    "formal_relay_test": "Existing C++ test: actual receive thread and original frame through fake UART, RT-on FIFO10 and RT-off normal policy both passed."
+  }
+}

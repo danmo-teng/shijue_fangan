@@ -164,7 +164,7 @@ class DynamicFence:
             self.last_initial_scan_id=scan.scan_id
             # Freeze support briefly. Geometry and even NumPy array creation
             # must not hold up the independent 100Hz motion ingestion path.
-            poses=list(self.poses);yaws=list(self.yaws)
+            poses,yaws=self._initial_support(scan)
             if not len(poses) or not len(yaws):return dict(status='WAITING_MOTION_REFERENCE')
             state['attempts']+=1
         poses=np.array(poses);yaws=np.array(yaws)
@@ -218,6 +218,9 @@ class DynamicFence:
                 state['status']='GLOBAL_SYMMETRIC_FIX'
             return dict(state,scan_id=scan.scan_id,reference_ns=scan.reference_ns,accuracy_verified=False,
                 reference=dict(self.reference) if self.reference else None)
+
+    def _initial_support(self,scan):
+        return list(self.poses),list(self.yaws)
 
     def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False,round_token=None):
         """Known field reference; legacy fixture defaults unchanged, formal start explicit."""
@@ -374,10 +377,7 @@ class DynamicFence:
             # Subtracting the frozen pre-fit prior would apply its revision
             # twice to the vehicle position. No sensor-age decision is made.
             candidate=fit.get('candidate_center_xy_m')
-            self.motion.observe_walls(scan.scan_id,fit['position_observed_axes'],reference_ns=scan.reference_ns,
-                center_xy=candidate,raw_poses=self.poses,reacquired=fit.get('position_reacquired',False))
-            current=sample(self.motion.history or self.poses,scan.reference_ns)
-            current_xy=(current[:2]-reference['pose_origin'])@rotation(reference['vio_rotation']).T+reference['start_center_xy_m']
+            current_xy=self._apply_wall_motion(scan,fit,reference)
             result.update(motion_source=self.motion.mode,motion_selection=self.motion.snapshot())
             if candidate is not None:
                 for axis in fit['position_observed_axes']:
@@ -404,6 +404,14 @@ class DynamicFence:
                 result['fit_ms']+=geometry_result['extract_ms']+geometry_result['solve_ms']
             self.last_fit=result
         return result
+
+    def _apply_wall_motion(self,scan,fit,reference):
+        """Apply a posterior against current history, atomically with its owner."""
+        self.motion.observe_walls(scan.scan_id,fit['position_observed_axes'],reference_ns=scan.reference_ns,
+            center_xy=fit.get('candidate_center_xy_m'),raw_poses=self.poses,
+            reacquired=fit.get('position_reacquired',False))
+        current=sample(self.motion.history or self.poses,scan.reference_ns)
+        return (current[:2]-reference['pose_origin'])@rotation(reference['vio_rotation']).T+reference['start_center_xy_m']
 
     def control_snapshot(self,now=None):
         return self.snapshot(now,include_display=False)

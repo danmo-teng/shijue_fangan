@@ -1176,6 +1176,36 @@ def test_global_wall_initialization():
     for i in range(3):
         scan=cloud((.4,-.3),angle,i)
         assert numerical(plain.try_initialize(scan))==numerical(isolated.try_initialize(scan))
+    # The native high-rate owner supplies full RAW initialization history,
+    # rather than its two-endpoint display view or selected motion's zero yaw.
+    from lidar_yaw_debug.native_motion import NativeDynamicFence,NativeMotionRuntime
+    runtime=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1))
+    try:
+        native=NativeDynamicFence(mount,runtime)
+        for i in range(101):
+            t=origin-200_000_000+i*5_000_000
+            native.ingest_pose(dict(session_id='geometry-parity',frame_number=i,timestamp_monotonic_ns=t,
+                receive_monotonic_ns=t,x_m=0.,y_m=0.,yaw_rad=0.,tracker_confidence=3))
+            native.ingest_yaw(t,1287.,dict(source='synthetic_gyro'))
+        native.request_initialization('same numerical fixture',physical_confirmed=False)
+        assert len(native.poses)==2  # Low-rate facade view, not fitting support.
+        with native.lock:
+            raw_poses,raw_yaws=native._initial_support(cloud((.4,-.3),angle,0))
+        assert len(raw_poses)==len(raw_yaws)==101
+        assert np.array_equal(raw_poses,np.asarray(plain.poses))
+        assert np.allclose(raw_yaws,np.asarray(plain.yaws),rtol=1e-12,atol=1e-10)
+        for i in range(3):
+            selected=native.try_initialize(cloud((.4,-.3),angle,i))
+            assert selected['confirmations']==i+1
+            assert selected['status']==('GLOBAL_SYMMETRIC_FIX' if i==2 else 'CONFIRMING_WALL_MATCH')
+            if i<2:assert native.reference is None
+        assert runtime.snapshot()['reference']==native.reference
+        for key in ('pose_origin','vio_rotation','yaw_offset','start_center_xy_m','field_heading_deg'):
+            assert np.allclose(native.reference[key],plain.reference[key],rtol=1e-12,atol=1e-10),key
+        for key in ('source','branch_policy','reference_sample_ns','square_absolute_side_identified'):
+            assert native.reference[key]==plain.reference[key],key
+        assert native.has_anchor and runtime.snapshot()['has_anchor']
+    finally:runtime.close()
     for scan in (cloud((.4,-.3),angle,3),cloud((.4,-.3),angle,4,one_wall=True),
                  cloud((.75,.1),angle,5),cloud((.75,.1),angle,6)):
         assert numerical(plain.observe(scan))==numerical(isolated.observe(scan))
@@ -1412,6 +1442,41 @@ def test_dynamic_motion_compensation():
     assert offloaded_single['position_observed_axes']==one['position_observed_axes']
     assert offloaded_single['candidate_center_xy_m']==one['candidate_center_xy_m']
     assert np.array_equal(isolated.offset,engine.offset)
+    # The native high-rate owner must also preserve this original geometric
+    # consumer, including actual field bind, raw yaw and single-axis posterior.
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime,NativeDynamicFence
+    native_runtime=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1))
+    try:
+        native=NativeDynamicFence(mount,native_runtime)
+        for i in range(41):
+            t=i*.005;p=pose(t);ns=origin+round(t*1e9)
+            native.ingest_pose(dict(session_id='offline',frame_number=i,timestamp_monotonic_ns=ns,
+                receive_monotonic_ns=ns,x_m=p[0],y_m=p[1],yaw_rad=p[2],tracker_confidence=3))
+            native.ingest_yaw(ns,360*t,dict(source='independent_synthetic_motion'))
+            if i==0:native.align('offline known trajectory',physical_confirmed=False)
+        selected=native.observe(scan)
+        for key in ('rank_xy','position_observed_axes','used_points','motion_source'):
+            assert selected[key]==result[key],key
+        for key in ('candidate_center_xy_m','prior_center_xy_m','map_translation_offset_m'):
+            assert np.allclose(selected[key],result[key],rtol=1e-12,atol=1e-10),key
+        native_single=native.observe(single_scan)
+        assert native_single['position_observed_axes']==one['position_observed_axes']
+        assert np.allclose(native.offset,engine.offset,rtol=1e-12,atol=1e-10)
+        assert np.allclose(native.control_snapshot()['center_xy_m'],engine.control_snapshot()['center_xy_m'],
+                           rtol=1e-12,atol=1e-10)
+        # Identity invalidation must also discard the Python geometry-side
+        # initialization; the native owner performs exactly one revision reset.
+        revision=native.revision
+        native.initialization=dict(status='CONFIRMING_WALL_MATCH',confirmations=2)
+        native.pending_initial_pose=np.ones(3)
+        native.pending_reacquisition=dict(confirmations=1)
+        native.context(dict(kind='device_identity_changed',sample={}))
+        assert native.reference is None and native.revision==revision+1
+        assert native.initialization is None and native.pending_initial_pose is None
+        assert native.pending_reacquisition is None and native.last_fit is None
+        assert not native.has_anchor and not native.yaws
+        assert native.try_initialize(scan)['status']=='INITIALIZATION_NOT_REQUESTED'
+    finally:native_runtime.close()
     assert len(one['position_observed_axes'])==1 and len(one['inherited_axes'])==1
     old=engine.snapshot(origin+5_000_000_000)
     assert old['ready'] and old['motion_age_ms']>4000  # No age admission gate.
@@ -2995,3 +3060,356 @@ def test_wall_supported_source_arbitration():
         posterior=p.start+p.r@np.array(p.m.history[-1][1:3])+offset
         assert np.allclose(posterior,p.start+p.r@np.array([.5,0.]),atol=1e-12)
     print('PASS wall-supported arbitration / one-axis ambiguity / capture-time source rebase / confidence=3 jump')
+
+
+def test_native_runtime_motion_source_parity():
+    """Same production source handlers, offline; no UART, SDK or motion.
+
+    Compare after every input, including source changes rather than merely the
+    final position. These are known numerical fixtures, not sensor accuracy.
+    """
+    import math
+    import numpy as np
+    from collections import deque
+    from lidar_yaw_debug.motion_source import MotionSource
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime
+
+    def equivalent(expected, actual, path='motion_selection'):
+        if isinstance(expected, dict):
+            assert set(expected) == set(actual), (path, set(expected) ^ set(actual))
+            for key, value in expected.items():equivalent(value, actual[key], path+'.'+key)
+        elif isinstance(expected, (list, tuple)):
+            assert len(expected) == len(actual), (path, expected, actual)
+            for i, (a,b) in enumerate(zip(expected,actual)):equivalent(a,b,path+'['+str(i)+']')
+        elif isinstance(expected, bool) or expected is None or isinstance(expected,str):
+            assert actual == expected and (not isinstance(expected,bool) or isinstance(actual,bool)), (path,expected,actual)
+        else:
+            assert math.isclose(float(expected),float(actual),rel_tol=1e-12,abs_tol=1e-10), (path,expected,actual)
+
+    class Playback:
+        def __init__(self, angle=0.):
+            self.native=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1))
+            self.m=MotionSource();self.origin=1_000_000_000;self.raw=deque();self.yaws=deque();self.i=0
+            self.start=np.array([.2,-.3]);c,s=math.cos(angle),math.sin(angle);self.r=np.array([[c,-s],[s,c]])
+            self.reference=dict(pose_origin=[0.,0.],vio_rotation=angle,yaw_offset=angle,
+                reference_sample_ns=self.origin,start_center_xy_m=self.start.tolist())
+            self.m.configure(self.reference);self.native.command('configure',self.reference);self.check()
+            self.pose(0.,self.origin)
+        def check(self):
+            state=self.native.snapshot(dict(kind='histories'))
+            equivalent(self.m.snapshot(),state['motion_selection'])
+            equivalent(list(self.m.events),state['events'],'source_events')
+            for key,expected in (('history',self.m.history),('wheels',self.m.wheels),('native_yaws',self.m.native_yaws)):
+                actual=state[key];expected=list(expected)
+                assert len(actual)==len(expected),(key,len(actual),len(expected))
+                if expected:
+                    assert np.array_equal(np.asarray(actual)[:,0],np.asarray(expected)[:,0]),key
+                    assert np.allclose(np.asarray(actual)[:,1:],np.asarray(expected)[:,1:],rtol=1e-12,atol=1e-10),key
+            return state
+        def pose(self,x,t,confidence=3):
+            p=dict(session_id='native-parity',frame_number=t-self.origin,timestamp_monotonic_ns=t,
+                receive_monotonic_ns=t,x_m=x,y_m=0.,yaw_rad=0.,tracker_confidence=confidence)
+            self.m.pose(p);self.native.command('pose',p)
+            if confidence>0:self.raw.append((t,x,0.,0.))
+            self.check()
+        def yaw(self,t,angle=0.):
+            source=dict(raw=dict(yaw_receive_us=t//1000))
+            if not self.yaws or t>=self.yaws[-1][0]:
+                if self.yaws and t==self.yaws[-1][0]:self.yaws.pop()
+                self.yaws.append((t,angle))
+            self.m.yaw(t,angle,source)
+            self.native.command('yaw',dict(time_ns=t,yaw_deg=math.degrees(angle),source=source));self.check()
+        def wheel(self,p):
+            self.m.wheel(p,self.yaws);self.native.command('wheel',p);self.check()
+        def tick(self,v,x):
+            self.i+=1;t=self.origin+self.i*10_000_000;self.yaw(t)
+            self.wheel(dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='fixture',sample_id=self.i,
+                raw_mcu_sample=dict(t0_us=(t-10_000_000)//1000,t1_us=t//1000),v_body_mps=[v,0.,0.],
+                interval_start_ns=t-10_000_000,interval_end_ns=t,receive_monotonic_ns=t))
+            self.pose(x,t)
+            if self.i==1:self.wall(0.,index=0)
+        def wall(self,x,axes=('x','y'),index=None,reacquired=False):
+            i=self.i if index is None else index
+            p=dict(scan_id='scan-'+str(i),axes=list(axes),reference_ns=self.origin+i*10_000_000,
+                center_xy=(self.start+self.r@np.array([x,0.])).tolist(),raw_poses=list(self.raw),reacquired=reacquired)
+            self.m.observe_walls(**p);self.native.command('walls',p);self.check()
+        def close(self):self.native.close()
+
+    for scenario in ('wheel_slip','wheel_then_vio_bad','vio_bad','both_bad','single_wall','recovery'):
+        p=Playback()
+        try:
+            limit=110 if scenario=='recovery' else 100 if scenario=='wheel_then_vio_bad' else 50
+            for i in range(1,limit+1):
+                x=(3*i*.01 if scenario=='vio_bad' else -i*.01 if scenario=='both_bad' else
+                   3*max(0,i-40)*.01 if scenario=='wheel_then_vio_bad' else
+                   max(0,i-40)*.01 if scenario=='recovery' else 0.)
+                p.tick(1.,x)
+                if i%10==0:p.wall(i*.01 if scenario=='vio_bad' else x if scenario=='recovery' else
+                    max(0,i-40)*.01 if scenario=='wheel_then_vio_bad' else 0.,
+                    axes=('x',) if scenario=='single_wall' else ('x','y'))
+            if scenario=='wheel_slip':
+                assert p.m.mode=='T265_PRIMARY_WHEEL_SUSPECT'
+                p.pose(.8,p.origin+505_000_000)  # confidence=3 still cannot bypass the jump policy.
+                assert p.m.mode=='WHEEL_FALLBACK' and p.m.wheel_suspect
+            elif scenario=='recovery':assert p.m.mode=='T265_WITH_WHEEL_TAIL' and not p.m.wheel_suspect
+            else:assert p.m.mode=='WHEEL_FALLBACK' and not p.m.wheel_suspect
+        finally:p.close()
+
+    # A late two-wall verdict changes the source at scan capture, preserving
+    # all subsequent actual Pose increments in either field rotation.
+    for angle in (0.,.7):
+        p=Playback(angle)
+        try:
+            for i in range(1,51):p.tick(2.,i*.01)
+            p.wall(.3,index=30);p.wall(.4,index=40)
+            assert p.m.mode=='T265_PRIMARY_WHEEL_SUSPECT'
+        finally:p.close()
+
+    # Float implementations need not be bit-identical; classifications on
+    # either side of the unchanged50mm/25mm boundaries must still agree.
+    for delta in (-1e-8,1e-8):
+        p=Playback()
+        try:
+            p.tick(1.,.01+.05+delta)
+            assert p.m.mode==('T265_WITH_WHEEL_TAIL' if delta<0 else 'WHEEL_FALLBACK')
+        finally:p.close()
+        p=Playback()
+        try:
+            for i in range(1,31):p.tick(1.,i/30*(.025+delta))
+            p.wall(0.)
+            assert p.m.wall_evidence['status']==('WHEEL_SUSPECT' if delta<0 else 'AMBIGUOUS')
+        finally:p.close()
+
+    # Actual wheel identity/order checks retain source state; no age gate or
+    # fake epoch acceptance is introduced to make the native fixture pass.
+    p=Playback(.7)
+    try:
+        p.tick(.5,.005)
+        t=p.origin+10_000_000
+        packet=dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='fixture',sample_id=1,
+            raw_mcu_sample=dict(t0_us=p.origin//1000,t1_us=t//1000),v_body_mps=[.5,0.,0.],
+            interval_start_ns=p.origin,interval_end_ns=t,receive_monotonic_ns=t)
+        for altered in (packet,dict(packet,sample_id=0),dict(packet,mcu_epoch='another-boot',sample_id=2),
+                        dict(packet,source='command_target'),dict(packet,measurement_valid=False)):
+            p.wheel(altered)
+        p.yaw(t-5_000_000,.2);p.yaw(t,.1)
+        p.pose(.005,t)  # duplicate frame/sample does not create another update
+        assert len(p.m.wheels)==2 and p.m.last_wheel==('fixture',1)
+        p.pose(.005,t+5_000_000,confidence=0)
+        assert p.m.mode=='WHEEL_FALLBACK'
+    finally:p.close()
+
+
+def test_native_runtime_historical_wall_parity():
+    """Delayed posterior uses current history and preserves later motion."""
+    import math
+    import numpy as np
+    from lidar_yaw_debug.dynamic import DynamicFence,rotation
+    from lidar_yaw_debug.motion_source import sample
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime
+    from lidar_yaw_debug.diagnostic import load_config
+    mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
+    for angle in (0.,.7):
+        for axes in (['x','y'],['x']):
+            e=DynamicFence(mount);native=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1))
+            a=1_000_000_000;b=a+100_000_000
+            def pose(frame,t,x=0.,y=0.):
+                p=dict(session_id='native-late-wall',frame_number=frame,timestamp_monotonic_ns=t,
+                    receive_monotonic_ns=t,x_m=x,y_m=y,yaw_rad=0.,tracker_confidence=3)
+                e.ingest_pose(p);native.command('pose',p)
+            def yaw(t):
+                p=dict(time_ns=t,yaw_deg=0.,source={})
+                e.ingest_yaw(t,0.,{});native.command('yaw',p)
+            def wheel(i,start,end):
+                p=dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='fixture',sample_id=i,
+                    v_body_mps=[.1,0.,0.],raw_mcu_sample=dict(t0_us=start//1000,t1_us=end//1000),
+                    interval_start_ns=start,interval_end_ns=end,receive_monotonic_ns=end)
+                e.ingest_wheel(p);native.command('wheel',p)
+            try:
+                pose(1,a);yaw(a);yaw(b)
+                reference=e.align('offline known reference',physical_confirmed=False,center_xy=(.2,-.3),
+                    heading_deg=math.degrees(angle))
+                native.command('configure',reference)
+                wheel(1,a,b)
+                candidate=np.array([.2,-.3])+rotation(angle)@np.array([.01,0.])
+                pose(2,b-10_000_000,.049,.02);yaw(b+100_000_000);wheel(2,b,b+100_000_000)
+                state=native.snapshot(dict(kind='histories'))
+                p=dict(revision=state['revision'],scan_id='known-late-wall',reference_ns=b,
+                    candidate_center_xy_m=candidate.tolist(),position_observed_axes=axes,position_reacquired=False)
+                native.command('apply_wall',p)
+                # Exact production commit equations, independent of geometry.
+                e.motion.observe_walls(p['scan_id'],axes,reference_ns=b,center_xy=candidate,raw_poses=e.poses)
+                current=sample(e.motion.history or e.poses,b)
+                current_xy=rotation(reference['vio_rotation'])@(current[:2]-reference['pose_origin'])+reference['start_center_xy_m']
+                for axis in axes:
+                    j=('x','y').index(axis);e.offset[j]=candidate[j]-current_xy[j]
+                after=native.snapshot(dict(kind='histories'))
+                assert np.allclose(after['offset'],e.offset,rtol=1e-12,atol=1e-10)
+                assert np.allclose(after['history'],list(e.motion.history),rtol=1e-12,atol=1e-10)
+                selected=np.asarray(after['history'][-1])
+                final=rotation(reference['vio_rotation'])@(selected[1:3]-reference['pose_origin'])+reference['start_center_xy_m']+after['offset']
+                corrected_at_scan=final-rotation(angle)@np.array([.01,0.])
+                for axis in axes:
+                    j=('x','y').index(axis);assert abs(corrected_at_scan[j]-candidate[j])<1e-10
+                if axes==['x']:assert after['offset'][1]==0.
+                assert int(selected[0])==b+100_000_000
+            finally:native.close()
+
+
+def test_native_runtime_socket_input_and_control_parity():
+    """Real local sockets exercise production wire/JSON handlers, no devices."""
+    import math
+    import socket
+    import struct
+    import uuid
+    from f405_timed_measurements import TimedMeasurements
+    import f405_timed_protocol as wire
+    from lidar_yaw_debug.control_packet import format_control_packet
+    from lidar_yaw_debug.diagnostic import load_config
+    from lidar_yaw_debug.dynamic import DynamicFence
+    from lidar_yaw_debug.inputs import NativeFeedbackAdapter
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime
+
+    def equivalent(expected,actual,path='packet'):
+        if isinstance(expected,dict):
+            assert set(expected)==set(actual),(path,set(expected)^set(actual))
+            for key,value in expected.items():equivalent(value,actual[key],path+'.'+key)
+        elif isinstance(expected,(list,tuple)):
+            assert len(expected)==len(actual),(path,expected,actual)
+            for i,(a,b) in enumerate(zip(expected,actual)):equivalent(a,b,path+'['+str(i)+']')
+        elif isinstance(expected,bool) or expected is None or isinstance(expected,str):
+            assert actual==expected and (not isinstance(expected,bool) or isinstance(actual,bool)),(path,expected,actual)
+        else:assert math.isclose(float(expected),float(actual),rel_tol=1e-12,abs_tol=1e-10),(path,expected,actual)
+
+    mount=load_config(Path(__file__).resolve().parents[1]/'config/lidar_yaw_debug.json')['installation']
+    original=DynamicFence(mount);forwarded=[];logged=[]
+    def forward(kind,payload):
+        forwarded.append((kind,payload))
+        if kind=='wheel':original.ingest_wheel(payload)
+        elif kind=='yaw':original.ingest_yaw(payload['time_ns'],payload['yaw_deg'],payload['source'])
+        elif kind=='invalidate':original.invalidate_reference(payload['reason'])
+        else:raise AssertionError(kind)
+        return True
+    adapter=NativeFeedbackAdapter(forward,lambda *a,**k:None,
+        SimpleNamespace(submit=lambda name,value:logged.append((name,value))))
+    epoch=bytes.fromhex('12'*16)
+    identity=dict(boot_epoch=epoch.hex(),epoch_valid=True,interface_compatible=True,
+        protocol_major=1,protocol_minor=3,drift_bound_ppm=0xffffffff)
+    clock=TimedMeasurements();clock.set_identity(identity)
+    assert clock.sync(dict(boot_epoch=epoch.hex(),epoch_valid=1,nonce=7,
+        host_write_before_ns=2_000_000_000,receive_monotonic_ns=2_001_000_000,
+        receive_event_us=1_000_100,response_prepare_us=1_000_200,tick_resolution_us=1))
+    context=dict(kind='clock_context',sample=dict(identity=identity,syncs=list(clock.syncs)))
+    sid=uuid.uuid4().hex;addresses=['\0native-motion-test-'+sid+suffix for suffix in ('-wheel','-pose','-control')]
+    owned=[];runtime=None
+    with tempfile.TemporaryDirectory() as temporary:
+        try:
+            for address in addresses[:2]:
+                server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);owned.append(server)
+                server.bind(address);server.listen(1)
+            terminal=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);owned.append(terminal)
+            terminal.bind(addresses[2]);terminal.settimeout(1.)
+            runtime=NativeMotionRuntime(dict(feedback_fd=owned[0].fileno(),pose_fd=owned[1].fileno(),
+                control_address='@'+addresses[2][1:],session_id=sid,pose_session_id=sid,log_root=temporary))
+            clients=[]
+            for address in addresses[:2]:
+                client=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);owned.append(client)
+                client.connect(address);clients.append(client)
+            adapter.context(context);runtime.command('context',context)
+            wire_count=0;pose_count=0;packets=[];latest_raw={};last_ready=None
+
+            def wait(predicate):
+                # A bounded fixture wait for local processing, not a production
+                # freshness policy or an extra MCU request/handshake.
+                deadline=time.monotonic()+2.
+                while time.monotonic()<deadline:
+                    state=runtime.snapshot(dict(kind='histories'))
+                    if predicate(state):return state
+                    time.sleep(.001)
+                raise AssertionError('native local socket handler did not finish')
+            def feedback(packet,received):
+                nonlocal wire_count
+                data=struct.pack('>Q',received)+packet
+                adapter.accept(data);assert clients[0].send(data)==len(data);wire_count+=1
+                return wait(lambda state:state['native_feedback']['frames']==wire_count)
+            def pose(frame,t,x=0.,confidence=3,session=None):
+                nonlocal pose_count,latest_raw
+                p=dict(schema=1,session_id=session or sid,frame_number=frame,timestamp_monotonic_ns=t,
+                    receive_monotonic_ns=t+1000,x_m=x,y_m=0.,yaw_rad=0.,tracker_confidence=confidence,
+                    mapper_confidence=1,travel_from_start_m=abs(x))
+                data=json.dumps(p,separators=(',',':')).encode();assert clients[1].send(data)==len(data)
+                if session is not None and session!=sid:return p
+                original.ingest_pose(p);latest_raw=p;pose_count+=1
+                wait(lambda state:state['pose_ingested']==pose_count)
+                return p
+            def expected_packet():
+                return format_control_packet(original.control_snapshot(),latest_raw,sid,len(packets),last_ready,
+                    lidar_state=dict(lidar_connected=False,lidar_error=None))
+            def receive():
+                nonlocal last_ready
+                packet=json.loads(terminal.recv(16384));expected=expected_packet()
+                assert expected is not None;equivalent(expected,packet)
+                assert packet['packet_id']==len(packets)
+                packets.append(packet)
+                if packet['quality']!='LOST':last_ready=packet
+                return packet
+            def no_packet():
+                terminal.settimeout(.03)
+                try:terminal.recv(16384);raise AssertionError('unchanged input duplicated a control packet')
+                except socket.timeout:pass
+                finally:terminal.settimeout(1.)
+            def gyro(index,tick):
+                return wire.packet(wire.GYRO,index,struct.pack('>16sIIqQIIIiQIIIQ',epoch,1,index,
+                    12345,tick,index,835,0xffffffff,-1000,tick,index,835,0xffffffff,tick+100))
+            def wheel(index,start,end):
+                dt=(end-start)/1e6;v=math.pi*.070/1061.268*20/(math.sqrt(3)*dt)
+                return wire.packet(wire.WHEEL,index,struct.pack('>16sIIQQiiIIIiiiIII',epoch,1,index,start,end,
+                    round(v*1e6),0,10,20,30,10,-10,0,129,0xffffffff,3))
+            tick0=1_010_000;tick1=tick0+10000
+            host0=clock.map_time(tick0,2_020_000_000)[0]
+            host1=clock.map_time(tick1,2_030_000_000)[0]
+            feedback(gyro(1,tick0),2_020_000_000)
+            pose(0,host0)
+            no_packet()  # No field reference, no invented ready control pose.
+            reference=original.align('socket fixture known reference',physical_confirmed=False,
+                center_xy=(.2,-.3),heading_deg=math.degrees(.7))
+            runtime.command('field_reference',dict(reference=reference,revision=original.revision,has_anchor=False))
+            receive()
+            packet=wheel(1,tick0,tick1)
+            state=feedback(packet,2_030_000_000);receive()
+            assert state['native_feedback']['wheel_frames']==1
+            measured=next(p for kind,p in forwarded if kind=='wheel')
+            assert measured['measurement_valid'] and not measured['capture_time_qualified']
+            assert measured['mcu_epoch']==epoch.hex()  # Unknown drift is not an admission gate.
+            # A real1mm position refinement changes the original publish key;
+            # a Pose exactly matching the wheel tail need not send a packet.
+            actual_pose_x=measured['v_body_mps'][0]*.01+.001
+            pose(1,host1,x=actual_pose_x);receive()
+            pose(2,host1+5_000_000,x=actual_pose_x,confidence=0)
+            lost_tracking=receive()
+            assert lost_tracking['motion_source']=='WHEEL_FALLBACK' and lost_tracking['t265']['tracker_confidence']==0
+            feedback(packet,2_031_000_000);no_packet()  # Same real sample ID, not a new endpoint.
+            pose(2,host1+5_000_000,x=actual_pose_x,confidence=0);no_packet()
+            # A Pose from another device session cannot enter this configured
+            # socket, while the active session stays usable.
+            before=runtime.snapshot();pose(99,host1+6_000_000,session='another-session');no_packet()
+            after=runtime.snapshot();assert after['pose_ingested']==before['pose_ingested']
+            original.invalidate_reference('fixture explicit invalidation')
+            runtime.command('invalidate',dict(reason='fixture explicit invalidation',revision=original.revision))
+            stale=receive();assert stale['quality']=='LOST' and stale['pose']==last_ready['pose']
+            runtime.command('context',context);no_packet()
+            state=runtime.snapshot(dict(kind='histories'))
+            assert state['native_feedback']['decode_errors']==0
+            assert state['native_feedback']['frames']==wire_count
+            assert state['direct_output']['packets_sent']==len(packets) and state['direct_output']['output_drops']==0
+            assert [p['packet_id']for p in packets]==list(range(len(packets)))
+            runtime.close()
+            final=runtime.snapshot()
+            assert all(v['dropped']==0 and not v['failed']for v in final['logging'].values())
+            native_logged=[json.loads(line)for line in(Path(temporary)/'motion_feedback.jsonl').read_text().splitlines()]
+            assert native_logged==[value for name,value in logged if name=='motion_feedback.jsonl']
+            native_controls=[json.loads(line)for line in(Path(temporary)/'control_pose.jsonl').read_text().splitlines()]
+            assert native_controls==packets  # Actual successful sends, not IPC intent.
+        finally:
+            if runtime is not None:runtime.close()
+            for sock in owned:sock.close()

@@ -21,7 +21,7 @@ import struct
 
 import serial
 import f405_timed_protocol as timed
-from async_debug_log import AsyncDebugLog
+from async_debug_log import AsyncDebugLog,ProcessDebugLog
 
 from f407_motion_protocol import (
     StreamParser, move_body_frame, turn_ccw_frame, motion_stop_frame,
@@ -551,7 +551,13 @@ class ChassisTestClient:
         if self.serial is not None:
             raise RuntimeError("client already owns a UART")
         self.serial = self.serial_factory(self.device,self.baud,timeout=.05,write_timeout=.2,exclusive=True)
-        self.async_log=AsyncDebugLog(self.status_path.parent)
+        # The native UART observer shares the GUI interpreter. Keep every
+        # original diagnostic record, but serialize/write it outside that GIL
+        # just as the motion worker already does. No receive queue expansion,
+        # telemetry decimation or change to action/SEQ pairing.
+        writer=(ProcessDebugLog if getattr(self.serial,'receive_record_scope','')==
+                'native_CRC_valid_complete_frame' else AsyncDebugLog)
+        self.async_log=writer(self.status_path.parent)
         self.thread = threading.Thread(target=self._read_loop, name="f405-test-uart-owner",daemon=True)
         self.thread.start()
         if self.require_device_identity:

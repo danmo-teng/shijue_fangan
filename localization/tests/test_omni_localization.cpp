@@ -10,6 +10,8 @@
 #include "test_uart_relay.hpp"
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <pthread.h>
+#include <sched.h>
 
 #include <algorithm>
 #include <cmath>
@@ -969,6 +971,43 @@ void test_dynamic_pose_relay()
     check(saved["pose"] == p["pose"] && saved["timestamp_monotonic_ns"] == 1 && saved["packet_id"] == 1,
           "formal JSON is the same latest dynamic snapshot and original sample time");
     ::unlink(path.c_str());
+
+    // Exercise the actual receiver thread and scheduling with a local fake
+    // UART sink; never open hardware or start a second SDK owner.
+    const char *previous_rt = std::getenv("RDK_LOCALIZATION_RT");
+    const bool had_rt = previous_rt != nullptr;
+    const std::string saved_rt = previous_rt ? previous_rt : "";
+    for (bool realtime : {true, false}) {
+        ::setenv("RDK_LOCALIZATION_RT", realtime ? "1" : "off", 1);
+        const std::string name = "@relay-thread-" + std::to_string(::getpid()) + (realtime ? "-rt" : "-normal");
+        std::atomic<int> policy{-1}, priority{-1}, received{0};
+        Relay threaded(name, "formal-fixture", path, [&](const std::array<std::uint8_t, omni::kFrameSize> &bytes) {
+            omni::FusedPoseFrame frame;
+            if (!omni::decode_fused_pose_frame(bytes.data(), bytes.size(), frame)) return false;
+            sched_param actual{}; int actual_policy = -1;
+            ::pthread_getschedparam(::pthread_self(), &actual_policy, &actual);
+            policy = actual_policy; priority = actual.sched_priority; ++received;
+            return true;
+        });
+        threaded.start();
+        const int sender = ::socket(AF_UNIX, SOCK_DGRAM, 0);
+        sockaddr_un address{}; address.sun_family = AF_UNIX;
+        std::copy(name.begin() + 1, name.end(), address.sun_path + 1);
+        p["session_id"] = "formal-fixture"; p["packet_id"] = 3; p["quality"] = "DEGRADED";
+        const auto data = p.dump();
+        check(::sendto(sender, data.data(), data.size(), 0, reinterpret_cast<sockaddr *>(&address),
+                       offsetof(sockaddr_un, sun_path) + name.size()) == static_cast<ssize_t>(data.size()),
+              "send original formal JSON to actual relay thread");
+        for (int i = 0; i < 1000 && received == 0; ++i) ::usleep(1000);
+        threaded.stop(); ::close(sender);
+        check(received == 1, "actual relay thread delivers exactly one valid 0x16 to fake UART");
+        check((policy == SCHED_FIFO && priority == 10) || (policy == SCHED_OTHER && priority == 0),
+              "RT permission failure preserves working ordinary relay scheduling");
+        if (!realtime) check(policy == SCHED_OTHER, "RT-off leaves relay in ordinary scheduling");
+        ::unlink(path.c_str());
+    }
+    if (had_rt) ::setenv("RDK_LOCALIZATION_RT", saved_rt.c_str(), 1);
+    else ::unsetenv("RDK_LOCALIZATION_RT");
 }
 
 void test_async_csv_logging()

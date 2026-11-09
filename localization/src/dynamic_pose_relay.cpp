@@ -2,8 +2,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <poll.h>
+#include <pthread.h>
+#include <sched.h>
 #include <unistd.h>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <cstdio>
@@ -84,6 +87,18 @@ bool DynamicPoseRelay::accept(Json packet)
 
 void DynamicPoseRelay::run()
 {
+    ::pthread_setname_np(::pthread_self(), "dynamic-pose-tx");
+    const char *rt = std::getenv("RDK_LOCALIZATION_RT");
+    const bool requested = !rt || (std::strcmp(rt,"0") && std::strcmp(rt,"off") && std::strcmp(rt,"false"));
+    sched_param priority{}; priority.sched_priority = 10;
+    const int error = requested ? ::pthread_setschedparam(::pthread_self(), SCHED_FIFO, &priority) : 0;
+    int policy = 0;
+    const int query_error = ::pthread_getschedparam(::pthread_self(), &policy, &priority);
+    // Startup result only. Missing permission preserves ordinary scheduling;
+    // no sample-age check, retry handshake or command admission is added.
+    std::cerr << "[DYNAMIC POSE] scheduling requested=" << requested
+              << " policy=" << policy << " priority=" << priority.sched_priority
+              << " error=" << error << " query_error=" << query_error << '\n';
     while (!stop_) {
         pollfd p{fd_, POLLIN, 0};
         if (::poll(&p, 1, 50) <= 0) continue;

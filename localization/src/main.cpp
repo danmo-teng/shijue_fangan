@@ -12,6 +12,7 @@
 #include "debug_fisheye_evidence.hpp"
 #include "async_csv_log.hpp"
 #include "async_latest_file.hpp"
+#include "priority_inheritance_mutex.hpp"
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -1047,7 +1048,7 @@ int main(int argc, char **argv)
         std::atomic<std::uint8_t> navigation_command_code{0};
         std::atomic<std::uint16_t> navigation_remaining_mm{0};
         std::atomic<std::uint16_t> navigation_heading_cdeg{0};
-        std::mutex uart_tx_mutex;
+        omni::PriorityInheritanceMutex uart_tx_mutex;
         // Explicit physical-button STOP is scoped to this process/session.
         // It prevents an in-flight model startup or old command file from
         // sending CONFIG/mission heartbeats again after the manual ABORT.
@@ -1074,7 +1075,7 @@ int main(int argc, char **argv)
             if(!options.test_uart_socket.empty()) {
                 test_uart_relay.reset(new omni::TestUartRelay(options.test_uart_socket,
                     [&](const std::uint8_t *data,std::size_t size) {
-                        std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                         const auto before=monotonic_ns();
                         if(debug_wheel)debug_wheel->wire_request(data,size,before);
                         return uart->write_all(data,size,50);
@@ -1083,7 +1084,7 @@ int main(int argc, char **argv)
             if (!options.operator_socket.empty()) {
                 operator_relay.reset(new omni::OperatorUartRelay(options.operator_socket,
                     [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
-                        std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                         if (omni::is_operator_abort(frame)) {
                             operator_stopped.store(true, std::memory_order_relaxed);
                             navigation_command_active.store(false, std::memory_order_relaxed);
@@ -1158,7 +1159,7 @@ int main(int argc, char **argv)
             });
             if (!feedback_requests.empty()) {
                 // One-shot startup configuration, no reply wait or periodic identity/sync loop.
-                std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                 if(debug_wheel)debug_wheel->wire_request(feedback_requests.data(),feedback_requests.size(),monotonic_ns());
                 const bool sent = uart->write_all(feedback_requests.data(), feedback_requests.size(), 50);
                 std::cerr << "[WHEEL FEEDBACK] startup identity/subscription write=" << sent
@@ -1179,7 +1180,7 @@ int main(int argc, char **argv)
 
                     auto transmit = [&](const std::array<std::uint8_t, omni::kFrameSize> &frame,
                                         const std::array<std::uint8_t, omni::kFrameSize> *context = nullptr) {
-                        std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                        std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                         if (operator_stopped.load(std::memory_order_relaxed)) return;
                         if (context && !uart->write_all(context->data(), context->size(), 50)) {
                             relay_tx_errors.fetch_add(1, std::memory_order_relaxed);
@@ -1281,7 +1282,7 @@ int main(int argc, char **argv)
                 options.debug_test_session, options.dynamic_pose_output,
                 [&](const std::array<std::uint8_t, omni::kFrameSize> &bytes) {
                     if (!uart) return false;
-                    std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                    std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                     return uart->write_all(bytes.data(), bytes.size(), 50);
                 }));
             dynamic_relay->start();
@@ -1352,6 +1353,13 @@ int main(int argc, char **argv)
             raw_pose_log.submit(raw_pose_csv.str());raw_pose_csv.str("");
         }
         EventLog event_log(options.events_path);
+        event_log.write("uart_tx_mutex_protocol",omni::DebugWheelInput::Json{
+            {"mutex_protocol_requested","PTHREAD_PRIO_INHERIT"},
+            {"mutex_protocol_actual",uart_tx_mutex.priority_inheritance()?"PTHREAD_PRIO_INHERIT":"PTHREAD_PRIO_NONE"},
+            {"mutex_priority_inheritance",uart_tx_mutex.priority_inheritance()},
+            {"mutex_protocol_error",uart_tx_mutex.protocol_error()
+                ?omni::DebugWheelInput::Json(std::strerror(uart_tx_mutex.protocol_error()))
+                :omni::DebugWheelInput::Json(nullptr)}}.dump());
         T265MapStatus t265_map;
         t265_map.enabled = !options.t265_map_path.empty();
         t265_map.path = options.t265_map_path;
@@ -2129,7 +2137,7 @@ int main(int argc, char **argv)
                     ((static_cast<unsigned>(latest_t265.mapper_confidence) & 0x03u) << 2) |
                     (static_cast<unsigned>(latest_t265.tracker_confidence) & 0x03u));
                 const auto bytes = omni::build_fused_pose_frame(tx);
-                std::lock_guard<std::mutex> lock(uart_tx_mutex);
+                std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                 if (uart->write_all(bytes.data(), bytes.size(), 50)) {
                     ++pose_tx_frames;
                 } else {

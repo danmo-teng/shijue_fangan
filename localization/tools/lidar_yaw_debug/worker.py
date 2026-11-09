@@ -28,6 +28,7 @@ from .protocol import command_frame
 from .native_geometry import backend_status
 from .inputs import NativeFeedbackAdapter
 from .control_packet import format_control_packet
+from .native_motion import NativeDynamicFence,NativeMotionRuntime
 
 
 def make_reader(config):
@@ -211,6 +212,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     if policy_output is not None:policy_output.setblocking(False)
     last_policy=(False,'measured_wheel_input_enabled');policy_error_reported=False
     native_adapter=None;native_connection=None;native_reader=None
+    native_runtime=None;native_runtime_error=None
     pose_connection=None;pose_reader=None;pose_error=None
     native_state=dict(enabled=native_feedback is not None,connected=False,
                       decode_errors=0,motion_input_drops=0,error=None)
@@ -311,6 +313,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
 
     def publish_sdk_policy():
         nonlocal last_policy,policy_error_reported
+        if native_runtime is not None:return  # The same native motion owner publishes source decisions.
         if policy_output is None:return
         with engine.lock:
             pause=engine.motion.wheel_suspect
@@ -341,6 +344,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 try:kind,payload=inbox.get_nowait()
                 except queue.Empty:break
             changed=True
+            if native_runtime is not None and kind in ('pose','yaw','wheel'):
+                native_runtime.command(kind,payload)
+                continue
             if kind=='pose':
                 latest_raw_pose=payload
                 engine.ingest_pose(payload);counters['pose_ingested']+=1
@@ -350,6 +356,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             elif kind=='wheel':engine.ingest_wheel(payload);counters['measured_wheel_ingested']+=1
             elif kind=='feedback_context' and native_adapter is not None:
                 native_adapter.context(payload)
+            elif kind=='feedback_context' and native_runtime is not None:
+                engine.context(payload)
             elif kind=='invalidate':
                 engine.invalidate_reference(payload['reason']);event('reference_invalidated',**payload)
             elif kind=='align':
@@ -381,6 +389,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
 
     def publish_control():
         nonlocal last_control_key,last_output_packet
+        if native_runtime is not None:return  # Never create a second control producer in Python.
         # Small, coherent latest value. No scan points, percentile calculation,
         # display queue or file write is on this publication path.
         value=dict(last=engine.control_snapshot(),have_tracked_pose=bool(engine.poses),
@@ -425,17 +434,27 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             event('control_snapshot_capacity_error',reason=str(exc))
 
     def state():
-        return dict(counters,**reader_state,scans=engine.scan_count,fits=engine.fit_count,
+        native=engine.refresh_native() if native_runtime is not None else {}
+        observed_counters=dict(counters)
+        for key in ('pose_ingested','primary_yaw_ingested','measured_wheel_ingested','control_updates'):
+            if key in native:observed_counters[key]=native[key]
+        native_logs=native.get('logging',{})
+        native_logs_healthy=all(not value.get('dropped') and not value.get('failed') for value in native_logs.values())
+        return dict(observed_counters,**reader_state,scans=engine.scan_count,fits=engine.fit_count,
             scan_processing_ms_p95=p95,last=engine.snapshot(),error=error,
             worker_pid=os.getpid(),worker_cpu_affinity=sorted(os.sched_getaffinity(0)),
             capture_chain_present=bool(engine.poses and engine.yaws and reader_state['scans_received']),
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
             lidar_requested_enabled=requested_lidar_enabled,
             lidar_corrections_enabled=engine.lidar_corrections_enabled,
-            logging_healthy=log.healthy(),motion_scheduling=scheduling,line_geometry=geometry_backend or backend_status(),
+            logging_healthy=log.healthy() and native_logs_healthy,motion_scheduling=native.get('motion_scheduling',scheduling),line_geometry=geometry_backend or backend_status(),
             geometry_pid=geometry_process.pid,geometry_execution='independent_process_original_algorithm',
-            native_feedback=dict(native_state,**(native_adapter.snapshot() if native_adapter else {})),
-            direct_output=dict(direct_output) if direct_socket is not None else None,pose_input_error=pose_error,
+            native_feedback=dict(native_state,**(native.get('native_feedback',{}) if native_runtime is not None else
+                (native_adapter.snapshot() if native_adapter else {}))),
+            direct_output=native.get('direct_output') if native_runtime is not None else (dict(direct_output) if direct_socket is not None else None),
+            pose_input_error=native.get('pose_input_error',pose_error),native_motion_error=native.get('error',native_runtime_error),
+            motion_execution='native_cpp_owner' if native_runtime is not None else 'python_original_fallback',
+            native_logging=native_logs,
             accuracy_verified=False,full_speed_physical_validation=False)
 
     def drain_reader():
@@ -447,6 +466,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             changed=(value['lidar_connected']!=reader_state['lidar_connected'] or
                      value['lidar_error']!=reader_state['lidar_error'])
             reader_state=value
+            if native_runtime is not None:
+                native_runtime.command('lidar_state',dict(connected=value['lidar_connected'],error=value['lidar_error']))
             if changed:
                 dirty=True
                 engine.set_lidar_enabled(requested_lidar_enabled and value['lidar_connected'])
@@ -510,7 +531,23 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
 
     try:
         geometry_process.start();geometry_child.close()
-        if native_feedback is not None:
+        if native_feedback is not None and pose_input is not None:
+            try:
+                def address(value):return '@'+value[1:] if value.startswith('\0') else value
+                native_runtime=NativeMotionRuntime(dict(session_id=(control_output['session_id'] if control_output else pose_input['session_id']),
+                    pose_session_id=pose_input['session_id'],
+                    sdk_policy_session_id=sdk_policy['session_id'] if sdk_policy else pose_input['session_id'],
+                    feedback_fd=native_feedback.fileno(),pose_fd=pose_input['socket'].fileno(),
+                    control_address=address(control_output['address']) if control_output else '',
+                    sdk_policy_address=address(sdk_policy['address']) if sdk_policy else '',
+                    log_root=str(root)))
+                engine=NativeDynamicFence(config['installation'],native_runtime);engine.geometry=compute_geometry
+            except Exception as exc:
+                if native_runtime is not None:native_runtime.close()
+                native_runtime=None;native_runtime_error=str(exc)
+                engine=DynamicFence(config['installation']);engine.geometry=compute_geometry
+                event('native_motion_start_failed_python_fallback',reason=str(exc),latency_validated=False)
+        if native_feedback is not None and native_runtime is None:
             native_feedback.setblocking(False)
             native_adapter=NativeFeedbackAdapter(native_send,event,log)
         if pose_input is not None:pose_input['socket'].setblocking(False)
@@ -531,7 +568,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             # between them. No replay, stale-data rejection or synthetic ticks.
             # Housekeeping runs after a bounded quantum instead of after every
             # individual wire frame (there are two frames per wheel interval).
-            for _ in range(16):
+            for _ in range(16 if native_runtime is None else 0):
                 incoming=False
                 if native_feedback is not None:incoming=receive_native() or incoming
                 if pose_input is not None:incoming=receive_pose() or incoming
@@ -569,8 +606,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 last_publish=time.monotonic()
             if not changed and not housekeeping_changed and latest is None:
                 waiting=[inbox._reader,updates._reader,scans._reader]
-                if native_feedback is not None:waiting.append(native_connection or native_feedback)
-                if pose_input is not None:waiting.append(pose_connection or pose_input['socket'])
+                if native_feedback is not None and native_runtime is None:waiting.append(native_connection or native_feedback)
+                if pose_input is not None and native_runtime is None:waiting.append(pose_connection or pose_input['socket'])
                 select.select(waiting,[],[],.002)
     except Exception as exc:
         error=str(exc);event('worker_error',reason=error)
@@ -604,13 +641,18 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 drain_reader();receiver.join(timeout=.02)
             drain_reader()
             if receiver.is_alive():receiver.terminate();receiver.join(timeout=1)
+        if native_runtime is not None:
+            native_runtime.close()
+            engine.refresh_native()
+            while engine.motion.events:
+                change=engine.motion.events.popleft();name=change.pop('event');event(name,**change)
         if times:p95=float(np.percentile(times,95))
         final=state()
         final['receiver_stopped_cleanly']=receiver.exitcode==0
         final['fit_thread_stopped']=not fitter.is_alive()
         final['geometry_stopped_cleanly']=geometry_process.exitcode==0
         log.submit('lidar_worker_summary.json',final,atomic=True);log.close()
-        final['logging_healthy']=log.healthy() and reader_state.get('reader_logging_healthy',False)
+        final['logging_healthy']=final['logging_healthy'] and log.healthy() and reader_state.get('reader_logging_healthy',False)
         final['logging_statistics']=log.statistics()
         try:reply('stopped',summary=final)
         except queue.Full:pass

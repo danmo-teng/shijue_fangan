@@ -23,6 +23,13 @@ endif()
 if(NOT EXISTS "${REALSENSE_LIBRARY}")
     message(FATAL_ERROR "official librealsense 2.50 library not found: ${REALSENSE_LIBRARY}")
 endif()
+# The measured-input/control loop owns its native thread; Python only invokes
+# low-frequency reference/geometry operations through this narrow C ABI.
+add_library(motion_runtime SHARED src/motion_runtime.cpp src/motion_source_native.cpp)
+target_include_directories(motion_runtime PRIVATE include
+    "${REALSENSE_ROOT}/third_party/librealsense/third-party")
+target_compile_options(motion_runtime PRIVATE -O3 -ffp-contract=off)
+target_link_libraries(motion_runtime PRIVATE pthread)
 add_library(omni_localization_core
     src/config.cpp
     src/f407_protocol.cpp
@@ -39,7 +46,7 @@ target_include_directories(debug_wheel_input PUBLIC include "${REALSENSE_INCLUDE
     "${REALSENSE_ROOT}/third_party/librealsense/third-party")
 target_link_libraries(debug_wheel_input PUBLIC omni_localization_core "${REALSENSE_LIBRARY}")
 add_executable(t265_omni_localizer src/main.cpp)
-add_dependencies(t265_omni_localizer lidar_geometry)
+add_dependencies(t265_omni_localizer lidar_geometry motion_runtime)
 target_include_directories(t265_omni_localizer PRIVATE "${REALSENSE_INCLUDE_DIR}")
 target_link_libraries(t265_omni_localizer PRIVATE
     omni_localization_core debug_wheel_input "${REALSENSE_LIBRARY}")
