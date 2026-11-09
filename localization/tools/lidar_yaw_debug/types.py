@@ -66,6 +66,17 @@ class RawScan:
         if len({p.raw_point_id for p in self.points}) != len(self.points):
             raise ValueError("duplicate physical point")
 
+    def __reduce_ex__(self, protocol):
+        # Native scans already own a checked POD copy. Transport that compact
+        # copy across the existing local queues/pipes, rather than pickling
+        # hundreds of point dictionaries and repeated physical-ID prefixes.
+        # Ordinary/synthetic/calibrated scans retain the original pickle path.
+        payload = self.__dict__.get('_native_transport')
+        if payload is None:
+            return object.__reduce_ex__(self, protocol)
+        from .native_lidar_reader import restore_native_scan
+        return restore_native_scan, (self.sensor_epoch, self.time_map_version, payload)
+
     @property
     def first_point_ns(self):
         return self.points[0].time_ns

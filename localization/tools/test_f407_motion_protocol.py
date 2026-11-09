@@ -757,6 +757,16 @@ def test_native_lidar_reader():
             if outcomes[0][1]:
                 break
         readers[1].close()
+        if copied_checked:
+            with patch('lidar_yaw_debug.native_lidar_reader._load',
+                       side_effect=AssertionError('transport must not load a device/native backend')):
+                assert pickle.loads(pickle.dumps(restored)) == restored
+            # Ordinary Python scans keep their previous independent pickle
+            # format; they do not need a native payload or a compiled library.
+            from lidar_yaw_debug.types import RawScan
+            ordinary = RawScan(restored.scan_id, restored.reference_ns, restored.points,
+                restored.sensor_epoch, restored.time_map_version, restored.timing_qualified)
+            assert pickle.loads(pickle.dumps(ordinary)) == ordinary
         return scans, early, readers[0].stats
 
     for direction in (1, -1):

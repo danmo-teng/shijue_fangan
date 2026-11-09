@@ -49,6 +49,45 @@ class NativeReaderError(RuntimeError):
     """Native backend failure; receiver can continue using a new Python epoch."""
 
 
+def _copy_native_scan(raw_points, count, epoch, version, payload=None):
+    points = []
+    previous_offset = None
+    for index in range(count):
+        point = raw_points[index]
+        if point.packet_offset != previous_offset:
+            previous_offset = point.packet_offset
+            packet_id = f'byte:{previous_offset}'
+            prefix = f'{epoch}:{packet_id}:'
+        # C++ has already checked the scalars, unique byte/index identities and
+        # sector time order/bounds. All values below become owned Python data.
+        copied = object.__new__(TimedPoint)
+        object.__setattr__(copied, '__dict__', dict(
+            raw_point_id=prefix + str(point.point_index), time_ns=point.time_ns,
+            point_lidar_m=(point.x, point.y), packet_id=packet_id,
+            point_index=point.point_index, intensity=point.intensity,
+            time_qualified=False, raw_angle_deg=point.raw_angle_deg,
+            valid_return=bool(point.valid_return)))
+        points.append(copied)
+    uid = f'{epoch}:sector:{points[0].raw_point_id}:{points[-1].raw_point_id}'
+    scan = object.__new__(RawScan)
+    object.__setattr__(scan, '__dict__', dict(scan_id=uid,
+        reference_ns=points[-1].time_ns, points=tuple(points),
+        sensor_epoch=epoch, time_map_version=version, timing_qualified=False,
+        _native_transport=(C.string_at(raw_points, count * C.sizeof(_Point))
+                           if payload is None else payload)))
+    return scan
+
+
+def restore_native_scan(epoch, version, payload):
+    # Same-host transient IPC only, not a persisted or cross-machine format.
+    size = C.sizeof(_Point)
+    if not payload or len(payload) % size:
+        raise ValueError('invalid native scan transport size')
+    count = len(payload) // size
+    raw_points = (_Point * count).from_buffer_copy(payload)
+    return _copy_native_scan(raw_points, count, epoch, version, payload)
+
+
 def _load():
     global _library, _load_error
     if _library is not None:
@@ -140,33 +179,7 @@ class NativeLidarStream:
         @_Scan
         def emit(_user, raw_points, count):
             try:
-                points = []
-                previous_offset = None
-                for index in range(count):
-                    point = raw_points[index]
-                    if point.packet_offset != previous_offset:
-                        previous_offset = point.packet_offset
-                        packet_id = f'byte:{previous_offset}'
-                        prefix = f'{self.sensor_epoch}:{packet_id}:'
-                    # The native reader has already checked these scalars and
-                    # sector time order/resource bounds. Copy owned immutable
-                    # Python values once, without re-running per-ray NumPy/type
-                    # and sequence checks at the complete-scan boundary.
-                    # Other callers still use the normal validating dataclasses.
-                    copied = object.__new__(TimedPoint)
-                    object.__setattr__(copied, '__dict__', dict(
-                        raw_point_id=prefix + str(point.point_index), time_ns=point.time_ns,
-                        point_lidar_m=(point.x, point.y), packet_id=packet_id,
-                        point_index=point.point_index, intensity=point.intensity,
-                        time_qualified=False, raw_angle_deg=point.raw_angle_deg,
-                        valid_return=bool(point.valid_return)))
-                    points.append(copied)
-                uid = f'{self.sensor_epoch}:sector:{points[0].raw_point_id}:{points[-1].raw_point_id}'
-                scan = object.__new__(RawScan)
-                object.__setattr__(scan, '__dict__', dict(scan_id=uid,
-                    reference_ns=points[-1].time_ns, points=tuple(points),
-                    sensor_epoch=self.sensor_epoch, time_map_version=self.time_map_version,
-                    timing_qualified=False))
+                scan = _copy_native_scan(raw_points, count, self.sensor_epoch, self.time_map_version)
                 output.append(scan)
                 if on_scan is not None:
                     self._status()
