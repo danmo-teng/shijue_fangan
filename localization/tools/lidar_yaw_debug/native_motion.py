@@ -211,8 +211,9 @@ class NativeDynamicFence(DynamicFence):
         self.refresh_native()
         return np.asarray(result['current_xy'],float)
 
-    def snapshot(self,now=None,*,include_display=True):
-        state=self.refresh_native()
+    def snapshot(self,now=None,*,include_display=True,_native_state=None):
+        # 状态发布已取过同一份原生快照时复用，避免再次查询/解析完整JSON。
+        state=self.refresh_native() if _native_state is None else _native_state
         result=dict(state.get('last') or dict(ready=False,reason='尚未从围栏建立场地参考'))
         result.update(scans=self.scan_count,fixes=self.fit_count)
         if not result.get('ready'):

@@ -4222,5 +4222,634 @@
       "FIFO10 measured, not a PREEMPT_RT kernel or guaranteed deadline",
       "Real T265 still has no Pose; 05H startup limitation remains"
     ]
+  },
+  "geometry_wait_and_snapshot": {
+    "stage": "05J",
+    "measured_parent_commit": "038fff0",
+    "log_root": "/tmp/rdk_lidar_latency_20261110/snapshot_compare_1794263931747122486",
+    "changed_files": [
+      "localization/tools/lidar_yaw_debug/native_motion.py",
+      "localization/tools/lidar_yaw_debug/worker.py"
+    ],
+    "change": "Reuse the already-fetched native state only when formatting the display state; other snapshot callers and all numerical/control calculations are unchanged.",
+    "frozen_view_checks": "Default and reused snapshots exact for ready=false/ready=true, each include_display true/false; reused view does not make a runtime call. No persistent mirror tests added.",
+    "ab_ba": [
+      {
+        "label": "A1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Original localization replay with concurrent formal YOLO/VSE/tracking on saved frames; only duplicate display snapshot query is changed; no physical UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.5490785,
+          "p95": 2.9877666499999993,
+          "p99": 4.633329409999997,
+          "max": 13.593292
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.891786,
+          "p95": 5.014542699999999,
+          "p99": 8.31431708,
+          "max": 13.645958
+        },
+        "fits": 97,
+        "packet_to_lidar_result_ms": {
+          "p50": 43.50691,
+          "p95": 64.29100519999994,
+          "p99": 74.14080356,
+          "max": 74.758481
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 49.438266,
+          "p95": 142.32598459999983,
+          "p99": 270.42817967999997,
+          "max": 273.344556
+        },
+        "geometry_wall_ms": {
+          "p50": 32.887317,
+          "p95": 50.96042039999999,
+          "p99": 54.57155959999996,
+          "max": 60.341942
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 14.818583,
+          "p95": 19.509698799999995,
+          "p99": 22.031127999999974,
+          "max": 25.158208
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 97
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.142841,
+          "p95": 3.912969,
+          "p99": 9.021192,
+          "max": 19.404767
+        },
+        "monotonic_realtime_offset_change_ns": 40375,
+        "stopped_cleanly": true,
+        "errors": [],
+        "snapshot_variant": "old",
+        "worker_cpu_and_calls": {
+          "mode": "old",
+          "native_calls": {
+            "snapshot:state": 515,
+            "command:lidar_state": 214,
+            "command:context": 1,
+            "command:field_reference": 1,
+            "snapshot:window": 101,
+            "command:apply_wall": 101
+          },
+          "process_user_cpu_s": 9.106109,
+          "process_system_cpu_s": 1.4206549999999998,
+          "wall_s": 12.663870824
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 101,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 4,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      },
+      {
+        "label": "B1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Original localization replay with concurrent formal YOLO/VSE/tracking on saved frames; only duplicate display snapshot query is changed; no physical UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.441121,
+          "p95": 2.6532107499999995,
+          "p99": 3.38662941,
+          "max": 5.706399
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.6572035,
+          "p95": 3.3438897,
+          "p99": 5.14318299,
+          "max": 12.595378
+        },
+        "fits": 99,
+        "packet_to_lidar_result_ms": {
+          "p50": 40.994251,
+          "p95": 54.92319559999992,
+          "p99": 73.74238373999991,
+          "max": 96.957248
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 43.519377,
+          "p95": 163.5487188999999,
+          "p99": 272.10043926,
+          "max": 278.478684
+        },
+        "geometry_wall_ms": {
+          "p50": 30.982406,
+          "p95": 40.15053689999999,
+          "p99": 44.51673005999998,
+          "max": 49.01606
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 15.24525,
+          "p95": 20.5329549,
+          "p99": 22.47184298,
+          "max": 22.533582
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 99
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.108715,
+          "p95": 1.169296,
+          "p99": 3.451549,
+          "max": 10.652399
+        },
+        "monotonic_realtime_offset_change_ns": -124,
+        "stopped_cleanly": true,
+        "errors": [],
+        "snapshot_variant": "new",
+        "worker_cpu_and_calls": {
+          "mode": "new",
+          "native_calls": {
+            "snapshot:state": 329,
+            "command:lidar_state": 214,
+            "command:context": 1,
+            "command:field_reference": 1,
+            "snapshot:window": 104,
+            "command:apply_wall": 104
+          },
+          "process_user_cpu_s": 8.32209,
+          "process_system_cpu_s": 1.4936949999999998,
+          "wall_s": 12.669240739
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 104,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 1,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      },
+      {
+        "label": "B2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Original localization replay with concurrent formal YOLO/VSE/tracking on saved frames; only duplicate display snapshot query is changed; no physical UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.4657244999999999,
+          "p95": 2.7931371499999997,
+          "p99": 3.78347701,
+          "max": 11.048424
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.7061405,
+          "p95": 3.4060706,
+          "p99": 5.874308009999999,
+          "max": 13.929499
+        },
+        "fits": 99,
+        "packet_to_lidar_result_ms": {
+          "p50": 39.892171,
+          "p95": 64.44828779999999,
+          "p99": 82.33944281999996,
+          "max": 93.288092
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 43.164484,
+          "p95": 165.25373519999985,
+          "p99": 278.47431456,
+          "max": 282.702699
+        },
+        "geometry_wall_ms": {
+          "p50": 30.519116,
+          "p95": 38.33106659999999,
+          "p99": 47.31214011999999,
+          "max": 50.480388
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 15.01771,
+          "p95": 19.702062599999998,
+          "p99": 21.574074319999998,
+          "max": 21.767542
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 99
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.107112,
+          "p95": 1.094397,
+          "p99": 3.494526,
+          "max": 11.275226
+        },
+        "monotonic_realtime_offset_change_ns": -1167,
+        "stopped_cleanly": true,
+        "errors": [],
+        "snapshot_variant": "new",
+        "worker_cpu_and_calls": {
+          "mode": "new",
+          "native_calls": {
+            "snapshot:state": 330,
+            "command:lidar_state": 213,
+            "command:context": 1,
+            "command:field_reference": 1,
+            "snapshot:window": 104,
+            "command:apply_wall": 104
+          },
+          "process_user_cpu_s": 7.861118,
+          "process_system_cpu_s": 1.9463570000000001,
+          "wall_s": 12.665385974
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 104,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 1,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      },
+      {
+        "label": "A2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Original localization replay with concurrent formal YOLO/VSE/tracking on saved frames; only duplicate display snapshot query is changed; no physical UART/SDK/camera/JPU/GUI/motors",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.407912,
+          "p95": 2.7243148499999994,
+          "p99": 4.165405319999996,
+          "max": 9.713179
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.6727660000000002,
+          "p95": 4.1796620499999975,
+          "p99": 6.798329319999995,
+          "max": 16.409408
+        },
+        "fits": 98,
+        "packet_to_lidar_result_ms": {
+          "p50": 41.081167,
+          "p95": 66.61317319999996,
+          "p99": 76.75263955000001,
+          "max": 78.572636
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 45.3654995,
+          "p95": 145.3013828499996,
+          "p99": 275.72242441,
+          "max": 276.613512
+        },
+        "geometry_wall_ms": {
+          "p50": 30.962385,
+          "p95": 41.6341318,
+          "p99": 58.60404062,
+          "max": 60.106526
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 14.82952,
+          "p95": 19.4442931,
+          "p99": 21.42163726,
+          "max": 21.500248
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 98
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.110787,
+          "p95": 1.560646,
+          "p99": 5.921695,
+          "max": 18.269327
+        },
+        "monotonic_realtime_offset_change_ns": 1874,
+        "stopped_cleanly": true,
+        "errors": [],
+        "snapshot_variant": "old",
+        "worker_cpu_and_calls": {
+          "mode": "old",
+          "native_calls": {
+            "snapshot:state": 519,
+            "command:lidar_state": 213,
+            "command:context": 1,
+            "command:field_reference": 1,
+            "snapshot:window": 103,
+            "command:apply_wall": 103
+          },
+          "process_user_cpu_s": 8.98948,
+          "process_system_cpu_s": 1.572177,
+          "wall_s": 13.073983126
+        },
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 103,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 2,
+          "logging_healthy": true,
+          "reader_logging_healthy": true
+        }
+      }
+    ],
+    "vision_log": "/tmp/rdk_lidar_latency_20261110/snapshot_compare_1794263931747122486/vision/20261110_063853_817095_competition/summary.json",
+    "vision_summary": {
+      "mean_fps": 42.6,
+      "min_fps_1s": 28,
+      "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+      "camera_opened": false,
+      "jpu_used": false,
+      "gui_used": false,
+      "errors": []
+    },
+    "fingerprints": {
+      "localization/tools/lidar_yaw_debug/native_motion.py": "f52e2a102b6f6578b7fb69167132346dc9ac37b34e7312f5d512e27e11b0d0ce",
+      "localization/tools/lidar_yaw_debug/worker.py": "a1cd6846f4e1983279f8350db33ab8539fa01505c293e02ee12514ab6f3d4050"
+    },
+    "a1_extra_load_note": "A ready=true frozen view check (0.96s wall, no hardware) ran concurrently with A1; A1 is retained, not used alone to claim latency improvement.",
+    "no_hard_deadline_claim": "B2 control local-socket-to-kernel maximum 11.048424ms; control throughput remains 100Hz but not every deadline.",
+    "openblas_investigation": {
+      "log_root": "/tmp/rdk_lidar_latency_20261110/geometry_threads_1794263610009056584",
+      "original_blas_threads": 8,
+      "ab_ba": [
+        {
+          "label": "A1",
+          "blas_threads": 8,
+          "count": 102,
+          "all_numerical_outputs_exact": true,
+          "wall_ms": {
+            "p50": 11.463777499999999,
+            "p95": 14.922425249999993,
+            "p99": 17.06515035,
+            "max": 18.453318
+          },
+          "process_cpu_ms": {
+            "p50": 11.332937999999999,
+            "p95": 14.683402449999992,
+            "p99": 16.812233349999996,
+            "max": 17.540457
+          },
+          "thread_cpu_ms": {
+            "p50": 11.338896,
+            "p95": 14.688635449999992,
+            "p99": 16.817277849999996,
+            "max": 17.544208
+          }
+        },
+        {
+          "label": "B1",
+          "blas_threads": 1,
+          "count": 102,
+          "all_numerical_outputs_exact": true,
+          "wall_ms": {
+            "p50": 11.1277785,
+            "p95": 13.973406749999999,
+            "p99": 16.84003875,
+            "max": 20.116522
+          },
+          "process_cpu_ms": {
+            "p50": 10.8610425,
+            "p95": 13.761766099999997,
+            "p99": 16.01215168,
+            "max": 19.930374
+          },
+          "thread_cpu_ms": {
+            "p50": 10.864229,
+            "p95": 13.758541449999997,
+            "p99": 16.01144284,
+            "max": 19.928707
+          }
+        },
+        {
+          "label": "B2",
+          "blas_threads": 1,
+          "count": 102,
+          "all_numerical_outputs_exact": true,
+          "wall_ms": {
+            "p50": 10.8288415,
+            "p95": 13.472654799999999,
+            "p99": 16.06370342,
+            "max": 16.343491
+          },
+          "process_cpu_ms": {
+            "p50": 10.690667000000001,
+            "p95": 13.2889399,
+            "p99": 15.65929775,
+            "max": 16.019876
+          },
+          "thread_cpu_ms": {
+            "p50": 10.6937295,
+            "p95": 13.2867494,
+            "p99": 15.65694792,
+            "max": 16.000168
+          }
+        },
+        {
+          "label": "A2",
+          "blas_threads": 8,
+          "count": 102,
+          "all_numerical_outputs_exact": true,
+          "wall_ms": {
+            "p50": 10.247677,
+            "p95": 12.24819535,
+            "p99": 12.711756759999998,
+            "max": 12.837503
+          },
+          "process_cpu_ms": {
+            "p50": 10.0262515,
+            "p95": 12.00727105,
+            "p99": 12.267830329999999,
+            "max": 12.45346
+          },
+          "thread_cpu_ms": {
+            "p50": 10.0252725,
+            "p95": 12.00575615,
+            "p99": 12.26550191,
+            "max": 12.451793
+          }
+        }
+      ],
+      "captured": {
+        "wall_ms": {
+          "p50": 12.391045,
+          "p95": 16.196162599999994,
+          "p99": 24.14105321999998,
+          "max": 26.378752
+        },
+        "process_cpu_ms": {
+          "p50": 12.217542,
+          "p95": 15.096852549999996,
+          "p99": 19.402478009999992,
+          "max": 24.073082
+        },
+        "thread_cpu_ms": {
+          "p50": 12.213958,
+          "p95": 15.091994849999997,
+          "p99": 19.398362849999987,
+          "max": 24.069373
+        }
+      }
+    },
+    "openblas_decision": "Do not deploy a thread-count change; 8 vs 1 showed no repeatable net speedup. Exact numerical comparison excludes timings and cumulative backend instrumentation counts only.",
+    "pipe_probe": {
+      "log_root": "/tmp/rdk_lidar_latency_20261110/pipe_probe_1794263763009007388",
+      "jobs": 104,
+      "scope": "Temporary trace wrappers around original worker/geometry, no production timers or numerical changes",
+      "metrics": {
+        "outbound_ms": {
+          "p50": 2.9662825,
+          "p95": 4.490220999999998,
+          "p99": 6.01462127,
+          "max": 13.977499
+        },
+        "math_wall_ms": {
+          "p50": 12.503961499999999,
+          "p95": 15.45406275,
+          "p99": 17.12949032,
+          "max": 17.253322
+        },
+        "reply_return_ms": {
+          "p50": 1.210726,
+          "p95": 1.9278092500000001,
+          "p99": 2.32167573,
+          "max": 3.712572
+        },
+        "child_send_ms": {
+          "p50": 0.6559975,
+          "p95": 0.7873015999999999,
+          "p99": 0.86561651,
+          "max": 1.096413
+        },
+        "total_observe_ms": {
+          "p50": 24.7947995,
+          "p95": 30.1297036,
+          "p99": 35.22312012,
+          "max": 46.829733
+        },
+        "parent_geometry_thread_cpu_ms": {
+          "p50": 1.2474165,
+          "p95": 1.6009642,
+          "p99": 1.68631146,
+          "max": 1.713417
+        }
+      },
+      "slowest": [
+        {
+          "scan_id": "0c29478f92034171b35009ed4bc4e46c:sector:0c29478f92034171b35009ed4bc4e46c:byte:27600:8:0c29478f92034171b35009ed4bc4e46c:byte:28305:3",
+          "parent_observe_start_ns": 37335528018308,
+          "parent_geometry_start_ns": 37335529165846,
+          "parent_geometry_return_ns": 37335548880786,
+          "parent_geometry_thread_cpu_ms": 1.272126,
+          "voluntary_context_switches": 3,
+          "involuntary_context_switches": 0,
+          "child_received_ns": 37335532020087,
+          "child_finished_ns": 37335546953083,
+          "child_process_cpu_ms": 13.869959,
+          "parent_observe_return_ns": 37335561952787,
+          "child_send_return_ns": 37335547817164,
+          "outbound_ms": 2.854241,
+          "math_wall_ms": 14.932996,
+          "reply_return_ms": 1.927703,
+          "child_send_ms": 0.864081,
+          "total_observe_ms": 33.934479
+        },
+        {
+          "scan_id": "0c29478f92034171b35009ed4bc4e46c:sector:0c29478f92034171b35009ed4bc4e46c:byte:173453:0:0c29478f92034171b35009ed4bc4e46c:byte:174111:8",
+          "parent_observe_start_ns": 37344058109714,
+          "parent_geometry_start_ns": 37344060466456,
+          "parent_geometry_return_ns": 37344080328062,
+          "parent_geometry_thread_cpu_ms": 1.325625,
+          "voluntary_context_switches": 1,
+          "involuntary_context_switches": 0,
+          "child_received_ns": 37344063332823,
+          "child_finished_ns": 37344078798192,
+          "child_process_cpu_ms": 14.751082,
+          "parent_observe_return_ns": 37344093372689,
+          "child_send_return_ns": 37344079663856,
+          "outbound_ms": 2.866367,
+          "math_wall_ms": 15.465369,
+          "reply_return_ms": 1.52987,
+          "child_send_ms": 0.865664,
+          "total_observe_ms": 35.262975
+        },
+        {
+          "scan_id": "0c29478f92034171b35009ed4bc4e46c:sector:0c29478f92034171b35009ed4bc4e46c:byte:10674:3:0c29478f92034171b35009ed4bc4e46c:byte:11332:10",
+          "parent_observe_start_ns": 37334455484453,
+          "parent_geometry_start_ns": 37334457730280,
+          "parent_geometry_return_ns": 37334487671272,
+          "parent_geometry_thread_cpu_ms": 1.311417,
+          "voluntary_context_switches": 1,
+          "involuntary_context_switches": 0,
+          "child_received_ns": 37334471707779,
+          "child_finished_ns": 37334486388818,
+          "child_process_cpu_ms": 14.077542,
+          "parent_observe_return_ns": 37334502314186,
+          "child_send_return_ns": 37334487080065,
+          "outbound_ms": 13.977499,
+          "math_wall_ms": 14.681039,
+          "reply_return_ms": 1.282454,
+          "child_send_ms": 0.691247,
+          "total_observe_ms": 46.829733
+        }
+      ],
+      "native_calls": {
+        "MainThread": {
+          "p50": 2.906741,
+          "p95": 4.1977039,
+          "p99": 4.979969059999998,
+          "max": 12.323046
+        },
+        "lidar-fit": {
+          "p50": 1.966223,
+          "p95": 3.4443891499999997,
+          "p99": 3.926196889999998,
+          "max": 4.649236
+        }
+      }
+    },
+    "rare_wait_observation": {
+      "log_root": "/tmp/rdk_lidar_latency_20261110/geometry_threads_1794263610009056584",
+      "scan_byte_offset": 132751,
+      "total_observe_ms": 147.52809,
+      "geometry_roundtrip_ms": 139.716989,
+      "child_main_cpu_ms": 10.139417,
+      "cause": "Unknown. Not reproduced in subsequent split trace; cannot attribute to math, BLAS or a particular syscall."
+    },
+    "scope": "Offline traces and saved-frame vision compute replay only; no production timing monitors, BLAS setting, mathematics, source arbitration, devices, motors, reboot or log pruning changes."
   }
 }

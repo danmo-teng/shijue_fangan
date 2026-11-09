@@ -490,8 +490,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             if key in native:observed_counters[key]=native[key]
         native_logs=native.get('logging',{})
         native_logs_healthy=all(not value.get('dropped') and not value.get('failed') for value in native_logs.values())
+        last=(engine.snapshot(_native_state=native) if native_runtime is not None else engine.snapshot())
         return dict(observed_counters,**reader_state,scans=engine.scan_count,fits=engine.fit_count,
-            scan_processing_ms_p95=p95,last=engine.snapshot(),error=error,
+            scan_processing_ms_p95=p95,last=last,error=error,
             worker_pid=os.getpid(),worker_cpu_affinity=sorted(os.sched_getaffinity(0)),
             capture_chain_present=bool(engine.poses and engine.yaws and reader_state['scans_received']),
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
