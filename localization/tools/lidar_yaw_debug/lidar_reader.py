@@ -147,7 +147,12 @@ class LidarStream:
         self.sector.reset()
         raise LidarTimingError(str(message))
 
-    def feed(self, data: bytes, arrival_ns: int):
+    def feed(self, data: bytes, arrival_ns: int, *, on_scan=None):
+        """Emit each finished sector before processing the remaining batch.
+
+        The returned list is unchanged. A nonblocking callback lets the
+        consumer start while later packets in this same read are decoded.
+        """
         require_time_ns(arrival_ns, "arrival_ns")
         if self.needs_new_epoch:
             raise LidarTimingError("reader requires explicit new source/clock epoch")
@@ -197,10 +202,14 @@ class LidarStream:
                 self.adapter.reset_segment(); self.sector.reset()
                 continue
             try:
-                output.extend(self.sector.feed(points))
+                ready = self.sector.feed(points)
             except LidarTimingError as exc:
                 self.stats["sector_rejections"] += 1
                 self.last_error = str(exc)
                 self.adapter.reset_segment(); self.sector.reset()
+                continue
+            output.extend(ready)
+            if on_scan is not None:
+                for scan in ready: on_scan(scan)
         self.stats["scans_emitted"] += len(output)
         return output

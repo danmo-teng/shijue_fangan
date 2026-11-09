@@ -83,6 +83,13 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
         state['reader_logging_healthy'] = log.healthy()
         offer_latest(updates, dict(state))
 
+    def publish_scan(scan):
+        state['scans_received'] += 1
+        log.submit('dynamic_scans.jsonl', dict(scan_id=scan.scan_id,
+            reference_ns=scan.reference_ns, time_qualified=False,
+            points=[vars(p).copy() for p in scan.points]))
+        state['scan_queue_drops'] += offer_latest(scans, scan)
+
     def disconnect(exc):
         nonlocal lidar, reader, next_open
         if lidar is not None:
@@ -126,18 +133,11 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
             if data:
                 log.submit('lidar_rx.jsonl', dict(timestamp_monotonic_ns=received, data_hex=data.hex()))
                 try:
-                    ready = reader.feed(data, received)
+                    reader.feed(data, received, on_scan=publish_scan)
                 except LidarTimingError as exc:
                     event('lidar_segment_restart', reason=str(exc))
                     for k, v in reader.stats.items(): totals[k] = totals.get(k, 0) + v
                     reader = make_reader(config)
-                    ready = []
-                for scan in ready:
-                    state['scans_received'] += 1
-                    log.submit('dynamic_scans.jsonl', dict(scan_id=scan.scan_id,
-                        reference_ns=scan.reference_ns, time_qualified=False,
-                        points=[vars(p).copy() for p in scan.points]))
-                    state['scan_queue_drops'] += offer_latest(scans, scan)
             if time.monotonic() - last_publish >= .05:
                 publish()
                 last_publish = time.monotonic()

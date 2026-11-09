@@ -295,6 +295,28 @@ def test_lidar_yaw_diagnostic():
     assert len(scans)>=3 and reader.stats["crc_errors"]==0
     assert all(not s.timing_qualified for s in scans)  # Never qualify nominal 1ms ticks.
     assert all(all(b.time_ns>a.time_ns for a,b in zip(s.points,s.points[1:])) for s in scans)
+    # A complete scan must not wait for all later packets in the same read.
+    # Compare exact physical rays/IDs/times, including wrap and CRC recovery.
+    for corrupt in (False,True):
+        cfg=dict(bearing_sign=1,bearing_zero_deg=0,physical_direction=1,
+                 center_raw_deg=m['center_raw_deg'],fov_deg=m['display_fov_deg'])
+        batch_reader=LidarStream(cfg,sensor_epoch='scan-delivery-parity')
+        stream_reader=LidarStream(cfg,sensor_epoch='scan-delivery-parity')
+        early=False
+        for i in range(0,150,30):
+            packets=[scan_packet(j) for j in range(i,i+30)]
+            if corrupt and i==30:
+                damaged=bytearray(packets[7]);damaged[9]^=1;packets[7]=bytes(damaged)
+            data=b''.join(packets);arrival=2_000_000_000+i*3_000_000
+            expected=batch_reader.feed(data,arrival);delivered=[];delivered_after_packets=[]
+            def emit(scan):
+                delivered.append(scan)
+                delivered_after_packets.append(stream_reader.stats['scan_packets'])
+            actual=stream_reader.feed(data,arrival,on_scan=emit)
+            assert actual==expected and delivered==expected
+            early=early or any(count<stream_reader.stats['scan_packets'] for count in delivered_after_packets)
+        assert early and stream_reader.stats==batch_reader.stats
+        assert stream_reader.stats['crc_errors']==int(corrupt)
     # Independent rectangle ray caster, actual inverted mounting and retained FOV.
     truth=np.array([-.9,.85]);heading=math.radians(135)
     ext=[*m["extrinsic"][:2],math.radians(m["extrinsic"][2])]

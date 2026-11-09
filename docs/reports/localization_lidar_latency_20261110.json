@@ -606,5 +606,231 @@
   "next": [
     "stream completed sectors before finishing the rest of a batched receive",
     "human decision pending for C++ parser/time/sector migration"
-  ]
+  ],
+  "completed_sectors_streaming": {
+    "baseline": "6dc2194",
+    "scope": "Emit complete immutable sectors before processing remaining packets in one receive batch; returned scans/math/time mapping unchanged",
+    "abba": [
+      {
+        "label": "A1",
+        "mode": "batch",
+        "scans": 99,
+        "latency_ms": {
+          "p50": 12.113894,
+          "p95": 75.3031661,
+          "p99": 82.98004143999994,
+          "max": 97.13827
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2081,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 1,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 28,
+          "history_records_written": 2185,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.07732800000000001,
+          "p95": 0.1498433000000001,
+          "max": 2.568706
+        },
+        "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794255567706617006/A1"
+      },
+      {
+        "label": "B1",
+        "mode": "stream",
+        "scans": 100,
+        "latency_ms": {
+          "p50": 12.076706,
+          "p95": 61.45834584999999,
+          "p99": 78.2410586200001,
+          "max": 99.313468
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2094,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 0,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 27,
+          "history_records_written": 2198,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.07712350000000001,
+          "p95": 0.14959925000000032,
+          "max": 2.778376
+        },
+        "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794255567706617006/B1"
+      },
+      {
+        "label": "B2",
+        "mode": "stream",
+        "scans": 100,
+        "latency_ms": {
+          "p50": 11.931227499999999,
+          "p95": 56.61563859999999,
+          "p99": 75.9409349500001,
+          "max": 95.312656
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2082,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 0,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 29,
+          "history_records_written": 2186,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.077174,
+          "p95": 0.13791825000000008,
+          "max": 2.868114
+        },
+        "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794255567706617006/B2"
+      },
+      {
+        "label": "A2",
+        "mode": "batch",
+        "scans": 99,
+        "latency_ms": {
+          "p50": 11.448605,
+          "p95": 79.4109173,
+          "p99": 88.80626944,
+          "max": 91.03143
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2115,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 1,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 31,
+          "history_records_written": 2219,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.07563,
+          "p95": 0.14447430000000006,
+          "max": 2.482557
+        },
+        "artifact_root": "/tmp/rdk_lidar_latency_20261110/receiver_1794255567706617006/A2"
+      }
+    ],
+    "matched_scans": {
+      "common_consumer_scans": 99,
+      "raw_scans_exactly_equal": 100,
+      "phases": {
+        "A1": {
+          "p50": 12.113894,
+          "p95": 75.3031661,
+          "p99": 82.98004143999994,
+          "max": 97.13827
+        },
+        "B1": {
+          "p50": 11.972728,
+          "p95": 46.680174299999905,
+          "p99": 72.44121521999998,
+          "max": 78.028206
+        },
+        "B2": {
+          "p50": 11.861436,
+          "p95": 46.355209999999936,
+          "p99": 73.21111623999998,
+          "max": 75.745261
+        },
+        "A2": {
+          "p50": 11.448605,
+          "p95": 79.4109173,
+          "p99": 88.80626944,
+          "max": 91.03143
+        }
+      }
+    },
+    "tests": [
+      "test_lidar_yaw_diagnostic passed, including streaming/batch exact point identity, timestamps, wrap and CRC recovery",
+      "test_dynamic_worker_process passed, including real PTY receiver, numerical process and suspended-child shutdown"
+    ],
+    "note": "All 100 raw logged scans across all four runs match exactly after removing only independently-created source epoch prefixes and the per-session clock-anchor constant. Shared 99 consumer scans are compared separately; report the additional delivered stream scan too. Worst all-sample latency is not improved consistently; parsing CPU is not reduced by this scheduling change.",
+    "fingerprints": {
+      "localization/tools/lidar_yaw_debug/lidar_reader.py": "3debb9d5110be46fec26b34948aea7b9a6efa3decaf3a50aa3ab985e0e23e095",
+      "localization/tools/lidar_yaw_debug/worker.py": "73cdd3af9672a7c83ba258801a58e75ff2a0c9ecbbdf6a9edf5d7262dfd6d6a8",
+      "localization/tools/test_f407_motion_protocol.py": "25b6ca8e1a1d54e27c0a28cb1cca697681e84b96129a4ef27efc4d993cc62b02"
+    }
+  }
 }
