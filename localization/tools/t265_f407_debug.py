@@ -608,6 +608,10 @@ def arguments() -> argparse.Namespace:
                         help="仅离线分析F405 07/08轮式与主gyro区间残差，不连接设备")
     parser.add_argument("--wheel-gyro-output", type=Path, metavar="OUTDIR",
                         help="将离线残差JSON/CSV导出到原日志目录之外；省略则只输出stdout")
+    parser.add_argument("--motion-response-analyze", type=Path, metavar="SESSION",
+                        help="仅离线导出原始SDK/07/08及主机接收时钟相对响应，不连接设备")
+    parser.add_argument("--motion-response-output", type=Path, metavar="OUTDIR",
+                        help="响应JSON及原始量CSV写到原会话之外；省略仅stdout摘要")
     parser.add_argument("--wheel-arm-m", type=float,
                         help="离线轮式旋转有效力臂，默认0.13m（不是轮半径，未标定，不写配置）")
     parser.add_argument("--localizer", type=Path, default=DEFAULT_LOCALIZER)
@@ -632,6 +636,16 @@ def arguments() -> argparse.Namespace:
 
 def main() -> int:
     args = arguments()
+    if args.motion_response_analyze:
+        if args.analyze or args.wheel_gyro_residual or args.wheel_gyro_output or args.wheel_arm_m is not None:
+            raise ValueError('--motion-response-analyze is a separate offline mode')
+        from wheel_gyro_residual import analyze_motion_response, export_motion_response
+        result, signals = analyze_motion_response(args.motion_response_analyze)
+        if args.motion_response_output:
+            export_motion_response(args.motion_response_analyze,args.motion_response_output,result,signals)
+        print(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False))
+        return 0
+    if args.motion_response_output:raise ValueError('--motion-response-output requires --motion-response-analyze')
     if args.wheel_gyro_residual:
         if args.analyze:raise ValueError('--wheel-gyro-residual and --analyze are separate offline modes')
         from wheel_gyro_residual import analyze_session, export_report

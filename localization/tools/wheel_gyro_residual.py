@@ -252,3 +252,201 @@ def export_report(session, output, report, rows):
         if rows:
             writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
     return json_path,csv_path
+
+
+def project_raw_pose(row, forward, up, offset):
+    """Same rigid-body transform as T265FieldProjector; no yaw-rate IIR."""
+    def cross(a,b):return (a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])
+    def dot(a,b):return sum(x*y for x,y in zip(a,b))
+    q=[float(row[k]) for k in ('qx','qy','qz','qw')];norm=math.sqrt(dot(q,q))
+    def rotate(v):
+        if norm<1e-12:return tuple(v)
+        xyz=[v/norm for v in q[:3]];w=q[3]/norm;t=[2*v for v in cross(xyz,v)];c=cross(xyz,t)
+        return tuple(v[i]+w*t[i]+c[i] for i in range(3))
+    f,l,u=rotate(forward),rotate(cross(up,forward)),rotate(up)
+    lever=tuple(offset[0]*f[i]+offset[1]*l[i] for i in range(3))
+    omega=[float(row[k]) for k in ('wx_radps','wy_radps','wz_radps')]
+    spin=cross(omega,lever);centre=[float(row[k])-spin[i] for i,k in enumerate(('vx_mps','vy_mps','vz_mps'))]
+    return dict(forward_mps=dot(centre,f),left_mps=dot(centre,l),up_mps=dot(centre,u),
+                yaw_rate_rad_s=dot(omega,u))
+
+
+def response_lag(reference, sdk_segments, *, minimum_excursion, window_s=.01):
+    """Offline signed correlation, using equal-width integrated SDK windows.
+
+    reference=(host receive seconds, value, averaging duration seconds). The
+    wheel interval ends at its host RX *proxy*, not a physical capture time.
+    Positive lag means the SDK waveform is later on the host receive clock.
+    """
+    import numpy as np
+    if len(reference)<100:return dict(identifiable=False,reason='insufficient_samples')
+    ref=np.asarray(reference,dtype=float);origin=ref[0,0];ref[:,0]-=origin
+    if np.ptp(ref[:,1])<minimum_excursion:
+        return dict(identifiable=False,reason='constant_or_low_excitation',minimum_excursion=minimum_excursion)
+    prepared=[]
+    for segment in sdk_segments:
+        if len(segment)<2:continue
+        data=np.asarray(segment,dtype=float);t=data[:,0]-origin;y=data[:,1]
+        integ=np.r_[0.,np.cumsum((y[:-1]+y[1:])*.5*np.diff(t))]
+        prepared.append((t,y,integ))
+    def primitive(query,t,y,integ):
+        ix=np.clip(np.searchsorted(t,query,side='right')-1,0,len(t)-2)
+        dt=query-t[ix];slope=(y[ix+1]-y[ix])/(t[ix+1]-t[ix])
+        return integ[ix]+y[ix]*dt+slope*dt*dt*.5
+    curve=[]
+    for lag in np.arange(-.5,.5001,.005):
+        values=np.full(len(ref),np.nan);end=ref[:,0]+lag;duration=np.where(ref[:,2]>0,ref[:,2],window_s);start=end-duration
+        for t,y,integ in prepared:
+            selected=(start>=t[0])&(end<=t[-1])
+            values[selected]=(primitive(end[selected],t,y,integ)-primitive(start[selected],t,y,integ))/duration[selected]
+        good=np.isfinite(values);count=int(good.sum())
+        if count<100:continue
+        x=ref[good,1];y=values[good]
+        if np.ptp(x)<minimum_excursion or np.ptp(y)<minimum_excursion:continue
+        denom=float(np.linalg.norm(x-x.mean())*np.linalg.norm(y-y.mean()))
+        if denom<=1e-15:continue
+        curve.append(dict(lag_ms=round(float(lag*1000),6),correlation=float(np.dot(x-x.mean(),y-y.mean())/denom),samples=count))
+    if not curve:return dict(identifiable=False,reason='no_excited_continuous_overlap')
+    peak=max(curve,key=lambda x:abs(x['correlation']))
+    near=[r['lag_ms'] for r in curve if abs(r['correlation'])>=abs(peak['correlation'])-.01]
+    boundary=abs(peak['lag_ms'])>=499.9;broad=max(near)-min(near)>50
+    return dict(identifiable=not boundary and not broad and abs(peak['correlation'])>=.5,
+        peak=peak,peak_width_within_001_ms=max(near)-min(near),search_boundary=boundary,
+        polarity_reversed=peak['correlation']<0,curve=curve,
+        method='signed Pearson peak; SDK piecewise-linear integral over same wheel averaging duration; host RX clock only')
+
+
+def analyze_motion_response(session):
+    """Read-only signal export; no SDK, UART, runtime policy or config writes."""
+    session=Path(session).resolve();residual,_=analyze_session(session)
+    source=session/residual['source_file'];records=[]
+    for line in source.read_text().splitlines():
+        try:
+            packet=json.loads(line)
+            if isinstance(packet,dict):records.append(packet)
+        except (ValueError,UnicodeDecodeError):pass # Counts retained by analyze_session.
+    config={}
+    for line in (session/'localization.conf').read_text().splitlines():
+        line=line.split('#',1)[0]
+        if '=' in line:
+            key,value=line.split('=',1);config[key.strip()]=value.strip()
+    def axis(value):
+        if value in ('+x','x','-x','+y','y','-y','+z','z','-z'):
+            result=[0.,0.,0.];result['xyz'.index(value[-1])]=-1. if value.startswith('-') else 1.;return result
+        return [float(v) for v in value.split(',')]
+    forward=axis(config['camera_robot_forward_axis']);up=axis(config['camera_robot_up_axis'])
+    if len(forward)!=3 or len(up)!=3:raise ValueError('Saved installation axes must have three components')
+    offset=[float(config[k]) for k in ('camera_offset_forward_m','camera_offset_left_m')]
+    signals=[];segments={key:[] for key in ('forward_mps','left_mps','up_mps','yaw_rate_rad_s')};current={key:[] for key in segments}
+    previous=None;raw_pose_path=session/'t265_raw_pose.csv';pose_count=0;breaks=0
+    with raw_pose_path.open(newline='') as stream:
+        for raw in csv.DictReader(stream):
+            stamp=int(raw['receive_monotonic_ns']);frame=int(raw['frame_number']);tracked=int(raw['tracker_confidence'])>0
+            values=project_raw_pose(raw,forward,up,offset)
+            valid=all(math.isfinite(v) for v in values.values())
+            contiguous=previous is not None and frame==previous[0]+1 and stamp>previous[1] and previous[2] and tracked and valid
+            if not contiguous:
+                if previous is not None:breaks+=1
+                for key in segments:
+                    if current[key]:segments[key].append(current[key]);current[key]=[]
+            if tracked and valid:
+                for key in segments:current[key].append((stamp/1e9,values[key]))
+            signals.append(dict(kind='sdk_pose',host_receive_monotonic_ns=stamp,**raw,**values));pose_count+=1
+            previous=(frame,stamp,tracked and valid)
+    for key in segments:
+        if current[key]:segments[key].append(current[key])
+    refs={key:[] for key in segments};seen=set();bad=0;gyro_received=[]
+    for packet in records:
+        try:
+            kind=packet.get('type');epoch=_group(packet);stamp=int(packet['receive_monotonic_ns'])
+            if kind==7:
+                identity=(epoch,kind,packet['measurement_id'])
+                if identity in seen:continue
+                seen.add(identity);dt=(_number(packet['t1_us'])-_number(packet['t0_us']))/1e6
+                flags=int(packet['flags']);valid=bool(flags&1) and not bool(flags&(8|16|32))
+                if dt<=0:raise ValueError('invalid wheel interval')
+                d=[_number(packet['delta'+str(i)]) for i in (1,2,3)]
+                vx=METRES_PER_RAW_COUNT*(d[0]-d[1])/(math.sqrt(3)*dt);vy=METRES_PER_RAW_COUNT*(d[0]+d[1]-2*d[2])/(3*dt)
+                signals.append(dict(kind='wheel07',host_receive_monotonic_ns=stamp,**packet,forward_mps=vx,left_mps=vy,up_mps=0.,duration_s=dt,analysis_value_valid=valid))
+                if valid:
+                    for key,value in (('forward_mps',vx),('left_mps',vy),('up_mps',0.)):refs[key].append((stamp/1e9,value,dt))
+            elif kind==8:
+                identity=(epoch,kind,packet['rate_source_id'])
+                if identity in seen:continue
+                seen.add(identity);flags=int(packet['rate_flags']);valid=bool(flags&1) and not bool(flags&32)
+                rate=math.radians(_number(packet['rate_mdps'])/1000)
+                signals.append(dict(kind='gyro08',host_receive_monotonic_ns=stamp,**packet,yaw_rate_rad_s=rate,analysis_value_valid=valid))
+                gyro_received.append((stamp/1000.,rate,valid))
+        except (KeyError,TypeError,ValueError,OverflowError):bad+=1
+    identity_epochs={tuple((p.get('boot_epoch'),p.get('reference_epoch'))) for p in records if p.get('type') in (7,8)}
+    comparisons={}
+    for key in ('forward_mps','left_mps','up_mps'):
+        comparisons[key]=response_lag(refs[key],segments[key],minimum_excursion=.02) if len(identity_epochs)==1 else dict(identifiable=False,reason='multiple_epochs_export_only')
+    if len(identity_epochs)==1:
+        series=_Series(gyro_received,Counter())
+        for tick,rate,valid in series.rows:
+            integral,status=series.interval(tick-10000.,tick,integrate=True)
+            if integral is not None:
+                refs['yaw_rate_rad_s'].append((tick/1e6,integral/.01,.01))
+        comparisons['yaw_rate_rad_s']=response_lag(refs['yaw_rate_rad_s'],segments['yaw_rate_rad_s'],minimum_excursion=math.radians(5))
+    else:comparisons['yaw_rate_rad_s']=dict(identifiable=False,reason='multiple_epochs_export_only')
+    sdk_counts=Counter();sdk_sessions=set();sdk_path=session/'wheel_sdk.jsonl'
+    if sdk_path.is_file():
+        for line in sdk_path.read_text().splitlines():
+            try:
+                event=json.loads(line);name=event.get('event','unknown');sdk_counts[name]+=1
+                if event.get('session_id'):sdk_sessions.add(str(event['session_id']))
+                if name=='wheel_sdk_result':sdk_counts['actual_api_true' if event.get('sdk_result') is True else 'actual_api_not_true']+=1
+                if name in ('wheel_sdk_attempt','wheel_sdk_result','wheel_input_sample_paused','wheel_source_policy_applied') or name.startswith('wheel_experiment_'):
+                    signals.append(dict(kind='sdk_call_event',event=name,
+                        event_host_monotonic_ns=event.get('timestamp_monotonic_ns'),
+                        log_monotonic_ns=event.get('log_monotonic_ns'),
+                        source_json=json.dumps(event,ensure_ascii=False)))
+            except (ValueError,TypeError,AttributeError):sdk_counts['malformed_sdk_lines']+=1
+    metadata=residual['metadata'];requested=metadata.get('wheel_input_requested')
+    # Requested=true includes normal, deliberately wrong, zero and held input.
+    # An explicit group is evidence; an enable switch alone cannot classify A.
+    full_metadata={}
+    try:full_metadata=json.loads((session/'metadata.json').read_text())
+    except (OSError,ValueError):pass
+    explicit_group=next((full_metadata.get(key) for key in ('transfer_group','motion_response_group','wheel_experiment_group')
+                         if full_metadata.get(key) in ('F','A','B','C','D','E')),None)
+    group=explicit_group or ('F' if requested is False and not sdk_counts['actual_api_true'] else
+                             'wheel_enabled_condition_unclassified' if requested is True else 'unknown')
+    report=dict(schema_version=1,analysis='offline_motion_response',runtime_connected=False,session=str(session),
+        transfer_group=group,group_source='explicit_metadata' if explicit_group else 'enable_request_and_actual_API_counts_only',
+        transfer_group_meaning='F=pure T265, A=normal official wheel input; B/C/D/E require explicit experiment identity; enable request never proves A',
+        actual_identity=residual['actual_identity'],session_complete=residual['session_complete'],
+        sdk_calls=dict(counts=dict(sdk_counts),session_ids=sorted(sdk_sessions),
+            return_scope='Host API return only, no per-sample device fusion ACK; attempt timestamp precedes call and log timestamp is not call time'),
+        source_files=residual['source_files'],installation=dict(forward_C=forward,up_C=up,offset_forward_left_m=offset),
+        pose_rows=pose_count,sdk_continuity_breaks=breaks,malformed_feedback_records=bad,signal_rows=len(signals),comparisons=comparisons,
+        effective_arm=dict(independent_ground_truth_fit=None,relative_to_gyro_fit=None,
+            reason='No automatic action-boundary inference; use exported raw counts and independently measured signed full-turn actions',wheel_count_totals=residual['groups']),
+        limitations=['Host receive waveform lag is not absolute ground-motion latency or pure transport delay.',
+            'Wheel RX is only a proxy for interval end; MCU and SDK capture clocks are retained without automatic alignment.',
+            'SDK signal is integrated over the same wheel interval duration; no endpoint-only 5ms midpoint claim.',
+            'Only contiguous tracked finite SDK segments enter correlation; all raw rows remain exported.',
+            'No IIR, installation/scale/clock fitting or configuration changes are applied.',
+            'Gyro08 and SDK omega both use 10ms linear-integral means on their host RX clocks; lag includes both transport and IMU/estimator filtering.',
+            'Wheel/gyro are SDK dependencies during injection, not independent physical truth.',
+            'Stopping wheel send within a session does not establish a fresh pure-T265 baseline.'])
+    report['source_files'][raw_pose_path.name]=dict(sha256=hashlib.sha256(raw_pose_path.read_bytes()).hexdigest(),bytes=raw_pose_path.stat().st_size)
+    for path in (session/'localization.conf',sdk_path):
+        if path.is_file():report['source_files'][path.name]=dict(sha256=hashlib.sha256(path.read_bytes()).hexdigest(),bytes=path.stat().st_size)
+    return report,signals
+
+
+def export_motion_response(session, output, report, signals):
+    session=Path(session).resolve();output=Path(output).resolve()
+    if output==session or session in output.parents or output in session.parents:
+        raise ValueError('Output must be outside the original session and its ancestors')
+    paths=[output/'motion_response.json',output/'motion_response_signals.csv']
+    if any(path.exists() for path in paths):raise FileExistsError('Analysis output already exists: '+str(output))
+    output.mkdir(parents=True,exist_ok=True)
+    with paths[0].open('x',encoding='utf-8') as stream:
+        json.dump(report,stream,ensure_ascii=False,indent=2,allow_nan=False);stream.write('\n')
+    with paths[1].open('x',encoding='utf-8',newline='') as stream:
+        fields=sorted({key for row in signals for key in row});writer=csv.DictWriter(stream,fieldnames=fields)
+        writer.writeheader();writer.writerows(signals)
+    return tuple(paths)

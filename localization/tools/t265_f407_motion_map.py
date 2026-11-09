@@ -12,8 +12,11 @@ import functools
 import copy
 import json
 import math
+import os
 import re
+import select
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -698,10 +701,12 @@ class MotionMapApp:
         return self._submit_action(lambda:self.bridge.turn_ccw(angle_deg,self.turn_rate_deg_s),
                                    f"逆时针 {angle_deg:+.1f}°，角速度上限 {self.turn_rate_deg_s}°/s")
 
-    def send_move(self, direction_deg: float, distance_mm: int) -> int:
+    def send_move(self, direction_deg: float, distance_mm: int, *, body_mm=None) -> int:
         self.active_test_parameters.update(direction_deg_target=direction_deg,distance_mm_target=distance_mm)
         a = math.radians(direction_deg)
         forward, left = round(distance_mm*math.cos(a)), round(distance_mm*math.sin(a))
+        if body_mm is not None:
+            forward, left = body_mm
         self.record_event("move_requested", {"forward_mm":forward,"left_mm":left,"speed_mm_s":self.speed_mm_s})
         return self._submit_action(lambda:self.bridge.move_body(forward,left,self.speed_mm_s),
                                    f"前{forward:+d}/左{left:+d}mm，速度{self.speed_mm_s}mm/s")
@@ -784,6 +789,10 @@ class MotionMapApp:
             "test_parameters": self.active_test_parameters,
             "localization": copy.deepcopy(marker["localization"]),
             "motion_status": copy.deepcopy(marker["motion_status"])}
+        if getattr(self.options,"motion_lab_chassis_only",False):
+            document.update(imu_native_unaligned=copy.deepcopy(marker.get("imu_native_unaligned")),
+                            wheel_reference=copy.deepcopy(marker.get("wheel_reference")),
+                            pose_source="not_started_chassis_only")
         with (self.run_dir / "ground_truth.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(document, ensure_ascii=False) + "\n")
         self.record_event("ground_truth_recorded", document)
@@ -798,16 +807,21 @@ class MotionMapApp:
             raise ValueError("先结束本段动作，再人工确认停稳并标记")
         now = time.monotonic_ns()
         stamp = self.localization.get("timestamp_monotonic_ns", 0)
-        if (not stamp or
+        chassis_only = getattr(self.options, "motion_lab_chassis_only", False)
+        if not chassis_only and (not stamp or
                 self.localization.get("quality") == "LOST" or
                 self.localization.get("t265",{}).get("tracker_confidence",0) <= 0):
             raise ValueError("T265尚无可记录位姿，未冻结终点")
         self.settled_reference_mark = dict(test_id=self.test_id,timestamp_monotonic_ns=now,
-            pose_age_at_mark_ms=(now-stamp)/1_000_000,
+            pose_age_at_mark_ms=(now-stamp)/1_000_000 if stamp and not chassis_only else None,
             source="operator_declared_settled_not_controller_or_gyro_truth",
-            localization=copy.deepcopy(self.localization), motion_status=copy.deepcopy(self.motion_status))
+            localization={} if chassis_only else copy.deepcopy(self.localization),
+            motion_status=copy.deepcopy(self.motion_status),
+            imu_native_unaligned=copy.deepcopy(self.imu_telemetry),
+            wheel_reference=copy.deepcopy(self.latest_wheel_reference))
         self.record_event("manual_settled_reference_mark", self.settled_reference_mark)
-        self.message = f"已冻结实验{self.test_id}末帧（年龄{(now-stamp)/1_000_000:.0f}ms，仅记录）；测量后G录入"
+        self.message = (f"已记录实验{self.test_id}人工停稳标记（仅轮/gyro，无T265）；可录入独立实测" if chassis_only else
+                        f"已冻结实验{self.test_id}末帧（年龄{(now-stamp)/1_000_000:.0f}ms，仅记录）；测量后G录入")
 
     def start_forward(self) -> None:
         self.send_move(0.0, self.distance_mm)
@@ -952,6 +966,9 @@ class MotionMapApp:
         self.events_path = self.run_dir / "events.jsonl"
         self.commands_path = self.run_dir / "commands.jsonl"
         status_log = self.run_dir / "f407_motion_status.jsonl"
+        if getattr(self.options, "motion_lab_chassis_only", False):
+            self._start_chassis_only_session(status_log)
+            return
         usb_recovery=None
         if getattr(self.options,"t265_usb_recovery",False):
             from t265_usb_recovery import recover_t265
@@ -959,6 +976,7 @@ class MotionMapApp:
             usb_recovery=recover_t265(self.run_dir/"t265_usb_recovery.json")
         synthetic=getattr(self.options,"wheel_fixture","off")!="off"
         sdk_session_id = uuid.uuid4().hex
+        self.sdk_session_id = sdk_session_id
         native_address='@t265-test-uart-'+sdk_session_id
         if not synthetic:
             self.bridge = F407SerialBridge(
@@ -1008,6 +1026,8 @@ class MotionMapApp:
                         "--debug-wheel-config", str(self.run_dir / "wheel_sdk_config.json"),
                         "--debug-wheel-log", str(self.run_dir / "wheel_sdk.jsonl"),
                         "--debug-wheel-session", sdk_session_id]
+            if getattr(self.options, "wheel_experiment", False):
+                command += ["--debug-wheel-experiment"]
         if synthetic:command += ["--debug-wheel-synthetic"]
         else:command += ['--uart',self.options.uart,'--baud',str(self.options.baud),
                          '--test-uart-socket',native_address]
@@ -1047,6 +1067,8 @@ class MotionMapApp:
             "device_restart_note":getattr(self.options,"device_restart_note","not_confirmed"),
             "clean_device_restart_verified":False,
             "fisheye_evidence_enabled":getattr(self.options,"fisheye_evidence",False),
+            "motion_lab_stdio":getattr(self.options,"motion_lab_stdio",False),
+            "wheel_experiment_enabled":getattr(self.options,"wheel_experiment",False),
             "wheel_input_requested": wheel_enabled,
             "timed_measurements_requested": wheel_enabled or getattr(self.options,"timed_measurements",False),
             "wheel_processing": "native C++ UART/interval-gyro pairing/mount conversion/SDK; Python observer only" if not synthetic else "synthetic fixture IPC",
@@ -1140,7 +1162,163 @@ class MotionMapApp:
         )
         self.message = f"底盘{self.options.baud}："+("身份已读回，动作须人工触发；轮速尚未注入" if link["motion_identity_ready"] else str(link["reason"]))
         self.record_event("session_started", {"initial_pose": metadata["initial_pose"]})
-        print(f"测试日志目录：{self.run_dir}", flush=True)
+        print(f"测试日志目录：{self.run_dir}", file=sys.stderr if getattr(self.options,"motion_lab_stdio",False) else sys.stdout, flush=True)
+
+    def _start_chassis_only_session(self, status_log):
+        """The existing direct client owns UART; there is no SDK/USB owner."""
+        self.localization_json = None
+        self.bridge = F407SerialBridge(self.options.uart, self.options.baud,
+            self.motion_status_path, status_log, identity_policy=self.options.chassis_profile,
+            asserted_firmware=self.options.actual_lower_firmware)
+        self.bridge.identity_confirmed = self.motion_identity_confirmed()
+        self.bridge.start()
+        self.bridge.start_timed_measurements()
+        link = self.bridge.connection_snapshot()
+        metadata = dict(schema_version=4, created_local=datetime.now().astimezone().isoformat(timespec="seconds"),
+            mode="interactive_f405_normaldebug", session_purpose="motion_lab_chassis_only",
+            motion_lab_stdio=True, motion_lab_chassis_only=True,
+            chassis_uart_owner="existing_python_chassis_test_client",
+            chassis_link=link, actual_lower_firmware=link["actual_lower_firmware"],
+            actual_lower_mode=link["actual_lower_mode"], actual_lower_service=link["actual_lower_service"],
+            sdk_owner_started=False, sdk_session_id=None, wheel_input_requested=False,
+            timed_measurements_requested=True, effective_config=self.session_config,
+            reference_description=self.options.reference_description, physical_accuracy_test=False,
+            ground_truth_policy="operator tape/ground marks only; no T265 Pose exists in this session",
+            protocol=dict(MOTION_PROTOCOL,baud=self.options.baud))
+        try:
+            metadata["upper_git_commit"] = subprocess.check_output(
+                ["git","rev-parse","HEAD"], cwd=PROJECT_ROOT,text=True).strip()
+        except (OSError,subprocess.SubprocessError):
+            metadata["upper_git_commit"] = "unavailable"
+        (self.run_dir/"metadata.json").write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+        self.record_event("session_started",dict(chassis_only=True,sdk_owner_started=False))
+
+    def motion_lab_status(self):
+        sdk = read_json(self.run_dir/"wheel_sdk_status.json") if self.run_dir and self.localizer else None
+        return dict(run_dir=str(self.run_dir) if self.run_dir else None,
+            chassis_only=getattr(self.options,"motion_lab_chassis_only",False),
+            chassis=self.bridge.connection_snapshot() if self.bridge else None,
+            measurements=self.bridge.measurement_snapshot() if self.bridge else None,
+            pending=copy.deepcopy(self.bridge.pending) if self.bridge else None,
+            needs_stop_ack=self.bridge.needs_stop_ack if self.bridge else None,
+            sdk_owner_started=self.localizer is not None,
+            sdk_owner_returncode=self.localizer.poll() if self.localizer else None,
+            sdk_session_id=getattr(self,"sdk_session_id",None), sdk=sdk,
+            wheel_input_requested=self.options.wheel_input=="on",
+            wheel_experiment_enabled=getattr(self.options,"wheel_experiment",False),
+            current_pose=None if getattr(self.options,"motion_lab_chassis_only",False) else copy.deepcopy(self.localization),
+            imu=copy.deepcopy(self.imu_telemetry), wheel_reference=copy.deepcopy(self.latest_wheel_reference),
+            motion_status=copy.deepcopy(self.motion_status), active_test=self.active_test,
+            test_id=self.test_id, host_action_id=self.active_host_action_id, message=self.message)
+
+    def motion_lab_command(self, request):
+        """One explicit operation. Submission is never an acceptance/DONE claim."""
+        if not isinstance(request,dict):
+            raise ValueError("command must be a JSON object")
+        op=request.get("op")
+        def number(name, default=None, integer=False):
+            value=request.get(name,default)
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value):
+                raise ValueError(f"{name} must be a finite number")
+            if integer and int(value)!=value:
+                raise ValueError(f"{name} must be an integer")
+            return int(value) if integer else float(value)
+        if op=="status":return self.motion_lab_status()
+        if op in ("move","turn"):
+            if self.active_test is not None or (self.bridge and (self.bridge.pending is not None or self.bridge.needs_stop_ack)):
+                raise RuntimeError("当前动作尚未结束；需要取消时显式stop，不自动替换动作")
+            before=self.active_host_action_id
+            if op=="move":
+                forward,left=number("forward_mm",integer=True),number("left_mm",integer=True)
+                self.speed_mm_s=number("speed_mm_s",self.speed_mm_s,integer=True)
+                self.distance_mm=round(math.hypot(forward,left))
+                self.toggle_test("lab_move",lambda:self.send_move(math.degrees(math.atan2(left,forward)),
+                    self.distance_mm,body_mm=(forward,left)))
+            else:
+                angle=number("angle_deg")
+                self.turn_rate_deg_s=number("rate_deg_s",self.turn_rate_deg_s)
+                self.toggle_test("lab_turn",lambda:self.send_turn(angle))
+            if self.active_host_action_id==before:
+                raise RuntimeError(self.message)
+            return dict(submitted=True,lower_accepted=None,host_action_id=self.active_host_action_id,
+                        wire_sequence=self.active_command_sequence,test_id=self.test_id)
+        if op=="stop":
+            before=self.active_host_action_id
+            self.active_test=None;self.return_phase=None
+            self.send_stop(str(request.get("reason","explicit motion lab STOP")))
+            if before==self.active_host_action_id:raise RuntimeError(self.message)
+            return dict(submitted=True,lower_stopped=None,host_action_id=self.active_host_action_id)
+        if op=="mark":
+            self.mark_settled_reference()
+            return copy.deepcopy(self.settled_reference_mark)
+        if op=="ground_truth":
+            self.save_ground_truth(str(request.get("text","")))
+            return dict(saved=True,test_id=self.test_id)
+        if op=="event":
+            name=request.get("name")
+            if not isinstance(name,str) or not name:raise ValueError("event requires a nonempty name")
+            details=request.get("details",{})
+            if not isinstance(details,dict):raise ValueError("event details must be an object")
+            return dict(saved=self.record_event(name,details))
+        if op=="experiment":
+            if not getattr(self.options,"wheel_experiment",False):
+                raise ValueError("experiment requires explicit --wheel-experiment in this SDK session")
+            mode=request.get("mode");phase=request.get("phase_id")
+            if mode not in ("normal","drop","bias_body","zero_camera","hold_last_camera"):
+                raise ValueError("unknown experiment mode")
+            if not isinstance(phase,str) or not phase:raise ValueError("phase_id is required")
+            duration=number("duration_ns",0,integer=True)
+            start=number("start_monotonic_ns",0,integer=True)
+            if start<0 or duration<0 or (mode!="normal" and not duration):
+                raise ValueError("non-normal experiment requires positive duration_ns; start must be nonnegative")
+            packet=dict(schema=3,kind="wheel_input_experiment",session_id=self.sdk_session_id,
+                phase_id=phase,mode=mode,start_monotonic_ns=start,duration_ns=duration)
+            if mode=="bias_body":
+                bias=request.get("bias_body_mps")
+                if (not isinstance(bias,list) or len(bias)!=3 or
+                        any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) for v in bias)):
+                    raise ValueError("bias_body_mps requires three finite values")
+                packet["bias_body_mps"]=bias
+            with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as stream:
+                stream.sendto(json.dumps(packet,allow_nan=False).encode(),"\0t265-wheel-"+self.sdk_session_id)
+            self.record_event("wheel_experiment_requested",packet)
+            return dict(ipc_sent=True,sdk_applied=None,request=packet,
+                        evidence="wheel_sdk.jsonl records actual profile application and API calls")
+        if op=="close":return dict(closing=True)
+        raise ValueError("unknown op")
+
+    def run_motion_lab(self):
+        """No window, scheduler or automatic motions; stdin is the operator."""
+        def reply(request, result=None, error=None):
+            row=dict(request_id=request.get("request_id") if isinstance(request,dict) else None,
+                     op=request.get("op") if isinstance(request,dict) else None,ok=error is None)
+            row.update(error=error) if error is not None else row.update(result=result)
+            print(json.dumps(row,ensure_ascii=False,allow_nan=False),flush=True)
+        try:
+            self.start_session()
+            reply(dict(op="started"),self.motion_lab_status())
+            poll=select.poll();poll.register(sys.stdin.fileno(),select.POLLIN|select.POLLHUP|select.POLLERR)
+            buffer=b""
+            while True:
+                self.update_data()
+                if not poll.poll(20):continue
+                chunk=os.read(sys.stdin.fileno(),65536)
+                if not chunk:break
+                buffer+=chunk
+                while b"\n" in buffer:
+                    line,buffer=buffer.split(b"\n",1)
+                    if not line.strip():continue
+                    request=None
+                    try:
+                        request=json.loads(line)
+                        result=self.motion_lab_command(request)
+                        reply(request,result)
+                        if request.get("op")=="close":return 0
+                    except (ValueError,RuntimeError,OSError,TypeError,serial.SerialException) as error:
+                        reply(request,error=str(error))
+            return 0
+        finally:
+            self.stop_session()
 
     def stop_session(self) -> None:
         wheel_summary=None
@@ -1178,7 +1356,7 @@ class MotionMapApp:
         if self.localizer_log is not None:
             self.localizer_log.close()
             self.localizer_log = None
-        if self.run_dir is not None:
+        if self.run_dir is not None and not getattr(self.options,"motion_lab_chassis_only",False):
             try:
                 records=[json.loads(line) for line in (self.run_dir/'localization_events.jsonl').read_text().splitlines()]
                 diagnostics=next((e['data'] for e in reversed(records) if e.get('event')=='diagnostic_csv_status'),None)
@@ -1233,9 +1411,10 @@ class MotionMapApp:
                     self.record_event("analysis_failed", {"error": str(error)})
             stopped_saved = self.record_event("session_stopped", {"localizer_returncode": localizer_returncode})
             # Save completion last. Failed/incomplete sessions never cause pruning.
-            required = [self.run_dir / n for n in ("metadata.json", "localization_debug.csv",
-                        "t265_raw_pose.csv", "analysis.json", "events.jsonl")]
-            if (stopped_saved and logs_ok and not self.logging_failed and localizer_returncode == 0 and
+            chassis_only=getattr(self.options,"motion_lab_chassis_only",False)
+            required = [self.run_dir / n for n in (("metadata.json","events.jsonl") if chassis_only else
+                        ("metadata.json", "localization_debug.csv", "t265_raw_pose.csv", "analysis.json", "events.jsonl"))]
+            if (stopped_saved and logs_ok and not self.logging_failed and (chassis_only or localizer_returncode == 0) and
                     all(p.is_file() and p.stat().st_size > 0 for p in required)):
                 (self.run_dir / "session_complete.json").write_text(json.dumps({
                     "owner": "t265_f407_motion_map", "complete": True,
@@ -1351,6 +1530,8 @@ class MotionMapApp:
             raise RuntimeError("传感器检查没有真实SDK轮速接受结果；不能以配置或IPC成功代替")
 
     def run(self) -> int:
+        if getattr(self.options,"motion_lab_stdio",False):
+            return self.run_motion_lab()
         try:
             if self.options.logs_only:
                 self.storage_panel.open = self.storage_panel.scan_requested = True
@@ -1429,6 +1610,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--serial")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice; default pure T265, on uses measured 07/08 with timing diagnostics only")
+    parser.add_argument("--motion-lab-stdio",action="store_true",help="explicit no-GUI operator JSON lines; starts listening, never automatic motion")
+    parser.add_argument("--motion-lab-chassis-only",action="store_true",help="stdio only: existing client owns UART without SDK/USB; wheel/gyro and explicit motion")
+    parser.add_argument("--wheel-experiment",action="store_true",help="stdio+wheel on only: allow explicit bounded SDK-input experiments; default disabled")
     parser.add_argument("--wheel-fixture",choices=("off","axes","pause-resume"),default="off",
                         help="explicit synthetic SDK-response sequence; headless only, NO chassis UART, not measured feedback")
     parser.add_argument("--wheel-noise-std-mps", type=float, default=.10,
@@ -1450,6 +1634,12 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.motion_lab_stdio and (options.logs_only or options.check_chassis or options.sensor_check_seconds or options.wheel_fixture!="off"):
+        parser.error("--motion-lab-stdio cannot combine with log/check/synthetic modes")
+    if options.motion_lab_chassis_only and (not options.motion_lab_stdio or options.wheel_input!="off" or options.t265_usb_recovery or options.fisheye_evidence):
+        parser.error("--motion-lab-chassis-only requires stdio and wheel off; no USB/SDK options")
+    if options.wheel_experiment and (not options.motion_lab_stdio or options.wheel_input!="on" or options.motion_lab_chassis_only or options.wheel_fixture!="off"):
+        parser.error("--wheel-experiment requires stdio with real wheel input on")
     if options.sensor_check_render_mode!='on' and not options.sensor_check_seconds:
         parser.error('--sensor-check-render-mode requires --sensor-check-seconds')
     if options.log_module=="competition":

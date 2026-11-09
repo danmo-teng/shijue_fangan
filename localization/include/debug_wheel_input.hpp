@@ -13,6 +13,7 @@
 #include <condition_variable>
 #include <deque>
 #include <atomic>
+#include <array>
 
 namespace omni {
 // Opt-in debug ingress in the SAME SDK owner. No chassis UART or pose fusion.
@@ -21,7 +22,8 @@ public:
     using Json = nlohmann::json;
     using Send = std::function<bool(std::uint32_t, const rs2_vector &)>;
     DebugWheelInput(const LocalizationConfig &, const std::string &session,
-                   const std::string &address, const std::string &log_path, bool synthetic_input=false);
+                   const std::string &address, const std::string &log_path, bool synthetic_input=false,
+                   bool experiment_enabled=false);
     ~DebugWheelInput();
     static void validate_config(const Json &);
     void configure(const rs2::pose_sensor &, const std::string &config_path);
@@ -35,12 +37,15 @@ public:
     bool process(Json packet, std::uint64_t now_ns, const Send &send);
     // Single input-thread policy consumer; also used by the fake-SDK check.
     bool source_policy(const Json &);
+    bool experiment_policy(const Json &, std::uint64_t now_ns);
 private:
     void record(Json);
     void write_logs();
     void wire_packet(const std::uint8_t *,std::size_t,std::uint64_t,bool request);
     void native_loop();
     void receive_source_policies();
+    void update_experiment(std::uint64_t now_ns);
+    Json experiment_context() const;
     LocalizationConfig config_;
     std::string session_, status_path_;
     std::ofstream log_;
@@ -57,6 +62,14 @@ private:
     std::string input_policy_reason_="measured_wheel_input_enabled";
     std::uint64_t paused_samples_=0;
     std::uint64_t last_success_ns_=0;
+    bool experiment_enabled_=false, experiment_pending_=false, experiment_active_=false;
+    std::string experiment_mode_="normal", experiment_phase_id_;
+    std::array<double,3> experiment_bias_{{0.,0.,0.}};
+    std::uint64_t experiment_start_ns_=0, experiment_end_ns_=0, experiment_applied_ns_=0;
+    bool have_last_submitted_=false, experiment_have_hold_=false, last_submitted_result_=false;
+    rs2_vector last_submitted_{}, experiment_hold_{};
+    std::uint32_t last_submitted_frame_=0, experiment_hold_frame_=0;
+    bool experiment_hold_result_=false;
     std::atomic<bool> stopping_{false},logging_stopping_{false},logging_failed_{false};
     std::atomic<std::uint64_t> dropped_logs_{0};
     std::thread input_thread_,log_thread_;

@@ -1,0 +1,160 @@
+{
+  "scope": "desktop readiness only; no motor commands; no accuracy or physical response conclusion",
+  "power_transition": "Operator must switch to vehicle battery and reboot RDK before floor test; new SDK sessions required",
+  "tests": [
+    "cached C++ build and existing target with five-state fake sink PASS",
+    "Python stdio target PASS",
+    "raw rigid-body/constant signal/known +40ms response target PASS"
+  ],
+  "sessions": [
+    {
+      "path": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_183601_interactive",
+      "sdk_session_id": "a1a6838635304facaf35ebe7c361a0cb",
+      "wheel_input_requested": false,
+      "actual": {
+        "git_commit": "ac61480cf44e24c314988f2be4ff3996d9b1ee93",
+        "source_dirty": 1,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "uart_baud": 921600,
+        "protocol_major": 1,
+        "protocol_minor": 3
+      },
+      "complete": {
+        "owner": "t265_f407_motion_map",
+        "complete": true,
+        "session_index": 28,
+        "accuracy_verified": false
+      },
+      "raw_pose_rows": 28669,
+      "raw_frame_first_last": [
+        0,
+        28668
+      ],
+      "raw_pose_receive_span_s": 143.660926124,
+      "motion_commands": 0,
+      "source_hashes": {
+        "metadata.json": "969e1625c36cdf807eee9008f4bd545187c127078fb5fecd73d5af9f8539c43f",
+        "chassis_identity.json": "f535fffae92dd9143b1589c41a112a21ffda4358431b44bf4655fd733b55539f",
+        "session_complete.json": "93e227a92a6f0d061dfdd2061d189540adc91600e35ff3190cdd5703bda1ceae",
+        "t265_raw_pose.csv": "fc88ef007ea3d1c997566ce8e8d1e5f24634030e4f5ffc52a40a8e3859dec68a"
+      }
+    },
+    {
+      "path": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_184039_interactive",
+      "sdk_session_id": "3b4982437ccf460e9cca440d3e13c0ef",
+      "wheel_input_requested": true,
+      "actual": {
+        "git_commit": "ac61480cf44e24c314988f2be4ff3996d9b1ee93",
+        "source_dirty": 1,
+        "board": 405,
+        "mode": 5,
+        "service": 1,
+        "uart_baud": 921600,
+        "protocol_major": 1,
+        "protocol_minor": 3
+      },
+      "complete": {
+        "owner": "t265_f407_motion_map",
+        "complete": true,
+        "session_index": 29,
+        "accuracy_verified": false
+      },
+      "raw_pose_rows": 5686,
+      "raw_frame_first_last": [
+        0,
+        5685
+      ],
+      "raw_pose_receive_span_s": 28.488128028,
+      "motion_commands": 0,
+      "source_hashes": {
+        "metadata.json": "10794e0af9f0c62f4aa4402474f05250de8b904ea612f379e0e222ce811c71d2",
+        "chassis_identity.json": "e844d19e1afc98d5da227597f9d56c1c3ff3485f60776d7be147f73b3ee2ff4e",
+        "session_complete.json": "c4f98811739d2291d629957895dd3396c72619e9bc4762c15c2ceb314f27b0f5",
+        "t265_raw_pose.csv": "da52a0c87976ee24e139381d04a15136e7d7f22fbded70cedcfbf525008fac93",
+        "wheel_sdk.jsonl": "96e18243ce9c2d2582badfe15f2570bea15ebbd29a97c60971b739d4d5d50e7a"
+      },
+      "sdk_event_counts": {
+        "wheel_input_session": 1,
+        "wheel_config_load": 1,
+        "wheel_native_worker_started": 1,
+        "wheel_native_input_discarded": 1,
+        "wheel_native_identity": 1,
+        "wheel_native_clock_exchange": 1,
+        "wheel_native_measurement": 5744,
+        "wheel_native_rejected": 2,
+        "wheel_sdk_attempt": 2816,
+        "wheel_sdk_result": 2816,
+        "wheel_requests_coalesced": 5,
+        "wheel_experiment_requested": 5,
+        "wheel_experiment_applied": 4,
+        "wheel_experiment_sample_skipped": 50,
+        "wheel_experiment_window_ended": 3
+      },
+      "actual_api_true": 2816,
+      "actual_api_not_true": 0,
+      "active_experiments": {
+        "drop": {
+          "active_attempts": 0,
+          "active_api_true": 0,
+          "active_skips": 50,
+          "first_last_api_velocity_C": []
+        },
+        "zero_camera": {
+          "active_attempts": 49,
+          "active_api_true": 49,
+          "active_skips": 0,
+          "first_last_api_velocity_C": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ]
+        },
+        "bias_body": {
+          "active_attempts": 110,
+          "active_api_true": 110,
+          "active_skips": 0,
+          "first_last_api_velocity_C": [
+            [
+              0.174064710736275,
+              0.0,
+              0.100000001490116
+            ],
+            [
+              0.182567030191422,
+              0.0,
+              0.100000396370888
+            ]
+          ],
+          "max_delta_from_expected_bias_mps": 1.725299830779292e-08
+        },
+        "hold_last_camera": {
+          "active_attempts": 50,
+          "active_api_true": 50,
+          "active_skips": 0,
+          "first_last_api_velocity_C": [
+            [
+              0.182567030191422,
+              0.0,
+              0.100000396370888
+            ],
+            [
+              0.182567030191422,
+              0.0,
+              0.100000396370888
+            ]
+          ]
+        }
+      },
+      "final_restored_normal_api_true": 2
+    }
+  ]
+}

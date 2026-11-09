@@ -81,6 +81,7 @@ struct Options {
     int pose_jumping_override = -1; // -1 leaves the SDK setting unchanged.
     bool debug_fresh_session = false;
     bool debug_wheel_synthetic = false;
+    bool debug_wheel_experiment = false;
 };
 
 struct TimedEncoderFrame {
@@ -266,6 +267,7 @@ void usage(const char *program)
         << "  --debug-wheel-config FILE  identity C-frame SDK wheel configuration\n"
         << "  --debug-wheel-log FILE     complete SDK wheel attempt/result log\n"
         << "  --debug-wheel-session ID   independent SDK test session identity\n"
+        << "  --debug-wheel-experiment   explicit real-feedback input fault experiment (test UART only)\n"
         << "  --debug-fresh-session      disable map preservation for debug A/B\n"
         << "  --debug-test-session ID    record actual SDK process/session identity\n"
         << "  --wheel-feedback-socket @NAME  formal UART measured-feedback tap\n"
@@ -338,6 +340,8 @@ Options parse_options(int argc, char **argv)
             options.debug_wheel_session = value("--debug-wheel-session");
         } else if (argument == "--debug-wheel-synthetic") {
             options.debug_wheel_synthetic = true;
+        } else if (argument == "--debug-wheel-experiment") {
+            options.debug_wheel_experiment = true;
         } else if (argument == "--debug-fresh-session") {
             options.debug_fresh_session = true;
         } else if (argument == "--debug-test-session") {
@@ -398,6 +402,10 @@ Options parse_options(int argc, char **argv)
         throw std::invalid_argument("pose IPC is limited to identified debug sessions");
     if(options.debug_wheel_synthetic && (!wheel || !options.debug_fresh_session || options.debug_test_session.empty()))
         throw std::invalid_argument("synthetic input requires an explicitly identified isolated debug SDK session");
+    if(options.debug_wheel_experiment && (!wheel || !test_uart || competition_wheel ||
+        options.debug_wheel_synthetic || !options.debug_fresh_session || options.debug_test_session.empty() ||
+        options.debug_wheel_session!=options.debug_test_session))
+        throw std::invalid_argument("wheel experiment requires the same identified fresh test-UART SDK session; formal/synthetic paths forbidden");
     if (wheel != !options.debug_wheel_config.empty() || wheel != !options.debug_wheel_log.empty() ||
         wheel != !options.debug_wheel_session.empty())
         throw std::invalid_argument("debug wheel input requires socket/config/log/session together");
@@ -997,7 +1005,8 @@ int main(int argc, char **argv)
         const omni::LocalizationConfig config = omni::load_config(options.config_path);
         if(!options.debug_wheel_socket.empty()) {
             debug_wheel.reset(new omni::DebugWheelInput(config,options.debug_wheel_session,
-                options.debug_wheel_socket,options.debug_wheel_log,options.debug_wheel_synthetic));
+                options.debug_wheel_socket,options.debug_wheel_log,options.debug_wheel_synthetic,
+                options.debug_wheel_experiment));
             if(!options.uart_path.empty())debug_wheel->use_native_feedback();
         }
         rs2::log_to_console(options.debug_sdk ? RS2_LOG_SEVERITY_DEBUG : RS2_LOG_SEVERITY_WARN);

@@ -3609,6 +3609,117 @@ def test_native_runtime_socket_input_and_control_parity():
             for sock in owned:sock.close()
 
 
+def test_motion_lab_stdio():
+    """Only explicit local commands; no SDK/UART/GUI hardware in this check."""
+    import io
+    import os
+    import socket
+    import uuid
+    from contextlib import redirect_stderr,redirect_stdout
+    from unittest.mock import patch
+    import t265_f407_motion_map as module
+    from f405_test_client import ChassisTestClient
+    def options(root,*extra):
+        with patch('sys.argv',['map','--motion-lab-stdio','--output-root',str(root),*extra]):
+            return module.arguments()
+    for extra in (['--wheel-experiment'],['--motion-lab-chassis-only','--wheel-input','on'],
+                  ['--sensor-check-seconds','1'],['--wheel-fixture','axes','--wheel-input','on']):
+        with redirect_stderr(io.StringIO()):
+            try:options(Path('/unused'),*extra);assert False,'ambiguous lab mode accepted'
+            except SystemExit as error:assert error.code==2
+    class FakeSerial:
+        def __init__(self):self.written=[]
+        def write(self,data):self.written.append(data);return len(data)
+        def close(self):pass
+    transports=[]
+    def start_client(client):
+        client.serial=FakeSerial();transports.append(client.serial)
+    with tempfile.TemporaryDirectory() as temporary, \
+         patch.object(module.MotionMapApp,'detect_screen_size',return_value=(1024,768)), \
+         patch.object(module.subprocess,'check_output',return_value='offline'), \
+         patch('low_latency_scheduling.prepare_realtime',return_value={'fixture_only':True}), \
+         patch.object(ChassisTestClient,'start',start_client):
+        root=Path(temporary)
+        opt=options(root,'--motion-lab-chassis-only','--baud','115200','--chassis-profile','legacy',
+                    '--actual-lower-service','MOTIONDEBUG','--reference-description','independent floor marks')
+        app=module.MotionMapApp(opt)
+        with patch.object(module.subprocess,'Popen',side_effect=AssertionError('chassis-only opened SDK')), \
+             patch.object(module,'write_sdk_config',side_effect=AssertionError('chassis-only configured SDK')):
+            app.start_session()
+        transport=transports[-1]
+        assert transport.written==[] and app.localizer is None and app.wheel_input is None
+        assert app.motion_lab_status()['sdk'] is None and app.motion_lab_status()['current_pose'] is None
+        metadata=json.loads((app.run_dir/'metadata.json').read_text())
+        assert metadata['sdk_owner_started'] is False and metadata['sdk_session_id'] is None
+        app.bridge.feed(inbound(MSG_MOTION_STATUS,0,bytes(8)),time.monotonic_ns())
+        move=app.motion_lab_command(dict(op='move',forward_mm=301,left_mm=-43,speed_mm_s=200))
+        assert move['submitted'] and move['lower_accepted'] is None
+        packet=transport.written[-1]
+        assert int.from_bytes(packet[6:8],'big',signed=True)==301
+        assert int.from_bytes(packet[8:10],'big',signed=True)==-43
+        written=len(transport.written)
+        try:app.motion_lab_command(dict(op='move',forward_mm=10,left_mm=0));assert False
+        except RuntimeError:pass
+        assert len(transport.written)==written  # repeated command cannot become implicit STOP
+        def finish(state=2):
+            pending=app.bridge.pending
+            app.bridge.feed(inbound(MSG_MOTION_STATUS,1,bytes((pending['wire_sequence'],state,0,pending['opcode']))+bytes(4)),
+                            time.monotonic_ns()+1_000_000)
+            app.update_data()
+        finish()
+        assert app.active_test is None and app.bridge.pending is None
+        app.motion_lab_command(dict(op='mark'))
+        app.motion_lab_command(dict(op='ground_truth',text='300,-40,?'))
+        truth=json.loads((app.run_dir/'ground_truth.jsonl').read_text())
+        assert truth['localization']=={} and truth['pose_sample_monotonic_ns'] is None
+        assert truth['pose_age_at_mark_ms'] is None and truth['pose_source']=='not_started_chassis_only'
+        turn=app.motion_lab_command(dict(op='turn',angle_deg=90,rate_deg_s=60))
+        assert turn['submitted'] and int.from_bytes(transport.written[-1][6:8],'big',signed=True)==-900
+        app.motion_lab_command(dict(op='stop'));finish(4)
+        # Existing SDK experiment endpoint: exact bytes, no fabricated ACK or second input producer.
+        sid=uuid.uuid4().hex;address='\0t265-wheel-'+sid
+        app.sdk_session_id=sid;app.options.wheel_experiment=True
+        with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as listener:
+            listener.bind(address);listener.settimeout(.3)
+            response=app.motion_lab_command(dict(op='experiment',phase_id='known_bias',mode='bias_body',
+                duration_ns=500_000_000,bias_body_mps=[.1,0,0]))
+            received=json.loads(listener.recv(65536))
+            assert received==response['request'] and received['session_id']==sid
+            assert response['sdk_applied'] is None and received['kind']=='wheel_input_experiment'
+        app.options.wheel_experiment=False
+        try:app.motion_lab_command(dict(op='experiment',mode='drop',phase_id='disabled',duration_ns=1));assert False
+        except ValueError:pass
+        with patch.object(module.time,'sleep'):
+            app.stop_session()
+        assert (app.run_dir/'session_complete.json').is_file()
+        assert not (app.run_dir/'t265_raw_pose.csv').exists() and not (app.run_dir/'localization_debug.csv').exists()
+        # The stdio loop survives malformed/unknown input without motions or GUI startup.
+        read_fd,write_fd=os.pipe()
+        os.write(write_fd,b'not-json\n{"op":"unknown"}\n{"op":"status","request_id":7}\n{"op":"close"}\n')
+        os.close(write_fd)
+        second=module.MotionMapApp(opt);output=io.StringIO()
+        with os.fdopen(read_fd,'r') as incoming, patch.object(module.sys,'stdin',incoming), \
+             redirect_stdout(output),patch.object(module.cv2,'namedWindow',side_effect=AssertionError('GUI started')):
+            assert second.run()==0
+        replies=[json.loads(row) for row in output.getvalue().splitlines()]
+        assert [r['ok'] for r in replies]==[True,False,False,True,True]
+        assert replies[3]['request_id']==7 and transports[-1].written==[]
+        assert (second.run_dir/'session_complete.json').is_file()
+        # A and F preserve all original SDK flags; only A loads real input/profile support.
+        for wheel,experiment in [('off',False),('on',True)]:
+            opt=options(root,'--wheel-input',wheel,*(['--wheel-experiment'] if experiment else []))
+            current=module.MotionMapApp(opt)
+            child=SimpleNamespace(pid=123,poll=lambda:0,returncode=0)
+            with patch.object(module.subprocess,'Popen',return_value=child):
+                current.start_session()
+            metadata=json.loads((current.run_dir/'metadata.json').read_text());command=metadata['localizer_command']
+            assert all(flag in command for flag in ['--enable-pose-jumping','--t265-only-output','--ignore-encoders','--debug-fresh-session'])
+            assert ('--debug-wheel-socket' in command)==(wheel=='on')
+            assert ('--debug-wheel-experiment' in command)==experiment
+            assert metadata['wheel_input_requested']==(wheel=='on')
+            current.stop_session()
+
+
 def test_offline_wheel_gyro_residual():
     """Known raw packets: numerical/coverage checks, no slip labels or hardware."""
     import math
@@ -3679,3 +3790,28 @@ def test_offline_wheel_gyro_residual():
                 redirect_stdout(output):
             assert debug.main()==0
         assert json.loads(output.getvalue())['model']['effective_wheel_arm_m']==.14
+
+
+def test_motion_response_offline():
+    """Independent known lag and rigid-body cases; no device access."""
+    import math
+    from wheel_gyro_residual import project_raw_pose, response_lag
+    forward=[.8660254,0,.5];up=[0,-1,0];left=[-.5,0,.8660254]
+    offset=[-.0346105,-.0599471445]
+    lever=[offset[0]*forward[i]+offset[1]*left[i] for i in range(3)]
+    omega=up
+    camera_v=[omega[1]*lever[2]-omega[2]*lever[1],
+              omega[2]*lever[0]-omega[0]*lever[2],
+              omega[0]*lever[1]-omega[1]*lever[0]]
+    raw=dict(qx=0,qy=0,qz=0,qw=1,wx_radps=omega[0],wy_radps=omega[1],wz_radps=omega[2],
+             vx_mps=camera_v[0],vy_mps=camera_v[1],vz_mps=camera_v[2])
+    projected=project_raw_pose(raw,forward,up,offset)
+    assert abs(projected['yaw_rate_rad_s']-1)<1e-12
+    assert max(abs(projected[k]) for k in ('forward_mps','left_mps','up_mps'))<1e-12
+    assert response_lag([(i*.01,0,.01) for i in range(200)],[],minimum_excursion=.02)['identifiable'] is False
+    def pulse(t):return math.exp(-((t-1)/.06)**2)+.55*math.exp(-((t-2.1)/.10)**2)
+    def integral(t):return math.sqrt(math.pi)/2*(.06*math.erf((t-1)/.06)+.055*math.erf((t-2.1)/.10))
+    reference=[(i*.01,(integral(i*.01)-integral(i*.01-.01))/.01,.01) for i in range(30,281)]
+    sdk=[(i*.005,pulse(i*.005-.04)) for i in range(701)]
+    result=response_lag(reference,[sdk],minimum_excursion=.02)
+    assert result['identifiable'] and abs(result['peak']['lag_ms']-40)<=5,result

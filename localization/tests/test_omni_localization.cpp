@@ -938,6 +938,92 @@ void test_debug_wheel_input()
         next["alignment_gyro_end_ns"]=1030000000;
         check(input.process(next,5000000000,sink)&&calls==2,"next genuinely new measured sample resumes normally");
     }
+    {
+        const auto experiment_log=root+"/experiment.jsonl";
+        std::vector<rs2_vector> sent;
+        auto sink=[&](std::uint32_t frame,const rs2_vector &v) {
+            check(frame==sent.size(),"experiment sends consume sequential SDK frames only");
+            sent.push_back(v);return true;
+        };
+        auto sample=[&](unsigned id) {
+            auto p=packet;p["packet_id"]=id;
+            p["alignment_start_ns"]=1000000000ULL+id*10000000ULL;
+            p["alignment_end_ns"]=1010000000ULL+id*10000000ULL;
+            p["alignment_gyro_end_ns"]=p["alignment_end_ns"];return p;
+        };
+        auto policy=[](const char *mode,const char *phase,std::uint64_t duration) {
+            return Json{{"schema",3},{"kind","wheel_input_experiment"},{"session_id","sdk-test"},
+                {"phase_id",phase},{"mode",mode},{"duration_ns",duration}};
+        };
+        auto bias=policy("bias_body","known-forward-bias",1000000000ULL);
+        bias["bias_body_mps"]={.1,0.,0.};bias["start_monotonic_ns"]=11000000000ULL;
+        {
+            Input disabled(config,"sdk-test","",root+"/disabled-experiment.jsonl");
+            check(!disabled.experiment_policy(bias,10000000000ULL),"normal SDK owner ignores experiment requests by default");
+            check(disabled.process(sample(0),10000000000ULL,sink)&&near(sent.back().x,.069221,1e-7),
+                  "disabled experiment leaves measured SDK velocity unchanged");
+        }
+        sent.clear();
+        {
+            Input input(config,"sdk-test","",experiment_log,false,true);
+            check(input.process(sample(0),10000000000ULL,sink),"explicit experiment starts from real measured input");
+            auto wrong=bias;wrong["session_id"]="another-sdk";
+            check(!input.experiment_policy(wrong,10000000000ULL),"other SDK session cannot schedule input experiment");
+            auto invalid=bias;invalid["duration_ns"]=0;
+            check(!input.experiment_policy(invalid,10000000000ULL),"non-normal experiment needs a finite positive window");
+            check(input.experiment_policy(bias,10000000000ULL),"known body bias schedules on the existing owner");
+            check(input.process(sample(1),10500000000ULL,sink)&&near(sent.back().x,.069221,1e-7),
+                  "future experiment leaves preceding measured input unchanged");
+            check(input.process(sample(2),11000000000ULL,sink)&&near(sent.back().x,.069221+.08660254037844386,1e-7)&&near(sent.back().z,.05,1e-7),
+                  "body bias rotates into camera axes without repeating the lever term");
+            check(input.process(sample(3),12000000000ULL,sink)&&near(sent.back().x,.069221,1e-7),
+                  "expired experiment resumes current real input without replay");
+            check(input.experiment_policy(policy("drop","true-missing-input",500000000ULL),13000000000ULL),"drop window applies");
+            const auto before_drop=sent.size();
+            check(!input.process(sample(4),13100000000ULL,sink)&&sent.size()==before_drop,
+                  "drop consumes new measured sample with no API call or synthetic zero");
+            check(input.process(sample(5),13500000000ULL,sink)&&sent.size()==before_drop+1,
+                  "drop expiration sends only the next current measured interval");
+            check(input.experiment_policy(policy("zero_camera","explicit-zero",500000000ULL),14000000000ULL),"zero window applies");
+            check(input.process(sample(6),14100000000ULL,sink)&&sent.back().x==0&&sent.back().y==0&&sent.back().z==0,
+                  "explicit zero clears final camera velocity including the nonzero lever contribution");
+            check(input.process(sample(7),14500000000ULL,sink)&&near(sent.back().x,.069221,1e-7),
+                  "normal measured input follows the completed zero window");
+            check(input.experiment_policy(policy("hold_last_camera","repeat-submitted-nonzero",1000000000ULL),15000000000ULL),"hold window applies");
+            auto moved=sample(8);moved["v_body_mps"]={.2,0.,0.};
+            auto camera=moved["v_camera_mps"].get<std::vector<double>>();camera[0]+=.2*forward[0];camera[2]+=.2*forward[2];
+            moved["v_camera_mps"]=camera;
+            check(input.process(moved,15100000000ULL,sink)&&near(sent.back().x,.069221,1e-7)&&near(sent.back().z,0,1e-8),
+                  "hold repeats the last actually submitted float32 vector, not the new measurement");
+            auto pause=Json{{"schema",3},{"kind","wheel_source_policy"},{"session_id","sdk-test"},{"pause",true},{"reason","fixture"}};
+            check(input.source_policy(pause),"existing source pause remains available during experiment");
+            const auto before_pause=sent.size();
+            check(!input.process(sample(9),15200000000ULL,sink)&&sent.size()==before_pause,
+                  "source pause takes priority without replacing the experimental profile");
+            pause["pause"]=false;check(input.source_policy(pause),"existing source resume applies");
+            check(input.process(sample(10),15300000000ULL,sink)&&near(sent.back().x,.069221,1e-7),
+                  "source resume preserves the active hold experiment");
+            check(input.experiment_policy(policy("normal","explicit-normal",0),15400000000ULL),"normal zero-duration cancels an active window");
+            check(input.process(sample(11),15400000000ULL,sink)&&near(sent.back().x,.069221,1e-7),
+                  "explicit normal cancellation restores current measured input");
+        }
+        bool saw_bias=false,saw_zero=false,saw_hold=false,saw_skip=false,saw_call_times=false,raw_unchanged=true;
+        std::ifstream records(experiment_log);
+        for(std::string line;std::getline(records,line);) {
+            const auto e=Json::parse(line);const auto kind=e.value("event",std::string());
+            if(kind=="wheel_experiment_sample_skipped")saw_skip=e["sdk_call_attempted"]==false;
+            if(kind!="wheel_sdk_result")continue;
+            const auto mode=e["experiment"]["experiment_mode"].get<std::string>();
+            saw_bias=saw_bias||mode=="bias_body";saw_zero=saw_zero||mode=="zero_camera";saw_hold=saw_hold||mode=="hold_last_camera";
+            raw_unchanged=raw_unchanged&&near(e["measured_velocity_camera_mps"][0].get<double>(),
+                mode=="hold_last_camera"&&e["packet_id"]==8?.069221+.2*forward[0]:.069221,1e-7);
+            saw_call_times=e["call_end_monotonic_ns"].get<std::uint64_t>()>=e["call_start_monotonic_ns"].get<std::uint64_t>()&&
+                e["sdk_velocity_camera_mps"].is_array()&&e["sdk_result"]==true;
+        }
+        check(saw_bias&&saw_zero&&saw_hold&&saw_skip&&saw_call_times&&raw_unchanged,
+              "experiment logs preserve original values, actual submitted float32 values, API times and real drop semantics");
+        ::unlink(experiment_log.c_str());::unlink((root+"/disabled-experiment.jsonl").c_str());
+    }
     ::unlink(log.c_str()); ::unlink((root+"/wheel_sdk_status.json").c_str()); ::rmdir(root.c_str());
 }
 
