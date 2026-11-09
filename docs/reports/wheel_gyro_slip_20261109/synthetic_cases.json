@@ -1,0 +1,785 @@
+{
+  "kind": "algebraic_counterexamples_not_hardware",
+  "model": {
+    "D_m": 0.07,
+    "counts_per_revolution": 1061.268,
+    "k_m_per_count": 0.0002072157888029089,
+    "L_m": 0.13,
+    "L_calibrated": false
+  },
+  "conclusions": [
+    "Zero residual does not certify XY wheel odometry.",
+    "All three single-bad-wheel hypotheses satisfy gyro; residual alone cannot pick the wheel.",
+    "These synthetic examples give no empirical detection accuracy or tuned threshold."
+  ],
+  "cases": [
+    {
+      "name": "normal_forward",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Ideal no-slip plane model",
+      "measured_raw_sign_wheel_m_s": [
+        0.25980762113533157,
+        -0.25980762113533157,
+        0.0
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.3,
+        0.0,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blocked_forward",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Body fixed; wheels spin in the same pure-translation pattern",
+      "measured_raw_sign_wheel_m_s": [
+        0.25980762113533157,
+        -0.25980762113533157,
+        0.0
+      ],
+      "true_body_twist": [
+        0,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.3,
+        0.0,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "normal_backward",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Ideal no-slip plane model",
+      "measured_raw_sign_wheel_m_s": [
+        -0.25980762113533157,
+        0.25980762113533157,
+        0.0
+      ],
+      "true_body_twist": [
+        -0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        -0.3,
+        0.0,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            -0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            -0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            -0.3,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blocked_backward",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Body fixed; wheels spin in the same pure-translation pattern",
+      "measured_raw_sign_wheel_m_s": [
+        -0.25980762113533157,
+        0.25980762113533157,
+        0.0
+      ],
+      "true_body_twist": [
+        0,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        -0.3,
+        0.0,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            -0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            -0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            -0.3,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "normal_left",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Ideal no-slip plane model",
+      "measured_raw_sign_wheel_m_s": [
+        0.15,
+        0.15,
+        -0.3
+      ],
+      "true_body_twist": [
+        0,
+        0.3,
+        0
+      ],
+      "encoder_body_twist": [
+        0.0,
+        0.3,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.0,
+            0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.0,
+            0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.0,
+            0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blocked_left",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Body fixed; wheels spin in the same pure-translation pattern",
+      "measured_raw_sign_wheel_m_s": [
+        0.15,
+        0.15,
+        -0.3
+      ],
+      "true_body_twist": [
+        0,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.0,
+        0.3,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.0,
+            0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.0,
+            0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.0,
+            0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "normal_right",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Ideal no-slip plane model",
+      "measured_raw_sign_wheel_m_s": [
+        -0.15,
+        -0.15,
+        0.3
+      ],
+      "true_body_twist": [
+        0,
+        -0.3,
+        0
+      ],
+      "encoder_body_twist": [
+        0.0,
+        -0.3,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.0,
+            -0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.0,
+            -0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.0,
+            -0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blocked_right",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Body fixed; wheels spin in the same pure-translation pattern",
+      "measured_raw_sign_wheel_m_s": [
+        -0.15,
+        -0.15,
+        0.3
+      ],
+      "true_body_twist": [
+        0,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.0,
+        -0.3,
+        0.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.0,
+            -0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.0,
+            -0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.0,
+            -0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one_wheel_1_extra_-1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Exactly this wheel has extra signed error; other two no-slip",
+      "measured_raw_sign_wheel_m_s": [
+        -0.04019237886466842,
+        -0.25980762113533157,
+        0.0
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.12679491924311226,
+        -0.09999999999999999,
+        -0.7692307692307692
+      ],
+      "omega_residual_deg_s": -44.07367654852486,
+      "sum_slip_m_s": -0.3,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            -0.04641016151377548,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.12679491924311226,
+            -0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one_wheel_1_extra_1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Exactly this wheel has extra signed error; other two no-slip",
+      "measured_raw_sign_wheel_m_s": [
+        0.5598076211353316,
+        -0.25980762113533157,
+        0.0
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.47320508075688766,
+        0.09999999999999999,
+        0.7692307692307692
+      ],
+      "omega_residual_deg_s": 44.07367654852486,
+      "sum_slip_m_s": 0.3,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.6464101615137755,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.47320508075688766,
+            0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one_wheel_2_extra_-1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Exactly this wheel has extra signed error; other two no-slip",
+      "measured_raw_sign_wheel_m_s": [
+        0.25980762113533157,
+        -0.5598076211353316,
+        0.0
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.47320508075688766,
+        -0.09999999999999999,
+        -0.7692307692307692
+      ],
+      "omega_residual_deg_s": -44.07367654852486,
+      "sum_slip_m_s": -0.3,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.6464101615137755,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.47320508075688766,
+            -0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one_wheel_2_extra_1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Exactly this wheel has extra signed error; other two no-slip",
+      "measured_raw_sign_wheel_m_s": [
+        0.25980762113533157,
+        0.04019237886466842,
+        0.0
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.12679491924311226,
+        0.09999999999999999,
+        0.7692307692307692
+      ],
+      "omega_residual_deg_s": 44.07367654852486,
+      "sum_slip_m_s": 0.3,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            -0.04641016151377548,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.12679491924311226,
+            0.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one_wheel_3_extra_-1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Exactly this wheel has extra signed error; other two no-slip",
+      "measured_raw_sign_wheel_m_s": [
+        0.25980762113533157,
+        -0.25980762113533157,
+        -0.3
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.3,
+        0.19999999999999998,
+        -0.7692307692307692
+      ],
+      "omega_residual_deg_s": -44.07367654852486,
+      "sum_slip_m_s": -0.3,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.47320508075688766,
+            0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.12679491924311226,
+            0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one_wheel_3_extra_1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Exactly this wheel has extra signed error; other two no-slip",
+      "measured_raw_sign_wheel_m_s": [
+        0.25980762113533157,
+        -0.25980762113533157,
+        0.3
+      ],
+      "true_body_twist": [
+        0.3,
+        0,
+        0
+      ],
+      "encoder_body_twist": [
+        0.3,
+        -0.19999999999999998,
+        0.7692307692307692
+      ],
+      "omega_residual_deg_s": 44.07367654852486,
+      "sum_slip_m_s": 0.3,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.12679491924311226,
+            -0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.47320508075688766,
+            -0.3,
+            0.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.3,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "normal_rotation_-1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Equal arms L=.13m, known gyro rate",
+      "measured_raw_sign_wheel_m_s": [
+        -0.13,
+        -0.13,
+        -0.13
+      ],
+      "true_body_twist": [
+        0,
+        0,
+        -1
+      ],
+      "encoder_body_twist": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.0,
+            0.0,
+            -1.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.0,
+            0.0,
+            -1.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.0,
+            0.0,
+            -1.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "normal_rotation_1",
+      "kind": "synthetic_not_hardware",
+      "assumption": "Equal arms L=.13m, known gyro rate",
+      "measured_raw_sign_wheel_m_s": [
+        0.13,
+        0.13,
+        0.13
+      ],
+      "true_body_twist": [
+        0,
+        0,
+        1
+      ],
+      "encoder_body_twist": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "omega_residual_deg_s": 0.0,
+      "sum_slip_m_s": 0.0,
+      "single_bad_wheel_hypotheses": [
+        {
+          "assumed_bad_wheel": 1,
+          "body_twist": [
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 2,
+          "body_twist": [
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "assumed_bad_wheel": 3,
+          "body_twist": [
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      ]
+    }
+  ]
+}

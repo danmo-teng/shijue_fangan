@@ -3607,3 +3607,75 @@ def test_native_runtime_socket_input_and_control_parity():
         finally:
             if runtime is not None:runtime.close()
             for sock in owned:sock.close()
+
+
+def test_offline_wheel_gyro_residual():
+    """Known raw packets: numerical/coverage checks, no slip labels or hardware."""
+    import math
+    from wheel_gyro_residual import analyze_records,analyze_session,export_report,METRES_PER_RAW_COUNT
+    def wheel(i,a,b,d,epoch='a'):
+        return dict(type=7,boot_epoch=epoch,reference_epoch=1,measurement_id=i,
+            t0_us=a,t1_us=b,delta1=d[0],delta2=d[1],delta3=d[2],flags=129)
+    def gyro(i,t,yaw=0,rate=0,epoch='a'):
+        return dict(type=8,boot_epoch=epoch,reference_epoch=1,
+            yaw_source_id=i,yaw_receive_us=t,yaw_mdeg=yaw,yaw_flags=835,
+            rate_source_id=i,rate_receive_us=t,rate_mdps=rate,rate_flags=835)
+    endpoints=[gyro(0,0),gyro(1,10000)]
+    for sign in (-1,1):
+        _,rows=analyze_records(endpoints+[wheel(1,0,10000,[sign]*3)])
+        raw=rows[0]
+        expected=math.degrees(sign*METRES_PER_RAW_COUNT/.13)/.01
+        assert math.isclose(raw['residual_yaw_deg_s'],expected,abs_tol=1e-12)
+        assert math.isclose(raw['residual_rate_deg_s'],expected,abs_tol=1e-12)
+    _,rows=analyze_records(endpoints+[wheel(1,0,10000,[1,0,0])])
+    assert math.isclose(rows[0]['encoder_omega_deg_s'],math.degrees(METRES_PER_RAW_COUNT/(3*.13))/.01)
+    # A wall-blocked translational wheel pattern may have exactly zero yaw
+    # residual. It cannot be certified as no-slip from this comparison.
+    _,rows=analyze_records(endpoints+[wheel(1,0,10000,[10,-10,0])])
+    assert rows[0]['residual_yaw_deg_s']==rows[0]['residual_rate_deg_s']==0 and rows[0]['vx_m_s']>0
+    records=[gyro(0,0,0,0),gyro(1,20000,40,4000),wheel(1,5000,15000,[0,0,0])]
+    report,rows=analyze_records(records+[records[0],records[-1]])
+    assert math.isclose(rows[0]['yaw_delta_deg'],.02,abs_tol=1e-12)
+    assert math.isclose(rows[0]['rate_integral_deg'],.02,abs_tol=1e-12)
+    assert math.isclose(rows[0]['residual_yaw_deg_s'],-2.,abs_tol=1e-12)
+    assert report['counts']['duplicate_wheel_id']==report['counts']['duplicate_rate_source_id']==1
+    for packet in (wheel(1,-1,10000,[0,0,0]),wheel(1,0,30000,[0,0,0]),wheel(1,5000,15000,[0,0,0],epoch='b')):
+        _,rows=analyze_records(records[:2]+[packet])
+        assert rows[0]['yaw_delta_deg'] is None and rows[0]['rate_integral_deg'] is None
+    packets=[gyro(i,i*10000) for i in range(13)]
+    packets += [wheel(i if i<=6 else i+1,(i-1)*10000,i*10000,[0,0,0]) for i in range(1,13)]
+    report,rows=analyze_records(packets)
+    assert report['counts']['wheel_continuity_breaks']==1
+    assert all(not (row['first_wheel_id']<=6 and row['last_wheel_id']>=8) for row in rows)
+    assert sum(row['interval_count'] for row in rows if row['window']=='50ms')==12
+    assert sum(row['interval_count'] for row in rows if row['window']=='100ms')==12
+    timed_gap=[wheel(i,(i-1)*10000+(10000 if i>6 else 0),i*10000+(10000 if i>6 else 0),[0,0,0])
+               for i in range(1,13)]
+    report,rows=analyze_records(packets[:13]+timed_gap)
+    assert report['counts']['wheel_continuity_breaks']==1
+    assert all(not (row['t0_us']<70000 and row['t1_us']>60000) for row in rows)
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);session=root/'session';session.mkdir()
+        original='\n'.join(json.dumps(packet) for packet in records)+'\nnot-json\n'
+        (session/'chassis_extended.jsonl').write_text(original)
+        report,rows=analyze_session(session)
+        assert report['counts']['bad_json_lines']==1 and report['source_file']=='chassis_extended.jsonl'
+        for output in (session,session/'nested',root):
+            try:export_report(session,output,report,rows)
+            except ValueError:pass
+            else:raise AssertionError('Original session/ancestor output was accepted')
+        exported=export_report(session,root/'export',report,rows)
+        assert all(path.is_file() for path in exported)
+        assert (session/'chassis_extended.jsonl').read_text()==original
+        # The existing entry must return from the explicit offline branch,
+        # without reaching its live capture/device path.
+        import io
+        from contextlib import redirect_stdout
+        from unittest.mock import patch
+        import t265_f407_debug as debug
+        output=io.StringIO()
+        with patch('sys.argv',['debug','--wheel-gyro-residual',str(session),'--wheel-arm-m','.14']), \
+                patch.object(debug,'run_capture',side_effect=AssertionError('live capture')), \
+                redirect_stdout(output):
+            assert debug.main()==0
+        assert json.loads(output.getvalue())['model']['effective_wheel_arm_m']==.14

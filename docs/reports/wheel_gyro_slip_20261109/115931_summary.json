@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "analysis": "offline_wheel_gyro_residual",
+  "runtime_connected": false,
+  "model": {
+    "metres_per_raw_count": 0.0002072157888029089,
+    "effective_wheel_arm_m": 0.13,
+    "arm_calibrated": false,
+    "metres_per_raw_count_formula": "pi * 0.070 / 1061.268",
+    "axes": "X forward / Y left / CCW positive",
+    "count_sign": "raw F405, no second encoder negation",
+    "encoder_angle": "k*(delta1+delta2+delta3)/(3*L)",
+    "residual": "encoder minus gyro, degrees/second"
+  },
+  "alignment": {
+    "clock": "same boot/reference epoch MCU event microseconds",
+    "yaw": "cumulative yaw linear interpolation at t0/t1",
+    "rate": "piecewise-linear trapezoid over the same t0/t1",
+    "extrapolation": false,
+    "missing_coverage": "offline comparison unavailable; no online admission effect"
+  },
+  "flags_interpretation": "Current F405 telemetry 1.3 representable-value flags only; not all historical protocol versions.",
+  "counts": {
+    "raw_records": 4884,
+    "type_8": 2442,
+    "type_7": 2442,
+    "duplicate_wheel_id": 0,
+    "conflicting_wheel_id": 0,
+    "duplicate_yaw_source_id": 0,
+    "duplicate_rate_source_id": 0,
+    "conflicting_yaw_source_id": 0,
+    "conflicting_rate_source_id": 0,
+    "duplicate_source_time": 0,
+    "conflicting_source_time": 0,
+    "wheel_continuity_breaks": 0,
+    "invalid_wheel_interval": 0,
+    "invalid_wheel_flags": 0,
+    "invalid_yaw_flags": 0,
+    "invalid_rate_flags": 0,
+    "malformed_records": 0,
+    "source_lines": 4884,
+    "bad_json_lines": 0
+  },
+  "flags": {
+    "yaw": {
+      "835": 2442
+    },
+    "rate": {
+      "835": 2442
+    },
+    "wheel": {
+      "129": 2442
+    }
+  },
+  "groups": [
+    {
+      "boot_epoch": "38613807ded2ea86d76999b3175c1879",
+      "reference_epoch": 1,
+      "wheel_intervals": 2442,
+      "yaw_sources": 2442,
+      "rate_sources": 2442,
+      "continuous_blocks": 1,
+      "wheel_span_s": 24.42,
+      "summed_interval_s": 24.420000000000353,
+      "nonzero_wheel_intervals": 0,
+      "raw_delta_sum": [
+        0,
+        0,
+        0
+      ],
+      "encoder_delta_deg": 0.0
+    }
+  ],
+  "windows": {
+    "raw_interval": {
+      "rows": 2442,
+      "partial_windows": 0,
+      "summary_includes_partial": true,
+      "covered_count": {
+        "yaw": 2441,
+        "rate": 2441
+      },
+      "covered_nonpartial": {
+        "rows": 2442,
+        "yaw_count": 2441,
+        "rate_count": 2441,
+        "residual_yaw_deg_s": {
+          "count": 2441,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "rms": 0.0,
+          "median": 0.0,
+          "p95_abs": 0.0
+        },
+        "residual_rate_deg_s": {
+          "count": 2441,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "rms": 0.0,
+          "median": 0.0,
+          "p95_abs": 0.0
+        }
+      },
+      "interval_duration_s": {
+        "count": 2442,
+        "min": 0.009989,
+        "max": 0.01001,
+        "mean": 0.0099999999999999,
+        "rms": 0.010000000426044205,
+        "median": 0.01,
+        "p95_abs": 0.010005
+      },
+      "encoder_omega_deg_s": {
+        "count": 2442,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "residual_yaw_deg_s": {
+        "count": 2441,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "residual_rate_deg_s": {
+        "count": 2441,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "yaw_comparison": {
+        "outside_source_coverage": 1,
+        "covered": 2441
+      },
+      "rate_comparison": {
+        "outside_source_coverage": 1,
+        "covered": 2441
+      }
+    },
+    "50ms": {
+      "rows": 489,
+      "partial_windows": 1,
+      "summary_includes_partial": true,
+      "covered_count": {
+        "yaw": 488,
+        "rate": 488
+      },
+      "covered_nonpartial": {
+        "rows": 488,
+        "yaw_count": 487,
+        "rate_count": 487,
+        "residual_yaw_deg_s": {
+          "count": 487,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "rms": 0.0,
+          "median": 0.0,
+          "p95_abs": 0.0
+        },
+        "residual_rate_deg_s": {
+          "count": 487,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "rms": 0.0,
+          "median": 0.0,
+          "p95_abs": 0.0
+        }
+      },
+      "interval_duration_s": {
+        "count": 489,
+        "min": 0.02,
+        "max": 0.050011,
+        "mean": 0.04993865030674881,
+        "rms": 0.04995703684457648,
+        "median": 0.05,
+        "p95_abs": 0.050005600000000004
+      },
+      "encoder_omega_deg_s": {
+        "count": 489,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "residual_yaw_deg_s": {
+        "count": 488,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "residual_rate_deg_s": {
+        "count": 488,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "yaw_comparison": {
+        "outside_source_coverage": 1,
+        "covered": 488
+      },
+      "rate_comparison": {
+        "outside_source_coverage": 1,
+        "covered": 488
+      }
+    },
+    "100ms": {
+      "rows": 245,
+      "partial_windows": 1,
+      "summary_includes_partial": true,
+      "covered_count": {
+        "yaw": 244,
+        "rate": 244
+      },
+      "covered_nonpartial": {
+        "rows": 244,
+        "yaw_count": 243,
+        "rate_count": 243,
+        "residual_yaw_deg_s": {
+          "count": 243,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "rms": 0.0,
+          "median": 0.0,
+          "p95_abs": 0.0
+        },
+        "residual_rate_deg_s": {
+          "count": 243,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "rms": 0.0,
+          "median": 0.0,
+          "p95_abs": 0.0
+        }
+      },
+      "interval_duration_s": {
+        "count": 245,
+        "min": 0.02,
+        "max": 0.10001,
+        "mean": 0.09967346938775497,
+        "rms": 0.0998038893732737,
+        "median": 0.1,
+        "p95_abs": 0.100005
+      },
+      "encoder_omega_deg_s": {
+        "count": 245,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "residual_yaw_deg_s": {
+        "count": 244,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "residual_rate_deg_s": {
+        "count": 244,
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "rms": 0.0,
+        "median": 0.0,
+        "p95_abs": 0.0
+      },
+      "yaw_comparison": {
+        "outside_source_coverage": 1,
+        "covered": 244
+      },
+      "rate_comparison": {
+        "outside_source_coverage": 1,
+        "covered": 244
+      }
+    }
+  },
+  "data_duration_s": 24.42,
+  "summed_wheel_interval_s": 24.420000000000353,
+  "limitations": [
+    "No slip threshold, radius/delay fit, detection accuracy or runtime policy is produced.",
+    "Yaw and rate may come from the same gyro; neither is independent ground truth.",
+    "Near-zero rotational residual cannot rule out translational slip against a wall.",
+    "The residual cannot uniquely identify a bad wheel or reconstruct true XY.",
+    "MCU receive events are not guaranteed physical acquisition timestamps."
+  ],
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_115931_interactive",
+  "source_file": "motion_feedback.jsonl",
+  "source_files": {
+    "motion_feedback.jsonl": {
+      "sha256": "807cee371156af151f18c42fe779479721a3e8a843e6664e52154545025e36ea",
+      "bytes": 2285712
+    },
+    "metadata.json": {
+      "sha256": "73b527369790fbb66e7b77837ca1ff59103eb83e6408fa38a33f08321218b693",
+      "bytes": 18991
+    },
+    "chassis_identity.json": {
+      "sha256": "09a5fa447f4c0a918b314c4ec86b6dd307c91f216bab4da393a1db08b1b8e841",
+      "bytes": 799
+    },
+    "session_complete.json": {
+      "sha256": "054ecca3441f7189866eb9a27be10cc5a03b0c5ad6825934867c113c9d23dc3c",
+      "bytes": 101
+    }
+  },
+  "actual_identity": {
+    "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "source_dirty": 1,
+    "board": 405,
+    "mode": 5,
+    "service": 1,
+    "protocol_major": 1,
+    "protocol_minor": 3,
+    "uart_baud": 921600,
+    "boot_epoch": "38613807ded2ea86d76999b3175c1879"
+  },
+  "metadata": {
+    "actual_lower_firmware": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "actual_lower_mode": "NormalDebug",
+    "upper_git_commit": "93d6538ccede45cf08b07cb95637b0b069186825",
+    "wheel_input_requested": true,
+    "pose_source": "t265_sdk_pose_with_camera_offset",
+    "mode": "interactive_f405_normaldebug"
+  },
+  "session_complete": {
+    "owner": "t265_f407_motion_map",
+    "complete": true,
+    "session_index": 27,
+    "accuracy_verified": false
+  },
+  "ground_truth_present": false,
+  "context_files_present": [
+    "events.jsonl"
+  ]
+}

@@ -1,0 +1,365 @@
+{
+  "schema_version": 1,
+  "analysis": "offline_wheel_gyro_residual",
+  "runtime_connected": false,
+  "model": {
+    "metres_per_raw_count": 0.0002072157888029089,
+    "effective_wheel_arm_m": 0.13,
+    "arm_calibrated": false,
+    "metres_per_raw_count_formula": "pi * 0.070 / 1061.268",
+    "axes": "X forward / Y left / CCW positive",
+    "count_sign": "raw F405, no second encoder negation",
+    "encoder_angle": "k*(delta1+delta2+delta3)/(3*L)",
+    "residual": "encoder minus gyro, degrees/second"
+  },
+  "alignment": {
+    "clock": "same boot/reference epoch MCU event microseconds",
+    "yaw": "cumulative yaw linear interpolation at t0/t1",
+    "rate": "piecewise-linear trapezoid over the same t0/t1",
+    "extrapolation": false,
+    "missing_coverage": "offline comparison unavailable; no online admission effect"
+  },
+  "flags_interpretation": "Current F405 telemetry 1.3 representable-value flags only; not all historical protocol versions.",
+  "counts": {
+    "raw_records": 1015,
+    "type_7": 506,
+    "type_2": 1,
+    "type_8": 505,
+    "type_4": 1,
+    "type_6": 2,
+    "duplicate_wheel_id": 0,
+    "conflicting_wheel_id": 0,
+    "duplicate_yaw_source_id": 0,
+    "duplicate_rate_source_id": 0,
+    "conflicting_yaw_source_id": 0,
+    "conflicting_rate_source_id": 0,
+    "duplicate_source_time": 0,
+    "conflicting_source_time": 0,
+    "wheel_continuity_breaks": 0,
+    "invalid_wheel_interval": 0,
+    "invalid_wheel_flags": 0,
+    "invalid_yaw_flags": 0,
+    "invalid_rate_flags": 0,
+    "malformed_records": 0,
+    "source_lines": 1015,
+    "bad_json_lines": 0
+  },
+  "flags": {
+    "wheel": {
+      "129": 506
+    },
+    "yaw": {
+      "835": 505
+    },
+    "rate": {
+      "835": 505
+    }
+  },
+  "groups": [
+    {
+      "boot_epoch": "2b40340370e209faed7d2123a1015296",
+      "reference_epoch": 1,
+      "wheel_intervals": 506,
+      "yaw_sources": 505,
+      "rate_sources": 505,
+      "continuous_blocks": 1,
+      "wheel_span_s": 5.060001,
+      "summed_interval_s": 5.060000999999978,
+      "nonzero_wheel_intervals": 122,
+      "raw_delta_sum": [
+        -101,
+        -253,
+        -2
+      ],
+      "encoder_delta_deg": -10.837543826383593
+    }
+  ],
+  "windows": {
+    "raw_interval": {
+      "rows": 506,
+      "partial_windows": 0,
+      "summary_includes_partial": true,
+      "covered_count": {
+        "yaw": 503,
+        "rate": 503
+      },
+      "covered_nonpartial": {
+        "rows": 506,
+        "yaw_count": 503,
+        "rate_count": 503,
+        "residual_yaw_deg_s": {
+          "count": 503,
+          "min": -5.484312153965537,
+          "max": 13.314287312137704,
+          "mean": 0.41273595317267203,
+          "rms": 1.907828009700761,
+          "median": 0.0,
+          "p95_abs": 4.391292448923046
+        },
+        "residual_rate_deg_s": {
+          "count": 503,
+          "min": -5.478761149835919,
+          "max": 13.031671754827606,
+          "mean": 0.3940840924420454,
+          "rms": 1.8553957091679079,
+          "median": 0.0,
+          "p95_abs": 4.2814571836732895
+        }
+      },
+      "interval_duration_s": {
+        "count": 506,
+        "min": 0.009989,
+        "max": 0.010011,
+        "mean": 0.010000001976284544,
+        "rms": 0.01000000240918941,
+        "median": 0.01,
+        "p95_abs": 0.010005
+      },
+      "encoder_omega_deg_s": {
+        "count": 506,
+        "min": -21.309777186709308,
+        "max": 3.045776772201716,
+        "mean": -2.1417892754161234,
+        "rms": 5.0600491547334325,
+        "median": 0.0,
+        "p95_abs": 14.454657724572185
+      },
+      "residual_yaw_deg_s": {
+        "count": 503,
+        "min": -5.484312153965537,
+        "max": 13.314287312137704,
+        "mean": 0.41273595317267203,
+        "rms": 1.907828009700761,
+        "median": 0.0,
+        "p95_abs": 4.391292448923046
+      },
+      "residual_rate_deg_s": {
+        "count": 503,
+        "min": -5.478761149835919,
+        "max": 13.031671754827606,
+        "mean": 0.3940840924420454,
+        "rms": 1.8553957091679079,
+        "median": 0.0,
+        "p95_abs": 4.2814571836732895
+      },
+      "yaw_comparison": {
+        "outside_source_coverage": 3,
+        "covered": 503
+      },
+      "rate_comparison": {
+        "outside_source_coverage": 3,
+        "covered": 503
+      }
+    },
+    "50ms": {
+      "rows": 102,
+      "partial_windows": 1,
+      "summary_includes_partial": true,
+      "covered_count": {
+        "yaw": 100,
+        "rate": 100
+      },
+      "covered_nonpartial": {
+        "rows": 101,
+        "yaw_count": 100,
+        "rate_count": 100,
+        "residual_yaw_deg_s": {
+          "count": 100,
+          "min": -3.575573138911517,
+          "max": 9.964081118820292,
+          "mean": 0.4152122544673641,
+          "rms": 1.5732781798698474,
+          "median": 0.0,
+          "p95_abs": 2.9837211521316367
+        },
+        "residual_rate_deg_s": {
+          "count": 100,
+          "min": -3.483431457178552,
+          "max": 9.655223682902916,
+          "mean": 0.39644703947408033,
+          "rms": 1.5227331119130936,
+          "median": 0.0,
+          "p95_abs": 2.9003231229922357
+        }
+      },
+      "interval_duration_s": {
+        "count": 102,
+        "min": 0.010005,
+        "max": 0.050012,
+        "mean": 0.049607852941176415,
+        "rms": 0.04976412019728476,
+        "median": 0.05,
+        "p95_abs": 0.050005
+      },
+      "encoder_omega_deg_s": {
+        "count": 102,
+        "min": -17.658085172944407,
+        "max": 0.608850776763123,
+        "mean": -2.2204525549908736,
+        "rms": 5.035017121863247,
+        "median": 0.0,
+        "p95_abs": 13.363002179064198
+      },
+      "residual_yaw_deg_s": {
+        "count": 100,
+        "min": -3.575573138911517,
+        "max": 9.964081118820292,
+        "mean": 0.4152122544673641,
+        "rms": 1.5732781798698474,
+        "median": 0.0,
+        "p95_abs": 2.9837211521316367
+      },
+      "residual_rate_deg_s": {
+        "count": 100,
+        "min": -3.483431457178552,
+        "max": 9.655223682902916,
+        "mean": 0.39644703947408033,
+        "rms": 1.5227331119130936,
+        "median": 0.0,
+        "p95_abs": 2.9003231229922357
+      },
+      "yaw_comparison": {
+        "outside_source_coverage": 2,
+        "covered": 100
+      },
+      "rate_comparison": {
+        "outside_source_coverage": 2,
+        "covered": 100
+      }
+    },
+    "100ms": {
+      "rows": 51,
+      "partial_windows": 1,
+      "summary_includes_partial": true,
+      "covered_count": {
+        "yaw": 49,
+        "rate": 49
+      },
+      "covered_nonpartial": {
+        "rows": 50,
+        "yaw_count": 49,
+        "rate_count": 49,
+        "residual_yaw_deg_s": {
+          "count": 49,
+          "min": -2.901962079831947,
+          "max": 5.382358821678336,
+          "mean": 0.3855169556040422,
+          "rms": 1.236513408839045,
+          "median": 0.0,
+          "p95_abs": 2.685027163690005
+        },
+        "residual_rate_deg_s": {
+          "count": 49,
+          "min": -2.833857785012183,
+          "max": 5.172435735309951,
+          "mean": 0.36765169381248536,
+          "rms": 1.1888982658624923,
+          "median": 0.0,
+          "p95_abs": 2.5560332782245574
+        }
+      },
+      "interval_duration_s": {
+        "count": 51,
+        "min": 0.060007,
+        "max": 0.100006,
+        "mean": 0.09921570588235297,
+        "rms": 0.09937053262026574,
+        "median": 0.1,
+        "p95_abs": 0.100005
+      },
+      "encoder_omega_deg_s": {
+        "count": 51,
+        "min": -14.307850175431641,
+        "max": 0.30443147701110174,
+        "mean": -2.2204811356437983,
+        "rms": 4.983564275693501,
+        "median": 0.0,
+        "p95_abs": 12.785866312025586
+      },
+      "residual_yaw_deg_s": {
+        "count": 49,
+        "min": -2.901962079831947,
+        "max": 5.382358821678336,
+        "mean": 0.3855169556040422,
+        "rms": 1.236513408839045,
+        "median": 0.0,
+        "p95_abs": 2.685027163690005
+      },
+      "residual_rate_deg_s": {
+        "count": 49,
+        "min": -2.833857785012183,
+        "max": 5.172435735309951,
+        "mean": 0.36765169381248536,
+        "rms": 1.1888982658624923,
+        "median": 0.0,
+        "p95_abs": 2.5560332782245574
+      },
+      "yaw_comparison": {
+        "outside_source_coverage": 2,
+        "covered": 49
+      },
+      "rate_comparison": {
+        "outside_source_coverage": 2,
+        "covered": 49
+      }
+    }
+  },
+  "data_duration_s": 5.060001,
+  "summed_wheel_interval_s": 5.060000999999978,
+  "limitations": [
+    "No slip threshold, radius/delay fit, detection accuracy or runtime policy is produced.",
+    "Yaw and rate may come from the same gyro; neither is independent ground truth.",
+    "Near-zero rotational residual cannot rule out translational slip against a wall.",
+    "The residual cannot uniquely identify a bad wheel or reconstruct true XY.",
+    "MCU receive events are not guaranteed physical acquisition timestamps."
+  ],
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_002036_interactive",
+  "source_file": "chassis_extended.jsonl",
+  "source_files": {
+    "chassis_extended.jsonl": {
+      "sha256": "2818cc687cc7056b456157daa1cfa6ae1045214ece7650e16fcbe4c87ecbda33",
+      "bytes": 525104
+    },
+    "metadata.json": {
+      "sha256": "c4f285ce8690a88018d123e4c12dfa91e32712c8da1a3efaca3ba7e8aad5afdf",
+      "bytes": 13371
+    },
+    "chassis_identity.json": {
+      "sha256": "ff5163e27ff07c75e8e3b1a8d1e51ac6eccb412603b52eae8df405b9a72023f5",
+      "bytes": 798
+    },
+    "session_complete.json": {
+      "sha256": "1a22d5f896194215a4d3d484b4a451c1a7be1a4bbbf46ab4228783e6c6e33810",
+      "bytes": 101
+    }
+  },
+  "actual_identity": {
+    "git_commit": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "source_dirty": 1,
+    "board": 405,
+    "mode": 5,
+    "service": 1,
+    "protocol_major": 1,
+    "protocol_minor": 3,
+    "uart_baud": 921600,
+    "boot_epoch": "2b40340370e209faed7d2123a1015296"
+  },
+  "metadata": {
+    "actual_lower_firmware": "14b2a3a9077e6980a540631ce94345e61eb0487d",
+    "actual_lower_mode": "NormalDebug",
+    "upper_git_commit": "44994887400b5e691b8f0c8b2648b6fddb25728f",
+    "wheel_input_requested": false,
+    "pose_source": "t265_direct_with_camera_offset",
+    "mode": "interactive_f405_normaldebug"
+  },
+  "session_complete": {
+    "owner": "t265_f407_motion_map",
+    "complete": true,
+    "session_index": 11,
+    "accuracy_verified": false
+  },
+  "ground_truth_present": false,
+  "context_files_present": [
+    "events.jsonl"
+  ]
+}

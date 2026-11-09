@@ -604,6 +604,12 @@ def run_capture(args: argparse.Namespace) -> int:
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="T265/F407三轮里程计只监听调试程序")
     parser.add_argument("--analyze", type=Path, help="分析已有CSV或一次运行日志目录")
+    parser.add_argument("--wheel-gyro-residual", type=Path, metavar="SESSION",
+                        help="仅离线分析F405 07/08轮式与主gyro区间残差，不连接设备")
+    parser.add_argument("--wheel-gyro-output", type=Path, metavar="OUTDIR",
+                        help="将离线残差JSON/CSV导出到原日志目录之外；省略则只输出stdout")
+    parser.add_argument("--wheel-arm-m", type=float,
+                        help="离线轮式旋转有效力臂，默认0.13m（不是轮半径，未标定，不写配置）")
     parser.add_argument("--localizer", type=Path, default=DEFAULT_LOCALIZER)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_RUN_ROOT)
@@ -626,6 +632,17 @@ def arguments() -> argparse.Namespace:
 
 def main() -> int:
     args = arguments()
+    if args.wheel_gyro_residual:
+        if args.analyze:raise ValueError('--wheel-gyro-residual and --analyze are separate offline modes')
+        from wheel_gyro_residual import analyze_session, export_report
+        result, rows = analyze_session(args.wheel_gyro_residual,
+            .13 if args.wheel_arm_m is None else args.wheel_arm_m)
+        if args.wheel_gyro_output:
+            export_report(args.wheel_gyro_residual,args.wheel_gyro_output,result,rows)
+        print(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False))
+        return 0
+    if args.wheel_gyro_output:raise ValueError('--wheel-gyro-output requires --wheel-gyro-residual')
+    if args.wheel_arm_m is not None:raise ValueError('--wheel-arm-m requires --wheel-gyro-residual')
     config_path = args.config
     if args.analyze:
         csv_path, run_dir = find_csv(args.analyze)
