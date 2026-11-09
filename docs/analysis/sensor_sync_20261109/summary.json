@@ -1,0 +1,4014 @@
+{
+  "scope": "offline sensor response synchronization, no runtime or firmware changes",
+  "analysis_parent_commit": "41c4bbc",
+  "sign": "positive delay_B_after_A_ms means B waveform later than A; not a calibrated absolute hardware latency",
+  "common_14_actions": [
+    "0581f3f679ed4366ae02166b435690b1:5",
+    "0581f3f679ed4366ae02166b435690b1:6",
+    "28964abb9bba47e494b2c146fcca49a3:5",
+    "28964abb9bba47e494b2c146fcca49a3:6",
+    "997d50393e984145a9a94c3ff57035c0:5",
+    "997d50393e984145a9a94c3ff57035c0:6",
+    "b2d70b9d4a994f54a45bae832cfef421:1",
+    "b2d70b9d4a994f54a45bae832cfef421:2",
+    "b2d70b9d4a994f54a45bae832cfef421:3",
+    "b2d70b9d4a994f54a45bae832cfef421:4",
+    "b2d70b9d4a994f54a45bae832cfef421:5",
+    "b2d70b9d4a994f54a45bae832cfef421:6",
+    "b2d70b9d4a994f54a45bae832cfef421:7",
+    "b2d70b9d4a994f54a45bae832cfef421:8"
+  ],
+  "common_14_rotation_pairs": [
+    {
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "n": 14,
+      "median_ms": 29.00000000000036,
+      "min_ms": 24.000000000000355,
+      "max_ms": 34.00000000000036,
+      "p25_ms": 25.250000000000355,
+      "p75_ms": 32.75000000000036
+    },
+    {
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "n": 14,
+      "median_ms": -1.9999999999996687,
+      "min_ms": -8.999999999999675,
+      "max_ms": 10.000000000000341,
+      "p25_ms": -5.749999999999672,
+      "p75_ms": 6.250000000000338
+    },
+    {
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "n": 14,
+      "median_ms": -27.99999999999969,
+      "min_ms": -28.999999999999694,
+      "max_ms": -27.99999999999969,
+      "p25_ms": -27.99999999999969,
+      "p75_ms": -27.99999999999969
+    },
+    {
+      "A": "encoder",
+      "B": "lidar",
+      "time_basis": "estimated_source_raw_point_geometry",
+      "n": 14,
+      "median_ms": 5.352314519656511,
+      "min_ms": -3.8938304953993303,
+      "max_ms": 10.357440829478238,
+      "p25_ms": 3.3432243857146955,
+      "p75_ms": 7.659152962544428
+    },
+    {
+      "A": "gyro",
+      "B": "lidar",
+      "time_basis": "estimated_source_raw_point_geometry",
+      "n": 14,
+      "median_ms": -27.921922740338175,
+      "min_ms": -32.31829707110185,
+      "max_ms": -24.237265720167304,
+      "p25_ms": -29.13727256362509,
+      "p75_ms": -26.415358641188227
+    },
+    {
+      "A": "t265",
+      "B": "lidar",
+      "time_basis": "estimated_source_raw_point_geometry",
+      "n": 14,
+      "median_ms": 2.266996533185389,
+      "min_ms": -3.8123260935169463,
+      "max_ms": 4.03823604813149,
+      "p25_ms": 0.8834899943835807,
+      "p75_ms": 2.496682909645359
+    }
+  ],
+  "all_motion_summaries": [
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": 21.00000000000035,
+      "min_ms": 19.000000000000348,
+      "max_ms": 26.000000000000355,
+      "p25_ms": 19.75000000000035,
+      "p75_ms": 23.00000000000035,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": 21.00000000000035,
+      "min_ms": 19.000000000000348,
+      "max_ms": 26.000000000000355,
+      "p25_ms": 19.75000000000035,
+      "p75_ms": 23.00000000000035,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -7.999999999999674,
+      "min_ms": -11.999999999999677,
+      "max_ms": -5.999999999999672,
+      "p25_ms": -8.999999999999675,
+      "p75_ms": -7.499999999999673,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 6,
+      "median_ms": 24.500000000000355,
+      "min_ms": 20.00000000000035,
+      "max_ms": 31.000000000000362,
+      "p25_ms": 24.000000000000355,
+      "p75_ms": 28.75000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -4.499999999999671,
+      "min_ms": -4.999999999999671,
+      "max_ms": 3.3306690738754696e-13,
+      "p25_ms": -4.999999999999671,
+      "p75_ms": -2.9999999999996696,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 6,
+      "median_ms": 30.00000000000036,
+      "min_ms": 27.000000000000355,
+      "max_ms": 36.00000000000036,
+      "p25_ms": 29.25000000000036,
+      "p75_ms": 33.00000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -28.499999999999694,
+      "min_ms": -29.999999999999694,
+      "max_ms": -26.99999999999969,
+      "p25_ms": -29.999999999999694,
+      "p75_ms": -26.99999999999969,
+      "boundary_fits": 0
+    },
+    {
+      "session": "190954",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -23.999999999999687,
+      "min_ms": -23.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -23.999999999999687,
+      "p75_ms": -23.749999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": 28.000000000000355,
+      "min_ms": 23.000000000000355,
+      "max_ms": 30.00000000000036,
+      "p25_ms": 26.000000000000355,
+      "p75_ms": 29.25000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": 28.000000000000355,
+      "min_ms": 23.000000000000355,
+      "max_ms": 31.000000000000362,
+      "p25_ms": 26.000000000000355,
+      "p75_ms": 29.50000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -3.9999999999996705,
+      "min_ms": -7.999999999999674,
+      "max_ms": 3.3306690738754696e-13,
+      "p25_ms": -6.499999999999673,
+      "p75_ms": -1.4999999999996683,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 6,
+      "median_ms": 6.0000000000003375,
+      "min_ms": -32.999999999999694,
+      "max_ms": 30.00000000000036,
+      "p25_ms": -23.499999999999687,
+      "p75_ms": 25.000000000000355,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": 3.3306690738754696e-13,
+      "min_ms": -4.999999999999671,
+      "max_ms": 4.000000000000337,
+      "p25_ms": -2.7499999999996696,
+      "p75_ms": 2.5000000000003353,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 6,
+      "median_ms": 6.500000000000338,
+      "min_ms": -28.999999999999694,
+      "max_ms": 34.00000000000036,
+      "p25_ms": -21.249999999999684,
+      "p75_ms": 29.00000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -27.99999999999969,
+      "min_ms": -27.99999999999969,
+      "max_ms": -26.99999999999969,
+      "p25_ms": -27.99999999999969,
+      "p75_ms": -27.74999999999969,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191242",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 4,
+      "median_ms": -23.999999999999687,
+      "min_ms": -23.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -23.999999999999687,
+      "p75_ms": -23.749999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 28.50000000000036,
+      "min_ms": 24.000000000000355,
+      "max_ms": 33.00000000000036,
+      "p25_ms": 26.250000000000355,
+      "p75_ms": 30.750000000000362,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 28.50000000000036,
+      "min_ms": 24.000000000000355,
+      "max_ms": 33.00000000000036,
+      "p25_ms": 26.250000000000355,
+      "p75_ms": 30.750000000000362,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 3.3306690738754696e-13,
+      "min_ms": -6.999999999999673,
+      "max_ms": 7.000000000000339,
+      "p25_ms": -3.49999999999967,
+      "p75_ms": 3.500000000000336,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 4,
+      "median_ms": -14.99999999999968,
+      "min_ms": -26.99999999999969,
+      "max_ms": 29.00000000000036,
+      "p25_ms": -21.749999999999687,
+      "p75_ms": -0.24999999999966782,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 4.000000000000337,
+      "min_ms": -2.9999999999996696,
+      "max_ms": 11.000000000000343,
+      "p25_ms": 0.5000000000003335,
+      "p75_ms": 7.500000000000339,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 4,
+      "median_ms": 4.5000000000003375,
+      "min_ms": -22.999999999999687,
+      "max_ms": 34.00000000000036,
+      "p25_ms": -16.99999999999968,
+      "p75_ms": 26.500000000000355,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -28.499999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -27.99999999999969,
+      "p25_ms": -28.749999999999694,
+      "p75_ms": -28.24999999999969,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191736",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -23.999999999999687,
+      "min_ms": -24.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -24.499999999999687,
+      "p75_ms": -23.499999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 28.000000000000355,
+      "min_ms": 27.000000000000355,
+      "max_ms": 29.00000000000036,
+      "p25_ms": 27.500000000000355,
+      "p75_ms": 28.50000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 28.000000000000355,
+      "min_ms": 27.000000000000355,
+      "max_ms": 29.00000000000036,
+      "p25_ms": 27.500000000000355,
+      "p75_ms": 28.50000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -4.999999999999671,
+      "min_ms": -6.999999999999673,
+      "max_ms": -2.9999999999996696,
+      "p25_ms": -5.999999999999672,
+      "p75_ms": -3.9999999999996705,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 8,
+      "median_ms": 22.500000000000355,
+      "min_ms": -28.999999999999694,
+      "max_ms": 73.0000000000004,
+      "p25_ms": 12.000000000000345,
+      "p75_ms": 27.000000000000355,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 1.000000000000334,
+      "min_ms": -1.9999999999996687,
+      "max_ms": 4.000000000000337,
+      "p25_ms": -0.4999999999996674,
+      "p75_ms": 2.5000000000003353,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 8,
+      "median_ms": 28.00000000000036,
+      "min_ms": -22.999999999999687,
+      "max_ms": 79.0000000000004,
+      "p25_ms": 17.250000000000348,
+      "p75_ms": 32.75000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -27.99999999999969,
+      "min_ms": -27.99999999999969,
+      "max_ms": -27.99999999999969,
+      "p25_ms": -27.99999999999969,
+      "p75_ms": -27.99999999999969,
+      "boundary_fits": 0
+    },
+    {
+      "session": "191910",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -22.999999999999687,
+      "min_ms": -22.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -22.999999999999687,
+      "p75_ms": -22.999999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192105",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 8,
+      "median_ms": -24.999999999999687,
+      "min_ms": -38.9999999999997,
+      "max_ms": 28.00000000000036,
+      "p25_ms": -29.999999999999694,
+      "p75_ms": -11.249999999999677,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192105",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 8,
+      "median_ms": -20.999999999999687,
+      "min_ms": -33.999999999999694,
+      "max_ms": 32.00000000000036,
+      "p25_ms": -24.999999999999687,
+      "p75_ms": -6.999999999999673,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 1,
+      "median_ms": 18.000000000000348,
+      "min_ms": 18.000000000000348,
+      "max_ms": 18.000000000000348,
+      "p25_ms": 18.000000000000348,
+      "p75_ms": 18.000000000000348,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 1,
+      "median_ms": 18.000000000000348,
+      "min_ms": 18.000000000000348,
+      "max_ms": 18.000000000000348,
+      "p25_ms": 18.000000000000348,
+      "p75_ms": 18.000000000000348,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 1,
+      "median_ms": -10.999999999999677,
+      "min_ms": -10.999999999999677,
+      "max_ms": -10.999999999999677,
+      "p25_ms": -10.999999999999677,
+      "p75_ms": -10.999999999999677,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 4,
+      "median_ms": 204.0000000000005,
+      "min_ms": -350.0,
+      "max_ms": 350.0000000000006,
+      "p25_ms": -43.999999999999716,
+      "p75_ms": 350.0000000000006,
+      "boundary_fits": 3
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 1,
+      "median_ms": -6.999999999999673,
+      "min_ms": -6.999999999999673,
+      "max_ms": -6.999999999999673,
+      "p25_ms": -6.999999999999673,
+      "p75_ms": -6.999999999999673,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 4,
+      "median_ms": 212.0000000000005,
+      "min_ms": -350.0,
+      "max_ms": 350.0000000000006,
+      "p25_ms": -31.9999999999997,
+      "p75_ms": 350.0000000000006,
+      "boundary_fits": 3
+    },
+    {
+      "session": "192329",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 1,
+      "median_ms": -28.999999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -28.999999999999694,
+      "p25_ms": -28.999999999999694,
+      "p75_ms": -28.999999999999694,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192329",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 1,
+      "median_ms": -22.999999999999687,
+      "min_ms": -22.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -22.999999999999687,
+      "p75_ms": -22.999999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 25.500000000000355,
+      "min_ms": 25.000000000000355,
+      "max_ms": 26.000000000000355,
+      "p25_ms": 25.250000000000355,
+      "p75_ms": 25.750000000000355,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 25.000000000000355,
+      "min_ms": 24.000000000000355,
+      "max_ms": 26.000000000000355,
+      "p25_ms": 24.500000000000355,
+      "p75_ms": 25.500000000000355,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -7.499999999999673,
+      "min_ms": -8.999999999999675,
+      "max_ms": -5.999999999999672,
+      "p25_ms": -8.249999999999675,
+      "p75_ms": -6.749999999999673,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 12,
+      "median_ms": 5.500000000000338,
+      "min_ms": -36.9999999999997,
+      "max_ms": 30.00000000000036,
+      "p25_ms": -18.749999999999684,
+      "p75_ms": 25.250000000000355,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -2.499999999999669,
+      "min_ms": -3.9999999999996705,
+      "max_ms": -0.9999999999996678,
+      "p25_ms": -3.2499999999996696,
+      "p75_ms": -1.7499999999996685,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 12,
+      "median_ms": 11.000000000000343,
+      "min_ms": -30.999999999999694,
+      "max_ms": 36.00000000000036,
+      "p25_ms": -14.49999999999968,
+      "p75_ms": 30.25000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -28.499999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -27.99999999999969,
+      "p25_ms": -28.749999999999694,
+      "p75_ms": -28.24999999999969,
+      "boundary_fits": 0
+    },
+    {
+      "session": "192842",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -23.499999999999687,
+      "min_ms": -23.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -23.749999999999687,
+      "p75_ms": -23.249999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 33.00000000000036,
+      "min_ms": 26.000000000000355,
+      "max_ms": 40.00000000000037,
+      "p25_ms": 29.50000000000036,
+      "p75_ms": 36.50000000000037,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 33.00000000000036,
+      "min_ms": 26.000000000000355,
+      "max_ms": 40.00000000000037,
+      "p25_ms": 29.50000000000036,
+      "p75_ms": 36.50000000000037,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 2.000000000000335,
+      "min_ms": -6.999999999999673,
+      "max_ms": 11.000000000000343,
+      "p25_ms": -2.4999999999996696,
+      "p75_ms": 6.500000000000339,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 6,
+      "median_ms": -20.499999999999684,
+      "min_ms": -35.9999999999997,
+      "max_ms": 25.000000000000355,
+      "p25_ms": -32.2499999999997,
+      "p75_ms": 13.000000000000346,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": 7.50000000000034,
+      "min_ms": -0.9999999999996678,
+      "max_ms": 16.000000000000348,
+      "p25_ms": 3.2500000000003357,
+      "p75_ms": 11.750000000000345,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 6,
+      "median_ms": -14.499999999999678,
+      "min_ms": -30.999999999999694,
+      "max_ms": 30.00000000000036,
+      "p25_ms": -25.249999999999687,
+      "p75_ms": 18.000000000000348,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -28.999999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -28.999999999999694,
+      "p25_ms": -28.999999999999694,
+      "p75_ms": -28.999999999999694,
+      "boundary_fits": 0
+    },
+    {
+      "session": "193147",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 2,
+      "median_ms": -22.999999999999687,
+      "min_ms": -22.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -22.999999999999687,
+      "p75_ms": -22.999999999999687,
+      "boundary_fits": 0
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "channel": "rotation",
+      "n": 10,
+      "median_ms": 31.500000000000362,
+      "min_ms": 25.000000000000355,
+      "max_ms": 43.00000000000037,
+      "p25_ms": 29.25000000000036,
+      "p75_ms": 33.00000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 10,
+      "median_ms": 31.500000000000362,
+      "min_ms": 25.000000000000355,
+      "max_ms": 43.00000000000037,
+      "p25_ms": 29.25000000000036,
+      "p75_ms": 33.75000000000036,
+      "boundary_fits": 0
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "channel": "rotation",
+      "n": 10,
+      "median_ms": 5.0000000000003375,
+      "min_ms": -4.999999999999671,
+      "max_ms": 16.000000000000348,
+      "p25_ms": -0.24999999999966716,
+      "p75_ms": 7.750000000000341,
+      "boundary_fits": 0
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_translation",
+      "channel": "translation",
+      "n": 9,
+      "median_ms": 28.00000000000036,
+      "min_ms": -265.9999999999999,
+      "max_ms": 350.0000000000006,
+      "p25_ms": 20.00000000000035,
+      "p75_ms": 31.000000000000362,
+      "boundary_fits": 1
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "channel": "rotation",
+      "n": 10,
+      "median_ms": 9.500000000000341,
+      "min_ms": 3.3306690738754696e-13,
+      "max_ms": 22.00000000000035,
+      "p25_ms": 5.2500000000003375,
+      "p75_ms": 11.750000000000345,
+      "boundary_fits": 0
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_translation",
+      "channel": "translation",
+      "n": 9,
+      "median_ms": 33.00000000000036,
+      "min_ms": -259.9999999999999,
+      "max_ms": 350.0000000000006,
+      "p25_ms": 25.000000000000355,
+      "p75_ms": 35.00000000000036,
+      "boundary_fits": 1
+    },
+    {
+      "session": "194149",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "channel": "rotation",
+      "n": 10,
+      "median_ms": -27.99999999999969,
+      "min_ms": -29.999999999999694,
+      "max_ms": -27.99999999999969,
+      "p25_ms": -27.99999999999969,
+      "p75_ms": -27.99999999999969,
+      "boundary_fits": 0
+    },
+    {
+      "session": "194149",
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "channel": "rotation",
+      "n": 10,
+      "median_ms": -23.999999999999687,
+      "min_ms": -23.999999999999687,
+      "max_ms": -22.999999999999687,
+      "p25_ms": -23.999999999999687,
+      "p75_ms": -23.999999999999687,
+      "boundary_fits": 0
+    }
+  ],
+  "angle_rate_summaries": [
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 4,
+      "median_ms": 22.000000000000355,
+      "min_ms": 20.00000000000035,
+      "max_ms": 27.000000000000355,
+      "median_normalized_mse": 0.004318599669083382
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 4,
+      "median_ms": 22.000000000000355,
+      "min_ms": 20.00000000000035,
+      "max_ms": 28.00000000000036,
+      "median_normalized_mse": 0.004776744701873776
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 4,
+      "median_ms": -1.4999999999996683,
+      "min_ms": -3.9999999999996705,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 0.0053146391496593105
+    },
+    {
+      "session": "190954",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 4,
+      "median_ms": -7.499999999999673,
+      "min_ms": -10.999999999999677,
+      "max_ms": -5.999999999999672,
+      "median_normalized_mse": 0.004274060481278248
+    },
+    {
+      "session": "190954",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 4,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 2.632777219609959e-06
+    },
+    {
+      "session": "190954",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 4,
+      "median_ms": -27.49999999999969,
+      "min_ms": -30.999999999999694,
+      "max_ms": -20.999999999999687,
+      "median_normalized_mse": 0.0008749376046524953
+    },
+    {
+      "session": "190954",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 4,
+      "median_ms": -28.999999999999694,
+      "min_ms": -30.999999999999694,
+      "max_ms": -26.99999999999969,
+      "median_normalized_mse": 0.000167901900542412
+    },
+    {
+      "session": "190954",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 4,
+      "median_ms": -0.4999999999996674,
+      "min_ms": -0.9999999999996678,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 6.970036481029616e-05
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 4,
+      "median_ms": 29.500000000000362,
+      "min_ms": 24.000000000000355,
+      "max_ms": 31.000000000000362,
+      "median_normalized_mse": 0.003195172750478153
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 4,
+      "median_ms": 21.00000000000035,
+      "min_ms": 14.000000000000345,
+      "max_ms": 34.00000000000036,
+      "median_normalized_mse": 0.0059097882552237805
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 4,
+      "median_ms": -0.4999999999996674,
+      "min_ms": -10.999999999999677,
+      "max_ms": 11.000000000000343,
+      "median_normalized_mse": 0.008920163288144524
+    },
+    {
+      "session": "191242",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 4,
+      "median_ms": -3.9999999999996705,
+      "min_ms": -6.999999999999673,
+      "max_ms": 3.0000000000003357,
+      "median_normalized_mse": 0.0034146329252496208
+    },
+    {
+      "session": "191242",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 4,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 2.9577108807459948e-06
+    },
+    {
+      "session": "191242",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 4,
+      "median_ms": -25.999999999999687,
+      "min_ms": -34.9999999999997,
+      "max_ms": -21.999999999999687,
+      "median_normalized_mse": 0.004622897214685476
+    },
+    {
+      "session": "191242",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 4,
+      "median_ms": -27.99999999999969,
+      "min_ms": -29.999999999999694,
+      "max_ms": -26.99999999999969,
+      "median_normalized_mse": 0.00011980980642212918
+    },
+    {
+      "session": "191242",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 4,
+      "median_ms": -0.4999999999996674,
+      "min_ms": -0.9999999999996678,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 7.331462567600409e-05
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": 29.00000000000036,
+      "min_ms": 24.000000000000355,
+      "max_ms": 34.00000000000036,
+      "median_normalized_mse": 0.0041995707417630795
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 30.00000000000036,
+      "min_ms": 27.000000000000355,
+      "max_ms": 33.00000000000036,
+      "median_normalized_mse": 0.011070585129748102
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 6.500000000000339,
+      "min_ms": -1.9999999999996687,
+      "max_ms": 15.000000000000346,
+      "median_normalized_mse": 0.017335779719750484
+    },
+    {
+      "session": "191736",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": 2.000000000000335,
+      "min_ms": -4.999999999999671,
+      "max_ms": 9.000000000000341,
+      "median_normalized_mse": 0.004522243415858609
+    },
+    {
+      "session": "191736",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 4.494017946536313e-06
+    },
+    {
+      "session": "191736",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": -28.499999999999694,
+      "min_ms": -29.999999999999694,
+      "max_ms": -26.99999999999969,
+      "median_normalized_mse": 0.007101387189963718
+    },
+    {
+      "session": "191736",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": -27.999999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -26.99999999999969,
+      "median_normalized_mse": 0.0002311974454866049
+    },
+    {
+      "session": "191736",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 2,
+      "median_ms": -0.4999999999996674,
+      "min_ms": -0.9999999999996678,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 0.0001165277129303158
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": 28.000000000000355,
+      "min_ms": 26.000000000000355,
+      "max_ms": 30.00000000000036,
+      "median_normalized_mse": 0.003174564792480474
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 28.000000000000355,
+      "min_ms": 26.000000000000355,
+      "max_ms": 30.00000000000036,
+      "median_normalized_mse": 0.005896143567371369
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 0.5000000000003335,
+      "min_ms": -3.9999999999996705,
+      "max_ms": 5.0000000000003375,
+      "median_normalized_mse": 0.01646322393163431
+    },
+    {
+      "session": "191910",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": -5.999999999999672,
+      "min_ms": -8.999999999999675,
+      "max_ms": -2.9999999999996696,
+      "median_normalized_mse": 0.003561835542864846
+    },
+    {
+      "session": "191910",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 2.4588492519544047e-06
+    },
+    {
+      "session": "191910",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": -19.999999999999684,
+      "min_ms": -37.9999999999997,
+      "max_ms": -1.9999999999996687,
+      "median_normalized_mse": 0.0059308597229772745
+    },
+    {
+      "session": "191910",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": -29.499999999999694,
+      "min_ms": -29.999999999999694,
+      "max_ms": -28.999999999999694,
+      "median_normalized_mse": 0.00015577414367456141
+    },
+    {
+      "session": "191910",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 2,
+      "median_ms": 3.3306690738754696e-13,
+      "min_ms": 3.3306690738754696e-13,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 8.576756137045901e-05
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 1,
+      "median_ms": 18.000000000000348,
+      "min_ms": 18.000000000000348,
+      "max_ms": 18.000000000000348,
+      "median_normalized_mse": 0.0033072934067268655
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 1,
+      "median_ms": 14.000000000000345,
+      "min_ms": 14.000000000000345,
+      "max_ms": 14.000000000000345,
+      "median_normalized_mse": 0.008109340734031556
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 1,
+      "median_ms": -21.999999999999687,
+      "min_ms": -21.999999999999687,
+      "max_ms": -21.999999999999687,
+      "median_normalized_mse": 0.014434899135575727
+    },
+    {
+      "session": "192329",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 1,
+      "median_ms": -13.99999999999968,
+      "min_ms": -13.99999999999968,
+      "max_ms": -13.99999999999968,
+      "median_normalized_mse": 0.003251706502219331
+    },
+    {
+      "session": "192329",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 1,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 1.6120135379796945e-06
+    },
+    {
+      "session": "192329",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 1,
+      "median_ms": -7.999999999999674,
+      "min_ms": -7.999999999999674,
+      "max_ms": -7.999999999999674,
+      "median_normalized_mse": 0.004066200475629139
+    },
+    {
+      "session": "192329",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 1,
+      "median_ms": -30.999999999999694,
+      "min_ms": -30.999999999999694,
+      "max_ms": -30.999999999999694,
+      "median_normalized_mse": 0.0005216474486619946
+    },
+    {
+      "session": "192329",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 1,
+      "median_ms": 1.000000000000334,
+      "min_ms": 1.000000000000334,
+      "max_ms": 1.000000000000334,
+      "median_normalized_mse": 0.0003552916865761202
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": 25.500000000000355,
+      "min_ms": 24.000000000000355,
+      "max_ms": 27.000000000000355,
+      "median_normalized_mse": 0.0032800008538893836
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 16.000000000000348,
+      "min_ms": 11.000000000000343,
+      "max_ms": 21.00000000000035,
+      "median_normalized_mse": 0.008207779031358983
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 14.000000000000345,
+      "min_ms": 14.000000000000345,
+      "max_ms": 14.000000000000345,
+      "median_normalized_mse": 0.020367803085322427
+    },
+    {
+      "session": "192842",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": -7.499999999999673,
+      "min_ms": -10.999999999999677,
+      "max_ms": -3.9999999999996705,
+      "median_normalized_mse": 0.0035357709027685745
+    },
+    {
+      "session": "192842",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 2.3208814073790647e-06
+    },
+    {
+      "session": "192842",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": -28.499999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -27.99999999999969,
+      "median_normalized_mse": 0.00650651498848371
+    },
+    {
+      "session": "192842",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": -28.999999999999694,
+      "min_ms": -28.999999999999694,
+      "max_ms": -28.999999999999694,
+      "median_normalized_mse": 0.00010411844826232228
+    },
+    {
+      "session": "192842",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 2,
+      "median_ms": 3.3306690738754696e-13,
+      "min_ms": 3.3306690738754696e-13,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 7.240252467245238e-05
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": 33.00000000000036,
+      "min_ms": 26.000000000000355,
+      "max_ms": 40.00000000000037,
+      "median_normalized_mse": 0.004791019895668595
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 27.500000000000355,
+      "min_ms": 13.000000000000345,
+      "max_ms": 42.00000000000037,
+      "median_normalized_mse": 0.008267051595270556
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": 8.00000000000034,
+      "min_ms": -2.9999999999996696,
+      "max_ms": 19.000000000000348,
+      "median_normalized_mse": 0.036974998708410874
+    },
+    {
+      "session": "193147",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": 2.0000000000003353,
+      "min_ms": -7.999999999999674,
+      "max_ms": 12.000000000000345,
+      "median_normalized_mse": 0.005445639718179251
+    },
+    {
+      "session": "193147",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 2,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 3.4414099899562933e-06
+    },
+    {
+      "session": "193147",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 2,
+      "median_ms": -17.999999999999684,
+      "min_ms": -20.999999999999687,
+      "max_ms": -14.99999999999968,
+      "median_normalized_mse": 0.013483097116691036
+    },
+    {
+      "session": "193147",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 2,
+      "median_ms": -28.999999999999694,
+      "min_ms": -29.999999999999694,
+      "max_ms": -27.99999999999969,
+      "median_normalized_mse": 0.0005602416313099694
+    },
+    {
+      "session": "193147",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 2,
+      "median_ms": -0.4999999999996674,
+      "min_ms": -0.9999999999996678,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 8.921516908660718e-05
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "MCU",
+      "n": 10,
+      "median_ms": 32.50000000000036,
+      "min_ms": 25.000000000000355,
+      "max_ms": 43.00000000000037,
+      "median_normalized_mse": 0.005796365056716712
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "gyro_yaw_derivative",
+      "time_basis": "host_RX",
+      "n": 10,
+      "median_ms": 32.00000000000036,
+      "min_ms": 15.000000000000346,
+      "max_ms": 45.00000000000037,
+      "median_normalized_mse": 0.009765606834031977
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 10,
+      "median_ms": 9.500000000000341,
+      "min_ms": -5.999999999999672,
+      "max_ms": 30.00000000000036,
+      "median_normalized_mse": 0.01716680624704546
+    },
+    {
+      "session": "194149",
+      "A": "encoder",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 10,
+      "median_ms": 3.500000000000336,
+      "min_ms": -3.9999999999996705,
+      "max_ms": 16.000000000000348,
+      "median_normalized_mse": 0.006336212354344998
+    },
+    {
+      "session": "194149",
+      "A": "gyro_yaw_derivative",
+      "B": "gyro_rate",
+      "time_basis": "MCU",
+      "n": 10,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -0.9999999999996678,
+      "max_ms": -0.9999999999996678,
+      "median_normalized_mse": 3.6660598987114407e-06
+    },
+    {
+      "session": "194149",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "host_RX",
+      "n": 10,
+      "median_ms": -23.499999999999687,
+      "min_ms": -32.999999999999694,
+      "max_ms": -17.999999999999684,
+      "median_normalized_mse": 0.004807480607238134
+    },
+    {
+      "session": "194149",
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "source_estimate",
+      "n": 10,
+      "median_ms": -28.499999999999694,
+      "min_ms": -30.999999999999694,
+      "max_ms": -23.999999999999687,
+      "median_normalized_mse": 0.00023717617060391578
+    },
+    {
+      "session": "194149",
+      "A": "t265_quaternion_derivative",
+      "B": "t265_rate",
+      "time_basis": "SDK_capture",
+      "n": 10,
+      "median_ms": -0.9999999999996678,
+      "min_ms": -1.9999999999996687,
+      "max_ms": 3.3306690738754696e-13,
+      "median_normalized_mse": 0.0001825399019691219
+    }
+  ],
+  "formal_rotation_summaries": [
+    {
+      "race": 1,
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "n": 28,
+      "median_ms": 39.00000000000037,
+      "min_ms": 25.000000000000355,
+      "max_ms": 101.00000000000043,
+      "median_normalized_mse": 0.01287005706698878,
+      "boundary_fits": 0
+    },
+    {
+      "race": 1,
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "n": 28,
+      "median_ms": 38.00000000000037,
+      "min_ms": 25.000000000000355,
+      "max_ms": 101.00000000000043,
+      "median_normalized_mse": 0.012868792796864537,
+      "boundary_fits": 0
+    },
+    {
+      "race": 1,
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "n": 28,
+      "median_ms": 12.000000000000345,
+      "min_ms": -2.9999999999996696,
+      "max_ms": 34.00000000000036,
+      "median_normalized_mse": 0.012460916657059413,
+      "boundary_fits": 0
+    },
+    {
+      "race": 1,
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "n": 28,
+      "median_ms": 16.500000000000348,
+      "min_ms": 2.000000000000335,
+      "max_ms": 38.00000000000037,
+      "median_normalized_mse": 0.012633519946400893,
+      "boundary_fits": 0
+    },
+    {
+      "race": 1,
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "n": 28,
+      "median_ms": -28.499999999999694,
+      "min_ms": -29.999999999999694,
+      "max_ms": -22.999999999999687,
+      "median_normalized_mse": 0.0007304714969806907,
+      "boundary_fits": 0
+    },
+    {
+      "race": 1,
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "n": 28,
+      "median_ms": -22.999999999999687,
+      "min_ms": -24.999999999999687,
+      "max_ms": -18.999999999999684,
+      "median_normalized_mse": 0.0007703706485256265,
+      "boundary_fits": 0
+    },
+    {
+      "race": 1,
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "estimated_source_20ms_average",
+      "n": 28,
+      "median_ms": -27.99999999999969,
+      "min_ms": -30.999999999999694,
+      "max_ms": -24.999999999999687,
+      "median_normalized_mse": 0.0006151004418517342,
+      "boundary_fits": 0
+    },
+    {
+      "race": 2,
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "MCU_source_intervals",
+      "n": 42,
+      "median_ms": 37.00000000000037,
+      "min_ms": -350.0,
+      "max_ms": 350.0000000000006,
+      "median_normalized_mse": 0.016298578829549527,
+      "boundary_fits": 2
+    },
+    {
+      "race": 2,
+      "A": "encoder",
+      "B": "gyro",
+      "time_basis": "host_receive_intervals",
+      "n": 42,
+      "median_ms": 36.00000000000036,
+      "min_ms": -350.0,
+      "max_ms": 350.0000000000006,
+      "median_normalized_mse": 0.017554284329092243,
+      "boundary_fits": 2
+    },
+    {
+      "race": 2,
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "estimated_source_intervals",
+      "n": 42,
+      "median_ms": 10.500000000000341,
+      "min_ms": -350.0,
+      "max_ms": 347.0000000000006,
+      "median_normalized_mse": 0.016968591133498336,
+      "boundary_fits": 1
+    },
+    {
+      "race": 2,
+      "A": "encoder",
+      "B": "t265",
+      "time_basis": "host_receive_intervals",
+      "n": 42,
+      "median_ms": 15.500000000000348,
+      "min_ms": -350.0,
+      "max_ms": 350.0000000000006,
+      "median_normalized_mse": 0.01705860222759328,
+      "boundary_fits": 2
+    },
+    {
+      "race": 2,
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "estimated_source_10ms_average",
+      "n": 42,
+      "median_ms": -28.999999999999694,
+      "min_ms": -29.999999999999694,
+      "max_ms": -24.999999999999687,
+      "median_normalized_mse": 0.001079337098478168,
+      "boundary_fits": 0
+    },
+    {
+      "race": 2,
+      "A": "gyro",
+      "B": "t265",
+      "time_basis": "host_receive_10ms_average",
+      "n": 42,
+      "median_ms": -22.999999999999687,
+      "min_ms": -24.999999999999687,
+      "max_ms": -19.999999999999684,
+      "median_normalized_mse": 0.0010726494555410825,
+      "boundary_fits": 0
+    },
+    {
+      "race": 2,
+      "A": "gyro_yaw_derivative",
+      "B": "t265_quaternion_derivative",
+      "time_basis": "estimated_source_20ms_average",
+      "n": 42,
+      "median_ms": -28.999999999999694,
+      "min_ms": -31.999999999999694,
+      "max_ms": -25.99999999999969,
+      "median_normalized_mse": 0.00105102556543165,
+      "boundary_fits": 0
+    }
+  ],
+  "formal_lidar": [
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:21",
+      "parameters": {
+        "observed_gyro_delta_deg": -170.9316871592514,
+        "observed_peak_dps": 116.516
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -28.593895439581242,
+      "field_yaw_nuisance_offset_deg": 2.6524311782798646,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.0046850948845988186,
+      "rmse_no_shift_m": 0.01471667725610323,
+      "support": {
+        "scans": 30,
+        "scans_with_support": 30,
+        "raw_points": 5211,
+        "supported_points": 4614
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:21",
+      "parameters": {
+        "observed_gyro_delta_deg": -170.9316871592514,
+        "observed_peak_dps": 116.516
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 1.50556449584216,
+      "field_yaw_nuisance_offset_deg": 1.4489185337058326,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005063570550768726,
+      "rmse_no_shift_m": 0.00509550273431701,
+      "support": {
+        "scans": 30,
+        "scans_with_support": 30,
+        "raw_points": 5211,
+        "supported_points": 4614
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:21",
+      "parameters": {
+        "observed_gyro_delta_deg": -170.9316871592514,
+        "observed_peak_dps": 116.516
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 4.524558566335534,
+      "field_yaw_nuisance_offset_deg": 2.330022117513134,
+      "encoder_nuisance_angle_gain": 0.9895091687917708,
+      "rmse_m": 0.011193814807115971,
+      "rmse_no_shift_m": 0.010960997854933591,
+      "support": {
+        "scans": 30,
+        "scans_with_support": 30,
+        "raw_points": 5211,
+        "supported_points": 4614
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:19",
+      "parameters": {
+        "observed_gyro_delta_deg": 159.9609999999999,
+        "observed_peak_dps": 143.981
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -26.539808274733474,
+      "field_yaw_nuisance_offset_deg": 2.8388779579027044,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006657297256208894,
+      "rmse_no_shift_m": 0.016944880276723022,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4509,
+        "supported_points": 3622
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:19",
+      "parameters": {
+        "observed_gyro_delta_deg": 159.9609999999999,
+        "observed_peak_dps": 143.981
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.0549046855587694,
+      "field_yaw_nuisance_offset_deg": 1.5314395054938463,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006855069532403452,
+      "rmse_no_shift_m": 0.006981876929177321,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4509,
+        "supported_points": 3622
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:19",
+      "parameters": {
+        "observed_gyro_delta_deg": 159.9609999999999,
+        "observed_peak_dps": 143.981
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 10.939304451678778,
+      "field_yaw_nuisance_offset_deg": 2.8531347774796525,
+      "encoder_nuisance_angle_gain": 0.9995245633046093,
+      "rmse_m": 0.013413604386684994,
+      "rmse_no_shift_m": 0.016032721096026634,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4509,
+        "supported_points": 3622
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:16",
+      "parameters": {
+        "observed_gyro_delta_deg": 153.08400000000006,
+        "observed_peak_dps": 120.544
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -26.40413933735868,
+      "field_yaw_nuisance_offset_deg": 2.342472684216916,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008161641255656656,
+      "rmse_no_shift_m": 0.012857479774377683,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6599,
+        "supported_points": 6143
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:16",
+      "parameters": {
+        "observed_gyro_delta_deg": 153.08400000000006,
+        "observed_peak_dps": 120.544
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 3.5574733074653606,
+      "field_yaw_nuisance_offset_deg": 1.6369843342836954,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.00820071040118868,
+      "rmse_no_shift_m": 0.008298764287327995,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6599,
+        "supported_points": 6143
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race1",
+      "action_id": "race1:observed_rotation:16",
+      "parameters": {
+        "observed_gyro_delta_deg": 153.08400000000006,
+        "observed_peak_dps": 120.544
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 11.145309101716244,
+      "field_yaw_nuisance_offset_deg": 5.7438541788682995,
+      "encoder_nuisance_angle_gain": 0.9865020009430475,
+      "rmse_m": 0.00813472140380884,
+      "rmse_no_shift_m": 0.008626710139874611,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6599,
+        "supported_points": 6143
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:2",
+      "parameters": {
+        "observed_gyro_delta_deg": 182.39021133623896,
+        "observed_peak_dps": 148.437
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -28.244400795748255,
+      "field_yaw_nuisance_offset_deg": -0.1949650682631972,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006197868745892421,
+      "rmse_no_shift_m": 0.018441267290243157,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4857,
+        "supported_points": 3975
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:2",
+      "parameters": {
+        "observed_gyro_delta_deg": 182.39021133623896,
+        "observed_peak_dps": 148.437
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.9305183551504166,
+      "field_yaw_nuisance_offset_deg": -0.6400267381490847,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006265478238660543,
+      "rmse_no_shift_m": 0.006310264428734535,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4857,
+        "supported_points": 3975
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:2",
+      "parameters": {
+        "observed_gyro_delta_deg": 182.39021133623896,
+        "observed_peak_dps": 148.437
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 5.073468156922841,
+      "field_yaw_nuisance_offset_deg": 0.7853591552241311,
+      "encoder_nuisance_angle_gain": 0.9979587658365746,
+      "rmse_m": 0.0070686345519865666,
+      "rmse_no_shift_m": 0.007790276786421082,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4857,
+        "supported_points": 3975
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:19",
+      "parameters": {
+        "observed_gyro_delta_deg": -168.73530153137312,
+        "observed_peak_dps": 116.271
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -29.368400009744565,
+      "field_yaw_nuisance_offset_deg": -0.05142472652157085,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.00504272812018386,
+      "rmse_no_shift_m": 0.015589114404256142,
+      "support": {
+        "scans": 29,
+        "scans_with_support": 29,
+        "raw_points": 5028,
+        "supported_points": 4667
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:19",
+      "parameters": {
+        "observed_gyro_delta_deg": -168.73530153137312,
+        "observed_peak_dps": 116.271
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.7948802659575827,
+      "field_yaw_nuisance_offset_deg": 0.5422364535613858,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005137684346734589,
+      "rmse_no_shift_m": 0.005153220555924005,
+      "support": {
+        "scans": 29,
+        "scans_with_support": 29,
+        "raw_points": 5028,
+        "supported_points": 4667
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:19",
+      "parameters": {
+        "observed_gyro_delta_deg": -168.73530153137312,
+        "observed_peak_dps": 116.271
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.953711508971673,
+      "field_yaw_nuisance_offset_deg": -0.7019233237888245,
+      "encoder_nuisance_angle_gain": 0.9914872925601932,
+      "rmse_m": 0.018998024745847688,
+      "rmse_no_shift_m": 0.01870174995138804,
+      "support": {
+        "scans": 29,
+        "scans_with_support": 29,
+        "raw_points": 5028,
+        "supported_points": 4667
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:37",
+      "parameters": {
+        "observed_gyro_delta_deg": 168.12896265805512,
+        "observed_peak_dps": 120.361
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -27.02797034890435,
+      "field_yaw_nuisance_offset_deg": 0.2741319519232768,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005712475845770623,
+      "rmse_no_shift_m": 0.015581560910554739,
+      "support": {
+        "scans": 30,
+        "scans_with_support": 30,
+        "raw_points": 5203,
+        "supported_points": 4208
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:37",
+      "parameters": {
+        "observed_gyro_delta_deg": 168.12896265805512,
+        "observed_peak_dps": 120.361
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.4720415500602435,
+      "field_yaw_nuisance_offset_deg": -0.8809035393876491,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005746329057412244,
+      "rmse_no_shift_m": 0.0058963889891390005,
+      "support": {
+        "scans": 30,
+        "scans_with_support": 30,
+        "raw_points": 5203,
+        "supported_points": 4208
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    },
+    {
+      "session": "race2",
+      "action_id": "race2:observed_rotation:37",
+      "parameters": {
+        "observed_gyro_delta_deg": 168.12896265805512,
+        "observed_peak_dps": 120.361
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 10.318283282404812,
+      "field_yaw_nuisance_offset_deg": 0.03472293357874109,
+      "encoder_nuisance_angle_gain": 0.9981610137013323,
+      "rmse_m": 0.01359449639742988,
+      "rmse_no_shift_m": 0.015904863274850883,
+      "support": {
+        "scans": 30,
+        "scans_with_support": 30,
+        "raw_points": 5203,
+        "supported_points": 4208
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "formal_reference"
+    }
+  ],
+  "lidar_19_actions": [
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:5",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -27.074487006452525,
+      "field_yaw_nuisance_offset_deg": -0.07257719216008192,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008342636229687818,
+      "rmse_no_shift_m": 0.01843184096364182,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5376,
+        "supported_points": 5270
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:5",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 3.2211752985809396,
+      "field_yaw_nuisance_offset_deg": -0.207238592682427,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.0092210380221437,
+      "rmse_no_shift_m": 0.009322565066666375,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5376,
+        "supported_points": 5270
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:5",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 5.040139670592013,
+      "field_yaw_nuisance_offset_deg": 0.17983893391722802,
+      "encoder_nuisance_angle_gain": 0.9975313315049275,
+      "rmse_m": 0.007935246820588935,
+      "rmse_no_shift_m": 0.008545321679036082,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5376,
+        "supported_points": 5270
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:6",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -25.661193446222264,
+      "field_yaw_nuisance_offset_deg": 0.07109074561279356,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006724273459606463,
+      "rmse_no_shift_m": 0.01810833867140272,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6600,
+        "supported_points": 6451
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:6",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.9291303642732522,
+      "field_yaw_nuisance_offset_deg": 0.2626942300964472,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008347088013966882,
+      "rmse_no_shift_m": 0.008517734080175626,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6600,
+        "supported_points": 6451
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:6",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 6.847040753647443,
+      "field_yaw_nuisance_offset_deg": -0.10628823400780306,
+      "encoder_nuisance_angle_gain": 0.9964717354436061,
+      "rmse_m": 0.006611695875272073,
+      "rmse_no_shift_m": 0.007684238804569757,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6600,
+        "supported_points": 6451
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:5",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -29.657297187762442,
+      "field_yaw_nuisance_offset_deg": 0.20165450371752058,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.004836570334720476,
+      "rmse_no_shift_m": 0.013817351610561844,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4863,
+        "supported_points": 4831
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:5",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.7152178352483475,
+      "field_yaw_nuisance_offset_deg": 0.20171203250409406,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.00480026786889637,
+      "rmse_no_shift_m": 0.004808659917764037,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4863,
+        "supported_points": 4831
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:5",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 8.269472088611819,
+      "field_yaw_nuisance_offset_deg": 0.3858453338770795,
+      "encoder_nuisance_angle_gain": 1.0089074876062136,
+      "rmse_m": 0.004897846332644591,
+      "rmse_no_shift_m": 0.005997070451540601,
+      "support": {
+        "scans": 28,
+        "scans_with_support": 28,
+        "raw_points": 4863,
+        "supported_points": 4831
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -28.958540726148144,
+      "field_yaw_nuisance_offset_deg": 0.174940704323252,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.004383909100844399,
+      "rmse_no_shift_m": 0.01480007484879585,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4689,
+        "supported_points": 4652
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.3788704033243935,
+      "field_yaw_nuisance_offset_deg": 0.24892297739465258,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.004404704684300238,
+      "rmse_no_shift_m": 0.00455417351859332,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4689,
+        "supported_points": 4652
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.1835693924442966,
+      "field_yaw_nuisance_offset_deg": 0.4778314943454164,
+      "encoder_nuisance_angle_gain": 1.0053745804782674,
+      "rmse_m": 0.00432440736846521,
+      "rmse_no_shift_m": 0.004324966505789716,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4689,
+        "supported_points": 4652
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:5",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -27.769404347253438,
+      "field_yaw_nuisance_offset_deg": -0.06573323565603327,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007176433044634225,
+      "rmse_no_shift_m": 0.019338432312076652,
+      "support": {
+        "scans": 33,
+        "scans_with_support": 33,
+        "raw_points": 5725,
+        "supported_points": 5643
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:5",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.525343806512721,
+      "field_yaw_nuisance_offset_deg": 0.04843115781256996,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007135931351848456,
+      "rmse_no_shift_m": 0.007339407602836041,
+      "support": {
+        "scans": 33,
+        "scans_with_support": 33,
+        "raw_points": 5725,
+        "supported_points": 5643
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:5",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 4.778354550253814,
+      "field_yaw_nuisance_offset_deg": 0.28153123351829795,
+      "encoder_nuisance_angle_gain": 1.004550016022824,
+      "rmse_m": 0.0073097176037739894,
+      "rmse_no_shift_m": 0.007897875592839353,
+      "support": {
+        "scans": 33,
+        "scans_with_support": 33,
+        "raw_points": 5725,
+        "supported_points": 5643
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:6",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -29.180594880935523,
+      "field_yaw_nuisance_offset_deg": 0.10784756386420967,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005974420095322269,
+      "rmse_no_shift_m": 0.02021882610669861,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7812,
+        "supported_points": 7753
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:6",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 1.4410030537426544,
+      "field_yaw_nuisance_offset_deg": -0.23883691837841373,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006130902038378711,
+      "rmse_no_shift_m": 0.006166570088762585,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7812,
+        "supported_points": 7753
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:6",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 1.7348127681084118,
+      "field_yaw_nuisance_offset_deg": -0.7369396767275302,
+      "encoder_nuisance_angle_gain": 1.0026034640333648,
+      "rmse_m": 0.006136954896619179,
+      "rmse_no_shift_m": 0.00622985648874865,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7812,
+        "supported_points": 7753
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "192329",
+      "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+      "parameters": {
+        "angle_ccw_deg": 360.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -27.68540513451055,
+      "field_yaw_nuisance_offset_deg": 0.05066967845450194,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006082954068615922,
+      "rmse_no_shift_m": 0.022506781140275198,
+      "support": {
+        "scans": 66,
+        "scans_with_support": 66,
+        "raw_points": 11451,
+        "supported_points": 11053
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "fault_360"
+    },
+    {
+      "session": "192329",
+      "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+      "parameters": {
+        "angle_ccw_deg": 360.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 8.742626047696247,
+      "field_yaw_nuisance_offset_deg": 2.987517527860668,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.009534248599699799,
+      "rmse_no_shift_m": 0.011409109263153396,
+      "support": {
+        "scans": 66,
+        "scans_with_support": 66,
+        "raw_points": 11451,
+        "supported_points": 11053
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "fault_360"
+    },
+    {
+      "session": "192329",
+      "action_id": "a9dd8c44c59f45e9a988fb6f62028896:5",
+      "parameters": {
+        "angle_ccw_deg": 360.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 3.6806221456913115,
+      "field_yaw_nuisance_offset_deg": -0.6330932283070098,
+      "encoder_nuisance_angle_gain": 1.0008093559557225,
+      "rmse_m": 0.006682882231066682,
+      "rmse_no_shift_m": 0.007186475939236667,
+      "support": {
+        "scans": 66,
+        "scans_with_support": 66,
+        "raw_points": 11451,
+        "supported_points": 11053
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "fault_360"
+    },
+    {
+      "session": "193147",
+      "action_id": "32af95d7d37149e7ae3694522b398ec1:7",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -28.02102926384067,
+      "field_yaw_nuisance_offset_deg": -0.19848609430429007,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008096102253554506,
+      "rmse_no_shift_m": 0.01879780698542436,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7808,
+        "supported_points": 7608
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "injection_experiment"
+    },
+    {
+      "session": "193147",
+      "action_id": "32af95d7d37149e7ae3694522b398ec1:7",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 3.6262189966387606,
+      "field_yaw_nuisance_offset_deg": -0.18689727445073095,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008637876402927683,
+      "rmse_no_shift_m": 0.008885264406963902,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7808,
+        "supported_points": 7608
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "injection_experiment"
+    },
+    {
+      "session": "193147",
+      "action_id": "32af95d7d37149e7ae3694522b398ec1:7",
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 4.077670287424638,
+      "field_yaw_nuisance_offset_deg": -0.7096387813477965,
+      "encoder_nuisance_angle_gain": 1.0242292943127156,
+      "rmse_m": 0.009376620081120599,
+      "rmse_no_shift_m": 0.009489369781258992,
+      "support": {
+        "scans": 45,
+        "scans_with_support": 45,
+        "raw_points": 7808,
+        "supported_points": 7608
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "injection_experiment"
+    },
+    {
+      "session": "193147",
+      "action_id": "32af95d7d37149e7ae3694522b398ec1:8",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -30.787925162493977,
+      "field_yaw_nuisance_offset_deg": -0.09856399838704077,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007590491704372612,
+      "rmse_no_shift_m": 0.014491073319199636,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6597,
+        "supported_points": 6426
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "injection_experiment"
+    },
+    {
+      "session": "193147",
+      "action_id": "32af95d7d37149e7ae3694522b398ec1:8",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -0.6037133015947366,
+      "field_yaw_nuisance_offset_deg": 0.15794625297223083,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.008431732246303301,
+      "rmse_no_shift_m": 0.0084374280681547,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6597,
+        "supported_points": 6426
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "injection_experiment"
+    },
+    {
+      "session": "193147",
+      "action_id": "32af95d7d37149e7ae3694522b398ec1:8",
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 60.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 3.3266308510922213,
+      "field_yaw_nuisance_offset_deg": -0.6000085579757994,
+      "encoder_nuisance_angle_gain": 0.9985026454544962,
+      "rmse_m": 0.007430715214747915,
+      "rmse_no_shift_m": 0.007488063568425002,
+      "support": {
+        "scans": 38,
+        "scans_with_support": 38,
+        "raw_points": 6597,
+        "supported_points": 6426
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "injection_experiment"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:1",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -29.00730561169378,
+      "field_yaw_nuisance_offset_deg": -0.08048500363335302,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005900765287965813,
+      "rmse_no_shift_m": 0.01753423838300311,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4680,
+        "supported_points": 4573
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:1",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 1.3883064717892803,
+      "field_yaw_nuisance_offset_deg": -0.006393783252905123,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005931481372532063,
+      "rmse_no_shift_m": 0.005995344273097956,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4680,
+        "supported_points": 4573
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:1",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 5.196074625079964,
+      "field_yaw_nuisance_offset_deg": -0.39574475286292427,
+      "encoder_nuisance_angle_gain": 1.000841244125307,
+      "rmse_m": 0.006742522806730632,
+      "rmse_no_shift_m": 0.007377637771743671,
+      "support": {
+        "scans": 27,
+        "scans_with_support": 27,
+        "raw_points": 4680,
+        "supported_points": 4573
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:2",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -24.237265720167304,
+      "field_yaw_nuisance_offset_deg": -0.10834971506692352,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007436532840568596,
+      "rmse_no_shift_m": 0.014911747458662531,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4515,
+        "supported_points": 4498
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:2",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 4.03823604813149,
+      "field_yaw_nuisance_offset_deg": 0.2182841462207419,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.0074457519434858776,
+      "rmse_no_shift_m": 0.0076171043226074655,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4515,
+        "supported_points": 4498
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:2",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 9.81540697197908,
+      "field_yaw_nuisance_offset_deg": -0.5820430490369789,
+      "encoder_nuisance_angle_gain": 1.0084113637673664,
+      "rmse_m": 0.007779172252279687,
+      "rmse_no_shift_m": 0.00909352989086705,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4515,
+        "supported_points": 4498
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:3",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -29.955852822024823,
+      "field_yaw_nuisance_offset_deg": -0.21838250543070212,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006685566700540943,
+      "rmse_no_shift_m": 0.01849592538770932,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5383,
+        "supported_points": 5355
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:3",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -2.0919784130703865,
+      "field_yaw_nuisance_offset_deg": -0.0691104784577609,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006822767758999357,
+      "rmse_no_shift_m": 0.0069242729271804405,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5383,
+        "supported_points": 5355
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:3",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 6.981364114069205,
+      "field_yaw_nuisance_offset_deg": -0.38181123730743843,
+      "encoder_nuisance_angle_gain": 1.0044873485278945,
+      "rmse_m": 0.007041863898944233,
+      "rmse_no_shift_m": 0.007857194359309067,
+      "support": {
+        "scans": 31,
+        "scans_with_support": 31,
+        "raw_points": 5383,
+        "supported_points": 5355
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:4",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -28.07444113342291,
+      "field_yaw_nuisance_offset_deg": -0.184185646512438,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006453960479832983,
+      "rmse_no_shift_m": 0.01686596393806995,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4160,
+        "supported_points": 4087
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:4",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.155122663046384,
+      "field_yaw_nuisance_offset_deg": -0.3026221867490666,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006556876117205994,
+      "rmse_no_shift_m": 0.006625715408923524,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4160,
+        "supported_points": 4087
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:4",
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 5.50855441423306,
+      "field_yaw_nuisance_offset_deg": -0.7209897843531785,
+      "encoder_nuisance_angle_gain": 1.0000423126095852,
+      "rmse_m": 0.007680941972544339,
+      "rmse_no_shift_m": 0.008197793671908612,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4160,
+        "supported_points": 4087
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:5",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -27.53547635528537,
+      "field_yaw_nuisance_offset_deg": -0.18132173250677544,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.005655091023951299,
+      "rmse_no_shift_m": 0.01570715508985919,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4511,
+        "supported_points": 4383
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:5",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.39905570295556,
+      "field_yaw_nuisance_offset_deg": -0.01375871106893601,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.00590373481125519,
+      "rmse_no_shift_m": 0.006053942700477021,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4511,
+        "supported_points": 4383
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:5",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 10.357440829478238,
+      "field_yaw_nuisance_offset_deg": 0.13147455597331079,
+      "encoder_nuisance_angle_gain": 1.0056329283037289,
+      "rmse_m": 0.006132291867728723,
+      "rmse_no_shift_m": 0.008158849496552883,
+      "support": {
+        "scans": 26,
+        "scans_with_support": 26,
+        "raw_points": 4511,
+        "supported_points": 4383
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -25.909612478438262,
+      "field_yaw_nuisance_offset_deg": -0.1775052771685703,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006987185775680836,
+      "rmse_no_shift_m": 0.012551006179851441,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4338,
+        "supported_points": 4217
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.4107002190432727,
+      "field_yaw_nuisance_offset_deg": -0.06392875665878676,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006968877033469684,
+      "rmse_no_shift_m": 0.007061942522268547,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4338,
+        "supported_points": 4217
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:6",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 7.885082578702836,
+      "field_yaw_nuisance_offset_deg": 0.05459831400108574,
+      "encoder_nuisance_angle_gain": 0.9940988526595289,
+      "rmse_m": 0.0075182816927830895,
+      "rmse_no_shift_m": 0.008130926782365594,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4338,
+        "supported_points": 4217
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:7",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -32.31829707110185,
+      "field_yaw_nuisance_offset_deg": -0.10030543596861312,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006944057893544693,
+      "rmse_no_shift_m": 0.016321650593424403,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4165,
+        "supported_points": 4131
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:7",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -3.8123260935169463,
+      "field_yaw_nuisance_offset_deg": -0.21362866985100762,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.0070204887604030505,
+      "rmse_no_shift_m": 0.0071555562080805315,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4165,
+        "supported_points": 4131
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:7",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -3.8938304953993303,
+      "field_yaw_nuisance_offset_deg": 0.023668248583907838,
+      "encoder_nuisance_angle_gain": 1.0035574466953223,
+      "rmse_m": 0.006990144369104658,
+      "rmse_no_shift_m": 0.007128806240983927,
+      "support": {
+        "scans": 24,
+        "scans_with_support": 24,
+        "raw_points": 4165,
+        "supported_points": 4131
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -26.19564918610013,
+      "field_yaw_nuisance_offset_deg": -0.025067464538840845,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006843941419859579,
+      "rmse_no_shift_m": 0.015436927681726435,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4339,
+        "supported_points": 4290
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.7003977478655533,
+      "field_yaw_nuisance_offset_deg": -0.26072370863137806,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006852949615804403,
+      "rmse_no_shift_m": 0.0068618689373338955,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4339,
+        "supported_points": 4290
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.864847664201656,
+      "field_yaw_nuisance_offset_deg": -0.10268992121670031,
+      "encoder_nuisance_angle_gain": 1.002182684295204,
+      "rmse_m": 0.007053973291142962,
+      "rmse_no_shift_m": 0.007178577428232637,
+      "support": {
+        "scans": 25,
+        "scans_with_support": 25,
+        "raw_points": 4339,
+        "supported_points": 4290
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "normal_90_180"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:19",
+      "parameters": {
+        "angle_ccw_deg": 10.0,
+        "rate_deg_s": 30.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -28.611564499998696,
+      "field_yaw_nuisance_offset_deg": 0.15845047428850784,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006598255966142171,
+      "rmse_no_shift_m": 0.007471204839918458,
+      "support": {
+        "scans": 52,
+        "scans_with_support": 52,
+        "raw_points": 9031,
+        "supported_points": 8621
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "small_10"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:19",
+      "parameters": {
+        "angle_ccw_deg": 10.0,
+        "rate_deg_s": 30.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 2.3284432358335687,
+      "field_yaw_nuisance_offset_deg": 0.048718900830273616,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.006649737929568087,
+      "rmse_no_shift_m": 0.006656852720608036,
+      "support": {
+        "scans": 52,
+        "scans_with_support": 52,
+        "raw_points": 9031,
+        "supported_points": 8621
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "small_10"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:19",
+      "parameters": {
+        "angle_ccw_deg": 10.0,
+        "rate_deg_s": 30.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 14.16066147756335,
+      "field_yaw_nuisance_offset_deg": -0.5127382092425704,
+      "encoder_nuisance_angle_gain": 1.039094375028494,
+      "rmse_m": 0.0074460056032982875,
+      "rmse_no_shift_m": 0.007606209235621476,
+      "support": {
+        "scans": 52,
+        "scans_with_support": 52,
+        "raw_points": 9031,
+        "supported_points": 8621
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "small_10"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:20",
+      "parameters": {
+        "angle_ccw_deg": -10.0,
+        "rate_deg_s": 30.0
+      },
+      "reference": "gyro",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": -29.29389901831819,
+      "field_yaw_nuisance_offset_deg": 0.1917550046400751,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007031668632746369,
+      "rmse_no_shift_m": 0.00906487203314046,
+      "support": {
+        "scans": 15,
+        "scans_with_support": 15,
+        "raw_points": 2605,
+        "supported_points": 2517
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "small_10"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:20",
+      "parameters": {
+        "angle_ccw_deg": -10.0,
+        "rate_deg_s": 30.0
+      },
+      "reference": "sdk",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.9156813678833582,
+      "field_yaw_nuisance_offset_deg": 0.06285571557140557,
+      "encoder_nuisance_angle_gain": null,
+      "rmse_m": 0.007071844499571743,
+      "rmse_no_shift_m": 0.007072612959381297,
+      "support": {
+        "scans": 15,
+        "scans_with_support": 15,
+        "raw_points": 2605,
+        "supported_points": 2517
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "small_10"
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:20",
+      "parameters": {
+        "angle_ccw_deg": -10.0,
+        "rate_deg_s": 30.0
+      },
+      "reference": "encoder",
+      "time_basis": "estimated_sensor_event_time",
+      "lidar_delay_after_reference_ms": 0.20292564567141974,
+      "field_yaw_nuisance_offset_deg": 0.10808860723022645,
+      "encoder_nuisance_angle_gain": 0.9592642348536907,
+      "rmse_m": 0.007024011459218077,
+      "rmse_no_shift_m": 0.0070240485854382965,
+      "support": {
+        "scans": 15,
+        "scans_with_support": 15,
+        "raw_points": 2605,
+        "supported_points": 2517
+      },
+      "translation_model": "interpolated_centres",
+      "optimizer_success": true,
+      "bound_hit": false,
+      "category": "small_10"
+    }
+  ],
+  "lidar_clock": [
+    {
+      "session": "motion_191736",
+      "packets": 9187,
+      "invalid_header": 0,
+      "duration_s": 62.38000000000011,
+      "rx_minus_logged_last_point_ms": {
+        "p01": 0.08805164004570543,
+        "p50": 1.6957519999323267,
+        "p95": 5.536034000033387,
+        "p99": 20.304759300038267,
+        "max": 56.37322100005804
+      },
+      "linear_trend_ppm": 46.87461214783207,
+      "detrended_ms": {
+        "p01": -1.9883749980247312,
+        "p50": -0.7206164955763377,
+        "p95": 2.8506073687551123,
+        "p99": 17.47733350444917,
+        "max": 53.59979691051128
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "motion_191910",
+      "packets": 14970,
+      "invalid_header": 0,
+      "duration_s": 101.87999999999988,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -0.4479051899647857,
+        "p50": 1.0844729999917035,
+        "p95": 3.2572071000913634,
+        "p99": 6.555467269954521,
+        "max": 17.363688000159527
+      },
+      "linear_trend_ppm": 19.308785453830026,
+      "detrended_ms": {
+        "p01": -1.029349996133487,
+        "p50": -0.27178328470493973,
+        "p95": 1.7509021123075301,
+        "p99": 5.103601418546755,
+        "max": 16.439747332809198
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "motion_192329",
+      "packets": 15960,
+      "invalid_header": 0,
+      "duration_s": 108.33899999999994,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -0.3033928300487787,
+        "p50": 0.6772735000595276,
+        "p95": 2.8080604501042203,
+        "p99": 7.825189079942435,
+        "max": 39.683258999957616
+      },
+      "linear_trend_ppm": 7.2145881666852905,
+      "detrended_ms": {
+        "p01": -1.0860105079294309,
+        "p50": -0.33796874484508616,
+        "p95": 1.817960004178375,
+        "p99": 6.736334443742568,
+        "max": 38.86042846770607
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "motion_192842",
+      "packets": 24575,
+      "invalid_header": 0,
+      "duration_s": 167.1170000000002,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -2.904829640119715,
+        "p50": -1.2484010003390722,
+        "p95": 1.3894574001824358,
+        "p99": 9.142077020042011,
+        "max": 39.03684000033536
+      },
+      "linear_trend_ppm": 14.856629231452898,
+      "detrended_ms": {
+        "p01": -1.3880148737518183,
+        "p50": -0.4677818985726252,
+        "p95": 2.131519023599576,
+        "p99": 9.725143205713382,
+        "max": 38.74538642508531
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "motion_193147",
+      "packets": 19110,
+      "invalid_header": 0,
+      "duration_s": 129.93100000000004,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -0.6478509901899088,
+        "p50": 0.3134695000426291,
+        "p95": 3.1051506001631406,
+        "p99": 20.69137321970629,
+        "max": 99.03627099993173
+      },
+      "linear_trend_ppm": 2.489744712853491,
+      "detrended_ms": {
+        "p01": -1.6480696793952427,
+        "p50": -0.7966442018496545,
+        "p95": 1.9704710264059377,
+        "p99": 19.5314992669353,
+        "max": 98.00376738228346
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "motion_194149",
+      "packets": 15472,
+      "invalid_header": 0,
+      "duration_s": 105.20100000000002,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -0.6336547201635767,
+        "p50": 0.42911750006169314,
+        "p95": 4.32301244995869,
+        "p99": 11.883388820015133,
+        "max": 44.0320289999363
+      },
+      "linear_trend_ppm": -9.577004445280984,
+      "detrended_ms": {
+        "p01": -1.5147474739582436,
+        "p50": -0.6363294565207012,
+        "p95": 3.3183851207884354,
+        "p99": 10.855894921750144,
+        "max": 42.69248785012244
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "race1",
+      "packets": 27417,
+      "invalid_header": 0,
+      "duration_s": 186.48500000000013,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -1.7648159198870417,
+        "p50": -0.45490200000131154,
+        "p95": 3.478596799868683,
+        "p99": 8.252414560101897,
+        "max": 54.64279699981489
+      },
+      "linear_trend_ppm": -3.702771336564671,
+      "detrended_ms": {
+        "p01": -1.8341027562083025,
+        "p50": -0.5972694873765515,
+        "p95": 3.325447136416334,
+        "p99": 8.08494966586416,
+        "max": 54.364952952406455
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    },
+    {
+      "session": "race2",
+      "packets": 34192,
+      "invalid_header": 0,
+      "duration_s": 232.42200000000003,
+      "rx_minus_logged_last_point_ms": {
+        "p01": -1.3860489599210268,
+        "p50": 0.5213924998770381,
+        "p95": 10.361659200043496,
+        "p99": 46.504242729936955,
+        "max": 276.86219799988976
+      },
+      "linear_trend_ppm": 5.512697364843874,
+      "detrended_ms": {
+        "p01": -4.644499574400292,
+        "p50": -2.251237797901365,
+        "p95": 7.544508539408728,
+        "p99": 43.51935949270865,
+        "max": 273.8738479375427
+      },
+      "note": "transport+initial clock anchor+nominal clock drift; not physical acquisition delay"
+    }
+  ],
+  "cross_validation": [
+    {
+      "train_action": "997d50393e984145a9a94c3ff57035c0:5",
+      "test_action": "997d50393e984145a9a94c3ff57035c0:6",
+      "reference": "gyro",
+      "trained_lag_ms": -27.074487006452525,
+      "zero": {
+        "lag_ms": 0.0,
+        "rms_mm": 18.10833867140272,
+        "nuisance_yaw_deg": -0.6206893056339942,
+        "cost": 0.4966639591271507
+      },
+      "crossvalidated": {
+        "lag_ms": -27.074487006452525,
+        "rms_mm": 6.769631985342008,
+        "nuisance_yaw_deg": 0.12477558439389075,
+        "cost": 0.11045786220521973
+      },
+      "test_fitted_rms_mm": 6.724273459606463
+    },
+    {
+      "train_action": "997d50393e984145a9a94c3ff57035c0:6",
+      "test_action": "997d50393e984145a9a94c3ff57035c0:5",
+      "reference": "gyro",
+      "trained_lag_ms": -25.661193446222264,
+      "zero": {
+        "lag_ms": 0.0,
+        "rms_mm": 18.43184096364182,
+        "nuisance_yaw_deg": 1.400756324279125,
+        "cost": 0.422676646936963
+      },
+      "crossvalidated": {
+        "lag_ms": -25.661193446222264,
+        "rms_mm": 8.394172834293268,
+        "nuisance_yaw_deg": 0.019992663681534358,
+        "cost": 0.12885503106867655
+      },
+      "test_fitted_rms_mm": 8.342636229687818
+    }
+  ],
+  "numeric_checks": {
+    "description": "known B-after-A +40ms and gain2.3; same-interval integration",
+    "result": {
+      "delay_B_after_A_ms": 40.00000000000037,
+      "gain_A_over_B": 2.300000000000001,
+      "normalized_mse": 1.2065449508156476e-15,
+      "search_boundary": false,
+      "sensitivity_width_plus_1pct_variance_ms": [
+        22.00000000000035,
+        58.000000000000384
+      ],
+      "samples": 600
+    }
+  },
+  "lidar_timestamp_sign_check": {
+    "expected_lag_ms": -57.07448700645253,
+    "recovered_grid_lag_ms": -57.0,
+    "step_ms": 1
+  },
+  "input_paths": {
+    "motion_root": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map",
+    "formal_roots": [
+      "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195243_competition_wheel",
+      "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel"
+    ]
+  }
+}

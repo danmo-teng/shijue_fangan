@@ -20,7 +20,36 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
-## 最新补充：MOTION-TIMING-20261109（只读分析，不是固件修改命令）
+## 最新补算：SENSOR-SYNC-20261109（六对同步，只读证据）
+
+用户指出上一轮主要交付处理耗时，未完整计算传感器间同步。本轮已补齐原始波形/墙面几何的六对相位；没有修改F405或发布新的固件实施要求。
+
+```text
+四路同步报告：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/sensor_sync_20261109/ANALYSIS.md
+每动作各时间口径的编码器/T265/gyro结果：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/sensor_sync_20261109/motion_pair_lags.csv
+原始雷达点拟合的全部结果（含异常/小角和正式转动）：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/sensor_sync_20261109/lidar_pair_lags.csv
+
+符号：A→B为B的运动特征相对A的延迟，正数更晚；不是外部标定的硬件绝对时延。
+共同14次正常90/180转动，估计源时刻中位：
+编码器→gyro +29ms；编码器→T265 -2ms；gyro→T265 -28ms；
+编码器→原始雷达 +5.4ms；gyro→原始雷达 -27.9ms；T265→原始雷达 +2.3ms。
+雷达用原始光束/墙面拟合、中心自由运动，不拿已采用gyro的定位航向自证零延迟。
+27个有SDK的MotionDebug转动及两场70个活动区间复核：T265相对gyro源相位约-28～-29ms；
+按主机原始RX则约-23～-24ms，二者不能混用。小于几毫秒只宜说接近同步。
+平移F/A的全波形RX匹配中位+30/+6.5ms，A方向间-29～+34ms，不支持固定平移延迟补偿。
+第二场雷达包收齐相对日志点时刻P95 10.36ms/最大276.86ms，另有接收/映射长尾，不等同提线CPU。
+
+约28ms gyro历史回移只是待人讨论的候选，不是本次要求F405改时间戳、滤波器或控制器。
+不据此增加计时/ISR/年龄拒绝/握手/FAULT/测试代码，也不改gyro正方向、外参、比例或轮臂。
+本批actual仍为MotionDebug ac61480/dirty1、正式9434608/dirty1；源码不能代替dirty差异或已烧录证明。
+```
+
+本轮只读重核F405固定入口，文件blob仍为54ad68124628fc1f2fc361d82bec4dd342850b61；它的既有要求不自动恢复为本轮实施授权。原始日志未改或清理。本地分析图表/当前状态提交推送后由对方按固定入口读取，不宣称其已读、已审核或已部署。
+
+## 此前补充：MOTION-TIMING-20261109（处理耗时和到角）
 
 本轮依用户要求继续以MotionDebug作受控响应/到角依据、两场正式作联合负载参考。完整数据和表图已提交本仓库以下固定路径；没有修改或烧录F405，没有新增运动/测试代码/ISR/时间门或握手要求。
 
