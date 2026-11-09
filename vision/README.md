@@ -345,9 +345,10 @@ python3 -m py_compile run_editor.py run_detector.py calibrate_ground.py rescue_v
 
 桌面“YOLO26-640实时测速”仍使用原入口 `benchmark_yolo26_x5.py`，默认模型改为：
 `/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin`。
-仅替换独立测速模型，正式比赛入口、模型文件、类别表及公共识别实现保持原样。
+独立测速完成后，用户要求只替换正式模型。已将同一1109权重复制到正式原.bin路径，文件名保留，
+正式入口、代码逻辑、类别表/映射和阈值均不改；新旧六类顺序兼容。正式原路径加载和单次合成推理通过，未发车。
 默认读取模型旁 `classes.txt`，将 `blueteam/redteam` 显式映射为 `safe_blue/safe_red`；
-`common/kernel/risk/wound` 使用原正式别名映射。模型目录是用户提供的外部依赖，不复制或覆盖原模型。
+`common/kernel/risk/wound` 使用原正式别名映射。测速直接使用用户提供的外部模型目录；正式程序加载其原路径下已替换的同一权重。
 
 识别直接复用正式 `Yolo26Pipeline` 的 spawn 推理进程、三个图像槽、JPU/NV12/VSE、
 640×640等比例补边、LTRB/NMS、原生1280×1024坐标、多帧跟踪，以及正式
@@ -363,7 +364,7 @@ python3 -m py_compile run_editor.py run_detector.py calibrate_ground.py rescue_v
 
 ```bash
 python3 vision/benchmark_yolo26_x5.py
-# 用原正式模型作同一测速链的人工对照：
+# 从正式路径加载已更新模型，运行同一测速链：
 python3 vision/benchmark_yolo26_x5.py --model /home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin --labels /home/sunrise/RDK_X5/shijue_fangan/vision/config/yolo_labels.txt
 ```
 
