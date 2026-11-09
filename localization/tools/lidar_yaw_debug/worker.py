@@ -646,8 +646,10 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             latest=None
             for _ in range(8):
                 if not readable_nowait(scans._reader.fileno()):break
-                try:latest=scans.get_nowait()
+                try:incoming_scan=scans.get_nowait()
                 except queue.Empty:break
+                if latest is not None:counters['fit_requests_coalesced']+=1
+                latest=incoming_scan
             if latest is not None:
                 counters['fit_requests_coalesced']+=offer_latest(fit_inbox,
                     (latest,engine.revision,reference_request_id))

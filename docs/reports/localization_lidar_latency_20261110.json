@@ -1967,5 +1967,1212 @@
     },
     "raw_logs_unchanged": true,
     "devices_opened": false
+  },
+  "joint_replay": {
+    "phase": "05F",
+    "base_commit": "4a88a69",
+    "directory": "/tmp/rdk_lidar_latency_20261110/joint_1794259564610143821",
+    "phases": [
+      {
+        "label": "A1",
+        "reader": "python",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "scope": "Offline production RadarWorker, native input/control, numerical child and logging; recorded telemetry/Pose plus lidar PTY; no real UART/SDK/YOLO/GUI or physical accuracy claim",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.2040585,
+          "p95": 2.1259520999999997,
+          "p99": 2.6639571699999998,
+          "max": 4.255693
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.295183,
+          "p95": 2.2856333499999995,
+          "p99": 3.07211783,
+          "max": 4.753483
+        },
+        "fits": 100,
+        "packet_to_lidar_result_ms": {
+          "p50": 39.159501,
+          "p95": 90.62697564999999,
+          "p99": 98.28194466000012,
+          "max": 122.843712
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 42.466322500000004,
+          "p95": 209.02459764999998,
+          "p99": 291.03583921,
+          "max": 298.992391
+        },
+        "geometry_wall_ms": {
+          "p50": 25.2169275,
+          "p95": 30.4251474,
+          "p99": 32.78920968000002,
+          "max": 36.955197
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 10.9821665,
+          "p95": 14.42510495,
+          "p99": 16.723326600000004,
+          "max": 17.333127
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.082614,
+          "p95": 0.528386,
+          "p99": 0.996123,
+          "max": 9.340471
+        },
+        "monotonic_realtime_offset_change_ns": 17667,
+        "stopped_cleanly": true,
+        "errors": [],
+        "state_receipt": {
+          "scans_received": 105,
+          "scans": 105,
+          "fits": 105,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 0,
+          "pose_ingested": 2096,
+          "primary_yaw_ingested": 1045,
+          "measured_wheel_ingested": 1050,
+          "motion_execution": "native_cpp_owner",
+          "motion_scheduling": {
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "applied": true,
+            "error": null,
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+            "query_error": null,
+            "requested": true,
+            "requested_policy": "SCHED_FIFO",
+            "requested_priority": 10
+          },
+          "reader_backend": "python",
+          "logging_healthy": true,
+          "receiver_stopped_cleanly": true,
+          "geometry_stopped_cleanly": true,
+          "error": null,
+          "native_feedback": {
+            "enabled": true,
+            "connected": false,
+            "decode_errors": 0,
+            "motion_input_drops": 0,
+            "error": null,
+            "conversion": "original_forward_motion_event",
+            "frames": 2095,
+            "gyro_frames": 1045,
+            "identity_present": true,
+            "timed_yaw_seen": true,
+            "wheel_frames": 1050
+          },
+          "native_logging": {
+            "control_pose": {
+              "dropped": 0,
+              "failed": false
+            },
+            "events": {
+              "dropped": 0,
+              "failed": false
+            },
+            "motion_feedback": {
+              "dropped": 0,
+              "failed": false
+            },
+            "pose_motion": {
+              "dropped": 0,
+              "failed": false
+            }
+          },
+          "direct_output": {
+            "last_packet": {
+              "accuracy_verified": false,
+              "current_wall_axes": [],
+              "frame": "field",
+              "lidar_connected": false,
+              "lidar_corrections_enabled": false,
+              "lidar_error": null,
+              "motion_selection": {
+                "independent_ground_truth": false,
+                "last_paired_pose_ns": 33145840694381,
+                "last_raw_pose_ns": 33145840694381,
+                "last_wheel_sample_id": 82827,
+                "mode": "WHEEL_FALLBACK",
+                "pending_pose_drops": 0,
+                "phase_wheel_suppressed": false,
+                "phase_wheel_suppression_reason": "",
+                "policy": {
+                  "comparison_travel_m": 0.25,
+                  "displacement_conflict_m": 0.05,
+                  "recovery_residual_m": 0.025,
+                  "recovery_travel_m": 0.5,
+                  "recovery_two_axis_fixes": 2,
+                  "single_increment_conflict_m": 0.05
+                },
+                "reason": "T265_wheel_displacement_conflict",
+                "recovery_travel_m": 0.0,
+                "recovery_two_axis_fixes": 0,
+                "spatial_conflict_m": 0.0258600704315057,
+                "t265_translation_rebase_m": [
+                  0.0,
+                  0.0
+                ],
+                "wheel_and_gyro_are_sdk_dependencies": true,
+                "wheel_input_policy": {
+                  "dependency_persists_after_pause": true,
+                  "pause_requested": false,
+                  "reason": "measured_wheel_input_enabled"
+                },
+                "wheel_motion_suspect": false,
+                "wheel_time_basis": "receive_end_with_native_interval_duration",
+                "wheel_yaw_support": "MCU_interval_endpoint_held"
+              },
+              "motion_source": "WHEEL_FALLBACK",
+              "navigation": {
+                "distance_compensation_enabled": false,
+                "wheel_progress_m": null
+              },
+              "packet_id": 1956,
+              "pose": {
+                "x_m": 0.841301256211299,
+                "y_m": 0.0227308757716076,
+                "yaw_deg": 81.4910000000016
+              },
+              "pose_source": "LIDAR_ANCHORED_WHEEL_FALLBACK",
+              "position_reacquisitions": 0,
+              "qualified_pose": false,
+              "quality": "DEGRADED",
+              "reference": {
+                "description": "OFFLINE recorded-data timing fixture, not a physical placement",
+                "field_heading_deg": 74.8879999999999,
+                "physical_placement_confirmed": false,
+                "pose_origin": [
+                  0.740039224004832,
+                  -0.0227693400208661
+                ],
+                "reference_sample_ns": 33135348420460,
+                "source": "known_pose_fixture",
+                "start_center_xy_m": [
+                  0.796700000372227,
+                  -0.208110905463234
+                ],
+                "timestamp_monotonic_ns": 33135358412634,
+                "vio_rotation": -0.0140854521380582,
+                "yaw_offset": -28.2821005974795
+              },
+              "schema_version": 1,
+              "session_id": "8d7ae52a16804a9695bc49ad4c9124f9",
+              "t265": {
+                "mapper_confidence": 0,
+                "raw_center_xy_m": [
+                  0.589230993572262,
+                  -0.084971036690979
+                ],
+                "sample_monotonic_ns": 33145840694381,
+                "tracker_confidence": 3,
+                "translation_scale": 1,
+                "translation_scale_enabled": false,
+                "travel_from_start_m": 2.21970899394953
+              },
+              "timestamp_monotonic_ns": 33145844660784,
+              "wheel": {
+                "fusion_weight": 0.0,
+                "independent_reference": false,
+                "official_sdk_input": true
+              }
+            },
+            "output_drops": 0,
+            "packets_sent": 1957
+          }
+        }
+      },
+      {
+        "label": "B1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "scope": "Offline production RadarWorker, native input/control, numerical child and logging; recorded telemetry/Pose plus lidar PTY; no real UART/SDK/YOLO/GUI or physical accuracy claim",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.205912,
+          "p95": 2.3031419999999994,
+          "p99": 3.0299017399999997,
+          "max": 4.966981
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.32437,
+          "p95": 2.477916,
+          "p99": 3.4171703299999985,
+          "max": 5.071648
+        },
+        "fits": 99,
+        "packet_to_lidar_result_ms": {
+          "p50": 32.728046,
+          "p95": 56.579686099999996,
+          "p99": 58.87430079999996,
+          "max": 70.24724
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 36.759684,
+          "p95": 156.30087149999986,
+          "p99": 264.91605774,
+          "max": 266.246395
+        },
+        "geometry_wall_ms": {
+          "p50": 23.551747,
+          "p95": 31.1084022,
+          "p99": 34.79654465999991,
+          "max": 57.099956
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 10.803292,
+          "p95": 14.810487699999996,
+          "p99": 18.000987259999974,
+          "max": 23.790497
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 99
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.081848,
+          "p95": 0.535149,
+          "p99": 1.003815,
+          "max": 3.301931
+        },
+        "monotonic_realtime_offset_change_ns": 917,
+        "stopped_cleanly": true,
+        "errors": [],
+        "state_receipt": {
+          "scans_received": 105,
+          "scans": 104,
+          "fits": 104,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 1,
+          "pose_ingested": 2096,
+          "primary_yaw_ingested": 1045,
+          "measured_wheel_ingested": 1050,
+          "motion_execution": "native_cpp_owner",
+          "motion_scheduling": {
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "applied": true,
+            "error": null,
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+            "query_error": null,
+            "requested": true,
+            "requested_policy": "SCHED_FIFO",
+            "requested_priority": 10
+          },
+          "reader_backend": "cpp_bytes_timing_sector_v1",
+          "logging_healthy": true,
+          "receiver_stopped_cleanly": true,
+          "geometry_stopped_cleanly": true,
+          "error": null,
+          "native_feedback": {
+            "enabled": true,
+            "connected": false,
+            "decode_errors": 0,
+            "motion_input_drops": 0,
+            "error": null,
+            "conversion": "original_forward_motion_event",
+            "frames": 2095,
+            "gyro_frames": 1045,
+            "identity_present": true,
+            "timed_yaw_seen": true,
+            "wheel_frames": 1050
+          },
+          "native_logging": {
+            "control_pose": {
+              "dropped": 0,
+              "failed": false
+            },
+            "events": {
+              "dropped": 0,
+              "failed": false
+            },
+            "motion_feedback": {
+              "dropped": 0,
+              "failed": false
+            },
+            "pose_motion": {
+              "dropped": 0,
+              "failed": false
+            }
+          },
+          "direct_output": {
+            "last_packet": {
+              "accuracy_verified": false,
+              "current_wall_axes": [],
+              "frame": "field",
+              "lidar_connected": false,
+              "lidar_corrections_enabled": false,
+              "lidar_error": null,
+              "motion_selection": {
+                "independent_ground_truth": false,
+                "last_paired_pose_ns": 33159381984783,
+                "last_raw_pose_ns": 33159381984783,
+                "last_wheel_sample_id": 82827,
+                "mode": "WHEEL_FALLBACK",
+                "pending_pose_drops": 0,
+                "phase_wheel_suppressed": false,
+                "phase_wheel_suppression_reason": "",
+                "policy": {
+                  "comparison_travel_m": 0.25,
+                  "displacement_conflict_m": 0.05,
+                  "recovery_residual_m": 0.025,
+                  "recovery_travel_m": 0.5,
+                  "recovery_two_axis_fixes": 2,
+                  "single_increment_conflict_m": 0.05
+                },
+                "reason": "T265_wheel_displacement_conflict",
+                "recovery_travel_m": 0.0,
+                "recovery_two_axis_fixes": 0,
+                "spatial_conflict_m": 0.0280444256378282,
+                "t265_translation_rebase_m": [
+                  0.0,
+                  0.0
+                ],
+                "wheel_and_gyro_are_sdk_dependencies": true,
+                "wheel_input_policy": {
+                  "dependency_persists_after_pause": true,
+                  "pause_requested": false,
+                  "reason": "measured_wheel_input_enabled"
+                },
+                "wheel_motion_suspect": false,
+                "wheel_time_basis": "receive_end_with_native_interval_duration",
+                "wheel_yaw_support": "MCU_interval_endpoint_held"
+              },
+              "motion_source": "WHEEL_FALLBACK",
+              "navigation": {
+                "distance_compensation_enabled": false,
+                "wheel_progress_m": null
+              },
+              "packet_id": 1933,
+              "pose": {
+                "x_m": 0.84491880735786,
+                "y_m": 0.0156585516947746,
+                "yaw_deg": 81.0570000000011
+              },
+              "pose_source": "LIDAR_ANCHORED_WHEEL_FALLBACK",
+              "position_reacquisitions": 0,
+              "qualified_pose": false,
+              "quality": "DEGRADED",
+              "reference": {
+                "description": "OFFLINE recorded-data timing fixture, not a physical placement",
+                "field_heading_deg": 74.6790000000001,
+                "physical_placement_confirmed": false,
+                "pose_origin": [
+                  0.741836876549999,
+                  -0.0246667039235655
+                ],
+                "reference_sample_ns": 33148939818758,
+                "source": "known_pose_fixture",
+                "start_center_xy_m": [
+                  0.796539512785924,
+                  -0.208439588777671
+                ],
+                "timestamp_monotonic_ns": 33148947931150,
+                "vio_rotation": -0.00720036137749291,
+                "yaw_offset": -28.2896753264332
+              },
+              "schema_version": 1,
+              "session_id": "57e751b3a09747f4881a998b9c7a1e29",
+              "t265": {
+                "mapper_confidence": 0,
+                "raw_center_xy_m": [
+                  0.586443656614088,
+                  -0.0848208119859581
+                ],
+                "sample_monotonic_ns": 33159381984783,
+                "tracker_confidence": 3,
+                "translation_scale": 1,
+                "translation_scale_enabled": false,
+                "travel_from_start_m": 2.21970899394953
+              },
+              "timestamp_monotonic_ns": 33159385131141,
+              "wheel": {
+                "fusion_weight": 0.0,
+                "independent_reference": false,
+                "official_sdk_input": true
+              }
+            },
+            "output_drops": 0,
+            "packets_sent": 1934
+          }
+        }
+      },
+      {
+        "label": "B2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "scope": "Offline production RadarWorker, native input/control, numerical child and logging; recorded telemetry/Pose plus lidar PTY; no real UART/SDK/YOLO/GUI or physical accuracy claim",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.2782045,
+          "p95": 2.2090042,
+          "p99": 3.1818266699999995,
+          "max": 5.870104
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.391266,
+          "p95": 2.361876449999999,
+          "p99": 3.2909821599999995,
+          "max": 5.930812
+        },
+        "fits": 98,
+        "packet_to_lidar_result_ms": {
+          "p50": 32.0924445,
+          "p95": 47.53122839999997,
+          "p99": 62.17133951,
+          "max": 68.706246
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 35.226608999999996,
+          "p95": 140.25385419999984,
+          "p99": 266.01558846,
+          "max": 270.967227
+        },
+        "geometry_wall_ms": {
+          "p50": 23.227831000000002,
+          "p95": 30.69138444999999,
+          "p99": 35.725536500000004,
+          "max": 40.210477
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 10.955166,
+          "p95": 15.216574999999999,
+          "p99": 17.04887527,
+          "max": 17.744083
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 98
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.083848,
+          "p95": 0.575612,
+          "p99": 1.162003,
+          "max": 4.695415
+        },
+        "monotonic_realtime_offset_change_ns": -3333,
+        "stopped_cleanly": true,
+        "errors": [],
+        "state_receipt": {
+          "scans_received": 105,
+          "scans": 103,
+          "fits": 103,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 1,
+          "pose_ingested": 2096,
+          "primary_yaw_ingested": 1045,
+          "measured_wheel_ingested": 1050,
+          "motion_execution": "native_cpp_owner",
+          "motion_scheduling": {
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "applied": true,
+            "error": null,
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+            "query_error": null,
+            "requested": true,
+            "requested_policy": "SCHED_FIFO",
+            "requested_priority": 10
+          },
+          "reader_backend": "cpp_bytes_timing_sector_v1",
+          "logging_healthy": true,
+          "receiver_stopped_cleanly": true,
+          "geometry_stopped_cleanly": true,
+          "error": null,
+          "native_feedback": {
+            "enabled": true,
+            "connected": false,
+            "decode_errors": 0,
+            "motion_input_drops": 0,
+            "error": null,
+            "conversion": "original_forward_motion_event",
+            "frames": 2095,
+            "gyro_frames": 1045,
+            "identity_present": true,
+            "timed_yaw_seen": true,
+            "wheel_frames": 1050
+          },
+          "native_logging": {
+            "control_pose": {
+              "dropped": 0,
+              "failed": false
+            },
+            "events": {
+              "dropped": 0,
+              "failed": false
+            },
+            "motion_feedback": {
+              "dropped": 0,
+              "failed": false
+            },
+            "pose_motion": {
+              "dropped": 0,
+              "failed": false
+            }
+          },
+          "direct_output": {
+            "last_packet": {
+              "accuracy_verified": false,
+              "current_wall_axes": [],
+              "frame": "field",
+              "lidar_connected": false,
+              "lidar_corrections_enabled": false,
+              "lidar_error": null,
+              "motion_selection": {
+                "independent_ground_truth": false,
+                "last_paired_pose_ns": 33173002660853,
+                "last_raw_pose_ns": 33173002660853,
+                "last_wheel_sample_id": 82827,
+                "mode": "WHEEL_FALLBACK",
+                "pending_pose_drops": 0,
+                "phase_wheel_suppressed": false,
+                "phase_wheel_suppression_reason": "",
+                "policy": {
+                  "comparison_travel_m": 0.25,
+                  "displacement_conflict_m": 0.05,
+                  "recovery_residual_m": 0.025,
+                  "recovery_travel_m": 0.5,
+                  "recovery_two_axis_fixes": 2,
+                  "single_increment_conflict_m": 0.05
+                },
+                "reason": "T265_wheel_displacement_conflict",
+                "recovery_travel_m": 0.0,
+                "recovery_two_axis_fixes": 0,
+                "spatial_conflict_m": 0.0236346376229176,
+                "t265_translation_rebase_m": [
+                  0.0,
+                  0.0
+                ],
+                "wheel_and_gyro_are_sdk_dependencies": true,
+                "wheel_input_policy": {
+                  "dependency_persists_after_pause": true,
+                  "pause_requested": false,
+                  "reason": "measured_wheel_input_enabled"
+                },
+                "wheel_motion_suspect": false,
+                "wheel_time_basis": "receive_end_with_native_interval_duration",
+                "wheel_yaw_support": "MCU_interval_endpoint_held"
+              },
+              "motion_source": "WHEEL_FALLBACK",
+              "navigation": {
+                "distance_compensation_enabled": false,
+                "wheel_progress_m": null
+              },
+              "packet_id": 1944,
+              "pose": {
+                "x_m": 0.84106423502782,
+                "y_m": 0.0233694196830522,
+                "yaw_deg": 81.4910000000016
+              },
+              "pose_source": "LIDAR_ANCHORED_WHEEL_FALLBACK",
+              "position_reacquisitions": 0,
+              "qualified_pose": false,
+              "quality": "DEGRADED",
+              "reference": {
+                "description": "OFFLINE recorded-data timing fixture, not a physical placement",
+                "field_heading_deg": 74.8879999999999,
+                "physical_placement_confirmed": false,
+                "pose_origin": [
+                  0.740039224004832,
+                  -0.0227693400208661
+                ],
+                "reference_sample_ns": 33162510386932,
+                "source": "known_pose_fixture",
+                "start_center_xy_m": [
+                  0.796700000372227,
+                  -0.208110905463234
+                ],
+                "timestamp_monotonic_ns": 33162519325361,
+                "vio_rotation": -0.0140854521380582,
+                "yaw_offset": -28.2821005974795
+              },
+              "schema_version": 1,
+              "session_id": "adef1ff06e40411c800f505c19247173",
+              "t265": {
+                "mapper_confidence": 0,
+                "raw_center_xy_m": [
+                  0.589230993572262,
+                  -0.084971036690979
+                ],
+                "sample_monotonic_ns": 33173002660853,
+                "tracker_confidence": 3,
+                "translation_scale": 1,
+                "translation_scale_enabled": false,
+                "travel_from_start_m": 2.21970899394953
+              },
+              "timestamp_monotonic_ns": 33173005812080,
+              "wheel": {
+                "fusion_weight": 0.0,
+                "independent_reference": false,
+                "official_sdk_input": true
+              }
+            },
+            "output_drops": 0,
+            "packets_sent": 1945
+          }
+        }
+      },
+      {
+        "label": "A2",
+        "reader": "python",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "scope": "Offline production RadarWorker, native input/control, numerical child and logging; recorded telemetry/Pose plus lidar PTY; no real UART/SDK/YOLO/GUI or physical accuracy claim",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.2211005,
+          "p95": 2.1605593499999993,
+          "p99": 3.04861749,
+          "max": 4.760567
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.3523075,
+          "p95": 2.564552499999999,
+          "p99": 3.65752,
+          "max": 9.680006
+        },
+        "fits": 100,
+        "packet_to_lidar_result_ms": {
+          "p50": 43.6339015,
+          "p95": 99.8453966,
+          "p99": 105.73887143000013,
+          "max": 130.122812
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 47.0600775,
+          "p95": 204.72064394999998,
+          "p99": 294.91280797,
+          "max": 295.361968
+        },
+        "geometry_wall_ms": {
+          "p50": 26.88813,
+          "p95": 51.04261389999999,
+          "p99": 69.43455114000001,
+          "max": 70.360116
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 11.6388325,
+          "p95": 17.1307834,
+          "p99": 19.898794240000004,
+          "max": 20.814667
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.092544,
+          "p95": 0.686275,
+          "p99": 1.627059,
+          "max": 9.239625
+        },
+        "monotonic_realtime_offset_change_ns": 2335,
+        "stopped_cleanly": true,
+        "errors": [],
+        "state_receipt": {
+          "scans_received": 105,
+          "scans": 105,
+          "fits": 105,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 0,
+          "pose_ingested": 2096,
+          "primary_yaw_ingested": 1045,
+          "measured_wheel_ingested": 1050,
+          "motion_execution": "native_cpp_owner",
+          "motion_scheduling": {
+            "actual_policy": 1,
+            "actual_priority": 10,
+            "applied": true,
+            "error": null,
+            "mutex_priority_inheritance": true,
+            "mutex_protocol_actual": "PTHREAD_PRIO_INHERIT",
+            "mutex_protocol_error": null,
+            "mutex_protocol_requested": "PTHREAD_PRIO_INHERIT",
+            "query_error": null,
+            "requested": true,
+            "requested_policy": "SCHED_FIFO",
+            "requested_priority": 10
+          },
+          "reader_backend": "python",
+          "logging_healthy": true,
+          "receiver_stopped_cleanly": true,
+          "geometry_stopped_cleanly": true,
+          "error": null,
+          "native_feedback": {
+            "enabled": true,
+            "connected": false,
+            "decode_errors": 0,
+            "motion_input_drops": 0,
+            "error": null,
+            "conversion": "original_forward_motion_event",
+            "frames": 2095,
+            "gyro_frames": 1045,
+            "identity_present": true,
+            "timed_yaw_seen": true,
+            "wheel_frames": 1050
+          },
+          "native_logging": {
+            "control_pose": {
+              "dropped": 0,
+              "failed": false
+            },
+            "events": {
+              "dropped": 0,
+              "failed": false
+            },
+            "motion_feedback": {
+              "dropped": 0,
+              "failed": false
+            },
+            "pose_motion": {
+              "dropped": 0,
+              "failed": false
+            }
+          },
+          "direct_output": {
+            "last_packet": {
+              "accuracy_verified": false,
+              "current_wall_axes": [],
+              "frame": "field",
+              "lidar_connected": false,
+              "lidar_corrections_enabled": false,
+              "lidar_error": null,
+              "motion_selection": {
+                "independent_ground_truth": false,
+                "last_paired_pose_ns": 33186575035397,
+                "last_raw_pose_ns": 33186575035397,
+                "last_wheel_sample_id": 82827,
+                "mode": "WHEEL_FALLBACK",
+                "pending_pose_drops": 0,
+                "phase_wheel_suppressed": false,
+                "phase_wheel_suppression_reason": "",
+                "policy": {
+                  "comparison_travel_m": 0.25,
+                  "displacement_conflict_m": 0.05,
+                  "recovery_residual_m": 0.025,
+                  "recovery_travel_m": 0.5,
+                  "recovery_two_axis_fixes": 2,
+                  "single_increment_conflict_m": 0.05
+                },
+                "reason": "T265_wheel_displacement_conflict",
+                "recovery_travel_m": 0.0,
+                "recovery_two_axis_fixes": 0,
+                "spatial_conflict_m": 0.0258593899222544,
+                "t265_translation_rebase_m": [
+                  0.0,
+                  0.0
+                ],
+                "wheel_and_gyro_are_sdk_dependencies": true,
+                "wheel_input_policy": {
+                  "dependency_persists_after_pause": true,
+                  "pause_requested": false,
+                  "reason": "measured_wheel_input_enabled"
+                },
+                "wheel_motion_suspect": false,
+                "wheel_time_basis": "receive_end_with_native_interval_duration",
+                "wheel_yaw_support": "MCU_interval_endpoint_held"
+              },
+              "motion_source": "WHEEL_FALLBACK",
+              "navigation": {
+                "distance_compensation_enabled": false,
+                "wheel_progress_m": null
+              },
+              "packet_id": 1933,
+              "pose": {
+                "x_m": 0.843641216251341,
+                "y_m": 0.0182117003188101,
+                "yaw_deg": 81.2000000000011
+              },
+              "pose_source": "LIDAR_ANCHORED_WHEEL_FALLBACK",
+              "position_reacquisitions": 0,
+              "qualified_pose": false,
+              "quality": "DEGRADED",
+              "reference": {
+                "description": "OFFLINE recorded-data timing fixture, not a physical placement",
+                "field_heading_deg": 74.8220000000001,
+                "physical_placement_confirmed": false,
+                "pose_origin": [
+                  0.741952679169138,
+                  -0.024176474142322
+                ],
+                "reference_sample_ns": 33176127858298,
+                "source": "known_pose_fixture",
+                "start_center_xy_m": [
+                  0.79650437275356,
+                  -0.208305992314053
+                ],
+                "timestamp_monotonic_ns": 33176140467518,
+                "vio_rotation": -0.00634690799524096,
+                "yaw_offset": -28.2871795056028
+              },
+              "schema_version": 1,
+              "session_id": "7abb195fef1745789bba93e73f2caad0",
+              "t265": {
+                "mapper_confidence": 0,
+                "raw_center_xy_m": [
+                  0.586184178537333,
+                  -0.0853560524641245
+                ],
+                "sample_monotonic_ns": 33186575035397,
+                "tracker_confidence": 3,
+                "translation_scale": 1,
+                "translation_scale_enabled": false,
+                "travel_from_start_m": 2.21970899394953
+              },
+              "timestamp_monotonic_ns": 33186578456992,
+              "wheel": {
+                "fusion_weight": 0.0,
+                "independent_reference": false,
+                "official_sdk_input": true
+              }
+            },
+            "output_drops": 0,
+            "packets_sent": 1934
+          }
+        }
+      }
+    ],
+    "common_fit_scan_count": 98,
+    "common_fit_metrics": {
+      "A1": {
+        "packet_to_result_ms": {
+          "p50": 38.809293999999994,
+          "p95": 76.83455939999983,
+          "max": 122.843712
+        },
+        "reference_to_result_ms": {
+          "p50": 42.1876665,
+          "p95": 166.1196536999999,
+          "max": 298.992391
+        },
+        "compute_ms": {
+          "p50": 25.208844,
+          "p95": 30.4416682,
+          "max": 36.955197
+        }
+      },
+      "B1": {
+        "packet_to_result_ms": {
+          "p50": 32.7188375,
+          "p95": 56.60223815,
+          "max": 70.24724
+        },
+        "reference_to_result_ms": {
+          "p50": 36.670672499999995,
+          "p95": 137.37865969999984,
+          "max": 266.246395
+        },
+        "compute_ms": {
+          "p50": 23.5310385,
+          "p95": 31.1163688,
+          "max": 57.099956
+        }
+      },
+      "B2": {
+        "packet_to_result_ms": {
+          "p50": 32.0924445,
+          "p95": 47.53122839999997,
+          "max": 68.706246
+        },
+        "reference_to_result_ms": {
+          "p50": 35.226608999999996,
+          "p95": 140.25385419999984,
+          "max": 270.967227
+        },
+        "compute_ms": {
+          "p50": 23.227831000000002,
+          "p95": 30.69138444999999,
+          "max": 40.210477
+        }
+      },
+      "A2": {
+        "packet_to_result_ms": {
+          "p50": 42.561989,
+          "p95": 95.70589914999996,
+          "max": 130.122812
+        },
+        "reference_to_result_ms": {
+          "p50": 46.767191499999996,
+          "p95": 170.76618509999994,
+          "max": 295.361968
+        },
+        "compute_ms": {
+          "p50": 26.9398175,
+          "p95": 51.12271769999999,
+          "max": 70.360116
+        }
+      }
+    },
+    "notes": [
+      "1000 original wheel IDs per measured ten-second phase; each has a first corresponding successful control datagram. UNIX kernel timestamps exclude observer scheduling, single realtime/monotonic offset uncertainty/change reported. Not a real UART/SDK run or deadline guarantee.",
+      "10.5-second complete fixture per phase includes 0.5-second setup. Actual original telemetry bodies re-encoded identically; host timestamps shifted/replaced for replay; identity is historical NormalRun, not an actual currently attached F405.",
+      "No matched clock exchange is invented. Unknown time quality remains unknown and feedback is adopted under current policy. Initial center/heading are replay fixture references, not physical truth.",
+      "Fewer Native fits are existing latest-mailbox coalescing triggered by historical receive bursts, not parser point loss: all receive 105 scans; 104/103 Native vs 105 Python fitted across full fixture. One drain-loop replacement was previously not counted; fixed existing coalescing counter without changing queue selection.",
+      "Reference-to-result includes recorded receive batching and unqualified arrival-anchored point time, not a calibrated physical acquisition latency. No actual YOLO/GUI/full-speed/precision validation."
+    ],
+    "fingerprints": {
+      "localization/tools/lidar_yaw_debug/worker.py": "c5b1ef1456b7e3b3cb3e21ba7ec34ad04784460eaedaa58eb9fb735e55a12083",
+      "localization/tools/lidar_yaw_debug/native_lidar_reader.py": "593b034c83d1a52cbf335ae30ffa108f978ad974444001c6caf55e7687ba1662",
+      "localization/tools/lidar_yaw_debug/types.py": "9b2fac5bac60c455ae70147694f54dfa208ecb9b345c5adf7eb383f439fbfc75",
+      "localization/build/liblidar_geometry.so": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975",
+      "localization/build/libmotion_runtime.so": "3e7641f8912353e37d496cf3f85728930d1785b87741c6579bae9e779d2b281b"
+    },
+    "measurement_commit": "4a88a69",
+    "post_measurement_counter_fix": {
+      "source_sha256": "11212d83d1ca9bab4664fc1bf710fdabe009c137f9957adef88a5d4f31313e9f",
+      "change": "Count an older scan replaced while draining the existing latest mailbox; queue selection unchanged; syntax/diff checked; joint timing above precedes this counter-only correction."
+    }
+  },
+  "gil_interval_not_deployed": {
+    "directory": "/tmp/rdk_lidar_latency_20261110/receiver_1794258979991163177",
+    "phases": [
+      {
+        "label": "A1",
+        "mode": "0.005",
+        "receiver_cpu": {
+          "actual_switch_interval_s": 0.005,
+          "cpu_s": 2.129553,
+          "voluntary_context_switches": 4596,
+          "involuntary_context_switches": 133
+        },
+        "backend": "cpp_bytes_timing_sector_v1",
+        "scans": 100,
+        "latency_ms": {
+          "p50": 6.219996999999999,
+          "p95": 14.206723849999994,
+          "p99": 20.257051400000034,
+          "max": 27.12977
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2140,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 0,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 30,
+          "history_records_written": 2244,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.0745835,
+          "p95": 0.13681180000000004,
+          "max": 2.294251
+        }
+      },
+      {
+        "label": "B1",
+        "mode": "0.001",
+        "receiver_cpu": {
+          "actual_switch_interval_s": 0.001,
+          "cpu_s": 2.208929,
+          "voluntary_context_switches": 5125,
+          "involuntary_context_switches": 171
+        },
+        "backend": "cpp_bytes_timing_sector_v1",
+        "scans": 100,
+        "latency_ms": {
+          "p50": 6.1569555000000005,
+          "p95": 13.107589849999998,
+          "p99": 22.54654237000003,
+          "max": 28.2766
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2129,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 0,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 29,
+          "history_records_written": 2233,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.07722599999999999,
+          "p95": 0.15121010000000001,
+          "max": 3.456207
+        }
+      },
+      {
+        "label": "B2",
+        "mode": "0.001",
+        "receiver_cpu": {
+          "actual_switch_interval_s": 0.001,
+          "cpu_s": 2.177772,
+          "voluntary_context_switches": 5107,
+          "involuntary_context_switches": 200
+        },
+        "backend": "cpp_bytes_timing_sector_v1",
+        "scans": 100,
+        "latency_ms": {
+          "p50": 5.886103,
+          "p95": 11.87075015,
+          "p99": 13.127180810000002,
+          "max": 13.620281
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2143,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 0,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 29,
+          "history_records_written": 2247,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.0787365,
+          "p95": 0.1382874,
+          "max": 2.774706
+        }
+      },
+      {
+        "label": "A2",
+        "mode": "0.005",
+        "receiver_cpu": {
+          "actual_switch_interval_s": 0.005,
+          "cpu_s": 2.288456,
+          "voluntary_context_switches": 4594,
+          "involuntary_context_switches": 272
+        },
+        "backend": "cpp_bytes_timing_sector_v1",
+        "scans": 100,
+        "latency_ms": {
+          "p50": 6.317163,
+          "p95": 12.318965149999999,
+          "p99": 13.228551750000022,
+          "max": 17.483349
+        },
+        "input_chunks": 1212,
+        "input_bytes": 170832,
+        "reader_stats": {
+          "rx_batches": 2115,
+          "rx_bytes": 170832,
+          "scan_packets": 3634,
+          "status_packets": 6,
+          "ack_packets": 0,
+          "crc_errors": 0,
+          "timing_rejections": 0,
+          "sector_rejections": 0,
+          "scans_emitted": 100
+        },
+        "scan_queue_drops": 0,
+        "child_exit": 0,
+        "errors": [],
+        "logging_healthy": true,
+        "logging_statistics": {
+          "queue_capacity": 4096,
+          "queue_pending": 0,
+          "queue_peak": 26,
+          "history_records_written": 2219,
+          "snapshot_writes": 1,
+          "snapshots_coalesced": 0,
+          "dropped": 0,
+          "error": null,
+          "flush_interval_ms": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.0828785,
+          "p95": 0.16789925000000006,
+          "max": 3.498198
+        }
+      }
+    ],
+    "decision": "Keep production default; 1ms had no sufficiently clear consistent tail benefit over 5ms; no production scheduling change."
   }
 }
