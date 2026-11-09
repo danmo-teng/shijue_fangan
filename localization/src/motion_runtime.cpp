@@ -375,7 +375,9 @@ private:
     Json native_error_=nullptr,pose_error_=nullptr,thread_error_=nullptr;
     std::uint64_t frames_=0,wheel_frames_=0,gyro_frames_=0,decode_errors_=0,poses_ingested_=0,wheels_ingested_=0,yaws_ingested_=0;
     std::uint64_t scan_count_=0,fit_count_=0,reacquisitions_=0,control_updates_=0,packets_sent_=0,output_drops_=0;
-    Json last_packet_=nullptr,last_ready_packet_=nullptr,last_key_=nullptr;
+    // 两个历史视图共享不可变报文；发送失败时各自仍保留原有的更新语义。
+    std::shared_ptr<const Json> last_packet_,last_ready_packet_;
+    Json last_key_=nullptr;
     bool last_policy_pause_=false,policy_error_reported_=false;std::string last_policy_reason_="measured_wheel_input_enabled";
     Json scheduling_=Json::object(),competition_wheel_policy_=nullptr;
     static int duplicate(int fd) {if(fd<0)return -1;int result=fcntl(fd,F_DUPFD_CLOEXEC,0);if(result<0)throw std::runtime_error(std::strerror(errno));return result;}
@@ -512,8 +514,8 @@ private:
     }
     Json format_control(const Json &value)const {
         if(!value.at("ready").get<bool>()){
-            if(last_ready_packet_.is_null())return nullptr;
-            Json packet=last_ready_packet_;packet["packet_id"]=packets_sent_;packet["quality"]="LOST";
+            if(!last_ready_packet_)return nullptr;
+            Json packet=*last_ready_packet_;packet["packet_id"]=packets_sent_;packet["quality"]="LOST";
             packet["reference_invalid_reason"]=get<std::string>(value,"reason","reference unavailable");return packet;
         }
         const auto &xy=value.at("center_xy_m");return Json{{"schema_version",1},{"session_id",session_},{"packet_id",packets_sent_},
@@ -542,10 +544,12 @@ private:
             !poses_.empty(),!yaws_.empty(),lidar_connected_,lidar_error_});
         if(key==last_key_)return;
         auto packet=format_control(value);
-        if(value.at("ready").get<bool>())last_ready_packet_=packet;
-        if(control_.fd>=0&&!packet.is_null()){
-            auto encoded=packet.dump();
-            if(control_.send(encoded)){++packets_sent_;last_packet_=packet;control_log_->submit(encoded+"\n");}
+        std::shared_ptr<const Json> stored;
+        if(!packet.is_null())stored=std::make_shared<const Json>(std::move(packet));
+        if(value.at("ready").get<bool>())last_ready_packet_=stored;
+        if(control_.fd>=0&&stored){
+            auto encoded=stored->dump();
+            if(control_.send(encoded)){++packets_sent_;last_packet_=stored;control_log_->submit(encoded+"\n");}
             else ++output_drops_;
         }
         ++control_updates_;last_key_=std::move(key);
@@ -572,6 +576,8 @@ private:
             {"control_pose",Json{{"dropped",control_log_->dropped()},{"failed",control_log_->failed()}}},
             {"events",Json{{"dropped",events_log_->dropped()},{"failed",events_log_->failed()}}}};
         auto value=current(true);
+        static const Json no_packet=nullptr;
+        const auto &packet=last_packet_?*last_packet_:no_packet;
         return Json{{"last",value},{"first_pose",poses_.empty()?Json(nullptr):Json(poses_.front())},
             {"last_pose",poses_.empty()?Json(nullptr):Json(poses_.back())},{"first_yaw",yaws_.empty()?Json(nullptr):Json(yaws_.front())},
             {"last_yaw",yaws_.empty()?Json(nullptr):Json(yaws_.back())},
@@ -582,7 +588,7 @@ private:
             {"reference",reference_},{"offset",offset_},{"revision",revision_},{"has_anchor",has_anchor_},
             {"competition_wheel_policy",competition_wheel_policy_},
             {"fixes",fit_count_},{"reacquisitions",reacquisitions_},{"scans",scan_count_},{"last_scan_ns",last_scan_ns_<0?Json(nullptr):Json(last_scan_ns_)},
-            {"direct_output",Json{{"packets_sent",packets_sent_},{"output_drops",output_drops_},{"last_packet",last_packet_}}},
+            {"direct_output",Json{{"packets_sent",packets_sent_},{"output_drops",output_drops_},{"last_packet",packet}}},
             {"logging",logs},{"pose_input_error",pose_error_},{"motion_scheduling",scheduling_},{"error",thread_error_},
             {"last_wheel",motion_.last_wheel?Json::array({motion_.last_wheel->first,motion_.last_wheel->second}):Json(nullptr)}};
     }
