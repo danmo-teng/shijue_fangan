@@ -1,0 +1,233 @@
+{
+  "date": "2026-11-10",
+  "analysis_parent_commit": "fb32fc5",
+  "scope": "offline hypothetical phase-alignment effects, not deployed and not independently measured physical errors",
+  "method": {
+    "gyro_query_shift_s": 0.028,
+    "wheel_radius_m": 0.035,
+    "effective_wheel_lever_m": 0.115,
+    "camera_offset_radius_m": 0.06922100002133659,
+    "comparison_window_s": 0.1,
+    "action_window": "sent through ended+0.15s",
+    "residual": "encoder angle change/0.1 - gyro cumulative angle change/0.1",
+    "after": "gyro query boundaries both shifted +0.028s using existing future samples; offline only, not an online wait",
+    "lever": "norm of delta omega cross r; gyro average over exact wheel interval",
+    "fit": "No new lag/gain/geometry fit; uses prior 28ms candidate and fixed .115m wheel lever",
+    "statistic_weighting": "all wheel endpoints pooled, no claim of independent sample confidence interval"
+  },
+  "sample_count": 3174,
+  "rate_residual_abs_dps_before": {
+    "p50": 3.488714180064477,
+    "p95": 11.401958921792271,
+    "max": 21.574223861283315
+  },
+  "rate_residual_abs_dps_after": {
+    "p50": 0.7776988959346198,
+    "p95": 4.733355534086242,
+    "max": 9.57892216756818
+  },
+  "lever_velocity_change_mps": {
+    "p50": 0.0036731323584155632,
+    "p95": 0.01394740567385128,
+    "max": 0.026243029121804495
+  },
+  "yaw_change_deg": {
+    "p50": 0.9575797035922733,
+    "p95": 4.040176284571146,
+    "max": 4.443917736713729
+  },
+  "per_action": [
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:5",
+      "wire_sequence": 178,
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 60.0
+      },
+      "sample_count": 211,
+      "rate_residual_rms_before_dps": 5.900252762933352,
+      "rate_residual_rms_shifted_dps": 2.027679283928555,
+      "lever_speed_delta_p95_mps": 0.013066990960970925
+    },
+    {
+      "session": "191736",
+      "action_id": "28964abb9bba47e494b2c146fcca49a3:6",
+      "wire_sequence": 179,
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 60.0
+      },
+      "sample_count": 197,
+      "rate_residual_rms_before_dps": 4.7221439284476805,
+      "rate_residual_rms_shifted_dps": 1.8785544333894382,
+      "lever_speed_delta_p95_mps": 0.014425875898969613
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:5",
+      "wire_sequence": 81,
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 265,
+      "rate_residual_rms_before_dps": 5.180482821803028,
+      "rate_residual_rms_shifted_dps": 1.9750642620042103,
+      "lever_speed_delta_p95_mps": 0.010663665754281747
+    },
+    {
+      "session": "191910",
+      "action_id": "0581f3f679ed4366ae02166b435690b1:6",
+      "wire_sequence": 82,
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 384,
+      "rate_residual_rms_before_dps": 4.780293082958555,
+      "rate_residual_rms_shifted_dps": 1.795542581607252,
+      "lever_speed_delta_p95_mps": 0.010591929996926876
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:5",
+      "wire_sequence": 249,
+      "parameters": {
+        "angle_ccw_deg": 180.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 247,
+      "rate_residual_rms_before_dps": 5.642238750900958,
+      "rate_residual_rms_shifted_dps": 2.0793297612484243,
+      "lever_speed_delta_p95_mps": 0.011581306917813249
+    },
+    {
+      "session": "192842",
+      "action_id": "997d50393e984145a9a94c3ff57035c0:6",
+      "wire_sequence": 250,
+      "parameters": {
+        "angle_ccw_deg": -180.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 316,
+      "rate_residual_rms_before_dps": 5.052416568707849,
+      "rate_residual_rms_shifted_dps": 2.23856937376292,
+      "lever_speed_delta_p95_mps": 0.01184526075722831
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:1",
+      "wire_sequence": 19,
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 199,
+      "rate_residual_rms_before_dps": 7.0103371531601715,
+      "rate_residual_rms_shifted_dps": 2.7742734100694615,
+      "lever_speed_delta_p95_mps": 0.01500092815042853
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:2",
+      "wire_sequence": 20,
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 197,
+      "rate_residual_rms_before_dps": 7.946082428495282,
+      "rate_residual_rms_shifted_dps": 2.5008896007537658,
+      "lever_speed_delta_p95_mps": 0.017384881572979398
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:3",
+      "wire_sequence": 21,
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 250,
+      "rate_residual_rms_before_dps": 6.593650502690935,
+      "rate_residual_rms_shifted_dps": 2.4844519711214788,
+      "lever_speed_delta_p95_mps": 0.013832423233446882
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:4",
+      "wire_sequence": 22,
+      "parameters": {
+        "angle_ccw_deg": 90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 178,
+      "rate_residual_rms_before_dps": 6.152166478519226,
+      "rate_residual_rms_shifted_dps": 2.8621913254716596,
+      "lever_speed_delta_p95_mps": 0.014035902119293122
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:5",
+      "wire_sequence": 23,
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 193,
+      "rate_residual_rms_before_dps": 6.38921545850437,
+      "rate_residual_rms_shifted_dps": 2.2292536874471836,
+      "lever_speed_delta_p95_mps": 0.013925959726653224
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:6",
+      "wire_sequence": 24,
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 180,
+      "rate_residual_rms_before_dps": 6.045594318815235,
+      "rate_residual_rms_shifted_dps": 2.4956084553656463,
+      "lever_speed_delta_p95_mps": 0.014114018668998442
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:7",
+      "wire_sequence": 25,
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 178,
+      "rate_residual_rms_before_dps": 5.939051443699312,
+      "rate_residual_rms_shifted_dps": 1.5904626488128966,
+      "lever_speed_delta_p95_mps": 0.01498376263290551
+    },
+    {
+      "session": "194149",
+      "action_id": "b2d70b9d4a994f54a45bae832cfef421:8",
+      "wire_sequence": 26,
+      "parameters": {
+        "angle_ccw_deg": -90.0,
+        "rate_deg_s": 120.0
+      },
+      "sample_count": 179,
+      "rate_residual_rms_before_dps": 5.596506952849226,
+      "rate_residual_rms_shifted_dps": 1.6747104822785044,
+      "lever_speed_delta_p95_mps": 0.013476114143504647
+    }
+  ],
+  "illustrative": {
+    "yaw_lag_at_150_dps_deg": 4.2,
+    "point_projection_at_1m_m": 0.07323819712763169,
+    "sector_span_s": 0.04,
+    "differential_yaw_at_500_dps2_deg": 0.56,
+    "first_order_yaw_prediction_error_at_500_dps2_deg": 0.196,
+    "uncompensated_position_at_1mps_130ms_m": 0.13,
+    "propagation_error_if_prior_20pct_at_1mps_130ms_m": 0.026000000000000002
+  },
+  "official_sdk_source": "https://github.com/IntelRealSense/librealsense/blob/v2.50.0/include/librealsense2/hpp/rs_sensor.hpp#L595-L606"
+}
