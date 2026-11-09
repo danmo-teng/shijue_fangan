@@ -20,11 +20,33 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
-## 当前部署安排（2026-11-09，无新增固件要求）
+## 本轮轨迹交接：TRAJECTORY-20261109（先取证，不是实施授权）
 
-用户安排稍后烧录NormalRun，直接下地跑既有正式比赛；MotionDebug暂缓，C++导航迁移低优先级，不作为烧录或比赛前置。本轮RDK不要求下位机新增功能、诊断或测试程序。
+用户要求先导出两场开局/比赛轨迹供F405分析，上位机随后继续联合MotionDebug延迟、末段慢调、送物航向和雷达/降级分析。当前尚未确定新的F405修改方案，不能把初步轨迹疑点直接当施工命令。
 
-已只读核对对端main=f1cf2a5909f408b28d821b29b0fc6a63d91fb8dc的固定入口与CMake，最新提交为MotionDebug烧录/读回文档，固件实现仍14b2a3a。NormalRun和MotionDebug都为board405/mode5、UART4=921600；NormalRun为service2/RESCUE_TASK，MotionDebug为service1/MOTIONDEBUG。应使用既有NormalRun构建，不能拿mode5或expected SHA冒充已运行NormalRun。实际烧录身份留待部署后读取，原未知字段如实保留，不新增握手或时间检查。完整比赛地面结果尚未验收。
+两场实际9434608a8c395d8506b36accf1753b9bf92dad24/dirty1、NormalRun/TASK(service2)、921600、协议1.3；RDK HEAD为4cfaba9。先核对自己的dirty差异，不把expected/干净Git代替实际固件。
+
+```text
+先读导出说明与开局图：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/README.md
+
+第一场开局CSV：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/race1_opening_10hz.csv
+
+第二场开局CSV：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/race2_opening_10hz.csv
+
+RDK完整两场32文件ZIP（人工传文件用，GitHub不含原始大日志）：
+/home/sunrise/下载/RDK_正式比赛轨迹_20261109_两场_初步.zip
+```
+
+先审`Task.c::task_process_start`出发三段、`nav_follow_coarse`的600mm/FINE切换及`min(120,D×1.0)`mm/s、视觉ALIGN到ENTER的航向保持。说明里分清理论距离不足、实际轮/gyro变化和定位估计；不只靠加距离、改T265外参或新增等待掩盖问题。RDK仍在分析，接收方可独立判断/驳回，并向人解释重要取舍。本次不要求新增测试代码、ISR、协议、握手、年龄门或FAULT。
+
+## 当前部署事实（2026-11-09）
+
+此前MotionDebug实采已结束。用户后续已切换NormalRun并跑两场；19:48原身份查询与正式SDK会话均读回9434608/dirty1、service2、921600，静止mode0/fault0，正式运行无全局FAULT。当前进行联合分析，C++导航执行迁移仍低优先级，不作为实测前置。
+
+本轮已按actual只读读取GitHub9434608的Task.c、motor.c、Location.c、app_config.h和当前固定入口，RDK不改写/烧录下位机；dirty差异仍未知。NormalRun和MotionDebug都为board405/mode5；service2与service1才区分本轮角色。两场原始日志保留，定位、刹停和投送精度未独立验收。
 
 ## RDK → F405：UART-100HZ-01
 

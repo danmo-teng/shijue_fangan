@@ -1,0 +1,56 @@
+[
+  {
+    "label": "race1",
+    "wheel_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195243_competition_wheel",
+    "business_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/20261109_195756_competition",
+    "round_token": "f3de7b41601c78d39b6a0f4cc80831dc",
+    "start_s": 3607.563808458,
+    "opening": {
+      "start": 3607.563808458,
+      "end": 3615.872774706,
+      "duration_s": 8.30896624800016,
+      "pose_start": [
+        -1.3004446367172,
+        1.34040716696489,
+        135.0
+      ],
+      "pose_end": [
+        -0.116715084192882,
+        0.535941701174748,
+        323.08
+      ],
+      "center_error_m": 0.5485033435962213
+    },
+    "git_commit": "9434608a8c395d8506b36accf1753b9bf92dad24",
+    "source_dirty": 1,
+    "upper_git": "4cfaba937ac4c05c8e258b88849da5b4410b9b7a",
+    "scope": "Preliminary export of estimator trajectories, not independent ground truth or firmware change approval"
+  },
+  {
+    "label": "race2",
+    "wheel_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+    "business_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/20000101_080033_competition_04",
+    "round_token": "5b8e70f8ac6ec99505f74fc4f68ba28d",
+    "start_s": 3921.009062803,
+    "opening": {
+      "start": 3921.009062803,
+      "end": 3929.391131187,
+      "duration_s": 8.382068384000377,
+      "pose_start": [
+        -1.31816782199821,
+        1.32460723021684,
+        135.0
+      ],
+      "pose_end": [
+        -0.0742127944860271,
+        0.613855810245732,
+        326.023324934186
+      ],
+      "center_error_m": 0.6183255571605216
+    },
+    "git_commit": "9434608a8c395d8506b36accf1753b9bf92dad24",
+    "source_dirty": 1,
+    "upper_git": "4cfaba937ac4c05c8e258b88849da5b4410b9b7a",
+    "scope": "Preliminary export of estimator trajectories, not independent ground truth or firmware change approval"
+  }
+]
