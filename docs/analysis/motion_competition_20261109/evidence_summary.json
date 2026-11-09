@@ -1,0 +1,2327 @@
+{
+  "schema": 1,
+  "date": "2026-11-09",
+  "scope": "offline_analysis_only",
+  "runtime_changed": false,
+  "independent_ground_truth": false,
+  "motion_action_count": 97,
+  "motion_outcomes": {
+    "reported_done": 94,
+    "reported_fault": 3
+  },
+  "mount_and_scale_unchanged": true,
+  "lower_actual_motiondebug": "ac61480cf44e24c314988f2be4ff3996d9b1ee93/dirty1",
+  "lower_actual_competition": "9434608a8c395d8506b36accf1753b9bf92dad24/dirty1",
+  "lower_reviewed_not_deployed": "b980c6a570f13fedba1417146028b1e06b5bb59a",
+  "relative_response_ms": {
+    "190954": {
+      "wheel_body_velocity": {
+        "0.2": {
+          "n": 6,
+          "min_ms": 25.000000000545697,
+          "median_ms": 57.5000000012551,
+          "max_ms": 270.0000000058935
+        },
+        "0.5": {
+          "n": 6,
+          "min_ms": -20.000000000436557,
+          "median_ms": 20.000000000436557,
+          "max_ms": 115.0000000025102
+        }
+      },
+      "gyro_rate": {
+        "0.2": {
+          "n": 4,
+          "min_ms": -30.000000000654836,
+          "median_ms": -25.000000000545697,
+          "max_ms": -25.000000000545697
+        },
+        "0.5": {
+          "n": 4,
+          "min_ms": -25.000000000545697,
+          "median_ms": -25.000000000545697,
+          "max_ms": -20.000000000436557
+        }
+      }
+    },
+    "191242": {
+      "wheel_body_velocity": {
+        "0.2": {
+          "n": 6,
+          "min_ms": 5.000000000109139,
+          "median_ms": 52.50000000114596,
+          "max_ms": 360.00000000785803
+        },
+        "0.5": {
+          "n": 6,
+          "min_ms": -30.000000000654836,
+          "median_ms": 20.000000000436557,
+          "max_ms": 95.00000000207365
+        }
+      },
+      "gyro_rate": {
+        "0.2": {
+          "n": 4,
+          "min_ms": -30.000000000654836,
+          "median_ms": -25.000000000545697,
+          "max_ms": -20.000000000436557
+        },
+        "0.5": {
+          "n": 4,
+          "min_ms": -40.000000000873115,
+          "median_ms": -27.500000000600267,
+          "max_ms": -25.000000000545697
+        }
+      }
+    }
+  },
+  "relative_wheel_arm": {
+    "fit_arm_m": 0.11472724488889785,
+    "fit_n": 4,
+    "held_out_n": 26,
+    "independent_angle_truth": false,
+    "model_unchanged": true,
+    "formula": "omega_CCW = k * (raw_delta1+raw_delta2+raw_delta3)/(3*L*dt)",
+    "comparisons": {
+      "0.13": {
+        "median_abs_deg": 20.125513301215022,
+        "rms_deg": 16.89965838868467,
+        "max_abs_deg": 24.22056306606825
+      },
+      "0.11472724488889785": {
+        "median_abs_deg": 0.45914589101045067,
+        "rms_deg": 0.8726759680696705,
+        "max_abs_deg": 3.4105601763911864
+      },
+      "0.115": {
+        "median_abs_deg": 0.30352302938352693,
+        "rms_deg": 0.85465265077244,
+        "max_abs_deg": 3.8306799877292974
+      }
+    }
+  },
+  "delivery_heading": [
+    {
+      "race": 1,
+      "relative_entry_s": 111.94888113900015,
+      "frozen_target_px": 576,
+      "pixel_error": -64,
+      "code_expected_locked_heading_deg": 95.71059313749964,
+      "actual_heading_start_deg": 94.4439999999998,
+      "actual_heading_end_deg": 92.6309999999999,
+      "start_xy_m": [
+        -0.0809024472247262,
+        0.469800600217478
+      ],
+      "end_xy_m": [
+        -0.185520960000768,
+        0.994715768204867
+      ],
+      "delta_xy_m": [
+        -0.10461851277604181,
+        0.5249151679873889
+      ],
+      "duration_s": 3.319524005999938,
+      "locked_heading_is_code_inference_not_telemetered": true
+    },
+    {
+      "race": 2,
+      "relative_entry_s": 99.66378819300007,
+      "frozen_target_px": 535,
+      "pixel_error": -105,
+      "code_expected_locked_heading_deg": 99.31708606912622,
+      "actual_heading_start_deg": 101.343,
+      "actual_heading_end_deg": 94.3500000000001,
+      "start_xy_m": [
+        -0.0901219875082804,
+        0.539370473273421
+      ],
+      "end_xy_m": [
+        -0.253414776510805,
+        1.03823900063466
+      ],
+      "delta_xy_m": [
+        -0.1632927890025246,
+        0.498868527361239
+      ],
+      "duration_s": 3.421998354000152,
+      "locked_heading_is_code_inference_not_telemetered": true
+    },
+    {
+      "race": 2,
+      "relative_entry_s": 193.98068896500035,
+      "frozen_target_px": 494,
+      "pixel_error": -146,
+      "code_expected_locked_heading_deg": 102.85069072455023,
+      "actual_heading_start_deg": 104.298,
+      "actual_heading_end_deg": 98.508,
+      "start_xy_m": [
+        0.204586039712973,
+        0.530746099812486
+      ],
+      "end_xy_m": [
+        0.038208237407688,
+        1.02470076887374
+      ],
+      "delta_xy_m": [
+        -0.166377802305285,
+        0.49395466906125396
+      ],
+      "duration_s": 3.3899374329994316,
+      "locked_heading_is_code_inference_not_telemetered": true
+    }
+  ],
+  "motion_sessions": {
+    "190754": {
+      "action_count": 3,
+      "outcomes": {
+        "reported_done": 2,
+        "reported_fault": 1
+      },
+      "pose_count": 0,
+      "pose_hz": null,
+      "pose_confidence": {},
+      "frame_gaps": 0,
+      "sdk": {
+        "counts": {},
+        "delays": {},
+        "actual_api_hz": null
+      },
+      "control_receive": {}
+    },
+    "190954": {
+      "action_count": 10,
+      "outcomes": {
+        "reported_done": 10
+      },
+      "pose_count": 27106,
+      "pose_hz": 199.59502534600364,
+      "pose_confidence": {
+        "0": 1,
+        "2": 8252,
+        "3": 18853
+      },
+      "frame_gaps": 0,
+      "sdk": {
+        "counts": {},
+        "delays": {},
+        "actual_api_hz": null
+      },
+      "control_receive": {}
+    },
+    "191242": {
+      "action_count": 10,
+      "outcomes": {
+        "reported_done": 10
+      },
+      "pose_count": 44292,
+      "pose_hz": 199.58085332266876,
+      "pose_confidence": {
+        "2": 38614,
+        "3": 5678
+      },
+      "frame_gaps": 0,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 10,
+          "wheel_native_measurement": 13500,
+          "wheel_sdk_attempt": 6738,
+          "wheel_sdk_result": 6738,
+          "actual_true": 6738,
+          "wheel_requests_coalesced": 16
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 6738,
+            "min": 0.121086,
+            "p50": 0.28481900000000004,
+            "p95": 0.6217130499999999,
+            "p99": 1.918441840000002,
+            "max": 11.609202
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 6738,
+            "min": 0.72118,
+            "p50": 5.934103,
+            "p95": 9.88599445,
+            "p99": 12.219210510000002,
+            "max": 20.836654
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 6738,
+            "min": 0.681558,
+            "p50": 1.0106885,
+            "p95": 1.5054190999999997,
+            "p99": 2.8050759700000008,
+            "max": 12.417553
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 6738,
+            "min": 2.973213,
+            "p50": 7.300402,
+            "p95": 11.659550649999996,
+            "p99": 13.780592570000001,
+            "max": 23.734462
+          }
+        },
+        "actual_api_hz": 99.74645385968883
+      },
+      "control_receive": {}
+    },
+    "191736": {
+      "action_count": 6,
+      "outcomes": {
+        "reported_done": 6
+      },
+      "pose_count": 13008,
+      "pose_hz": 199.58105682120984,
+      "pose_confidence": {
+        "2": 6708,
+        "3": 6300
+      },
+      "frame_gaps": 0,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 6,
+          "wheel_native_measurement": 2590,
+          "wheel_sdk_attempt": 1291,
+          "wheel_sdk_result": 1291,
+          "actual_true": 1291,
+          "wheel_requests_coalesced": 5
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 1291,
+            "min": 0.198255,
+            "p50": 0.393802,
+            "p95": 2.507228,
+            "p99": 6.092034899999979,
+            "max": 11.422949
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 1291,
+            "min": 1.025401,
+            "p50": 6.964298,
+            "p95": 11.494321,
+            "p99": 15.235372699999996,
+            "max": 20.363159
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 1291,
+            "min": 0.810353,
+            "p50": 1.164528,
+            "p95": 3.4112295,
+            "p99": 6.873254499999964,
+            "max": 12.113169
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 1291,
+            "min": 4.148904,
+            "p50": 9.727373,
+            "p95": 14.277766,
+            "p99": 17.494004199999996,
+            "max": 23.397956
+          }
+        },
+        "actual_api_hz": 99.65294453021052
+      },
+      "control_receive": {}
+    },
+    "191910": {
+      "action_count": 10,
+      "outcomes": {
+        "reported_done": 10
+      },
+      "pose_count": 20523,
+      "pose_hz": 196.1107263059148,
+      "pose_confidence": {
+        "2": 4978,
+        "3": 15545
+      },
+      "frame_gaps": 4,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 10,
+          "wheel_native_measurement": 10625,
+          "wheel_sdk_attempt": 5302,
+          "wheel_sdk_result": 5302,
+          "actual_true": 5302,
+          "wheel_requests_coalesced": 14
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 5302,
+            "min": 0.141919,
+            "p50": 0.30940049999999997,
+            "p95": 1.44467465,
+            "p99": 3.7215021099999843,
+            "max": 12.358351
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 5302,
+            "min": 0.858806,
+            "p50": 5.927799,
+            "p95": 10.0087849,
+            "p99": 13.0256251,
+            "max": 23.137162
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 5302,
+            "min": 0.74497,
+            "p50": 1.013683,
+            "p95": 2.2094073499999993,
+            "p99": 4.596047969999991,
+            "max": 12.919568
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 5302,
+            "min": 3.721795,
+            "p50": 7.9923850000000005,
+            "p95": 12.684089949999999,
+            "p99": 15.45819567,
+            "max": 25.623637
+          }
+        },
+        "actual_api_hz": 99.73100147156342
+      },
+      "control_receive": {}
+    },
+    "192105": {
+      "action_count": 8,
+      "outcomes": {
+        "reported_done": 8
+      },
+      "pose_count": 19815,
+      "pose_hz": 199.43895618676729,
+      "pose_confidence": {
+        "2": 7871,
+        "3": 11944
+      },
+      "frame_gaps": 2,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 8,
+          "wheel_native_measurement": 11552,
+          "wheel_sdk_attempt": 5567,
+          "wheel_sdk_result": 5567,
+          "actual_true": 5567,
+          "wheel_experiment_requested": 8,
+          "wheel_experiment_applied": 8,
+          "wheel_experiment_sample_skipped": 201,
+          "wheel_experiment_window_ended": 7,
+          "wheel_requests_coalesced": 11
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 5567,
+            "min": 0.134876,
+            "p50": 0.296877,
+            "p95": 1.0905763999999998,
+            "p99": 3.56967238000001,
+            "max": 13.925737
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 5567,
+            "min": 0.855549,
+            "p50": 6.279757,
+            "p95": 9.9994267,
+            "p99": 12.393671240000002,
+            "max": 24.033551
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 5567,
+            "min": 0.789798,
+            "p50": 1.047009,
+            "p95": 1.9243055,
+            "p99": 4.446869180000009,
+            "max": 14.706744
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 5567,
+            "min": 3.379974,
+            "p50": 7.913533,
+            "p95": 12.0567579,
+            "p99": 14.142721120000004,
+            "max": 25.639209
+          }
+        },
+        "actual_api_hz": 96.32892461668094
+      },
+      "control_receive": {}
+    },
+    "192329": {
+      "action_count": 5,
+      "outcomes": {
+        "reported_done": 4,
+        "reported_fault": 1
+      },
+      "pose_count": 22007,
+      "pose_hz": 198.69548995025627,
+      "pose_confidence": {
+        "0": 1,
+        "2": 22006
+      },
+      "frame_gaps": 4,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 5,
+          "wheel_native_measurement": 5581,
+          "wheel_sdk_attempt": 2785,
+          "wheel_sdk_result": 2785,
+          "actual_true": 2785,
+          "wheel_requests_coalesced": 7
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 2785,
+            "min": 0.158542,
+            "p50": 0.326751,
+            "p95": 1.3483561999999982,
+            "p99": 3.651602759999955,
+            "max": 14.12657
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 2785,
+            "min": 0.757254,
+            "p50": 6.223364,
+            "p95": 10.037938799999997,
+            "p99": 13.6606984,
+            "max": 23.436867
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 2785,
+            "min": 0.745963,
+            "p50": 1.045588,
+            "p95": 2.1475597999999985,
+            "p99": 4.74829339999997,
+            "max": 14.905567
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 2785,
+            "min": 2.856603,
+            "p50": 7.348967,
+            "p95": 11.727121199999988,
+            "p99": 14.990743159999992,
+            "max": 24.282483
+          }
+        },
+        "actual_api_hz": 99.74330012330655
+      },
+      "control_receive": {
+        "unique_count": 8414,
+        "unique_hz": 99.9999940568172,
+        "all_ms": {
+          "count": 8414,
+          "min": 1.714014000071984,
+          "p50": 4.642587999910575,
+          "p95": 12.76331265004272,
+          "p99": 22.632373080061946,
+          "max": 67.87520600005337
+        },
+        "motion_ms": {
+          "count": 1171,
+          "min": 2.0804920000045968,
+          "p50": 5.2959370000280614,
+          "p95": 17.400566500100467,
+          "p99": 34.47248310003487,
+          "max": 67.87520600005337
+        }
+      }
+    },
+    "192531": {
+      "action_count": 4,
+      "outcomes": {
+        "reported_done": 4
+      },
+      "pose_count": 0,
+      "pose_hz": null,
+      "pose_confidence": {},
+      "frame_gaps": 0,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 4,
+          "wheel_native_measurement": 2480,
+          "wheel_sdk_attempt": 1236,
+          "wheel_sdk_result": 1236,
+          "actual_true": 1236,
+          "wheel_requests_coalesced": 5
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 1236,
+            "min": 0.164045,
+            "p50": 0.211253,
+            "p95": 0.28885825000000004,
+            "p99": 0.33300675000000046,
+            "max": 0.373214
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 1236,
+            "min": 0.63005,
+            "p50": 5.781356,
+            "p95": 9.70365375,
+            "p99": 12.069284300000001,
+            "max": 14.318963
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 1236,
+            "min": 0.63005,
+            "p50": 0.8506165,
+            "p95": 1.0496815,
+            "p99": 1.1518857500000004,
+            "max": 1.277769
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 1236,
+            "min": 3.205189,
+            "p50": 7.239981,
+            "p95": 11.566275000000001,
+            "p99": 13.54114375,
+            "max": 15.685119
+          }
+        },
+        "actual_api_hz": 99.58694643967667
+      },
+      "control_receive": {}
+    },
+    "192842": {
+      "action_count": 14,
+      "outcomes": {
+        "reported_done": 14
+      },
+      "pose_count": 33525,
+      "pose_hz": 198.86686119026265,
+      "pose_confidence": {
+        "0": 1,
+        "2": 4946,
+        "3": 28578
+      },
+      "frame_gaps": 1,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 14,
+          "wheel_native_measurement": 17100,
+          "wheel_sdk_attempt": 8530,
+          "wheel_sdk_result": 8530,
+          "actual_true": 8530,
+          "wheel_requests_coalesced": 24
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 8530,
+            "min": 0.131043,
+            "p50": 0.3245445,
+            "p95": 1.5468636499999953,
+            "p99": 4.377406869999972,
+            "max": 22.730865
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 8530,
+            "min": 0.878174,
+            "p50": 5.995471,
+            "p95": 10.322231299999999,
+            "p99": 14.314277009999788,
+            "max": 27.099097
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 8530,
+            "min": 0.728215,
+            "p50": 1.0445095,
+            "p95": 2.4075773499999986,
+            "p99": 5.229450699999982,
+            "max": 23.336536
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 8530,
+            "min": 2.932444,
+            "p50": 7.3427055,
+            "p95": 12.021638449999998,
+            "p99": 15.730388359999994,
+            "max": 28.529476
+          }
+        },
+        "actual_api_hz": 99.69998429650053
+      },
+      "control_receive": {
+        "unique_count": 15027,
+        "unique_hz": 99.98668951317505,
+        "all_ms": {
+          "count": 15027,
+          "min": 1.819793999857211,
+          "p50": 2.7463689998512564,
+          "p95": 5.889877999788945,
+          "p99": 9.528664679673962,
+          "max": 45.32551600004808
+        },
+        "motion_ms": {
+          "count": 3199,
+          "min": 1.9927899998037901,
+          "p50": 2.9232299998511735,
+          "p95": 6.440782200252214,
+          "p99": 9.916018660205735,
+          "max": 17.00440000013259
+        }
+      }
+    },
+    "193147": {
+      "action_count": 8,
+      "outcomes": {
+        "reported_done": 8
+      },
+      "pose_count": 26086,
+      "pose_hz": 195.57947448503242,
+      "pose_confidence": {
+        "2": 8345,
+        "3": 17741
+      },
+      "frame_gaps": 4,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 8,
+          "wheel_native_measurement": 10838,
+          "wheel_sdk_attempt": 4949,
+          "wheel_sdk_result": 4949,
+          "actual_true": 4949,
+          "wheel_requests_coalesced": 15,
+          "wheel_experiment_requested": 10,
+          "wheel_experiment_applied": 10,
+          "wheel_experiment_sample_skipped": 458,
+          "wheel_experiment_window_ended": 6
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 4949,
+            "min": 0.141459,
+            "p50": 0.315169,
+            "p95": 1.8943627999999963,
+            "p99": 5.02630816,
+            "max": 11.67841
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 4949,
+            "min": 1.158744,
+            "p50": 6.628126,
+            "p95": 10.37152279999999,
+            "p99": 13.332978079999988,
+            "max": 20.142455
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 4949,
+            "min": 0.759962,
+            "p50": 1.067954,
+            "p95": 2.7259922,
+            "p99": 5.746763239999997,
+            "max": 12.784445
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 4949,
+            "min": 2.930407,
+            "p50": 8.185362,
+            "p95": 12.203346999999999,
+            "p99": 15.299480599999958,
+            "max": 25.684305
+          }
+        },
+        "actual_api_hz": 91.27801152637015
+      },
+      "control_receive": {
+        "unique_count": 10226,
+        "unique_hz": 99.99022589430022,
+        "all_ms": {
+          "count": 10226,
+          "min": 1.3437940001495008,
+          "p50": 3.0154790001688525,
+          "p95": 6.853447000025881,
+          "p99": 11.979536000126245,
+          "max": 109.26640700017742
+        },
+        "motion_ms": {
+          "count": 2098,
+          "min": 1.7992559996855562,
+          "p50": 3.487473000177488,
+          "p95": 7.83970990016769,
+          "p99": 12.887218410078287,
+          "max": 41.10182700014775
+        }
+      }
+    },
+    "194149": {
+      "action_count": 19,
+      "outcomes": {
+        "reported_done": 18,
+        "reported_fault": 1
+      },
+      "pose_count": 21656,
+      "pose_hz": 199.2170386409085,
+      "pose_confidence": {
+        "2": 13925,
+        "3": 7731
+      },
+      "frame_gaps": 1,
+      "sdk": {
+        "counts": {
+          "wheel_native_motion_request": 20,
+          "wheel_native_measurement": 17455,
+          "wheel_sdk_attempt": 8708,
+          "wheel_sdk_result": 8708,
+          "actual_true": 8708,
+          "wheel_requests_coalesced": 22
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 8708,
+            "min": 0.135707,
+            "p50": 0.323788,
+            "p95": 1.5826916499999963,
+            "p99": 4.579442980000022,
+            "max": 43.119202
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 8708,
+            "min": 0.705118,
+            "p50": 6.090664,
+            "p95": 10.142377399999997,
+            "p99": 13.37550238000002,
+            "max": 49.083804
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 8708,
+            "min": 0.705118,
+            "p50": 1.0268025,
+            "p95": 2.402476849999999,
+            "p99": 5.354848950000004,
+            "max": 43.802361
+          },
+          "mapped_wheel_end_to_api_end_ms": {
+            "count": 8708,
+            "min": 0.919697,
+            "p50": 6.053960999999999,
+            "p95": 10.597836749999997,
+            "p99": 13.775102490000014,
+            "max": 49.117427
+          }
+        },
+        "actual_api_hz": 99.71381513434068
+      },
+      "control_receive": {
+        "unique_count": 10484,
+        "unique_hz": 100.00000000000007,
+        "all_ms": {
+          "count": 10484,
+          "min": -0.4256759998497728,
+          "p50": 1.7376934999902005,
+          "p95": 5.43962919994101,
+          "p99": 9.54893005991835,
+          "max": 30.576311999993777
+        },
+        "motion_ms": {
+          "count": 3599,
+          "min": 0.0037039999369881116,
+          "p50": 1.9767389999287843,
+          "p95": 5.71021019982254,
+          "p99": 10.042031680022774,
+          "max": 20.993493999867496
+        }
+      }
+    }
+  },
+  "races": {
+    "race1": {
+      "wheel_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195243_competition_wheel",
+      "business_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/20261109_195756_competition",
+      "round_token": "f3de7b41601c78d39b6a0f4cc80831dc",
+      "start_s": 3607.563808458,
+      "end_s": 3790.390141941,
+      "duration_s": 182.82633348299987,
+      "identity": {
+        "version": 1,
+        "type": 2,
+        "sequence": 0,
+        "nonce": 17645127027352299251,
+        "epoch_fault": 0,
+        "boot_epoch": "2626d7e2571d3551ba6c6ff9ebae8e36",
+        "reference_epoch": 0,
+        "capabilities": 991,
+        "board": 405,
+        "mode": 5,
+        "service": 2,
+        "protocol_major": 1,
+        "protocol_minor": 3,
+        "tick_hz": 1000000,
+        "uart_baud": 921600,
+        "clock_flags": 3,
+        "drift_bound_ppm": 4294967295,
+        "mcu_uid": "002c00203335470434383831",
+        "device_idcode": 269444115,
+        "cpu_id": 1091551809,
+        "flash_kib": 1024,
+        "firmware_id": "615dd0e71c9897b6c198002335521cae902a31d4b3a8743786917963b8347623",
+        "git_commit": "9434608a8c395d8506b36accf1753b9bf92dad24",
+        "source_dirty": 1,
+        "max_payload": 160,
+        "receive_monotonic_ns": 3602786658937,
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "epoch_valid": true,
+        "interface_compatible": true,
+        "board_name": "F405",
+        "mode_name": "NormalRun",
+        "service_name": "TASK",
+        "identity_source": "actual_uart_reply"
+      },
+      "metadata_upper": "4cfaba937ac4c05c8e258b88849da5b4410b9b7a",
+      "opening": {
+        "start": 3607.563808458,
+        "end": 3615.872774706,
+        "duration_s": 8.30896624800016,
+        "pose_start": [
+          -1.3004446367172,
+          1.34040716696489,
+          135.0
+        ],
+        "pose_end": [
+          -0.116715084192882,
+          0.535941701174748,
+          323.08
+        ],
+        "center_error_m": 0.5485033435962213
+      },
+      "navigation": [
+        {
+          "state": "INITIAL_STASH_NAV",
+          "start": 3627.227087557,
+          "end": 3636.571487154,
+          "duration": 9.34439959700012,
+          "actual_wheel_speed_mps": {
+            "count": 935,
+            "min": 0.0,
+            "p50": 0.17635328601985278,
+            "p95": 0.5512455710933745,
+            "p99": 0.5982862597508649,
+            "max": 0.6120567157020663
+          },
+          "pose_start": [
+            0.581102305881872,
+            0.609667984626947,
+            353.738
+          ],
+          "pose_end": [
+            0.164294828098738,
+            -0.65831319422601,
+            272.619772513521
+          ],
+          "command_remaining_start_mm": 1369.0,
+          "command_remaining_end_mm": 42.0,
+          "after_first_D_le_600mm_s": 5.70514170899969,
+          "after_first_D_le_300mm_s": 2.051534645999709,
+          "after_first_D_le_250mm_s": 1.5594008999996731,
+          "after_first_D_le_200mm_s": 1.1851599139999962,
+          "after_first_D_le_150mm_s": 0.7893255159997352,
+          "after_first_D_le_100mm_s": 0.5537072859997352,
+          "after_first_D_le_80mm_s": 0.2772047670000575,
+          "after_first_D_le_60mm_s": 0.14436890099977973,
+          "after_first_D_le_50mm_s": 0.09078666499999599,
+          "after_first_D_le_0mm_s": null,
+          "D_under150_span_s": 0.7868676919997597,
+          "body_translation_below20mms_fraction": 0.20855614973262032,
+          "all_three_raw_deltas_zero_fraction": 0.1304812834224599,
+          "gyro_abs_rate_dps_p95": 111.43124999999996
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 3636.940077167,
+          "end": 3640.508253154,
+          "duration": 3.568175987000359,
+          "actual_wheel_speed_mps": {
+            "count": 357,
+            "min": 0.0,
+            "p50": 0.10428561416609676,
+            "p95": 0.5926655144633848,
+            "p99": 0.6576823290287617,
+            "max": 0.6723714089526711
+          },
+          "pose_start": [
+            0.156277347592527,
+            -0.664964775701319,
+            273.823
+          ],
+          "pose_end": [
+            0.0248874217740704,
+            -0.0707404276349002,
+            271.872730989788
+          ],
+          "command_remaining_start_mm": 683.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 2.856317104000027,
+          "after_first_D_le_300mm_s": 2.2303849459999583,
+          "after_first_D_le_250mm_s": 2.000769314000081,
+          "after_first_D_le_200mm_s": 1.413392493000174,
+          "after_first_D_le_150mm_s": 0.7022321829999782,
+          "after_first_D_le_100mm_s": 0.2641222010001911,
+          "after_first_D_le_80mm_s": 0.11607164600036413,
+          "after_first_D_le_60mm_s": 0.11607164600036413,
+          "after_first_D_le_50mm_s": 0.11607164600036413,
+          "after_first_D_le_0mm_s": 0.11607164600036413,
+          "D_under150_span_s": 0.581578805999925,
+          "body_translation_below20mms_fraction": 0.056022408963585436,
+          "all_three_raw_deltas_zero_fraction": 0.022408963585434174,
+          "gyro_abs_rate_dps_p95": 15.844600000000002
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 3662.315357019,
+          "end": 3665.591962954,
+          "duration": 3.2766059349996794,
+          "actual_wheel_speed_mps": {
+            "count": 328,
+            "min": 0.0,
+            "p50": 0.023919858119977846,
+            "p95": 0.1180493104815343,
+            "p99": 0.15932265631272352,
+            "max": 0.17305927304250415
+          },
+          "pose_start": [
+            0.125141682526774,
+            0.0930737473894898,
+            3.88899999999967
+          ],
+          "pose_end": [
+            0.0383692021066053,
+            0.0374220895978585,
+            2.59299999999968
+          ],
+          "command_remaining_start_mm": 156.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 3.271854161999727,
+          "after_first_D_le_300mm_s": 3.271854161999727,
+          "after_first_D_le_250mm_s": 3.271854161999727,
+          "after_first_D_le_200mm_s": 3.271854161999727,
+          "after_first_D_le_150mm_s": 2.8771399990000646,
+          "after_first_D_le_100mm_s": 0.6125835859998006,
+          "after_first_D_le_80mm_s": 0.34227254500001436,
+          "after_first_D_le_60mm_s": 0.34227254500001436,
+          "after_first_D_le_50mm_s": 0.34227254500001436,
+          "after_first_D_le_0mm_s": 0.34227254500001436,
+          "D_under150_span_s": 2.530636138000318,
+          "body_translation_below20mms_fraction": 0.4878048780487805,
+          "all_three_raw_deltas_zero_fraction": 0.29878048780487804,
+          "gyro_abs_rate_dps_p95": 14.35825
+        },
+        {
+          "state": "NAVIGATE",
+          "start": 3709.297982636,
+          "end": 3716.738742041,
+          "duration": 7.440759404999881,
+          "actual_wheel_speed_mps": {
+            "count": 744,
+            "min": 0.0,
+            "p50": 0.07691564967547242,
+            "p95": 0.489542242081067,
+            "p99": 0.5181774372258985,
+            "max": 0.5421022265818506
+          },
+          "pose_start": [
+            0.728230862674414,
+            0.328275532904197,
+            10.0469999999998
+          ],
+          "pose_end": [
+            -0.0939858693133573,
+            0.530928212205686,
+            171.57588910785
+          ],
+          "command_remaining_start_mm": 903.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 4.673842202999822,
+          "after_first_D_le_300mm_s": 3.0347509120001632,
+          "after_first_D_le_250mm_s": 2.433209270000134,
+          "after_first_D_le_200mm_s": 1.623424831000193,
+          "after_first_D_le_150mm_s": 0.9363732169999821,
+          "after_first_D_le_100mm_s": 0.4578258149999783,
+          "after_first_D_le_80mm_s": 0.08927183000014338,
+          "after_first_D_le_60mm_s": 0.07560442300018622,
+          "after_first_D_le_50mm_s": 0.07560442300018622,
+          "after_first_D_le_0mm_s": 0.07560442300018622,
+          "D_under150_span_s": 0.8527997400001368,
+          "body_translation_below20mms_fraction": 0.10483870967741936,
+          "all_three_raw_deltas_zero_fraction": 0.024193548387096774,
+          "gyro_abs_rate_dps_p95": 137.939
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 3725.124466114,
+          "end": 3733.455461648,
+          "duration": 8.330995534000067,
+          "actual_wheel_speed_mps": {
+            "count": 833,
+            "min": 0.0,
+            "p50": 0.11798257160275835,
+            "p95": 0.4201478291887273,
+            "p99": 0.4598659122821086,
+            "max": 0.4819170427532108
+          },
+          "pose_start": [
+            -0.186479413475602,
+            0.993720596922877,
+            92.6309999999999
+          ],
+          "pose_end": [
+            -0.00260795433639749,
+            0.0691607571373889,
+            294.40843021308
+          ],
+          "command_remaining_start_mm": 1011.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 3.888291542999923,
+          "after_first_D_le_300mm_s": 1.543979075000152,
+          "after_first_D_le_250mm_s": 1.207809195000209,
+          "after_first_D_le_200mm_s": 0.9724615250001989,
+          "after_first_D_le_150mm_s": 0.7162958489998346,
+          "after_first_D_le_100mm_s": 0.2506991549998929,
+          "after_first_D_le_80mm_s": 0.05100610299996333,
+          "after_first_D_le_60mm_s": 0.05100610299996333,
+          "after_first_D_le_50mm_s": 0.05100610299996333,
+          "after_first_D_le_0mm_s": 0.05100610299996333,
+          "D_under150_span_s": 0.6558532399999422,
+          "body_translation_below20mms_fraction": 0.27611044417767105,
+          "all_three_raw_deltas_zero_fraction": 0.1212484993997599,
+          "gyro_abs_rate_dps_p95": 111.72755
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 3754.939107883,
+          "end": 3758.928100678,
+          "duration": 3.9889927950002857,
+          "actual_wheel_speed_mps": {
+            "count": 398,
+            "min": 0.0,
+            "p50": 0.07309885438910789,
+            "p95": 0.24978620999801668,
+            "p99": 0.2589208306002679,
+            "max": 0.26666670119270613
+          },
+          "pose_start": [
+            0.156576169109001,
+            0.421163002874328,
+            319.059
+          ],
+          "pose_end": [
+            -0.00648166717954979,
+            0.0715775188667405,
+            324.816
+          ],
+          "command_remaining_start_mm": 449.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 3.9840212720000636,
+          "after_first_D_le_300mm_s": 1.481525712000348,
+          "after_first_D_le_250mm_s": 1.2207847750000838,
+          "after_first_D_le_200mm_s": 0.9838078780003343,
+          "after_first_D_le_150mm_s": 0.7346383580002112,
+          "after_first_D_le_100mm_s": 0.5063755129999663,
+          "after_first_D_le_80mm_s": 0.3897635570001512,
+          "after_first_D_le_60mm_s": 0.3897635570001512,
+          "after_first_D_le_50mm_s": 0.3897635570001512,
+          "after_first_D_le_0mm_s": 0.3897635570001512,
+          "D_under150_span_s": 0.33995136000021375,
+          "body_translation_below20mms_fraction": 0.3417085427135678,
+          "all_three_raw_deltas_zero_fraction": 0.16331658291457288,
+          "gyro_abs_rate_dps_p95": 18.258149999999997
+        }
+      ],
+      "source_duration_s": {
+        "T265_WITH_WHEEL_TAIL": 4.850866838999991,
+        "WHEEL_FALLBACK": 168.727229222,
+        "T265_PHASE_NO_WHEEL": 9.250283336999928
+      },
+      "source_transitions": [
+        {
+          "t": 3607.380751079,
+          "relative_s": -0.18305737899981978,
+          "source": "T265_WITH_WHEEL_TAIL",
+          "reason": "paired_field_reference",
+          "conflict_m": 7.93401321835285e-06,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3610.752027651,
+          "relative_s": 3.1882191929998953,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.051386219718859,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3717.559374239,
+          "relative_s": 109.9955657810001,
+          "source": "T265_PHASE_NO_WHEEL",
+          "reason": "safe_zone_low_speed",
+          "conflict_m": 0.00263035858031601,
+          "wheel_suspect": false,
+          "phase_suppressed": true,
+          "wall_evidence": null
+        },
+        {
+          "t": 3726.809657576,
+          "relative_s": 119.24584911800002,
+          "source": "T265_WITH_WHEEL_TAIL",
+          "reason": "phase_exit_rebased",
+          "conflict_m": 0.00263035858031601,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3728.47933365,
+          "relative_s": 120.91552519200013,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.0501637299781158,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        }
+      ],
+      "source_reason_counts": {
+        "paired_field_reference": 978,
+        "T265_wheel_displacement_conflict": 28755,
+        "safe_zone_low_speed": 2271,
+        "phase_exit_rebased": 557
+      },
+      "confidence_counts": {
+        "2": 718,
+        "3": 31843
+      },
+      "control_count": 32561,
+      "control_unique_wheel_endpoints": 18329,
+      "control_unique_rate_hz": 99.95217210579372,
+      "control_sample_intervals_ms": {
+        "count": 18328,
+        "min": 0.0,
+        "p50": 10.02060149994577,
+        "p95": 11.68103185000291,
+        "p99": 15.032524730154364,
+        "max": 25.054054000065662
+      },
+      "wheel_interval_ms": {
+        "count": 18797,
+        "min": 9.988,
+        "p50": 10.0,
+        "p95": 10.005,
+        "p99": 10.007,
+        "max": 10.012
+      },
+      "wheel_ids_gap_count": 0,
+      "radar": {
+        "count": 1827,
+        "scan_hz": 9.991231681943953,
+        "ranks": {
+          "2": 1485,
+          "0": 319,
+          "1": 23
+        },
+        "accepted_hz": 8.248264739938142,
+        "full_xy_hz": 8.122462293639352,
+        "accepted_gap_s": {
+          "count": 1507,
+          "min": 0.09866666699963389,
+          "p50": 0.10016666699993948,
+          "p95": 0.19950000000003457,
+          "p99": 0.8007349999998769,
+          "max": 1.7015833330001442
+        },
+        "full_xy_gap_s": {
+          "count": 1484,
+          "min": 0.09866666699963389,
+          "p50": 0.10016666699993948,
+          "p95": 0.19974999999976717,
+          "p99": 0.8175941666099179,
+          "max": 3.202083333000246
+        },
+        "reasons": {
+          "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 1507,
+          "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 305,
+          "FIXED_YAW_ENCLOSURE_REACQUIRED": 1,
+          "ENCLOSING_ARENA_CONTRADICTION": 14
+        },
+        "reacquisitions": [
+          {
+            "reference_ns": 3614727782937,
+            "correction_m": 0.1297248558839128,
+            "candidate_center_xy_m": [
+              -0.7141731051409733,
+              0.7634992104487872
+            ],
+            "position_reacquired": true
+          }
+        ],
+        "stats": {
+          "compute_ms": {
+            "count": 1827,
+            "min": 34.298854,
+            "p50": 54.304984,
+            "p95": 74.51888849999999,
+            "p99": 90.70936252,
+            "max": 175.734323
+          },
+          "compute_thread_cpu_ms": {
+            "count": 1827,
+            "min": 11.876376,
+            "p50": 17.149129,
+            "p95": 19.4183971,
+            "p99": 20.28881048,
+            "max": 24.039874
+          },
+          "snapshot_ms": {
+            "count": 1827,
+            "min": 3.572654,
+            "p50": 6.132645,
+            "p95": 10.53585029999999,
+            "p99": 13.685346560000001,
+            "max": 25.475452
+          },
+          "deskew_ms": {
+            "count": 1827,
+            "min": 2.566658,
+            "p50": 4.207691,
+            "p95": 8.981809399999992,
+            "p99": 13.403791660000001,
+            "max": 19.644844
+          },
+          "fit_ms": {
+            "count": 1827,
+            "min": 8.436380999999999,
+            "p50": 19.510669999999998,
+            "p95": 37.76634,
+            "p99": 46.757678160000005,
+            "max": 68.84666200000001
+          },
+          "geometry_compute_cpu_ms": {
+            "count": 1827,
+            "min": 11.293125,
+            "p50": 18.142373,
+            "p95": 32.39954209999999,
+            "p99": 37.30014302,
+            "max": 50.206168
+          },
+          "geometry_roundtrip_ms": {
+            "count": 1827,
+            "min": 20.174456,
+            "p50": 35.646349,
+            "p95": 56.50991849999997,
+            "p99": 67.89331652,
+            "max": 163.161666
+          },
+          "scan_span_ms": {
+            "count": 1827,
+            "min": 39.5,
+            "p50": 40.75,
+            "p95": 41.0,
+            "p99": 41.25,
+            "max": 41.5
+          },
+          "motion_unsupported_span_ns": {
+            "count": 1827,
+            "min": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 2785876.0
+          },
+          "residual_rms_m": {
+            "count": 1827,
+            "min": 0.003457162873114545,
+            "p50": 0.028423057202732697,
+            "p95": 0.04283137619346568,
+            "p99": 0.06825031799753989,
+            "max": 0.09079335640608328
+          },
+          "correction_m": {
+            "count": 1827,
+            "min": 2.6108142776035923e-05,
+            "p50": 0.0029993689281289813,
+            "p95": 0.02841816044423607,
+            "p99": 0.07171366507302443,
+            "max": 0.13635351560138262
+          },
+          "reference_to_begin_ms": {
+            "count": 1827,
+            "min": 6.386292,
+            "p50": 17.534426,
+            "p95": 36.53156099999999,
+            "p99": 47.060166640000006,
+            "max": 93.234642
+          },
+          "reference_to_fit_end_ms": {
+            "count": 1827,
+            "min": 45.167253,
+            "p50": 73.598021,
+            "p95": 102.11525909999999,
+            "p99": 119.82907566,
+            "max": 192.48681399999998
+          }
+        }
+      },
+      "sdk": {
+        "counts": {
+          "wheel_native_measurement": 36494,
+          "wheel_sdk_attempt": 17269,
+          "wheel_sdk_result": 17269,
+          "actual_true": 17269,
+          "wheel_requests_coalesced": 94,
+          "wheel_source_policy_applied": 2,
+          "wheel_input_sample_paused": 920
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 17269,
+            "min": 0.137041,
+            "p50": 0.46154,
+            "p95": 2.6308984,
+            "p99": 5.415447319999994,
+            "max": 21.838841
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 17269,
+            "min": 0.805122,
+            "p50": 6.483391,
+            "p95": 11.185213999999997,
+            "p99": 14.6021842,
+            "max": 28.288347
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 17269,
+            "min": 0.729039,
+            "p50": 1.231913,
+            "p95": 3.505394599999998,
+            "p99": 6.414583319999998,
+            "max": 22.473088
+          }
+        },
+        "actual_api_hz": 94.45452389100839
+      },
+      "sdk_position_discontinuity_count": 1,
+      "stop": {
+        "state": "GRAB",
+        "delivery_count": 1,
+        "first_fault_code": null,
+        "exit_reason": "signal_2"
+      }
+    },
+    "race2": {
+      "wheel_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+      "business_directory": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/20000101_080033_competition_04",
+      "round_token": "5b8e70f8ac6ec99505f74fc4f68ba28d",
+      "start_s": 3921.009062803,
+      "end_s": 4149.617645242,
+      "duration_s": 228.60858243900066,
+      "identity": {
+        "version": 1,
+        "type": 2,
+        "sequence": 0,
+        "nonce": 5823054105940460115,
+        "epoch_fault": 0,
+        "boot_epoch": "2626d7e2571d3551ba6c6ff9ebae8e36",
+        "reference_epoch": 0,
+        "capabilities": 991,
+        "board": 405,
+        "mode": 5,
+        "service": 2,
+        "protocol_major": 1,
+        "protocol_minor": 3,
+        "tick_hz": 1000000,
+        "uart_baud": 921600,
+        "clock_flags": 3,
+        "drift_bound_ppm": 4294967295,
+        "mcu_uid": "002c00203335470434383831",
+        "device_idcode": 269444115,
+        "cpu_id": 1091551809,
+        "flash_kib": 1024,
+        "firmware_id": "615dd0e71c9897b6c198002335521cae902a31d4b3a8743786917963b8347623",
+        "git_commit": "9434608a8c395d8506b36accf1753b9bf92dad24",
+        "source_dirty": 1,
+        "max_payload": 160,
+        "receive_monotonic_ns": 3915992119500,
+        "capture_time_qualified": false,
+        "sdk_time_qualified": false,
+        "epoch_valid": true,
+        "interface_compatible": true,
+        "board_name": "F405",
+        "mode_name": "NormalRun",
+        "service_name": "TASK",
+        "identity_source": "actual_uart_reply"
+      },
+      "metadata_upper": "4cfaba937ac4c05c8e258b88849da5b4410b9b7a",
+      "opening": {
+        "start": 3921.009062803,
+        "end": 3929.391131187,
+        "duration_s": 8.382068384000377,
+        "pose_start": [
+          -1.31816782199821,
+          1.32460723021684,
+          135.0
+        ],
+        "pose_end": [
+          -0.0742127944860271,
+          0.613855810245732,
+          326.023324934186
+        ],
+        "center_error_m": 0.6183255571605216
+      },
+      "navigation": [
+        {
+          "state": "INITIAL_STASH_NAV",
+          "start": 3937.906975914,
+          "end": 3946.087257259,
+          "duration": 8.180281344999912,
+          "actual_wheel_speed_mps": {
+            "count": 818,
+            "min": 0.0,
+            "p50": 0.11049278787549971,
+            "p95": 0.4787577479679772,
+            "p99": 0.5278804062330306,
+            "max": 0.5624444362645967
+          },
+          "pose_start": [
+            0.087883033344669,
+            0.220757848477431,
+            291.760288382719
+          ],
+          "pose_end": [
+            0.138116246297218,
+            -0.676717408706764,
+            275.801653812394
+          ],
+          "command_remaining_start_mm": 913.0,
+          "command_remaining_end_mm": 51.0,
+          "after_first_D_le_600mm_s": 6.1076538689999325,
+          "after_first_D_le_300mm_s": 3.3089052099999208,
+          "after_first_D_le_250mm_s": 2.9637807780000003,
+          "after_first_D_le_200mm_s": 2.5699222830003237,
+          "after_first_D_le_150mm_s": 2.291998317999969,
+          "after_first_D_le_100mm_s": 0.4239164929999788,
+          "after_first_D_le_80mm_s": 0.18256049999990864,
+          "after_first_D_le_60mm_s": 0.04752794300020469,
+          "after_first_D_le_50mm_s": null,
+          "after_first_D_le_0mm_s": null,
+          "D_under150_span_s": 2.284315048999815,
+          "body_translation_below20mms_fraction": 0.22616136919315402,
+          "all_three_raw_deltas_zero_fraction": 0.0941320293398533,
+          "gyro_abs_rate_dps_p95": 43.97549999999999
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 3946.494493467,
+          "end": 3951.365948302,
+          "duration": 4.871454834999895,
+          "actual_wheel_speed_mps": {
+            "count": 487,
+            "min": 0.0,
+            "p50": 0.09967634012643121,
+            "p95": 0.49231800705456924,
+            "p99": 0.5749753474451723,
+            "max": 0.6164693898029325
+          },
+          "pose_start": [
+            0.135269181060117,
+            -0.699951327989796,
+            276.471
+          ],
+          "pose_end": [
+            0.0420315783957206,
+            -0.0559912031265857,
+            289.524119166493
+          ],
+          "command_remaining_start_mm": 714.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 4.118559984000058,
+          "after_first_D_le_300mm_s": 1.7047689630003333,
+          "after_first_D_le_250mm_s": 1.219889645999956,
+          "after_first_D_le_200mm_s": 1.0530827229999886,
+          "after_first_D_le_150mm_s": 0.7825596060001772,
+          "after_first_D_le_100mm_s": 0.3682809540000562,
+          "after_first_D_le_80mm_s": 0.06456955900011963,
+          "after_first_D_le_60mm_s": 0.06456955900011963,
+          "after_first_D_le_50mm_s": 0.06456955900011963,
+          "after_first_D_le_0mm_s": 0.06456955900011963,
+          "D_under150_span_s": 0.7117783980002059,
+          "body_translation_below20mms_fraction": 0.22587268993839835,
+          "all_three_raw_deltas_zero_fraction": 0.19917864476386038,
+          "gyro_abs_rate_dps_p95": 48.0035
+        },
+        {
+          "state": "NAVIGATE",
+          "start": 3963.016357216,
+          "end": 3970.686120768,
+          "duration": 7.669763551999949,
+          "actual_wheel_speed_mps": {
+            "count": 767,
+            "min": 0.0,
+            "p50": 0.06332453616095424,
+            "p95": 0.4548049794587604,
+            "p99": 0.49337735731636145,
+            "max": 0.5271766646277128
+          },
+          "pose_start": [
+            0.0400959043909472,
+            -0.276507550564234,
+            261.782
+          ],
+          "pose_end": [
+            -0.138366986418981,
+            0.493336011296429,
+            109.099
+          ],
+          "command_remaining_start_mm": 838.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 5.076190494000002,
+          "after_first_D_le_300mm_s": 4.245359621999796,
+          "after_first_D_le_250mm_s": 3.6677220950000446,
+          "after_first_D_le_200mm_s": 2.670625369999925,
+          "after_first_D_le_150mm_s": 2.0441147329997875,
+          "after_first_D_le_100mm_s": 1.2548550249998698,
+          "after_first_D_le_80mm_s": 0.994878112999686,
+          "after_first_D_le_60mm_s": 0.22576184499985175,
+          "after_first_D_le_50mm_s": 0.11558512300007351,
+          "after_first_D_le_0mm_s": 0.11558512300007351,
+          "D_under150_span_s": 1.9246394960000544,
+          "body_translation_below20mms_fraction": 0.14602346805736635,
+          "all_three_raw_deltas_zero_fraction": 0.02346805736636245,
+          "gyro_abs_rate_dps_p95": 137.7865
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 4002.029346722,
+          "end": 4006.154951485,
+          "duration": 4.125604762999956,
+          "actual_wheel_speed_mps": {
+            "count": 412,
+            "min": 0.0,
+            "p50": 0.1456090633760559,
+            "p95": 0.2157876169315561,
+            "p99": 0.22966247047061897,
+            "max": 0.2558208401147178
+          },
+          "pose_start": [
+            -0.128344480235136,
+            0.503407201306183,
+            97.0439056176383
+          ],
+          "pose_end": [
+            0.00335177159573674,
+            0.0752964684443584,
+            95.7949999999998
+          ],
+          "command_remaining_start_mm": 522.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 4.122248397000021,
+          "after_first_D_le_300mm_s": 1.4479582209996806,
+          "after_first_D_le_250mm_s": 1.178781478000019,
+          "after_first_D_le_200mm_s": 0.8962221479996515,
+          "after_first_D_le_150mm_s": 0.5469572550000521,
+          "after_first_D_le_100mm_s": 0.19519361799984836,
+          "after_first_D_le_80mm_s": 0.03440694499977326,
+          "after_first_D_le_60mm_s": 0.03440694499977326,
+          "after_first_D_le_50mm_s": 0.03440694499977326,
+          "after_first_D_le_0mm_s": 0.03440694499977326,
+          "D_under150_span_s": 0.49760476900019057,
+          "body_translation_below20mms_fraction": 0.18932038834951456,
+          "all_three_raw_deltas_zero_fraction": 0.1407766990291262,
+          "gyro_abs_rate_dps_p95": 17.485999999999997
+        },
+        {
+          "state": "NAVIGATE",
+          "start": 4014.237845481,
+          "end": 4016.314426735,
+          "duration": 2.076581253999848,
+          "actual_wheel_speed_mps": {
+            "count": 208,
+            "min": 0.0,
+            "p50": 0.0,
+            "p95": 0.027629,
+            "p99": 0.03592591949937519,
+            "max": 0.06020284544770289
+          },
+          "pose_start": [
+            -0.0757034982021803,
+            0.540386837216487,
+            106.243
+          ],
+          "pose_end": [
+            -0.0897409287744382,
+            0.537078472110047,
+            103.848609344718
+          ],
+          "command_remaining_start_mm": 75.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 2.075820547999683,
+          "after_first_D_le_300mm_s": 2.075820547999683,
+          "after_first_D_le_250mm_s": 2.075820547999683,
+          "after_first_D_le_200mm_s": 2.075820547999683,
+          "after_first_D_le_150mm_s": 2.075820547999683,
+          "after_first_D_le_100mm_s": 2.075820547999683,
+          "after_first_D_le_80mm_s": 2.075820547999683,
+          "after_first_D_le_60mm_s": 0.06627210699980424,
+          "after_first_D_le_50mm_s": 0.06627210699980424,
+          "after_first_D_le_0mm_s": 0.06627210699980424,
+          "D_under150_span_s": 2.0042937049997818,
+          "body_translation_below20mms_fraction": 0.9086538461538461,
+          "all_three_raw_deltas_zero_fraction": 0.5048076923076923,
+          "gyro_abs_rate_dps_p95": 3.295
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 4025.098798074,
+          "end": 4033.94274285,
+          "duration": 8.843944775999717,
+          "actual_wheel_speed_mps": {
+            "count": 884,
+            "min": 0.0,
+            "p50": 0.11052057248543012,
+            "p95": 0.4363785754060357,
+            "p99": 0.48215389443047246,
+            "max": 0.5032310328517111
+          },
+          "pose_start": [
+            -0.256006216422613,
+            1.03949418430285,
+            94.3500000000004
+          ],
+          "pose_end": [
+            0.0103524974000908,
+            0.0736932456601154,
+            300.261456421963
+          ],
+          "command_remaining_start_mm": 1070.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 4.217863369000042,
+          "after_first_D_le_300mm_s": 1.6160178559998712,
+          "after_first_D_le_250mm_s": 1.2354934429999958,
+          "after_first_D_le_200mm_s": 0.9269246229996497,
+          "after_first_D_le_150mm_s": 0.6670493779997742,
+          "after_first_D_le_100mm_s": 0.2370792659999097,
+          "after_first_D_le_80mm_s": 0.07688370500000019,
+          "after_first_D_le_60mm_s": 0.07688370500000019,
+          "after_first_D_le_50mm_s": 0.07688370500000019,
+          "after_first_D_le_0mm_s": 0.07688370500000019,
+          "D_under150_span_s": 0.5860933919998388,
+          "body_translation_below20mms_fraction": 0.2703619909502262,
+          "all_three_raw_deltas_zero_fraction": 0.13914027149321267,
+          "gyro_abs_rate_dps_p95": 111.816
+        },
+        {
+          "state": "NAVIGATE",
+          "start": 4094.04482932,
+          "end": 4101.648254117,
+          "duration": 7.603424796999661,
+          "actual_wheel_speed_mps": {
+            "count": 761,
+            "min": 0.0,
+            "p50": 0.06330556379971669,
+            "p95": 0.33526571097712926,
+            "p99": 0.3589224,
+            "max": 0.36132900374174226
+          },
+          "pose_start": [
+            0.773764326112139,
+            0.354658118423495,
+            74.7340000000002
+          ],
+          "pose_end": [
+            0.208947161185491,
+            0.530599415405556,
+            169.725697503842
+          ],
+          "command_remaining_start_mm": 651.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 6.019262929999968,
+          "after_first_D_le_300mm_s": 4.831907982000303,
+          "after_first_D_le_250mm_s": 3.711954104999677,
+          "after_first_D_le_200mm_s": 3.034218034999867,
+          "after_first_D_le_150mm_s": 2.2901311360001273,
+          "after_first_D_le_100mm_s": 1.451145940999595,
+          "after_first_D_le_80mm_s": 1.0605563310000434,
+          "after_first_D_le_60mm_s": 0.06306208600017271,
+          "after_first_D_le_50mm_s": 0.06306208600017271,
+          "after_first_D_le_0mm_s": 0.06306208600017271,
+          "D_under150_span_s": 2.2197340270004133,
+          "body_translation_below20mms_fraction": 0.19053876478318002,
+          "all_three_raw_deltas_zero_fraction": 0.02890932982917214,
+          "gyro_abs_rate_dps_p95": 112.82899999999984
+        },
+        {
+          "state": "NAVIGATE",
+          "start": 4109.734677038,
+          "end": 4112.102690814,
+          "duration": 2.3680137760002253,
+          "actual_wheel_speed_mps": {
+            "count": 237,
+            "min": 0.0,
+            "p50": 0.06330556379971669,
+            "p95": 0.09671059166916517,
+            "p99": 0.10826523077457889,
+            "max": 0.1381438152071963
+          },
+          "pose_start": [
+            0.341208644478334,
+            0.503912982835079,
+            152.704
+          ],
+          "pose_end": [
+            0.208596769028205,
+            0.523009329476402,
+            150.672
+          ],
+          "command_remaining_start_mm": 195.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 2.367540736000592,
+          "after_first_D_le_300mm_s": 2.367540736000592,
+          "after_first_D_le_250mm_s": 2.367540736000592,
+          "after_first_D_le_200mm_s": 2.367540736000592,
+          "after_first_D_le_150mm_s": 1.420730884000477,
+          "after_first_D_le_100mm_s": 0.7903392160005751,
+          "after_first_D_le_80mm_s": 0.4527799600000435,
+          "after_first_D_le_60mm_s": 0.09468192300028022,
+          "after_first_D_le_50mm_s": 0.09468192300028022,
+          "after_first_D_le_0mm_s": 0.09468192300028022,
+          "D_under150_span_s": 1.3203793090006002,
+          "body_translation_below20mms_fraction": 0.06329113924050633,
+          "all_three_raw_deltas_zero_fraction": 0.05063291139240506,
+          "gyro_abs_rate_dps_p95": 6.72825
+        },
+        {
+          "state": "RETURN_CENTER",
+          "start": 4119.325024198,
+          "end": 4128.451150803,
+          "duration": 9.126126604999627,
+          "actual_wheel_speed_mps": {
+            "count": 912,
+            "min": 0.0,
+            "p50": 0.09961713869610993,
+            "p95": 0.407791824243723,
+            "p99": 0.46146970613737354,
+            "max": 0.4908473919549741
+          },
+          "pose_start": [
+            0.0398968888955709,
+            1.0272472876084,
+            98.508
+          ],
+          "pose_end": [
+            0.0446849373879821,
+            0.0532080587731294,
+            281.762642848205
+          ],
+          "command_remaining_start_mm": 1028.0,
+          "command_remaining_end_mm": 0.0,
+          "after_first_D_le_600mm_s": 3.5988418010001624,
+          "after_first_D_le_300mm_s": 1.5040075509996313,
+          "after_first_D_le_250mm_s": 1.1022173649998876,
+          "after_first_D_le_200mm_s": 0.6813136849996226,
+          "after_first_D_le_150mm_s": 0.39647207600046386,
+          "after_first_D_le_100mm_s": 0.09702846199979831,
+          "after_first_D_le_80mm_s": 0.09086464400024852,
+          "after_first_D_le_60mm_s": 0.09086464400024852,
+          "after_first_D_le_50mm_s": 0.09086464400024852,
+          "after_first_D_le_0mm_s": 0.09086464400024852,
+          "D_under150_span_s": 0.3010345270004109,
+          "body_translation_below20mms_fraction": 0.23793859649122806,
+          "all_three_raw_deltas_zero_fraction": 0.0756578947368421,
+          "gyro_abs_rate_dps_p95": 110.87865
+        }
+      ],
+      "source_duration_s": {
+        "T265_WITH_WHEEL_TAIL": 10.315712645000076,
+        "WHEEL_FALLBACK": 143.9883705680004,
+        "T265_PRIMARY_WHEEL_SUSPECT": 27.9556376190003,
+        "T265_PHASE_NO_WHEEL": 46.362189091999426
+      },
+      "source_transitions": [
+        {
+          "t": 3920.817103594,
+          "relative_s": -0.1919592089998332,
+          "source": "T265_WITH_WHEEL_TAIL",
+          "reason": "paired_field_reference",
+          "conflict_m": 0.0,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3927.967037899,
+          "relative_s": 6.957975096000155,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.053192887549928,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3928.556187188,
+          "relative_s": 7.547124385000188,
+          "source": "T265_PRIMARY_WHEEL_SUSPECT",
+          "reason": "two_axis_walls_support_T265_over_wheel",
+          "conflict_m": 0.0489946698656526,
+          "wheel_suspect": true,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3947.176892402,
+          "relative_s": 26.167829599000015,
+          "source": "WHEEL_FALLBACK",
+          "reason": "two_axis_walls_support_wheel_over_T265",
+          "conflict_m": 0.00787174387962234,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3965.679509547,
+          "relative_s": 44.6704467440004,
+          "source": "T265_PRIMARY_WHEEL_SUSPECT",
+          "reason": "two_axis_walls_support_T265_over_wheel",
+          "conflict_m": 0.0442117635229287,
+          "wheel_suspect": true,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3969.597065011,
+          "relative_s": 48.588002208000034,
+          "source": "WHEEL_FALLBACK",
+          "reason": "two_axis_walls_support_wheel_over_T265",
+          "conflict_m": 0.0270483456101843,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 3971.766491345,
+          "relative_s": 50.75742854200007,
+          "source": "T265_PHASE_NO_WHEEL",
+          "reason": "safe_zone_low_speed",
+          "conflict_m": 0.010579990604328,
+          "wheel_suspect": false,
+          "phase_suppressed": true,
+          "wall_evidence": null
+        },
+        {
+          "t": 4002.077286754,
+          "relative_s": 81.06822395100016,
+          "source": "T265_WITH_WHEEL_TAIL",
+          "reason": "phase_exit_rebased",
+          "conflict_m": 0.010579990604328,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4003.496053881,
+          "relative_s": 82.4869910780003,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.0500395761434844,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4018.925900679,
+          "relative_s": 97.91683787600005,
+          "source": "T265_PHASE_NO_WHEEL",
+          "reason": "safe_zone_low_speed",
+          "conflict_m": 0.0213974862302172,
+          "wheel_suspect": false,
+          "phase_suppressed": true,
+          "wall_evidence": null
+        },
+        {
+          "t": 4026.856896427,
+          "relative_s": 105.84783362400003,
+          "source": "T265_WITH_WHEEL_TAIL",
+          "reason": "phase_exit_rebased",
+          "conflict_m": 0.0213974862302172,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4027.496127122,
+          "relative_s": 106.48706431900018,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.0500861595382834,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4112.974829945,
+          "relative_s": 191.96576714200046,
+          "source": "T265_PHASE_NO_WHEEL",
+          "reason": "safe_zone_low_speed",
+          "conflict_m": 0.0336159319235871,
+          "wheel_suspect": false,
+          "phase_suppressed": true,
+          "wall_evidence": null
+        },
+        {
+          "t": 4121.09522788,
+          "relative_s": 200.0861650769998,
+          "source": "T265_WITH_WHEEL_TAIL",
+          "reason": "phase_exit_rebased",
+          "conflict_m": 0.0336159319235871,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4122.404695744,
+          "relative_s": 201.3956329409998,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.0507723849362519,
+          "wheel_suspect": false,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4127.917833725,
+          "relative_s": 206.9087709219998,
+          "source": "T265_PRIMARY_WHEEL_SUSPECT",
+          "reason": "two_axis_walls_support_T265_over_wheel",
+          "conflict_m": 0.00862685752831765,
+          "wheel_suspect": true,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        },
+        {
+          "t": 4133.335210666,
+          "relative_s": 212.32614786300064,
+          "source": "WHEEL_FALLBACK",
+          "reason": "T265_wheel_displacement_conflict",
+          "conflict_m": 0.212672691364919,
+          "wheel_suspect": true,
+          "phase_suppressed": false,
+          "wall_evidence": null
+        }
+      ],
+      "source_reason_counts": {
+        "paired_field_reference": 2280,
+        "T265_wheel_displacement_conflict": 23659,
+        "two_axis_walls_support_T265_over_wheel": 6976,
+        "two_axis_walls_support_wheel_over_T265": 418,
+        "safe_zone_low_speed": 11994,
+        "phase_exit_rebased": 1102
+      },
+      "confidence_counts": {
+        "2": 738,
+        "3": 45691
+      },
+      "control_count": 46429,
+      "control_unique_wheel_endpoints": 22775,
+      "control_unique_rate_hz": 99.39412789407216,
+      "control_sample_intervals_ms": {
+        "count": 22774,
+        "min": 0.0,
+        "p50": 10.021277500072756,
+        "p95": 15.031920350338623,
+        "p99": 17.720645430035805,
+        "max": 30.064824999954
+      },
+      "wheel_interval_ms": {
+        "count": 23396,
+        "min": 9.988,
+        "p50": 10.0,
+        "p95": 10.005,
+        "p99": 10.007,
+        "max": 10.012
+      },
+      "wheel_ids_gap_count": 0,
+      "radar": {
+        "count": 2278,
+        "scan_hz": 9.965098086412306,
+        "ranks": {
+          "2": 2172,
+          "1": 34,
+          "0": 72
+        },
+        "accepted_hz": 9.649681461931221,
+        "full_xy_hz": 9.500955637041983,
+        "accepted_gap_s": {
+          "count": 2205,
+          "min": 0.09866666700008864,
+          "p50": 0.10016666699993948,
+          "p95": 0.10075000000006185,
+          "p99": 0.19998999999983427,
+          "max": 1.0
+        },
+        "full_xy_gap_s": {
+          "count": 2171,
+          "min": 0.09866666700008864,
+          "p50": 0.10016666699993948,
+          "p95": 0.10075000000006185,
+          "p99": 0.20063333309994963,
+          "max": 1.4005000000001928
+        },
+        "reasons": {
+          "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 2205,
+          "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 72,
+          "FIXED_YAW_ENCLOSURE_REACQUIRED": 1
+        },
+        "reacquisitions": [
+          {
+            "reference_ns": 3998042593907,
+            "correction_m": 0.10738375037562177,
+            "candidate_center_xy_m": [
+              -0.14532081367334015,
+              0.543186023821653
+            ],
+            "position_reacquired": true
+          }
+        ],
+        "stats": {
+          "compute_ms": {
+            "count": 2278,
+            "min": 26.812338,
+            "p50": 58.950096,
+            "p95": 83.41482955000001,
+            "p99": 100.22713851,
+            "max": 148.878435
+          },
+          "compute_thread_cpu_ms": {
+            "count": 2278,
+            "min": 12.390958,
+            "p50": 17.686812,
+            "p95": 20.1343944,
+            "p99": 21.33342106,
+            "max": 28.032167
+          },
+          "snapshot_ms": {
+            "count": 2278,
+            "min": 3.801364,
+            "p50": 6.7398555,
+            "p95": 12.319537200000003,
+            "p99": 16.815187480000006,
+            "max": 29.301248
+          },
+          "deskew_ms": {
+            "count": 2278,
+            "min": 2.604284,
+            "p50": 4.597758499999999,
+            "p95": 10.282876600000002,
+            "p99": 17.48690753,
+            "max": 36.495598
+          },
+          "fit_ms": {
+            "count": 2278,
+            "min": 7.444395,
+            "p50": 19.823861,
+            "p95": 37.91815940000001,
+            "p99": 49.61917266000002,
+            "max": 85.311005
+          },
+          "geometry_compute_cpu_ms": {
+            "count": 2278,
+            "min": 10.294167,
+            "p50": 17.2878965,
+            "p95": 24.583005000000007,
+            "p99": 31.220595250000002,
+            "max": 45.969789
+          },
+          "geometry_roundtrip_ms": {
+            "count": 2278,
+            "min": 16.90195,
+            "p50": 38.279810999999995,
+            "p95": 62.92513520000001,
+            "p99": 77.72625877,
+            "max": 135.349646
+          },
+          "scan_span_ms": {
+            "count": 2278,
+            "min": 39.5,
+            "p50": 40.75,
+            "p95": 41.0,
+            "p99": 41.25,
+            "max": 41.5
+          },
+          "motion_unsupported_span_ns": {
+            "count": 2278,
+            "min": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 29688.630000002348,
+            "max": 6723688.0
+          },
+          "residual_rms_m": {
+            "count": 2278,
+            "min": 0.002226149404584645,
+            "p50": 0.007062457910334633,
+            "p95": 0.029554447374947442,
+            "p99": 0.04305430411521438,
+            "max": 0.05987616040020333
+          },
+          "correction_m": {
+            "count": 2278,
+            "min": 9.118518093993285e-06,
+            "p50": 0.0024835922598110717,
+            "p95": 0.030662947600537744,
+            "p99": 0.06179520984387995,
+            "max": 0.12047734318945448
+          },
+          "reference_to_begin_ms": {
+            "count": 2278,
+            "min": 7.332593,
+            "p50": 24.0699075,
+            "p95": 55.865793650000015,
+            "p99": 153.29845115,
+            "max": 395.619307
+          },
+          "reference_to_fit_end_ms": {
+            "count": 2278,
+            "min": 40.992175,
+            "p50": 83.95509999999999,
+            "p95": 130.4680039,
+            "p99": 240.64991799000003,
+            "max": 470.72668999999996
+          }
+        }
+      },
+      "sdk": {
+        "counts": {
+          "wheel_native_measurement": 45634,
+          "wheel_sdk_attempt": 13733,
+          "wheel_sdk_result": 13733,
+          "actual_true": 13733,
+          "wheel_requests_coalesced": 116,
+          "wheel_source_policy_applied": 11,
+          "wheel_input_sample_paused": 9012
+        },
+        "delays": {
+          "api_duration_ms": {
+            "count": 13733,
+            "min": 0.154083,
+            "p50": 0.541457,
+            "p95": 3.4798151999999996,
+            "p99": 6.781775680000003,
+            "max": 25.013478
+          },
+          "wheel_rx_to_api_end_ms": {
+            "count": 13733,
+            "min": 0.747873,
+            "p50": 6.612607,
+            "p95": 12.4233238,
+            "p99": 15.961220560000005,
+            "max": 25.95618
+          },
+          "paired_rx_to_api_end_ms": {
+            "count": 13733,
+            "min": 0.747873,
+            "p50": 1.346122,
+            "p95": 4.432279199999999,
+            "p99": 7.781303360000001,
+            "max": 25.931934
+          }
+        },
+        "actual_api_hz": 66.36787379111554
+      },
+      "sdk_position_discontinuity_count": 37,
+      "stop": {
+        "state": "CAPTURE_AUDIT",
+        "delivery_count": 2,
+        "first_fault_code": null,
+        "exit_reason": "signal_2"
+      }
+    }
+  },
+  "notes": [
+    "Host receive-clock response is not absolute physical latency or a calibrated fixed offset.",
+    "SDK API true is not a fusion or accuracy acknowledgement.",
+    "Sample timestamp in control_pose is not a TX timestamp.",
+    "L is an effective value fitted against primary gyro, not independent floor-angle calibration.",
+    "Source fractions are time-weighted; safe-zone no-wheel is intentional, not failure.",
+    "motion_sessions.sdk counts and delay statistics are restricted to the issued-action envelope; Pose counts/rates cover the recorded session. The report labels full-session API totals separately."
+  ],
+  "motion_lidar": {
+    "192842": {
+      "fit_records": 1498,
+      "rank_counts": {
+        "2": 1488,
+        "0": 10
+      },
+      "reported_accepted_fits": 1488,
+      "scan_queue_drops": 0,
+      "fit_requests_coalesced": 2,
+      "display_updates_coalesced": 61,
+      "control_updates_coalesced": 0,
+      "control_capacity_errors": 0,
+      "compute_ms": {
+        "p50": 33.833608,
+        "p95": 54.707656999999955,
+        "max": 122.143053
+      },
+      "residual_rms_m": {
+        "p50": 0.005384110031726767,
+        "p95": 0.008581890026931346,
+        "max": 0.04373548618725777
+      },
+      "fit_hz": 9.991862561251898,
+      "accepted_fraction": 0.9933244325767691
+    },
+    "193147": {
+      "fit_records": 1017,
+      "rank_counts": {
+        "2": 868,
+        "0": 149
+      },
+      "reported_accepted_fits": 868,
+      "scan_queue_drops": 1,
+      "fit_requests_coalesced": 1,
+      "display_updates_coalesced": 15,
+      "control_updates_coalesced": 0,
+      "control_capacity_errors": 0,
+      "compute_ms": {
+        "p50": 33.594939,
+        "p95": 57.838175599999964,
+        "max": 117.993051
+      },
+      "residual_rms_m": {
+        "p50": 0.005291794054475055,
+        "p95": 0.013880290404408836,
+        "max": 0.04878940126670734
+      },
+      "fit_hz": 9.98248643497016,
+      "accepted_fraction": 0.8534906588003933
+    },
+    "194149": {
+      "fit_records": 1043,
+      "rank_counts": {
+        "2": 981,
+        "0": 62
+      },
+      "reported_accepted_fits": 981,
+      "scan_queue_drops": 0,
+      "fit_requests_coalesced": 0,
+      "display_updates_coalesced": 1,
+      "control_updates_coalesced": 0,
+      "control_capacity_errors": 0,
+      "compute_ms": {
+        "p50": 35.77902,
+        "p95": 65.58592709999999,
+        "max": 109.953422
+      },
+      "residual_rms_m": {
+        "p50": 0.005554669538096184,
+        "p95": 0.02312621264539704,
+        "max": 0.054620306809690496
+      },
+      "fit_hz": 9.983137886104066,
+      "accepted_fraction": 0.9405560882070949
+    }
+  }
+}

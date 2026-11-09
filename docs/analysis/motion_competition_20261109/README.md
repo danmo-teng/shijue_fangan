@@ -1,6 +1,13 @@
-# 两场正式比赛轨迹初步导出
+# 两场正式比赛轨迹导出与联合分析
 
-2026-11-09，基于RDK实际日志。这里只是轨迹交接，完整MotionDebug/比赛延迟及到位问题仍在分析；不表示下位机改法已审核或获准实施。
+2026-11-09，基于RDK实际日志。先导出轨迹后已继续完成[MotionDebug＋两场正式比赛联合分析](ANALYSIS.md)。本目录是证据和建议，不表示新改法已审核、实施、烧录或地面验收。
+
+阅读入口：
+
+- [完整分析及推荐取舍](ANALYSIS.md)：响应/链路延迟、有效轮臂、到位慢调、开局偏移、送物航向、来源降级和雷达长尾。
+- [机器可读证据](evidence_summary.json)：两场实际身份/token、逐段统计、来源切换及97动作汇总。
+- [97个已发MotionDebug动作](motion_actions.csv)：ID、SEQ、请求、起止、DONE/FAULT及回执；不是独立地面真值。
+- [末段慢调图](arrival_tail.png)、[送物锁角图](delivery_heading.png)、[来源与墙约束图](source_and_wall_observations.png)、[SDK相对响应图](motion_response.png)。
 
 ![开局轨迹](opening_trajectories.png)
 
@@ -18,4 +25,4 @@
 
 含完整控制轨迹、100Hz实测07轮反馈、08主gyro、原H/D导航观察、正式0x17/0x1E状态、10Hz雷达修正、业务事件与原metadata/config/身份副本。初步包约7.8MiB，ZIP CRC检查通过；原始日志未改动。主gyroCSV保留本地累计角，不能直接与场地绝对角相减；H是平移方向，不等同车体应朝向。
 
-F405先核对`Task.c::task_process_start`出发三段、`nav_follow_coarse`的600mm/FINE切换及`min(120,D×1.0)`mm/s末段、视觉ALIGN到ENTER的航向来源。先讲清具体证据和影响再提最小改法，不因此新增握手、时间门、永久FAULT或测试程序。完整分析后另更新结论，不将初步疑点写成已证根因。
+F405先核对`Task.c::task_process_start`出发三段、`nav_follow_coarse`的600mm/FINE切换及`min(120,D×1.0)`mm/s末段、视觉ALIGN到ENTER的航向来源。新提交b980c6a的后轮微小航向修正已审，不重复要求实现；本批实跑仍为9434608/dirty1，新改法地面效果未验证。先讲清影响再提最小改法，不因此新增握手、时间门、永久FAULT或测试程序。具体跨端审查回执见[当前固定入口](../../CROSS_REPO_REQUESTS.md)。

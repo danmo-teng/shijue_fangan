@@ -22,13 +22,16 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 
 ## 本轮轨迹交接：TRAJECTORY-20261109（先取证，不是实施授权）
 
-用户要求先导出两场开局/比赛轨迹供F405分析，上位机随后继续联合MotionDebug延迟、末段慢调、送物航向和雷达/降级分析。当前尚未确定新的F405修改方案，不能把初步轨迹疑点直接当施工命令。
+用户要求先导出两场开局/比赛轨迹供F405分析，上位机已随后完成联合MotionDebug延迟、末段慢调、送物航向和雷达/降级分析。下面为已核对证据和待人审核的最小提案，不能把发布文档直接当施工授权。
 
 两场实际9434608a8c395d8506b36accf1753b9bf92dad24/dirty1、NormalRun/TASK(service2)、921600、协议1.3；RDK HEAD为4cfaba9。先核对自己的dirty差异，不把expected/干净Git代替实际固件。
 
 ```text
 先读导出说明与开局图：
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/README.md
+
+完整联合分析：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/ANALYSIS.md
 
 第一场开局CSV：
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/race1_opening_10hz.csv
@@ -40,11 +43,26 @@ RDK完整两场32文件ZIP（人工传文件用，GitHub不含原始大日志）
 /home/sunrise/下载/RDK_正式比赛轨迹_20261109_两场_初步.zip
 ```
 
-先审`Task.c::task_process_start`出发三段、`nav_follow_coarse`的600mm/FINE切换及`min(120,D×1.0)`mm/s、视觉ALIGN到ENTER的航向保持。说明里分清理论距离不足、实际轮/gyro变化和定位估计；不只靠加距离、改T265外参或新增等待掩盖问题。RDK仍在分析，接收方可独立判断/驳回，并向人解释重要取舍。本次不要求新增测试代码、ISR、协议、握手、年龄门或FAULT。
+本次不要求新增测试代码、ISR、协议、握手、年龄门或FAULT，RDK也不代写/烧录固件。请先对照自己的dirty差异和以下局部代码，向人说明接受、缩小、替代或拒绝的原因。
+
+### 本轮已审下位机更新：b980c6a（源码回执，不是本批实烧）
+
+只读核对b980c6a570f13fedba1417146028b1e06b5bb59a：新`APP_MOTOR_REAR_HEADING_ZERO_MM_S=0.5`及两个LowRearDeadband封装，只用于START_FORWARD、运输预备点粗段和安全区推进的后轮微小航向补偿；原调用保留。没有新ISR/协议/时间门。方向合理，**不重复要求再实现这个修复**，但两场实跑仍自报9434608/dirty1，不能提前记成新补丁通过。
+
+### 建议先审的一项：FINE末段速度（尚未批准实施）
+
+第二场D75→0耗时2.08s、91%采样平移<20mm/s；另两段最后250mm约3.67/3.71s，D=0后交接仅0.06～0.12s。`nav_follow_coarse`在D≤600mm跳过粗段，预备点FINE使用`min(120mm/s,D×1/s)`；FINE原本已有0.5mm/s单轮零速阈值和助推，b980c6a没有改这段曲线。
+
+请先提出局部可制动曲线与低速实际输出的最小改法，保原D=0/任务配对/到位容差；不要把提高全局最低速度或再加等待当答案。200～250mm/s末段上限只能作讨论初值，不是已经标定；应说明制动与载荷影响，让人决定。当前遥测没有逐轮目标/PWM，不能仅凭原始计数断言某个PID参数就是唯一根因，也不因此要求扩遥测。
+
+### 另外两项先解释，不联动乱改
+
+- 开局0.60m后退＋180°＋1.10m前进理论仍短16.8cm；实际前进时主yaw峰值333.8/343.4°而目标315°。先看b980c6a的航向效果，再决定距离/出发后原闭环收尾，不只加距离或改T265外参。
+- 视觉ALIGN把像素偏差转航向后，ENTER保留这个锁角；三次代码重建95.7/99.3/102.9°，中心估计左移10.5/16.3/16.6cm。内部锁角未直接遥测，不冒充实读。保留现方案与“先横移入口、再法线90°推进”需人选择，不能直接在ENTER强置90°而遗漏横向对准。
 
 ## 当前部署事实（2026-11-09）
 
-此前MotionDebug实采已结束。用户后续已切换NormalRun并跑两场；19:48原身份查询与正式SDK会话均读回9434608/dirty1、service2、921600，静止mode0/fault0，正式运行无全局FAULT。当前进行联合分析，C++导航执行迁移仍低优先级，不作为实测前置。
+此前MotionDebug实采已结束。用户后续已切换NormalRun并跑两场；19:48原身份查询与正式SDK会话均读回9434608/dirty1、service2、921600，静止mode0/fault0，正式运行无全局FAULT。联合分析已交付，C++导航执行迁移仍低优先级，不作为实测前置。
 
 本轮已按actual只读读取GitHub9434608的Task.c、motor.c、Location.c、app_config.h和当前固定入口，RDK不改写/烧录下位机；dirty差异仍未知。NormalRun和MotionDebug都为board405/mode5；service2与service1才区分本轮角色。两场原始日志保留，定位、刹停和投送精度未独立验收。
 
@@ -53,7 +71,7 @@ RDK完整两场32文件ZIP（人工传文件用，GitHub不含原始大日志）
 **目标已由用户批准：这轮直接修改921600＋真实100Hz编码器通路。**
 本次实现已由F405审查并提交，RDK已复核；后续新增重要取舍仍由人决定。
 状态：RDK适配6bfed9e；F405实现14b2a3a，回执41e4699，RDK已核对实际diff及调用链，
-未发现本次阻塞性问题。当前板端已读回14b2a3a/dirty1、service1 MOTIONDEBUG、921600及约100Hz轮反馈；早先51d4ccf/230400为修改前证据，不能覆盖新实际身份。NormalRun/TASK新构建尚未读回，软件源码复核不等于人的地面验收。
+未发现本次阻塞性问题。早先已读回14b2a3a/dirty1、service1 MOTIONDEBUG、921600及约100Hz轮反馈；本轮正式最新实读已是9434608/dirty1、service2 TASK，两场不同轮端点约99.95/99.39Hz。51d4ccf/230400为修改前证据，不覆盖当前actual；软件和频率事实不等于地面精度验收。
 
 ### 修改前问题与证据（6302bf2）
 
@@ -109,7 +127,7 @@ RDK本轮已适配C++串口、共用测试客户端及正式/测试入口；保�
 
 已读回actual：14b2a3a9077e6980a540631ce94345e61eb0487d、source_dirty=1、board405/mode5/service1 MOTIONDEBUG、921600。不是用expected替代；dirty1意味着仅凭Git不能断言镜像逐字等同干净源码。
 220828静止实收轮区间约100.034Hz，区间中位10.000/P9510.004ms。RDK79564a2已将实测配对/换算迁入唯一C++UART/SDK所有者；001339含绘图SDK约99.59～99.97Hz，2393次成功/0失败；011628历史雷达负载下99.957Hz，1645成功/0失败，配齐→API P95 0.667ms。以上是通路/静止实证，不能称地面精度或全比赛联合负载通过。
-本次无需F405新代码或测试程序。NormalRun新构建未在本轮读回，比赛前由人按实际模式部署；MotionDebug不冒充TASK。
+该次静止检查无需F405新代码或测试程序。当时尚未读回NormalRun；后续2026-11-09两场已实际读回9434608/dirty1、service2 TASK并分析，最新部署以上方当前事实为准，不继续按旧“未部署”状态提要求。
 
 ## F405 → RDK：回执
 

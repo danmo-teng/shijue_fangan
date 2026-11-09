@@ -1,0 +1,98 @@
+session,host_action_id,wire_sequence,name,parameters,sent_monotonic_s,ended_monotonic_s,duration_s,reported_outcome,reported_progress,reported_fault
+190754,4c64976260514a10ad84dfb0de5aa9a7:1,237,turn_ccw,"{""angle_ccw_deg"": 90.0, ""rate_deg_s"": 60.0}",918.221000723,920.517820591,2.296819868,reported_done,-906,0
+190754,4c64976260514a10ad84dfb0de5aa9a7:2,238,turn_ccw,"{""angle_ccw_deg"": -90.0, ""rate_deg_s"": 60.0}",944.146751696,946.172481599,2.025729903,reported_done,901,0
+190754,4c64976260514a10ad84dfb0de5aa9a7:3,239,turn_ccw,"{""angle_ccw_deg"": 360.0, ""rate_deg_s"": 60.0}",957.027305209,964.7914958,7.764190591,reported_fault,-3567,5
+190954,ce8a7058c3c44de18a26600afbcfaa70:1,79,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 120.0}",1066.426281903,1068.825591297,2.399309394,reported_done,-1800,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:2,80,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 120.0}",1077.61123568,1080.525081548,2.913845868,reported_done,1797,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:3,81,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 200}",1080.745008096,1083.885888728,3.140880632,reported_done,500,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:4,82,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 200}",1105.363201611,1108.864856176,3.501654565,reported_done,-500,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:5,83,move_body,"{""forward_mm"": 0, ""left_mm"": 300, ""speed_mm_s"": 200}",1109.060447156,1111.103866022,2.043418866,reported_done,300,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:6,84,move_body,"{""forward_mm"": 0, ""left_mm"": -300, ""speed_mm_s"": 200}",1111.391038164,1113.263757944,1.87271978,reported_done,-300,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:7,85,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 60.0}",1134.585494989,1138.143673842,3.558178853,reported_done,-1806,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:8,86,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 60.0}",1138.358687827,1143.082579584,4.723891757,reported_done,1791,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:9,87,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 400}",1143.256595264,1145.102490945,1.845895681,reported_done,500,0
+190954,ce8a7058c3c44de18a26600afbcfaa70:10,88,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 400}",1145.289024755,1147.122448782,1.833424027,reported_done,-500,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:1,179,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 120.0}",1356.313782664,1359.399866168,3.086083504,reported_done,-1795,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:2,180,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 120.0}",1368.107277917,1370.920074895,2.812796978,reported_done,1793,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:3,181,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 200}",1382.435140118,1385.620157677,3.185017559,reported_done,500,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:4,182,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 200}",1393.996710126,1398.421283156,4.42457303,reported_done,-500,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:5,183,move_body,"{""forward_mm"": 0, ""left_mm"": 300, ""speed_mm_s"": 200}",1398.936975416,1401.040451936,2.10347652,reported_done,300,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:6,184,move_body,"{""forward_mm"": 0, ""left_mm"": -300, ""speed_mm_s"": 200}",1401.334131912,1403.520700692,2.18656878,reported_done,-300,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:7,185,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 60.0}",1411.177708089,1415.061478427,3.883770338,reported_done,-1799,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:8,186,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 60.0}",1415.810235209,1419.920628297,4.110393088,reported_done,1793,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:9,187,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 400}",1420.13789671,1421.860600416,1.722703706,reported_done,500,0
+191242,b22fe38a17c54b9aa231b7bd8cf1207b:10,188,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 400}",1421.991273222,1423.860588359,1.869315137,reported_done,-500,0
+191736,28964abb9bba47e494b2c146fcca49a3:1,174,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",1528.40459823,1530.563302211,2.158703981,reported_done,500,0
+191736,28964abb9bba47e494b2c146fcca49a3:2,175,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",1530.852891171,1533.302278847,2.449387676,reported_done,-500,0
+191736,28964abb9bba47e494b2c146fcca49a3:3,176,move_body,"{""forward_mm"": 0, ""left_mm"": 300, ""speed_mm_s"": 300}",1533.479873314,1535.263739645,1.783866331,reported_done,300,0
+191736,28964abb9bba47e494b2c146fcca49a3:4,177,move_body,"{""forward_mm"": 0, ""left_mm"": -300, ""speed_mm_s"": 300}",1535.462469259,1537.002415597,1.539946338,reported_done,-300,0
+191736,28964abb9bba47e494b2c146fcca49a3:5,178,turn_ccw,"{""angle_ccw_deg"": 90.0, ""rate_deg_s"": 60.0}",1537.335742188,1539.302484217,1.966742029,reported_done,-904,0
+191736,28964abb9bba47e494b2c146fcca49a3:6,179,turn_ccw,"{""angle_ccw_deg"": -90.0, ""rate_deg_s"": 60.0}",1539.538446272,1541.363469188,1.825022916,reported_done,898,0
+191910,0581f3f679ed4366ae02166b435690b1:1,77,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 400}",1615.485883306,1617.203227351,1.717344045,reported_done,500,0
+191910,0581f3f679ed4366ae02166b435690b1:2,78,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 400}",1617.464634444,1619.363169834,1.89853539,reported_done,-500,0
+191910,0581f3f679ed4366ae02166b435690b1:3,79,move_body,"{""forward_mm"": 0, ""left_mm"": 400, ""speed_mm_s"": 400}",1619.559853698,1621.483327424,1.923473726,reported_done,400,0
+191910,0581f3f679ed4366ae02166b435690b1:4,80,move_body,"{""forward_mm"": 0, ""left_mm"": -400, ""speed_mm_s"": 400}",1622.864442388,1624.803379494,1.938937106,reported_done,-400,0
+191910,0581f3f679ed4366ae02166b435690b1:5,81,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 120.0}",1625.077599646,1627.58332905,2.505729404,reported_done,1793,0
+191910,0581f3f679ed4366ae02166b435690b1:6,82,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 120.0}",1642.091708648,1645.783312586,3.691603938,reported_done,-1791,0
+191910,0581f3f679ed4366ae02166b435690b1:7,83,move_body,"{""forward_mm"": 700, ""left_mm"": 0, ""speed_mm_s"": 700}",1660.211450228,1661.743447537,1.531997309,reported_done,700,0
+191910,0581f3f679ed4366ae02166b435690b1:8,84,move_body,"{""forward_mm"": -700, ""left_mm"": 0, ""speed_mm_s"": 700}",1662.18131824,1663.803565629,1.622247389,reported_done,-700,0
+191910,0581f3f679ed4366ae02166b435690b1:9,85,move_body,"{""forward_mm"": 350, ""left_mm"": 350, ""speed_mm_s"": 500}",1664.375487826,1666.484236384,2.108748558,reported_done,494,0
+191910,0581f3f679ed4366ae02166b435690b1:10,86,move_body,"{""forward_mm"": -350, ""left_mm"": -350, ""speed_mm_s"": 500}",1666.942277736,1668.643602071,1.701324335,reported_done,-494,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:1,125,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",1743.891399033,1746.14365998,2.252260947,reported_done,500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:2,126,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",1754.343922152,1756.803720924,2.459798772,reported_done,-500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:3,127,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",1757.228709206,1759.523838304,2.295129098,reported_done,500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:4,128,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",1767.353563276,1769.983645455,2.630082179,reported_done,-500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:5,129,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",1770.456533293,1772.623658065,2.167124772,reported_done,500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:6,130,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",1784.201811217,1786.583877359,2.382066142,reported_done,-500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:7,131,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",1787.042827558,1789.243625716,2.200798158,reported_done,500,0
+192105,dbc3bd4adeaa4f7fb52c1e1d40b0add2:8,132,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",1799.32079486,1801.683627795,2.362832935,reported_done,-500,0
+192329,a9dd8c44c59f45e9a988fb6f62028896:1,227,move_body,"{""forward_mm"": 600, ""left_mm"": 0, ""speed_mm_s"": 700}",1875.078756274,1876.423405703,1.344649429,reported_done,600,0
+192329,a9dd8c44c59f45e9a988fb6f62028896:2,228,move_body,"{""forward_mm"": -600, ""left_mm"": 0, ""speed_mm_s"": 700}",1876.89311504,1878.404523073,1.511408033,reported_done,-600,0
+192329,a9dd8c44c59f45e9a988fb6f62028896:3,229,move_body,"{""forward_mm"": 0, ""left_mm"": 300, ""speed_mm_s"": 400}",1879.295259531,1880.963501616,1.668242085,reported_done,300,0
+192329,a9dd8c44c59f45e9a988fb6f62028896:4,230,move_body,"{""forward_mm"": 0, ""left_mm"": -300, ""speed_mm_s"": 400}",1881.452270534,1882.823439361,1.371168827,reported_done,-300,0
+192329,a9dd8c44c59f45e9a988fb6f62028896:5,231,turn_ccw,"{""angle_ccw_deg"": 360.0, ""rate_deg_s"": 120.0}",1897.203541855,1903.003267716,5.799725861,reported_fault,-3589,5
+192531,b981cdebdeb045a6b5b44927fe184c4e:1,221,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 60.0}",2010.853984821,2013.883053712,3.029068891,reported_done,-1790,0
+192531,b981cdebdeb045a6b5b44927fe184c4e:2,222,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 60.0}",2014.329829203,2017.582771859,3.252942656,reported_done,1792,0
+192531,b981cdebdeb045a6b5b44927fe184c4e:3,223,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 120.0}",2017.979488936,2020.324909309,2.345420373,reported_done,-1802,0
+192531,b981cdebdeb045a6b5b44927fe184c4e:4,224,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 120.0}",2020.649912269,2023.262763171,2.612850902,reported_done,1796,0
+192842,997d50393e984145a9a94c3ff57035c0:1,245,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 400}",2188.247911576,2189.98327047,1.735358894,reported_done,500,0
+192842,997d50393e984145a9a94c3ff57035c0:2,246,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 400}",2190.448620955,2192.323318981,1.874698026,reported_done,-500,0
+192842,997d50393e984145a9a94c3ff57035c0:3,247,move_body,"{""forward_mm"": 0, ""left_mm"": 300, ""speed_mm_s"": 400}",2192.843560461,2194.443447889,1.599887428,reported_done,300,0
+192842,997d50393e984145a9a94c3ff57035c0:4,248,move_body,"{""forward_mm"": 0, ""left_mm"": -300, ""speed_mm_s"": 400}",2196.826167523,2198.36330839,1.537140867,reported_done,-300,0
+192842,997d50393e984145a9a94c3ff57035c0:5,249,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 120.0}",2198.754798838,2201.083270418,2.32847158,reported_done,-1792,0
+192842,997d50393e984145a9a94c3ff57035c0:6,250,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 120.0}",2201.468969745,2204.483247194,3.014277449,reported_done,1792,0
+192842,997d50393e984145a9a94c3ff57035c0:7,251,move_body,"{""forward_mm"": 300, ""left_mm"": 0, ""speed_mm_s"": 400}",2223.197904147,2224.483245311,1.285341164,reported_done,300,0
+192842,997d50393e984145a9a94c3ff57035c0:8,252,move_body,"{""forward_mm"": 0, ""left_mm"": 300, ""speed_mm_s"": 400}",2224.95660641,2226.444021408,1.487414998,reported_done,300,0
+192842,997d50393e984145a9a94c3ff57035c0:9,253,move_body,"{""forward_mm"": -300, ""left_mm"": 0, ""speed_mm_s"": 400}",2227.533932717,2229.003273547,1.46934083,reported_done,-300,0
+192842,997d50393e984145a9a94c3ff57035c0:10,254,move_body,"{""forward_mm"": 0, ""left_mm"": -300, ""speed_mm_s"": 400}",2229.482646205,2231.243385596,1.760739391,reported_done,-300,0
+192842,997d50393e984145a9a94c3ff57035c0:11,255,move_body,"{""forward_mm"": 700, ""left_mm"": 0, ""speed_mm_s"": 700}",2232.848014964,2234.403227652,1.555212688,reported_done,700,0
+192842,997d50393e984145a9a94c3ff57035c0:12,0,move_body,"{""forward_mm"": -700, ""left_mm"": 0, ""speed_mm_s"": 700}",2234.876627741,2236.483277263,1.606649522,reported_done,-700,0
+192842,997d50393e984145a9a94c3ff57035c0:13,1,move_body,"{""forward_mm"": 600, ""left_mm"": 0, ""speed_mm_s"": 200}",2262.330431336,2266.283331303,3.952899967,reported_done,600,0
+192842,997d50393e984145a9a94c3ff57035c0:14,2,move_body,"{""forward_mm"": -600, ""left_mm"": 0, ""speed_mm_s"": 200}",2267.081895981,2273.803215801,6.72131982,reported_done,-600,0
+193147,32af95d7d37149e7ae3694522b398ec1:1,175,move_body,"{""forward_mm"": 400, ""left_mm"": 0, ""speed_mm_s"": 400}",2388.919493942,2390.383153198,1.463659256,reported_done,400,0
+193147,32af95d7d37149e7ae3694522b398ec1:2,176,move_body,"{""forward_mm"": -400, ""left_mm"": 0, ""speed_mm_s"": 400}",2390.799767897,2392.483261575,1.683493678,reported_done,-400,0
+193147,32af95d7d37149e7ae3694522b398ec1:3,177,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",2409.765961244,2411.963005887,2.197044643,reported_done,500,0
+193147,32af95d7d37149e7ae3694522b398ec1:4,178,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",2413.934018129,2416.664739059,2.73072093,reported_done,-500,0
+193147,32af95d7d37149e7ae3694522b398ec1:5,179,move_body,"{""forward_mm"": 500, ""left_mm"": 0, ""speed_mm_s"": 300}",2418.390880504,2420.742760439,2.351879935,reported_done,500,0
+193147,32af95d7d37149e7ae3694522b398ec1:6,180,move_body,"{""forward_mm"": -500, ""left_mm"": 0, ""speed_mm_s"": 300}",2422.635236048,2426.442798699,3.807562651,reported_done,-500,0
+193147,32af95d7d37149e7ae3694522b398ec1:7,181,turn_ccw,"{""angle_ccw_deg"": 180.0, ""rate_deg_s"": 60.0}",2434.512662196,2438.262515713,3.749853517,reported_done,-1805,0
+193147,32af95d7d37149e7ae3694522b398ec1:8,182,turn_ccw,"{""angle_ccw_deg"": -180.0, ""rate_deg_s"": 60.0}",2440.160850136,2443.142514066,2.98166393,reported_done,1795,0
+194149,b2d70b9d4a994f54a45bae832cfef421:1,19,turn_ccw,"{""angle_ccw_deg"": 90.0, ""rate_deg_s"": 120.0}",2961.186885479,2963.034402193,1.847516714,reported_done,-904,0
+194149,b2d70b9d4a994f54a45bae832cfef421:2,20,turn_ccw,"{""angle_ccw_deg"": 90.0, ""rate_deg_s"": 120.0}",2963.527290979,2965.354769752,1.827478773,reported_done,-908,0
+194149,b2d70b9d4a994f54a45bae832cfef421:3,21,turn_ccw,"{""angle_ccw_deg"": 90.0, ""rate_deg_s"": 120.0}",2965.824131492,2968.174196426,2.350064934,reported_done,-907,0
+194149,b2d70b9d4a994f54a45bae832cfef421:4,22,turn_ccw,"{""angle_ccw_deg"": 90.0, ""rate_deg_s"": 120.0}",2968.557373066,2970.1941708,1.636797734,reported_done,-905,0
+194149,b2d70b9d4a994f54a45bae832cfef421:5,23,turn_ccw,"{""angle_ccw_deg"": -90.0, ""rate_deg_s"": 120.0}",2970.594785886,2972.374186559,1.779400673,reported_done,905,0
+194149,b2d70b9d4a994f54a45bae832cfef421:6,24,turn_ccw,"{""angle_ccw_deg"": -90.0, ""rate_deg_s"": 120.0}",2972.858430405,2974.514079016,1.655648611,reported_done,900,0
+194149,b2d70b9d4a994f54a45bae832cfef421:7,25,turn_ccw,"{""angle_ccw_deg"": -90.0, ""rate_deg_s"": 120.0}",2974.864194779,2976.494053611,1.629858832,reported_done,893,0
+194149,b2d70b9d4a994f54a45bae832cfef421:8,26,turn_ccw,"{""angle_ccw_deg"": -90.0, ""rate_deg_s"": 120.0}",2977.092169285,2978.733970178,1.641800893,reported_done,892,0
+194149,b2d70b9d4a994f54a45bae832cfef421:9,27,move_body,"{""forward_mm"": 50, ""left_mm"": 0, ""speed_mm_s"": 120}",2986.549664103,2990.453743086,3.904078983,reported_done,50,0
+194149,b2d70b9d4a994f54a45bae832cfef421:10,28,move_body,"{""forward_mm"": -50, ""left_mm"": 0, ""speed_mm_s"": 120}",2990.908214788,2997.593654673,6.685439885,reported_fault,-43,4
+194149,b2d70b9d4a994f54a45bae832cfef421:12,30,move_body,"{""forward_mm"": 0, ""left_mm"": 50, ""speed_mm_s"": 200}",3012.627706106,3013.31341955,0.685713444,reported_done,50,0
+194149,b2d70b9d4a994f54a45bae832cfef421:13,31,move_body,"{""forward_mm"": 0, ""left_mm"": -50, ""speed_mm_s"": 200}",3014.127121471,3014.893548682,0.766427211,reported_done,-50,0
+194149,b2d70b9d4a994f54a45bae832cfef421:14,32,move_body,"{""forward_mm"": 30, ""left_mm"": 0, ""speed_mm_s"": 200}",3015.987465654,3016.473233776,0.485768122,reported_done,30,0
+194149,b2d70b9d4a994f54a45bae832cfef421:15,33,move_body,"{""forward_mm"": -30, ""left_mm"": 0, ""speed_mm_s"": 200}",3017.039446827,3017.393326855,0.353880028,reported_done,-30,0
+194149,b2d70b9d4a994f54a45bae832cfef421:16,34,move_body,"{""forward_mm"": 400, ""left_mm"": 0, ""speed_mm_s"": 700}",3018.829365408,3019.973243317,1.143877909,reported_done,400,0
+194149,b2d70b9d4a994f54a45bae832cfef421:17,35,move_body,"{""forward_mm"": -400, ""left_mm"": 0, ""speed_mm_s"": 700}",3020.444864075,3021.673141196,1.228277121,reported_done,-400,0
+194149,b2d70b9d4a994f54a45bae832cfef421:18,36,move_body,"{""forward_mm"": 30, ""left_mm"": 0, ""speed_mm_s"": 120}",3040.822012497,3042.152758315,1.330745818,reported_done,30,0
+194149,b2d70b9d4a994f54a45bae832cfef421:19,37,turn_ccw,"{""angle_ccw_deg"": 10.0, ""rate_deg_s"": 30.0}",3042.688497531,3047.092611452,4.404113921,reported_done,-107,0
+194149,b2d70b9d4a994f54a45bae832cfef421:20,38,turn_ccw,"{""angle_ccw_deg"": -10.0, ""rate_deg_s"": 30.0}",3047.795470079,3048.512742698,0.717272619,reported_done,109,0
