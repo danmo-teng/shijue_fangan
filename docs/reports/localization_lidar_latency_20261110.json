@@ -3912,5 +3912,315 @@
       }
     },
     "conclusion": "Existing manager failed real firmware USB upload, 0/9323648 bytes in 1s; no Pose or live SDK output latency validation. No UART, wheel input or motor command, reset or recovery cycle was run. Current parser/replay results remain separately valid. No SDK/USB code was changed."
+  },
+  "formal_relay_pty": {
+    "stage": "05I",
+    "measured_upper_commit": "a4af551",
+    "goal_status_verified": "active",
+    "log_root": "/tmp/rdk_lidar_latency_20261110/relay_joint_1794263012274973842",
+    "scope": "Original formal C++ relay and serial writer, separate isolated synthetic 100Hz stream under replay/real vision compute load. Not a physical end-to-end UART/SDK measurement.",
+    "source_code_changed": false,
+    "all_relay_frames_decoded_and_crc_checked": true,
+    "relay_samples": [
+      {
+        "label": "R1",
+        "scope": "Original formal DynamicPoseRelay plus SerialPort::write_all and PI lock, fake 921600 PTY, synthetic unique pose IDs at 100Hz; concurrent production localization replay and saved-frame formal YOLO/VSE/tracking, no hardware UART/SDK/camera/JPU/motors",
+        "numerical_pose_is_synthetic": true,
+        "physical_baud_line_timing": false,
+        "window_ns": [
+          36588627225031,
+          36598618521717
+        ],
+        "samples": 999,
+        "native_write_samples": 999,
+        "observer_samples": 999,
+        "missing_at_native": [],
+        "missing_at_observer": [],
+        "write_errors": 0,
+        "all_native_count": 1432,
+        "all_observer_count": 1432,
+        "write_call_ms": {
+          "p50": 0.040458,
+          "p95": 0.07434969999999998,
+          "p99": 0.09734799999999999,
+          "max": 0.146582
+        },
+        "scheduling": {
+          "policy": 1,
+          "priority": 10,
+          "pi": 1
+        },
+        "errors": [],
+        "local_send_to_write_callback_ms": {
+          "p50": 0.345957,
+          "p95": 0.4942813999999998,
+          "p99": 0.6488034999999994,
+          "max": 9.786512
+        },
+        "local_send_to_write_return_ms": {
+          "p50": 0.388874,
+          "p95": 0.5568852,
+          "p99": 0.7339328399999999,
+          "max": 9.835761
+        },
+        "local_send_to_pty_observer_ms": {
+          "p50": 0.63679,
+          "p95": 3.2340604999999987,
+          "p99": 5.873203319999998,
+          "max": 11.427631
+        },
+        "latency_start": "Python recorded monotonic_ns immediately before actual local sendto, not kernel receipt or a physical sampling time"
+      },
+      {
+        "label": "R2",
+        "scope": "Original formal DynamicPoseRelay plus SerialPort::write_all and PI lock, fake 921600 PTY, synthetic unique pose IDs at 100Hz; concurrent production localization replay and saved-frame formal YOLO/VSE/tracking, no hardware UART/SDK/camera/JPU/motors",
+        "numerical_pose_is_synthetic": true,
+        "physical_baud_line_timing": false,
+        "window_ns": [
+          36603130556010,
+          36613120193050
+        ],
+        "samples": 1000,
+        "native_write_samples": 1000,
+        "observer_samples": 1000,
+        "missing_at_native": [],
+        "missing_at_observer": [],
+        "write_errors": 0,
+        "all_native_count": 1420,
+        "all_observer_count": 1420,
+        "write_call_ms": {
+          "p50": 0.0425,
+          "p95": 0.07442529999999999,
+          "p99": 0.09493224999999998,
+          "max": 0.137
+        },
+        "scheduling": {
+          "policy": 1,
+          "priority": 10,
+          "pi": 1
+        },
+        "errors": [],
+        "local_send_to_write_callback_ms": {
+          "p50": 0.347624,
+          "p95": 0.5276486499999999,
+          "p99": 0.7853001599999992,
+          "max": 4.547777
+        },
+        "local_send_to_write_return_ms": {
+          "p50": 0.3917485,
+          "p95": 0.5891521499999999,
+          "p99": 0.8613598299999996,
+          "max": 4.628777
+        },
+        "local_send_to_pty_observer_ms": {
+          "p50": 0.8616015,
+          "p95": 3.850086549999999,
+          "p99": 10.444286909999997,
+          "max": 17.931277
+        },
+        "latency_start": "Python recorded monotonic_ns immediately before actual local sendto, not kernel receipt or a physical sampling time"
+      }
+    ],
+    "localization_load": [
+      {
+        "label": "R1",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Recorded telemetry/Pose plus lidar PTY through production RadarWorker/native input/numerical child/logging, with real formal YOLO/VSE/tracker compute on saved frames and additional synthetic 100Hz relay fixture; excludes physical UART/SDK/camera/JPU/GUI and accuracy truth",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.504308,
+          "p95": 3.0640688999999988,
+          "p99": 4.485556499999999,
+          "max": 8.332891
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 1.7567024999999998,
+          "p95": 4.15048075,
+          "p99": 7.006624239999997,
+          "max": 14.262872
+        },
+        "fits": 97,
+        "packet_to_lidar_result_ms": {
+          "p50": 42.66545,
+          "p95": 61.6287912,
+          "p99": 84.09140087999991,
+          "max": 95.321286
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 45.302207,
+          "p95": 143.54549019999988,
+          "p99": 218.51087347999947,
+          "max": 280.124261
+        },
+        "geometry_wall_ms": {
+          "p50": 31.627943,
+          "p95": 46.57648779999999,
+          "p99": 48.720894039999976,
+          "max": 51.120007
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 15.603708,
+          "p95": 19.363971199999998,
+          "p99": 21.07221912,
+          "max": 21.211542
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 97
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.13464,
+          "p95": 2.077943,
+          "p99": 6.147423,
+          "max": 15.506899
+        },
+        "monotonic_realtime_offset_change_ns": 42,
+        "stopped_cleanly": true,
+        "errors": [],
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 102,
+          "scan_queue_drops": 1,
+          "fit_requests_coalesced": 2,
+          "reader_logging_healthy": true,
+          "logging_healthy": true
+        }
+      },
+      {
+        "label": "R2",
+        "reader": "native",
+        "source": "rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+        "window": [
+          4064000000000,
+          4074000000000
+        ],
+        "profiled": false,
+        "scope": "Recorded telemetry/Pose plus lidar PTY through production RadarWorker/native input/numerical child/logging, with real formal YOLO/VSE/tracker compute on saved frames and additional synthetic 100Hz relay fixture; excludes physical UART/SDK/camera/JPU/GUI and accuracy truth",
+        "wheel_samples": 1000,
+        "wheel_ids_with_control": 1000,
+        "missing_wheel_ids": [],
+        "socket_injection_to_control_kernel_ms": {
+          "p50": 1.577121,
+          "p95": 3.3180500999999993,
+          "p99": 5.018436009999999,
+          "max": 8.856056
+        },
+        "socket_injection_to_observer_ms": {
+          "p50": 2.0149939999999997,
+          "p95": 4.843251349999999,
+          "p99": 8.46735232,
+          "max": 16.692698
+        },
+        "fits": 100,
+        "packet_to_lidar_result_ms": {
+          "p50": 43.549052,
+          "p95": 75.08844484999999,
+          "p99": 102.81359179000016,
+          "max": 133.313293
+        },
+        "reference_to_lidar_result_ms": {
+          "p50": 48.545178,
+          "p95": 187.91536814999995,
+          "p99": 274.98825944000004,
+          "max": 284.156
+        },
+        "geometry_wall_ms": {
+          "p50": 33.1191885,
+          "p95": 43.585933049999994,
+          "p99": 49.52200514000002,
+          "max": 52.982168
+        },
+        "geometry_child_cpu_ms": {
+          "p50": 15.8619795,
+          "p95": 20.1989749,
+          "p99": 22.57495872,
+          "max": 22.847082
+        },
+        "rank_xy_counts": {
+          "0": 0,
+          "1": 0,
+          "2": 100
+        },
+        "feeder_lateness_ms": {
+          "p50": 0.176418,
+          "p95": 2.703896,
+          "p99": 7.325633,
+          "max": 19.198133
+        },
+        "monotonic_realtime_offset_change_ns": 251,
+        "stopped_cleanly": true,
+        "errors": [],
+        "final_counts": {
+          "scans_received": 105,
+          "fits": 105,
+          "scan_queue_drops": 0,
+          "fit_requests_coalesced": 0,
+          "reader_logging_healthy": true,
+          "logging_healthy": true
+        }
+      }
+    ],
+    "vision_log": "/tmp/rdk_lidar_latency_20261110/relay_joint_1794263012274973842/vision/20261110_062333_109242_competition/summary.json",
+    "vision": {
+      "pipeline": "competition",
+      "source": "saved_training_images_as_NV12_replay",
+      "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+      "mean_fps": 43.44444444444444,
+      "min_fps_1s": 37,
+      "unique_results": 1955,
+      "camera_opened": false,
+      "jpu_used": false,
+      "gui_used": false,
+      "errors": []
+    },
+    "scheduling_setup": {
+      "requested": true,
+      "requested_priority": 10,
+      "rtprio_limit": [
+        10,
+        10
+      ],
+      "error": null
+    },
+    "sample_table": "analysis/localization_latency_20261110/formal_relay_samples.csv",
+    "sample_table_rows": 1999,
+    "sample_table_sha256": "51454fe37199fddd47339f2a3f7e40e4f134b185dc4af9b9b60d16e72d2daa02",
+    "fingerprints": {
+      "localization/src/dynamic_pose_relay.cpp": "63131d0f109b8ac2d8406bde726de69e460b499bbff958b17db49510c77990a1",
+      "localization/src/serial_port.cpp": "ab9f5043d70b53c1af6f30642f2b5d9f0a596713c41854e0f3dae8b11d15a13c",
+      "localization/include/priority_inheritance_mutex.hpp": "8993f1a7a6d9bea274f934c25a6ca651856d1efd2db0cb1f8723bbf053403876",
+      "localization/tools/low_latency_scheduling.py": "1605a458d58e305af0b928f97bfc5adf930a990756a00c8314aed1901cf7804d",
+      "localization/build/libdebug_wheel_input.a": "b7d30135c1fc732cdfc19dd6f29c01a10031e2e9c305f29652b3f3d03160ec0d",
+      "localization/build/libomni_localization_core.a": "4dfc55a20555d779336eb0bf61539e13a263f6eb74ede23657023479208501ea",
+      "localization/build/libmotion_runtime.so": "3e7641f8912353e37d496cf3f85728930d1785b87741c6579bae9e779d2b281b",
+      "localization/build/liblidar_geometry.so": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975"
+    },
+    "temporary_fixture_fingerprints": {
+      "/tmp/rdk_lidar_latency_20261110/relay_joint_check.py": "b77370546e2e2f65ecbacebe3133e6fc8b923373bca8adead8f4cc0e397132ea",
+      "/tmp/rdk_lidar_latency_20261110/relay_fixture.cpp": "5c99c8cb05a2be8d951badc44c800a18e3d1bc8a9cf82f879e85b2e73c074401",
+      "/tmp/rdk_lidar_latency_20261110/relay_fixture": "84084cdc42639c57c8fd3ed77838a4ab5f91742fcff5b97021c15ab5deb01dd1"
+    },
+    "invalid_first_fixture": {
+      "log_root": "/tmp/rdk_lidar_latency_20261110/relay_joint_1794262924317880987",
+      "reason": "Fixture used incorrect fixed frame constants and did not inherit the existing rtprio setup. Python sink stopped; PTY backed up. Excluded from valid latency/production fault claims; logs retained."
+    },
+    "limitations": [
+      "No source firmware/SDK/physical sample time",
+      "PTY does not model 921600 bit-level serialization or the F405 receiver",
+      "Uncontended original PI mutex; no actual task-command contention",
+      "Separate relay and localization inputs; quantiles must not be added as measured end-to-end delay",
+      "Additional synthetic Python sender/receiver load makes radar results a stress case, not comparable to 05G as an algorithm regression",
+      "FIFO10 measured, not a PREEMPT_RT kernel or guaranteed deadline",
+      "Real T265 still has no Pose; 05H startup limitation remains"
+    ]
   }
 }
