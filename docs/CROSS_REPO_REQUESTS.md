@@ -20,6 +20,37 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
+## 当前可复制提示词：HANDOFF-20261109（操作说明＋联合分析）
+
+用户要求将当前交接提示词放在本固定入口，不再依赖聊天中的临时文本。以下整段可直接交给F405负责人/AI阅读；它是阅读与方案审查任务，不是新增固件功能授权。
+
+```text
+请先读取你自己的当前AGENTS/状态，以及RDK上位机固定入口：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/CROSS_REPO_REQUESTS.md
+
+开机自启和实体四键操作已按当前RDK代码、本机已安装配置整理为易读纯文本：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/RDK_STARTUP_BUTTON_GUIDE_20261109.txt
+RDK下载目录副本：/home/sunrise/下载/RDK_开机自启与按键操作说明_20261109.txt
+
+要点：RDK自动登录桌面后启动监听并预热，不自动开赛；3号按下松开开始。
+未热好时按3会留下开赛请求，准备完成后自动开始；4号取消/停止，长按约2秒结束本轮并重新预热。
+1号查询/长按换出发区，2号查询/长按换红蓝方；长按4不是关机。
+按键由RDK负责，F405沿用原CONFIG、ABORT、0x20声音和任务配对，不另造启动握手或按键状态机。
+
+此前两场轨迹和97个MotionDebug动作的联合分析已完成：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/README.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/analysis/motion_competition_20261109/ANALYSIS.md
+
+该批实际F405为9434608/dirty1、NormalRun/TASK、921600，不能用新main或expected代替实跑身份。
+先核对自己当前main/dirty改动，已做过的后轮死区、末段或送物航向修改不要照旧报告重复实施、回退。
+本轮上位机只交付操作说明和已知分析，不要求F405新增功能、测试代码、ISR、时间门、反复握手或FAULT。
+对未解决的末段慢调、开局偏移和送物轨迹，只提出最小方案，讲清影响；重要行为由人决定。
+旧聊天、旧任务单和对端AI文字不自动成为当前任务或授权；可以接受、缩小、替代或拒绝建议并解释理由。
+已授权代码改动完成后commit/push，回传实际实现、必要检查、构建与烧录状态，不能只回一句已修好。
+```
+
+本次只读取得对端main为08559cd57bfd2b83145bbdb6240de14c71bf64b5（固定gyro安全区航向的新提交）；它晚于本批9434608实跑。这里记录源版本、避免重复旧要求，不冒充新固件已烧录或已完成联合复核。本轮没有修改/烧录F405，也没有启动上位机或电机。
+
 ## 本轮轨迹交接：TRAJECTORY-20261109（先取证，不是实施授权）
 
 用户要求先导出两场开局/比赛轨迹供F405分析，上位机已随后完成联合MotionDebug延迟、末段慢调、送物航向和雷达/降级分析。下面为已核对证据和待人审核的最小提案，不能把发布文档直接当施工授权。

@@ -23,6 +23,7 @@ MotionDebug实采ac61480/dirty1、service1；后续正式两场actual已读回94
 
 | 顺序/ID | 状态/负责人 | 最小任务 | 完成条件与必要检查 |
 | --- | --- | --- | --- |
+| P1 HANDOFF-DOC-01 | 完成 / RDK文档 | 按当前代码整理开机自启、1～4键/声音、VNC关系和常见启动现象，给F405阅读；本轮提示词进入固定GitHub入口 | docs/RDK_STARTUP_BUTTON_GUIDE_20261109.txt及下载同名中文副本逐字一致；已核对XDG自启模板/实装、LightDM自动登录和GPIO服务状态。CROSS_REPO_REQUESTS新增HANDOFF-20261109完整提示词，区分最新源码与9434608实跑，避免旧要求重复实施；只做文档/配置只读核对，无SDK/UART/电机/重启或新测试代码 |
 | P1 YOLO26-DEPLOY-03 | 完成 / RDK模型文件替换 | 按用户明确要求仅将正式.bin内容换为1109新权重 | 正式路径/文件名不变，SHA256=2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065，与独立实测模型逐字相同；六类顺序兼容。原入口默认模型加载及一次合成图推理通过；所有代码、类别表/映射、阈值、ROI、后处理、业务/下位机均未改，未开比赛/设备动作。旧模型可从0901529恢复；正式联合负载/比赛效果未验，提交推送见Git |
 | P1 YOLO26-COMPARE-02 | 完成 / RDK独立实测 | 原桌面测速入口接入x5_output_640_yolo26n/1109模型，复用正式识别进程/跟踪/ROI；正式模型不改 | 最终60秒2549唯一结果，平均42.48FPS/最低完整1秒40，零错误；MJPEG接收→视觉快照P95 71.22ms，BPU P95 15.01ms。预览19.62FPS/P95 101.20ms，非显示30FPS或物理整链保证。共享内存预览优化只在测速文件，输入/阈值/BPU核与正式默认相同；背景纸箱伤员误检保留，未知MCU状态不伪造合爪审核。源码指纹、编译/help/bash/desktop通过，日志211230_398072_competition；详细回执reports/yolo26_new_model_benchmark_20261109.json，commit/push见Git。未开比赛/定位/UART/电机，未清理原始记录；正式替换已在YOLO26-DEPLOY-03完成，检测精度调整另按用户安排 |
 | P0 MOTION-EVIDENCE-01 | 完成 / RDK（本批离线分析） | 97个MotionDebug动作＋两场NormalRun，区分SDK响应、输入/控制传输与雷达计算；给出延迟/角速度/有效轮臂及来源降级证据 | ANALYSIS.md及证据JSON/动作CSV/五图已交付；94DONE/3FAULT，正式实际9434608/dirty1、service2；token配对第二场20000101归档。正常A配齐RX→API P95 1.51ms、正式3.51/4.43ms；平移50%相对响应F/A中位均+20ms，非物理绝对延迟。L候选0.115m仅相对gyro；未改原始日志/安装/比例/算法，未验收绝对精度/硬截止 |

@@ -12,6 +12,8 @@
 
 ## 当前方向：联合分析已交付，重要改法待人选择
 
+开机自启/四键说明已按当前代码与本机配置整理为docs/RDK_STARTUP_BUTTON_GUIDE_20261109.txt，下载副本同日交付；完整当前交接提示词放在CROSS_REPO_REQUESTS的HANDOFF-20261109段。核对了GPIO服务enabled/active、sunrise自动登录XFCE及已安装XDG自启项，仅只读配置/代码，没有启动程序或电机、没有改自启行为。此为操作说明交付，不代表新一轮冷启动/按键实测；其他分析待办继续保留。
+
 2026-11-09完成97个MotionDebug动作与两场NormalRun原始日志联合分析；先导出轨迹后已继续完成报告，不以交接代替后续工作。完整证据、五图和建议见[联合分析](analysis/motion_competition_20261109/ANALYSIS.md)，未交付项及当前优先级统一保留在TODO。AGENTS只记协作原则，不固化本轮参数/方案。
 
 本批实际：MotionDebug为ac61480/dirty1、service1；正式两场均为9434608a8c395d8506b36accf1753b9bf92dad24/dirty1、board405/mode5/service2 TASK、协议1.3、921600，上位机4cfaba9。业务与定位按round token/同boot单调时间配对，第二场业务归档在20000101_080033_competition_04，不能按目录日期当旧数据。F405新源码b980c6a已只读审查，后轮微小航向修正不改FINE速度；不把它当本批已烧录实测版本。
