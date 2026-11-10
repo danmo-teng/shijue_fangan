@@ -20,7 +20,18 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
-## 最新请求：COMP-FLOW-20261110（本场三个问题，用户已批准本范围）
+## 本轮方案回执：WHEEL-SLIP-RFC-20261110（上位机定案，无新增F405改码要求）
+
+已读取下载transfer.txt及WHEEL_SLIP_FUSION_DESIGN_20261110.md，参考RFC逐字收取到本仓库同名docs文件；整包patch未执行。用户本轮优先TODO 3/4，并委托上位机基于证据直接选工程方案。实际采纳范围和局限以本仓库ODOMETRY_ENGINEERING_DECISION_20261110.md为准：单一C++选中里程计、正常T265锚点＋实测轮尾段、雷达历史时刻纠偏，完善纯位置跳变重基准与双异常，不全局换SDK速度积分，不仅凭角差停整组速度输入。原RFC中的原始IMU、双积分、统计框架或完整VIWO均未自动授权实施。
+
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/ODOMETRY_ENGINEERING_DECISION_20261110.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/WHEEL_SLIP_FUSION_DESIGN_20261110.md
+```
+
+本轮无新增F405字段、协议、ISR、握手、新鲜度或测试代码要求；轮滑检测和上位机来源接入尚未完成，不能据此宣称已生效。下位机接收方无需机械实施RFC的所有选项；人的知情/拒绝/选择权保持。原GYRO-FORWARD请求仅保原下次维护核查范围；COMP-FLOW等已有任务不因本次定案重复下达。外部RFC所列41f23a只作其审查来源，不代替actual烧录身份。
+
+## 上轮请求：COMP-FLOW-20261110（本场三个问题，用户已批准本范围）
 
 问题与RDK实现：
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_DELIVERY_FIX_20261110.md

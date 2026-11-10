@@ -1,0 +1,1069 @@
+{
+  "schema": 1,
+  "kind": "read_only_sdk_single_interval_jump_bridge_review",
+  "deployed": false,
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+  "upper_review_head": "2046c0104311a5c5b958c72c0f8a8bd3b5df7a19",
+  "existing_manifest": "/home/sunrise/RDK_X5/shijue_fangan/docs/analysis/priority_todo_20261110/manifest.json",
+  "existing_raw_sha_records": "/home/sunrise/RDK_X5/shijue_fangan/docs/analysis/priority_todo_20261110/round2/motion_source_review.json",
+  "method_source": "/home/sunrise/RDK_X5/shijue_fangan/localization/tools/motion_source_review.py",
+  "reference": {
+    "description": "operator start: bind current warm Pose and gyro to selected formal start",
+    "field_heading_deg": 135,
+    "physical_placement_confirmed": false,
+    "pose_origin": [
+      -1.32110715655615,
+      1.32108390921049
+    ],
+    "reference_sample_ns": 3920809883286,
+    "round_token": "5b8e70f8ac6ec99505f74fc4f68ba28d",
+    "selected_start": {
+      "center_xy_m": [
+        -1.3211019843598,
+        1.3211019843598
+      ],
+      "yaw_deg": 135
+    },
+    "source": "selected_competition_start_at_button",
+    "start_center_xy_m": [
+      -1.3211019843598,
+      1.3211019843598
+    ],
+    "timestamp_monotonic_ns": 3920818919047,
+    "vio_rotation": 0.000540954388835058,
+    "yaw_offset": -9.43762358406406
+  },
+  "support": {
+    "raw_rows": 46582,
+    "jump_count": 21,
+    "phase_no_wheel_jump_count": 9
+  },
+  "method": [
+    "Full quaternion and SDK world omega rotate r_BC; vehicle-center v_W = SDK v_C_W - omega_W cross r_BC_W. Project the same fixed ground plane as existing module.",
+    "Existing >0.05m per adjacent SDK Pose threshold is reused for identifying the review sample, not fitted and not accepted as a new physical classification threshold.",
+    "For a marked adjacent interval only: predicted delta = 0.5*(v_previous+v_current)*actual_capture_dt; add predicted_delta - raw_position_delta to coordinate bias once. Subsequent nonjump intervals use SDK position increments, not continuing velocity integration.",
+    "All marked >50mm samples are bridged for this offline feasibility comparison; this is not proof every marked step is pure position relocalization.",
+    "Full-XY wall endpoints are fixed to first two observations after recorded dual-source transition, starting from last preceding full-XY wall; no best endpoint selection."
+  ],
+  "dual_events_ns": [
+    4133335210666
+  ],
+  "jumps": [
+    {
+      "frame": 11771,
+      "source_monotonic_ns": 3975520130190,
+      "relative_to_formal_reference_s": 54.701211143,
+      "dt_ms": 5.010457000000001,
+      "raw_delta_m": [
+        -0.060022276,
+        0.0008772190000000402
+      ],
+      "raw_delta_norm_m": 0.06002868588761657,
+      "bridge_delta_m": [
+        0.0006448744896966382,
+        0.00017334824064741037
+      ],
+      "bridge_delta_norm_m": 0.0006677669653382474,
+      "velocity_step_mps": 0.0066005681474139545,
+      "quaternion_step_deg": 0.0633568977678052,
+      "yaw_step_deg": 0.048258526921837776,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.12927832325960842,
+          0.037847522679980365
+        ],
+        [
+          0.12813312232175797,
+          0.03134706002870683
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.132478507384574,
+          0.0255654250710781
+        ],
+        [
+          0.130865036264377,
+          0.0194194439186596
+        ]
+      ]
+    },
+    {
+      "frame": 12284,
+      "source_monotonic_ns": 3978090625205,
+      "relative_to_formal_reference_s": 57.271706158,
+      "dt_ms": 5.011107,
+      "raw_delta_m": [
+        0.054781531999999994,
+        -0.0007533089999999798
+      ],
+      "raw_delta_norm_m": 0.05478671118726241,
+      "bridge_delta_m": [
+        0.0003018992975792843,
+        -0.0001723016186968625
+      ],
+      "bridge_delta_norm_m": 0.0003476075857693906,
+      "velocity_step_mps": 0.11583862068701037,
+      "quaternion_step_deg": 0.6971921210990705,
+      "yaw_step_deg": 0.6963633322284106,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.1090420871220306,
+          -0.06558636656969807
+        ],
+        [
+          0.011449970852099395,
+          -0.0031815199259854097
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0307945662534504,
+          -0.122563135959939
+        ],
+        [
+          0.00544087692345447,
+          -0.0108086719511436
+        ]
+      ]
+    },
+    {
+      "frame": 13095,
+      "source_monotonic_ns": 3982154314750,
+      "relative_to_formal_reference_s": 61.335395703,
+      "dt_ms": 5.011422,
+      "raw_delta_m": [
+        0.009360675000000013,
+        -0.04994075200000003
+      ],
+      "raw_delta_norm_m": 0.05081044131653584,
+      "bridge_delta_m": [
+        -0.00035497944194880487,
+        0.00014192102831719496
+      ],
+      "bridge_delta_norm_m": 0.0003822982899319522,
+      "velocity_step_mps": 0.023587431922605293,
+      "quaternion_step_deg": 0.33477271286285365,
+      "yaw_step_deg": 0.3347883290718215,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.08077964766661154,
+          0.03465807084989297
+        ],
+        [
+          -0.060888502390918975,
+          0.0219809542879601
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          -0.0554626301156983,
+          0.0682184760467692
+        ],
+        [
+          -0.0426887893913576,
+          0.0489734228521217
+        ]
+      ]
+    },
+    {
+      "frame": 13180,
+      "source_monotonic_ns": 3982580224928,
+      "relative_to_formal_reference_s": 61.761305881,
+      "dt_ms": 5.010263,
+      "raw_delta_m": [
+        -0.005997909999999995,
+        0.049675131999999955
+      ],
+      "raw_delta_norm_m": 0.05003592373071091,
+      "bridge_delta_m": [
+        -0.00031135337772189375,
+        -0.0002434371893316962
+      ],
+      "bridge_delta_norm_m": 0.00039522473476308177,
+      "velocity_step_mps": 0.021932787514922582,
+      "quaternion_step_deg": 0.41055896071368964,
+      "yaw_step_deg": 0.4094782458785016,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.0581773293211643,
+          -0.05881190801753198
+        ],
+        [
+          -0.06610891182900834,
+          -0.03836350546143957
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          -0.0794258897164399,
+          0.0226222055963002
+        ],
+        [
+          -0.0655326310874281,
+          0.0393317716090962
+        ]
+      ]
+    },
+    {
+      "frame": 13274,
+      "source_monotonic_ns": 3983051232363,
+      "relative_to_formal_reference_s": 62.232313316,
+      "dt_ms": 5.0100229999999994,
+      "raw_delta_m": [
+        0.05415046000000001,
+        0.0012501000000000317
+      ],
+      "raw_delta_norm_m": 0.05416488778001484,
+      "bridge_delta_m": [
+        0.0001326155834985092,
+        -0.0002120472823803262
+      ],
+      "bridge_delta_norm_m": 0.00025010186515004614,
+      "velocity_step_mps": 0.009903508279833342,
+      "quaternion_step_deg": 0.42206560564254064,
+      "yaw_step_deg": 0.417576019069341,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.02953916323864892,
+          -0.04621054135592194
+        ],
+        [
+          0.02340094641693918,
+          -0.03843868375954209
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          -0.0512098404345679,
+          -0.0185096181316277
+        ],
+        [
+          -0.0424682266084542,
+          -0.0139619628693062
+        ]
+      ]
+    },
+    {
+      "frame": 13753,
+      "source_monotonic_ns": 3985451366082,
+      "relative_to_formal_reference_s": 64.632447035,
+      "dt_ms": 5.010774,
+      "raw_delta_m": [
+        -0.071188787,
+        0.021657910000000002
+      ],
+      "raw_delta_norm_m": 0.07441040559020942,
+      "bridge_delta_m": [
+        0.00020279452236294368,
+        5.689630195085508e-05
+      ],
+      "bridge_delta_norm_m": 0.00021062480261378844,
+      "velocity_step_mps": 0.09061231391886448,
+      "quaternion_step_deg": 0.3297666816110074,
+      "yaw_step_deg": 0.32697385387536815,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.077727951821745,
+          -0.014425417646170129
+        ],
+        [
+          0.0032154403020840544,
+          0.03713500381024581
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0423732729119082,
+          0.065249039701564
+        ],
+        [
+          -0.0336073675700861,
+          0.0165915294900333
+        ]
+      ]
+    },
+    {
+      "frame": 14198,
+      "source_monotonic_ns": 3987681135705,
+      "relative_to_formal_reference_s": 66.862216658,
+      "dt_ms": 5.0107219999999995,
+      "raw_delta_m": [
+        0.061060695,
+        0.018452389999999985
+      ],
+      "raw_delta_norm_m": 0.06378792339146278,
+      "bridge_delta_m": [
+        -0.0001841087992307973,
+        6.765213328842513e-06
+      ],
+      "bridge_delta_norm_m": 0.0001842330536727619,
+      "velocity_step_mps": 0.0062123241905619525,
+      "quaternion_step_deg": 0.3499072961746128,
+      "yaw_step_deg": 0.349385569456499,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.03383093213024536,
+          0.0002692733446407322
+        ],
+        [
+          -0.03965500431994976,
+          0.00243102147468571
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0121271053283685,
+          0.0310851129024364
+        ],
+        [
+          0.0165684687197215,
+          0.0359327318738982
+        ]
+      ]
+    },
+    {
+      "frame": 14737,
+      "source_monotonic_ns": 3990381530896,
+      "relative_to_formal_reference_s": 69.562611849,
+      "dt_ms": 5.011295,
+      "raw_delta_m": [
+        -0.050827274,
+        0.0038081450000000405
+      ],
+      "raw_delta_norm_m": 0.05096973367217158,
+      "bridge_delta_m": [
+        0.0007614412267367856,
+        -0.00014592704929536555
+      ],
+      "bridge_delta_norm_m": 0.0007752982945231293,
+      "velocity_step_mps": 0.04207252025309846,
+      "quaternion_step_deg": 0.27982686286085695,
+      "yaw_step_deg": 0.2769073660506915,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.15838010433916966,
+          -0.04914745158268141
+        ],
+        [
+          0.1455098988383665,
+          -0.00909180565336857
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.158443451151384,
+          0.0509641285767468
+        ],
+        [
+          0.124376528918882,
+          0.075014995623343
+        ]
+      ]
+    },
+    {
+      "frame": 16208,
+      "source_monotonic_ns": 3997752304517,
+      "relative_to_formal_reference_s": 76.93338547,
+      "dt_ms": 5.009898,
+      "raw_delta_m": [
+        0.001406934999999998,
+        -0.08884533700000002
+      ],
+      "raw_delta_norm_m": 0.0888564762565892,
+      "bridge_delta_m": [
+        -0.00015013186291164797,
+        -0.00015020574822171678
+      ],
+      "bridge_delta_norm_m": 0.00021237076790407767,
+      "velocity_step_mps": 0.016522239239310555,
+      "quaternion_step_deg": 0.7278697069825935,
+      "yaw_step_deg": -0.721301209125272,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PHASE_NO_WHEEL",
+      "phase_no_wheel": true,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.021734868851963622,
+          -0.030672662379145753
+        ],
+        [
+          -0.03819923076908574,
+          -0.029290932976175566
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          -0.0265962796106285,
+          0.02577594023025
+        ],
+        [
+          -0.0216080419922191,
+          0.0435720429263456
+        ]
+      ]
+    },
+    {
+      "frame": 22931,
+      "source_monotonic_ns": 4031438643769,
+      "relative_to_formal_reference_s": 110.619724722,
+      "dt_ms": 5.010308,
+      "raw_delta_m": [
+        0.023788120000000003,
+        0.062316373000000036
+      ],
+      "raw_delta_norm_m": 0.0667023612551275,
+      "bridge_delta_m": [
+        -1.677480468720873e-05,
+        -0.0003614074520607857
+      ],
+      "bridge_delta_norm_m": 0.0003617965456957309,
+      "velocity_step_mps": 0.10844664081220198,
+      "quaternion_step_deg": 0.08460356535203037,
+      "yaw_step_deg": 0.06100638129187165,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.021754011262437298,
+          -0.1231365987947606
+        ],
+        [
+          0.01505789410269034,
+          -0.021128964144997056
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.105177277148219,
+          -0.0680536624355064
+        ],
+        [
+          0.0258854814377052,
+          0.00590411824817889
+        ]
+      ]
+    },
+    {
+      "frame": 23276,
+      "source_monotonic_ns": 4033166869093,
+      "relative_to_formal_reference_s": 112.347950046,
+      "dt_ms": 5.010925,
+      "raw_delta_m": [
+        -0.06657764399999999,
+        0.09675812900000001
+      ],
+      "raw_delta_norm_m": 0.11745091829428742,
+      "bridge_delta_m": [
+        -7.27274027289394e-05,
+        -0.0012009313047473954
+      ],
+      "bridge_delta_norm_m": 0.0012031314449510405,
+      "velocity_step_mps": 0.1896151068276735,
+      "quaternion_step_deg": 0.08586044143396485,
+      "yaw_step_deg": -0.06205512735765841,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.03681059788730891,
+          -0.3193763463869602
+        ],
+        [
+          -0.06583813381288728,
+          -0.15994884995798417
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.264410764429785,
+          -0.183715925753513
+        ],
+        [
+          0.0770714393708357,
+          -0.1539078301947
+        ]
+      ]
+    },
+    {
+      "frame": 24244,
+      "source_monotonic_ns": 4038017267383,
+      "relative_to_formal_reference_s": 117.198348336,
+      "dt_ms": 5.0109710000000005,
+      "raw_delta_m": [
+        0.078608208,
+        0.025568229999999997
+      ],
+      "raw_delta_norm_m": 0.08266186999036595,
+      "bridge_delta_m": [
+        0.00033278417022012535,
+        -0.0006136878508765207
+      ],
+      "bridge_delta_norm_m": 0.0006981103653882673,
+      "velocity_step_mps": 0.011660589555860969,
+      "quaternion_step_deg": 0.29225669922918057,
+      "yaw_step_deg": 0.2907245704064219,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.06295236861545643,
+          -0.11777529896369346
+        ],
+        [
+          0.06986986093651079,
+          -0.12716239908984572
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.102418591821032,
+          -0.0857588291605622
+        ],
+        [
+          0.112285822450252,
+          -0.0921777457665424
+        ]
+      ]
+    },
+    {
+      "frame": 24321,
+      "source_monotonic_ns": 4038403094206,
+      "relative_to_formal_reference_s": 117.584175159,
+      "dt_ms": 5.01103,
+      "raw_delta_m": [
+        -0.04869440700000001,
+        -0.013782812000000005
+      ],
+      "raw_delta_norm_m": 0.050607422180041876,
+      "bridge_delta_m": [
+        9.523998287112746e-05,
+        -0.00022880425420808876
+      ],
+      "bridge_delta_norm_m": 0.00024783470515852364,
+      "velocity_step_mps": 0.006234718789661971,
+      "quaternion_step_deg": 0.007978484348060862,
+      "yaw_step_deg": -0.004287762557658248,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.022122338950989376,
+          -0.04557770891724675
+        ],
+        [
+          0.015889799420214738,
+          -0.045742540296223835
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0368569390134431,
+          -0.0348068503565735
+        ],
+        [
+          0.0310757476233422,
+          -0.0371588166426942
+        ]
+      ]
+    },
+    {
+      "frame": 24647,
+      "source_monotonic_ns": 4040036596046,
+      "relative_to_formal_reference_s": 119.217676999,
+      "dt_ms": 5.010688,
+      "raw_delta_m": [
+        -0.0030334340000000015,
+        0.346247415
+      ],
+      "raw_delta_norm_m": 0.3462607025291992,
+      "bridge_delta_m": [
+        -0.00023815561194113105,
+        -0.0009692818912373944
+      ],
+      "bridge_delta_norm_m": 0.0009981109558459896,
+      "velocity_step_mps": 0.2627202005348427,
+      "quaternion_step_deg": 0.20828777932109108,
+      "yaw_step_deg": 0.06016867433779299,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.05739242006428134,
+          -0.3244321842812533
+        ],
+        [
+          -0.037666626494247575,
+          -0.06245356523553734
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0383875941238668,
+          -0.326824430990464
+        ],
+        [
+          -0.018105061613663,
+          -0.0704773433662861
+        ]
+      ]
+    },
+    {
+      "frame": 24893,
+      "source_monotonic_ns": 4041269239522,
+      "relative_to_formal_reference_s": 120.450320475,
+      "dt_ms": 5.011779,
+      "raw_delta_m": [
+        0.0019422270000000186,
+        0.10504023700000001
+      ],
+      "raw_delta_norm_m": 0.1050581916593642,
+      "bridge_delta_m": [
+        -3.889458997702073e-05,
+        -0.0006642009835060702
+      ],
+      "bridge_delta_norm_m": 0.0006653388126510518,
+      "velocity_step_mps": 0.18417951320448786,
+      "quaternion_step_deg": 0.06266046068610587,
+      "yaw_step_deg": 0.06117166559408849,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.014291386968560608,
+          -0.22438588053982528
+        ],
+        [
+          -0.0012298840120715125,
+          -0.04067009399778711
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0504766934086136,
+          -0.219094591916524
+        ],
+        [
+          0.0104489955716052,
+          -0.0393104178123046
+        ]
+      ]
+    },
+    {
+      "frame": 25272,
+      "source_monotonic_ns": 4043168116452,
+      "relative_to_formal_reference_s": 122.349197405,
+      "dt_ms": 5.0114160000000005,
+      "raw_delta_m": [
+        -0.006186006999999993,
+        0.30682955300000003
+      ],
+      "raw_delta_norm_m": 0.3068919048733346,
+      "bridge_delta_m": [
+        0.0010112443705275111,
+        -0.0012576992598686944
+      ],
+      "bridge_delta_norm_m": 0.0016138223586249646,
+      "velocity_step_mps": 0.3269509708288496,
+      "quaternion_step_deg": 0.24608962259303652,
+      "yaw_step_deg": -0.05661172771931315,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.1994118758522164,
+          -0.4144250582356626
+        ],
+        [
+          0.20416442694424317,
+          -0.08750863071320704
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.294079330204122,
+          -0.353699515148761
+        ],
+        [
+          0.219151959366597,
+          -0.0355891986862304
+        ]
+      ]
+    },
+    {
+      "frame": 31439,
+      "source_monotonic_ns": 4074068768648,
+      "relative_to_formal_reference_s": 153.249849601,
+      "dt_ms": 5.009612,
+      "raw_delta_m": [
+        0.291248547,
+        0.127488433
+      ],
+      "raw_delta_norm_m": 0.3179292636395818,
+      "bridge_delta_m": [
+        -0.0006553338235829851,
+        -0.00034868466627992136
+      ],
+      "bridge_delta_norm_m": 0.0007423229868666572,
+      "velocity_step_mps": 0.20070530913295562,
+      "quaternion_step_deg": 0.33415980091459185,
+      "yaw_step_deg": 0.013090301219193136,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.22476409834146366,
+          -0.10487742235073944
+        ],
+        [
+          -0.03686647248237861,
+          -0.034328834053916776
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          -0.120263124655659,
+          0.217049574502478
+        ],
+        [
+          -0.0367348390152715,
+          0.0345614939880085
+        ]
+      ]
+    },
+    {
+      "frame": 37093,
+      "source_monotonic_ns": 4102398629313,
+      "relative_to_formal_reference_s": 181.579710266,
+      "dt_ms": 5.011166,
+      "raw_delta_m": [
+        1.795573127,
+        1.787083655
+      ],
+      "raw_delta_norm_m": 2.5333280175241257,
+      "bridge_delta_m": [
+        -0.0012980670807605738,
+        -0.0012915376399165702
+      ],
+      "bridge_delta_norm_m": 0.0018311328792514053,
+      "velocity_step_mps": 0.7015297469524328,
+      "quaternion_step_deg": 0.3493409499914965,
+      "yaw_step_deg": -0.2702928981806707,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          -0.5134007172109675,
+          -0.49925638521035937
+        ],
+        [
+          -0.004669161440258083,
+          -0.016207536725800824
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.419056459582657,
+          0.583377167597146
+        ],
+        [
+          0.00175000942745638,
+          0.0169004804353686
+        ]
+      ]
+    },
+    {
+      "frame": 41221,
+      "source_monotonic_ns": 4123082789028,
+      "relative_to_formal_reference_s": 202.263869981,
+      "dt_ms": 5.009604,
+      "raw_delta_m": [
+        -0.15436481800000001,
+        0.164930872
+      ],
+      "raw_delta_norm_m": 0.22589973345458714,
+      "bridge_delta_m": [
+        0.0001835059537684472,
+        9.141522915524581e-05
+      ],
+      "bridge_delta_norm_m": 0.00020501507064109602,
+      "velocity_step_mps": 0.009138986805207515,
+      "quaternion_step_deg": 0.12379789641874224,
+      "yaw_step_deg": 0.08992483372205477,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": false,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.03224671507507077,
+          0.01695966125652206
+        ],
+        [
+          0.041014945434800755,
+          0.019536328907668883
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          -0.0187644460544102,
+          0.0311216671592388
+        ],
+        [
+          -0.0217746580695737,
+          0.039750397531516
+        ]
+      ]
+    },
+    {
+      "frame": 43267,
+      "source_monotonic_ns": 4133334245291,
+      "relative_to_formal_reference_s": 212.515326244,
+      "dt_ms": 5.010667,
+      "raw_delta_m": [
+        -0.133496636,
+        0.165531308
+      ],
+      "raw_delta_norm_m": 0.21265456908213226,
+      "bridge_delta_m": [
+        0.00021341514349948,
+        -0.0012192327288367015
+      ],
+      "bridge_delta_norm_m": 0.0012377699586520483,
+      "velocity_step_mps": 0.008825002072470979,
+      "quaternion_step_deg": 0.5793468119741269,
+      "yaw_step_deg": 0.5775526809099947,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "T265_PRIMARY_WHEEL_SUSPECT",
+      "phase_no_wheel": false,
+      "wheel_suspect": true,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.04537426180299872,
+          -0.24675235282211055
+        ],
+        [
+          0.039810063357495866,
+          -0.23990250922986842
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.162998327894134,
+          -0.190726960355029
+        ],
+        [
+          0.153561149001938,
+          -0.188549502738275
+        ]
+      ]
+    },
+    {
+      "frame": 43331,
+      "source_monotonic_ns": 4133654934576,
+      "relative_to_formal_reference_s": 212.836015529,
+      "dt_ms": 5.011162000000001,
+      "raw_delta_m": [
+        0.125459957,
+        -0.15190318099999997
+      ],
+      "raw_delta_norm_m": 0.1970146624197311,
+      "bridge_delta_m": [
+        7.603481000098629e-05,
+        -0.000389371522904445
+      ],
+      "bridge_delta_norm_m": 0.0003967259446782033,
+      "velocity_step_mps": 0.04821519647379332,
+      "quaternion_step_deg": 0.5698354157299995,
+      "yaw_step_deg": 0.5675913433326658,
+      "confidence": [
+        3,
+        3
+      ],
+      "recorded_mode": "WHEEL_FALLBACK",
+      "phase_no_wheel": false,
+      "wheel_suspect": true,
+      "fixed_plane_velocity_before_after_mps": [
+        [
+          0.027918564490700144,
+          -0.09816371799461628
+        ],
+        [
+          0.002427614699270678,
+          -0.057237972433450086
+        ]
+      ],
+      "body_center_velocity_before_after_mps": [
+        [
+          0.0115074502824508,
+          -0.102082414081884
+        ],
+        [
+          -0.00706574712358698,
+          -0.0569281727294844
+        ]
+      ]
+    }
+  ],
+  "wall_proxy_comparison": [
+    {
+      "t0_ns": 4133261843907,
+      "t1_ns": 4133362093907,
+      "duration_ms": 100.25,
+      "wall_delta_m": [
+        -0.013927072562696985,
+        0.006247528773071664
+      ],
+      "raw_delta_m": [
+        -0.13197731647548336,
+        0.13264270729450314
+      ],
+      "bridge_delta_m": [
+        0.0018229195365686282,
+        -0.034035478000621185
+      ],
+      "raw_residual_m": 0.17294970726003814,
+      "bridge_residual_m": 0.04325254773832766,
+      "jump_count": 1
+    },
+    {
+      "t0_ns": 4133261843907,
+      "t1_ns": 4133761843907,
+      "duration_ms": 500.0,
+      "wall_delta_m": [
+        0.038654929694503126,
+        -0.0017073777763527698
+      ],
+      "raw_delta_m": [
+        -0.024528463258237636,
+        0.008092784511250152
+      ],
+      "bridge_delta_m": [
+        -0.01619409314674153,
+        -0.007139440455336116
+      ],
+      "raw_residual_m": 0.06393891089066037,
+      "bridge_residual_m": 0.05511735308945615,
+      "jump_count": 2
+    }
+  ],
+  "limitations": [
+    "No independent ground truth. Accepted walls depend on selected deskew, primary yaw and prior, causing correlation and selection bias.",
+    "Speed itself may be erroneous or affected by earlier wheel injection. Continuous speed across a step supports bridge consistency, not real displacement accuracy.",
+    "The bridge removes abrupt coordinate jumps only; smooth SDK drift and severe translation shrink remain.",
+    "Some marked jumps have large simultaneous velocity changes; they cannot all be called pure position-only jumps.",
+    "No new freshness gate, waits, handshakes, stop/fault behavior or live thresholds were implemented. Original files unchanged.",
+    "Recorded Pose body forward/left velocities are retained in each step; fixed-plane velocity used for bridging is recomputed with full quaternion and lever rotation. Do not mix these axes."
+  ]
+}

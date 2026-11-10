@@ -1,0 +1,190 @@
+{
+  "kind": "offline_causal_heading_bridge_review",
+  "deployed": false,
+  "gyro_phase_ms": 28,
+  "session_results": {
+    "20261109_195243_competition_wheel": {
+      "all": {
+        "n": 18726,
+        "full_support_n": 52,
+        "full_support_fraction": 0.002776887749652889,
+        "rate_error_deg": {
+          "n": 18726,
+          "p95_abs": 0.13961848269739766,
+          "rms": 0.0809745289069558,
+          "median": 0.0
+        },
+        "sdk_available_hold_error_deg": {
+          "n": 18726,
+          "p95_abs": 0.6490372094248638,
+          "rms": 0.256561538754602,
+          "median": -0.0005917916552464731
+        },
+        "sdk_available_plus_main_rate_tail_error_deg": {
+          "n": 18726,
+          "p95_abs": 0.07602084563789735,
+          "rms": 0.04269293431828557,
+          "median": -4.104739294586726e-06
+        },
+        "full_support_sdk_error_deg": {
+          "n": 52,
+          "p95_abs": 0.03844001164960545,
+          "rms": 0.027650649086293593,
+          "median": -0.0009119415007885735
+        },
+        "full_support_rate_error_deg": {
+          "n": 52,
+          "p95_abs": 0.10306703238913903,
+          "rms": 0.05535090638269947,
+          "median": 0.0
+        },
+        "missing_sdk_tail_ms": {
+          "n": 18726,
+          "p95_abs": 12.04054325,
+          "rms": 9.034698414799783,
+          "median": 8.3046385
+        }
+      },
+      "active": {
+        "n": 6833,
+        "full_support_n": 20,
+        "full_support_fraction": 0.002926972047416947,
+        "rate_error_deg": {
+          "n": 6833,
+          "p95_abs": 0.2699399978303022,
+          "rms": 0.12544376262587079,
+          "median": -0.002995888581799929
+        },
+        "sdk_available_hold_error_deg": {
+          "n": 6833,
+          "p95_abs": 0.9841542278279132,
+          "rms": 0.42326137344871917,
+          "median": -0.03944630818587141
+        },
+        "sdk_available_plus_main_rate_tail_error_deg": {
+          "n": 6833,
+          "p95_abs": 0.12985554835201674,
+          "rms": 0.06372261246531226,
+          "median": 0.00027822512294778856
+        },
+        "full_support_sdk_error_deg": {
+          "n": 20,
+          "p95_abs": 0.042464349606260235,
+          "rms": 0.024416982244411568,
+          "median": -0.0009746315768229614
+        },
+        "full_support_rate_error_deg": {
+          "n": 20,
+          "p95_abs": 0.15772819621580098,
+          "rms": 0.07702713923489991,
+          "median": -0.01063140761996511
+        },
+        "missing_sdk_tail_ms": {
+          "n": 6833,
+          "p95_abs": 12.098721399999999,
+          "rms": 8.719302928069023,
+          "median": 8.281343999999999
+        }
+      }
+    },
+    "20261109_195756_competition_wheel": {
+      "all": {
+        "n": 23335,
+        "full_support_n": 80,
+        "full_support_fraction": 0.0034283265481037067,
+        "rate_error_deg": {
+          "n": 23335,
+          "p95_abs": 0.16107323311370592,
+          "rms": 0.09182235394726512,
+          "median": 0.0
+        },
+        "sdk_available_hold_error_deg": {
+          "n": 23335,
+          "p95_abs": 0.8648247537448943,
+          "rms": 0.3611668585606315,
+          "median": -0.0013574024458602046
+        },
+        "sdk_available_plus_main_rate_tail_error_deg": {
+          "n": 23335,
+          "p95_abs": 0.08435674217276382,
+          "rms": 0.04881106539383407,
+          "median": -0.00024938451200542965
+        },
+        "full_support_sdk_error_deg": {
+          "n": 80,
+          "p95_abs": 0.07013649798684983,
+          "rms": 0.02754405862013926,
+          "median": 0.00023953926518713748
+        },
+        "full_support_rate_error_deg": {
+          "n": 80,
+          "p95_abs": 0.17583806009830058,
+          "rms": 0.07989892975789085,
+          "median": 0.0
+        },
+        "missing_sdk_tail_ms": {
+          "n": 23335,
+          "p95_abs": 13.800532499999994,
+          "rms": 9.432350927772404,
+          "median": 8.792216999999999
+        }
+      },
+      "active": {
+        "n": 9941,
+        "full_support_n": 49,
+        "full_support_fraction": 0.004929081581329846,
+        "rate_error_deg": {
+          "n": 9941,
+          "p95_abs": 0.2744091119242151,
+          "rms": 0.1342393679825093,
+          "median": -0.004319039704929212
+        },
+        "sdk_available_hold_error_deg": {
+          "n": 9941,
+          "p95_abs": 1.188779161899962,
+          "rms": 0.5524146453814984,
+          "median": -0.07249858654323867
+        },
+        "sdk_available_plus_main_rate_tail_error_deg": {
+          "n": 9941,
+          "p95_abs": 0.13225105559132455,
+          "rms": 0.06938598959722635,
+          "median": -0.0007976885734695497
+        },
+        "full_support_sdk_error_deg": {
+          "n": 49,
+          "p95_abs": 0.08526300514273452,
+          "rms": 0.03226013195966204,
+          "median": -0.000708598876412183
+        },
+        "full_support_rate_error_deg": {
+          "n": 49,
+          "p95_abs": 0.225624200728353,
+          "rms": 0.10115762719064514,
+          "median": -0.005101448163148322
+        },
+        "missing_sdk_tail_ms": {
+          "n": 9941,
+          "p95_abs": 14.135919,
+          "rms": 9.47691616224993,
+          "median": 8.822629000000001
+        }
+      }
+    }
+  },
+  "method": [
+    "Use main gyro newest packet actually received by each wheel callback; physical candidate base=MCU gyro event estimate minus28ms.",
+    "Proxy is subsequent gyro yaw at wheel interval endpoint plus28ms in original event timeline; no independent angle truth.",
+    "SDK support only samples whose recorded callback and processing time are both no later than wheel receive. Native socket arrival not separately retained.",
+    "Strict SDK bridge only when this already processed SDK history covers wheel endpoint; otherwise report held-to-last-SDK and optional main-rate tail separately.",
+    "All SDK motion and main gyro remain correlated after wheel input; clock median offset is not hardware calibration."
+  ],
+  "existing_manifest": "/home/sunrise/RDK_X5/shijue_fangan/docs/analysis/priority_todo_20261110/manifest.json",
+  "active_definition": "Latest main-gyro measured rate absolute value >=5 degrees/s, offline grouping only",
+  "limitations": [
+    "Proxy is delayed main gyro, not independent heading truth; repeat phase28ms is only a fixed candidate, not all-state calibrated hardware delay.",
+    "SDK callback+processing gives optimistic availability; exact arrival in NativeMotionSource socket is not retained.",
+    "Only actual received SDK samples before each wheel RX are used; no waiting, extrapolated SDK yaw or added age gate.",
+    "Adding a main-rate tail is a distinct hybrid candidate and retains SDK rotational/clock dependency; keep independent main-rate fallback."
+  ]
+}
