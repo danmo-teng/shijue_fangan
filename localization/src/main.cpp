@@ -2124,13 +2124,15 @@ int main(int argc, char **argv)
                                            wheel_gate == "corner_obstacle";
                 const bool inside_field = std::fabs(fused.x_m) <= config.field_half_m &&
                                           std::fabs(fused.y_m) <= config.field_half_m;
-                const double processing_age_ms = std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - t265_received).count();
-                // The migrated test path retains timestamps, but does not use
-                // pose age to clear VALID in the competition 0x16 output.
-                const bool source_fresh = !options.wheel_feedback_socket.empty() ||
+                // Pure T265 and official-input paths share the reviewed
+                // adoption policy. Disabling wheel input must not restore a
+                // hidden 250ms pose-age gate. Explicit legacy fusion keeps
+                // its old branch; no extra clock is read on the direct path.
+                const bool source_fresh = options.t265_only_output ||
+                    !options.wheel_feedback_socket.empty() ||
                     (std::isfinite(capture_age_ms) && capture_age_ms >= -50.0 &&
-                     capture_age_ms + processing_age_ms <= 250.0);
+                     capture_age_ms + std::chrono::duration<double, std::milli>(
+                         std::chrono::steady_clock::now() - t265_received).count() <= 250.0);
                 tx.status = omni::t265_pose_status(t265_update_accepted,
                                                    latest_t265.tracker_confidence, source_fresh);
                 if (uart_fresh && config.encoder_fusion_weight > 0.0 &&
