@@ -343,8 +343,10 @@ class VisionSnapshot:
     safe_corridor_obstacle_track_id: int | None = None
     safe_corridor_obstacle_bbox: tuple[int, int, int, int] | None = None
     safe_corridor_status: str = SAFE_CORRIDOR_CLEAR
+    safe_corridor_obstacle_remembered: bool = False
     ground_localizer_calibrated: bool = True
     carried_reference_bboxes: tuple[tuple[int, int, int, int], ...] = ()
+    carried_reference_track_ids: tuple[int, ...] = ()
     safe_sweep_capture_audit: CargoAudit | None = None
     safe_sweep_observation_valid: bool | None = None
     safe_sweep_observation_reason: str = ""
@@ -505,6 +507,7 @@ class CompetitionSettings:
     disperse_limit: int = 2  # Consecutive physical attempts without audit progress.
     approach_missing_hold_min_s: float = 0.30
     approach_missing_frame_multiplier: float = 2.5
+    approach_center_tolerance_px: int = 64
     yield_distance_m: float = 0.25
     detour_lateral_m: float = 0.25
     boundary_margin_m: float = 0.08
@@ -541,6 +544,8 @@ class CompetitionSettings:
             raise ValueError("start zone must be 1..4")
         if self.max_batch_count != 1:
             raise ValueError("formal material delivery must contain exactly one item")
+        if not 1 <= self.approach_center_tolerance_px <= CAMERA_IMAGE_CENTER_X_PX:
+            raise ValueError("approach centre tolerance is outside the image")
         if (
             self.audit_stable_frames <= 0 or
             self.normal_grab_audit_frames <= 0 or
@@ -709,6 +714,9 @@ class CompetitionMission:
         self.transport_audit_tx_baseline: int | None = None
         self.transport_audit_initial_ack: int | None = None
         self.transport_audit_handoff_active = False
+        self.empty_load_recheck_pending = False
+        self.empty_load_view_moved = False
+        self.empty_load_recheck_done = False
         self.navigation_initial_ack: int | None = None
         self.enter_initial_ack: int | None = None
         self.task_complete_initial_ack: int | None = None
@@ -734,6 +742,7 @@ class CompetitionMission:
         self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s: float | None = None
         self.safe_zone_acquire_timeout_reported = False
+        self.safe_zone_view_pitch_cdeg = 12000
         self.safe_zone_freeze_frame_floor: int | None = None
         self.safe_zone_freeze_last_frame_sequence: int | None = None
         self.safe_zone_freeze_hits = 0
@@ -1632,6 +1641,17 @@ class CompetitionMission:
             return CompetitionOutput(self.state, self._hold(),
                 "mode52等待对准后新图及对应角度分区距离表：" + vision.range_reason,
                 self.selected_batch, reason="approach_range_wait", expected_stm_modes=(52, 24, 3))
+        if (self.state != CompetitionState.CLUSTER_APPROACH and
+                abs(target.center_px[0] - CAMERA_IMAGE_CENTER_X_PX) >
+                self.settings.approach_center_tolerance_px):
+            # Reuse the frame already requested by mode52. A small residual
+            # error is acceptable; do not drive along an overshot heading.
+            return CompetitionOutput(
+                self.state, self._approach_command(target),
+                "目标明显偏出中心容许范围，原地重新对准；小偏差直接定距前进",
+                self.selected_batch, reason="approach_range_realign",
+                expected_stm_modes=(20, 52, 24, 3),
+            )
         flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if self.state == CompetitionState.CLUSTER_APPROACH:
             flags |= CMD_CLUSTER_TARGET
@@ -1924,6 +1944,12 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
         ready = stm.audit_fresh and stm.claw_visible and stm.camera_pitch_cdeg == 14000
+        if self.empty_load_recheck_pending:
+            if stm.camera_pitch_cdeg in {13800, 14200}:
+                self.empty_load_view_moved = True
+            elif self.empty_load_view_moved and ready:
+                self.empty_load_recheck_pending = False
+                self.empty_load_recheck_done = True
         if stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT, STM_MODE_RECOVERY_WAIT}:
             key = (stm.mode, ready, self.audit_epoch)
             if key != self.audit_camera_key:
@@ -1966,6 +1992,26 @@ class CompetitionMission:
             if vision.frame_sequence <= self.audit_recheck_frame_floor:
                 return self._audit_placeholder("audit_recheck_wait_frame")
             self.audit_recheck_frame_floor = None
+        if (stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT} and
+                vision.capture_audit.total_count == 0 and
+                not self.empty_load_recheck_done):
+            first = not self.empty_load_recheck_pending
+            self.empty_load_recheck_pending = True
+            self._invalidate_audit_evidence()
+            # An observed absence is not a proven empty claw. Keep it
+            # non-STABLE; the MCU reuses its existing 138/142 -> 140 view.
+            return CompetitionOutput(
+                self.state,
+                CommandRequest(CMD_CARGO_AUDIT, CMD_VALID,
+                    audit=self._audit_placeholder_payload(),
+                    audit_vision_frame=vision.frame_sequence),
+                "合爪载荷暂缺框，保持夹持并换视角复看，不直接双开放弃",
+                self.selected_batch,
+                event="load_empty_reobserve" if first else "",
+                reason="load_empty_reobserve",
+                tx_policy="audit_unstable_publish",
+                expected_stm_modes=self.expected_stm_modes(),
+            )
         return None
 
     def _audit_vision_fresh(self, vision: VisionSnapshot, now: float) -> bool:
@@ -2138,6 +2184,9 @@ class CompetitionMission:
         recheck_context: str,
     ) -> None:
         self.transport_audit_handoff_active = False
+        self.empty_load_recheck_pending = False
+        self.empty_load_view_moved = False
+        self.empty_load_recheck_done = False
         self.audit_epoch += 1
         self.post_grab_audit_active = False
         self.post_grab_camera_ready = None
@@ -2164,6 +2213,9 @@ class CompetitionMission:
         self, vision: VisionSnapshot, now: float
     ) -> None:
         self.audit_epoch += 1
+        self.empty_load_recheck_pending = False
+        self.empty_load_view_moved = False
+        self.empty_load_recheck_done = False
         self.post_grab_audit_active = True
         self.post_grab_camera_ready = None
         self.post_grab_half_close_active = False
@@ -3740,6 +3792,7 @@ class CompetitionMission:
         self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s = None
         self.safe_zone_acquire_timeout_reported = False
+        self.safe_zone_view_pitch_cdeg = 12000
         self.safe_zone_freeze_frame_floor = None
         self.safe_zone_freeze_last_frame_sequence = None
         self.safe_zone_freeze_hits = 0
@@ -3763,6 +3816,7 @@ class CompetitionMission:
         return CommandRequest(
             CMD_ALIGN_SAFE_ZONE,
             self._side_flags() | CMD_USE_FINAL_HEADING,
+            arg_b=11500 if self.safe_zone_view_pitch_cdeg == 11500 else 0,
             aux=round(self.settings.safe_heading_deg * 100.0) % 36000,
         )
 
@@ -3771,7 +3825,7 @@ class CompetitionMission:
             CMD_ALIGN_SAFE_ZONE,
             self._side_flags() | CMD_VISUAL_CORRECTION_VALID,
             max(-32768, min(32767, self.safe_zone_visual_pixel_error)),
-            0,
+            11500 if self.safe_zone_view_pitch_cdeg == 11500 else 0,
         )
 
     def _begin_safe_corridor_check(
@@ -3806,11 +3860,7 @@ class CompetitionMission:
         self.safe_sweep_execution_seen = False
         self.safe_sweep_attempts += 1
         self._set_state(CompetitionState.CLEAR_SAFE_ZONE, now)
-        original_ids = set(self.last_selected_track_ids)
-        if self.selected_batch is not None:
-            original_ids.update(self.selected_batch.track_ids)
-        if self.locked_target_track_id is not None:
-            original_ids.add(self.locked_target_track_id)
+        original_ids = set(vision.carried_reference_track_ids)
         self.safe_sweep_pickup = SweepPickupContext(
             target_id=vision.safe_corridor_obstacle_track_id,
             target_class=vision.safe_corridor_obstacle_class,
@@ -3825,7 +3875,8 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             self.safe_sweep_command,
-            f"安全区推进走廊发现{vision.safe_corridor_obstacle_class}，执行第{self.safe_sweep_attempts}次扫障",
+            f"安全区推进走廊{'保留此前漏检的' if vision.safe_corridor_obstacle_remembered else '发现'}"
+            f"{vision.safe_corridor_obstacle_class}阻挡，执行第{self.safe_sweep_attempts}次扫障",
             self.selected_batch,
             event="safe_zone_clear_start",
             motion_expected=True,
@@ -4136,7 +4187,7 @@ class CompetitionMission:
         if vision.frame_sequence == self.safe_zone_freeze_last_frame_sequence:
             return False
         self.safe_zone_freeze_last_frame_sequence = vision.frame_sequence
-        if vision.safe_bbox is None:
+        if vision.safe_bbox is None or vision.safe_zone_filter_blocked:
             self.safe_zone_freeze_hits = 0
             self.safe_zone_freeze_boxes.clear()
             return False
@@ -5149,6 +5200,9 @@ class CompetitionMission:
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
         self.stage_redirect_active = False
+        self.empty_load_recheck_pending = False
+        self.empty_load_view_moved = False
+        self.empty_load_recheck_done = False
         self.transport_separation_active = False
         self.transport_audit_handoff_active = True
         self.audit_camera_key = None
@@ -6179,11 +6233,16 @@ class CompetitionMission:
             ):
                 reason = "SAFE_CORRIDOR_UNAVAILABLE"
                 event = "" if self.safe_zone_acquire_timeout_reported else "safe_zone_acquire_no_box"
+                if not self.safe_zone_acquire_timeout_reported:
+                    self.safe_zone_view_pitch_cdeg = 11500
+                    self.safe_zone_freeze_boxes.clear()
+                    self.safe_zone_freeze_hits = 0
+                    self.safe_zone_freeze_frame_floor = vision.frame_sequence
                 self.safe_zone_acquire_timeout_reported = True
                 return CompetitionOutput(
                     self.state,
                     self._safe_zone_pose_align_command(),
-                    f"{reason}：等待新安全区画面完成视觉ALIGN与像素走廊检查",
+                    f"{reason}：保持载荷，已请求115°抬高复看一次，沿用安全区观察流程",
                     self.selected_batch,
                     event=event,
                     tx_policy="normal_command",
@@ -6583,6 +6642,10 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
+            if (stm.mode in {STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_NAVIGATE} and
+                    stm.gripper_closed and self.safe_sweep_attempts < 2 and
+                    vision.safe_corridor_obstacle_class is not None):
+                return self._start_safe_zone_clear(vision, stm, now)
             self.enter_command_accepted = self._opcode_acceptance_seen(
                 stm,
                 CMD_ENTER_SAFE_ZONE,

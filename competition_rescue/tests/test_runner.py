@@ -450,6 +450,62 @@ def test_claw_isolated_singleton_uses_existing_geometry_without_new_wire_fields(
     assert not view.capture_audit.left_isolated_green and not view.capture_audit.right_isolated_green
 
 
+def test_corridor_missed_obstacle_and_same_class_floor_object_are_not_load():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+    m = CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((229,), ('green_supply',), 'material'))
+    m.confirmed_delivery_destination = 'material'
+    m.carried_manifest = ('green_supply',)
+    m.carried_total_count = 1
+    m.state = CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+    carried = TrackedCargo(229,'green_supply',.84,(458,366,180,199),hits=278)
+    missed = TrackedCargo(258,'green_supply',.54,(308,566,258,239),hits=1,misses=5,visible=False)
+    polygon=((100,100),(1100,100),(1100,900),(100,900))
+    rois=CaptureRois(polygon,*split_capture_roi(polygon))
+    def snapshot(items, **kwargs):
+        with patch.object(runner_module,'tracked_cargo',return_value=items):
+            return runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),
+                (261,0,835,107),StmSnapshot(mode=11,age_ms=0,camera_pitch_cdeg=12000),
+                m,2851,capture_rois=rois,recent_carried_track_ids=(229,),**kwargs)
+    view=snapshot((carried,missed))
+    assert view.safe_corridor_obstacle_track_id==258 and view.safe_corridor_status=='BLOCKED'
+    # Once the track leaves the original tracker, preserve the known blocker
+    # for this observation/entry only, instead of declaring it gone.
+    view=snapshot((carried,),recent_corridor_obstacle=missed)
+    assert view.safe_corridor_obstacle_track_id==258
+    floor=replace(missed,track_id=259,visible=True,misses=0)
+    view=snapshot((floor,))
+    assert not view.delivery_target_found
+    assert view.safe_corridor_obstacle_track_id==259
+    # Same height alone must never identify cargo: disjoint 2D boxes differ.
+    other=replace(floor,bbox=(510,820,90,100))
+    poly,obstacle,_,_=runner_module.safe_zone_push_corridor((other,), (261,0,835,107),
+        'material',False,frozenset(),150,('green_supply',),1,((690,820,90,100),))
+    assert obstacle is other
+
+
+def test_held_injury_with_high_roi_overlap_does_not_require_projected_foot_inside():
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
+    polygon=((100,100),(600,100),(600,500),(100,500))
+    rois=CaptureRois(polygon,*split_capture_roi(polygon))
+    held=TrackedCargo(1,'injured_orange',.9,(350,300,100,230),hits=3)
+    with patch.object(runner_module,'tracked_cargo',return_value=(held,)):
+        view=runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,
+            StmSnapshot(mode=23,flags=3,age_ms=0,camera_pitch_cdeg=14000),m,1,capture_rois=rois)
+    assert view.capture_observation_valid and view.capture_audit.total_count==1
+    assert view.capture_audit.left_class=='injured_orange'
+
+
 def test_detection_logging() -> None:
     assert bbox_center_px((10, 20, 31, 41)) == (25, 40)
     detection = Detection(

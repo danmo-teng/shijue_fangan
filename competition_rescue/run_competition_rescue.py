@@ -566,13 +566,11 @@ def safe_zone_push_corridor(
         frozenset({"danger_cyan", "injured_orange"})
     )
     corridor_items: list[tuple[TrackedCargo, tuple[float, float]]] = []
-    near_field_items: list[TrackedCargo] = []
     for item in cargo:
-        if (
-            not item.visible or
-            item.inside_safe_zone
-        ):
+        if item.inside_safe_zone:
             continue
+        # Existing tracker survivors retain a recently seen obstacle through
+        # a missed detection; a missing box does not prove a clear corridor.
         box_x, box_y, box_width, box_height = item.bbox
         bottom_center = (
             float(box_x + box_width * 0.5),
@@ -581,28 +579,8 @@ def safe_zone_push_corridor(
         if not cargo_in_front_region(item, polygon, safe_bbox):
             continue
         corridor_items.append((item, bottom_center))
-        if cv2.pointPolygonTest(claw_near_field, bottom_center, False) >= 0:
-            near_field_items.append(item)
 
     carried_counts = Counter(carried_manifest)
-    near_field_matches_manifest = (
-        carried_total_count > 0 and
-        len(near_field_items) == carried_total_count and
-        Counter(item.class_name for item in near_field_items) == carried_counts
-    )
-
-    def overlaps_carried_height(item: TrackedCargo) -> bool:
-        _, item_y, _, item_height = item.bbox
-        item_bottom = item_y + item_height
-        for _, carried_y, _, carried_height in recent_carried_bboxes:
-            overlap_height = max(
-                0,
-                min(item_bottom, carried_y + carried_height) -
-                max(item_y, carried_y),
-            )
-            if overlap_height / max(1, min(item_height, carried_height)) >= 0.60:
-                return True
-        return False
 
     candidates: list[TrackedCargo] = []
     for item, bottom_center in corridor_items:
@@ -621,10 +599,10 @@ def safe_zone_push_corridor(
         if (
             in_claw_near_field and
             not different_critical_class and
-            (
-                near_field_matches_manifest or
-                overlaps_carried_height(item)
-            )
+            carried_counts[item.class_name] > 0 and
+            any(bbox_overlap_ratio(item.bbox, box) >= 0.60 and
+                bbox_overlap_ratio(box, item.bbox) >= 0.60
+                for box in recent_carried_bboxes)
         ):
             continue
         candidates.append(item)
@@ -683,6 +661,8 @@ def make_vision_snapshot(
     capture_quality_reason: str = "",
     observed_s: float | None = None,
     range_calibration: ApproachRangeCalibration | None = None,
+    recent_carried_track_ids: tuple[int, ...] = (),
+    recent_corridor_obstacle: TrackedCargo | None = None,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     rois = capture_rois or load_capture_rois(
@@ -709,6 +689,13 @@ def make_vision_snapshot(
             x, y, width, height = item.bbox
             overlap = bbox_capture_roi_overlap_ratio(item.bbox, rois.overall)
             included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60, overlap_ratio=overlap)
+            if (not included and item.class_name == "injured_orange" and overlap >= 0.80):
+                # A held pyramid can project its foot outside the polygon.
+                # Keep the user's ROI: require its centre and >=80% box area.
+                included = cv2.pointPolygonTest(
+                    np.asarray(rois.overall, dtype=np.float32),
+                    tuple(map(float, item.center_px)), False,
+                ) >= 0
             truncated = (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
                          y + height >= IMAGE_HEIGHT - 1)
             reason = "included" if included else (
@@ -763,7 +750,6 @@ def make_vision_snapshot(
         capture_observation_valid = True
         capture_quality_reason = ""
     selected_ids = set(selected.track_ids) if selected is not None else set()
-    selected_classes = set(selected.classes) if selected is not None else set()
     audit = (
         audit_from_cargo(
             capture,
@@ -829,35 +815,23 @@ def make_vision_snapshot(
         )
     ]
     approach_target = max(target_candidates, key=lambda item: item.area_px, default=None)
+    known_carried_ids = (
+        set(recent_carried_track_ids)
+        if mission.carried_manifest or mission.post_grab_audit_active else set()
+    )
+    expected_manifest = mission.carried_manifest
+    if (capture_enabled and capture_observation_valid and audit is not None and
+            mission._audit_valid(audit) and
+            (not expected_manifest or
+             Counter(item.class_name for item in capture) == Counter(expected_manifest))):
+        known_carried_ids = {item.track_id for item in capture}
     exact_delivery_items = [
         item for item in cargo
-        if item.visible and item.track_id in selected_ids
+        if item.visible and item.track_id in known_carried_ids
     ]
-    delivery_classes = set(selected_classes)
-    delivery_classes.update(mission.carried_delivery_classes())
-    same_class_items = [
-        item for item in cargo
-        if item.visible and item.class_name in delivery_classes
-    ]
-    expected_delivery_count = mission.carried_delivery_count()
-    if len(exact_delivery_items) >= expected_delivery_count:
-        delivery_items = exact_delivery_items
-    else:
-        delivery_candidates = {
-            item.track_id: item for item in exact_delivery_items
-        }
-        delivery_candidates.update(
-            {item.track_id: item for item in same_class_items}
-        )
-        delivery_items = sorted(
-            delivery_candidates.values(),
-            key=lambda item: (
-                item.bbox[1] + item.bbox[3],
-                item.area_px,
-                -item.track_id,
-            ),
-            reverse=True,
-        )[:expected_delivery_count]
+    # Do not turn an arbitrary, nearer same-class floor object into the load
+    # when its original tracker disappears.
+    delivery_items = exact_delivery_items
     delivery_inside_ids = tuple(
         item.track_id for item in delivery_items if item.inside_safe_zone
     )
@@ -882,20 +856,18 @@ def make_vision_snapshot(
         mission.confirmed_delivery_destination or
         (selected.destination if selected is not None else None)
     )
-    corridor_excluded_track_ids = {
-        item.track_id for item in delivery_items
-    }
-    corridor_excluded_track_ids.update(selected_ids)
-    corridor_excluded_track_ids.update(mission.last_selected_track_ids)
-    if mission.locked_target_track_id is not None:
-        corridor_excluded_track_ids.add(mission.locked_target_track_id)
+    corridor_excluded_track_ids = known_carried_ids
+    corridor_cargo = cargo
+    if (recent_corridor_obstacle is not None and
+            not any(item.track_id == recent_corridor_obstacle.track_id for item in cargo)):
+        corridor_cargo = cargo + (recent_corridor_obstacle,)
     (
         corridor,
         corridor_obstacle,
         corridor_distance_mm,
         corridor_status,
     ) = safe_zone_push_corridor(
-        cargo,
+        corridor_cargo,
         corridor_bbox,
         corridor_destination,
         mission.first_common_delivered,
@@ -954,8 +926,10 @@ def make_vision_snapshot(
             None if corridor_obstacle is None else corridor_obstacle.bbox
         ),
         safe_corridor_status=corridor_status,
+        safe_corridor_obstacle_remembered=bool(corridor_obstacle is not None and not corridor_obstacle.visible),
         ground_localizer_calibrated=localizer.calibrated,
         carried_reference_bboxes=current_carried_bboxes,
+        carried_reference_track_ids=tuple(sorted(known_carried_ids)),
         safe_sweep_capture_audit=sweep_audit,
         safe_sweep_search_polygon=sweep_search_polygon,
     )
@@ -2065,6 +2039,12 @@ class CompetitionPlanner:
             "safe_zone_visual_pixel_error": self.mission.safe_zone_visual_pixel_error,
             "safe_zone_visual_locked": self.mission.safe_zone_visual_locked,
             "safe_zone_fallback": self.mission.safe_zone_fallback,
+            "safe_corridor_obstacle_remembered": vision.safe_corridor_obstacle_remembered,
+            "safe_zone_view_pitch_cdeg": self.mission.safe_zone_view_pitch_cdeg,
+            "empty_load_recheck_pending": self.mission.empty_load_recheck_pending,
+            "empty_load_view_moved": self.mission.empty_load_view_moved,
+            "empty_load_recheck_done": self.mission.empty_load_recheck_done,
+            "carried_reference_track_ids": list(vision.carried_reference_track_ids),
             "safe_sweep_attempts": self.mission.safe_sweep_attempts,
             "safe_sweep_command_accepted": self.mission.safe_sweep_command_accepted,
             "safe_sweep_execution_seen": self.mission.safe_sweep_execution_seen,
@@ -2244,7 +2224,9 @@ class CompetitionPlanner:
                 pass  # Failure to report diagnostics must not stop control.
 
     def _record_replay_event(self, output, pose, stm, vision, now: float) -> None:
-        if output.event != "safe_zone_acquire_no_box" or self.replay_event_sink is None:
+        if (output.event not in {"safe_zone_acquire_no_box", "load_empty_reobserve",
+                                 "safe_zone_entry", "safe_zone_clear_start"} or
+                self.replay_event_sink is None):
             return
         try:
             self.replay_event_sink(dict(event=output.event,
@@ -2833,6 +2815,9 @@ def main() -> int:
     recent_safe_bbox: tuple[int, int, int, int] | None = None
     safe_zone_missing_frames = 0
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = ()
+    recent_carried_track_ids: tuple[int, ...] = ()
+    recent_corridor_obstacle: TrackedCargo | None = None
+    corridor_memory_pitch = 0
     competition_started = False
     config_sent = False
     operator_stopped = False
@@ -2860,6 +2845,7 @@ def main() -> int:
     def prepare_operator_start():
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
+        nonlocal recent_carried_track_ids, recent_corridor_obstacle, corridor_memory_pitch
         if operator_start_ready or operator_stopped or not args.wait_for_operator:
             return
         request = operator_start_request(args.operator_control,args.pose,args.reset_session_token)
@@ -2880,6 +2866,9 @@ def main() -> int:
         recent_safe_bbox = None
         safe_zone_missing_frames = 0
         recent_carried_bboxes = ()
+        recent_carried_track_ids = ()
+        recent_corridor_obstacle = None
+        corridor_memory_pitch = 0
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
@@ -3159,6 +3148,16 @@ def main() -> int:
                     safe_zone_missing_frames = 3
                     safe_bbox = None
                     safe_zone_filter_blocked = False
+                remember_corridor = (
+                    mission.state in {CompetitionState.ACQUIRE_SAFE_ZONE,
+                        CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+                        CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                        CompetitionState.ENTER_SAFE_ZONE} and
+                    stm.camera_pitch_cdeg in {11500, 12000}
+                )
+                if not remember_corridor or stm.camera_pitch_cdeg != corridor_memory_pitch:
+                    recent_corridor_obstacle = None
+                corridor_memory_pitch = stm.camera_pitch_cdeg
                 latest_vision = make_vision_snapshot(
                     detections,
                     tracks,
@@ -3177,7 +3176,21 @@ def main() -> int:
                     ),
                     observed_s=packet.published_ns / 1_000_000_000.0,
                     range_calibration=range_calibration,
+                    recent_carried_track_ids=recent_carried_track_ids,
+                    recent_corridor_obstacle=recent_corridor_obstacle,
                 )
+                if (remember_corridor and latest_vision.safe_corridor_obstacle_class is not None):
+                    recent_corridor_obstacle = TrackedCargo(
+                        latest_vision.safe_corridor_obstacle_track_id,
+                        latest_vision.safe_corridor_obstacle_class, 0.0,
+                        latest_vision.safe_corridor_obstacle_bbox, visible=False,
+                    )
+                elif remember_corridor and latest_vision.safe_corridor_polygon:
+                    recent_corridor_obstacle = None
+                if latest_vision.carried_reference_track_ids:
+                    recent_carried_track_ids = latest_vision.carried_reference_track_ids
+                elif not mission.carried_manifest:
+                    recent_carried_track_ids = ()
                 if not mission.carried_manifest:
                     recent_carried_bboxes = ()
                 elif latest_vision.carried_reference_bboxes:

@@ -1247,6 +1247,87 @@ def test_mode51_reference_audit_exits_and_budget() -> None:
     assert out.command.opcode == CMD_RELEASE_BOTH and invalid.delivery_count == 4
 
 
+def test_range_recheck_accepts_small_error_and_realigns_large_overshoot() -> None:
+    from protocol import CMD_APPROACH_RANGE
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    m.state = CompetitionState.APPROACH
+    status = replace(stm(mode=52), camera_pitch_cdeg=12000)
+    first = VisionSnapshot(frame_sequence=1, observed_monotonic_s=1.0,
+        range_pitch_cdeg=12000, range_distances=((1, 380),))
+    m._range_approach_output(first, status, 1.0)
+    # The new-frame requirement already exists; this adds no settling wait.
+    for cx in (813, 858, 705):
+        target = TrackedCargo(1, "green_supply", .9, (cx - 20, 200, 40, 40))
+        out = m._range_approach_output(replace(first, frame_sequence=2,
+            observed_monotonic_s=1.1, cargo=(target,)), status, 1.1)
+        assert out.reason == "approach_range_realign"
+        assert not out.command.flags & CMD_APPROACH_RANGE
+        assert out.command.arg_a == cx
+    for cx in (576, 640, 704):
+        target = TrackedCargo(1, "green_supply", .9, (cx - 20, 200, 40, 40))
+        out = m._range_approach_output(replace(first, frame_sequence=3,
+            observed_monotonic_s=1.2, cargo=(target,)), status, 1.2)
+        assert out.command.flags & CMD_APPROACH_RANGE and out.command.arg_a == 380
+        repeated = m._range_approach_output(replace(first, frame_sequence=4),
+            replace(status, mode=53), 1.3)
+        assert repeated.command == out.command
+        m.range_command = None
+
+
+def test_loaded_empty_reobserves_once_without_stable_empty_or_fake_load() -> None:
+    for mode in (23, 48):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.state = CompetitionState.POST_GRAB_AUDIT if mode == 23 else CompetitionState.TRANSPORT_AUDIT
+        status = replace(stm(mode=mode, flags=3), camera_pitch_cdeg=14000)
+        m.audit_camera_key = (mode, True, m.audit_epoch)
+        m.audit_camera_ready_since = 0.0
+        view = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1., capture_audit=CargoAudit())
+        out = m._audit_observation_wait(view, status, 1.)
+        assert out.reason == "load_empty_reobserve" and out.event == "load_empty_reobserve"
+        assert out.command.opcode == CMD_CARGO_AUDIT
+        assert not out.command.audit.stable and out.command.audit.total_count == 0
+        assert out.command.audit_vision_frame == 10 and m.audit_hits == 0
+        again = m._audit_observation_wait(replace(view, frame_sequence=11,
+            observed_monotonic_s=1.1), status, 1.1)
+        assert again.reason == "load_empty_reobserve" and not again.event
+        seen = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+        assert m._audit_observation_wait(replace(view, frame_sequence=12,
+            observed_monotonic_s=1.15, capture_audit=seen), status, 1.15) is None
+        # Reuse the MCU's existing camera nudge. No new timer or request ACK.
+        m._audit_observation_wait(replace(view, frame_sequence=12,
+            observed_monotonic_s=1.2), replace(status, camera_pitch_cdeg=13800, flags=2), 1.2)
+        m._audit_observation_wait(replace(view, frame_sequence=13,
+            observed_monotonic_s=1.3), status, 1.3)
+        assert m.empty_load_recheck_done
+        assert m._audit_observation_wait(replace(view, frame_sequence=14,
+            observed_monotonic_s=1.6), status, 1.6) is None
+        # A genuinely empty view after this physical re-observation can use
+        # the existing empty-audit path; do not invent a legal singleton.
+
+
+def test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps() -> None:
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_CLEAR_SAFE_ZONE
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    m.confirmed_delivery_destination = "material"
+    m.carried_manifest = ("green_supply",)
+    m.carried_total_count = 1
+    m._begin_safe_zone_acquire(VisionSnapshot(frame_sequence=1), 1.)
+    status = replace(stm(mode=11, flags=2), camera_pitch_cdeg=12000)
+    view = VisionSnapshot(frame_sequence=2, observed_monotonic_s=6.1)
+    out = m.step(view, pose(), status, 6.1)
+    assert out.command.opcode == CMD_ALIGN_SAFE_ZONE and out.command.arg_b == 11500
+    assert m.step(replace(view, frame_sequence=3, observed_monotonic_s=6.2),
+        pose(), status, 6.2).command == out.command
+    m.state = CompetitionState.ENTER_SAFE_ZONE
+    obstacle = replace(view, safe_corridor_obstacle_class="green_supply",
+        safe_corridor_obstacle_track_id=258, safe_corridor_obstacle_bbox=(308,566,258,239))
+    out = m.step(obstacle, pose(), replace(status, mode=10), 6.3)
+    assert out.state == CompetitionState.CLEAR_SAFE_ZONE
+    assert out.command.opcode == CMD_CLEAR_SAFE_ZONE
+
+
 def test_range_cumulative_and_transport_sort() -> None:
     from protocol import CMD_APPROACH_RANGE, CMD_SIDE_VALID, CMD_STAGE_ONLY, CMD_DRIVE_STRAIGHT, CMD_USE_FINAL_HEADING
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
