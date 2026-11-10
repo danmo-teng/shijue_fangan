@@ -270,6 +270,9 @@ class CargoAudit:
     class_counts: tuple[tuple[str, int], ...] = ()
     left_class_counts: tuple[tuple[str, int], ...] = ()
     right_class_counts: tuple[tuple[str, int], ...] = ()
+    # Local image evidence only; these do not add fields to the MCU audit.
+    left_isolated_green: bool = False
+    right_isolated_green: bool = False
 
     @property
     def signature(self) -> tuple:
@@ -499,7 +502,7 @@ class CompetitionSettings:
     vision_stale_s: float = 0.30
     search_min_turn_deg: float = 720.0
     search_target_confirm_frames: int = 1
-    disperse_limit: int = 2
+    disperse_limit: int = 2  # Consecutive physical attempts without audit progress.
     approach_missing_hold_min_s: float = 0.30
     approach_missing_frame_multiplier: float = 2.5
     yield_distance_m: float = 0.25
@@ -763,6 +766,9 @@ class CompetitionMission:
         self.search_candidate_hits = 0
         self.stash_checked = False
         self.disperse_attempts = 0
+        self.separation_progress_attempt = 0
+        self.separation_reviewed_attempt = 0
+        self.separation_start_audit: CargoAudit | None = None
         self.separation_keep_side: str | None = None
         self.separation_side_attempts = 0
         self.separation_request_epoch = 0
@@ -1270,6 +1276,9 @@ class CompetitionMission:
             self.delivery_counted_for_batch = False
             self.separation_keep_side = None
             self.separation_side_attempts = 0
+            self.separation_progress_attempt = 0
+            self.separation_reviewed_attempt = 0
+            self.separation_start_audit = None
         self.deferred_cluster_ids = frozenset()
         self.deferred_cluster_bbox = None
         self.deferred_cluster_class = None
@@ -1323,6 +1332,9 @@ class CompetitionMission:
         self._clear_disperse_side_votes()
         if reset_attempts and self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.disperse_attempts = 0
+            self.separation_progress_attempt = 0
+            self.separation_reviewed_attempt = 0
+            self.separation_start_audit = None
             self.separation_keep_side = None
             self.separation_side_attempts = 0
             self.disperse_observe_attempts = 0
@@ -1401,6 +1413,8 @@ class CompetitionMission:
         manifest = self._manifest_for_audit(audit)
         if audit.total_count == 1 and manifest == ("injured_orange",):
             return "injury"
+        if "green_supply" in manifest:
+            return "material"
         if manifest and set(manifest).issubset(MATERIAL_CLASSES):
             return "material"
         return self.selected_batch.destination
@@ -1779,9 +1793,11 @@ class CompetitionMission:
         *,
         first_green_bump: bool = False,
         keep_count: int = 0,
+        audit: CargoAudit | None = None,
     ) -> None:
         self.separation_request_epoch += 1
         self.separation_request_counted = False
+        self.separation_start_audit = audit if keep_count > 0 else None
         if first_green_bump:
             self.disperse_context = "first_green_bump"
             self.disperse_command = CommandRequest(
@@ -1824,10 +1840,13 @@ class CompetitionMission:
         self.initial_release_tx_baseline = stm.relay_mission_tx_frames
         self.initial_release_command_accepted = False
 
-    def _arm_invalid_release(self, stm: StmSnapshot, now: float) -> None:
+    def _arm_invalid_release(
+        self, stm: StmSnapshot, now: float, audit: CargoAudit
+    ) -> None:
         if self.invalid_release_initial_ack is None:
             self.separation_request_epoch += 1
             self.separation_request_counted = False
+            self.separation_start_audit = audit
             self.invalid_release_initial_ack = (
                 stm.acknowledged_sequence if stm.fresh else None
             )
@@ -2228,6 +2247,8 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> None:
+        self._review_separation_result(audit)
+        self._prefer_green_batch(audit)
         self.pending_audit = audit
         self.pending_audit_payload = payload
         self.pending_audit_valid = valid
@@ -2379,7 +2400,7 @@ class CompetitionMission:
             self.audit_hits = continued_hits
             self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
-        if (self.disperse_attempts >= self.settings.disperse_limit and
+        if (self._separation_limit_reached() and
                 not self.pending_audit_valid and stm.fresh and
                 stm.context_valid and stm.context_matches and
                 stm.accepted_command == CMD_CARGO_AUDIT and bool(stm.action_status & 1) and
@@ -2597,6 +2618,12 @@ class CompetitionMission:
                 self._clear_pending_audit()
                 if audit.danger_present:
                     return self._start_danger_release(audit, stm, now)
+                keep_side = self._preferred_keep_side(audit)
+                if audit.total_count > 1 and keep_side is not None:
+                    self.cluster_keep_side = keep_side
+                    self.post_grab_audit_active = False
+                    self.post_grab_camera_ready = None
+                    return self._start_disperse(audit, stm, now)
                 release_side = self._choose_release_side(audit)
                 if (
                     (release_side == "left" and audit.left_count <= 0) or
@@ -2613,7 +2640,7 @@ class CompetitionMission:
                 self.post_grab_audit_active = False
                 self.post_grab_camera_ready = None
                 self._set_state(CompetitionState.INVALID_RELEASE, now)
-                self._arm_invalid_release(stm, now)
+                self._arm_invalid_release(stm, now, audit)
                 return self._invalid_release_output(audit, stm, now)
             event = (
                 "post_grab_invalid_stable_publish"
@@ -2721,13 +2748,13 @@ class CompetitionMission:
                 self.invalid_release_final = True
                 self.invalid_release_context = "disperse_final_release"
                 self._set_state(CompetitionState.INVALID_RELEASE, now)
-                self._arm_invalid_release(stm, now)
+                self._arm_invalid_release(stm, now, audit)
                 return self._invalid_release_output(audit, stm, now)
             self.invalid_release_side = release_side
             self.invalid_release_final = final_release
             self.invalid_release_context = release_context
             self._set_state(CompetitionState.INVALID_RELEASE, now)
-            self._arm_invalid_release(stm, now)
+            self._arm_invalid_release(stm, now, audit)
             return self._invalid_release_output(audit, stm, now)
         event = "" if self.pending_audit_event_emitted else "cargo_audit_stable_publish"
         self.pending_audit_event_emitted = True
@@ -3007,12 +3034,30 @@ class CompetitionMission:
             )
         if not self.first_common_delivered:
             return side_count == 1 and side_class == "green_supply"
+        if side_count == 1 and side_class == "green_supply":
+            return True
         if self.selected_batch is not None and self.selected_batch.destination == "injury":
             return side_count == 1 and side_class == "injured_orange"
         return (
             1 <= side_count <= self.settings.max_batch_count and
             side_class in {"green_supply", "core_black"}
         )
+
+    @staticmethod
+    def _side_green_count(audit: CargoAudit, side: str) -> int:
+        category = audit.left_class if side == "left" else audit.right_class
+        count = audit.left_count if side == "left" else audit.right_count
+        green = audit.left_green_count if side == "left" else audit.right_green_count
+        return count if category == "green_supply" else green
+
+    def _separation_destination(self, audit: CargoAudit) -> str:
+        assert self.selected_batch is not None
+        if (self.safe_sweep_reaudit_active or
+                (self.state == CompetitionState.CLEAR_SAFE_ZONE and
+                 self.safe_sweep_pickup is not None and
+                 self.safe_sweep_pickup.recovering_original)):
+            return self._sweep_original_destination()
+        return self._audit_destination(audit)
 
     def _side_is_disperse_candidate(self, audit: CargoAudit, side: str) -> bool:
         """A side worth separating is not permission to transport its contents."""
@@ -3022,7 +3067,7 @@ class CompetitionMission:
             return False
         category = audit.left_class if side == "left" else audit.right_class
         count = audit.left_count if side == "left" else audit.right_count
-        green = audit.left_green_count if side == "left" else audit.right_green_count
+        green = self._side_green_count(audit, side)
         invalid = audit.left_invalid if side == "left" else audit.right_invalid
         composition = dict(audit.left_class_counts if side == "left" else audit.right_class_counts)
         known_mixture = (
@@ -3034,8 +3079,9 @@ class CompetitionMission:
         )
         if count <= 0 or ((invalid or category == "unknown") and not known_mixture):
             return False
+        destination = self._separation_destination(audit)
         if known_mixture:
-            if self.selected_batch.destination == "injury":
+            if destination == "injury":
                 return self.first_common_delivered and composition.get("injured_orange", 0) > 0
             return green > 0
         if category not in MATERIAL_CLASSES | {"mixed_material", "injured_orange"}:
@@ -3052,8 +3098,10 @@ class CompetitionMission:
             return True
         if not self.first_common_delivered:
             return category == "green_supply" or (category == "mixed_material" and green > 0)
-        if self.selected_batch.destination == "injury":
+        if destination == "injury":
             return category == "injured_orange"
+        if any(self._side_green_count(audit, value) > 0 for value in ("left", "right")):
+            return green > 0
         return category in MATERIAL_CLASSES | {"mixed_material"}
 
     def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
@@ -3063,21 +3111,25 @@ class CompetitionMission:
             return "left" if left_nonempty else "right"
         if not left_nonempty:
             return None
-        left_green = audit.left_green_count
-        right_green = audit.right_green_count
+        left_green = self._side_green_count(audit, "left")
+        right_green = self._side_green_count(audit, "right")
+        left_single = audit.left_isolated_green and audit.left_count == left_green == 1
+        right_single = audit.right_isolated_green and audit.right_count == right_green == 1
+        if left_single != right_single:
+            return "left" if left_single else "right"
         if left_green > 0 and right_green == 0:
             return "left"
         if right_green > 0 and left_green == 0:
             return "right"
         if left_green != right_green:
             return "left" if left_green > right_green else "right"
-        locked = self.cluster_keep_side or self.separation_keep_side
-        if locked in {"left", "right"}:
-            return locked
         left_other = audit.left_count - left_green
         right_other = audit.right_count - right_green
         if left_other != right_other:
             return "left" if left_other < right_other else "right"
+        locked = self.cluster_keep_side or self.separation_keep_side
+        if locked in {"left", "right"}:
+            return locked
         return "left"
 
     def _should_first_green_bump(self, audit: CargoAudit) -> bool:
@@ -3140,7 +3192,7 @@ class CompetitionMission:
         self.post_grab_audit_active = False
         self.post_grab_camera_ready = None
         self._set_state(CompetitionState.INVALID_RELEASE, now)
-        self._arm_invalid_release(stm, now)
+        self._arm_invalid_release(stm, now, audit)
         return self._invalid_release_output(audit, stm, now)
 
     def _clear_disperse_side_votes(self) -> None:
@@ -3207,6 +3259,14 @@ class CompetitionMission:
             self.cargo_recheck_context not in {"disperse_selective", "single_side"}
         ):
             return "both"
+        # The same keep decision applies before and after closing the claws.
+        # A multi-item side is worth separating even though it cannot be delivered.
+        keep_side = self._preferred_keep_side(audit)
+        if keep_side is not None:
+            discard_count = audit.right_count if keep_side == "left" else audit.left_count
+            if discard_count > 0:
+                return "right" if keep_side == "left" else "left"
+            return "both"  # Within one claw, use DISPERSE rather than release an empty side.
         # An unknown category or an audit-level unknown flag cannot identify a
         # safe side.  Do not guess by count in that case.
         if (
@@ -3508,13 +3568,13 @@ class CompetitionMission:
     def _invalid_release_output(
         self, audit: CargoAudit, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
-        self._arm_invalid_release(stm, now)
+        self._arm_invalid_release(stm, now, audit)
         side = self.invalid_release_side
         release_command = self._invalid_release_command()
         if self.invalid_release_context == "separate_then_search":
             message = "首次无法判断左右归属，发送无侧DISPERSE执行20°观察转向"
         elif self.invalid_release_context == "separation_limit_failed":
-            message = "第二次复审已就绪且仍非法，双开并等待mode24后退、mode47返中交接"
+            message = "连续分离无进展，双开并沿原mode24后退、mode47返中交接"
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",
@@ -4639,11 +4699,11 @@ class CompetitionMission:
             previous_keep_side = self.separation_keep_side if same_cluster else None
             previous_side_attempts = self.separation_side_attempts if same_cluster else 0
             previous_cluster_id = self.cluster_id
-            if same_cluster and previous_attempts >= self.settings.disperse_limit:
+            if same_cluster and self._separation_limit_reached():
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
-                    "当前聚集目标已完成2次带侧分离，不再请求第三次",
+                    "当前聚集目标连续分离无进展，沿用放弃路径",
                     tx_policy="hold",
                     reason="cluster_disperse_limit_reached",
                 )
@@ -4851,13 +4911,66 @@ class CompetitionMission:
             self.separation_keep_side = keep_side
             self.separation_request_counted = True
 
+    def _review_separation_result(self, audit: CargoAudit) -> None:
+        """Use the existing completed-action audit, once per accepted attempt."""
+        if self.disperse_attempts <= self.separation_reviewed_attempt:
+            return
+        before = self.separation_start_audit
+        if before is not None:
+            old = Counter(self._manifest_for_audit(before))
+            current = Counter(self._manifest_for_audit(audit))
+            wanted = (
+                "green_supply" if old["green_supply"] > 0 else
+                "injured_orange" if self.selected_batch is not None and
+                self.selected_batch.destination == "injury" else "core_black"
+            )
+            gained_green = old["green_supply"] == 0 and current["green_supply"] > 0
+            reduced = current[wanted] > 0 and (
+                audit.total_count,
+                audit.total_count - current[wanted],
+            ) < (
+                before.total_count,
+                before.total_count - old[wanted],
+            )
+            if gained_green or reduced:
+                self.separation_progress_attempt = self.disperse_attempts
+        self.separation_reviewed_attempt = self.disperse_attempts
+
+    def _separation_limit_reached(self) -> bool:
+        # Keep the old two-failure policy, but successful reduction earns another
+        # attempt. Total accepted actions remain visible in the existing log.
+        return (self.separation_reviewed_attempt - self.separation_progress_attempt >=
+                self.settings.disperse_limit)
+
+    def _prefer_green_batch(self, audit: CargoAudit) -> None:
+        batch = self.selected_batch
+        if (batch is None or batch.initial_stash or
+                self._separation_destination(audit) != "material" or
+                not any(self._side_green_count(audit, side) > 0 for side in ("left", "right"))):
+            return
+        side = self._preferred_keep_side(audit)
+        if side is None:
+            return
+        category = audit.left_class if side == "left" else audit.right_class
+        track_id = audit.left_stable_track_id if side == "left" else audit.right_stable_track_id
+        self.selected_batch = replace(
+            batch,
+            track_ids=(track_id,) if category == "green_supply" and track_id is not None else batch.track_ids,
+            classes=("green_supply",),
+            destination="material",
+            confirmed_total_count=None,
+        )
+        self.target_last_class = "green_supply"
+
     def _start_disperse(
         self, audit: CargoAudit, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
-        if self.disperse_attempts >= self.settings.disperse_limit:
+        self._review_separation_result(audit)
+        if self._separation_limit_reached():
             return self._start_capture_abandon(audit, stm, now, limit_reached=True)
         if audit.danger_present:
             return self._start_danger_release(audit, stm, now)
+        self._prefer_green_batch(audit)
         # Use this audit's stable side. The previous accepted side tracks the
         # streak only; it cannot override a new side after mechanical completion.
         if self.cluster_keep_side is not None:
@@ -4869,7 +4982,8 @@ class CompetitionMission:
             audit.right_count if self.cluster_keep_side == "right" else 0
         )
         self._set_state(CompetitionState.DISPERSE, now)
-        self._arm_disperse(stm, self.cluster_keep_side, keep_count=self.cluster_keep_side_count)
+        self._arm_disperse(stm, self.cluster_keep_side,
+                           keep_count=self.cluster_keep_side_count, audit=audit)
         return CompetitionOutput(
             self.state,
             self.disperse_command,
@@ -5113,6 +5227,8 @@ class CompetitionMission:
             )
         )
         if confirmed:
+            self._review_separation_result(audit)
+            self._prefer_green_batch(audit)
             if valid:
                 old_destination = self.confirmed_delivery_destination
                 if not self._pose_fresh(pose):
@@ -5146,7 +5262,7 @@ class CompetitionMission:
                     reason="transport_audit_valid", tx_policy="normal_command",
                     expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
                 )
-            if self.disperse_attempts >= self.settings.disperse_limit:
+            if self._separation_limit_reached():
                 return self._start_capture_abandon(audit, stm, now, limit_reached=True)
             if audit.danger_present:
                 return self._start_danger_release(audit, stm, now)
@@ -5632,7 +5748,7 @@ class CompetitionMission:
             self.invalid_release_context = "recovery_abandon"
             self.invalid_release_final = True
             self._set_state(CompetitionState.INVALID_RELEASE, now)
-            self._arm_invalid_release(stm, now)
+            self._arm_invalid_release(stm, now, audit)
             self.recovery_command = CommandRequest(CMD_RELEASE_BOTH, self._side_flags())
             return CompetitionOutput(self.state, self.recovery_command,
                                      "已明确请求放弃恢复载荷，双开后等待mode47返中心", self.selected_batch,
@@ -5912,7 +6028,7 @@ class CompetitionMission:
             return self._transport_audit_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.SEARCH:
-            if self.disperse_attempts >= self.settings.disperse_limit or self.recovery_task_locked:
+            if self._separation_limit_reached() or self.recovery_task_locked:
                 self._begin_return(stm, now)
                 return self._return_center_output(pose, now, "旧任务预算待清理，先返中心再寻找")
             if self.settings.initial_stash_enabled and not self.initial_stash_done:

@@ -1376,7 +1376,115 @@ def test_safe_staging_arrival_keeps_zero_handoff_and_stash_window() -> None:
     assert stash.staging_zero_tx_baseline is None
 
 
+def test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception() -> None:
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((10,), ("injured_orange",), "injury"))
+    greens = CargoAudit(left_class="green_supply", right_class="green_supply",
+                        left_count=3, right_count=1, left_green_count=3,
+                        right_green_count=1, total_count=4)
+    for audit, expected in (
+        (greens, "left"),
+        (replace(greens, left_count=1, right_count=3,
+                 left_green_count=1, right_green_count=3), "right"),
+        (replace(greens, right_count=2, right_green_count=2, total_count=5), "left"),
+        (replace(greens, right_isolated_green=True), "right"),
+        (replace(greens, right_isolated_green=True, right_count=2,
+                 right_green_count=2, total_count=5), "left"),
+    ):
+        assert m._preferred_keep_side(audit) == expected
+        assert m._choose_release_side(audit) == ("right" if expected == "left" else "left")
+        assert not m._audit_valid(audit)  # Choosing a group never authorizes its delivery.
+    mixed = CargoAudit(left_class="injured_orange", right_class="green_supply",
+                       left_count=1, right_count=2, right_green_count=2,
+                       total_count=3, injury_mixed=True, right_stable_track_id=20)
+    assert m._preferred_keep_side(mixed) == "right"
+    assert not m._audit_payload(mixed).destination_injury
+    generation = m.task_generation
+    m._prefer_green_batch(mixed)
+    assert m.selected_batch.destination == "material"
+    assert m.selected_batch.classes == ("green_supply",) and m.selected_batch.track_ids == (20,)
+    assert m.task_generation == generation  # No new task/handshake to change sorting priority.
+    m.first_common_delivered = False
+    assert not m._audit_valid(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
+    assert m._audit_valid(CargoAudit(left_class="green_supply", left_count=1, total_count=1))
+
+
+def test_progressive_sorting_allows_third_action_and_counts_only_real_attempts() -> None:
+    def greens(left, right):
+        return CargoAudit(left_class="green_supply" if left else "",
+            right_class="green_supply" if right else "", left_count=left,
+            right_count=right, left_green_count=left, right_green_count=right,
+            total_count=left + right, stable=True)
+
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    for attempt, audit in enumerate((greens(3, 2), greens(2, 1), greens(2, 0)), 1):
+        m.cluster_keep_side = m._preferred_keep_side(audit)
+        out = m._start_disperse(audit, stm(mode=37), float(attempt))
+        assert out.state == CompetitionState.DISPERSE and out.command.opcode == CMD_DISPERSE_PILE
+        assert m.disperse_attempts == attempt - 1  # Sending is not acceptance.
+        m._count_separation_acceptance("left")
+        m._count_separation_acceptance("left")
+        assert m.disperse_attempts == attempt
+        assert not m._separation_limit_reached()  # An unreviewed action is not a failure.
+    m._review_separation_result(greens(1, 0))
+    assert m.disperse_attempts == m.separation_progress_attempt == 3
+    assert m._audit_valid(greens(1, 0)) and not m._separation_limit_reached()
+    # Repeated planner cycles on the same completed action cannot reset its result.
+    m._review_separation_result(greens(1, 0))
+    assert m.separation_progress_attempt == 3
+
+    stalled = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    stalled._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    unchanged = greens(2, 1)
+    for attempt in range(2):
+        stalled.cluster_keep_side = "left"
+        assert stalled._start_disperse(unchanged, stm(mode=37), float(attempt)).state == CompetitionState.DISPERSE
+        stalled._count_separation_acceptance("left")
+    out = stalled._start_disperse(unchanged, stm(mode=37), 3.0)
+    assert out.command.opcode == CMD_RELEASE_BOTH and stalled.disperse_attempts == 2
+    assert out.state == CompetitionState.INVALID_RELEASE
+    # Losing the desired green is not successful reduction of an unwanted group.
+    lost = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    lost._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    lost.separation_start_audit = CargoAudit(left_class="green_supply", right_class="injured_orange",
+                                            left_count=1, right_count=1, total_count=2)
+    lost._count_separation_acceptance("left")
+    lost._review_separation_result(CargoAudit(right_class="injured_orange", right_count=1, total_count=1))
+    assert lost.separation_progress_attempt == 0
+
+
+def test_post_grab_multigreen_reuses_accepted_audit_without_release_backoff() -> None:
+    from protocol import CMD_SIDE_VALID
+    for isolated, expected in ((False, "left"), (True, "right")):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+        audit = CargoAudit(left_class="green_supply", right_class="green_supply",
+            left_count=3, right_count=1, left_green_count=3, right_green_count=1,
+            total_count=4, stable=True, right_isolated_green=isolated)
+        m.post_grab_audit_active = True
+        status = replace(stm(mode=23, flags=67), camera_pitch_cdeg=14000)
+        for frame, now in ((1, 1.0), (2, 1.3), (3, 1.41)):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now, capture_audit=audit)
+            pending = m._audit_output(view, status, now)
+        assert m.pending_audit_release_context == "post_grab_invalid"
+        ack = replace(relay_stm(pending, mode=23, flags=67), camera_pitch_cdeg=14000,
+                      context_valid=True, context_matches=True,
+                      accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        out = m._audit_confirmation_output(view, ack, 1.42)
+        assert out.state == CompetitionState.DISPERSE
+        assert out.command.opcode == CMD_DISPERSE_PILE and out.command.flags & CMD_SIDE_VALID
+        assert bool(out.command.flags & CMD_TARGET_RIGHT) == (expected == "right")
+        assert m.cluster_keep_side == expected and not m.post_grab_audit_active
+        assert m.selected_batch.destination == "material"
+
+
 def main() -> None:
+    test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception()
+    test_progressive_sorting_allows_third_action_and_counts_only_real_attempts()
+    test_post_grab_multigreen_reuses_accepted_audit_without_release_backoff()
     test_safe_staging_arrival_keeps_zero_handoff_and_stash_window()
     test_range_cumulative_and_transport_sort()
     test_mode51_reference_audit_exits_and_budget()

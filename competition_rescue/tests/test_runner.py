@@ -413,6 +413,43 @@ def test_planner_stop_records_unconfirmed_abort_timeout() -> None:
         assert planner.termination_result["timeout"] is True
 
 
+def test_claw_isolated_singleton_uses_existing_geometry_without_new_wire_fields() -> None:
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import TrackedCargo, CargoBatch
+    polygon = ((100, 100), (1200, 100), (1200, 950), (100, 950))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    items = (
+        TrackedCargo(1, "green_supply", .9, (400, 500, 100, 100), hits=3),
+        TrackedCargo(2, "green_supply", .9, (450, 500, 100, 100), hits=3),
+        TrackedCargo(3, "green_supply", .9, (500, 500, 100, 100), hits=3),
+        TrackedCargo(4, "green_supply", .9, (900, 500, 80, 100), hits=3),
+    )
+    status = StmSnapshot(mode=38, flags=1, age_ms=0, camera_pitch_cdeg=14000)
+    for single_bbox, expected in (((900, 500, 80, 100), "right"),
+                                  ((610, 500, 80, 100), "left")):
+        current = items[:-1] + (replace(items[-1], bbox=single_bbox),)
+        with patch.object(runner_module, "tracked_cargo", return_value=current):
+            view = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+                status, mission, 1, capture_rois=rois, observed_s=1.0)
+        audit = view.capture_audit
+        assert view.capture_observation_valid and audit.left_count == 3 and audit.right_count == 1
+        assert audit.right_isolated_green == (expected == "right")
+        assert mission._preferred_keep_side(audit) == expected
+        without_image_hint = replace(audit, left_isolated_green=False, right_isolated_green=False)
+        assert mission._audit_payload(audit) == mission._audit_payload(without_image_hint)
+    # A large adjacent detection must not be declared independent from its centre distance alone.
+    overlapping = (items[0], replace(items[-1], bbox=(350, 480, 650, 160)))
+    with patch.object(runner_module, "tracked_cargo", return_value=overlapping):
+        view = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+            status, mission, 2, capture_rois=rois, observed_s=1.1)
+    assert not view.capture_audit.left_isolated_green and not view.capture_audit.right_isolated_green
+
+
 def test_detection_logging() -> None:
     assert bbox_center_px((10, 20, 31, 41)) == (25, 40)
     detection = Detection(

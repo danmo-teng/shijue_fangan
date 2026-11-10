@@ -388,6 +388,8 @@ def audit_from_cargo(
     items: tuple[TrackedCargo, ...],
     selected_ids: set[int] | None = None,
     side_by_track: dict[int, str] | None = None,
+    *,
+    isolated_track_ids: set[int] | None = None,
 ) -> CargoAudit | None:
     visible = [item for item in items if item.visible]
     if not visible:
@@ -445,6 +447,7 @@ def audit_from_cargo(
         any(item.class_name == "injured_orange" for item in right) and
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
+    isolated_track_ids = isolated_track_ids or set()
     return CargoAudit(
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
         left_class_counts=tuple(sorted(Counter(item.class_name for item in left).items())),
@@ -477,6 +480,10 @@ def audit_from_cargo(
         right_nearest_distance_m=nearest_distance(right),
         left_stable_track_id=stable_track_id(left),
         right_stable_track_id=stable_track_id(right),
+        left_isolated_green=(len(left) == 1 and left_name == "green_supply" and
+                             left[0].track_id in isolated_track_ids),
+        right_isolated_green=(len(right) == 1 and right_name == "green_supply" and
+                              right[0].track_id in isolated_track_ids),
     )
 
 
@@ -762,6 +769,15 @@ def make_vision_snapshot(
             capture,
             selected_ids,
             capture_side_by_track,
+            isolated_track_ids={
+                item.track_id for item in capture
+                if item.class_name == "green_supply" and
+                not target_quality.get(item.track_id) and
+                mission._is_isolated(item, capture) and
+                all(other.track_id == item.track_id or
+                    not mission._boxes_overlap(item.bbox, other.bbox)
+                    for other in capture)
+            },
         )
         if capture_observation_valid else None
     )
@@ -2283,6 +2299,9 @@ class CompetitionPlanner:
             "keep_count": self.mission.cluster_keep_side_count,
             "separation_branch": self.mission.disperse_context,
             "separation_attempts": self.mission.disperse_attempts,
+            "separation_no_progress_attempts": (
+                self.mission.separation_reviewed_attempt - self.mission.separation_progress_attempt
+            ),
             "task_id": self.protocol_task, "action_id": self.protocol_action,
             "rejected_action_id": stm.rejected_action_id, "matched_rejection": matched_rejection,
             "request_task_id": pending_task, "request_action_id": pending_action,
