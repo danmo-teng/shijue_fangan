@@ -416,5 +416,5 @@ def export_review(session,output,result):
         with path.open('x',newline='') as f:
             fields=sorted({k for r in records for k in r})
             if fields:
-                writer=csv.DictWriter(f,fieldnames=fields);writer.writeheader();writer.writerows(records)
+                writer=csv.DictWriter(f,fieldnames=fields,lineterminator='\n');writer.writeheader();writer.writerows(records)
     return paths

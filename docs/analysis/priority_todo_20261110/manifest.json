@@ -255,7 +255,7 @@
     "F/A fallback pose time uses processing minus capture_age; callback RX minus consumer age is incorrect."
   ],
   "code": {
-    "localization/tools/motion_source_review.py": "d26b52f01a25fa13088cca31a0253f3790b34c0452293424fe9c39fdfcd49308",
+    "localization/tools/motion_source_review.py": "f932df3dd733acb952efce08c1c8b371aea8415ba8e5a1dde87ecb6648c25aa7",
     "localization/tools/t265_f407_debug.py": "545e1054993f965f585be9bd0eb21dbc5222c7739466f1e30f916eb40f6130f9",
     "localization/tools/wheel_gyro_residual.py": "1c47f42624264b53ad7247c01b74a44d7bab7635fe23ac8207f9067ec0e5711e",
     "localization/tools/lidar_yaw_debug/dynamic.py": "a010dfebd91464ceb38e18a046a7674a059d21c7f9063252dd8e42ce33aeb427",
@@ -273,7 +273,8 @@
       "F": 4.999899955865361e-10,
       "A": 4.99997652113858e-10
     },
-    "real_ground_accuracy_verified": false
+    "real_ground_accuracy_verified": false,
+    "csv_line_endings": "15 derived tables normalized to LF; all parsed CSV cells unchanged; original logs untouched"
   },
   "artifacts": [
     {
@@ -288,8 +289,8 @@
     },
     {
       "path": "docs/analysis/priority_todo_20261110/F/synchronization.csv",
-      "bytes": 1500458,
-      "sha256": "1022770c50db636bb8abf3b1638a162c4975cc48c7149c5d8414555b5ac6bb8b"
+      "bytes": 1485492,
+      "sha256": "e453c03281041823e2e8fe84d3748928aba25c82b3eca7cc49cd38d1152e363a"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/F/scan_candidates.csv",
@@ -308,8 +309,8 @@
     },
     {
       "path": "docs/analysis/priority_todo_20261110/A/synchronization.csv",
-      "bytes": 2344623,
-      "sha256": "fabba262ecdbc476913cd99f9c26fd7772abc08f5e8d29bb73cc15d6692f01b5"
+      "bytes": 2320187,
+      "sha256": "0b805a708f605747ed3d61662bec79926666dfc57daaf7fe246741f7cb2aa5fb"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/A/scan_candidates.csv",
@@ -323,18 +324,18 @@
     },
     {
       "path": "docs/analysis/priority_todo_20261110/dynamic/wall_windows.csv",
-      "bytes": 9283,
-      "sha256": "898016b231ab4c9ef635a747ca5ae6a904b241423e8f0122e48bca5c348946f1"
+      "bytes": 9265,
+      "sha256": "551c1e980b5626a357363e40801cd51ab78040fb439399bddff7304b34d02612"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/dynamic/synchronization.csv",
-      "bytes": 1851807,
-      "sha256": "f7eb0532e7a547c534b1f78d4e2912a83602f6e44efa28cd883d0933f5bcb23f"
+      "bytes": 1833338,
+      "sha256": "ae7f0e4e00b4bb5c99a2fe9c9aafa9986677ccc3099116950f3e6c2ed989e542"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/dynamic/scan_candidates.csv",
-      "bytes": 2900951,
-      "sha256": "f913f1435dbbb58d3cf23f285245b2cd9d2f6b0394eec42a08444fd17652cdad"
+      "bytes": 2887614,
+      "sha256": "aa0c956301810382d460e2e28f8c3afc62e6d75203caf1957bc7f06c23b257ae"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round1/motion_source_review.json",
@@ -343,18 +344,18 @@
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round1/wall_windows.csv",
-      "bytes": 15371,
-      "sha256": "94f90e75970417443dc15240bc6ddc737f4f2e933cf36106d97096d02cdf936a"
+      "bytes": 15341,
+      "sha256": "ab45e32f1402d9e6e61783935d05f88c1e9a3a7d9239e1c6434153119da8f002"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round1/synchronization.csv",
-      "bytes": 2748356,
-      "sha256": "13f5b5b1094c8ee9d9b5e9395bd85537478fd69d18099dcee60b5cd61738cf14"
+      "bytes": 2727684,
+      "sha256": "0222c2631d471db8a52439d48146f2b9d684a9809d51ed7ef10b7fbef98f3768"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round1/scan_candidates.csv",
-      "bytes": 3223370,
-      "sha256": "d6e33cfcbdb77226d8b2577e6ecaf326ab76aa9c3cf9d88da186b0746d742e4a"
+      "bytes": 3208521,
+      "sha256": "ae95306ea1ae5e77534d8a71f49319ee4ec5023f6b61aac5f5cd5532d2dde590"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round2/motion_source_review.json",
@@ -363,18 +364,18 @@
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round2/wall_windows.csv",
-      "bytes": 28596,
-      "sha256": "419ae7d11c5562dfb4edafa6c1c7b355197edb4c49b7e25bfb3aaa2e441f9ad6"
+      "bytes": 28541,
+      "sha256": "754babdcf662f359f47bfd9c0e6c717ca803b9f01be04a8192940d51e6acefaa"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round2/synchronization.csv",
-      "bytes": 3471967,
-      "sha256": "f6ffe30bdb118db93cae28b923574f6044093de8b9480c4677740e31174bdee2"
+      "bytes": 3446235,
+      "sha256": "dc8f78a50b3b22f6cfab45bf8ecd39667db3b4a0c56ca40e6f95df5dc050424f"
     },
     {
       "path": "docs/analysis/priority_todo_20261110/round2/scan_candidates.csv",
-      "bytes": 4033705,
-      "sha256": "7380c688637af36a98db782ab7b488a0f76e07cec8d9889f31b63fdea6b0f4af"
+      "bytes": 4015176,
+      "sha256": "a53710ddbfcb5e23047192bb7acf2c1c3062b23f603f02750e2ecd4318dede3f"
     }
   ]
 }
