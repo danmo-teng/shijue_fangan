@@ -605,6 +605,7 @@ def main() -> None:
         assert app.motion_identity_confirmed() and app.options.actual_lower_firmware == "unconfirmed"
         app.options.reference_description="test tape zero and ground angle line"
         app.measurement_buffer = None
+        app.reference_buffer = None
         app.distance_mm = 1000
         moves, turns = [], []
         app.toggle_test = lambda name, action: action()
@@ -3994,6 +3995,46 @@ def test_motion_lab_stdio():
             assert ('--debug-wheel-experiment' in command)==experiment
             assert metadata['wheel_input_requested']==(wheel=='on')
             current.stop_session()
+
+
+def test_motion_map_simple_operator_view():
+    """Rendering/selection never moves; explicit action dispatch keeps signs."""
+    from unittest.mock import patch
+    import t265_f407_motion_map as module
+    with tempfile.TemporaryDirectory() as directory:
+        with patch('sys.argv',['map','--windowed','--output-root',directory]), \
+             patch.object(module.MotionMapApp,'detect_screen_size',return_value=(1280,1024)):
+            app=module.MotionMapApp(module.arguments())
+        app.render_logical()
+        assert not app.show_advanced and 'execute_selected' in app.hitboxes and 'returntest' not in app.hitboxes
+        def click(name):
+            a,b,c,d=app.hitboxes[name];app.select_at((a+c)//2,(b+d)//2)
+        calls=[]
+        with patch.object(app,'toggle_test',side_effect=lambda name,operation:operation()), \
+             patch.object(app,'send_move',side_effect=lambda *a,**k:calls.append(('move',a))), \
+             patch.object(app,'send_turn',side_effect=lambda *a,**k:calls.append(('turn',a))), \
+             patch.object(app,'send_stop',side_effect=lambda:calls.append(('stop',()))), \
+             patch.object(app,'record_event',return_value=True):
+            click('action_next');app.render_logical()
+            assert calls==[]  # Choosing and rendering are never execution.
+            click('execute_selected')
+            assert calls==[('move',(180,1000))]
+            for i,(_,_,kind,value) in enumerate(module.SIMPLE_ACTIONS):
+                app.simple_action_index=i;app.execute_selected()
+                assert calls[-1]==(kind,((value,) if kind=='turn' else (value,1000)))
+            app.render_logical()
+            click('rplus');assert app.turn_rate_deg_s==70
+            click('rminus');assert app.turn_rate_deg_s==60
+            before=len(calls);click('reference_note')
+            for key in b'floor_A_V1':app.handle_key(key)
+            assert len(calls)==before and app.reference_buffer=='floor_A_V1'
+            click('stop');assert calls[-1]==('stop',())
+            app.handle_key(13);assert app.options.reference_description=='floor_A_V1'
+            click('advanced_view');app.render_logical()
+            assert app.show_advanced and 'returntest' in app.hitboxes and 'execute_selected' not in app.hitboxes
+            click('simple_view');app.render_logical();assert not app.show_advanced
+        assert app.bridge is None and app.localizer is None and app.run_dir is None
+        app.storage_panel.close()
 
 
 def test_offline_wheel_gyro_residual():

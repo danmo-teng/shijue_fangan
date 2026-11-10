@@ -67,6 +67,12 @@ DEBUG_COMMAND_LEFT_SIGN = 1
 DEBUG_COMMAND_TURN_SIGN = -1
 LOWER_FIRMWARE = IMPLEMENTATION_COMMIT
 MOTION_STATUS_TIMEOUT_MS = 1000
+SIMPLE_ACTIONS = (
+    ("forward", "前进", "move", 0), ("backward", "后退", "move", 180),
+    ("lateral", "左横移", "move", 90), ("right", "右横移", "move", 270),
+    *((f"rotate_{angle}deg", f"{'逆' if angle>0 else '顺'}时针{abs(angle)}°", "turn", angle)
+      for angle in (90, -90, 180, -180, 360, -360)),
+)
 MOTION_PROTOCOL = dict(PROTOCOL, uart="RDK /dev/ttyS1 to F405 UART4/JP506", board="F405_ROBO", motion_command_type="0x19", motion_status_type="0x1A",
                        turn_angle_unit="signed 0.1 degree", move_arguments="physical forward/left mm",
                        wheel_body_axes="F=(u2-u1)/sqrt(3), L=(2*u3-u1-u2)/3; ui=-K*raw_delta_i/dt; receive interval estimate only",
@@ -238,6 +244,9 @@ class MotionMapApp:
         self.wheel_sdk_status = None
         self.fisheye_requests=0
         self.visual_disturbance_active = False
+        self.show_advanced = False
+        self.simple_action_index = 0
+        self.reference_buffer: str | None = None
 
     @staticmethod
     def detect_screen_size() -> tuple[int, int]:
@@ -350,8 +359,12 @@ class MotionMapApp:
                  max_width=x1-x0-8)
 
     def draw_panel(self, canvas: np.ndarray, text: TextPainter) -> None:
+        if not self.show_advanced:
+            self.draw_simple_panel(canvas,text)
+            return
         x0 = 920
         cv2.rectangle(canvas, (900, 0), (LOGICAL_WIDTH, LOGICAL_HEIGHT), (26, 27, 30), -1)
+        self.button(canvas,text,"simple_view","简洁页",(1168,9,1250,40))
         text.add("T265/F405 运动调试", (x0, 12), 22, (245, 245, 245), True)
         mode = getattr(self.options, "wheel_input", "off")
         wheel_state=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
@@ -493,6 +506,67 @@ class MotionMapApp:
         if self.measurement_buffer is not None:
             text.add(f"测量 f,l,deg: {self.measurement_buffer}_", (x0, 954), 14, (100, 240, 240))
         text.add(self.message, (x0, 986), 12, (0, 215, 255))
+
+    def draw_simple_panel(self, canvas, text):
+        """Operator view only. The original action/protocol owners are reused."""
+        x=920
+        cv2.rectangle(canvas,(900,0),(LOGICAL_WIDTH,LOGICAL_HEIGHT),(26,27,30),-1)
+        text.add("T265安装 / 官方轮速验证",(x,12),21,bold=True)
+        text.add("1 先看本轮输入与实际设备",(x,53),17,(140,215,245),True)
+        requested=getattr(self.options,'wheel_input','off')=='on'
+        state=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
+        labels={"SDK_CONFIG_LOADED":"SDK已加载，尚无受理样本", "SDK_API_ACCEPTED":"已有SDK受理样本",
+                "SDK_INPUT_PAUSED_WHEEL_SUSPECT":"轮式可疑，暂停发送"}
+        source=("官方轮速："+labels.get(state.get('state'),"已请求，尚未加载")) if requested else "纯T265：未请求轮速注入"
+        text.add(source,(x,83),16,(90,210,245))
+        text.add(f"SDK API成功 {state.get('sdk_api_success_samples',0)} 次 / {state.get('sdk_api_rate_hz',0)} Hz",
+                 (x,110),15)
+        text.add("API受理记录，不等于实车精度通过",(x,135),13,(180,180,190))
+        link=self.bridge.connection_snapshot() if self.bridge else {}
+        fw=str(link.get('actual_lower_firmware','未收到实际身份'))
+        text.add("F405固件："+fw[:16],(x,161),14)
+        text.add("运动接口已确认" if self.motion_identity_confirmed() else "实际MotionDebug身份待确认",
+                 (x,185),14,(245,210,150))
+        pose=self.localization.get('pose',{})
+        if all(k in pose for k in ('x_m','y_m','yaw_deg')):
+            text.add(f"车中心 {pose['x_m']:+.3f}, {pose['y_m']:+.3f}m / {pose['yaw_deg']:.1f}°",(x,213),15)
+        else:text.add("车中心位姿：等待T265",(x,213),15)
+        text.add("橙=车中心  绿=相机  紫=轮式参考",(x,240),13,(180,180,190))
+        text.add("2 选一段动作，再点击执行",(x,280),17,(140,215,245),True)
+        _,label,kind,value=SIMPLE_ACTIONS[self.simple_action_index]
+        target=f"{self.distance_mm}mm / {self.speed_mm_s}mm/s" if kind=='move' else f"{self.turn_rate_deg_s}°/s"
+        text.add(label+" / "+target,(x,311),18,(245,245,245),True)
+        self.button(canvas,text,'action_prev','上一项',(x,346,1078,385))
+        self.button(canvas,text,'action_next','下一项',(1090,346,1250,385))
+        if kind=='move':
+            for i,(name,label) in enumerate((('dminus','距离−100'),('dplus','距离+100'),('sminus','速度−50'),('splus','速度+50'))):
+                self.button(canvas,text,name,label,(x+i*84,399,x+i*84+78,434))
+        else:
+            self.button(canvas,text,'rminus','角速度−10°/s',(x,399,1078,434))
+            self.button(canvas,text,'rplus','角速度+10°/s',(1090,399,1250,434))
+        self.button(canvas,text,'execute_selected','执行这一段（点击才动）',(x,451,1250,507),False,(55,110,80))
+        self.button(canvas,text,'stop','停止 STOP',(x,520,1250,583),False,(55,55,150))
+        text.add(f"当前：实验{self.test_id} / {self.active_test or '未执行'}",(x,596),13,(245,210,150))
+        text.add("3 停稳后，记录真实测量",(x,632),17,(140,215,245),True)
+        self.button(canvas,text,'mark_settled','我已停稳：冻结终点',(x,666,1250,705))
+        self.button(canvas,text,'reference_note','填写卷尺 / 地面基准说明',(x,714,1250,753))
+        self.button(canvas,text,'ground_truth','录入实测距离 / 转角',(x,762,1250,801))
+        text.add("前向mm,左向mm,逆时针deg；未知填?",(x,819),13,(180,180,190))
+        text.add("指令值与DONE不是真值；不自动返航",(x,842),13,(180,180,190))
+        if self.reference_buffer is not None:
+            text.add("基准说明（可用拼音）:"+self.reference_buffer+"_",(x,870),13,(100,240,240),max_width=330)
+        elif self.measurement_buffer is not None:
+            text.add("实测值："+self.measurement_buffer+"_",(x,870),15,(100,240,240))
+        else:text.add(self.message,(x,870),13,(0,215,255),max_width=330)
+        if self.reference_buffer is not None or self.measurement_buffer is not None:
+            text.add("回车保存 / Esc取消；STOP仍可点击",(x,899),13,(180,180,190))
+        self.button(canvas,text,'advanced_view','高级：外参 / 完整状态 / 旧动作',(x,931,1250,975))
+        text.add('日志：'+(self.run_dir.name if self.run_dir else '尚未启动'),(x,988),11,(180,180,190))
+
+    def execute_selected(self):
+        name,_,kind,value=SIMPLE_ACTIONS[self.simple_action_index]
+        operation=(lambda:self.send_turn(value)) if kind=='turn' else (lambda:self.send_move(value,self.distance_mm))
+        self.toggle_test(name,operation)
 
     def render_logical(self) -> np.ndarray:
         canvas = np.zeros((LOGICAL_HEIGHT, LOGICAL_WIDTH, 3), dtype=np.uint8)
@@ -778,7 +852,7 @@ class MotionMapApp:
         if all(v is None for v in values) or any(v is not None and not math.isfinite(v) for v in values):
             raise ValueError("至少录入一项有限实测值")
         if not self.options.reference_description.strip():
-            raise ValueError("启动时用--reference-description记录卷尺零点和地面角度基准")
+            raise ValueError("先填写卷尺/地面基准说明，或用--reference-description记录")
         document = {"test_id": self.test_id, "timestamp_monotonic_ns": time.monotonic_ns(),
             "measurement_end_monotonic_ns": marker["timestamp_monotonic_ns"],
             "pose_sample_monotonic_ns":marker["localization"].get("timestamp_monotonic_ns"),
@@ -903,6 +977,26 @@ class MotionMapApp:
                     self.active_test = None
                     self.return_phase = None
                 self.send_stop()
+            elif name in {'advanced_view','simple_view'}:
+                self.show_advanced=name=='advanced_view'
+            elif name in {'action_prev','action_next'}:
+                self.simple_action_index=(self.simple_action_index+(1 if name=='action_next' else -1))%len(SIMPLE_ACTIONS)
+            elif name=='execute_selected':
+                self.execute_selected()
+            elif name=='mark_settled':
+                try:self.mark_settled_reference()
+                except ValueError as error:self.message=str(error)
+            elif name=='ground_truth':
+                self.reference_buffer=self.measurement_buffer=None
+                self.handle_key(ord('g'))
+            elif name=='reference_note':
+                self.measurement_buffer=None
+                self.reference_buffer=self.options.reference_description
+                self.message='输入基准说明，回车保存；Esc取消。可用拼音/字母编号。'
+            elif name=='rminus':
+                self.turn_rate_deg_s=max(10,self.turn_rate_deg_s-10)
+            elif name=='rplus':
+                self.turn_rate_deg_s=min(360,self.turn_rate_deg_s+10)
             elif name.startswith("turn_"):
                 angle = int(name.split("_", 1)[1])
                 self.toggle_test(f"rotate_{angle}deg", lambda: self.send_turn(angle))
@@ -1429,6 +1523,17 @@ class MotionMapApp:
         if getattr(self, "storage_panel", None) and self.storage_panel.key(key, self):
             return True
         key &= 0xFF
+        if self.reference_buffer is not None:
+            if key==27:self.reference_buffer=None
+            elif key in (10,13):
+                if self.reference_buffer.strip():
+                    self.options.reference_description=self.reference_buffer.strip()
+                    self.record_event('manual_reference_description_set',dict(reference=self.options.reference_description,source='operator_text'))
+                    self.reference_buffer=None;self.message='基准说明已保存到本次动作记录'
+                else:self.message='请填写实际卷尺零点 / 地面标线说明'
+            elif key in (8,127):self.reference_buffer=self.reference_buffer[:-1]
+            elif 32<=key<127:self.reference_buffer+=chr(key)
+            return True
         if self.measurement_buffer is not None:
             if key == 27:
                 self.measurement_buffer = None
