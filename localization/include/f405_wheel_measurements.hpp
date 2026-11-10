@@ -18,6 +18,9 @@ public:
     void request(const std::uint8_t *, std::size_t, std::uint64_t written_before_ns);
     void feedback(const std::uint8_t *, std::size_t, std::uint64_t received_ns);
     Json latest(); // consume ready intervals once; coalesce, never replay a backlog
+    // A new SDK session/source boundary discards pending motion, while retaining
+    // matched identity/clock context; it never sends another MCU handshake.
+    void discard_motion_support();
 private:
     Json decode(const std::uint8_t *, std::size_t, std::uint64_t);
     Json prepare(const Json &, std::string &reason);

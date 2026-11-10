@@ -26,8 +26,9 @@ template<class T> struct NativeMotionValue {
     void reset() noexcept { present = false; }
 };
 
-// Exact source-selection policy from lidar_yaw_debug/motion_source.py. This
-// class owns numerical state only: no UART, SDK, clock reads, locks or threads.
+// Legacy policy remains identical to lidar_yaw_debug/motion_source.py; the
+// explicit robust experiment adds continuous SDK coordinates and wheel-only
+// bootstrap. Numerical state only: no UART, SDK, clock reads, locks or threads.
 class NativeMotionSource {
 public:
     using Json = nlohmann::json;
@@ -45,6 +46,9 @@ public:
     };
 
     void configure(const Json &configuration);
+    void reset_sdk_session();
+    void sdk_unavailable(const std::string &reason);
+    Vec2 raw_sdk_point(const Vec2 &point) const;
     void set_wheel_suppressed(bool suppressed, const std::string &reason);
     bool wheel_input_paused() const noexcept { return phase_wheel_suppressed || wheel_suspect; }
     std::string wheel_input_reason() const;
@@ -91,7 +95,26 @@ public:
     int evidence_confirmations = 0;
     NativeMotionValue<std::string> last_evidence_scan;
 
+    // Explicit experimental policy. Raw SDK/counter histories are never rewritten.
+    bool robust_odometry_enabled = false;
+    bool t265_suspect = false;
+    std::uint64_t sdk_position_bridges = 0;
+    History continuous_poses;
+    Vec2 sdk_coordinate_bias{{0., 0.}};
+    Json latest_pose = nullptr, previous_valid_pose = nullptr;
+    bool sdk_adopted = false;
+    Basis sdk_basis{{Vec2{{1., 0.}}, Vec2{{0., 1.}}}};
+    YawHistory host_yaw_reference;
+    bool sdk_rotation_pending = false;
+    bool sdk_stream_available = false;
+    Vec2 sdk_frame_translation{{0., 0.}};
+    bool sdk_frame_translation_pending = false;
+    History raw_sdk_frame_poses;
+
 private:
+    void robust_pose(const Json &sample);
+    void robust_process();
+    void robust_fallback(const std::string &reason, double t);
     void process();
     void fallback(const std::string &reason, double t);
     void publish();

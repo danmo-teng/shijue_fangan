@@ -3,6 +3,7 @@
 Explicit buttons are the only source of chassis motion. No competition output.
 """
 import argparse
+import copy
 import json
 import math
 import multiprocessing as mp
@@ -24,6 +25,30 @@ from lidar_yaw_debug.worker import RadarWorker
 from lidar_yaw_debug.inputs import forward_motion_event
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 from local_packet_receiver import LocalPacketReceiver
+
+
+def motion_source_label(mode,axes,confirming,*,sdk_available=None):
+    wheel_modes=('WHEEL_FALLBACK','WHEEL_ONLY_NO_SDK','WHEEL_UNCERTAIN_BOTH_SUSPECT')
+    labels={'WHEEL_FALLBACK':'轮速传播／等待雷达约束',
+        'WHEEL_ONLY_NO_SDK':'轮速＋主yaw／SDK不可用',
+        'WHEEL_UNCERTAIN_BOTH_SUSPECT':'双路异常／轮式不确定传播',
+        'BOTH_SUSPECT':'双路异常／不确定传播',
+        'T265_PRIMARY_WHEEL_SUSPECT':'T265＋主yaw／轮式可疑',
+        'T265_WITH_WHEEL_TAIL':'T265定位／轮反馈续推',
+        'T265_PHASE_NO_WHEEL':'T265＋主yaw／阶段排除轮式',
+        'T265_UNCERTAIN_NO_WHEEL':'T265异常／无轮式替代增量',
+        'NO_MOTION_SOURCE_SUPPORT':'无运动增量支持／保持已有估计'}
+    label=labels.get(mode,'T265定位／暂无轮反馈参考')
+    if mode in wheel_modes and axes:
+        label=('不确定轮式' if mode=='WHEEL_UNCERTAIN_BOTH_SUSPECT' else '轮速传播')+'／雷达'+''.join(axes).upper()+'修正'
+    if confirming:
+        prefix=('不确定轮式' if mode=='WHEEL_UNCERTAIN_BOTH_SUSPECT' else
+                '轮速传播' if mode in wheel_modes else 'T265传播')
+        label=prefix+'／正在重获围栏位置'
+    if mode=='T265_PHASE_NO_WHEEL' and sdk_available is False:
+        label='T265离线／阶段排除轮式，增量未知'
+    return label
+
 
 def capture_control(connection, root, stop, packets):
     """Test-only passive receiver, isolated from the map/CSV parsing GIL."""
@@ -63,15 +88,20 @@ class DynamicMapApp(base.MotionMapApp):
         self.dynamic_error=None;self.dynamic_snapshot={};self.path=[];self.vio_path=[]
         self.last_worker_input_drops=0
         self.last_dynamic_stamp=0;self.exit_requested=False
+        self.last_raw_dynamic_stamp=None
         self.control_socket=None;self.control_process=None
         self.control_context=None;self.control_stop=None;self.control_packets=None
         self.control_address='\0motion-lab-control-'+uuid.uuid4().hex
         self.capture_chain_present=False
         self.auto_reference_requested=False
+        self.initial_reference_requested=False
         self.speed_mm_s=200;self.turn_rate_deg_s=60;self.distance_mm=500
 
     def motion_lab_command(self, request):
         # Reuse the GUI reference action for the existing stdio field test.
+        if isinstance(request,dict) and request.get('op')=='set_reference':
+            return self.request_known_reference(request.get('center_xy_m'),request.get('yaw_deg'),
+                request.get('description'),request.get('reference_kind'))
         if isinstance(request, dict) and request.get('op') == 'align':
             if self.bridge.pending:
                 raise RuntimeError('先结束当前动作再建立起点')
@@ -92,6 +122,23 @@ class DynamicMapApp(base.MotionMapApp):
                 execution='isolated_readonly_process',
                 exitcode=self.control_process.exitcode if self.control_process else None)
         return result
+
+    def request_known_reference(self,center_xy_m,yaw_deg,description,reference_kind):
+        if not getattr(self.options,'experimental_robust_localization',False):
+            raise ValueError('set_reference仅用于--experimental-robust-localization测试')
+        if self.bridge and self.bridge.pending:
+            raise RuntimeError('先结束当前动作再建立起点')
+        if (not isinstance(center_xy_m,(list,tuple)) or len(center_xy_m)!=2 or
+                not all(isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) for v in center_xy_m)):
+            raise ValueError('center_xy_m必须是两个有限数值，单位m')
+        if not isinstance(yaw_deg,(int,float)) or isinstance(yaw_deg,bool) or not math.isfinite(yaw_deg):
+            raise ValueError('yaw_deg必须是有限场地角度，逆时针为正')
+        if not isinstance(description,str) or not description.strip() or reference_kind not in ('measured','assumed'):
+            raise ValueError('必须说明description及reference_kind=measured或assumed，假设起点不是真值')
+        request_id=self.radar.set_reference(center_xy_m,float(yaw_deg),description.strip(),reference_kind)
+        self.devent('known_field_reference_requested',request_id=request_id,center_xy_m=list(center_xy_m),
+            yaw_deg=yaw_deg,description=description.strip(),reference_kind=reference_kind)
+        return dict(request_id=request_id,reference_pending=True,reference_kind=reference_kind)
 
     def extra_localizer_args(self):
         return ['--debug-pose-socket','@'+self.pose_address[1:],
@@ -121,8 +168,10 @@ class DynamicMapApp(base.MotionMapApp):
             self.control_process=self.control_context.Process(target=capture_control,
                 args=(self.control_socket,self.run_dir,self.control_stop,self.control_packets),name='motion-lab-control-capture')
             self.control_process.start()
+        experimental=({'experimental_robust_localization':True}
+                      if getattr(self.options,'experimental_robust_localization',False) else {})
         self.radar.start(self.dynamic_config,self.options.lidar,self.options.lidar_baud,self.run_dir,sdk_policy=sdk_policy,
-            control_output=control_output,pose_input=dict(socket=self.pose_socket,session_id=self.wheel_input.session_id))
+            control_output=control_output,pose_input=dict(socket=self.pose_socket,session_id=self.wheel_input.session_id),**experimental)
 
     def start_session(self):
         self.message='建议场地中心无遮挡处，静止后点自动定位'
@@ -158,6 +207,13 @@ class DynamicMapApp(base.MotionMapApp):
         m['initialization_policy']='arena_center_origin_initial_heading_nearest_positive_X_mod_90'
         m['suggested_physical_placement']='arena_center_clear_of_speed_bumps_not_an_exact_pose_measurement'
         m['obstacle_policy']='operator_disables_lidar_corrections; automatic_occlusion_detection_unverified'
+        if getattr(self.options,'experimental_robust_localization',False):
+            m['initialization_policy']='explicit_measured_or_assumed_field_reference_otherwise_real_wall_initialization'
+            m['sdk_unavailable_policy']='same_CPP_owner_keeps_UART; measured_wheel_primary_yaw_continues_if_reference_known'
+            m['requested_initial_reference']=(dict(center_xy_m=self.options.initial_center_m,
+                yaw_deg=self.options.initial_yaw_deg,description=self.options.reference_description,
+                reference_kind=self.options.initial_reference_kind)
+                if getattr(self.options,'initial_center_m',None) is not None else None)
         m['motion_source_policy']=dict(MOTION_SOURCE_POLICY,normal='T265_with_measured_wheel_tail',
             fallback='measured_wheel_and_primary_yaw_with_observable_lidar_axes',
             recovery='movement_agreement_and_two_axis_walls_then_translation_rebase',
@@ -190,6 +246,7 @@ class DynamicMapApp(base.MotionMapApp):
         for message in self.radar.poll():
             if message['kind']=='reference_set':
                 self.path=[];self.vio_path=[];self.dynamic_error=None
+                self.last_raw_dynamic_stamp=None
                 self.devent('field_reference_set',reference=message['reference'])
                 self.message='定位完成；动作单击，再点同一动作会停止'
             elif message['kind']=='reference_search_started':self.message='寻找至少两面不平行围栏，确认后建立坐标'
@@ -205,9 +262,17 @@ class DynamicMapApp(base.MotionMapApp):
         if self.radar.input_drops!=self.last_worker_input_drops:
             self.last_worker_input_drops=self.radar.input_drops
             self.devent('bounded_motion_queue_overflow',dropped=self.radar.input_drops)
-        if (self.options.sensor_check_seconds and not self.dynamic_snapshot.get('ready')
+        have_support=(state.get('have_motion_support') if getattr(self.options,'experimental_robust_localization',False)
+                      else state.get('have_tracked_pose'))
+        initial_center=getattr(self.options,'initial_center_m',None)
+        if (initial_center is not None and not self.initial_reference_requested
+                and have_support and state.get('have_primary_yaw')):
+            self.request_known_reference(initial_center,self.options.initial_yaw_deg,
+                self.options.reference_description,self.options.initial_reference_kind)
+            self.initial_reference_requested=True
+        if (self.options.sensor_check_seconds and initial_center is None and not self.dynamic_snapshot.get('ready')
                 and not self.auto_reference_requested and self.radar.pending_reference is None
-                and state.get('have_tracked_pose') and state.get('have_primary_yaw')):
+                and have_support and state.get('have_primary_yaw')):
             self.radar.align('desktop sensor check; no prescribed XY/heading; actual walls required',physical_confirmed=False)
             self.auto_reference_requested=True
         self.input_snapshot=self.wheel_input.snapshot(self.wheel_sdk_status) if self.wheel_input else {}
@@ -215,7 +280,11 @@ class DynamicMapApp(base.MotionMapApp):
             stamp=self.dynamic_snapshot['sample_monotonic_ns']
             if stamp!=self.last_dynamic_stamp:
                 self.path.append(self.dynamic_snapshot['center_xy_m']);self.path=self.path[-5000:];self.last_dynamic_stamp=stamp
-                self.vio_path.append(self.dynamic_snapshot['t265_center_xy_m']);self.vio_path=self.vio_path[-5000:]
+                raw_xy=self.dynamic_snapshot.get('t265_center_xy_m')
+                raw_stamp=self.dynamic_snapshot.get('raw_t265_sample_ns')
+                if raw_xy is not None and raw_stamp is not None and raw_stamp!=self.last_raw_dynamic_stamp:
+                    self.vio_path.append(raw_xy);self.vio_path=self.vio_path[-5000:]
+                    self.last_raw_dynamic_stamp=raw_stamp
         if self.dynamic_log:self.dynamic_log.submit('dynamic_status.json',self.dynamic_snapshot,atomic=True)
 
     def render_logical(self):
@@ -261,21 +330,17 @@ class DynamicMapApp(base.MotionMapApp):
         mode=s.get('motion_selection',{}).get('mode','T265_NO_WHEEL_REFERENCE')
         axes=tuple(s.get('current_wall_axes',[])) if s.get('lidar_corrections_enabled',True) else ()
         confirming=(s.get('last_fit') or {}).get('reacquisition_status')=='CONFIRMING_ENCLOSURE'
-        source_key=(mode,axes,confirming)
+        sdk_available=self.radar.state.get('sdk_available')
+        source_key=(mode,axes,confirming,sdk_available)
         if getattr(self,'source_label_key',None)!=source_key:
-            label={'WHEEL_FALLBACK':'轮速传播／等待雷达约束',
-                   'T265_PRIMARY_WHEEL_SUSPECT':'T265＋主yaw／轮式可疑',
-                   'T265_WITH_WHEEL_TAIL':'T265定位／轮反馈续推'}.get(mode,'T265定位／暂无轮反馈参考')
-            if mode=='WHEEL_FALLBACK' and axes:
-                label='轮速传播／雷达'+''.join(axes).upper()+'修正'
-            if confirming:
-                label=('轮速传播' if mode=='WHEEL_FALLBACK' else 'T265传播')+'／正在重获围栏位置'
+            label=motion_source_label(mode,axes,confirming,sdk_available=sdk_available)
             patch=np.full((24,340,3),(26,27,30),np.uint8)
             text=base.TextPainter(font_scale=1./self.render_scale)
             text.add(label,(0,0),13,(130,210,240));self.source_label=text.paint(patch);self.source_label_key=source_key
         canvas[215:239,920:1260]=self.source_label
         wheel=getattr(self,'input_snapshot',{});count=wheel.get('sdk_api_success_samples',0)
-        stage='OFF' if self.options.wheel_input=='off' else ('PAUSED_WHEEL_SUSPECT' if wheel.get('wheel_input_paused') else
+        stage='OFF' if self.options.wheel_input=='off' else ('SDK_OFFLINE' if self.radar.state.get('sdk_available') is False else
+            'PAUSED_WHEEL_SUSPECT' if wheel.get('wheel_input_paused') else
             'API_OK' if count else 'CFG_OK' if wheel.get('config_loaded') else 'WAIT_CFG')
         number(f'{stage} / {count} / {wheel.get("sdk_api_rate_hz",0):.0f}Hz',849)
         age=wheel.get('sdk_success_age_ms');age_text='--' if age is None else f'{age:.0f}'
@@ -350,6 +415,8 @@ class DynamicMapApp(base.MotionMapApp):
         if self.options.logs_only:return super().handle_key(key)
         if self.storage_panel.key(key,self):return True
         if self.measurement_buffer is not None:return super().handle_key(key)
+        if key&255 in (ord('m'),ord('M'),ord('g'),ord('G')):
+            return super().handle_key(key)
         if self.exit_requested or key&255 in (27,ord('q'),ord('Q')):return False
         if key&255 in (32,ord('s'),ord('S')):self.active_test=None;self.send_stop('用户停止键')
         return True
@@ -359,9 +426,40 @@ class DynamicMapApp(base.MotionMapApp):
         self.devent('dynamic_ground_truth',test_id=self.test_id,measurement=text,
             reference=self.options.reference_description,marker=self.settled_reference_mark)
 
+    def mark_settled_reference(self):
+        if not getattr(self.options,'experimental_robust_localization',False):
+            return super().mark_settled_reference()
+        if (self.test_id<=0 or self.active_test is not None or
+                (self.bridge is not None and self.bridge.pending is not None)):
+            raise ValueError('先结束本段动作，再人工确认停稳并标记')
+        if not self.dynamic_snapshot.get('ready'):
+            raise ValueError('尚无有场地参考的实际运动输出，未冻结终点')
+        now=time.monotonic_ns();raw=copy.deepcopy(self.localization)
+        raw_stamp=raw.get('timestamp_monotonic_ns')
+        self.settled_reference_mark=dict(test_id=self.test_id,timestamp_monotonic_ns=now,
+            pose_age_at_mark_ms=(now-raw_stamp)/1e6 if raw_stamp else None,
+            source='operator_declared_settled_not_controller_or_gyro_truth',
+            localization=raw,dynamic_localization=copy.deepcopy(self.dynamic_snapshot),
+            motion_status=copy.deepcopy(self.motion_status),imu_native_unaligned=copy.deepcopy(self.imu_telemetry),
+            wheel_reference=copy.deepcopy(self.latest_wheel_reference))
+        self.record_event('manual_settled_reference_mark',self.settled_reference_mark)
+        self.message=f'已冻结实验{self.test_id}选中轨迹；原始T265单独保存，测量后G录入'
+
+    def validate_sensor_check(self):
+        if not getattr(self.options,'experimental_robust_localization',False):
+            return super().validate_sensor_check()
+        if not self.dynamic_snapshot.get('ready'):
+            raise RuntimeError('实验检查未建立真实运动支持及场地参考，未伪造Pose或定位成功')
+        self.devent('robust_sensor_check_result',ready=True,
+            motion_source=self.dynamic_snapshot.get('motion_selection',{}).get('mode'),
+            actual_t265_pose_present=bool(self.radar.state.get('have_tracked_pose')),
+            actual_sdk_api_success_samples=(self.wheel_sdk_status or {}).get('sdk_api_success_samples',0),
+            physical_accuracy_verified=False)
+
     def run(self):
         result=super().run()
-        if self.options.sensor_check_seconds and not self.capture_chain_present:
+        if (self.options.sensor_check_seconds and not self.capture_chain_present
+                and not getattr(self.options,'experimental_robust_localization',False)):
             raise RuntimeError('检查未收到完整Pose/主yaw/雷达链路；查看dynamic_summary与localizer.log')
         return result
 
@@ -411,12 +509,24 @@ def arguments():
     ap=argparse.ArgumentParser(add_help=False)
     ap.add_argument('--lidar',default='/dev/ttyS6');ap.add_argument('--lidar-baud',type=int,default=230400)
     ap.add_argument('--dynamic-config',type=Path,default=base.PROJECT_ROOT/'localization/config/lidar_yaw_debug.json')
+    ap.add_argument('--initial-center-m',type=float,nargs=2,metavar=('X','Y'),
+        help='experimental only: explicit field center position, m; never inferred from missing SDK')
+    ap.add_argument('--initial-yaw-deg',type=float,help='experimental explicit field heading, CCW degrees')
+    ap.add_argument('--initial-reference-kind',choices=('measured','assumed'),default='assumed',
+        help='explicit initial placement evidence; assumed placement is not measured ground truth')
     extra,remaining=ap.parse_known_args();old=sys.argv
     if not any(x=='--wheel-input' or x.startswith('--wheel-input=') for x in remaining):
         remaining += ['--wheel-input','on']  # User confirmed dynamic default, 2026-11-03.
     try:sys.argv=[old[0],*remaining];o=base.arguments()
     finally:sys.argv=old
     for k,v in vars(extra).items():setattr(o,k,v)
+    if ((o.initial_center_m is None)!=(o.initial_yaw_deg is None)):
+        raise ValueError('--initial-center-m和--initial-yaw-deg必须成对提供')
+    if o.initial_center_m is not None:
+        if not o.experimental_robust_localization or not o.reference_description.strip():
+            raise ValueError('显式起点需要--experimental-robust-localization和--reference-description')
+        if not all(math.isfinite(v) for v in [*o.initial_center_m,o.initial_yaw_deg]):
+            raise ValueError('显式起点坐标/角度必须有限')
     if o.wheel_fixture!='off' or o.check_chassis:raise ValueError('dynamic entry does not accept synthetic/chassis-check mode')
     o.zone=4;o.center_origin=True;o.heading_offset_deg=45.  # Legacy test +X=0, before laser initialization.
     return o

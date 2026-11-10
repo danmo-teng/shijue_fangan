@@ -8,6 +8,7 @@
 #include "async_latest_file.hpp"
 #include "serial_port.hpp"
 #include "test_uart_relay.hpp"
+#include "motion_source_native.hpp"
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <pthread.h>
@@ -391,6 +392,20 @@ void test_new_mount()
     check(near(out.pose.x_m,.4,1e-8) && near(out.pose.y_m,-.2,1e-8), "full attitude removes tilted lever arm");
     check(near(out.body_forward_velocity_mps,.3,1e-8) && near(out.body_left_velocity_mps,-.2,1e-8),
           "instantaneous omega cross lever velocity compensation uses full rotation");
+    const double expected_vx=.3*fw[0]-.2*lw[0];
+    const double expected_vy=-(.3*fw[2]-.2*lw[2]);
+    check(near(out.vx_local_mps,expected_vx,1e-8) && near(out.vy_local_mps,expected_vy,1e-8),
+          "fixed-plane centre velocity retains full tilt and one lever correction");
+    config.start_heading_offset_deg += 37;
+    config.t265_translation_scale_enabled = true;
+    config.t265_translation_scale = 1.04;
+    omni::T265FieldProjector rotated_projector(config);
+    rotated_projector.project(sample(mount,0,0,0));
+    const auto rotated=rotated_projector.project(tilted);
+    const double ca=std::cos(omni::radians(37)), sa=std::sin(omni::radians(37));
+    check(near(rotated.vx_local_mps,1.04*(ca*expected_vx-sa*expected_vy),1e-8) &&
+          near(rotated.vy_local_mps,1.04*(sa*expected_vx+ca*expected_vy),1e-8),
+          "fixed-plane velocity uses the same start heading and scale as position");
 }
 
 void test_projection_gate_and_filter()
@@ -939,6 +954,23 @@ void test_debug_wheel_input()
         check(input.process(next,5000000000,sink)&&calls==2,"next genuinely new measured sample resumes normally");
     }
     {
+        Input input(config,"sdk-test","",log);
+        std::vector<std::uint32_t> frames;
+        const auto sink=[&](std::uint32_t frame,const rs2_vector &){frames.push_back(frame);return true;};
+        check(input.process(packet,2000000000,sink),"SDK restart fixture begins with a submitted sample");
+        Json policy{{"schema",3},{"kind","wheel_source_policy"},{"session_id","sdk-test"},
+            {"pause",true},{"reason","explicit source exclusion survives device restart"}};
+        check(input.source_policy(policy),"restart fixture pauses source");
+        input.prepare_sdk_restart();
+        check(!input.process(packet,3000000000,sink)&&frames.size()==1,
+              "new SDK generation retains source exclusion, without submitting old velocity or fake zero");
+        policy["pause"]=false;check(input.source_policy(policy),"new SDK generation can resume source once");
+        auto next=packet;next["packet_id"]=1;next["alignment_start_ns"]=1010000000;
+        next["alignment_end_ns"]=1020000000;next["alignment_gyro_end_ns"]=1020000000;
+        check(input.process(next,4000000000,sink)&&frames==std::vector<std::uint32_t>({0,0}),
+              "actual new SDK generation restarts SDK frame numbering, then consumes a genuinely new sample");
+    }
+    {
         const auto experiment_log=root+"/experiment.jsonl";
         std::vector<rs2_vector> sent;
         auto sink=[&](std::uint32_t frame,const rs2_vector &v) {
@@ -1047,6 +1079,15 @@ void test_dynamic_pose_relay()
           frames[0].heading_cdeg == 27025, "dynamic field units and heading");
     check((frames[0].status & omni::kPoseValid) && (frames[0].status & omni::kPoseWheelActive) &&
           !(frames[0].status & omni::kPoseT265Good), "fallback remains valid, never mislabeled T265 good");
+    for (const auto *mode : {"WHEEL_ONLY_NO_SDK", "WHEEL_UNCERTAIN_BOTH_SUSPECT"}) {
+        auto robust = p;robust["motion_source"] = mode;
+        robust["t265"]["sdk_available"] = false;
+        robust["motion_selection"] = Json{{"t265_motion_suspect",true}};
+        const auto frame = Relay::frame(robust, 0);
+        check((frame.status & omni::kPoseValid) && (frame.status & omni::kPoseWheelActive) &&
+              !(frame.status & omni::kPoseT265Good),
+              "experimental wheel-only/double uncertainty keeps valid estimate without labeling old confidence as T265 good");
+    }
     check(!relay.accept(p), "duplicate transport packet not replayed");
     p["packet_id"] = 1; p["quality"] = "LOST";
     check(relay.accept(p) && !(frames.back().status & omni::kPoseValid), "reference invalid is not fabricated valid");
@@ -1223,7 +1264,9 @@ int replay_native_wheels(const char *input_path,const char *config_path)
     std::ifstream file(input_path);if(!file)throw std::runtime_error("missing replay input");
     std::string line;
     while(std::getline(file,line)) {
-        const auto event=Json::parse(line);const auto hex=event.at("raw_hex").get<std::string>();
+        const auto event=Json::parse(line);
+        if(event.value("discard_motion_support",false)){input.discard_motion_support();continue;}
+        const auto hex=event.at("raw_hex").get<std::string>();
         std::vector<std::uint8_t> bytes;
         for(std::size_t i=0;i<hex.size();i+=2)bytes.push_back(std::stoul(hex.substr(i,2),nullptr,16));
         const auto ns=event.at("timestamp_ns").get<std::uint64_t>();
@@ -1351,8 +1394,189 @@ void test_motion_feedback_tap()
     }
 }
 
+void test_robust_motion_source()
+{
+    using Source = omni::NativeMotionSource;
+    using Json = Source::Json;
+    const std::int64_t origin = 1000000000LL, interval = 10000000LL;
+    auto configure = [&](Source &m, bool enabled = true) {
+        m.configure({{"pose_origin", {0., 0.}}, {"start_center_xy_m", {0., 0.}},
+            {"vio_rotation", 0.}, {"yaw_offset", 0.}, {"reference_sample_ns", origin},
+            {"robust_odometry_enabled", enabled}});
+    };
+    auto pose = [&](Source &m, int i, double x, double velocity = .5, int confidence = 3) {
+        m.pose({{"timestamp_monotonic_ns", origin + i * interval}, {"frame_number", i + 1},
+            {"x_m", x}, {"y_m", 0.}, {"yaw_rad", 0.}, {"vx_local_mps", velocity},
+            {"vy_local_mps", 0.}, {"tracker_confidence", confidence}, {"rotation_xyzw", {0., 0., 0., 1.}}});
+    };
+    auto wheel = [&](Source &m, int i, double velocity = .5) {
+        const auto end = origin + i * interval, start = end - interval;
+        Source::YawHistory yaws{{{static_cast<double>(start), 0.}}, {{static_cast<double>(end), 0.}}};
+        m.yaw(start, 0., {{"raw", {{"yaw_receive_us", start / 1000}}}});
+        m.yaw(end, 0., {{"raw", {{"yaw_receive_us", end / 1000}}}});
+        m.wheel({{"source", "measured_wheel_feedback"}, {"measurement_valid", true},
+            {"mcu_epoch", "real-fixture-boot"}, {"sample_id", i}, {"v_body_mps", {velocity, 0., 0.}},
+            {"raw_mcu_sample", {{"t0_us", start / 1000}, {"t1_us", end / 1000}}},
+            {"interval_start_ns", start}, {"interval_end_ns", end}, {"receive_monotonic_ns", end}}, yaws);
+    };
+    {
+        Source m; configure(m);
+        for (int i = 1; i <= 10; ++i) wheel(m, i);
+        check(m.mode == "WHEEL_ONLY_NO_SDK" && near(m.history.back()[1], .05),
+            "robust wheel-only startup propagates without SDK or walls");
+        check(m.latest_pose.is_null() && m.continuous_poses.empty(),
+            "wheel-only startup creates no SDK Pose or confidence sample");
+        pose(m, 10, 100.);  // Actual SDK world may have an arbitrary translation.
+        check(m.mode == "T265_WITH_WHEEL_TAIL" && near(m.history.back()[1], .05),
+            "first actual SDK Pose is continuously rebased to wheel-only trajectory");
+        wheel(m, 11); pose(m, 11, 100.005);
+        check(near(m.history.back()[1], .055), "rebased SDK continues its physical increments");
+        pose(m, 12, 100.005, .5, 0); wheel(m, 12); wheel(m, 13);
+        check(m.mode == "WHEEL_FALLBACK" && near(m.history.back()[1], .065),
+            "SDK loss plus unavailable lidar leaves measured wheel propagation running");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0.); pose(m, 1, .005); pose(m, 2, .405);
+        check(m.sdk_position_bridges == 1 && near(m.history.back()[1], .010),
+            "SDK-only pure translation jump bridges one actual adjacent interval");
+        pose(m, 3, .410);
+        check(near(m.history.back()[1], .015) && near(m.last_raw_xy->at(0), .410),
+            "bridge preserves subsequent position increments and original raw SDK position");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0.); wheel(m, 1); pose(m, 1, .005); wheel(m, 2);
+        auto tilted = m.latest_pose; tilted["timestamp_monotonic_ns"] = origin + 2 * interval;
+        tilted["frame_number"] = 3; tilted["x_m"] = .405;
+        tilted["rotation_xyzw"] = Json{std::sin(.15), 0., 0., std::cos(.15)}; m.pose(tilted);
+        check(m.sdk_position_bridges == 0 && m.mode == "WHEEL_FALLBACK",
+            "roll/pitch change with same yaw cannot qualify as a pure translation rebase");
+        Source no_attitude; configure(no_attitude); pose(no_attitude, 0, 0.); wheel(no_attitude, 1);
+        pose(no_attitude, 1, .005); wheel(no_attitude, 2); auto missing = no_attitude.latest_pose;
+        missing["timestamp_monotonic_ns"] = origin + 2 * interval; missing["frame_number"] = 3;
+        missing["x_m"] = .405; missing.erase("rotation_xyzw"); no_attitude.pose(missing);
+        check(no_attitude.sdk_position_bridges == 0 && no_attitude.mode == "WHEEL_FALLBACK",
+            "missing full attitude cannot be invented to qualify a translation-only bridge");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0.); auto slow_interval = m.latest_pose;
+        slow_interval["timestamp_monotonic_ns"] = origin + 1000000000LL;
+        slow_interval["frame_number"] = 2; slow_interval["x_m"] = .5; m.pose(slow_interval);
+        check(m.sdk_position_bridges == 0 && near(m.history.back()[1], .5) && !m.t265_suspect,
+            "real long-interval displacement is not rejected by a fixed 50mm position threshold");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0.); wheel(m, 1); pose(m, 1, .005);
+        m.set_wheel_suppressed(true, "business_resists_safe_zone");
+        wheel(m, 2, 1.); pose(m, 2, .405);
+        check(m.sdk_position_bridges == 1 && near(m.history.back()[1], .010),
+            "business wheel exclusion also applies SDK continuity handling");
+        const double before = m.history.back()[1];
+        for (int i = 3; i <= 8; ++i) wheel(m, i, 1.);
+        m.set_wheel_suppressed(false, "business_phase_ended"); wheel(m, 9, .5);
+        check(near(m.history.back()[1], before + .005),
+            "phase exit never replays excluded spinning wheel displacement");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0.); wheel(m, 1); pose(m, 1, .005);
+        // Simulate an already-confirmed wall verdict; a new SDK fault is not a
+        // new observation proving that the previously bad wheel has recovered.
+        m.wheel_suspect = true; m.mode = "T265_PRIMARY_WHEEL_SUSPECT";
+        wheel(m, 2); pose(m, 2, .405);
+        check(m.mode == "T265_PRIMARY_WHEEL_SUSPECT" && m.wheel_input_paused(),
+            "pure SDK position rebase cannot restore previously suspect wheel input");
+        wheel(m, 3); pose(m, 3, .800, 1.2);
+        check(m.mode == "WHEEL_UNCERTAIN_BOTH_SUSPECT" && m.wheel_suspect && m.t265_suspect,
+            "SDK motion fault after wheel fault preserves explicit double uncertainty");
+        check(m.wheel_input_paused(), "uncertain wheel fallback does not resume known-bad SDK injection");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0., 1.03);
+        for (int i = 1; i <= 210; ++i) { wheel(m, i, 1.); pose(m, i, i * .0103, 1.03); }
+        check(m.mode == "WHEEL_FALLBACK" && m.t265_suspect,
+            "persistent displacement baseline exposes 3 percent drift despite frequent SDK anchors");
+        check(!m.snapshot().at("source_conflict_is_independent_fault_diagnosis").get<bool>(),
+            "two-source conflict is explicitly not independent proof of which source is wrong");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0., 0.); wheel(m, 1, 0.); pose(m, 1, 0., 0.);
+        m.observe_walls("still-baseline", {"x", "y"}, origin + interval, Json{0., 0.}, m.continuous_poses);
+        for (int i = 2; i <= 8; ++i) {
+            wheel(m, i, 0.); pose(m, i, (i - 1) * .01, 0.);
+            m.observe_walls("still-" + std::to_string(i), {"x", "y"}, origin + i * interval,
+                Json{0., 0.}, m.continuous_poses);
+        }
+        check(m.evidence_verdict && *m.evidence_verdict == "T265_SUSPECT" && m.evidence_confirmations >= 2,
+            "two-axis walls can diagnose stationary SDK drift below old 25cm travel gate");
+        check(m.mode == "WHEEL_FALLBACK" && m.t265_suspect && !m.wheel_suspect,
+            "wall-supported stationary wheel remains selected after slow SDK drift");
+    }
+    {
+        Source m; configure(m); pose(m, 0, 0., .7); wheel(m, 1); pose(m, 1, .007, .7);
+        m.observe_walls("both-bad-baseline", {"x", "y"}, origin + interval, Json{0., 0.}, m.continuous_poses);
+        for (int i = 2; i <= 50; ++i) {
+            wheel(m, i); pose(m, i, i * .007, .7);
+            if (i == 40 || i == 50) m.observe_walls("both-bad-" + std::to_string(i), {"x", "y"},
+                origin + i * interval, Json{0., 0.}, m.continuous_poses);
+        }
+        check(m.evidence_verdict && *m.evidence_verdict == "BOTH_SUSPECT" && m.wheel_suspect && m.t265_suspect,
+            "two accepted full-XY wall intervals can explicitly contradict both motion sources");
+        check(m.mode == "WHEEL_UNCERTAIN_BOTH_SUSPECT" && m.wheel_input_paused(),
+            "simultaneous two-source conflict pauses wrong wheel injection but retains best-effort motion");
+        const double baseline_ns = m.wall_window->t;
+        check(near(baseline_ns, origin + 50 * interval),
+            "confirmed source verdict starts recovery from a new post-conflict wall baseline");
+        m.observe_walls("single-wall-cannot-clear-both", {"x"}, origin + 50 * interval,
+            Json{0., 0.}, m.continuous_poses);
+        check(m.wheel_suspect && m.t265_suspect && m.wheel_input_paused(),
+            "a single wall cannot claim recovery of the previously conflicting full XY motion");
+    }
+    {
+        Source m, baseline; configure(m, false); auto original = m.reference;
+        original.erase("robust_odometry_enabled"); baseline.configure(original);
+        wheel(m, 1); wheel(baseline, 1);
+        check(!m.robust_odometry_enabled && m.history == baseline.history && m.mode == baseline.mode,
+            "explicitly disabled experiment matches omitted legacy policy");
+    }
+    {
+        Source m; configure(m); auto ref = m.reference;
+        ref["reference_coordinate_source"] = "measured_wheel_local"; m.configure(ref);
+        for (int i = 1; i <= 10; ++i) wheel(m, i);
+        auto turned_pose = [&](int i, std::uint64_t frame, double x, double y, double heading, double vx, double vy) {
+            m.pose({{"timestamp_monotonic_ns", origin + i * interval}, {"frame_number", frame},
+                {"x_m", x}, {"y_m", y}, {"yaw_rad", heading}, {"vx_local_mps", vx},
+                {"vy_local_mps", vy}, {"tracker_confidence", 3},
+                {"rotation_xyzw", {0., 0., std::sin(heading / 2.), std::cos(heading / 2.)}}});
+        };
+        turned_pose(10, 11, 10., 20., std::acos(-1.) / 2., 0., .5);
+        wheel(m, 11); turned_pose(11, 12, 10., 20.005, std::acos(-1.) / 2., 0., .5);
+        check(near(m.history.back()[1], .055) && near(m.history.back()[2], 0.),
+            "first SDK after wheel-only startup binds a nonzero 90deg SDK-to-local rotation");
+        auto raw = m.raw_sdk_point({{10., 20.005}});
+        check(near(raw[0], .055) && near(raw[1], 0.), "raw SDK display uses same first-session rigid alignment");
+        m.sdk_unavailable("actual_USB_disconnect"); wheel(m, 12);
+        check(m.mode == "WHEEL_ONLY_NO_SDK" && near(m.history.back()[1], .060),
+            "explicit SDK unavailable event keeps continuous wheel-only propagation");
+        m.reset_sdk_session(); wheel(m, 13);
+        turned_pose(13, 1, 100., 200., std::acos(-1.), -.5, 0.);
+        wheel(m, 14); turned_pose(14, 2, 99.995, 200., std::acos(-1.), -.5, 0.);
+        check(near(m.history.back()[1], .070) && near(m.history.back()[2], 0.),
+            "new actual SDK session can reset frame number, translation and yaw without moving field reference");
+        ref = m.reference; ref["reference_coordinate_source"] = "selected_odometry_local";
+        ref["reference_sample_ns"] = origin + 14 * interval; ref["pose_origin"] = Json{.070, 0.}; m.configure(ref);
+        wheel(m, 15); turned_pose(15, 3, 99.990, 200., std::acos(-1.), -.5, 0.);
+        check(near(m.history.back()[1], .075) && near(m.history.back()[2], 0.),
+            "rebinding field reference to selected local coordinates preserves SDK rotation and translation");
+    }
+}
+
 int main(int argc,char **argv)
 {
+    if(argc==2 && std::string(argv[1])=="--robust-motion-core") {
+        test_robust_motion_source();
+        if(failures) return EXIT_FAILURE;
+        std::cout << "robust motion source direct cases passed\n";
+        return EXIT_SUCCESS;
+    }
     if(argc==4 && std::string(argv[1])=="--wheel-replay")return replay_native_wheels(argv[2],argv[3]);
     test_motion_feedback_tap();
     test_native_uart_relay();

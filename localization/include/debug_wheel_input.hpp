@@ -30,6 +30,7 @@ public:
     void poll(std::uint64_t now_ns);
     void start();
     void stop();
+    void prepare_sdk_restart();
     void use_native_feedback();
     void wire_feedback(const std::uint8_t *,std::size_t,std::uint64_t receive_ns);
     void wire_request(const std::uint8_t *,std::size_t,std::uint64_t before_ns);
@@ -83,5 +84,6 @@ private:
     std::deque<WirePacket> input_;
     std::atomic<bool> started_{false};
     std::uint64_t input_drops_=0,prestart_feedback_=0;
+    std::uint64_t sdk_generation_=0,source_policy_revision_=0;
 };
 } // namespace omni

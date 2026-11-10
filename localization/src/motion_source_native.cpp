@@ -29,6 +29,22 @@ double norm2(const Vec2 &v) { return std::hypot(v[0], v[1]); }
 // checks used math.hypot. Retain that distinction and the original operations.
 double wall_norm2(const Vec2 &v) { return std::sqrt(v[0] * v[0] + v[1] * v[1]); }
 bool finite(const Vec2 &v) { return std::isfinite(v[0]) && std::isfinite(v[1]); }
+bool nearby_orientation(const Json &a, const Json &b) {
+    if (!a.count("rotation_xyzw") || !b.count("rotation_xyzw")) return false;
+    const auto &qa = a.at("rotation_xyzw"), &qb = b.at("rotation_xyzw");
+    if (!qa.is_array() || !qb.is_array() || qa.size() != 4 || qb.size() != 4) return false;
+    double aa = 0., bb = 0., ab = 0.;
+    for (std::size_t i = 0; i < 4; ++i) {
+        if (!qa.at(i).is_number() || !qb.at(i).is_number()) return false;
+        const double x = qa.at(i).get<double>(), y = qb.at(i).get<double>();
+        if (!std::isfinite(x) || !std::isfinite(y)) return false;
+        aa += x * x; bb += y * y; ab += x * y;
+    }
+    if (aa < 1e-12 || bb < 1e-12) return false;
+    // q and -q represent the same orientation. Check all three attitude axes,
+    // including obstacle-induced roll/pitch, rather than planar yaw alone.
+    return 2. * std::acos(std::min(1., std::fabs(ab) / std::sqrt(aa * bb))) <= .10;
+}
 bool equal_optional(const NativeMotionValue<std::string> &value, const std::string &other) {
     return value && *value == other;
 }
@@ -77,7 +93,10 @@ double NativeMotionSource::sample_yaw(const YawHistory &rows, double t) {
 void NativeMotionSource::event(Json value) { append_bounded(events, std::move(value), 128); }
 
 void NativeMotionSource::yaw(std::int64_t host_ns, double yaw_rad, const Json &source) {
-    (void)host_ns;
+    if (robust_odometry_enabled && (host_yaw_reference.empty() || host_ns >= host_yaw_reference.back()[0])) {
+        if (!host_yaw_reference.empty() && host_ns == host_yaw_reference.back()[0]) host_yaw_reference.pop_back();
+        append_bounded(host_yaw_reference, std::array<double, 2>{{static_cast<double>(host_ns), yaw_rad}});
+    }
     const Json raw = source.value("raw", Json::object());
     if (raw.find("yaw_receive_us") == raw.end()) return;
     const auto t = raw.at("yaw_receive_us").get<std::int64_t>() * 1000;
@@ -88,7 +107,8 @@ void NativeMotionSource::yaw(std::int64_t host_ns, double yaw_rad, const Json &s
 
 std::string NativeMotionSource::wheel_input_reason() const {
     return phase_wheel_suppressed ? phase_wheel_reason : wheel_suspect
-        ? "two_axis_wall_motion_wheel_suspect" : "measured_wheel_input_enabled";
+        ? (robust_odometry_enabled && t265_suspect ? "both_motion_sources_suspect" :
+            "two_axis_wall_motion_wheel_suspect") : "measured_wheel_input_enabled";
 }
 
 void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string &why) {
@@ -115,14 +135,20 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
         if (history.empty() && !reference.is_null() && last_tracked_ns)
             publish_vio(*last_tracked_ns, *last_tracked_xy);
     } else if (wheel_suspect) {
-        mode = "T265_PRIMARY_WHEEL_SUSPECT"; reason = "two_axis_walls_support_T265_over_wheel";
+        if (robust_odometry_enabled && t265_suspect && selected && !wheels.empty()) {
+            anchor = *selected; anchor_wheel = first2(wheel_at(wheels.back()[0]));
+            mode = "WHEEL_UNCERTAIN_BOTH_SUSPECT"; reason = "phase_exit_both_motion_sources_suspect";
+        } else {
+            mode = "T265_PRIMARY_WHEEL_SUSPECT"; reason = "two_axis_walls_support_T265_over_wheel";
+        }
     } else if (!reference.is_null() && selected) {
         // Anchor only once actual wheel support reaches the selected Pose.
         // Excluded wheel totals are never replayed as a post-phase tail.
         resume_anchor_ns = wheels.empty() ? *t : std::max(*t, static_cast<std::int64_t>(wheels.back()[0]));
         resume_anchor_xy = *selected;
         anchor.reset(); anchor_wheel.reset();
-        mode = "T265_WITH_WHEEL_TAIL"; reason = "phase_exit_rebased";
+        mode = robust_odometry_enabled && t265_suspect ? "WHEEL_FALLBACK" : "T265_WITH_WHEEL_TAIL";
+        reason = "phase_exit_rebased";
         process();
     } else { mode = "T265_NO_WHEEL_REFERENCE"; reason = "no_measured_wheel_reference"; }
     event({{"event", "wheel_phase_suppression_changed"}, {"sample_monotonic_ns", optional_json(t)},
@@ -131,8 +157,35 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
 }
 
 void NativeMotionSource::configure(const Json &configuration) {
+    const bool keep_sdk_frame = robust_odometry_enabled && configuration.value("robust_odometry_enabled", false) &&
+        configuration.value("reference_coordinate_source", std::string()) == "selected_odometry_local";
+    const Basis kept_sdk_basis = sdk_basis;
+    const Vec2 kept_sdk_coordinate_bias = sdk_coordinate_bias, kept_bias = bias;
+    const Vec2 kept_frame_translation = sdk_frame_translation;
+    robust_odometry_enabled = configuration.value("robust_odometry_enabled", false);
+    t265_suspect = false; sdk_position_bridges = 0; sdk_adopted = false;
+    continuous_poses.clear(); sdk_coordinate_bias = {{0., 0.}}; previous_valid_pose = nullptr;
+    sdk_basis = {{Vec2{{1., 0.}}, Vec2{{0., 1.}}}};
+    sdk_rotation_pending = robust_odometry_enabled &&
+        configuration.value("reference_coordinate_source", std::string()) == "measured_wheel_local";
+    sdk_frame_translation = {{0., 0.}}; sdk_frame_translation_pending = robust_odometry_enabled;
+    raw_sdk_frame_poses.clear();
+    if (keep_sdk_frame) {
+        sdk_basis = kept_sdk_basis; sdk_coordinate_bias = kept_sdk_coordinate_bias;
+        sdk_frame_translation = kept_frame_translation; sdk_frame_translation_pending = false;
+    }
+    if (robust_odometry_enabled && sdk_stream_available && !sdk_rotation_pending && !latest_pose.is_null() && latest_pose.value("tracker_confidence", 0) > 0) {
+        previous_valid_pose = latest_pose;
+        const Vec2 xy = add(rotate(sdk_basis, Vec2{{latest_pose.at("x_m").get<double>(), latest_pose.at("y_m").get<double>()}}), sdk_coordinate_bias);
+        append_bounded(continuous_poses, Row{{latest_pose.at("timestamp_monotonic_ns").get<double>(),
+            xy[0], xy[1], static_cast<double>(latest_pose.at("tracker_confidence").get<int>())}});
+        // The reference was formed in this already-observed SDK local frame.
+        // There is no delayed first-session transform left to discover.
+        sdk_frame_translation_pending = false;
+    }
     reference = configuration; history.clear(); anchor.reset();
     bias = {{0., 0.}}; previous.reset(); window.reset(); recovery_window.reset();
+    if (keep_sdk_frame) bias = kept_bias;
     recovery_travel = 0.; wall_fixes = 0; last_wall.reset();
     last_paired_ns.reset(); mode = "T265_NO_WHEEL_REFERENCE";
     reason = "no_measured_wheel_reference";
@@ -153,7 +206,55 @@ void NativeMotionSource::configure(const Json &configuration) {
     process();
 }
 
+void NativeMotionSource::reset_sdk_session() {
+    if (!robust_odometry_enabled) return;
+    pending.clear(); continuous_poses.clear(); previous_valid_pose = nullptr; latest_pose = nullptr;
+    raw_sdk_frame_poses.clear(); sdk_frame_translation = {{0., 0.}}; sdk_frame_translation_pending = true;
+    last_raw_ns.reset(); last_raw_xy.reset(); last_tracked_ns.reset(); last_tracked_xy.reset();
+    last_confidence.reset(); previous.reset(); window.reset(); recovery_window.reset();
+    wall_window.reset(); wall_evidence = nullptr; evidence_verdict.reset(); evidence_confirmations = 0;
+    sdk_coordinate_bias = {{0., 0.}}; sdk_rotation_pending = true; sdk_adopted = false;
+    t265_suspect = true;
+    sdk_stream_available = false;
+    // Keep the selected coordinate frame and real wheel accumulation. A new SDK
+    // session establishes its own rotation/translation only from actual Pose.
+    if (!phase_wheel_suppressed && !wheels.empty()) {
+        if (!history.empty()) {
+            const double t = std::min(history.back()[0], wheels.back()[0]);
+            anchor = first2(sample(history, t)); anchor_wheel = first2(wheel_at(t));
+        }
+        mode = wheel_suspect ? "WHEEL_UNCERTAIN_BOTH_SUSPECT" : "WHEEL_ONLY_NO_SDK";
+        reason = "SDK_session_changed_keep_field_and_wheel_reference";
+    }
+    event({{"event", "SDK_session_reference_reset"}, {"field_reference_preserved", true},
+        {"raw_wheel_accumulation_preserved", true}, {"wheel_motion_suspect", wheel_suspect}});
+}
+
+NativeMotionSource::Vec2 NativeMotionSource::raw_sdk_point(const Vec2 &point) const {
+    return robust_odometry_enabled ? add(rotate(sdk_basis, point), sdk_frame_translation) : point;
+}
+
+void NativeMotionSource::sdk_unavailable(const std::string &why) {
+    if (!robust_odometry_enabled) return;
+    sdk_stream_available = false; t265_suspect = true; sdk_adopted = false;
+    pending.clear(); previous.reset(); window.reset(); recovery_window.reset();
+    if (phase_wheel_suppressed) {
+        mode = "T265_PHASE_NO_WHEEL";
+    } else if (!wheels.empty()) {
+        if (!history.empty()) {
+            const double t = std::min(history.back()[0], wheels.back()[0]);
+            anchor = first2(sample(history, t)); anchor_wheel = first2(wheel_at(t));
+        }
+        mode = wheel_suspect ? "WHEEL_UNCERTAIN_BOTH_SUSPECT" : "WHEEL_ONLY_NO_SDK";
+    } else mode = "NO_MOTION_SOURCE_SUPPORT";
+    reason = why;
+    event({{"event", "SDK_unavailable_keep_supported_odometry"}, {"reason", why},
+        {"motion_source", mode}, {"field_reference_preserved", true},
+        {"wheel_motion_suspect", wheel_suspect}, {"synthetic_SDK_sample", false}});
+}
+
 void NativeMotionSource::pose(const Json &p) {
+    if (robust_odometry_enabled) { robust_pose(p); return; }
     const auto t = p.at("timestamp_monotonic_ns").get<std::int64_t>();
     const Vec2 xy{{p.at("x_m").get<double>(), p.at("y_m").get<double>()}};
     if (!finite(xy) || (last_raw_ns && t <= *last_raw_ns)) return;
@@ -227,6 +328,7 @@ NativeMotionSource::Vec3 NativeMotionSource::wheel_at(double t) const {
 }
 
 void NativeMotionSource::fallback(const std::string &why, double t) {
+    if (robust_odometry_enabled) { robust_fallback(why, t); return; }
     if (phase_wheel_suppressed) return;
     if (mode == "T265_PRIMARY_WHEEL_SUSPECT" && !wheels.empty() && !history.empty()) {
         const double end = wheels.back()[0];
@@ -244,6 +346,7 @@ void NativeMotionSource::fallback(const std::string &why, double t) {
 }
 
 void NativeMotionSource::process() {
+    if (robust_odometry_enabled) { robust_process(); return; }
     if (phase_wheel_suppressed) return;
     if (reference.is_null() || wheels.empty()) return;
     if (resume_anchor_ns) {
@@ -316,6 +419,211 @@ void NativeMotionSource::process() {
     publish();
 }
 
+void NativeMotionSource::robust_pose(const Json &p) {
+    const auto t = p.at("timestamp_monotonic_ns").get<std::int64_t>();
+    const Vec2 raw{{p.at("x_m").get<double>(), p.at("y_m").get<double>()}};
+    if (!finite(raw) || (last_raw_ns && t <= *last_raw_ns)) return;
+    const int confidence = p.at("tracker_confidence").get<int>();
+    sdk_stream_available = true;
+    if (sdk_rotation_pending && confidence > 0) {
+        if (host_yaw_reference.empty() || !p.count("yaw_rad")) return;
+        const double main_yaw = sample_yaw(host_yaw_reference, t);
+        const double angle = main_yaw + std::atan2(basis[1][0], basis[0][0]) - p.at("yaw_rad").get<double>();
+        const double c = std::cos(angle), s = std::sin(angle);
+        sdk_basis = {{Vec2{{c, -s}}, Vec2{{s, c}}}}; sdk_rotation_pending = false;
+        event({{"event", "actual_SDK_coordinate_rotation_bound"}, {"sample_monotonic_ns", t},
+            {"sdk_to_selected_rotation_rad", angle}, {"main_yaw_rad", main_yaw},
+            {"SDK_yaw_rad", p.at("yaw_rad")}, {"field_reference_preserved", true}});
+    }
+    Vec2 xy = add(rotate(sdk_basis, raw), sdk_coordinate_bias);
+    bool unbridged_jump = false;
+    if (confidence > 0 && !previous_valid_pose.is_null() && !continuous_poses.empty()) {
+        const auto &old = previous_valid_pose;
+        const double dt = (t - old.at("timestamp_monotonic_ns").get<std::int64_t>()) / 1e9;
+        const Vec2 old_raw{{old.at("x_m").get<double>(), old.at("y_m").get<double>()}};
+        const Vec2 step = rotate(sdk_basis, subtract(raw, old_raw));
+        const bool consecutive = !latest_pose.is_null() && latest_pose.value("tracker_confidence", 0) > 0 &&
+            p.count("frame_number") && old.count("frame_number") &&
+            p.at("frame_number").get<std::uint64_t>() == old.at("frame_number").get<std::uint64_t>() + 1;
+        bool bridged = false;
+        bool velocity_displacement_conflict = false;
+        if (consecutive && dt > 0. && p.count("vx_local_mps") && p.count("vy_local_mps") &&
+            old.count("vx_local_mps") && old.count("vy_local_mps")) {
+            const Vec2 va = rotate(sdk_basis, Vec2{{old.at("vx_local_mps").get<double>(), old.at("vy_local_mps").get<double>()}});
+            const Vec2 vb = rotate(sdk_basis, Vec2{{p.at("vx_local_mps").get<double>(), p.at("vy_local_mps").get<double>()}});
+            const Vec2 bridge{{.5 * (va[0] + vb[0]) * dt, .5 * (va[1] + vb[1]) * dt}};
+            velocity_displacement_conflict = finite(va) && finite(vb) && norm2(subtract(step, bridge)) > .05;
+            // This is a physical consistency classification of adjacent frames,
+            // not an age gate. A long interval's actual velocity displacement is
+            // included, and missing frames/velocity cannot qualify a bridge.
+            if (finite(va) && finite(vb) && norm2(step) > .05 &&
+                norm2(subtract(step, bridge)) > .05 && norm2(subtract(va, vb)) <= .20 &&
+                norm2(va) <= 1.5 && norm2(vb) <= 1.5 && nearby_orientation(old, p)) {
+                sdk_coordinate_bias = add(sdk_coordinate_bias, subtract(bridge, step));
+                xy = add(rotate(sdk_basis, raw), sdk_coordinate_bias); bridged = true; ++sdk_position_bridges;
+                event({{"event", "SDK_translation_jump_bridged"}, {"sample_monotonic_ns", t},
+                    {"raw_position_step_m", step}, {"single_interval_bridge_m", bridge},
+                    {"sdk_coordinate_rebase_m", sdk_coordinate_bias}, {"frame_number", p.at("frame_number")},
+                    {"independent_ground_truth", false}});
+            }
+        }
+        // Large displacement alone across a long/gapped interval is not a jump.
+        // Only a direct adjacent position step is classified here; the paired
+        // wheel displacement comparison handles accumulated disagreements.
+        unbridged_jump = !bridged && norm2(step) > .05 &&
+            (velocity_displacement_conflict || norm2(step) > 1.5 * dt + .05);
+    }
+    latest_pose = p; last_raw_ns = t; last_raw_xy = raw; last_confidence = confidence;
+    if (confidence > 0) {
+        last_tracked_ns = t; last_tracked_xy = xy; previous_valid_pose = p;
+        append_bounded(continuous_poses, Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
+        const Vec2 sdk_raw = rotate(sdk_basis, raw);
+        append_bounded(raw_sdk_frame_poses, Row{{static_cast<double>(t), sdk_raw[0], sdk_raw[1], static_cast<double>(confidence)}});
+    }
+    if (confidence <= 0) {
+        t265_suspect = true;
+        if (!phase_wheel_suppressed) robust_fallback("SDK_tracking_lost", t);
+        return;
+    }
+    if (!sdk_adopted && !history.empty()) {
+        bias = subtract(first2(sample(history, t)), xy);
+        if (phase_wheel_suppressed || wheels.empty()) {
+            sdk_frame_translation = subtract(first2(sample(history, t)), rotate(sdk_basis, raw));
+            sdk_frame_translation_pending = false; sdk_adopted = true;
+        }
+    } else if (!sdk_adopted && history.empty() && wheels.empty()) {
+        // A genuine SDK-only start already defines this local coordinate frame;
+        // do not re-anchor away the first physical increment on the next Pose.
+        sdk_adopted = true; sdk_frame_translation_pending = false;
+    }
+    if (unbridged_jump) {
+        t265_suspect = true;
+        if (phase_wheel_suppressed || wheels.empty()) {
+            // There is no supported alternate XY increment in this case. Keep
+            // the previous selected estimate across this one uncertain step;
+            // subsequent actual SDK increments remain available, marked suspect.
+            if (!history.empty()) bias = subtract(first2(sample(history, t)), xy);
+            mode = phase_wheel_suppressed ? "T265_PHASE_NO_WHEEL" : "T265_UNCERTAIN_NO_WHEEL";
+            reason = "SDK_unclassified_jump_no_supported_alternate";
+            event({{"event", "motion_increment_unknown"}, {"sample_monotonic_ns", t},
+                {"reason", reason}, {"held_estimate_is_measured_static", false}});
+        } else robust_fallback("SDK_position_and_motion_inconsistent", t);
+    }
+    if (phase_wheel_suppressed || wheels.empty() || mode == "T265_PRIMARY_WHEEL_SUSPECT" || resume_anchor_ns) {
+        if (!reference.is_null()) publish_vio(t, xy);
+        if (wheels.empty() && !phase_wheel_suppressed && !t265_suspect) {
+            mode = "T265_NO_WHEEL_REFERENCE"; reason = "no_measured_wheel_reference";
+        }
+    }
+    if (pending.size() == 4096) ++pending_pose_drops;
+    append_bounded(pending, Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
+    robust_process();
+}
+
+void NativeMotionSource::robust_fallback(const std::string &why, double t) {
+    t265_suspect = true;
+    if (phase_wheel_suppressed || wheels.empty()) return;
+    const auto previous_mode = mode;
+    const std::string target = wheel_suspect ? "WHEEL_UNCERTAIN_BOTH_SUSPECT" : "WHEEL_FALLBACK";
+    if ((mode == "T265_PRIMARY_WHEEL_SUSPECT" || !anchor) && !history.empty()) {
+        const double end = std::min(wheels.back()[0], history.back()[0]);
+        anchor = first2(sample(history, end)); anchor_wheel = first2(wheel_at(end));
+    }
+    if (previous_mode != target) event({{"event", "motion_source_changed"},
+        {"sample_monotonic_ns", static_cast<std::int64_t>(t)}, {"previous_source", previous_mode},
+        {"motion_source", target}, {"reason", why}, {"wheel_motion_suspect", wheel_suspect},
+        {"t265_motion_suspect", true}, {"independent_ground_truth", false}});
+    mode = target;
+    if (previous_mode != target || why == "two_axis_walls_support_wheel_over_T265" ||
+        why == "two_axis_walls_contradict_both_motion_sources") reason = why;
+    recovery_window.reset(); recovery_travel = 0.; wall_fixes = 0;
+}
+
+void NativeMotionSource::robust_process() {
+    if (phase_wheel_suppressed || reference.is_null() || wheels.empty()) return;
+    if (resume_anchor_ns) {
+        if (wheels.back()[0] < *resume_anchor_ns) return;
+        const double t = std::max(static_cast<double>(*resume_anchor_ns), wheels.front()[0]);
+        anchor = history.empty() ? *resume_anchor_xy : first2(sample(history, t));
+        anchor_wheel = first2(wheel_at(t));
+        pending.erase(std::remove_if(pending.begin(), pending.end(),
+            [t](const Row &p) { return p[0] < t; }), pending.end());
+        resume_anchor_ns.reset(); resume_anchor_xy.reset();
+    }
+    const auto ref_ns = reference_time(reference);
+    if (!anchor) {
+        if (ref_ns > wheels.back()[0]) return;
+        const double t = std::max(static_cast<double>(ref_ns), wheels.front()[0]);
+        anchor = xy_json(reference.at("pose_origin")); anchor_wheel = first2(wheel_at(t));
+        if (!history.empty()) anchor = first2(sample(history, t));
+        if (continuous_poses.empty()) {
+            mode = "WHEEL_ONLY_NO_SDK"; reason = "measured_wheel_and_primary_yaw_only";
+        } else {
+            mode = "T265_WITH_WHEEL_TAIL"; reason = "paired_field_reference";
+            previous = Pair{subtract(*anchor, bias), wheel_at(t)};
+            window = *previous; sdk_adopted = true;
+        }
+    }
+    while (!pending.empty() && pending.front()[0] <= wheels.back()[0]) {
+        const Row p = pending.front(); pending.pop_front(); const double t = p[0];
+        if (t < wheels.front()[0] || t < ref_ns) continue;
+        const Vec2 xy{{p[1], p[2]}}; const Vec3 w = wheel_at(t);
+        if (p[3] <= 0.) { robust_fallback("SDK_tracking_lost", t); previous.reset(); window.reset(); continue; }
+        if (!sdk_adopted) {
+            // First real SDK sample after wheel-only startup: align it to the
+            // already-published wheel trajectory; never manufacture a Pose.
+            const Vec2 selected = subtract(add(*anchor, first2(w)), *anchor_wheel);
+            bias = subtract(selected, xy); anchor = selected; anchor_wheel = first2(w);
+            if (sdk_frame_translation_pending && !raw_sdk_frame_poses.empty()) {
+                sdk_frame_translation = subtract(selected, first2(sample(raw_sdk_frame_poses, t)));
+                sdk_frame_translation_pending = false;
+            }
+            mode = wheel_suspect ? (t265_suspect ? "WHEEL_UNCERTAIN_BOTH_SUSPECT" : "T265_PRIMARY_WHEEL_SUSPECT") : "T265_WITH_WHEEL_TAIL";
+            reason = "first_actual_SDK_pose_rebased_to_wheel_only_trajectory";
+            sdk_adopted = true; if (!wheel_suspect) t265_suspect = false;
+            previous = Pair{xy, w}; window = *previous;
+            event({{"event", "actual_SDK_pose_adopted"}, {"sample_monotonic_ns", static_cast<std::int64_t>(t)},
+                {"t265_translation_rebase_m", bias}, {"synthetic_SDK_sample", false}});
+        } else if (!previous || !window) { previous = Pair{xy, w}; window = *previous; }
+        else {
+            const Pair prev = *previous, base = *window;
+            const double step = norm2(subtract(subtract(xy, prev.xy), subtract(first2(w), first2(prev.wheel))));
+            const double conflict = norm2(subtract(subtract(xy, base.xy), subtract(first2(w), first2(base.wheel))));
+            last_conflict_m = std::max(step, conflict);
+            if (step > .05 || conflict > .05) {
+                if (mode != "T265_PRIMARY_WHEEL_SUSPECT") robust_fallback("T265_wheel_accumulated_displacement_conflict", t);
+                else { recovery_window.reset(); recovery_travel = 0.; }
+                window = Pair{xy, w};
+            } else if (mode == "T265_WITH_WHEEL_TAIL") {
+                anchor = add(xy, bias); anchor_wheel = first2(w);
+                // Do not reset this comparison every .25m anchor update: that
+                // hides slow drift smaller than the per-leg conflict threshold.
+            } else {
+                if (!recovery_window) recovery_window = Pair{xy, w};
+                const Pair recovery = *recovery_window;
+                const double residual = norm2(subtract(subtract(xy, recovery.xy), subtract(first2(w), first2(recovery.wheel))));
+                if (residual > .025) { recovery_window = Pair{xy, w}; recovery_travel = 0.; }
+                else if (w[2] - recovery.wheel[2] >= .25) {
+                    recovery_travel += w[2] - recovery.wheel[2]; recovery_window = Pair{xy, w};
+                }
+                if (recovery_travel >= .50 && wall_fixes >= 2 &&
+                    (!wheel_suspect || (equal_optional(evidence_verdict, "BOTH_AGREE") && evidence_confirmations >= 2))) {
+                    const Vec2 selected = mode == "T265_PRIMARY_WHEEL_SUSPECT" ? add(xy, bias) :
+                        subtract(add(*anchor, first2(w)), *anchor_wheel);
+                    bias = subtract(selected, xy); anchor = selected; anchor_wheel = first2(w);
+                    mode = "T265_WITH_WHEEL_TAIL"; reason = "motion_and_two_axis_walls_agree_rebased";
+                    t265_suspect = false; wheel_suspect = false; window = Pair{xy, w};
+                    event({{"event", "motion_source_changed"}, {"sample_monotonic_ns", static_cast<std::int64_t>(t)},
+                        {"motion_source", mode}, {"reason", reason}, {"t265_translation_rebase_m", bias}});
+                }
+            }
+            previous = Pair{xy, w};
+        }
+        last_paired_ns = static_cast<std::int64_t>(t);
+    }
+    publish();
+}
+
 void NativeMotionSource::publish() {
     if (phase_wheel_suppressed || resume_anchor_ns) return;
     if (!anchor || wheels.empty() || mode == "T265_PRIMARY_WHEEL_SUSPECT") return;
@@ -335,15 +643,20 @@ void NativeMotionSource::publish_vio(double t, const Vec2 &xy) {
 
 void NativeMotionSource::select_wall_supported_vio(double t, const History &raw_poses) {
     if (phase_wheel_suppressed) return;
+    const History &sdk = robust_odometry_enabled ? continuous_poses : raw_poses;
+    if (sdk.empty()) return;
     const auto previous_mode = mode;
     const Vec2 selected = first2(sample(history.empty() ? raw_poses : history, t));
-    const Vec2 raw = first2(sample(raw_poses, t));
+    const Vec2 raw = first2(sample(sdk, t));
     bias = subtract(selected, raw);
     while (!history.empty() && history.back()[0] >= t) history.pop_back();
     append_bounded(history, Row{{static_cast<double>(static_cast<std::int64_t>(t)), selected[0], selected[1], 0.}});
-    for (const auto &pose : raw_poses) if (pose[0] > t) publish_vio(pose[0], Vec2{{pose[1], pose[2]}});
+    for (const auto &pose : sdk) if (pose[0] > t) publish_vio(pose[0], Vec2{{pose[1], pose[2]}});
     anchor = selected; anchor_wheel = first2(wheel_at(t));
     mode = "T265_PRIMARY_WHEEL_SUSPECT"; wheel_suspect = true;
+    if (robust_odometry_enabled) {
+        t265_suspect = false; previous = Pair{raw, wheel_at(t)}; window = *previous;
+    }
     reason = "two_axis_walls_support_T265_over_wheel";
     recovery_window.reset(); recovery_travel = 0.; wall_fixes = 0;
     event({{"event", "motion_source_changed"}, {"sample_monotonic_ns", static_cast<std::int64_t>(t)},
@@ -368,24 +681,25 @@ void NativeMotionSource::observe_walls(const std::string &scan_id, const std::ve
         std::int64_t reference_ns, const Json &center_xy, const History &raw_poses, bool reacquired) {
     if (phase_wheel_suppressed) return; // The outer geometric correction still applies.
     const bool full_xy = std::set<std::string>(axes.begin(), axes.end()) == std::set<std::string>{"x", "y"};
-    if ((mode == "WHEEL_FALLBACK" || wheel_suspect) && !equal_optional(last_wall, scan_id)) {
+    if ((mode == "WHEEL_FALLBACK" || mode == "WHEEL_UNCERTAIN_BOTH_SUSPECT" || wheel_suspect) && !equal_optional(last_wall, scan_id)) {
         last_wall = scan_id; wall_fixes = full_xy ? wall_fixes + 1 : 0;
     }
     if (reference_ns < 0) return;
     if (equal_optional(last_evidence_scan, scan_id)) return;
     last_evidence_scan = scan_id;
-    if (!full_xy || center_xy.is_null() || reference.is_null() || raw_poses.empty() || wheels.empty()) {
+    const History &sdk = robust_odometry_enabled ? continuous_poses : raw_poses;
+    if (!full_xy || center_xy.is_null() || reference.is_null() || sdk.empty() || wheels.empty()) {
         wall_window.reset(); evidence_verdict.reset(); evidence_confirmations = 0;
         wall_evidence = {{"status", "NO_FULL_XY_WALL_EVIDENCE"}, {"scan_id", scan_id}}; return;
     }
     const double t = static_cast<double>(reference_ns);
-    if (!(raw_poses.front()[0] <= t && t <= raw_poses.back()[0] && wheels.front()[0] <= t && t <= wheels.back()[0])) {
+    if (!(sdk.front()[0] <= t && t <= sdk.back()[0] && wheels.front()[0] <= t && t <= wheels.back()[0])) {
         wall_window.reset(); evidence_verdict.reset(); evidence_confirmations = 0;
         wall_evidence = {{"status", "NO_COMMON_INTERVAL_SUPPORT"}, {"scan_id", scan_id}}; return;
     }
     const double angle = reference.at("vio_rotation").get<double>(), c = std::cos(angle), s = std::sin(angle);
     const Basis r{{Vec2{{c, -s}}, Vec2{{s, c}}}};
-    const Vec2 vio = add(rotate(r, subtract(first2(sample(raw_poses, t)), xy_json(reference.at("pose_origin")))),
+    const Vec2 vio = add(rotate(r, subtract(first2(sample(sdk, t)), xy_json(reference.at("pose_origin")))),
                         xy_json(reference.at("start_center_xy_m")));
     const Vec3 w = wheel_at(t); const Vec2 wxy = rotate(r, first2(w));
     const WallWindow now{t, xy_json(center_xy), vio, wxy, w[2]};
@@ -397,10 +711,11 @@ void NativeMotionSource::observe_walls(const std::string &scan_id, const std::ve
     if (t <= old.t) return;
     const Vec2 wall_delta = subtract(now.wall, old.wall), vio_delta = subtract(vio, old.vio), wheel_delta = subtract(wxy, old.wheel);
     const double activity = std::max({wall_norm2(wall_delta), wall_norm2(vio_delta), w[2] - old.travel});
-    if (activity < .25) return;
     const double ve = wall_norm2(subtract(vio_delta, wall_delta)), we = wall_norm2(subtract(wheel_delta, wall_delta));
+    if (activity < .25 && !(robust_odometry_enabled && std::max(ve, we) > .05)) return;
     const std::string verdict = ve <= .025 && we > .05 ? "WHEEL_SUSPECT" :
-        we <= .025 && ve > .05 ? "T265_SUSPECT" : std::max(ve, we) <= .025 ? "BOTH_AGREE" : "AMBIGUOUS";
+        we <= .025 && ve > .05 ? "T265_SUSPECT" : std::max(ve, we) <= .025 ? "BOTH_AGREE" :
+        robust_odometry_enabled && ve > .05 && we > .05 ? "BOTH_SUSPECT" : "AMBIGUOUS";
     evidence_confirmations = equal_optional(evidence_verdict, verdict) ? evidence_confirmations + 1 : 1;
     evidence_verdict = verdict;
     wall_evidence = {{"status", verdict}, {"scan_id", scan_id}, {"reference_ns", reference_ns},
@@ -408,11 +723,26 @@ void NativeMotionSource::observe_walls(const std::string &scan_id, const std::ve
         {"t265_wall_displacement_error_m", ve}, {"wheel_wall_displacement_error_m", we},
         {"confirmations", evidence_confirmations}, {"t265_depends_on_sdk_wheel_input", true},
         {"walls_depend_on_primary_yaw_and_selected_deskew", true}, {"independent_ground_truth", false}};
+    bool new_source_verdict = false;
     if (evidence_confirmations >= 2) {
-        if (verdict == "WHEEL_SUSPECT" && mode != "T265_PRIMARY_WHEEL_SUSPECT") select_wall_supported_vio(t, raw_poses);
-        else if (verdict == "T265_SUSPECT" && wheel_suspect) select_wall_supported_wheel(t);
+        if (verdict == "WHEEL_SUSPECT" && mode != "T265_PRIMARY_WHEEL_SUSPECT") {
+            select_wall_supported_vio(t, raw_poses); new_source_verdict = true;
+        } else if (verdict == "T265_SUSPECT" && (wheel_suspect || robust_odometry_enabled)) {
+            new_source_verdict = reason != "two_axis_walls_support_wheel_over_T265";
+            select_wall_supported_wheel(t);
+        } else if (verdict == "BOTH_SUSPECT") {
+            new_source_verdict = !wheel_suspect || !t265_suspect ||
+                reason != "two_axis_walls_contradict_both_motion_sources";
+            wheel_suspect = true; t265_suspect = true;
+            robust_fallback("two_axis_walls_contradict_both_motion_sources", t);
+            wall_evidence["conflict_is_independent_fault_proof"] = false;
+        }
     }
-    if (activity >= .50 && (evidence_confirmations >= 2 || verdict == "AMBIGUOUS")) wall_window = now;
+    if (robust_odometry_enabled && new_source_verdict) {
+        // Recovery must describe new motion after the conflict, rather than
+        // cancellation of an old wrong displacement inside the same baseline.
+        wall_window = now; wall_evidence["next_interval_baseline_reset"] = true;
+    } else if (activity >= .50 && (evidence_confirmations >= 2 || verdict == "AMBIGUOUS")) wall_window = now;
 }
 
 NativeMotionSource::Json NativeMotionSource::snapshot(bool include_evidence) const {
@@ -428,6 +758,22 @@ NativeMotionSource::Json NativeMotionSource::snapshot(bool include_evidence) con
             {"reason", wheel_input_reason()},
             {"dependency_persists_after_pause", true}}},
         {"wheel_and_gyro_are_sdk_dependencies", true}, {"independent_ground_truth", false}};
+    if (robust_odometry_enabled) {
+        result["wheel_and_gyro_are_sdk_dependencies"] = nullptr;
+        result["wheel_and_gyro_can_be_sdk_dependencies"] = true;
+        result["actual_sdk_dependency_scope"] = "see SDK owner per-generation API log; not inferred from configuration";
+        result["robust_odometry_enabled"] = true;
+        result["t265_motion_suspect"] = t265_suspect;
+        result["both_motion_suspect"] = t265_suspect && wheel_suspect;
+        result["sdk_position_jump_bridges"] = sdk_position_bridges;
+        result["sdk_coordinate_rebase_m"] = sdk_coordinate_bias;
+        result["sdk_to_selected_rotation_rad"] = std::atan2(sdk_basis[1][0], sdk_basis[0][0]);
+        result["sdk_rotation_pending"] = sdk_rotation_pending;
+        result["sdk_stream_available"] = sdk_stream_available;
+        result["sdk_frame_translation_m"] = sdk_frame_translation;
+        result["source_conflict_is_independent_fault_diagnosis"] = false;
+        result["sdk_pose_received"] = !continuous_poses.empty();
+    }
     if (!include_evidence) result.erase("wall_motion_evidence");
     return result;
 }

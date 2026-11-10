@@ -254,8 +254,10 @@ class Runtime {
 public:
     explicit Runtime(const Json &config):session_(get<std::string>(config,"session_id","")),
         pose_session_(get<std::string>(config,"pose_session_id",session_)),
-        policy_session_(get<std::string>(config,"sdk_policy_session_id",session_)) {
+        policy_session_(get<std::string>(config,"sdk_policy_session_id",session_)),
+        robust_enabled_(get<bool>(config,"robust_odometry_enabled",false)) {
         try {
+            motion_.robust_odometry_enabled=robust_enabled_;
             feedback_fd_=duplicate(get<int>(config,"feedback_fd",-1));
             pose_fd_=duplicate(get<int>(config,"pose_fd",-1));
             wheel_policy_fd_=duplicate(get<int>(config,"wheel_policy_fd",-1));
@@ -284,7 +286,8 @@ public:
         const auto &p=has(request,"payload")?request.at("payload"):request;
         Json result={{"ok",true}};
         if(kind=="context")context(p);
-        else if(kind=="configure") {reference_=p;motion_.configure(p);}
+        else if(kind=="configure") configure_reference(p);
+        else if(kind=="known_reference")result=known_reference(p);
         else if(kind=="pose")ingest_pose(p);
         else if(kind=="yaw")ingest_yaw(p.at("time_ns").get<std::int64_t>(),p.at("yaw_deg").get<double>(),p.at("source"));
         else if(kind=="wheel"){motion_.wheel(p,yaws_);++wheels_ingested_;}
@@ -299,9 +302,9 @@ public:
                 p.value("center_xy",Json(nullptr)),raw,get<bool>(p,"reacquired",false));
         }
         else if(kind=="field_reference"){
-            reference_=p.at("reference");revision_=get<std::int64_t>(p,"revision",revision_+1);
+            revision_=get<std::int64_t>(p,"revision",revision_+1);
             offset_={{0.,0.}};has_anchor_=get<bool>(p,"has_anchor",false);last_fit_=nullptr;
-            motion_.configure(reference_);
+            configure_reference(p.at("reference"));
         }
         else if(kind=="clear_reference"){
             revision_=get<std::int64_t>(p,"revision",revision_+1);reference_=nullptr;offset_={{0.,0.}};has_anchor_=false;
@@ -328,7 +331,7 @@ public:
         double last=get<double>(query,"last_ns",std::numeric_limits<double>::infinity());
         const bool latest=get<bool>(query,"latest",false),consume=get<bool>(query,"consume_events",false);
         const bool geometry_only=kind=="window"&&get<bool>(query,"geometry_only",false);
-        Json result;History raw_copy,selected_copy,history_copy,wheel_copy,pending_copy;
+        Json result;History raw_copy,selected_copy,history_copy,wheel_copy,pending_copy,initialization_copy;
         Yaws yaw_copy,native_yaw_copy;std::deque<Json> event_copy;
         {
             std::lock_guard<RuntimeMutex> guard(mutex_);
@@ -348,6 +351,7 @@ public:
             }else if(kind=="histories"){
                 raw_copy=poses_;yaw_copy=yaws_;history_copy=motion_.history;wheel_copy=motion_.wheels;
                 native_yaw_copy=motion_.native_yaws;pending_copy=motion_.pending;
+                if(robust_enabled_)initialization_copy=initialization_history();
             }
             if(consume)motion_.events.clear();
         }
@@ -359,6 +363,7 @@ public:
             result["poses"]=rows(raw_copy);result["yaws"]=rows(yaw_copy);result["history"]=rows(history_copy);
             result["motion_history"]=result["history"];result["wheels"]=rows(wheel_copy);
             result["native_yaws"]=rows(native_yaw_copy);result["pending"]=rows(pending_copy);
+            if(robust_enabled_)result["initialization_motion_history"]=rows(initialization_copy);
         }
         return result;
     }
@@ -371,6 +376,10 @@ private:
     Json reference_=nullptr,last_sample_=nullptr,last_raw_pose_=Json::object(),last_yaw_=nullptr,last_fit_=nullptr;
     Source::Vec2 offset_{{0.,0.}};std::int64_t revision_=0,last_scan_ns_=-1;
     bool has_anchor_=false,lidar_enabled_=true,lidar_connected_=false,timed_yaw_seen_=false;
+    bool robust_enabled_=false;
+    bool sdk_available_=false;
+    Json sdk_error_=nullptr;
+    std::string sdk_device_session_;
     Json lidar_error_=nullptr,last_yaw_epoch_=nullptr;std::uint32_t last_yaw_id_=0;bool have_yaw_id_=false;
     Json native_error_=nullptr,pose_error_=nullptr,thread_error_=nullptr;
     std::uint64_t frames_=0,wheel_frames_=0,gyro_frames_=0,decode_errors_=0,poses_ingested_=0,wheels_ingested_=0,yaws_ingested_=0;
@@ -390,6 +399,54 @@ private:
     }
     void event(const std::string &name,Json fields=Json::object()) {
         fields["event"]=name;fields["timestamp_monotonic_ns"]=now_ns();events_log_->submit(fields.dump()+"\n");
+    }
+    void configure_reference(Json reference) {
+        if(robust_enabled_)reference["robust_odometry_enabled"]=true;
+        reference_=std::move(reference);motion_.configure(reference_);
+    }
+    // This history is initialization geometry support, never fabricated SDK
+    // Pose. Before field binding wheel XY already use native primary-yaw axes.
+    Source::Row initialization_row(const Source::Row &row)const {
+        double yaw=yaws_.empty()?0.:Source::sample_yaw(yaws_,row[0]);
+        if(!reference_.is_null())yaw+=reference_.at("yaw_offset").get<double>()-reference_.at("vio_rotation").get<double>();
+        return Source::Row{{row[0],row[1],row[2],yaw}};
+    }
+    History initialization_history()const {
+        const auto &input=!motion_.history.empty()?motion_.history:motion_.wheels;
+        History result;for(const auto &row:input)result.push_back(initialization_row(row));return result;
+    }
+    Json known_reference(const Json &p) {
+        if(!robust_enabled_)throw std::invalid_argument("known_reference requires experimental robust localization");
+        const auto center=p.at("center_xy_m").get<std::vector<double>>();
+        const auto heading=p.at("yaw_deg").get<double>();
+        const auto description=get<std::string>(p,"description","");
+        const auto kind=get<std::string>(p,"reference_kind","");
+        if(center.size()!=2||!std::isfinite(center[0])||!std::isfinite(center[1])||!std::isfinite(heading)||
+           description.empty()||(kind!="measured"&&kind!="assumed"))
+            throw std::invalid_argument("explicit finite center/yaw, description and measured/assumed reference_kind required");
+        if(yaws_.empty())throw std::invalid_argument("known_reference needs actual primary yaw feedback");
+        const bool selected=!motion_.history.empty();
+        const bool sdk=!selected&&!poses_.empty();
+        const auto &support=selected?motion_.history:sdk?poses_:motion_.wheels;
+        if(support.empty())throw std::invalid_argument("known_reference needs actual SDK Pose or wheel feedback");
+        const double first=std::max(support.front()[0],yaws_.front()[0]);
+        const double t=std::min(support.back()[0],yaws_.back()[0]);
+        if(t<first)throw std::invalid_argument("known_reference has no common measured motion/yaw interval");
+        const auto origin=Source::sample(support,t);
+        const double raw_yaw=Source::sample_yaw(yaws_,t),theta=heading*PI/180.;
+        const double local_yaw=selected?initialization_row(Source::Row{{t,origin[0],origin[1],0.}})[3]:sdk?origin[2]:raw_yaw;
+        Json reference={{"pose_origin",Json::array({origin[0],origin[1]})},
+            {"vio_rotation",theta-local_yaw},{"yaw_offset",theta-raw_yaw},
+            {"start_center_xy_m",center},{"field_heading_deg",heading},{"description",description},
+            {"source",selected?"operator_known_pose_selected_reference":sdk?"operator_known_pose_sdk_reference":"operator_known_pose_wheel_reference"},
+            {"reference_coordinate_source",selected?"selected_odometry_local":sdk?"actual_sdk_pose":"measured_wheel_local"},
+            {"reference_kind",kind},{"physical_placement_confirmed",kind=="measured"},
+            {"timestamp_monotonic_ns",static_cast<std::int64_t>(t)},
+            {"reference_sample_ns",static_cast<std::int64_t>(t)}};
+        ++revision_;offset_={{0.,0.}};has_anchor_=false;last_fit_=nullptr;
+        configure_reference(reference);
+        event("operator_known_reference_bound",reference_);
+        return Json{{"ok",true},{"reference",reference_},{"revision",revision_}};
     }
     void restore_competition_wheel_policy() {
         if(!competition_wheel_policy_.is_null())motion_.set_wheel_suppressed(
@@ -416,18 +473,36 @@ private:
     }
     void invalidate(const std::string &reason,std::int64_t revision) {
         reference_=nullptr;revision_=revision;yaws_.clear();last_fit_=nullptr;motion_=Source();has_anchor_=false;
+        motion_.robust_odometry_enabled=robust_enabled_;
         restore_competition_wheel_policy();
         event("reference_invalidated",Json{{"reason",reason}});
     }
     void ingest_pose(const Json &sample) {
+        if(robust_enabled_&&get<std::string>(sample,"kind","")=="sdk_availability"){
+            sdk_available_=get<bool>(sample,"available",false);
+            sdk_error_=sdk_available_?Json(nullptr):sample.value("reason",Json("SDK unavailable"));
+            pose_log_->submit(sample.dump()+"\n");
+            if(!sdk_available_)motion_.sdk_unavailable(sdk_error_.is_string()?sdk_error_.get<std::string>():"SDK unavailable");
+            event("sdk_availability",sample);return;
+        }
         last_raw_pose_=sample;++poses_ingested_;pose_log_->submit(sample.dump()+"\n");
         for(const char *key:{"x_m","y_m","yaw_rad"})if(!has(sample,key)||!sample.at(key).is_number()||!std::isfinite(sample.at(key).get<double>()))return;
         if(!last_sample_.is_null()){
-            if(sample.at("session_id")!=last_sample_.at("session_id")){
-                reference_=nullptr;++revision_;poses_.clear();motion_=Source();
-                restore_competition_wheel_policy();
+            const auto device_session=get<std::string>(sample,"sdk_device_session_id",get<std::string>(sample,"session_id",""));
+            if(sample.at("session_id")!=last_sample_.at("session_id")||
+               (robust_enabled_&&!sdk_device_session_.empty()&&device_session!=sdk_device_session_)){
+                poses_.clear();
+                if(robust_enabled_){
+                    motion_.reset_sdk_session();
+                    event("sdk_session_rebound",Json{{"previous_device_session",sdk_device_session_},{"sdk_device_session_id",device_session},
+                        {"field_reference_preserved",!reference_.is_null()}});
+                }else{
+                    reference_=nullptr;++revision_;motion_=Source();restore_competition_wheel_policy();
+                }
             }else if(sample.at("frame_number").get<std::uint64_t>()<=last_sample_.at("frame_number").get<std::uint64_t>())return;
         }
+        sdk_device_session_=get<std::string>(sample,"sdk_device_session_id",get<std::string>(sample,"session_id",""));
+        sdk_available_=true;sdk_error_=nullptr;
         auto t=sample.at("timestamp_monotonic_ns").get<std::int64_t>();
         if(!poses_.empty()&&t<=poses_.back()[0])t=sample.at("receive_monotonic_ns").get<std::int64_t>();
         if(!poses_.empty()&&t<=poses_.back()[0])return;
@@ -479,11 +554,23 @@ private:
         return {{c*x-s*y+reference_.at("start_center_xy_m").at(0).get<double>(),s*x+c*y+reference_.at("start_center_xy_m").at(1).get<double>()}};
     }
     Json current(bool evidence=false,bool publish_only=false)const {
-        if(reference_.is_null()||poses_.empty()||yaws_.empty())return Json{{"ready",false},{"reason","尚未从围栏建立场地参考"},
+        const bool wheel_only=robust_enabled_&&!motion_.history.empty();
+        if(reference_.is_null()||(!wheel_only&&poses_.empty())||yaws_.empty())return Json{{"ready",false},
+            {"reason",robust_enabled_?"尚未建立场地参考或缺少真实运动/yaw支持":"尚未从围栏建立场地参考"},
             {"scans",scan_count_},{"fixes",fit_count_},{"initialization",nullptr},{"lidar_corrections_enabled",lidar_enabled_}};
         const auto &selected=(motion_.history.empty()?poses_:motion_.history).back();auto t=std::int64_t(selected[0]);
         Source::Vec3 xyz{{selected[1],selected[2],selected[3]}};
-        auto center=field_xy(xyz),raw=field_xy(Source::sample(poses_,double(t)));
+        auto center=field_xy(xyz);
+        Json raw=nullptr;
+        if(!poses_.empty()&&(!robust_enabled_||(!motion_.sdk_rotation_pending&&!motion_.sdk_frame_translation_pending))){
+            auto point=Source::sample(poses_,double(t));
+            if(robust_enabled_){
+                auto local=motion_.raw_sdk_point(Source::Vec2{{point[0],point[1]}});
+                point[0]=local[0];point[1]=local[1];
+            }
+            auto raw_xy=field_xy(point);
+            raw=Json::array({raw_xy[0],raw_xy[1]});
+        }
         double yaw=Source::sample_yaw(yaws_,double(t))+reference_.at("yaw_offset").get<double>();
         double degrees=std::fmod(yaw*180./PI,360.);if(degrees<0)degrees+=360.;
         std::string source=!motion_.history.empty()?motion_.mode:(has_anchor_?"VIO":"VIO_FROM_INITIAL_REFERENCE");
@@ -492,7 +579,8 @@ private:
             {"current_wall_axes",last_fit_.is_null()?Json::array():last_fit_.value("position_observed_axes",Json::array())},
             {"fixes",fit_count_},{"ready",true},{"center_xy_m",Json::array({center[0]+offset_[0],center[1]+offset_[1]})},
             {"t265_center_xy_m",raw},{"yaw_deg",degrees},{"sample_monotonic_ns",t},
-            {"raw_t265_sample_ns",std::int64_t(poses_.back()[0])}};
+            {"raw_t265_sample_ns",poses_.empty()?Json(nullptr):Json(std::int64_t(poses_.back()[0]))}};
+        if(robust_enabled_){value["sdk_available"]=sdk_available_;value["sdk_error"]=sdk_error_;}
         // 控制只用上述投影；完整显示/查询仍保留原字段和取值。
         if(!publish_only){
             value["position_reacquisitions"]=reacquisitions_;
@@ -511,7 +599,8 @@ private:
     Json apply_wall(const Json &p) {
         auto expected=get<std::int64_t>(p,"revision",revision_);
         if(expected!=revision_)return Json{{"ok",false},{"applied",false},{"reason","queued scan belongs to a previous reference"},{"revision",revision_}};
-        if(reference_.is_null()||poses_.empty())return Json{{"ok",false},{"applied",false},{"reason","reference unavailable"},{"revision",revision_}};
+        if(reference_.is_null()||(poses_.empty()&&(!robust_enabled_||motion_.history.empty())))
+            return Json{{"ok",false},{"applied",false},{"reason","reference unavailable"},{"revision",revision_}};
         auto ns=p.at("reference_ns").get<std::int64_t>();auto candidate=p.value("candidate_center_xy_m",Json(nullptr));
         auto observed=axes(p,"position_observed_axes");bool reacquired=get<bool>(p,"position_reacquired",false);
         motion_.observe_walls(get<std::string>(p,"scan_id",""),observed,ns,candidate,poses_,reacquired);
@@ -530,7 +619,7 @@ private:
             Json packet=*last_ready_packet_;packet["packet_id"]=packets_sent_;packet["quality"]="LOST";
             packet["reference_invalid_reason"]=get<std::string>(value,"reason","reference unavailable");return packet;
         }
-        const auto &xy=value.at("center_xy_m");return Json{{"schema_version",1},{"session_id",session_},{"packet_id",packets_sent_},
+        const auto &xy=value.at("center_xy_m");Json packet={{"schema_version",1},{"session_id",session_},{"packet_id",packets_sent_},
             {"frame","field"},{"timestamp_monotonic_ns",value.at("sample_monotonic_ns")},{"quality","DEGRADED"},
             {"pose",Json{{"x_m",xy.at(0)},{"y_m",xy.at(1)},{"yaw_deg",value.at("yaw_deg")}}},
             {"pose_source",value.at("source")},{"motion_source",value.at("motion_selection").at("mode")},
@@ -544,6 +633,14 @@ private:
             {"qualified_pose",false},{"accuracy_verified",false},{"current_wall_axes",value.at("current_wall_axes")},
             {"lidar_corrections_enabled",lidar_enabled_},{"lidar_connected",lidar_connected_},{"lidar_error",lidar_error_},
             {"position_reacquisitions",reacquisitions_},{"reference",reference_},{"motion_selection",value.at("motion_selection")}};
+        if(robust_enabled_){
+            packet["t265"]["sdk_available"]=sdk_available_;packet["t265"]["sdk_error"]=sdk_error_;
+            packet["t265"]["sdk_device_session_id"]=sdk_device_session_;
+            packet["wheel"]["official_sdk_input"]=nullptr;
+            packet["wheel"]["official_sdk_input_requested"]=policy_.fd>=0;
+            packet["wheel"]["actual_sdk_acceptance_scope"]="see SDK owner per-generation API log; no fusion ACK";
+        }
+        return packet;
     }
     void publish() {
         publish_policy();auto value=current(false,true);
@@ -554,6 +651,10 @@ private:
             value.value("current_wall_axes",Json::array()),value.value("fixes",Json(nullptr)),
             raw.value("tracker_confidence",Json(nullptr)),raw.value("mapper_confidence",Json(nullptr)),
             !poses_.empty(),!yaws_.empty(),lidar_connected_,lidar_error_});
+        if(robust_enabled_){
+            key.push_back(sdk_available_);key.push_back(sdk_error_);
+            key.push_back(motion_.t265_suspect);key.push_back(motion_.wheel_suspect);
+        }
         if(key==last_key_)return;
         auto packet=format_control(value);
         std::shared_ptr<const Json> stored;
@@ -590,7 +691,7 @@ private:
         auto value=current(true);
         static const Json no_packet=nullptr;
         const auto &packet=last_packet_?*last_packet_:no_packet;
-        return Json{{"last",value},{"first_pose",poses_.empty()?Json(nullptr):Json(poses_.front())},
+        Json result={{"last",value},{"first_pose",poses_.empty()?Json(nullptr):Json(poses_.front())},
             {"last_pose",poses_.empty()?Json(nullptr):Json(poses_.back())},{"first_yaw",yaws_.empty()?Json(nullptr):Json(yaws_.front())},
             {"last_yaw",yaws_.empty()?Json(nullptr):Json(yaws_.back())},
             {"last_yaw_row",yaws_.empty()?Json(nullptr):Json(yaws_.back())},{"last_sample",last_sample_},{"raw_pose",last_raw_pose_},
@@ -603,6 +704,16 @@ private:
             {"direct_output",Json{{"packets_sent",packets_sent_},{"output_drops",output_drops_},{"last_packet",packet}}},
             {"logging",logs},{"pose_input_error",pose_error_},{"motion_scheduling",scheduling_},{"error",thread_error_},
             {"last_wheel",motion_.last_wheel?Json::array({motion_.last_wheel->first,motion_.last_wheel->second}):Json(nullptr)}};
+        if(robust_enabled_){
+            const auto &support=!motion_.history.empty()?motion_.history:motion_.wheels;
+            result["robust_odometry_enabled"]=true;
+            result["first_motion"]=support.empty()?Json(nullptr):Json(initialization_row(support.front()));
+            result["last_motion"]=support.empty()?Json(nullptr):Json(initialization_row(support.back()));
+            result["initialization_motion_source"]=!motion_.history.empty()?"selected_odometry":"measured_wheel_local";
+            result["sdk_available"]=sdk_available_;result["sdk_error"]=sdk_error_;
+            result["sdk_device_session_id"]=sdk_device_session_;
+        }
+        return result;
     }
     bool receive_one(bool feedback) {
         int &connection=feedback?feedback_connection_:pose_connection_;const int listener=feedback?feedback_fd_:pose_fd_;

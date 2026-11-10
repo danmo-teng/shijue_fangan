@@ -55,9 +55,20 @@ FusedPoseFrame DynamicPoseRelay::frame(const Json &p, std::uint8_t sequence)
     const bool valid = quality == "GOOD" || quality == "DEGRADED";
     const auto mode = p.at("motion_source").get<std::string>();
     const unsigned confidence = p.at("t265").at("tracker_confidence").get<unsigned>();
+    const bool robust = p.at("t265").count("sdk_available") != 0;
+    bool t265_good = mode != "WHEEL_FALLBACK";
+    bool wheel_active = mode == "WHEEL_FALLBACK" || mode == "T265_WITH_WHEEL_TAIL";
+    if (robust) {
+        const auto &selection = p.at("motion_selection");
+        t265_good = p.at("t265").at("sdk_available").get<bool>() &&
+            !selection.value("t265_motion_suspect", false) &&
+            (mode == "T265_WITH_WHEEL_TAIL" || mode == "T265_PRIMARY_WHEEL_SUSPECT" ||
+             mode == "T265_PHASE_NO_WHEEL" || mode == "T265_NO_WHEEL_REFERENCE");
+        wheel_active = wheel_active || mode == "WHEEL_ONLY_NO_SDK" || mode == "WHEEL_UNCERTAIN_BOTH_SUSPECT";
+    }
     if (valid) f.status |= kPoseValid;
-    if (valid && mode != "WHEEL_FALLBACK" && confidence >= 2) f.status |= kPoseT265Good;
-    if (valid && (mode == "WHEEL_FALLBACK" || mode == "T265_WITH_WHEEL_TAIL")) f.status |= kPoseWheelActive;
+    if (valid && t265_good && confidence >= 2) f.status |= kPoseT265Good;
+    if (valid && wheel_active) f.status |= kPoseWheelActive;
     if (std::fabs(x) <= 1.5 && std::fabs(y) <= 1.5) f.status |= kPoseInsideField;
     // Unknown position error: use the saturated legacy sigma nibble, not a
     // fabricated small covariance. Raw tracker confidence remains raw.

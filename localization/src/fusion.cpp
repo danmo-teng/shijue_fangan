@@ -272,6 +272,13 @@ T265FieldPose T265FieldProjector::project(const T265RawPose &raw)
         unscaled_body_forward_velocity;
     result.body_left_velocity_mps = translation_scale *
         unscaled_body_left_velocity;
+    // Project onto the fixed initial ground basis used above for position.
+    // Reconstructing this from body XY and yaw would discard vertical motion
+    // under roll/pitch, even though its ground projection can be nonzero.
+    const double initial_forward_velocity = translation_scale * dot(centre_velocity, initial_forward);
+    const double initial_left_velocity = translation_scale * dot(centre_velocity, initial_left);
+    result.vx_local_mps = cs * initial_forward_velocity - ss * initial_left_velocity;
+    result.vy_local_mps = ss * initial_forward_velocity + cs * initial_left_velocity;
     result.forward_world[0] = forward_world.x;
     result.forward_world[1] = forward_world.y;
     result.forward_world[2] = forward_world.z;

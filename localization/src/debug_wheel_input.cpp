@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <cerrno>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -98,6 +99,35 @@ void DebugWheelInput::start()
 void DebugWheelInput::stop()
 {
     stopping_=true;input_ready_.notify_one();if(input_thread_.joinable())input_thread_.join();
+    wheel_.reset();
+}
+
+void DebugWheelInput::prepare_sdk_restart() {
+    stop();
+    std::deque<WirePacket> context;
+    {
+        std::lock_guard<std::mutex> lock(input_mutex_);
+        context.swap(input_);started_=false;
+        if(native_){
+            // Offline ingress retains only original identity/clock exchanges.
+            // Applying them here never opens a UART or asks for another reply.
+            for(const auto &p:context){
+                if(p.request)native_->request(p.data.data(),p.data.size(),p.ns);
+                else native_->feedback(p.data.data(),p.data.size(),p.ns);
+            }
+            native_->discard_motion_support();
+        }
+        wheel_.reset();config_loaded_=false;
+        have_packet_=have_epoch_=false;epoch_=nullptr;alignment_clock_.clear();
+        next_frame_=last_packet_=last_end_=0;last_success_ns_=0;
+        accepted_=rejected_=sdk_failed_samples_=paused_samples_=0;
+        last_sdk_call_failed_=false;
+        have_last_submitted_=experiment_have_hold_=false;
+        experiment_pending_=experiment_active_=false;experiment_mode_="normal";experiment_phase_id_.clear();
+        ++sdk_generation_;stopping_=false;
+    }
+    record({{"event","wheel_sdk_session_prepared"},{"pending_motion_replayed",false},
+        {"identity_clock_context_preserved",true},{"source_pause_preserved",input_paused_}});
 }
 
 void DebugWheelInput::use_native_feedback() {
@@ -108,6 +138,10 @@ void DebugWheelInput::use_native_feedback() {
 void DebugWheelInput::wire_packet(const std::uint8_t *p,std::size_t n,std::uint64_t ns,bool request) {
     if(!native_)return;
     std::lock_guard<std::mutex> lock(input_mutex_);
+    // Keep matched context for a real new SDK session, without accumulating
+    // offline wheel/gyro samples that would become an injection backlog.
+    if(stopping_&&!request&&n>=4&&(p[3]==7||p[3]==8))return;
+    if(stopping_&&request&&n==15&&p[2]==0x19)return;
     // Retain identity/clock context during SDK startup, never play the
     // pre-start wheel/rate backlog into a newly started estimator.
     if(!request && n>=4 && (p[3]==7||p[3]==8) && !started_) {++prestart_feedback_;return;}
@@ -135,7 +169,15 @@ void DebugWheelInput::native_loop() {
         }
         if(dropped||prestart)record({{"event","wheel_native_input_discarded"},{"queue_overflow",dropped},{"before_sdk_start",prestart}});
         try {
+            const auto policy_before=source_policy_revision_;
             receive_source_policies();
+            if(policy_before!=source_policy_revision_){
+                // This explicit source boundary also consumes the already
+                // dequeued batch, not just packets still in the shared queue.
+                batch.erase(std::remove_if(batch.begin(),batch.end(),[](const WirePacket &p){
+                    return !p.request&&p.data.size()>=4&&(p.data[3]==7||p.data[3]==8);
+                }),batch.end());
+            }
             for(const auto &p:batch) {
                 if(p.request)native_->request(p.data.data(),p.data.size(),p.ns);
                 else native_->feedback(p.data.data(),p.data.size(),p.ns);
@@ -155,6 +197,14 @@ bool DebugWheelInput::source_policy(const Json &p) {
     if(p.at("schema")!=3 || p.at("kind")!="wheel_source_policy" || p.at("session_id")!=session_ || !p.at("pause").is_boolean())return false;
     const bool pause=p.at("pause").get<bool>();const auto reason=p.at("reason").get<std::string>();
     if(pause==input_paused_&&reason==input_policy_reason_)return true;
+    if(pause!=input_paused_){
+        ++source_policy_revision_;
+        if(native_)native_->discard_motion_support();
+        std::lock_guard<std::mutex> lock(input_mutex_);
+        input_.erase(std::remove_if(input_.begin(),input_.end(),[](const WirePacket &packet){
+            return !packet.request&&packet.data.size()>=4&&(packet.data[3]==7||packet.data[3]==8);
+        }),input_.end());
+    }
     input_paused_=pause;input_policy_reason_=reason;
     record({{"event","wheel_source_policy_applied"},{"policy_request",p},
         {"device_estimator_reset",false},{"previous_wheel_dependency_cleared",false}});
@@ -279,6 +329,7 @@ void DebugWheelInput::record(Json event)
     event["last_sdk_call_failed"] = last_sdk_call_failed_;
     event["sdk_failure_policy"] = "continue_with_next_new_sample";
     event["config_loaded"]=config_loaded_;
+    event["sdk_input_generation"]=sdk_generation_;
     event["input_source"]=synthetic_input_ ? "synthetic_test_fixture" : "measured_wheel_feedback";
     event["last_sdk_success_ns"]=last_success_ns_;
     event["wheel_input_paused"]=input_paused_;
@@ -305,6 +356,7 @@ void DebugWheelInput::write_logs()
         }
         for(const auto &event:batch) {
             log_<<event.dump()<<'\n';latest=event;
+            if(event.value("event",std::string())=="wheel_sdk_session_prepared")success_times.clear();
             if(event.value("event",std::string())=="wheel_sdk_result" && event.value("sdk_result",false))
                 success_times.push_back(event["last_sdk_success_ns"].get<std::uint64_t>());
         }

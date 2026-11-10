@@ -22,6 +22,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -43,11 +44,14 @@
 namespace {
 
 volatile std::sig_atomic_t g_stop = 0;
+volatile std::sig_atomic_t g_sdk_retry = 0;
 
 void signal_handler(int)
 {
     g_stop = 1;
 }
+
+void sdk_retry_signal_handler(int) { g_sdk_retry = 1; }
 
 struct Options {
     std::string config_path = "config/localization.example.conf";
@@ -82,6 +86,11 @@ struct Options {
     bool debug_fresh_session = false;
     bool debug_wheel_synthetic = false;
     bool debug_wheel_experiment = false;
+    bool experimental_robust_localization = false;
+};
+
+struct T265Unavailable : std::runtime_error {
+    using std::runtime_error::runtime_error;
 };
 
 struct TimedEncoderFrame {
@@ -263,6 +272,7 @@ void usage(const char *program)
         << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
+        << "  --experimental-robust-localization  retain UART without T265; retry once per attach or SIGUSR1 (test only)\n"
         << "  --debug-wheel-socket @NAME  opt-in measured C-frame velocity IPC (test only)\n"
         << "  --debug-wheel-config FILE  identity C-frame SDK wheel configuration\n"
         << "  --debug-wheel-log FILE     complete SDK wheel attempt/result log\n"
@@ -330,6 +340,8 @@ Options parse_options(int argc, char **argv)
                 value("--t265-frame-timeout"), "--t265-frame-timeout");
         } else if (argument == "--debug-sdk") {
             options.debug_sdk = true;
+        } else if (argument == "--experimental-robust-localization") {
+            options.experimental_robust_localization = true;
         } else if (argument == "--debug-wheel-socket") {
             options.debug_wheel_socket = value("--debug-wheel-socket");
         } else if (argument == "--debug-wheel-config") {
@@ -994,6 +1006,7 @@ int main(int argc, char **argv)
         const Options options = parse_options(argc, argv);
         std::signal(SIGINT, signal_handler);
         std::signal(SIGTERM, signal_handler);
+        if (options.experimental_robust_localization) std::signal(SIGUSR1, sdk_retry_signal_handler);
         if (options.operator_uart_only) return run_operator_standby(options);
         const omni::LocalizationConfig config = omni::load_config(options.config_path);
         if(!options.debug_wheel_socket.empty()) {
@@ -1014,24 +1027,63 @@ int main(int argc, char **argv)
                   << (config.t265_translation_scale_enabled ? " (enabled)" : " (disabled)")
                   << '\n';
 
-        rs2::context context;
-        rs2::device selected;
-        const rs2::device_list devices = context.query_devices(RS2_PRODUCT_LINE_T200);
-        for (std::size_t i = 0; i < devices.size(); ++i) {
-            if (options.serial.empty() ||
-                device_info(devices[i], RS2_CAMERA_INFO_SERIAL_NUMBER) == options.serial) {
-                selected = devices[i];
-                break;
+        // The experimental path starts the sole UART owner before querying USB.
+        // Normal entry points retain their existing T265-first startup behavior.
+        std::atomic<bool> sdk_device_removed{false};
+        std::atomic<std::uint64_t> sdk_attach_generation{0}, sdk_device_event_errors{0};
+        std::mutex sdk_device_mutex;
+        std::condition_variable sdk_event_ready;
+        rs2::device sdk_watched_device;
+        std::unique_ptr<rs2::context> context;
+        std::string serial;
+        auto select_t265 = [&] {
+            if (!context) {
+                context.reset(new rs2::context());
+                if (options.experimental_robust_localization) {
+                    // Register even when no T265 is present at startup. A real
+                    // added-device event is the only automatic retry trigger.
+                    context->set_devices_changed_callback([&](rs2::event_information changed) {
+                        try {
+                            {
+                                std::lock_guard<std::mutex> lock(sdk_device_mutex);
+                                if (sdk_watched_device && changed.was_removed(sdk_watched_device))
+                                    sdk_device_removed = true;
+                            }
+                            for (const auto &added : changed.get_new_devices()) {
+                                if (device_info(added, RS2_CAMERA_INFO_PRODUCT_LINE) == "T200" &&
+                                    (options.serial.empty() || device_info(added, RS2_CAMERA_INFO_SERIAL_NUMBER) == options.serial))
+                                    ++sdk_attach_generation;
+                            }
+                            sdk_event_ready.notify_one();
+                        } catch (const std::exception &) {
+                            // SDK callbacks must not unwind the SDK watcher.
+                            ++sdk_device_event_errors;
+                        }
+                    });
+                }
             }
-        }
-        if (!selected) {
-            throw std::runtime_error("no running T265; use run_localization.sh to boot 03e7:2150 first");
-        }
-        const std::string serial = device_info(selected, RS2_CAMERA_INFO_SERIAL_NUMBER);
-        std::cerr << "[T265] serial=" << serial
-                  << " firmware=" << device_info(selected, RS2_CAMERA_INFO_FIRMWARE_VERSION)
-                  << " librealsense=" << RS2_API_VERSION_STR << '\n';
-        selected = rs2::device();
+            sdk_device_removed = false;
+            rs2::device selected;
+            const auto devices = context->query_devices(RS2_PRODUCT_LINE_T200);
+            for (std::size_t i = 0; i < devices.size(); ++i) {
+                if (options.serial.empty() ||
+                    device_info(devices[i], RS2_CAMERA_INFO_SERIAL_NUMBER) == options.serial) {
+                    selected = devices[i];
+                    break;
+                }
+            }
+            if (!selected)
+                throw T265Unavailable("no running T265; use run_localization.sh to boot 03e7:2150 first");
+            serial = device_info(selected, RS2_CAMERA_INFO_SERIAL_NUMBER);
+            std::cerr << "[T265] serial=" << serial
+                      << " firmware=" << device_info(selected, RS2_CAMERA_INFO_FIRMWARE_VERSION)
+                      << " librealsense=" << RS2_API_VERSION_STR << '\n';
+            if (options.experimental_robust_localization) {
+                std::lock_guard<std::mutex> lock(sdk_device_mutex);
+                sdk_watched_device = selected;
+            }
+        };
+        if (!options.experimental_robust_localization) select_t265();
 
         EncoderQueue encoder_queue;
         omni::ParserStats final_parser_stats{};
@@ -1278,6 +1330,23 @@ int main(int argc, char **argv)
             std::cerr << "[UART] disabled; output is T265-only\n";
         }
 
+        EventLog event_log(options.events_path);
+        const auto service_started = std::chrono::steady_clock::now();
+        std::unique_ptr<DebugPosePublisher> pose_publisher;
+        std::string sdk_device_session_id;
+        bool sdk_availability_known = false, sdk_available = false;
+        if (options.experimental_robust_localization)
+            pose_publisher.reset(new DebugPosePublisher(options.debug_pose_socket));
+        auto publish_sdk_availability = [&](bool available, const std::string &reason) {
+            if (sdk_availability_known && sdk_available == available) return;
+            sdk_availability_known = true; sdk_available = available;
+            const omni::DebugWheelInput::Json state{{"schema",1},{"kind","sdk_availability"},
+                {"session_id",options.debug_test_session},{"sdk_device_session_id",sdk_device_session_id},
+                {"available",available},{"reason",reason},{"receive_monotonic_ns",monotonic_ns()}};
+            if (options.experimental_robust_localization && pose_publisher) pose_publisher->send(state);
+            event_log.write("t265_sdk_availability",state.dump());
+        };
+
         std::unique_ptr<omni::DynamicPoseRelay> dynamic_relay;
         if (!options.dynamic_pose_socket.empty()) {
             dynamic_relay.reset(new omni::DynamicPoseRelay(options.dynamic_pose_socket,
@@ -1360,7 +1429,6 @@ int main(int argc, char **argv)
                             "wx_radps,wy_radps,wz_radps,tracker_confidence,mapper_confidence,processing_monotonic_ns,callback_queue_drops\n";
             raw_pose_log.submit(raw_pose_csv.str());raw_pose_csv.str("");
         }
-        EventLog event_log(options.events_path);
         event_log.write("uart_tx_mutex_protocol",omni::DebugWheelInput::Json{
             {"mutex_protocol_requested","PTHREAD_PRIO_INHERIT"},
             {"mutex_protocol_actual",uart_tx_mutex.priority_inheritance()?"PTHREAD_PRIO_INHERIT":"PTHREAD_PRIO_NONE"},
@@ -1368,13 +1436,18 @@ int main(int argc, char **argv)
             {"mutex_protocol_error",uart_tx_mutex.protocol_error()
                 ?omni::DebugWheelInput::Json(std::strerror(uart_tx_mutex.protocol_error()))
                 :omni::DebugWheelInput::Json(nullptr)}}.dump());
+        std::uint64_t consumed_attach_generation = 0;
+        // SDK resources unwind independently of UART, field reference and log
+        // writers. Reopening must not truncate raw logs or repeat CSV headers.
+        auto run_sdk = [&]() -> int {
+        if (options.experimental_robust_localization) select_t265();
         T265MapStatus t265_map;
         t265_map.enabled = !options.t265_map_path.empty();
         t265_map.path = options.t265_map_path;
         std::atomic<std::uint64_t> relocalization_event_count{0};
         std::atomic<bool> relocalized{false};
 
-        rs2::pipeline pipeline(context);
+        rs2::pipeline pipeline(*context);
         rs2::config rs_config;
         if (!serial.empty()) rs_config.enable_device(serial);
         rs_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
@@ -1384,6 +1457,7 @@ int main(int argc, char **argv)
         }
 
         std::unique_ptr<rs2::pose_sensor> map_pose_sensor;
+        try {
         if (t265_map.enabled || options.pose_jumping_override >= 0 || !options.debug_wheel_socket.empty()) {
             // Resolve and obtain the pose sensor from the same pipeline
             // configuration before importing the map. This is required by the
@@ -1497,6 +1571,14 @@ int main(int argc, char **argv)
                 ? "{\"sources\":[\"synthetic_test_fixture\"],\"independent_reference\":false}"
                 : "{\"sources\":[\"measured_wheel_feedback\",\"primary_gyro_rate\"],\"independent_reference\":false}");
         }
+        } catch (const rs2::error &) {
+            throw;
+        } catch (const std::exception &error) {
+            // Only SDK initialization is contained here. Programming errors in
+            // unrelated control/pose processing still reach the outer handler.
+            if (!options.experimental_robust_localization) throw;
+            throw T265Unavailable(std::string("SDK initialization failed: ") + error.what());
+        }
         DebugPoseQueue evidence_pose_queue;
         std::unique_ptr<omni::DebugFisheyeEvidence> fisheye;
         rs2::pipeline_profile active_profile;
@@ -1519,6 +1601,10 @@ int main(int argc, char **argv)
                 }
             });
         } else active_profile=pipeline.start(rs_config);
+        // An actual start identity, not a claim that firmware state was reset.
+        sdk_device_session_id = std::to_string(::getpid()) + ":" + std::to_string(monotonic_ns());
+        consumed_attach_generation = sdk_attach_generation.load();
+        publish_sdk_availability(true, "pipeline_started");
         if(debug_wheel)debug_wheel->start(); // Same SDK owner process, independent of Pose/GUI/disk loops.
         if (map_pose_sensor) {
             const float pose_jumping = map_pose_sensor->get_option(RS2_OPTION_ENABLE_POSE_JUMPING);
@@ -1532,6 +1618,7 @@ int main(int argc, char **argv)
             std::string(t265_map.enabled ? "true" : "false") + "}");
         if(!options.debug_test_session.empty()) {
             omni::DebugWheelInput::Json actual{{"session_id",options.debug_test_session},{"pid",::getpid()},
+                {"sdk_device_session_id",sdk_device_session_id},
                 {"serial",serial},{"firmware",device_info(active_profile.get_device(),RS2_CAMERA_INFO_FIRMWARE_VERSION)},
                 {"librealsense_compile_time",RS2_API_VERSION_STR},{"librealsense_api_version",rs2_get_api_version(nullptr)},
                 {"device_boot_epoch",nullptr},{"clean_fusion_state_verified",false}};
@@ -1546,7 +1633,7 @@ int main(int argc, char **argv)
         }
 
         omni::T265FieldProjector projector(config);
-        DebugPosePublisher pose_publisher(options.debug_pose_socket);
+        if (!pose_publisher) pose_publisher.reset(new DebugPosePublisher(options.debug_pose_socket));
         omni::T265YawSynchronizer yaw_synchronizer;
         omni::OmniEncoderIntegrator encoder_integrator(config);
         omni::PlanarEkf filter;
@@ -1622,6 +1709,17 @@ int main(int argc, char **argv)
         }
         std::cerr << "[RUN] field +X right, +Y up; yaw is counter-clockwise from +X\n";
         while (running.load(std::memory_order_relaxed) && !g_stop) {
+            if (options.experimental_robust_localization && options.duration_sec > 0 &&
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - service_started).count() >= options.duration_sec)
+                break;
+            if (options.experimental_robust_localization && g_sdk_retry) {
+                publish_sdk_availability(false, "explicit_SIGUSR1_restart");
+                throw T265Unavailable("explicit SIGUSR1 requested one SDK restart");
+            }
+            if (options.experimental_robust_localization && sdk_device_removed.load()) {
+                publish_sdk_availability(false, "T265 USB device removed");
+                throw T265Unavailable("T265 USB device removed");
+            }
             rs2::frameset frames;
             rs2::pose_frame pose_frame{rs2::frame{}};
             std::chrono::steady_clock::time_point callback_received{};
@@ -1636,6 +1734,8 @@ int main(int argc, char **argv)
                     if(have_frames)pose_frame=frames.get_pose_frame();
                 }
             } catch (const rs2::error &error) {
+                if (options.experimental_robust_localization)
+                    publish_sdk_availability(false, error.what());
                 event_log.write(
                     "t265_frame_poll_failed",
                     "{\"error\":\"" + json_escape(error.what()) + "\"}");
@@ -1810,21 +1910,32 @@ int main(int argc, char **argv)
                     continue;
                 }
             }
+            // Keep the raw untracked packet above, without binding a permanent
+            // ground plane from an SDK attitude that has not tracked yet. The
+            // experimental wheel-only path already runs while this is absent.
+            if (options.experimental_robust_localization && !projector.initialized() &&
+                raw.tracker_confidence == 0) continue;
             latest_t265 = projector.project(raw);
             if(!options.debug_pose_socket.empty()) {
                 const auto receive_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(t265_received.time_since_epoch()).count();
                 const double estimate=static_cast<double>(capture_conversion_monotonic_ns)-capture_age_ms*1e6;
                 const bool mapped=std::isfinite(estimate)&&estimate>=0;
                 const auto sample_ns=mapped ? static_cast<std::int64_t>(estimate) : receive_ns;
-                pose_publisher.send({{"schema",1},{"session_id",options.debug_test_session},{"frame_number",frame_number},
+                omni::DebugWheelInput::Json packet{{"schema",1},{"session_id",options.debug_test_session},
+                    {"sdk_device_session_id",sdk_device_session_id},{"frame_number",frame_number},
                     {"timestamp_monotonic_ns",sample_ns},{"receive_monotonic_ns",receive_ns},
                     {"capture_timestamp_ms",pose_frame.get_timestamp()},{"timestamp_domain",static_cast<int>(timestamp_domain)},
                     {"time_basis",mapped?"SDK_host_clock_mapped_estimate":"host_receive"},
                     {"x_m",latest_t265.pose.x_m},{"y_m",latest_t265.pose.y_m},{"yaw_rad",latest_t265.pose.yaw_rad},
                     {"forward_mps",latest_t265.body_forward_velocity_mps},{"left_mps",latest_t265.body_left_velocity_mps},
+                    {"vx_local_mps",latest_t265.vx_local_mps},{"vy_local_mps",latest_t265.vy_local_mps},
                     {"yaw_rate_radps",latest_t265.gyro_yaw_rate_radps},{"tracker_confidence",raw.tracker_confidence},
                     {"mapper_confidence",raw.mapper_confidence},{"travel_from_start_m",latest_t265.travel_from_origin_m},
-                    {"time_qualified",false}});
+                    {"time_qualified",false}};
+                if (options.experimental_robust_localization)
+                    packet["rotation_xyzw"] = omni::DebugWheelInput::Json::array({
+                        raw.rotation_xyzw[0], raw.rotation_xyzw[1], raw.rotation_xyzw[2], raw.rotation_xyzw[3]});
+                pose_publisher->send(packet);
             }
             yaw_synchronizer.update(steady_time_s(t265_received), latest_t265);
 
@@ -2405,6 +2516,67 @@ int main(int argc, char **argv)
                   << " event_log_io_failed=" << event_log.failed()
                   << " event_log_dropped=" << event_log.dropped() << '\n';
         return map_startup_failed ? 4 : EXIT_SUCCESS;
+        };
+        while (true) {
+        consumed_attach_generation = sdk_attach_generation.load();
+        std::string sdk_failure;
+        try {
+            return run_sdk();
+        } catch (const rs2::error &error) {
+            if (!options.experimental_robust_localization) throw;
+            sdk_failure = std::string(error.what()) + " (" + error.get_failed_function() + ")";
+        } catch (const T265Unavailable &error) {
+            if (!options.experimental_robust_localization) throw;
+            sdk_failure = error.what();
+        }
+        if (debug_wheel) debug_wheel->stop();
+        {
+            rs2::device release_after_unlock;
+            {
+                std::lock_guard<std::mutex> lock(sdk_device_mutex);
+                release_after_unlock = sdk_watched_device;
+                sdk_watched_device = rs2::device();
+            }
+            // The final SDK device release can join its own threads. Keep it
+            // outside the mutex that the device-change callback also uses.
+        }
+        publish_sdk_availability(false, sdk_failure);
+        event_log.write("t265_sdk_unavailable", omni::DebugWheelInput::Json{
+            {"reason", sdk_failure}, {"uart_owner_retained", bool(uart)},
+            {"pose_fabricated", false}, {"automatic_retry_trigger", "actual_T200_attach_once"},
+            {"timer_retries", false}, {"USB_reset_requested", false},
+            {"device_event_errors",sdk_device_event_errors.load()},
+            {"experimental_robust_localization", true}}.dump());
+        std::cerr << "[T265 UNAVAILABLE] " << sdk_failure
+                  << "; experimental UART/relay service continues without fabricated Pose\n";
+        std::string retry_reason;
+        while (running.load(std::memory_order_relaxed) && !g_stop) {
+            if (options.duration_sec > 0 && std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - service_started).count() >= options.duration_sec) break;
+            if (g_sdk_retry) { g_sdk_retry = 0; retry_reason = "explicit_SIGUSR1"; break; }
+            if (sdk_attach_generation.load() > consumed_attach_generation) {
+                retry_reason = "actual_T200_attach"; break;
+            }
+            std::unique_lock<std::mutex> lock(sdk_device_mutex);
+            // The idle timeout bounds signal/shutdown handling. It performs no
+            // USB query, reset, measurement-age test or automatic retry.
+            sdk_event_ready.wait_for(lock,std::chrono::milliseconds(25),[&] {
+                return sdk_attach_generation.load() > consumed_attach_generation || g_sdk_retry || g_stop || !running.load();
+            });
+        }
+        if (retry_reason.empty()) break;
+        event_log.write("t265_sdk_reopen_requested",omni::DebugWheelInput::Json{
+            {"reason",retry_reason},{"attach_generation",sdk_attach_generation.load()},
+            {"UART_owner_preserved",bool(uart)},{"field_reference_preserved",true},
+            {"one_attempt_per_trigger",true}}.dump());
+        if (debug_wheel) debug_wheel->prepare_sdk_restart();
+        }
+        running.store(false, std::memory_order_relaxed);
+        if (uart_thread.joinable()) uart_thread.join();
+        if (relay_thread.joinable()) relay_thread.join();
+        test_uart_relay.reset();
+        stm_status_writer->close();
+        return EXIT_SUCCESS;
     } catch (const rs2::error &error) {
         running.store(false, std::memory_order_relaxed);
         if (uart_thread.joinable()) uart_thread.join();

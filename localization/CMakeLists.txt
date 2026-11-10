@@ -58,7 +58,7 @@ option(BUILD_TESTING "Build protocol and fusion tests" ON)
 if(BUILD_TESTING)
     enable_testing()
     add_executable(test_omni_localization tests/test_omni_localization.cpp)
-    target_link_libraries(test_omni_localization PRIVATE omni_localization_core debug_wheel_input)
+    target_link_libraries(test_omni_localization PRIVATE omni_localization_core debug_wheel_input motion_runtime)
     add_test(NAME omni_localization_tests COMMAND test_omni_localization)
     add_executable(test_f407_mission_protocol
         firmware/f407_mission_protocol.c

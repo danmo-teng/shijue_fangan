@@ -33,6 +33,13 @@ bool after_id(std::uint32_t a,std::uint32_t b) {const std::uint32_t d=a-b;return
 F405WheelMeasurements::F405WheelMeasurements(const LocalizationConfig &c,std::string s,Record r)
     :config_(c),session_(std::move(s)),record_(std::move(r)) {}
 
+void F405WheelMeasurements::discard_motion_support() {
+    rates_.clear();pending_.clear();have_end_=false;last_end_=0;
+    motion_request_=nullptr;
+    // Retain the last consumed source IDs too: a repeated old 07/08 is still
+    // the same measurement after a source change, not a new SDK sample.
+}
+
 void F405WheelMeasurements::request(const std::uint8_t *p,std::size_t n,std::uint64_t host_ns) {
     if(n==15 && p[0]==0xa3 && p[1]==0xb3 && p[2]==0x19 && p[14]==0xc3 &&
         modbus_crc16(p+2,10)==std::uint16_t(p[12]|(p[13]<<8))) {

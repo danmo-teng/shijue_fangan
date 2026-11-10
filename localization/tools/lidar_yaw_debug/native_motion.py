@@ -14,8 +14,8 @@ from .dynamic import DynamicFence
 
 
 class NativeMotionRuntime:
-    def __init__(self, config):
-        path=Path(__file__).resolve().parents[2]/'build/libmotion_runtime.so'
+    def __init__(self, config, *, library_path=None):
+        path=Path(library_path) if library_path is not None else Path(__file__).resolve().parents[2]/'build/libmotion_runtime.so'
         self.lib=ctypes.CDLL(str(path))
         self.lib.omni_motion_runtime_create.argtypes=[ctypes.c_char_p]
         self.lib.omni_motion_runtime_create.restype=ctypes.c_void_p
@@ -105,8 +105,9 @@ class NativeSourceView:
 
 class NativeDynamicFence(DynamicFence):
     """Keep original initialization/reacquisition; native motion is authoritative."""
-    def __init__(self, installation, runtime):
+    def __init__(self, installation, runtime, *, experimental_robust_localization=False):
         super().__init__(installation)
+        self.experimental_robust_localization=bool(experimental_robust_localization)
         self.runtime=runtime;self.native_state={};self.motion=NativeSourceView(self)
         self.refresh_native()
 
@@ -164,17 +165,39 @@ class NativeDynamicFence(DynamicFence):
         self.refresh_native()
         return super().align(*args,**kwargs)
 
+    def set_known_reference(self, payload):
+        """Explicit operator field placement; real motion support is required.
+
+        The native owner selects the actual SDK or wheel reference at one
+        endpoint. No SDK Pose is synthesized for a missing camera.
+        """
+        if not self.experimental_robust_localization:
+            raise ValueError('已知/假设起点仅属于experimental robust测试路径')
+        with self.lock:
+            self.runtime.command('known_reference',payload)
+            self.last_fit=None;self.latest_points=[];self.initialization=None
+            self.pending_initial_pose=None;self.pending_reacquisition=None
+            self.last_initial_scan_id=None
+            self.refresh_native()
+            return dict(self.reference)
+
     def request_initialization(self,description,*,physical_confirmed=True):
         self.refresh_native()
         with self.lock:
-            if not self.poses or not self.yaws:raise ValueError('等待实际T265 Pose和主yaw数据')
+            support=(self.native_state.get('last_motion') if self.experimental_robust_localization
+                     else self.poses[-1] if self.poses else None)
+            if support is None or not self.yaws:
+                raise ValueError('等待实际轮式/T265运动和主yaw数据' if self.experimental_robust_localization
+                                 else '等待实际T265 Pose和主yaw数据')
             self.reference=None;self.revision+=1;self.offset[:]=0;self.has_anchor=False
             self.last_fit=None;self.latest_points=[];self.pending_initial_pose=None
             self.pending_reacquisition=None;self.last_initial_scan_id=None
             self.initialization=dict(status='SEARCHING_WALLS',description=description,
                 physical_stationary_confirmed=physical_confirmed,initial_primary_yaw_rad=self.yaws[-1][1],
-                initial_pose_yaw_rad=self.poses[-1][3],started_ns=time.monotonic_ns(),
+                initial_pose_yaw_rad=support[3],started_ns=time.monotonic_ns(),
                 confirmations=0,attempts=0,branch_policy='initial_heading_nearest_positive_X_mod_90')
+            if self.experimental_robust_localization:
+                self.initialization['motion_support_source']=self.native_state.get('initialization_motion_source')
             self.runtime.command('clear_reference',dict(revision=self.revision,searching=True))
             return dict(self.initialization)
 
@@ -182,7 +205,8 @@ class NativeDynamicFence(DynamicFence):
         # Keep the complete raw yaw support for the original unwrap rule;
         # initialization freeze is inside the original Python reference lock.
         state=self.runtime.snapshot(dict(kind='histories'))
-        return state['poses'],state['yaws']
+        return (state['initialization_motion_history'] if self.experimental_robust_localization
+                else state['poses']),state['yaws']
 
     def invalidate_reference(self,reason):
         with self.lock:

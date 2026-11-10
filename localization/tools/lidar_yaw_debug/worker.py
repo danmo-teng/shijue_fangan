@@ -200,7 +200,7 @@ def run_geometry_jobs(connection):
     finally:connection.close()
 
 
-def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None,native_feedback=None,control_output=None,pose_input=None,wheel_policy_input=None):
+def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk_policy=None,native_feedback=None,control_output=None,pose_input=None,wheel_policy_input=None,experimental_robust_localization=False):
     # This process owns motion propagation. Its receiver child alone owns lidar.
     # Own a process group before spawning any children. The external UART/SDK
     # owner stays outside it; a stuck shutdown can reclaim this whole subtree.
@@ -210,7 +210,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     if os.environ.get('RDK_LIDAR_MOTION_PROFILE'):
         import cProfile
         profile=cProfile.Profile(timer=time.thread_time);profile.enable()
-    engine=DynamicFence(config['installation']);log=ProcessDebugLog(root)
+    def make_python_engine():
+        return DynamicFence(config['installation'])
+    engine=make_python_engine();log=ProcessDebugLog(root)
     context=mp.get_context('spawn')
     geometry_parent,geometry_child=context.Pipe()
     geometry_process=context.Process(target=run_geometry_jobs,args=(geometry_child,),name='lidar-numerical-owner')
@@ -427,6 +429,23 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                         try:channel.get_nowait()
                         except queue.Empty:break
                 event('field_reference_set',reference=reference)
+            elif kind=='known_reference':
+                request_id=payload['request_id']
+                try:
+                    if not experimental_robust_localization:
+                        raise ValueError('显式已知/假设起点仅属于experimental robust测试路径')
+                    if native_runtime is None:
+                        raise ValueError('当前Python回退不支持无SDK已知起点；未伪造Pose或场地参考')
+                    reference=engine.set_known_reference(payload)
+                    reference_request_id=None
+                    for channel in (scans,fit_inbox):
+                        while True:
+                            try:channel.get_nowait()
+                            except queue.Empty:break
+                    reply('reference_set',request_id=request_id,reference=reference)
+                    event('field_reference_set',request_id=request_id,reference=reference)
+                except (ValueError,RuntimeError) as exc:
+                    reply('reference_rejected',request_id=request_id,error=str(exc))
             elif kind=='lidar_enabled':
                 requested_lidar_enabled=bool(payload['enabled'])
                 engine.set_lidar_enabled(requested_lidar_enabled and reader_state['lidar_connected'])
@@ -494,6 +513,10 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         return dict(observed_counters,**reader_state,scans=engine.scan_count,fits=engine.fit_count,
             scan_processing_ms_p95=p95,last=last,error=error,
             worker_pid=os.getpid(),worker_cpu_affinity=sorted(os.sched_getaffinity(0)),
+            experimental_robust_localization=experimental_robust_localization,
+            sdk_available=native.get('sdk_available'),sdk_error=native.get('sdk_error'),
+            have_motion_support=(native.get('last_motion') is not None if native_runtime is not None
+                else bool(engine.motion.history or engine.poses)),
             capture_chain_present=bool(engine.poses and engine.yaws and reader_state['scans_received']),
             have_tracked_pose=bool(engine.poses),have_primary_yaw=bool(engine.yaws),
             lidar_requested_enabled=requested_lidar_enabled,
@@ -583,6 +606,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
 
     try:
         geometry_process.start();geometry_child.close()
+        if experimental_robust_localization and (native_feedback is None or pose_input is None):
+            raise RuntimeError('实验版依赖未就绪：需要原生运动输入及唯一SDK/UART所有者，未回退旧仲裁')
         if native_feedback is not None and pose_input is not None:
             try:
                 def address(value):return '@'+value[1:] if value.startswith('\0') else value
@@ -593,12 +618,15 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                     control_address=address(control_output['address']) if control_output else '',
                     sdk_policy_address=address(sdk_policy['address']) if sdk_policy else '',
                     wheel_policy_fd=wheel_policy_input['socket'].fileno() if wheel_policy_input else -1,
-                    log_root=str(root)))
-                engine=NativeDynamicFence(config['installation'],native_runtime);engine.geometry=compute_geometry
+                    log_root=str(root),robust_odometry_enabled=experimental_robust_localization))
+                engine=NativeDynamicFence(config['installation'],native_runtime,
+                    experimental_robust_localization=experimental_robust_localization);engine.geometry=compute_geometry
             except Exception as exc:
                 if native_runtime is not None:native_runtime.close()
                 native_runtime=None;native_runtime_error=str(exc)
-                engine=DynamicFence(config['installation']);engine.geometry=compute_geometry
+                if experimental_robust_localization:
+                    raise RuntimeError('实验版依赖未就绪：'+str(exc)+'；未回退旧仲裁') from exc
+                engine=make_python_engine();engine.geometry=compute_geometry
                 event('native_motion_start_failed_python_fallback',reason=str(exc),latency_validated=False)
         if native_feedback is not None and native_runtime is None:
             native_feedback.setblocking(False)
@@ -608,7 +636,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         # Start display/reply feeder threads under normal scheduling too.
         offer_latest(display,state())
         reply('started',pid=os.getpid());event('worker_started',port=port,baud=baud,
-            chassis_uart_owned=False,t265_sdk_owned=False,receiver_pid=receiver.pid)
+            chassis_uart_owned=False,t265_sdk_owned=False,receiver_pid=receiver.pid,
+            experimental_robust_localization=experimental_robust_localization)
         scheduling=set_realtime_thread()
         event('motion_scheduling',**scheduling)
         while not stop.is_set():
@@ -747,10 +776,11 @@ class RadarWorker:
         self.feedback_socket=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
         self.feedback_socket.bind(self.feedback_address);self.feedback_socket.listen(1)
 
-    def start(self,config,port,baud,root,*,sdk_policy=None,control_output=None,pose_input=None):
+    def start(self,config,port,baud,root,*,sdk_policy=None,control_output=None,pose_input=None,experimental_robust_localization=False):
         self.scheduling_setup=prepare_realtime()
         self.process=self.context.Process(target=run_worker,args=(config,port,baud,root,
-            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy,self.feedback_socket,control_output,pose_input,self.wheel_policy_input),name='lidar-geometry-owner')
+            self.inbox,self.display,self.replies,self.stop,self.control,sdk_policy,self.feedback_socket,control_output,pose_input,self.wheel_policy_input,
+            experimental_robust_localization),name='lidar-geometry-owner')
         self.process.start()
 
     def send(self,kind,payload):
@@ -760,6 +790,15 @@ class RadarWorker:
     def align(self,description,*,physical_confirmed=True):
         request_id=uuid.uuid4().hex
         if not self.send('align',dict(request_id=request_id,description=description,physical_confirmed=physical_confirmed)):
+            raise ValueError('参考请求队列已满，未建立参考')
+        self.pending_reference=request_id
+        return request_id
+
+    def set_reference(self,center_xy_m,yaw_deg,description,reference_kind):
+        request_id=uuid.uuid4().hex
+        payload=dict(request_id=request_id,center_xy_m=list(center_xy_m),yaw_deg=yaw_deg,
+            description=description,reference_kind=reference_kind)
+        if not self.send('known_reference',payload):
             raise ValueError('参考请求队列已满，未建立参考')
         self.pending_reference=request_id
         return request_id

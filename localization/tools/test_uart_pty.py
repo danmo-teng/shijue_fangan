@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end UART test using a pseudo-terminal and a connected T265."""
+"""Existing UART PTY checks; --robust-no-sdk never accesses physical devices."""
 from __future__ import annotations
 
 import json
@@ -12,6 +12,10 @@ import subprocess
 import tempfile
 import threading
 import time
+import socket
+import sys
+import uuid
+import signal
 
 
 def crc16(data: bytes) -> int:
@@ -33,6 +37,186 @@ def mission_frame(sequence: int = 7) -> bytes:
     payload = bytes.fromhex("03 17 04 34 00 00 66 CE")
     body = bytes((0x18, sequence & 0xFF)) + payload
     return b"\xA3\xB3" + body + struct.pack("<H", crc16(body)) + b"\xC3"
+
+
+def robust_without_sdk() -> int:
+    """Real owner/PTY, mocked SDK creation/device events, no physical devices."""
+    from f405_timed_protocol import packet, WHEEL, GYRO
+    root = pathlib.Path(__file__).resolve().parents[1]
+    cache = (root / "build/CMakeCache.txt").read_text()
+    sdk_root = next(line.split("=", 1)[1] for line in cache.splitlines()
+                    if line.startswith("REALSENSE_ROOT:PATH="))
+    with tempfile.TemporaryDirectory(prefix="t265-no-sdk-pty-") as directory:
+        temporary = pathlib.Path(directory)
+        stub = temporary / "sdk_start_failure.cpp"
+        library = temporary / "sdk_start_failure.so"
+        stub.write_text('''#include <librealsense2/hpp/rs_types.hpp>
+#include <thread>
+#include <cstdlib>
+struct rs2_device_list { int count; };
+struct rs2_device {};
+struct rs2_context { rs2_devices_changed_callback *callback=nullptr; std::thread event; };
+extern "C" rs2_context *rs2_create_context(int version, rs2_error **error) {
+    (void)version;
+    if (std::getenv("RDK_PTY_DEVICE_EVENT")) return new rs2_context;
+    *error = rs2_create_error("fixture SDK startup failure; no USB accessed",
+        "rs2_create_context", "", RS2_EXCEPTION_TYPE_BACKEND);
+    return nullptr;
+}
+extern "C" void rs2_delete_context(rs2_context *context) {
+    if (!context) return;
+    if (context->event.joinable()) context->event.join();
+    if (context->callback) context->callback->release();
+    delete context;
+}
+extern "C" void rs2_set_devices_changed_callback_cpp(rs2_context *context,
+        rs2_devices_changed_callback *callback, rs2_error **) {
+    context->callback=callback;
+    context->event=std::thread([context] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        context->callback->on_devices_changed(new rs2_device_list{0},new rs2_device_list{1});
+    });
+}
+extern "C" rs2_device_list *rs2_query_devices_ex(const rs2_context *, int, rs2_error **) {
+    return new rs2_device_list{0};
+}
+extern "C" int rs2_get_device_count(const rs2_device_list *list,rs2_error **) {return list->count;}
+extern "C" void rs2_delete_device_list(rs2_device_list *list) {delete list;}
+extern "C" rs2_device *rs2_create_device(const rs2_device_list *,int,rs2_error **) {return new rs2_device;}
+extern "C" void rs2_delete_device(rs2_device *device) {delete device;}
+extern "C" int rs2_supports_device_info(const rs2_device *,rs2_camera_info,rs2_error **) {return 1;}
+extern "C" const char *rs2_get_device_info(const rs2_device *,rs2_camera_info info,rs2_error **) {
+    return info==RS2_CAMERA_INFO_PRODUCT_LINE?std::getenv("RDK_PTY_DEVICE_EVENT"):"fixture";
+}
+''')
+        subprocess.run(["c++", "-shared", "-fPIC", "-std=c++14", "-pthread", "-I" + sdk_root +
+                        "/third_party/librealsense/include", str(stub), "-o", str(library)], check=True)
+        environment = dict(os.environ, LD_PRELOAD=str(library))
+        environment.pop("RDK_PTY_DEVICE_EVENT", None)
+        identifier = uuid.uuid4().hex
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        listener.bind("\0no-sdk-motion-" + identifier)
+        listener.listen(1)
+        listener.settimeout(3)
+        master, slave = pty.openpty()
+        command_path, events = temporary / "command.bin", temporary / "events.jsonl"
+        command_path.write_bytes(mission_frame())
+        base = [str(root / "build/t265_omni_localizer"), "--config",
+                str(root / "config/localization.example.conf"), "--uart", os.ttyname(slave),
+                "--duration", "0.9", "--rate", "0", "--command-file", str(command_path),
+                "--events", str(events), "--output", str(temporary / "unused_pose.json"),
+                "--debug-test-session", identifier]
+        process = subprocess.Popen(base + ["--experimental-robust-localization",
+            "--motion-feedback-socket", "@no-sdk-motion-" + identifier], cwd=root,
+            env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        connection = None
+        received, forwarded = bytearray(), []
+        try:
+            connection, _ = listener.accept()
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and process.poll() is None:
+                if events.exists() and "t265_sdk_unavailable" in events.read_text():
+                    break
+                time.sleep(.005)
+            assert process.poll() is None, "owner exited at SDK startup failure"
+            epoch, sequence = bytes.fromhex("01" * 16), 0
+            next_send = time.monotonic()
+            while process.poll() is None and time.monotonic() < deadline:
+                now = time.monotonic()
+                if now >= next_send:
+                    t0, t1 = sequence * 10000, (sequence + 1) * 10000
+                    wheel = struct.pack(">16sIIQQiiIIIiiiIII", epoch, 0, sequence, t0, t1,
+                                        100000, 0, 1, 2, 3, 1, 2, 3, 1, 0, 0)
+                    gyro = struct.pack(">16sIIqQIIIiQIIIQ", epoch, 0, sequence, 0, t1,
+                                       sequence, 1, 0, 0, t1, sequence, 1, 0, t1)
+                    os.write(master, packet(WHEEL, sequence, wheel) + packet(GYRO, sequence, gyro))
+                    sequence += 1
+                    if sequence == 20:
+                        os.kill(process.pid, signal.SIGUSR1)
+                    next_send = now + .01
+                ready, _, _ = select.select([master, connection], [], [], .005)
+                for stream in ready:
+                    if stream == master:
+                        received.extend(os.read(master, 4096))
+                    else:
+                        data = connection.recv(4096)
+                        if data:
+                            forwarded.append(data)
+            output, _ = process.communicate(timeout=3)
+            assert process.returncode == 0, output
+            records = [json.loads(line) for line in events.read_text().splitlines()]
+            assert sum(item.get("event") == "t265_sdk_unavailable" for item in records) == 2, records
+            assert sum(item.get("event") == "t265_sdk_reopen_requested" for item in records) == 1, records
+            assert not (temporary / "unused_pose.json").exists(), "SDK failure fabricated a Pose"
+            heartbeats = []
+            for offset in range(len(received) - 14):
+                candidate = received[offset:offset + 15]
+                if candidate[:3] == b"\xa3\xb3\x18" and candidate[-1] == 0xc3 and \
+                        crc16(candidate[2:12]) == int.from_bytes(candidate[12:14], "little"):
+                    heartbeats.append(bytes(candidate))
+            assert len(heartbeats) >= 20, (len(heartbeats), output)
+            assert all(((b[3] - a[3]) & 255) == 1 for a, b in zip(heartbeats, heartbeats[1:]))
+            assert {message[11] for message in forwarded} == {WHEEL, GYRO}, forwarded
+            assert len(forwarded) >= 40, len(forwarded)
+            default = subprocess.run(base, cwd=root, env=environment, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True, timeout=3)
+            assert default.returncode == 3, default.stdout
+            availability = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            availability.bind("\0no-sdk-pose-" + identifier)
+            availability.listen(1)
+            availability.settimeout(2)
+            check = None
+            try:
+                check = subprocess.Popen([str(root / "build/t265_omni_localizer"), "--config",
+                    str(root / "config/localization.example.conf"), "--duration", "0.1", "--rate", "0",
+                    "--experimental-robust-localization", "--debug-test-session", identifier,
+                    "--debug-pose-socket", "@no-sdk-pose-" + identifier, "--debug-fresh-session",
+                    "--t265-only-output", "--ignore-encoders", "--enable-pose-jumping"],
+                    cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True)
+                peer, _ = availability.accept()
+                with peer:
+                    peer.settimeout(2)
+                    state = json.loads(peer.recv(8192))
+                check_output, _ = check.communicate(timeout=3)
+                assert check.returncode == 0 and state["kind"] == "sdk_availability", (state, check_output)
+                assert state["available"] is False and "x_m" not in state, state
+            finally:
+                if check is not None and check.poll() is None:
+                    check.kill()
+                    check.communicate()
+                availability.close()
+            attach_retries = {}
+            for product_line, expected in (("T200", 1), ("D400", 0)):
+                event_path = temporary / (product_line + ".jsonl")
+                attach = subprocess.run([str(root / "build/t265_omni_localizer"), "--config",
+                    str(root / "config/localization.example.conf"), "--duration", "0.3", "--rate", "0",
+                    "--experimental-robust-localization", "--events", str(event_path)],
+                    cwd=root, env=dict(environment,RDK_PTY_DEVICE_EVENT=product_line),
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=3)
+                assert attach.returncode == 0, attach.stdout
+                event_rows = [json.loads(line) for line in event_path.read_text().splitlines()]
+                retries = sum(row.get("event") == "t265_sdk_reopen_requested" for row in event_rows)
+                assert retries == expected, (product_line,event_rows,attach.stdout)
+                assert sum(row.get("event") == "t265_sdk_unavailable" for row in event_rows) == 1 + expected
+                attach_retries[product_line] = retries
+            print(json.dumps({"sdk_stub": "startup_failure_without_USB", "physical_uart": False,
+                "mission_heartbeats_after_sdk_failure": len(heartbeats),
+                "wheel_gyro_forwarded_after_sdk_failure": len(forwarded),
+                "default_exit_code": default.returncode, "availability_ipc": state["kind"],
+                "explicit_retry_attempts": 1, "timer_retry_attempts": 0,
+                "mock_added_device_retries": attach_retries,
+                "pose_fabricated": False}))
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+            if connection is not None:
+                connection.close()
+            listener.close()
+            os.close(master)
+            os.close(slave)
+    return 0
 
 
 def main() -> int:
@@ -152,4 +336,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(robust_without_sdk() if sys.argv[1:] == ["--robust-no-sdk"] else main())

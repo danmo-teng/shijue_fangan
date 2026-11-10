@@ -51,6 +51,10 @@ struct T265FieldPose {
     bool translation_scale_enabled = false;
     double body_forward_velocity_mps = 0.0;
     double body_left_velocity_mps = 0.0;
+    // Same fixed ground plane and initial-heading rotation as pose.x_m/y_m.
+    // This is centre velocity after the full 3D lever correction, not body XY.
+    double vx_local_mps = 0.0;
+    double vy_local_mps = 0.0;
     double travel_from_origin_m = 0.0;
     double forward_world[3] = {0.0, 0.0, -1.0};
     double left_world[3] = {-1.0, 0.0, 0.0};

@@ -1466,6 +1466,34 @@ def test_global_wall_initialization():
             assert native.reference[key]==plain.reference[key],key
         assert native.has_anchor and runtime.snapshot()['has_anchor']
     finally:runtime.close()
+    # The experimental native path initializes from actual wheel/yaw support
+    # with no SDK Pose. Its heading column must match that local frame, not
+    # the selected-history's legacy unused-zero field.
+    runtime=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1,robust_odometry_enabled=True))
+    try:
+        native=NativeDynamicFence(mount,runtime,experimental_robust_localization=True)
+        for i in range(101):
+            t=origin-200_000_000+i*5_000_000
+            native.ingest_yaw(t,1287.,dict(source='synthetic_main_gyro',raw=dict(yaw_receive_us=t//1000)))
+            native.ingest_wheel(dict(source='measured_wheel_feedback',measurement_valid=True,mcu_epoch='no-sdk',sample_id=i,
+                raw_mcu_sample=dict(t0_us=(t-5_000_000)//1000,t1_us=t//1000),v_body_mps=[0.,0.,0.],
+                interval_start_ns=t-5_000_000,interval_end_ns=t,receive_monotonic_ns=t))
+        assert not native.poses and not runtime.snapshot()['have_tracked_pose']
+        native.request_initialization('wheel-supported stationary square fixture',physical_confirmed=False)
+        wheel_support,yaw_support=native._initial_support(cloud((.4,-.3),angle,0))
+        assert len(wheel_support)>100 and len(yaw_support)==101
+        assert np.allclose(np.asarray(wheel_support)[:,3],math.radians(1287.))
+        for i in range(3):result=native.try_initialize(cloud((.4,-.3),angle,i))
+        assert result['status']=='GLOBAL_SYMMETRIC_FIX' and not native.poses
+        assert np.allclose(native.reference['start_center_xy_m'],[.4,-.3],atol=.001)
+        selected=native.control_snapshot()
+        assert selected['ready'] and selected['t265_center_xy_m'] is None
+        reference=native.set_known_reference(dict(center_xy_m=[.2,-.4],yaw_deg=42.,
+            description='explicit assumed field marker',reference_kind='assumed'))
+        assert reference['reference_kind']=='assumed' and not reference['physical_placement_confirmed']
+        assert np.allclose(native.control_snapshot()['center_xy_m'],[.2,-.4],atol=1e-10)
+        assert not native.poses and runtime.snapshot()['pose_ingested']==0
+    finally:runtime.close()
     for scan in (cloud((.4,-.3),angle,3),cloud((.4,-.3),angle,4,one_wall=True),
                  cloud((.75,.1),angle,5),cloud((.75,.1),angle,6)):
         assert numerical(plain.observe(scan))==numerical(isolated.observe(scan))
@@ -2436,6 +2464,30 @@ def test_t265_usb_recovery():
             try:usb.recover_t265(Path(temporary)/'failed.json');assert False,'failed upload must report failure'
             except RuntimeError:pass
         assert len(commands)==2 and all('uhubctl' not in c[0] for c in commands)
+    # Exercise the actual shell entry with only temporary fake executables.
+    # Boot failure remains fatal normally; experimental mode reaches the same
+    # owner once, and an already attempted preparation is never retried.
+    import os,subprocess
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary);loc=root/'localization';(loc/'build').mkdir(parents=True)
+        boot=root/'t265_trajectory/build/t265_boot';boot.parent.mkdir(parents=True)
+        script=loc/'run_localization.sh';script.write_bytes((Path(__file__).resolve().parents[1]/'run_localization.sh').read_bytes())
+        commands=root/'boot_calls';fakebin=root/'bin';fakebin.mkdir()
+        lsusb=fakebin/'lsusb';lsusb.write_text('#!/bin/sh\nexit 0\n');lsusb.chmod(0o755)
+        owner=loc/'build/t265_omni_localizer';owner.write_text('#!/bin/sh\necho FIXTURE_SOLE_OWNER\n');owner.chmod(0o755)
+        env=dict(os.environ,PATH=str(fakebin)+os.pathsep+os.environ['PATH'])
+        missing=subprocess.run(['bash',str(script),'--experimental-robust-localization'],env=env,capture_output=True,text=True)
+        assert missing.returncode==0 and 'FIXTURE_SOLE_OWNER' in missing.stdout
+        boot.write_text('#!/bin/sh\necho attempt >> "'+str(commands)+'"\nexit 7\n');boot.chmod(0o755)
+        normal=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True)
+        assert normal.returncode==7 and 'FIXTURE_SOLE_OWNER' not in normal.stdout
+        experimental=subprocess.run(['bash',str(script),'--experimental-robust-localization'],env=env,capture_output=True,text=True)
+        assert experimental.returncode==0 and 'FIXTURE_SOLE_OWNER' in experimental.stdout
+        assert commands.read_text().splitlines()==['attempt','attempt']
+        skipped=subprocess.run(['bash',str(script),'--experimental-robust-localization'],
+            env=dict(env,RDK_T265_TEST_BOOT_ATTEMPTED='1'),capture_output=True,text=True)
+        assert skipped.returncode==0 and 'FIXTURE_SOLE_OWNER' in skipped.stdout
+        assert commands.read_text().splitlines()==['attempt','attempt']
 
 
 def test_motion_log_storage():
@@ -3264,6 +3316,30 @@ def test_native_cpp_wheel_input():
                 assert actual['motion_wire_request_at_receive']['wire_sequence']==42
         print(json.dumps(dict(native_cpp_wheel_parity_samples=len(native),max_vector_error=max_error,
                               unknown_time_bounds_preserved=True,actual_SDK=False,motor_commands=False)))
+        # An explicit SDK/source boundary consumes pending motion but keeps
+        # already matched identity. The late gyro must not resurrect the
+        # pre-boundary wheel interval or require another MCU handshake.
+        boundary=events[:2]
+        def boundary_add(packet):
+            boundary.append(dict(raw_hex=packet.hex(),timestamp_ns=3_000_000_000+len(boundary)*100_000))
+        def boundary_gyro(source_id,tick):
+            payload=struct.pack('>16sIIqQIIIiQIIIQ',epoch,1,source_id,0,tick,source_id,0x341,0xffffffff,
+                                0,tick,source_id,0x341,0xffffffff,tick)
+            boundary_add(wire.packet(wire.GYRO,source_id,payload))
+        def boundary_wheel(source_id,tick):
+            payload=struct.pack('>16sIIQQiiIIIiiiIII',epoch,1,source_id,tick,tick+10000,
+                                round(k*10/(math.sqrt(3)*.01)*1e6),0,
+                                source_id,source_id,source_id,5,-5,0,0x281,0xffffffff,4)
+            boundary_add(wire.packet(wire.WHEEL,source_id,payload))
+        boundary_gyro(1000,2_000_000);boundary_wheel(1000,2_000_000)
+        boundary.append(dict(discard_motion_support=True))
+        boundary_gyro(1001,2_010_000);boundary_wheel(1000,2_000_000)
+        boundary_wheel(1001,2_010_000);boundary_gyro(1002,2_020_000)
+        source.write_text(''.join(json.dumps(e)+'\n' for e in boundary))
+        restarted=[json.loads(line) for line in subprocess.check_output([
+            str(LOCALIZATION_ROOT/'build/test_omni_localization'),'--wheel-replay',str(source),str(DEFAULT_CONFIG)],text=True).splitlines()]
+        assert [p['sample_id'] for p in restarted]==[1001],restarted
+        assert restarted[0]['mcu_epoch']==epoch.hex() and restarted[0]['measurement_valid']
 
 
 def test_wall_supported_source_arbitration():
@@ -3727,6 +3803,98 @@ def test_native_runtime_competition_wheel_policy():
             sender.close();phase.close();sdk.close()
 
 
+def test_experimental_robust_runtime_no_sdk_and_recovery():
+    """Real native runtime with recorded-protocol-shaped inputs, no devices."""
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime
+    import math
+    with tempfile.TemporaryDirectory() as temporary:
+        runtime=NativeMotionRuntime(dict(session_id='robust-runtime-fixture',feedback_fd=-1,pose_fd=-1,
+            robust_odometry_enabled=True,log_root=temporary))
+        t=1_000_000_000;measurement=0;heading=30.
+        def yaw():
+            runtime.command('yaw',dict(time_ns=t,yaw_deg=heading,
+                source=dict(source='fixture_primary_yaw',raw=dict(yaw_receive_us=t//1000))))
+        def wheel(v=0.):
+            nonlocal t,measurement
+            t+=10_000_000;measurement+=1;yaw()
+            runtime.command('wheel',dict(source='measured_wheel_feedback',measurement_valid=True,
+                mcu_epoch='fixture-boot',sample_id=measurement,v_body_mps=[v,0.,0.],
+                raw_mcu_sample=dict(t0_us=(t-10_000_000)//1000,t1_us=t//1000),
+                interval_start_ns=t-10_000_000,interval_end_ns=t,receive_monotonic_ns=t))
+        def pose(frame,x,y,sdk_yaw=-45.,session='physical-sdk-a',vx=0.,vy=0.):
+            runtime.command('pose',dict(session_id='robust-runtime-fixture',sdk_device_session_id=session,
+                frame_number=frame,timestamp_monotonic_ns=t,receive_monotonic_ns=t,
+                x_m=x,y_m=y,yaw_rad=math.radians(sdk_yaw),vx_local_mps=vx,vy_local_mps=vy,
+                tracker_confidence=3,mapper_confidence=1))
+        def availability(value):
+            runtime.command('pose',dict(schema=1,kind='sdk_availability',session_id='robust-runtime-fixture',
+                available=value,reason='fixture explicit USB removal',receive_monotonic_ns=t))
+        try:
+            yaw();wheel()
+            before=runtime.snapshot(dict(kind='histories'))
+            assert before['poses']==[] and before['last_sample'] is None
+            assert not before['last']['ready'] and before['initialization_motion_history']
+            assert abs(before['last_motion'][3]-math.radians(30))<1e-12
+            bound=runtime.command('known_reference',dict(center_xy_m=[1.2,-.5],yaw_deg=135.,
+                description='assumed fixture placement, not ground truth',reference_kind='assumed'))
+            assert bound['reference']['reference_kind']=='assumed'
+            assert not bound['reference']['physical_placement_confirmed']
+            for _ in range(100):wheel(.2)
+            state=runtime.snapshot(dict(kind='histories'));point=state['last']['center_xy_m']
+            expected=[1.2+.2*math.cos(math.radians(135)),-.5+.2*math.sin(math.radians(135))]
+            assert max(abs(a-b) for a,b in zip(point,expected))<1e-10
+            assert state['poses']==[] and state['pose_ingested']==0
+            assert state['last']['t265_center_xy_m'] is None and state['last']['raw_t265_sample_ns'] is None
+            assert state['motion_selection']['mode']=='WHEEL_ONLY_NO_SDK'
+            assert state['last']['ready'] and abs(state['last']['yaw_deg']-135.)<1e-10
+            # Single wall only updates x at the historical endpoint. It cannot
+            # certify or overwrite the unobserved y coordinate.
+            runtime.command('apply_wall',dict(revision=state['revision'],scan_id='one-wall',reference_ns=t,
+                candidate_center_xy_m=[point[0]+.04,99.],position_observed_axes=['x']))
+            corrected=runtime.snapshot()['last']['center_xy_m']
+            assert abs(corrected[0]-point[0]-.04)<1e-10 and corrected[1]==point[1]
+            availability(False);wheel(.2)
+            assert not runtime.snapshot()['sdk_available']
+            assert runtime.snapshot()['pose_ingested']==0
+            # A real SDK sample with a wholly different origin and orientation
+            # must be aligned, not overwrite the wheel-based field position.
+            p0=runtime.snapshot()['last']['center_xy_m'];pose(100,100.,200.)
+            recovered=runtime.snapshot()
+            assert max(abs(a-b) for a,b in zip(p0,recovered['last']['center_xy_m']))<1e-9
+            assert recovered['sdk_available'] and recovered['have_tracked_pose']
+            assert abs(recovered['motion_selection']['sdk_to_selected_rotation_rad']-math.radians(75.))<1e-9
+            # SDK session restarts at another origin/frame counter/yaw while
+            # the same chassis and field reference continue.
+            availability(False)
+            for _ in range(10):wheel(.2)
+            p1=runtime.snapshot()['last']['center_xy_m'];revision=runtime.snapshot()['revision']
+            pose(1,-7.,4.,sdk_yaw=90.,session='physical-sdk-b')
+            rebound=runtime.snapshot()
+            assert rebound['revision']==revision and rebound['reference']['reference_kind']=='assumed'
+            assert max(abs(a-b) for a,b in zip(p1,rebound['last']['center_xy_m']))<1e-9
+            assert rebound['sdk_device_session_id']=='physical-sdk-b'
+            runtime.command('wheel_suppression',dict(suppressed=True,reason='fixture safe-zone exclusion'))
+            held=runtime.snapshot();updates=held['control_updates']
+            availability(False)
+            offline=runtime.snapshot()
+            assert offline['control_updates']==updates+1
+            assert offline['last']['sample_monotonic_ns']==held['last']['sample_monotonic_ns']
+            assert offline['last']['center_xy_m']==held['last']['center_xy_m']
+            assert not offline['sdk_available'] and offline['motion_selection']['t265_motion_suspect']
+            runtime.command('wheel_suppression',dict(suppressed=False,reason='fixture phase ends'))
+            # Rebinding after SDK loss must refer to current selected motion,
+            # rather than the final old SDK point in a nonempty raw history.
+            availability(False)
+            for _ in range(10):wheel(.2)
+            new=runtime.command('known_reference',dict(center_xy_m=[2.,3.],yaw_deg=45.,
+                description='explicit second fixture position',reference_kind='measured'))
+            assert new['reference']['reference_coordinate_source']=='selected_odometry_local'
+            actual=runtime.snapshot()['last']['center_xy_m']
+            assert max(abs(a-b) for a,b in zip(actual,[2.,3.]))<1e-9
+            assert runtime.snapshot()['error'] is None
+        finally:runtime.close()
+
+
 def test_native_runtime_socket_input_and_control_parity():
     """Real local sockets exercise production wire/JSON handlers, no devices."""
     import math
@@ -3983,8 +4151,9 @@ def test_motion_lab_stdio():
         assert replies[3]['request_id']==7 and transports[-1].written==[]
         assert (second.run_dir/'session_complete.json').is_file()
         # A and F preserve all original SDK flags; only A loads real input/profile support.
-        for wheel,experiment in [('off',False),('on',True)]:
-            opt=options(root,'--wheel-input',wheel,*(['--wheel-experiment'] if experiment else []))
+        for wheel,experiment,robust in [('off',False,False),('on',True,False),('off',False,True)]:
+            opt=options(root,'--wheel-input',wheel,*(['--wheel-experiment'] if experiment else []),
+                *(['--experimental-robust-localization'] if robust else []))
             current=module.MotionMapApp(opt)
             child=SimpleNamespace(pid=123,poll=lambda:0,returncode=0)
             with patch.object(module.subprocess,'Popen',return_value=child):
@@ -3993,8 +4162,25 @@ def test_motion_lab_stdio():
             assert all(flag in command for flag in ['--enable-pose-jumping','--t265-only-output','--ignore-encoders','--debug-fresh-session'])
             assert ('--debug-wheel-socket' in command)==(wheel=='on')
             assert ('--debug-wheel-experiment' in command)==experiment
+            assert ('--experimental-robust-localization' in command)==robust
             assert metadata['wheel_input_requested']==(wheel=='on')
+            assert metadata['experimental_robust_localization']==robust
+            assert metadata['timed_measurements_requested']==(wheel=='on' or robust)
             current.stop_session()
+        # An explicit USB preparation failure cannot prevent experimental
+        # shared-owner startup, and cannot trigger another shell upload.
+        opt=options(root,'--experimental-robust-localization','--t265-usb-recovery')
+        current=module.MotionMapApp(opt)
+        with patch('t265_usb_recovery.recover_t265',side_effect=RuntimeError('fixture USB upload: 0 bytes')) as recovery, \
+             patch.object(module.subprocess,'Popen',return_value=child) as spawn:
+            current.start_session()
+        metadata=json.loads((current.run_dir/'metadata.json').read_text())
+        assert recovery.call_count==1 and spawn.call_count==1
+        assert spawn.call_args.kwargs['env']['RDK_T265_TEST_BOOT_ATTEMPTED']=='1'
+        assert metadata['t265_usb_recovery']['continue_shared_uart_owner'] is True
+        assert metadata['t265_usb_recovery']['sdk_pose_verified'] is False
+        assert '0 bytes' in metadata['t265_usb_recovery']['error']
+        current.stop_session()
 
 
 def test_motion_map_simple_operator_view():
@@ -4199,3 +4385,95 @@ def test_motion_response_offline():
     sdk=[(i*.005,pulse(i*.005-.04)) for i in range(701)]
     result=response_lag(reference,[sdk],minimum_excursion=.02)
     assert result['identifiable'] and abs(result['peak']['lag_ms']-40)<=5,result
+
+
+def test_experimental_robust_test_entry():
+    """Explicit test-only wiring and field reference, no SDK/UART or motors."""
+    import io
+    from contextlib import redirect_stderr
+    from unittest.mock import patch
+    import lidar_t265_motion_map as dynamic
+    import t265_f407_motion_map as base
+    assert dynamic.motion_source_label('WHEEL_ONLY_NO_SDK',(),False)=='轮速＋主yaw／SDK不可用'
+    assert dynamic.motion_source_label('WHEEL_ONLY_NO_SDK',('x',),True)=='轮速传播／正在重获围栏位置'
+    assert dynamic.motion_source_label('WHEEL_UNCERTAIN_BOTH_SUSPECT',('x','y'),True)=='不确定轮式／正在重获围栏位置'
+    assert dynamic.motion_source_label('T265_PHASE_NO_WHEEL',(),False,sdk_available=False)=='T265离线／阶段排除轮式，增量未知'
+    with patch('sys.argv',['dynamic-map']):
+        ordinary=dynamic.arguments()
+    assert ordinary.experimental_robust_localization is False
+    assert ordinary.initial_center_m is None and ordinary.initial_yaw_deg is None
+    args=['--experimental-robust-localization','--initial-center-m','.2','-.3',
+          '--initial-yaw-deg','135','--initial-reference-kind','assumed',
+          '--reference-description','operator declared corner marker']
+    with patch('sys.argv',['dynamic-map',*args]):
+        explicit=dynamic.arguments()
+    assert explicit.experimental_robust_localization and explicit.initial_center_m==[.2,-.3]
+    assert explicit.initial_reference_kind=='assumed'
+    for bad in (['--initial-center-m','0','0'],
+                ['--initial-center-m','0','0','--initial-yaw-deg','0'],
+                ['--experimental-robust-localization','--initial-center-m','nan','0',
+                 '--initial-yaw-deg','0','--reference-description','declared']):
+        with patch('sys.argv',['dynamic-map',*bad]),redirect_stderr(io.StringIO()):
+            try:dynamic.arguments()
+            except (ValueError,SystemExit):pass
+            else:raise AssertionError('Ambiguous/invalid field reference was accepted')
+    app=dynamic.DynamicMapApp.__new__(dynamic.DynamicMapApp)
+    app.options=ordinary;app.bridge=SimpleNamespace(pending=None)
+    sent=[];events=[]
+    app.radar=SimpleNamespace(set_reference=lambda *values:sent.append(values) or 'explicit-reference')
+    app.devent=lambda name,**fields:events.append((name,fields))
+    command=dict(op='set_reference',center_xy_m=[.2,-.3],yaw_deg=135.,
+        description='operator declared corner marker',reference_kind='assumed')
+    try:app.motion_lab_command(command)
+    except ValueError:pass
+    else:raise AssertionError('Formal/default path accepted experimental reference command')
+    assert not sent
+    app.options=explicit
+    reply=app.motion_lab_command(command)
+    assert reply==dict(request_id='explicit-reference',reference_pending=True,reference_kind='assumed')
+    assert sent==[([.2,-.3],135.,'operator declared corner marker','assumed')]
+    assert events[-1][1]['reference_kind']=='assumed' and events[-1][0]=='known_field_reference_requested'
+    before=len(sent)
+    for change in (dict(center_xy_m=[False,0]),dict(yaw_deg=float('nan')),
+                   dict(description=' '),dict(reference_kind=None)):
+        try:app.motion_lab_command(dict(command,**change))
+        except ValueError:pass
+        else:raise AssertionError('Invalid reference reached worker')
+    assert len(sent)==before
+    # A genuine wheel-only output can pass the explicit degraded sensor check;
+    # the receipt must still say no SDK Pose/API result and no physical proof.
+    app.dynamic_snapshot=dict(ready=True,motion_selection=dict(mode='WHEEL_ONLY_NO_SDK'))
+    app.radar.state=dict(have_tracked_pose=False);app.wheel_sdk_status=None
+    app.validate_sensor_check()
+    assert events[-1][0]=='robust_sensor_check_result'
+    assert events[-1][1]['actual_t265_pose_present'] is False
+    assert events[-1][1]['actual_sdk_api_success_samples']==0
+    assert events[-1][1]['physical_accuracy_verified'] is False
+    app.dynamic_snapshot=dict(ready=False)
+    try:app.validate_sensor_check()
+    except RuntimeError:pass
+    else:raise AssertionError('Missing measured support was called localization-ready')
+    with tempfile.TemporaryDirectory() as directory:
+        app.run_dir=Path(directory);app.test_id=1;app.active_test=None;app.active_test_parameters={}
+        app.localization={};app.motion_status={};app.imu_telemetry=None;app.latest_wheel_reference={}
+        app.dynamic_snapshot=dict(ready=True,sample_monotonic_ns=123,
+            center_xy_m=[.2,-.4],motion_selection=dict(mode='WHEEL_ONLY_NO_SDK'))
+        app.record_event=lambda *args:True
+        app.storage_panel=SimpleNamespace(key=lambda key,app:False)
+        app.measurement_buffer=None;app.reference_buffer=None
+        assert app.handle_key(ord('M'))
+        assert app.settled_reference_mark['localization']=={}
+        assert app.settled_reference_mark['dynamic_localization']['sample_monotonic_ns']==123
+        app.save_ground_truth('300,0,?')
+        truth=json.loads((app.run_dir/'ground_truth.jsonl').read_text())
+        assert truth['localization']=={} and truth['pose_sample_monotonic_ns'] is None
+        assert truth['selected_pose_sample_monotonic_ns']==123
+        assert truth['dynamic_localization']['motion_selection']['mode']=='WHEEL_ONLY_NO_SDK'
+        assert app.handle_key(ord('G')) and app.measurement_buffer==''
+        sdk_log=app.run_dir/'wheel_sdk.jsonl'
+        sdk_log.write_text(json.dumps(dict(event='wheel_sdk_result',sdk_result=True,
+            sdk_input_generation=0,sdk_api_success_samples=12))+'\n'+json.dumps(dict(
+            event='wheel_sdk_session_prepared',sdk_input_generation=1,sdk_api_success_samples=0))+'\n')
+        history=base.wheel_dependency_history(sdk_log,dict(sdk_input_generation=1,sdk_api_success_samples=0))
+        assert history['any_generation_had_wheel_dependency'] and history['history_read_complete']
+        assert [g['sdk_api_success_samples'] for g in history['sdk_generations']]==[12,0]

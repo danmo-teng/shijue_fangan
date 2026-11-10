@@ -90,6 +90,37 @@ def read_json(path: Path | None) -> dict | None:
         return None
 
 
+def wheel_dependency_history(path: Path, latest: dict | None) -> dict:
+    """Session-final provenance across actual SDK generations; no live gate."""
+    generations={};complete=True
+    def consume(row):
+        generation=row.get('sdk_input_generation',0)
+        entry=generations.setdefault(str(generation),dict(sdk_input_generation=generation,
+            sdk_api_success_samples=0,wheel_dependency_suspect=False))
+        entry['sdk_api_success_samples']=max(entry['sdk_api_success_samples'],row.get('sdk_api_success_samples',0))
+        entry['wheel_dependency_suspect']|=bool(row.get('wheel_dependency_suspect') or row.get('sdk_api_failed_samples',0))
+        if row.get('event')=='wheel_sdk_result' and row.get('sdk_result') is True:
+            entry['sdk_api_success_samples']=max(1,entry['sdk_api_success_samples'])
+    try:
+        with path.open(encoding='utf-8') as stream:
+            for line in stream:
+                try:
+                    row=json.loads(line)
+                    if isinstance(row,dict):consume(row)
+                    else:complete=False
+                except (ValueError,TypeError):complete=False
+    except OSError:complete=False
+    if latest:
+        try:consume(latest)
+        except (ValueError,TypeError):complete=False
+    any_dependency=any(row['sdk_api_success_samples']>0 or row['wheel_dependency_suspect']
+                       for row in generations.values())
+    return dict(any_generation_had_wheel_dependency=any_dependency,history_read_complete=complete,
+        sdk_generations=list(generations.values()),
+        state='wheel_dependency_recorded' if any_dependency else 'no_recorded_dependency' if complete else 'unknown_incomplete_history',
+        result_scope='host_SDK_call_history_only_not_fusion_ACK')
+
+
 def start_pose(zone: int) -> tuple[float, float, float]:
     headings = {1: 135.0, 2: 45.0, 3: 225.0, 4: 315.0}
     return 0.0, 0.0, (headings[zone] + START_HEADING_OFFSET_DEG) % 360.0
@@ -863,6 +894,9 @@ class MotionMapApp:
             "test_parameters": self.active_test_parameters,
             "localization": copy.deepcopy(marker["localization"]),
             "motion_status": copy.deepcopy(marker["motion_status"])}
+        if "dynamic_localization" in marker:
+            document["dynamic_localization"]=copy.deepcopy(marker["dynamic_localization"])
+            document["selected_pose_sample_monotonic_ns"]=marker["dynamic_localization"].get("sample_monotonic_ns")
         if getattr(self.options,"motion_lab_chassis_only",False):
             document.update(imu_native_unaligned=copy.deepcopy(marker.get("imu_native_unaligned")),
                             wheel_reference=copy.deepcopy(marker.get("wheel_reference")),
@@ -1067,7 +1101,14 @@ class MotionMapApp:
         if getattr(self.options,"t265_usb_recovery",False):
             from t265_usb_recovery import recover_t265
             # Before UART subscriptions and the sole SDK process are started.
-            usb_recovery=recover_t265(self.run_dir/"t265_usb_recovery.json")
+            try:
+                usb_recovery=recover_t265(self.run_dir/"t265_usb_recovery.json")
+            except (OSError,RuntimeError,subprocess.TimeoutExpired) as error:
+                if not getattr(self.options,"experimental_robust_localization",False):raise
+                usb_recovery=read_json(self.run_dir/"t265_usb_recovery.json") or {}
+                usb_recovery.update(error=str(error),sdk_pose_verified=False,
+                    continue_shared_uart_owner=True,repeated_boot_attempt=False)
+                self.record_event('t265_start_preparation_failed_continuing',usb_recovery)
         synthetic=getattr(self.options,"wheel_fixture","off")!="off"
         sdk_session_id = uuid.uuid4().hex
         self.sdk_session_id = sdk_session_id
@@ -1111,6 +1152,8 @@ class MotionMapApp:
             "--debug-test-session",sdk_session_id,
 
         ]
+        if getattr(self.options, "experimental_robust_localization", False):
+            command += ["--experimental-robust-localization"]
         if self.options.serial:
             command += ["--serial", self.options.serial]
         if getattr(self.options,"fisheye_evidence",False):
@@ -1127,16 +1170,23 @@ class MotionMapApp:
                          '--test-uart-socket',native_address]
         command += self.extra_localizer_args()
         self.before_localizer_start()
+        launch_options={}
+        if (getattr(self.options,'experimental_robust_localization',False)
+                and getattr(self.options,'t265_usb_recovery',False)):
+            launch_options['env']=dict(os.environ,RDK_T265_TEST_BOOT_ATTEMPTED='1')
         self.localizer = subprocess.Popen(
             command, cwd=str(LOCALIZATION_ROOT),
             stdout=self.localizer_log, stderr=subprocess.STDOUT,
             start_new_session=True,
+            **launch_options,
         )
         if self.bridge:
             from native_test_uart import serial_factory
             self.bridge.serial_factory=serial_factory(native_address,self.localizer)
             self.bridge.start()
-            if wheel_enabled or getattr(self.options,'timed_measurements',False):self.bridge.start_timed_measurements()
+            if (wheel_enabled or getattr(self.options,'timed_measurements',False)
+                    or getattr(self.options,'experimental_robust_localization',False)):
+                self.bridge.start_timed_measurements()
             link=self.bridge.connection_snapshot()
         metadata = {
             "schema_version": 4,
@@ -1157,6 +1207,7 @@ class MotionMapApp:
             "pose_source": "t265_sdk_pose_with_camera_offset" if wheel_enabled else "t265_direct_with_camera_offset",
             "sdk_session_id": sdk_session_id,
             "sdk_owner_pid": self.localizer.pid,
+            "experimental_robust_localization": getattr(self.options,"experimental_robust_localization",False),
             "device_boot_epoch": None,
             "device_restart_note":getattr(self.options,"device_restart_note","not_confirmed"),
             "clean_device_restart_verified":False,
@@ -1164,7 +1215,8 @@ class MotionMapApp:
             "motion_lab_stdio":getattr(self.options,"motion_lab_stdio",False),
             "wheel_experiment_enabled":getattr(self.options,"wheel_experiment",False),
             "wheel_input_requested": wheel_enabled,
-            "timed_measurements_requested": wheel_enabled or getattr(self.options,"timed_measurements",False),
+            "timed_measurements_requested": (wheel_enabled or getattr(self.options,"timed_measurements",False)
+                or getattr(self.options,"experimental_robust_localization",False)),
             "wheel_processing": "native C++ UART/interval-gyro pairing/mount conversion/SDK; Python observer only" if not synthetic else "synthetic fixture IPC",
             "realtime_setup":scheduling,
             "chassis_uart_owner": "native_cpp_sdk_owner" if not synthetic else "not_opened",
@@ -1298,6 +1350,7 @@ class MotionMapApp:
             sdk_owner_started=self.localizer is not None,
             sdk_owner_returncode=self.localizer.poll() if self.localizer else None,
             sdk_session_id=getattr(self,"sdk_session_id",None), sdk=sdk,
+            experimental_robust_localization=getattr(self.options,"experimental_robust_localization",False),
             wheel_input_requested=self.options.wheel_input=="on",
             wheel_experiment_enabled=getattr(self.options,"wheel_experiment",False),
             current_pose=None if getattr(self.options,"motion_lab_chassis_only",False) else copy.deepcopy(self.localization),
@@ -1474,6 +1527,10 @@ class MotionMapApp:
         if getattr(self, "storage_panel", None):
             self.storage_panel.close()
         if self.run_dir is not None:
+            dependencies=["synthetic_test_fixture"] if getattr(self.options,"wheel_fixture","off")!="off" else DEPENDENCIES
+            dependency_history=wheel_dependency_history(self.run_dir/"wheel_sdk.jsonl",
+                read_json(self.run_dir/"wheel_sdk_status.json"))
+            self.record_event('wheel_dependency_history',dependency_history)
             csv_path = self.run_dir / "localization_debug.csv"
             if csv_path.exists():
                 try:
@@ -1491,9 +1548,8 @@ class MotionMapApp:
                     result["effective_config"] = self.session_config
                     result["accuracy_verified"] = False
                     result["wheel_input_requested"] = getattr(self.options, "wheel_input", "off") == "on"
-                    sdk=read_json(self.run_dir / "wheel_sdk_status.json") or {}
-                    dependencies=["synthetic_test_fixture"] if getattr(self.options,"wheel_fixture","off")!="off" else DEPENDENCIES
-                    result["trajectory_dependency_sources"] = dependencies if (sdk.get("sdk_api_success_samples",0)>0 or sdk.get("wheel_dependency_suspect")) else []
+                    result["trajectory_dependency_sources"] = dependencies if dependency_history['any_generation_had_wheel_dependency'] else []
+                    result["wheel_dependency_history"]=dependency_history
                     result["potential_input_dependency_sources"] = dependencies if result["wheel_input_requested"] else []
                     result["wheel_reference_independent_pose"] = False  # Plot uses T265 heading in both modes.
                     result["wheel_sdk_status"] = read_json(self.run_dir / "wheel_sdk_status.json")
@@ -1506,13 +1562,22 @@ class MotionMapApp:
             stopped_saved = self.record_event("session_stopped", {"localizer_returncode": localizer_returncode})
             # Save completion last. Failed/incomplete sessions never cause pruning.
             chassis_only=getattr(self.options,"motion_lab_chassis_only",False)
-            required = [self.run_dir / n for n in (("metadata.json","events.jsonl") if chassis_only else
-                        ("metadata.json", "localization_debug.csv", "t265_raw_pose.csv", "analysis.json", "events.jsonl"))]
+            robust=getattr(self.options,"experimental_robust_localization",False)
+            # A complete wheel-only experimental capture must not require
+            # fictional SDK CSV/analysis. Native log health is still checked
+            # above; the dynamic subclass also checks its actual motion logs.
+            required_names=(("metadata.json","events.jsonl") if chassis_only else
+                ("metadata.json","localization_events.jsonl","events.jsonl") if robust else
+                ("metadata.json", "localization_debug.csv", "t265_raw_pose.csv", "analysis.json", "events.jsonl"))
+            required = [self.run_dir / n for n in required_names]
             if (stopped_saved and logs_ok and not self.logging_failed and (chassis_only or localizer_returncode == 0) and
                     all(p.is_file() and p.stat().st_size > 0 for p in required)):
                 (self.run_dir / "session_complete.json").write_text(json.dumps({
                     "owner": "t265_f407_motion_map", "complete": True,
                     "session_index": self.session_index,
+                    "completion_scope":"robust_motion_capture_not_SDK_or_accuracy_qualification" if robust else "original_t265_capture",
+                    "experimental_robust_localization":robust,
+                    "wheel_dependency_history":dependency_history,
                     "accuracy_verified": False}) + "\n", encoding="utf-8")
                 self.record_event("session_retention", {"policy":"capacity_warning_manual_review",
                     "automatic_deletion":False,"removed":[]})
@@ -1713,6 +1778,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument('--sensor-check-render-mode',choices=('on','off','compare'),default='on',
                         help='existing headless check only: same-SDK no-render/render comparison; never sends motion')
     parser.add_argument("--serial")
+    parser.add_argument("--experimental-robust-localization",action="store_true",
+                        help="test-only robust source selection; keep the sole UART owner if SDK is unavailable; formal defaults unchanged")
     parser.add_argument("--wheel-input", choices=("off", "on"), default="off",
                         help="SDK-session choice; default pure T265, on uses measured 07/08 with timing diagnostics only")
     parser.add_argument("--motion-lab-stdio",action="store_true",help="explicit no-GUI operator JSON lines; starts listening, never automatic motion")
@@ -1739,6 +1806,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--fullscreen", dest="fullscreen", action="store_true", default=True)
     parser.add_argument("--windowed", dest="fullscreen", action="store_false")
     options=parser.parse_args()
+    if options.experimental_robust_localization and (options.motion_lab_chassis_only or options.wheel_fixture!="off"):
+        parser.error("--experimental-robust-localization uses the real shared SDK/UART owner, not chassis-only/synthetic mode")
     if options.motion_lab_stdio and (options.logs_only or options.check_chassis or options.sensor_check_seconds or options.wheel_fixture!="off"):
         parser.error("--motion-lab-stdio cannot combine with log/check/synthetic modes")
     if options.motion_lab_chassis_only and (not options.motion_lab_stdio or options.wheel_input!="off" or options.t265_usb_recovery or options.fisheye_evidence):
