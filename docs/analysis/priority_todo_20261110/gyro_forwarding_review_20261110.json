@@ -1,0 +1,257 @@
+{
+  "read_only_original_logs": true,
+  "devices_opened": false,
+  "runtime_instrumentation_added": false,
+  "method": "Per unique (boot,reference,publication) TYPE08; publish_us minus each original F405 yaw/rate receive_us in the SAME MCU clock. These are latest-source snapshot waits, not every 1kHz packet latency. UART4 enqueue/DMA start and gyro internal physical time are unobserved; no true end-to-end one-way latency inferred.",
+  "lower_source_review_commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+  "lower_sources": {
+    "Main/Src/imu_uart.c": {
+      "blob": "77dc6a61061ea937c1d5b3308444c27f5e2849a4",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/imu_uart.c"
+    },
+    "Main/Src/DebugTelemetry.c": {
+      "blob": "080ab1b914253724c5bf5e548ecfde82e102f414",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/DebugTelemetry.c"
+    },
+    "Main/Src/Robot.c": {
+      "blob": "215eb6913f95152f94653ed0e1f1d5cab7e0df15",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/Robot.c"
+    },
+    "Main/Src/Uart.c": {
+      "blob": "e18b1766e9b76e4c8832c2ffcdab6c91be3c92bd",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/Uart.c"
+    }
+  },
+  "groups": {
+    "F": {
+      "file": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_190954_interactive/chassis_extended.jsonl",
+      "sha256": "f9938093fabd1bcaa1d03e38d4416a45f7c4597ac0dd982214b10559b1b8f560",
+      "counts": {
+        "gyro_records": 13597,
+        "unique_publications": 13597,
+        "yaw_negative_wait": 0,
+        "yaw_repeat_flag": 0,
+        "rate_negative_wait": 0,
+        "rate_repeat_flag": 0
+      },
+      "statistics": {
+        "yaw_receive_to_publish_ms": {
+          "n": 13597,
+          "min": 0.002,
+          "p50": 0.498,
+          "p95": 0.942,
+          "p99": 0.98,
+          "max": 1.037
+        },
+        "rate_receive_to_publish_ms": {
+          "n": 13597,
+          "min": 0.002,
+          "p50": 0.49,
+          "p95": 0.942,
+          "p99": 0.982,
+          "max": 1.023
+        },
+        "yaw_minus_rate_receive_ms": {
+          "n": 13597,
+          "min": -0.224,
+          "p50": -0.213,
+          "p95": 0.782,
+          "p99": 0.786,
+          "max": 0.862
+        },
+        "publication_interval_ms": {
+          "n": 13596,
+          "min": 9.997,
+          "p50": 10.006,
+          "p95": 10.027,
+          "p99": 10.035,
+          "max": 10.328
+        }
+      }
+    },
+    "A": {
+      "file": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_191242_interactive/chassis_extended.jsonl",
+      "sha256": "b1a05d8e74c7b4f976d07c110847ab4e233916f5d67b722328e1d94a2a90eb94",
+      "counts": {
+        "gyro_records": 22202,
+        "unique_publications": 22202,
+        "yaw_negative_wait": 0,
+        "yaw_repeat_flag": 0,
+        "rate_negative_wait": 0,
+        "rate_repeat_flag": 0
+      },
+      "statistics": {
+        "yaw_receive_to_publish_ms": {
+          "n": 22202,
+          "min": 0.002,
+          "p50": 0.5,
+          "p95": 0.943,
+          "p99": 0.983,
+          "max": 1.026
+        },
+        "rate_receive_to_publish_ms": {
+          "n": 22202,
+          "min": 0.002,
+          "p50": 0.491,
+          "p95": 0.943,
+          "p99": 0.983,
+          "max": 1.035
+        },
+        "yaw_minus_rate_receive_ms": {
+          "n": 22202,
+          "min": -0.223,
+          "p50": -0.213,
+          "p95": 0.782,
+          "p99": 0.786,
+          "max": 0.86
+        },
+        "publication_interval_ms": {
+          "n": 22201,
+          "min": 9.998,
+          "p50": 10.005,
+          "p95": 10.025,
+          "p99": 10.035,
+          "max": 10.381
+        }
+      }
+    },
+    "dynamic": {
+      "file": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_192842_interactive/motion_feedback.jsonl",
+      "sha256": "8ff4814e2af54a75d7bdc416fdcdb60973c8efa67671fe2c8ec67870dbc3c96d",
+      "counts": {
+        "gyro_records": 16782,
+        "unique_publications": 16782,
+        "yaw_negative_wait": 0,
+        "yaw_repeat_flag": 0,
+        "rate_negative_wait": 0,
+        "rate_repeat_flag": 0
+      },
+      "statistics": {
+        "yaw_receive_to_publish_ms": {
+          "n": 16782,
+          "min": 0.002,
+          "p50": 0.499,
+          "p95": 0.9429499999999988,
+          "p99": 0.983,
+          "max": 1.021
+        },
+        "rate_receive_to_publish_ms": {
+          "n": 16782,
+          "min": 0.002,
+          "p50": 0.4915,
+          "p95": 0.943,
+          "p99": 0.983,
+          "max": 1.037
+        },
+        "yaw_minus_rate_receive_ms": {
+          "n": 16782,
+          "min": -0.222,
+          "p50": -0.213,
+          "p95": 0.782,
+          "p99": 0.786,
+          "max": 0.843
+        },
+        "publication_interval_ms": {
+          "n": 16781,
+          "min": 9.999,
+          "p50": 10.006,
+          "p95": 10.027,
+          "p99": 10.035,
+          "max": 10.349
+        }
+      }
+    },
+    "round1": {
+      "file": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195243_competition_wheel/motion_feedback.jsonl",
+      "sha256": "fe250f99e69a301b6af4665efb7d7c6ae9188a6f590583631d8c1cc70453fff3",
+      "counts": {
+        "gyro_records": 18722,
+        "unique_publications": 18722,
+        "yaw_negative_wait": 0,
+        "yaw_repeat_flag": 0,
+        "rate_negative_wait": 0,
+        "rate_repeat_flag": 0
+      },
+      "statistics": {
+        "yaw_receive_to_publish_ms": {
+          "n": 18722,
+          "min": 0.002,
+          "p50": 0.4955,
+          "p95": 0.94,
+          "p99": 0.981,
+          "max": 1.687
+        },
+        "rate_receive_to_publish_ms": {
+          "n": 18722,
+          "min": 0.002,
+          "p50": 0.49,
+          "p95": 0.9409500000000007,
+          "p99": 0.983,
+          "max": 1.472
+        },
+        "yaw_minus_rate_receive_ms": {
+          "n": 18722,
+          "min": -1.208,
+          "p50": -0.213,
+          "p95": 0.783,
+          "p99": 0.787,
+          "max": 0.846
+        },
+        "publication_interval_ms": {
+          "n": 18721,
+          "min": 9.977,
+          "p50": 10.036,
+          "p95": 10.069,
+          "p99": 10.159799999999999,
+          "max": 20.063
+        }
+      }
+    },
+    "round2": {
+      "file": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel/motion_feedback.jsonl",
+      "sha256": "f4425ae0fec3dd6f851d72883b1fd59352d26065a35347b10e40e066ef4a9789",
+      "counts": {
+        "gyro_records": 23305,
+        "unique_publications": 23305,
+        "yaw_negative_wait": 0,
+        "yaw_repeat_flag": 0,
+        "rate_negative_wait": 0,
+        "rate_repeat_flag": 0
+      },
+      "statistics": {
+        "yaw_receive_to_publish_ms": {
+          "n": 23305,
+          "min": 0.002,
+          "p50": 0.497,
+          "p95": 0.943,
+          "p99": 0.983,
+          "max": 1.835
+        },
+        "rate_receive_to_publish_ms": {
+          "n": 23305,
+          "min": 0.002,
+          "p50": 0.492,
+          "p95": 0.941,
+          "p99": 0.983,
+          "max": 1.835
+        },
+        "yaw_minus_rate_receive_ms": {
+          "n": 23305,
+          "min": -1.206,
+          "p50": -0.213,
+          "p95": 0.783,
+          "p99": 0.787,
+          "max": 1.781
+        },
+        "publication_interval_ms": {
+          "n": 23304,
+          "min": 9.919,
+          "p50": 10.036,
+          "p95": 10.069,
+          "p99": 10.14797,
+          "max": 20.049
+        }
+      }
+    }
+  }
+}

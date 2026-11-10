@@ -281,6 +281,13 @@
       "application_zero_yaw_calls_found": 0,
       "firmware_modified": false,
       "independent_historical_fault_root_cause_proven": false
+    },
+    "gyro_forwarding_offline": {
+      "unique_type08_publications": 94608,
+      "source_hashes_match_original_manifest": true,
+      "new_runtime_instrumentation": false,
+      "uart4_queue_dma_start_latency_observed": false,
+      "new_detector_deployed": false
     }
   },
   "artifacts": [
@@ -388,6 +395,11 @@
       "path": "docs/analysis/priority_todo_20261110/zero_reference_call_sites.json",
       "bytes": 9341,
       "sha256": "0bc5b89617b647085a12c0774ecaa8eec5d615af10f626ffac16c25601007146"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/gyro_forwarding_review_20261110.json",
+      "bytes": 7920,
+      "sha256": "dddd21aa2acb7371e2fb3364d7d9db719bb1fedb66e921de8185a4eefa5106f2"
     }
   ]
 }
