@@ -232,10 +232,14 @@ void NativeMotionSource::fallback(const std::string &why, double t) {
         const double end = wheels.back()[0];
         anchor = first2(sample(history, end)); anchor_wheel = first2(wheel_at(end));
     }
-    if (mode != "WHEEL_FALLBACK") event({{"event", "motion_source_changed"},
+    const bool entering = mode != "WHEEL_FALLBACK";
+    if (entering) event({{"event", "motion_source_changed"},
         {"sample_monotonic_ns", static_cast<std::int64_t>(t)}, {"previous_source", mode},
         {"motion_source", "WHEEL_FALLBACK"}, {"reason", why}, {"spatial_conflict_m", last_conflict_m}});
-    mode = "WHEEL_FALLBACK"; reason = why;
+    mode = "WHEEL_FALLBACK";
+    // Keep the first cause through later paired displacement conflicts.
+    // A new explicit wall verdict is a different diagnosis, not a repeat.
+    if (entering || why == "two_axis_walls_support_wheel_over_T265") reason = why;
     recovery_window.reset(); recovery_travel = 0.; wall_fixes = 0;
 }
 

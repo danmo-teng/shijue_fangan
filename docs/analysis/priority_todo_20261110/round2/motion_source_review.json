@@ -1,0 +1,569 @@
+{
+  "schema_version": 1,
+  "analysis": "offline_motion_source_candidates",
+  "runtime_connected": false,
+  "deployed": false,
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+  "counts": {
+    "feedback_records": 46701,
+    "raw_sdk_rows": 46582,
+    "sdk_retained_rows": 46582,
+    "sdk_frame_breaks": 0,
+    "wheel_gyro_common_coverage_unavailable": 4,
+    "sdk_single_steps_over_50mm": 21,
+    "recorded_dual_suspect_transitions": 1,
+    "wall_not_full_xy": 106,
+    "wall_reacquisition_baseline_reset": 1,
+    "wall_window_common_coverage_unavailable": 7,
+    "raw_scans": 2323,
+    "scan_common_coverage_unavailable": 7
+  },
+  "wheel_input_requested": true,
+  "candidates": {
+    "gyro_phase_ms": 28.0,
+    "effective_arm_m": 0.115,
+    "fitted_on_this_data": false,
+    "wheel_translation": "published measured F405 07 forward/left; raw counts only for angular crosscheck",
+    "sdk_velocity": "full 3D SDK world v minus omega cross lever, projected onto original fixed ground plane",
+    "history_alignment_uses_future_gyro": true,
+    "causal_prediction_uses_only_received_packets": true,
+    "defaults_or_runtime_sources_modified": false
+  },
+  "synchronization": {
+    "raw_interval": {
+      "residual_raw_deg_s": {
+        "count": 23392,
+        "min": -93.49411984139556,
+        "max": 93.42723811385096,
+        "mean": -1.15990378721364,
+        "rms": 9.05323915926337,
+        "median": 0.0,
+        "p95_abs": 18.474384562622816
+      },
+      "residual_aligned_deg_s": {
+        "count": 23392,
+        "min": -76.93329259855486,
+        "max": 65.99923479178845,
+        "mean": -1.159903985318665,
+        "rms": 7.256357639372963,
+        "median": 0.0,
+        "p95_abs": 12.70512602991668
+      },
+      "held_vs_aligned_yaw_error_deg": {
+        "count": 23392,
+        "min": -5.2385068382946,
+        "max": 5.162198332999367,
+        "mean": -0.19194598812143468,
+        "rms": 1.256184615612411,
+        "median": 0.0,
+        "p95_abs": 3.067194352302431
+      },
+      "predicted_vs_aligned_yaw_error_deg": {
+        "count": 23392,
+        "min": -0.9581937650662931,
+        "max": 1.6180836831406824,
+        "mean": -0.0007274845576096264,
+        "rms": 0.09171041254741133,
+        "median": 0.0,
+        "p95_abs": 0.16078735085301504
+      },
+      "causal_prediction_horizon_ms": {
+        "count": 23392,
+        "min": 18.199,
+        "max": 41.442,
+        "mean": 32.71233584131326,
+        "rms": 32.84965915542455,
+        "median": 32.743,
+        "p95_abs": 37.336
+      }
+    },
+    "100ms": {
+      "residual_raw_deg_s": {
+        "count": 2339,
+        "min": -66.77284215465403,
+        "max": 70.89144158071763,
+        "mean": -1.1600068350892467,
+        "rms": 7.639169227740119,
+        "median": 0.0,
+        "p95_abs": 15.731598899439998
+      },
+      "residual_aligned_deg_s": {
+        "count": 2339,
+        "min": -66.37595190015784,
+        "max": 41.69918750956489,
+        "mean": -1.160008997463071,
+        "rms": 6.043409750384727,
+        "median": 0.0,
+        "p95_abs": 9.470232006890056
+      },
+      "held_vs_aligned_yaw_error_deg": {
+        "count": 2339,
+        "min": -5.197503819863444,
+        "max": 4.652261306531606,
+        "mean": -0.19389052459731743,
+        "rms": 1.2582824993331623,
+        "median": 0.0,
+        "p95_abs": 3.0694554031249224
+      },
+      "predicted_vs_aligned_yaw_error_deg": {
+        "count": 2339,
+        "min": -0.6363566634082419,
+        "max": 1.0565936136281033,
+        "mean": -0.000703676704627481,
+        "rms": 0.08618466477152073,
+        "median": 0.0,
+        "p95_abs": 0.15446075245716093
+      },
+      "causal_prediction_horizon_ms": {
+        "count": 2339,
+        "min": 20.721,
+        "max": 38.619,
+        "mean": 32.674366823428755,
+        "rms": 32.815031331427974,
+        "median": 32.724000000000004,
+        "p95_abs": 37.3502
+      }
+    }
+  },
+  "synchronization_active_rotation": {
+    "residual_raw_deg_s": {
+      "count": 1081,
+      "min": -66.77284215465403,
+      "max": 70.89144158071763,
+      "mean": -2.3137543327024237,
+      "rms": 11.108548623980802,
+      "median": -0.9216762507923006,
+      "p95_abs": 26.46181239167692
+    },
+    "residual_aligned_deg_s": {
+      "count": 1081,
+      "min": -66.37595190015784,
+      "max": 41.69918750956489,
+      "mean": -2.290942476826617,
+      "rms": 8.823138398813976,
+      "median": -0.6822451671271339,
+      "p95_abs": 18.45249628313815
+    },
+    "held_vs_aligned_yaw_error_deg": {
+      "count": 1081,
+      "min": -5.197503819863444,
+      "max": 4.652261306531606,
+      "mean": -0.4142806437657498,
+      "rms": 1.849947692323341,
+      "median": -0.2341172566370797,
+      "p95_abs": 3.941305186972346
+    },
+    "predicted_vs_aligned_yaw_error_deg": {
+      "count": 1081,
+      "min": -0.6363566634082419,
+      "max": 1.0565936136281033,
+      "mean": -0.0015140204493768222,
+      "rms": 0.12340043724046659,
+      "median": -0.006026236878105509,
+      "p95_abs": 0.24871285641419966
+    }
+  },
+  "wall_windows": {
+    "all": {
+      "wheel_raw_gyro": {
+        "count": 52,
+        "min": 0.0006947637742013488,
+        "max": 0.11492266230793435,
+        "mean": 0.027383624568597015,
+        "rms": 0.03688848139232761,
+        "median": 0.020119905987125253,
+        "p95_abs": 0.07188642712790132
+      },
+      "wheel_aligned_gyro": {
+        "count": 52,
+        "min": 0.0006947637742013488,
+        "max": 0.11462068097337846,
+        "mean": 0.027279174820109955,
+        "rms": 0.036768151943467366,
+        "median": 0.01953426283756058,
+        "p95_abs": 0.07178914196508171
+      },
+      "sdk_position": {
+        "count": 52,
+        "min": 0.007178511260637041,
+        "max": 2.2835120614653257,
+        "mean": 0.16458957903059818,
+        "rms": 0.35314302088700933,
+        "median": 0.09329254264283884,
+        "p95_abs": 0.2911080699287592
+      },
+      "sdk_velocity": {
+        "count": 52,
+        "min": 0.011631907188458818,
+        "max": 0.373509842947459,
+        "mean": 0.15236182593004874,
+        "rms": 0.17903932859425892,
+        "median": 0.1573641123358968,
+        "p95_abs": 0.27422398200891496
+      }
+    },
+    "no_sdk_jump": {
+      "wheel_raw_gyro": {
+        "count": 42,
+        "min": 0.0009449981521713798,
+        "max": 0.11492266230793435,
+        "mean": 0.028810771807640943,
+        "rms": 0.03849355373005545,
+        "median": 0.021324631506623615,
+        "p95_abs": 0.07291664620254942
+      },
+      "wheel_aligned_gyro": {
+        "count": 42,
+        "min": 0.0009450288627092077,
+        "max": 0.11462068097337846,
+        "mean": 0.02869443986638152,
+        "rms": 0.03837034885594432,
+        "median": 0.020135609746074236,
+        "p95_abs": 0.07309566413114073
+      },
+      "sdk_position": {
+        "count": 42,
+        "min": 0.007178511260637041,
+        "max": 0.2893462513047777,
+        "mean": 0.1212621676397603,
+        "rms": 0.15714891151059995,
+        "median": 0.08781877959463616,
+        "p95_abs": 0.2709070393376875
+      },
+      "sdk_velocity": {
+        "count": 42,
+        "min": 0.011631907188458818,
+        "max": 0.373509842947459,
+        "mean": 0.14532104850320623,
+        "rms": 0.17466222157924063,
+        "median": 0.1498324549409813,
+        "p95_abs": 0.2804151322486999
+      }
+    },
+    "sdk_jump": {
+      "wheel_raw_gyro": {
+        "count": 10,
+        "min": 0.0006947637742013488,
+        "max": 0.06776402598454254,
+        "mean": 0.021389606164612527,
+        "rms": 0.02919909002380937,
+        "median": 0.01572696214403419,
+        "p95_abs": 0.05564653524611157
+      },
+      "wheel_aligned_gyro": {
+        "count": 10,
+        "min": 0.0006947637742013488,
+        "max": 0.06774752378918661,
+        "mean": 0.02133506162576935,
+        "rms": 0.029090771158294337,
+        "median": 0.015936171076429122,
+        "p95_abs": 0.05533255827721378
+      },
+      "sdk_position": {
+        "count": 10,
+        "min": 0.050834849404158895,
+        "max": 2.2835120614653257,
+        "mean": 0.3465647068721171,
+        "rms": 0.7380851488904212,
+        "median": 0.09557260102597015,
+        "p95_abs": 1.3940776531991388
+      },
+      "sdk_velocity": {
+        "count": 10,
+        "min": 0.043615924358522504,
+        "max": 0.2559482973298298,
+        "mean": 0.18193309112278716,
+        "rms": 0.19636057964043993,
+        "median": 0.21770569557625807,
+        "p95_abs": 0.2555021924623873
+      }
+    },
+    "wheel_suspect": {
+      "wheel_raw_gyro": {
+        "count": 12,
+        "min": 0.009802307574595543,
+        "max": 0.07095922996071802,
+        "mean": 0.03152811769735765,
+        "rms": 0.03752538333249061,
+        "median": 0.024713628773708307,
+        "p95_abs": 0.07083262540832368
+      },
+      "wheel_aligned_gyro": {
+        "count": 12,
+        "min": 0.00968336705577418,
+        "max": 0.0706132720156286,
+        "mean": 0.031221843404538457,
+        "rms": 0.03729700935189164,
+        "median": 0.02404730743816349,
+        "p95_abs": 0.07042698853778451
+      },
+      "sdk_position": {
+        "count": 12,
+        "min": 0.012217448491946595,
+        "max": 0.12050327324921131,
+        "mean": 0.04461939336908676,
+        "rms": 0.05522174475983298,
+        "median": 0.0360851368464548,
+        "p95_abs": 0.11087067001656256
+      },
+      "sdk_velocity": {
+        "count": 12,
+        "min": 0.01329895247670559,
+        "max": 0.19158926593671893,
+        "mean": 0.08746902830610943,
+        "rms": 0.10969290574824916,
+        "median": 0.06608194114832264,
+        "p95_abs": 0.188004672997252
+      }
+    },
+    "dual_event": {
+      "wheel_raw_gyro": {
+        "count": 2,
+        "min": 0.01438908249768717,
+        "max": 0.0368420225136737,
+        "mean": 0.025615552505680435,
+        "rms": 0.027967662737734156,
+        "median": 0.025615552505680435,
+        "p95_abs": 0.03571937551287438
+      },
+      "wheel_aligned_gyro": {
+        "count": 2,
+        "min": 0.014437779629012607,
+        "max": 0.03657981103568895,
+        "mean": 0.02550879533235078,
+        "rms": 0.027807661318624426,
+        "median": 0.02550879533235078,
+        "p95_abs": 0.035472709465355134
+      },
+      "sdk_position": {
+        "count": 2,
+        "min": 0.06393891089066037,
+        "max": 0.17294970726003814,
+        "mean": 0.11844430907534925,
+        "rms": 0.13038363694731156,
+        "median": 0.11844430907534925,
+        "p95_abs": 0.16749916744156923
+      },
+      "sdk_velocity": {
+        "count": 2,
+        "min": 0.035830228560607524,
+        "max": 0.07994483349178456,
+        "mean": 0.057887531026196044,
+        "rms": 0.06194748453623656,
+        "median": 0.057887531026196044,
+        "p95_abs": 0.0777391032452257
+      }
+    }
+  },
+  "scan_metrics": {
+    "sdk_position": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.0012257699313708412,
+        "max": 0.03741232624777109,
+        "mean": 0.003964713574330916,
+        "rms": 0.004274727804863099,
+        "median": 0.0037190824523923023,
+        "p95_abs": 0.006604530278558738
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.002713042507962429,
+        "max": 0.1777235551941079,
+        "mean": 0.010357520533829188,
+        "rms": 0.01276281104069792,
+        "median": 0.007929893540211994,
+        "p95_abs": 0.02166123273160777
+      }
+    },
+    "sdk_velocity": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.0012287331156762423,
+        "max": 0.009287779081605071,
+        "mean": 0.003929884465942204,
+        "rms": 0.004145389809684127,
+        "median": 0.0037255541901155508,
+        "p95_abs": 0.006491830877022329
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.002672808367194382,
+        "max": 0.17772389013657786,
+        "mean": 0.010292936737950583,
+        "rms": 0.012585223729027232,
+        "median": 0.007907538059348027,
+        "p95_abs": 0.021420780114696444
+      }
+    },
+    "sdk_velocity_increment_aligned": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.0012287601986701747,
+        "max": 0.00928762973040748,
+        "mean": 0.003929857406515346,
+        "rms": 0.0041453602625478895,
+        "median": 0.0037255890976705336,
+        "p95_abs": 0.006491901076288043
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.0019647381878152813,
+        "max": 0.17763665173978696,
+        "mean": 0.00625402683148037,
+        "rms": 0.008368055035031168,
+        "median": 0.0056772376250489014,
+        "p95_abs": 0.008826967363729546
+      }
+    },
+    "wheel_aligned": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.001245507876891516,
+        "max": 0.009337315837368597,
+        "mean": 0.003931408333988862,
+        "rms": 0.004147664585944259,
+        "median": 0.00372800638916248,
+        "p95_abs": 0.006478294708174949
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.0021343175916544743,
+        "max": 0.1776487916117407,
+        "mean": 0.006237004102835276,
+        "rms": 0.008350475237436908,
+        "median": 0.005665448468095307,
+        "p95_abs": 0.008615696572148746
+      }
+    },
+    "wheel_main": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.0012581687684724272,
+        "max": 0.009465142179361802,
+        "mean": 0.003933530046898778,
+        "rms": 0.0041514665885715955,
+        "median": 0.0037196169181944053,
+        "p95_abs": 0.006493478040433681
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.002220930536561678,
+        "max": 0.1776487916117407,
+        "mean": 0.009472365287281114,
+        "rms": 0.012849042125507203,
+        "median": 0.0063288728452579384,
+        "p95_abs": 0.026152521536088807
+      }
+    },
+    "wheel_sdk_increment": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.001241287007285237,
+        "max": 0.009263967418528814,
+        "mean": 0.003932368964892898,
+        "rms": 0.004148571336405671,
+        "median": 0.003731965846560204,
+        "p95_abs": 0.006487123992066255
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.0021716685146956002,
+        "max": 0.1776370148965428,
+        "mean": 0.009468516569565513,
+        "rms": 0.012845813546146945,
+        "median": 0.006352708871637733,
+        "p95_abs": 0.02624571450632023
+      }
+    },
+    "wheel_sdk_increment_aligned": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.0012405040541747087,
+        "max": 0.009263976455492326,
+        "mean": 0.003932368425636522,
+        "rms": 0.004148571280889062,
+        "median": 0.0037319626508862005,
+        "p95_abs": 0.006487123992066264
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.0018938464961857034,
+        "max": 0.1776370148965428,
+        "mean": 0.006238782229534961,
+        "rms": 0.008350762127237111,
+        "median": 0.005658657213290376,
+        "p95_abs": 0.008619335150427997
+      }
+    },
+    "wheel_sdk_rotation": {
+      "tls_rms_m": {
+        "count": 2316,
+        "min": 0.0012374841152130306,
+        "max": 0.009264416317551639,
+        "mean": 0.0039324014061005936,
+        "rms": 0.004148614884148136,
+        "median": 0.0037319739996017117,
+        "p95_abs": 0.00648712399206636
+      },
+      "axis_rms_m": {
+        "count": 2316,
+        "min": 0.0024585163150082833,
+        "max": 0.17772425328168243,
+        "mean": 0.01026401402066221,
+        "rms": 0.012561462100526822,
+        "median": 0.007872974942165652,
+        "p95_abs": 0.021433329173023513
+      }
+    }
+  },
+  "source_files": {
+    "localization.conf": {
+      "bytes": 4494,
+      "sha256": "71918759382e0bf4279dae6534a860fdd81be9c9492c4990c615b955ad5f1a36"
+    },
+    "metadata.json": {
+      "bytes": 4544,
+      "sha256": "8c8b50d29ff501f6726518fc8a5e058859cfb6d265478e534426d35e47c5e84f"
+    },
+    "motion_feedback.jsonl": {
+      "bytes": 21943640,
+      "sha256": "f4425ae0fec3dd6f851d72883b1fd59352d26065a35347b10e40e066ef4a9789"
+    },
+    "pose_motion.jsonl": {
+      "bytes": 26186603,
+      "sha256": "977d5d105acacfb91d2d5caa227c80b665650914268aa18e35a9e50d835af395"
+    },
+    "localization_debug.csv": {
+      "bytes": 56590166,
+      "sha256": "42d45c5acb70cd88d32228ac66f4ee66db989986a596f4f2b24b09bc9c8eeb58"
+    },
+    "t265_raw_pose.csv": {
+      "bytes": 16357635,
+      "sha256": "65a01c33d4dc64a99eff39c4b2255933b6a7b5c2f7e950b7d7c753d43a905db0"
+    },
+    "control_pose.jsonl": {
+      "bytes": 114820239,
+      "sha256": "b24a68e07a634547f7c8b4d17bd52b16f97217ec16905aa0bf56939abad66208"
+    },
+    "dynamic_localization.jsonl": {
+      "bytes": 7293596,
+      "sha256": "fa1362e6c89c789709f849fcc623cadde1a382429b5ea63e1252c2fa8ae29428"
+    },
+    "dynamic_scans.jsonl": {
+      "bytes": 125005318,
+      "sha256": "277e83d41ffa99baaad16288e7ef99dc5bdb9be634a47059dde9fdf94aef286c"
+    }
+  },
+  "limitations": [
+    "No independent ground truth, slip labels or detection accuracy; nominal actions are not truth.",
+    "Wall windows use accepted two-axis historical fits; their priors/deskew depend on motion and main yaw.",
+    "SDK velocity/rotation retain previous wheel-input influence; pause does not clear that state.",
+    "A fixed 28ms phase is a comparison candidate, not a calibrated universal sensor delay.",
+    "Prediction is compared to later received gyro as a proxy, not an external angle reference.",
+    "SDK source time uses retained pose_motion, or processing_monotonic_ns minus consumer capture_age; callback RX is a different clock observation.",
+    "Scan metrics freeze supports from raw lines; TLS/axis residuals are proxies, not XY accuracy or independent wall identity.",
+    "All raw records stay unchanged. Missing common support only limits offline comparisons.",
+    "No online threshold, new timer, age gate, handshake, stop or firmware change is introduced."
+  ]
+}

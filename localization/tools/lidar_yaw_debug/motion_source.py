@@ -199,11 +199,16 @@ class MotionSource:
             end=self.wheels[-1][0]
             self.anchor=sample(self.history,end)[:2]
             self.anchor_wheel=self._wheel_at(end)[:2]
-        if self.mode!='WHEEL_FALLBACK':
+        entering=self.mode!='WHEEL_FALLBACK'
+        if entering:
             self.events.append(dict(event='motion_source_changed',sample_monotonic_ns=t,
                 previous_source=self.mode,motion_source='WHEEL_FALLBACK',reason=reason,
                 spatial_conflict_m=self.last_conflict_m))
-        self.mode='WHEEL_FALLBACK';self.reason=reason
+        self.mode='WHEEL_FALLBACK'
+        # Preserve the cause of this fallback episode. A paired Pose arriving
+        # later must not hide an SDK jump behind a generic displacement error.
+        # An explicit new wall verdict may still replace the old diagnosis.
+        if entering or reason=='two_axis_walls_support_wheel_over_T265':self.reason=reason
         self.recovery_window=None;self.recovery_travel=0.;self.wall_fixes=0
 
     def _process(self):

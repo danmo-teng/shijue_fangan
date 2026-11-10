@@ -1,0 +1,380 @@
+{
+  "schema_version": 1,
+  "baseline": "1ec0838",
+  "deployed_candidate": false,
+  "read_only_original_logs": true,
+  "motors_started": false,
+  "devices_opened": false,
+  "performance_work_resumed": false,
+  "offline_cli": "python3 localization/tools/t265_f407_debug.py --motion-source-review SESSION --motion-source-output OUTDIR",
+  "groups": {
+    "F": {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_190954_interactive",
+      "counts": {
+        "feedback_records": 27207,
+        "sdk_value_unavailable": 1,
+        "raw_sdk_rows": 27106,
+        "sdk_retained_rows": 27105,
+        "sdk_frame_breaks": 0,
+        "wheel_gyro_common_coverage_unavailable": 5,
+        "sdk_single_steps_over_50mm": 0,
+        "recorded_dual_suspect_transitions": 0
+      },
+      "source_files": {
+        "localization.conf": {
+          "bytes": 4486,
+          "sha256": "ff57ec329b2a7da8a9a04fc6ae6847bc1d49cb87b6f92b847dc951e3efec930f"
+        },
+        "metadata.json": {
+          "bytes": 12578,
+          "sha256": "20e163ebf793b2036bb328b1bddb3307be752f54f48bdabcf787d3b1f4bd2c00"
+        },
+        "chassis_extended.jsonl": {
+          "bytes": 13815226,
+          "sha256": "f9938093fabd1bcaa1d03e38d4416a45f7c4597ac0dd982214b10559b1b8f560"
+        },
+        "localization_debug.csv": {
+          "bytes": 32715349,
+          "sha256": "9b3e842ec7c7df4f94523b07c8424f62af07e7166b55814c1850fcd14bcc3097"
+        },
+        "t265_raw_pose.csv": {
+          "bytes": 9774847,
+          "sha256": "b1ca75025a6e72f9c30f6e1eec22024fbbada6a75a0264c151a076bc9d09d741"
+        }
+      }
+    },
+    "A": {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_191242_interactive",
+      "counts": {
+        "feedback_records": 44421,
+        "sdk_nonmonotonic": 1,
+        "raw_sdk_rows": 44292,
+        "sdk_retained_rows": 44291,
+        "sdk_frame_breaks": 1,
+        "wheel_gyro_common_coverage_unavailable": 5,
+        "wheel_interval_breaks": 1,
+        "sdk_single_steps_over_50mm": 0,
+        "recorded_dual_suspect_transitions": 0
+      },
+      "source_files": {
+        "localization.conf": {
+          "bytes": 4486,
+          "sha256": "ff57ec329b2a7da8a9a04fc6ae6847bc1d49cb87b6f92b847dc951e3efec930f"
+        },
+        "metadata.json": {
+          "bytes": 13132,
+          "sha256": "6f3def67884f685b9aec662a9db347143ea0474ce3da89d22c933b33bfbf336a"
+        },
+        "chassis_extended.jsonl": {
+          "bytes": 22556700,
+          "sha256": "b1a05d8e74c7b4f976d07c110847ab4e233916f5d67b722328e1d94a2a90eb94"
+        },
+        "localization_debug.csv": {
+          "bytes": 53302025,
+          "sha256": "d32e6fc6f5e6b8683b11613398eaa229973ee75c4c0eb7a43c376a032eff4dcc"
+        },
+        "t265_raw_pose.csv": {
+          "bytes": 16236424,
+          "sha256": "7f48870fa5e140482f4cf96b6bb14cd27dac29c0f365a1bf70f95629ef2a37c1"
+        }
+      }
+    },
+    "dynamic": {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_192842_interactive",
+      "counts": {
+        "feedback_records": 33577,
+        "sdk_value_unavailable": 1,
+        "raw_sdk_rows": 33525,
+        "sdk_retained_rows": 33524,
+        "sdk_frame_breaks": 1,
+        "wheel_gyro_common_coverage_unavailable": 4,
+        "wheel_interval_breaks": 2,
+        "sdk_single_steps_over_50mm": 0,
+        "recorded_dual_suspect_transitions": 0,
+        "wall_window_common_coverage_unavailable": 3,
+        "wall_not_full_xy": 10,
+        "raw_scans": 1669,
+        "scan_common_coverage_unavailable": 2
+      },
+      "source_files": {
+        "localization.conf": {
+          "bytes": 4486,
+          "sha256": "ff57ec329b2a7da8a9a04fc6ae6847bc1d49cb87b6f92b847dc951e3efec930f"
+        },
+        "metadata.json": {
+          "bytes": 17026,
+          "sha256": "6a1614bb004db39395425906778825475b1c4c68dde11776a53353f15390bc73"
+        },
+        "motion_feedback.jsonl": {
+          "bytes": 15721089,
+          "sha256": "8ff4814e2af54a75d7bdc416fdcdb60973c8efa67671fe2c8ec67870dbc3c96d"
+        },
+        "pose_motion.jsonl": {
+          "bytes": 18980052,
+          "sha256": "34379f9bb6288a17255af81b0d066e3ea446f86b27e388e1728f8ec9b689b03e"
+        },
+        "localization_debug.csv": {
+          "bytes": 40326168,
+          "sha256": "37f3d55503a24c37689d4f7e5d323ad5b30896b0fe75e74a33df9375f27f4bae"
+        },
+        "t265_raw_pose.csv": {
+          "bytes": 12107239,
+          "sha256": "4f28eae20681bb2376cf84f1fe04724d8d68174a3a11f04c6d03f857b3613842"
+        },
+        "control_pose.jsonl": {
+          "bytes": 73463012,
+          "sha256": "de301031bc6da20517f31b4d847f6e625026c01dc39697e68d1062b3144cc1c7"
+        },
+        "dynamic_localization.jsonl": {
+          "bytes": 4654730,
+          "sha256": "cafdd6aead5416305f9e92d15497e576c61c1635f64c66af2124056608bb674d"
+        },
+        "dynamic_scans.jsonl": {
+          "bytes": 89680527,
+          "sha256": "dd8d167b2986d47cf74bf8403420d8c3778a80cb43f5eb3036795b644ab965da"
+        }
+      }
+    },
+    "round1": {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195243_competition_wheel",
+      "counts": {
+        "feedback_records": 37519,
+        "sdk_value_unavailable": 1,
+        "raw_sdk_rows": 37386,
+        "sdk_retained_rows": 37385,
+        "sdk_frame_breaks": 0,
+        "wheel_gyro_common_coverage_unavailable": 5,
+        "sdk_single_steps_over_50mm": 1,
+        "recorded_dual_suspect_transitions": 0,
+        "wall_not_full_xy": 353,
+        "wall_reacquisition_baseline_reset": 1,
+        "raw_scans": 1864,
+        "scan_common_coverage_unavailable": 8
+      },
+      "source_files": {
+        "localization.conf": {
+          "bytes": 4494,
+          "sha256": "71918759382e0bf4279dae6534a860fdd81be9c9492c4990c615b955ad5f1a36"
+        },
+        "metadata.json": {
+          "bytes": 4544,
+          "sha256": "43e666a1fd5f884b31fd2bcd41baeb3740812e80703a5ee79527d41511a478dd"
+        },
+        "motion_feedback.jsonl": {
+          "bytes": 17599411,
+          "sha256": "fe250f99e69a301b6af4665efb7d7c6ae9188a6f590583631d8c1cc70453fff3"
+        },
+        "pose_motion.jsonl": {
+          "bytes": 21037003,
+          "sha256": "c55cca9e78a83dea329da2cbe159cfdebfef117f177e28d913e9163e15fc9d84"
+        },
+        "localization_debug.csv": {
+          "bytes": 45285280,
+          "sha256": "9a06d51319e7f1beed5a35e68202a53657fe130685ee53f4fa737cbd2cb50f7d"
+        },
+        "t265_raw_pose.csv": {
+          "bytes": 13101086,
+          "sha256": "d7858c39255072d9a589f3ec16a8267d51c69483c9a17909add46a3262c00790"
+        },
+        "control_pose.jsonl": {
+          "bytes": 79686016,
+          "sha256": "b74e1bd1bcfe60ed1967b1624756445b2f23b9814da7ee37ee762f6c97432475"
+        },
+        "dynamic_localization.jsonl": {
+          "bytes": 5720798,
+          "sha256": "621811b9eb600891996eea057e5b7c9913e4942315994234a7676c793f3b96f8"
+        },
+        "dynamic_scans.jsonl": {
+          "bytes": 100325820,
+          "sha256": "de5c0220b54cef64fb37d027466a724aa1d17265c7d63708541ada10e31c2a4a"
+        }
+      }
+    },
+    "round2": {
+      "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261109_195756_competition_wheel",
+      "counts": {
+        "feedback_records": 46701,
+        "raw_sdk_rows": 46582,
+        "sdk_retained_rows": 46582,
+        "sdk_frame_breaks": 0,
+        "wheel_gyro_common_coverage_unavailable": 4,
+        "sdk_single_steps_over_50mm": 21,
+        "recorded_dual_suspect_transitions": 1,
+        "wall_not_full_xy": 106,
+        "wall_reacquisition_baseline_reset": 1,
+        "wall_window_common_coverage_unavailable": 7,
+        "raw_scans": 2323,
+        "scan_common_coverage_unavailable": 7
+      },
+      "source_files": {
+        "localization.conf": {
+          "bytes": 4494,
+          "sha256": "71918759382e0bf4279dae6534a860fdd81be9c9492c4990c615b955ad5f1a36"
+        },
+        "metadata.json": {
+          "bytes": 4544,
+          "sha256": "8c8b50d29ff501f6726518fc8a5e058859cfb6d265478e534426d35e47c5e84f"
+        },
+        "motion_feedback.jsonl": {
+          "bytes": 21943640,
+          "sha256": "f4425ae0fec3dd6f851d72883b1fd59352d26065a35347b10e40e066ef4a9789"
+        },
+        "pose_motion.jsonl": {
+          "bytes": 26186603,
+          "sha256": "977d5d105acacfb91d2d5caa227c80b665650914268aa18e35a9e50d835af395"
+        },
+        "localization_debug.csv": {
+          "bytes": 56590166,
+          "sha256": "42d45c5acb70cd88d32228ac66f4ee66db989986a596f4f2b24b09bc9c8eeb58"
+        },
+        "t265_raw_pose.csv": {
+          "bytes": 16357635,
+          "sha256": "65a01c33d4dc64a99eff39c4b2255933b6a7b5c2f7e950b7d7c753d43a905db0"
+        },
+        "control_pose.jsonl": {
+          "bytes": 114820239,
+          "sha256": "b24a68e07a634547f7c8b4d17bd52b16f97217ec16905aa0bf56939abad66208"
+        },
+        "dynamic_localization.jsonl": {
+          "bytes": 7293596,
+          "sha256": "fa1362e6c89c789709f849fcc623cadde1a382429b5ea63e1252c2fa8ae29428"
+        },
+        "dynamic_scans.jsonl": {
+          "bytes": 125005318,
+          "sha256": "277e83d41ffa99baaad16288e7ef99dc5bdb9be634a47059dde9fdf94aef286c"
+        }
+      }
+    }
+  },
+  "scope_notes": [
+    "Phase 28ms and effective arm .115m were fixed, not fitted on these sessions.",
+    "SDK step counts use corrected center 2D consecutive tracked poses (>50mm), not raw 3D jump-event tally.",
+    "Whole-session and >=5deg/s active 100ms summaries are separate; no nominal target is truth.",
+    "Scan supports fixed once in raw lidar coordinates, shared by all candidates; includes static and moving scans.",
+    "Current walls use selected-source priors/deskew and are not independent XY truth.",
+    "F/A fallback pose time uses processing minus capture_age; callback RX minus consumer age is incorrect."
+  ],
+  "code": {
+    "localization/tools/motion_source_review.py": "d26b52f01a25fa13088cca31a0253f3790b34c0452293424fe9c39fdfcd49308",
+    "localization/tools/t265_f407_debug.py": "545e1054993f965f585be9bd0eb21dbc5222c7739466f1e30f916eb40f6130f9",
+    "localization/tools/wheel_gyro_residual.py": "1c47f42624264b53ad7247c01b74a44d7bab7635fe23ac8207f9067ec0e5711e",
+    "localization/tools/lidar_yaw_debug/dynamic.py": "a010dfebd91464ceb38e18a046a7674a059d21c7f9063252dd8e42ce33aeb427",
+    "localization/tools/lidar_yaw_debug/static.py": "ee0ecf84643eb447876d4a3076221de49d6c1bd7e6bc91af95dfaa5a14a8c5c5",
+    "localization/src/motion_source_native.cpp": "496c999ef6f6a96c9ee1c51a306b73681a370d9463629ef124051a1ed4d6ec6b",
+    "localization/tools/lidar_yaw_debug/motion_source.py": "b3f42cf68b82eada6b7dbc1bf4abd720fcfd20b74589dde7c1fad85c7e9f473b"
+  },
+  "native_motion_library_sha256": "5fa420db91a78a0e552664d5a458531b3868f6a63ef305eb982910ded24ca5f3",
+  "checks": {
+    "release_motion_runtime_build": true,
+    "offline_math_and_cli_tests": "3 passed",
+    "source_arbitration_tests": "2 passed",
+    "native_queued_jump_parity_and_reference_rotation_check": "2 passed",
+    "cpp_body_velocity_crosscheck_max_mps": {
+      "F": 4.999899955865361e-10,
+      "A": 4.99997652113858e-10
+    },
+    "real_ground_accuracy_verified": false
+  },
+  "artifacts": [
+    {
+      "path": "docs/analysis/priority_todo_20261110/F/motion_source_review.json",
+      "bytes": 10632,
+      "sha256": "5a5c2820cc4985187b237a54588f3d287a2e375f3bddf05ba5ded17b1422da38"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/F/wall_windows.csv",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/F/synchronization.csv",
+      "bytes": 1500458,
+      "sha256": "1022770c50db636bb8abf3b1638a162c4975cc48c7149c5d8414555b5ac6bb8b"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/F/scan_candidates.csv",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/A/motion_source_review.json",
+      "bytes": 10663,
+      "sha256": "2d74857aa913bdfdbba8b64719f09c4331ac3952051c1b5cc38c2fe5876433c3"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/A/wall_windows.csv",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/A/synchronization.csv",
+      "bytes": 2344623,
+      "sha256": "fabba262ecdbc476913cd99f9c26fd7772abc08f5e8d29bb73cc15d6692f01b5"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/A/scan_candidates.csv",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/dynamic/motion_source_review.json",
+      "bytes": 16965,
+      "sha256": "aad128e2eeca073904b9b84c7d8fed1913bd80cae4e36d689e3374460f41054e"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/dynamic/wall_windows.csv",
+      "bytes": 9283,
+      "sha256": "898016b231ab4c9ef635a747ca5ae6a904b241423e8f0122e48bca5c348946f1"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/dynamic/synchronization.csv",
+      "bytes": 1851807,
+      "sha256": "f7eb0532e7a547c534b1f78d4e2912a83602f6e44efa28cd883d0933f5bcb23f"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/dynamic/scan_candidates.csv",
+      "bytes": 2900951,
+      "sha256": "f913f1435dbbb58d3cf23f285245b2cd9d2f6b0394eec42a08444fd17652cdad"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round1/motion_source_review.json",
+      "bytes": 17210,
+      "sha256": "17937a58e11ec1bf24aee46d7502ffdac6b7c53432bf32d8341507aca7060ea7"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round1/wall_windows.csv",
+      "bytes": 15371,
+      "sha256": "94f90e75970417443dc15240bc6ddc737f4f2e933cf36106d97096d02cdf936a"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round1/synchronization.csv",
+      "bytes": 2748356,
+      "sha256": "13f5b5b1094c8ee9d9b5e9395bd85537478fd69d18099dcee60b5cd61738cf14"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round1/scan_candidates.csv",
+      "bytes": 3223370,
+      "sha256": "d6e33cfcbdb77226d8b2577e6ecaf326ab76aa9c3cf9d88da186b0746d742e4a"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round2/motion_source_review.json",
+      "bytes": 17983,
+      "sha256": "79ebf0b98b88aa61ba6c524e93ce6fec5e75a9d39d11f98478a9d398494afb29"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round2/wall_windows.csv",
+      "bytes": 28596,
+      "sha256": "419ae7d11c5562dfb4edafa6c1c7b355197edb4c49b7e25bfb3aaa2e441f9ad6"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round2/synchronization.csv",
+      "bytes": 3471967,
+      "sha256": "f6ffe30bdb118db93cae28b923574f6044093de8b9480c4677740e31174bdee2"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/round2/scan_candidates.csv",
+      "bytes": 4033705,
+      "sha256": "7380c688637af36a98db782ab7b488a0f76e07cec8d9889f31b63fdea6b0f4af"
+    }
+  ]
+}

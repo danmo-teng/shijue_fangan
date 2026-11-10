@@ -1,0 +1,389 @@
+{
+  "schema_version": 1,
+  "analysis": "offline_motion_source_candidates",
+  "runtime_connected": false,
+  "deployed": false,
+  "session": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/t265_f407_motion_map/20261109_191242_interactive",
+  "counts": {
+    "feedback_records": 44421,
+    "sdk_nonmonotonic": 1,
+    "raw_sdk_rows": 44292,
+    "sdk_retained_rows": 44291,
+    "sdk_frame_breaks": 1,
+    "wheel_gyro_common_coverage_unavailable": 5,
+    "wheel_interval_breaks": 1,
+    "sdk_single_steps_over_50mm": 0,
+    "recorded_dual_suspect_transitions": 0
+  },
+  "wheel_input_requested": true,
+  "candidates": {
+    "gyro_phase_ms": 28.0,
+    "effective_arm_m": 0.115,
+    "fitted_on_this_data": false,
+    "wheel_translation": "published measured F405 07 forward/left; raw counts only for angular crosscheck",
+    "sdk_velocity": "full 3D SDK world v minus omega cross lever, projected onto original fixed ground plane",
+    "history_alignment_uses_future_gyro": true,
+    "causal_prediction_uses_only_received_packets": true,
+    "defaults_or_runtime_sources_modified": false
+  },
+  "synchronization": {
+    "raw_interval": {
+      "residual_raw_deg_s": {
+        "count": 22214,
+        "min": -34.40642348887006,
+        "max": 24.08931334149748,
+        "mean": 0.007719528153915153,
+        "rms": 1.8832951948661314,
+        "median": 0.0,
+        "p95_abs": 4.0781242906329975
+      },
+      "residual_aligned_deg_s": {
+        "count": 22214,
+        "min": -29.822851832023822,
+        "max": 22.47660199543826,
+        "mean": 0.007717584232017182,
+        "rms": 1.3577490814226483,
+        "median": 0.0,
+        "p95_abs": 2.741414885111547
+      },
+      "held_vs_aligned_yaw_error_deg": {
+        "count": 22214,
+        "min": -4.623448005627203,
+        "max": 5.739891644907232,
+        "mean": 0.003171798661373004,
+        "rms": 0.5475389629861566,
+        "median": 0.0,
+        "p95_abs": 0.36059869914617754
+      },
+      "predicted_vs_aligned_yaw_error_deg": {
+        "count": 22214,
+        "min": -0.36441434376949056,
+        "max": 0.2457461571829698,
+        "mean": -1.901710035402855e-05,
+        "rms": 0.027903195362837998,
+        "median": 0.0,
+        "p95_abs": 0.060599835751492054
+      },
+      "causal_prediction_horizon_ms": {
+        "count": 22214,
+        "min": 19.290000000000003,
+        "max": 38.747,
+        "mean": 33.23195727919329,
+        "rms": 33.32212017647606,
+        "median": 33.26,
+        "p95_abs": 37.052
+      }
+    },
+    "100ms": {
+      "residual_raw_deg_s": {
+        "count": 2221,
+        "min": -11.71413210053977,
+        "max": 11.823272873453554,
+        "mean": 0.0076975639144631946,
+        "rms": 1.2445163093863862,
+        "median": 0.0,
+        "p95_abs": 2.561856419376592
+      },
+      "residual_aligned_deg_s": {
+        "count": 2221,
+        "min": -7.267478833689693,
+        "max": 5.47039632460484,
+        "mean": 0.007693922398058025,
+        "rms": 0.5848284156088506,
+        "median": 0.0,
+        "p95_abs": 1.090700571040603
+      },
+      "held_vs_aligned_yaw_error_deg": {
+        "count": 2221,
+        "min": -4.568701638024866,
+        "max": 5.651623543592656,
+        "mean": 0.0030922341787370665,
+        "rms": 0.5491801305679896,
+        "median": 0.0,
+        "p95_abs": 0.3526953376207378
+      },
+      "predicted_vs_aligned_yaw_error_deg": {
+        "count": 2221,
+        "min": -0.3332326993567353,
+        "max": 0.22503591990045402,
+        "mean": -0.000502376099515876,
+        "rms": 0.027525473493873923,
+        "median": 0.0,
+        "p95_abs": 0.05714610440733951
+      },
+      "causal_prediction_horizon_ms": {
+        "count": 2221,
+        "min": 22.032,
+        "max": 38.747,
+        "mean": 33.23465240882486,
+        "rms": 33.324962724433405,
+        "median": 33.258,
+        "p95_abs": 37.073
+      }
+    }
+  },
+  "synchronization_active_rotation": {
+    "residual_raw_deg_s": {
+      "count": 168,
+      "min": -11.71413210053977,
+      "max": 11.823272873453554,
+      "mean": -0.014871034722691457,
+      "rms": 4.156369686799129,
+      "median": 0.07558248769332862,
+      "p95_abs": 9.056539877576993
+    },
+    "residual_aligned_deg_s": {
+      "count": 168,
+      "min": -7.267478833689693,
+      "max": 5.47039632460484,
+      "mean": 0.015265779271956735,
+      "rms": 1.905922005969368,
+      "median": 0.024876674960391268,
+      "p95_abs": 3.470280239447667
+    },
+    "held_vs_aligned_yaw_error_deg": {
+      "count": 168,
+      "min": -4.568701638024866,
+      "max": 5.651623543592656,
+      "mean": 0.03842493908075702,
+      "rms": 1.994126852761824,
+      "median": -0.012744804738459337,
+      "p95_abs": 4.192813589914609
+    },
+    "predicted_vs_aligned_yaw_error_deg": {
+      "count": 168,
+      "min": -0.3332326993567353,
+      "max": 0.22503591990045402,
+      "mean": -0.0020776193478125454,
+      "rms": 0.08677543252116686,
+      "median": 0.00515821252760368,
+      "p95_abs": 0.16757730532757165
+    }
+  },
+  "wall_windows": {
+    "all": {
+      "wheel_raw_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "wheel_aligned_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_position": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_velocity": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      }
+    },
+    "no_sdk_jump": {
+      "wheel_raw_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "wheel_aligned_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_position": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_velocity": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      }
+    },
+    "sdk_jump": {
+      "wheel_raw_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "wheel_aligned_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_position": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_velocity": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      }
+    },
+    "wheel_suspect": {
+      "wheel_raw_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "wheel_aligned_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_position": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_velocity": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      }
+    },
+    "dual_event": {
+      "wheel_raw_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "wheel_aligned_gyro": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_position": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      },
+      "sdk_velocity": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "rms": null,
+        "median": null,
+        "p95_abs": null
+      }
+    }
+  },
+  "scan_metrics": {},
+  "source_files": {
+    "localization.conf": {
+      "bytes": 4486,
+      "sha256": "ff57ec329b2a7da8a9a04fc6ae6847bc1d49cb87b6f92b847dc951e3efec930f"
+    },
+    "metadata.json": {
+      "bytes": 13132,
+      "sha256": "6f3def67884f685b9aec662a9db347143ea0474ce3da89d22c933b33bfbf336a"
+    },
+    "chassis_extended.jsonl": {
+      "bytes": 22556700,
+      "sha256": "b1a05d8e74c7b4f976d07c110847ab4e233916f5d67b722328e1d94a2a90eb94"
+    },
+    "localization_debug.csv": {
+      "bytes": 53302025,
+      "sha256": "d32e6fc6f5e6b8683b11613398eaa229973ee75c4c0eb7a43c376a032eff4dcc"
+    },
+    "t265_raw_pose.csv": {
+      "bytes": 16236424,
+      "sha256": "7f48870fa5e140482f4cf96b6bb14cd27dac29c0f365a1bf70f95629ef2a37c1"
+    }
+  },
+  "limitations": [
+    "No independent ground truth, slip labels or detection accuracy; nominal actions are not truth.",
+    "Wall windows use accepted two-axis historical fits; their priors/deskew depend on motion and main yaw.",
+    "SDK velocity/rotation retain previous wheel-input influence; pause does not clear that state.",
+    "A fixed 28ms phase is a comparison candidate, not a calibrated universal sensor delay.",
+    "Prediction is compared to later received gyro as a proxy, not an external angle reference.",
+    "SDK source time uses retained pose_motion, or processing_monotonic_ns minus consumer capture_age; callback RX is a different clock observation.",
+    "Scan metrics freeze supports from raw lines; TLS/axis residuals are proxies, not XY accuracy or independent wall identity.",
+    "All raw records stay unchanged. Missing common support only limits offline comparisons.",
+    "No online threshold, new timer, age gate, handshake, stop or firmware change is introduced."
+  ]
+}

@@ -612,6 +612,12 @@ def arguments() -> argparse.Namespace:
                         help="仅离线导出原始SDK/07/08及主机接收时钟相对响应，不连接设备")
     parser.add_argument("--motion-response-output", type=Path, metavar="OUTDIR",
                         help="响应JSON及原始量CSV写到原会话之外；省略仅stdout摘要")
+    parser.add_argument("--motion-source-review", type=Path, metavar="SESSION",
+                        help="仅离线比较gyro对齐/因果预测、SDK速度与轮式传播，不接入正式定位")
+    parser.add_argument("--motion-source-output", type=Path, metavar="OUTDIR",
+                        help="候选比较JSON/CSV写到原会话之外；省略仅stdout摘要")
+    parser.add_argument("--review-gyro-phase-ms", type=float,
+                        help="仅候选离线比较，默认28ms；不是运行补偿或新鲜度门")
     parser.add_argument("--wheel-arm-m", type=float,
                         help="离线轮式旋转有效力臂，默认0.13m（不是轮半径，未标定，不写配置）")
     parser.add_argument("--localizer", type=Path, default=DEFAULT_LOCALIZER)
@@ -636,6 +642,18 @@ def arguments() -> argparse.Namespace:
 
 def main() -> int:
     args = arguments()
+    if args.motion_source_review:
+        if args.analyze or args.wheel_gyro_residual or args.motion_response_analyze or args.wheel_gyro_output or args.motion_response_output:
+            raise ValueError('--motion-source-review is a separate offline mode')
+        from motion_source_review import review_session, export_review
+        result=review_session(args.motion_source_review,
+            gyro_phase_ms=28. if args.review_gyro_phase_ms is None else args.review_gyro_phase_ms,
+            arm_m=.115 if args.wheel_arm_m is None else args.wheel_arm_m)
+        if args.motion_source_output:export_review(args.motion_source_review,args.motion_source_output,result)
+        print(json.dumps(result[0],ensure_ascii=False,indent=2,allow_nan=False))
+        return 0
+    if args.motion_source_output or args.review_gyro_phase_ms is not None:
+        raise ValueError('--motion-source-output/--review-gyro-phase-ms require --motion-source-review')
     if args.motion_response_analyze:
         if args.analyze or args.wheel_gyro_residual or args.wheel_gyro_output or args.wheel_arm_m is not None:
             raise ValueError('--motion-response-analyze is a separate offline mode')

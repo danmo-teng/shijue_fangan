@@ -3309,6 +3309,9 @@ def test_wall_supported_source_arbitration():
     assert slip.m.mode=='WHEEL_FALLBACK' and slip.m.wheel_suspect
     assert slip.m.reason=='SDK_single_step_jump_while_wheel_suspect'
     assert abs(slip.m.history[-1][1]-before[1])<1e-12
+    slip.tick(1.,.8)  # Pair the queued jump on the next actual wheel endpoint.
+    assert slip.m.mode=='WHEEL_FALLBACK' and slip.m.wheel_suspect
+    assert slip.m.reason=='SDK_single_step_jump_while_wheel_suspect'
     assert all(a[0]<b[0] for a,b in zip(slip.m.history,list(slip.m.history)[1:]))
     for which in ('vio_bad','both_bad','single_wall'):
         p=Playback()
@@ -3436,6 +3439,8 @@ def test_native_runtime_motion_source_parity():
                 assert p.m.mode=='T265_PRIMARY_WHEEL_SUSPECT'
                 p.pose(.8,p.origin+505_000_000)  # confidence=3 still cannot bypass the jump policy.
                 assert p.m.mode=='WHEEL_FALLBACK' and p.m.wheel_suspect
+                p.tick(1.,.8)
+                assert p.m.reason=='SDK_single_step_jump_while_wheel_suspect'
             elif scenario=='recovery':assert p.m.mode=='T265_WITH_WHEEL_TAIL' and not p.m.wheel_suspect
             else:assert p.m.mode=='WHEEL_FALLBACK' and not p.m.wheel_suspect
         finally:p.close()
@@ -4061,6 +4066,73 @@ def test_offline_wheel_gyro_residual():
                 redirect_stdout(output):
             assert debug.main()==0
         assert json.loads(output.getvalue())['model']['effective_wheel_arm_m']==.14
+
+
+def test_offline_motion_source_candidates():
+    """Tilted rigid-body cancellation, coverage and offline CLI isolation."""
+    import math
+    import io
+    import numpy as np
+    from contextlib import redirect_stdout
+    from unittest.mock import patch
+    from motion_source_review import _History, _integrated, _sdk_velocity, _review_scans, export_review
+    import t265_f407_debug as debug
+    f=np.array([math.sqrt(3)/2,0.,.5]);u=np.array([0.,-1.,0.])
+    lever=-.0346105*f-.0599471445*np.cross(u,f)
+    matrices=[np.eye(3),np.array([[0.,0.,1.],[0.,1.,0.],[-1.,0.,0.]]),
+              np.array([[1.,0.,0.],[0.,0.,-1.],[0.,1.,0.]])]
+    quaternions=[(0.,0.,0.,1.),(0.,math.sqrt(.5),0.,math.sqrt(.5)),
+                 (math.sqrt(.5),0.,0.,math.sqrt(.5))]
+    raw=[]
+    for rotation,q in zip(matrices,quaternions):
+        omega=np.array([.2,1.1,-.4]);v=np.cross(omega,rotation@lever)+[1.,0.,0.]
+        raw.append(dict(zip(('qx','qy','qz','qw'),q),
+            **dict(zip(('wx_radps','wy_radps','wz_radps'),omega)),
+            **dict(zip(('vx_mps','vy_mps','vz_mps'),v))))
+    result=_sdk_velocity(raw,f,u,[-.0346105,-.0599471445],0.)
+    assert np.allclose(result,[[math.sqrt(3)/2,.5]]*3,atol=1e-12)
+    h=_integrated([0,100_000_000,300_000_000],[[0.,0.],[2.,0.],[4.,0.]])
+    assert np.allclose(h.at([300_000_000]),[[.7,0.]])
+    broken=_History([0,10,20],[[0.,0.],[1.,0.],[2.,0.]],[10])
+    assert not broken.covers(0,20) and broken.covers(10,20)
+    assert not broken.covers(-1,10) and not broken.covers(10,21)
+    # An arbitrary SDK startup-heading difference must cancel from the
+    # within-scan increment candidate, while the main field reference stays.
+    from collections import Counter
+    ticks=np.arange(33,dtype=np.int64)*1_250_000+1_000_000_000
+    theta=np.linspace(0.,.1,33);zero=_History(ticks,np.zeros((33,2)))
+    main=_History(ticks,theta);sdk_yaw=_History(ticks,theta+.4)
+    points=[]
+    for i,(t,yaw) in enumerate(zip(ticks,theta)):
+        world=np.array([1.,-.6+i*.0375]);c,s=math.cos(yaw),math.sin(yaw)
+        point=np.array([[c,s],[-s,c]])@world
+        points.append(dict(time_ns=int(t),point_lidar_m=point.tolist(),valid_return=True,raw_angle_deg=0.))
+    scans=[dict(scan_id='known-wall',reference_ns=int(ticks[-1]),points=points)]
+    mount=dict(extrinsic=[0.,0.,0.],excluded_raw_ranges_deg=[],center_raw_deg=0.,fov_deg=360.)
+    reference=dict(vio_rotation=0.,pose_origin=[0.,0.],start_center_xy_m=[0.,0.])
+    metrics=_review_scans(scans,mount,zero,zero,zero,zero,main,sdk_yaw,0,0.,reference,Counter())
+    by_model={r['model']:r for r in metrics}
+    assert by_model['wheel_sdk_increment']['axis_rms_m']<1e-12
+    assert by_model['wheel_sdk_increment_aligned']['axis_rms_m']<1e-12
+    assert by_model['wheel_sdk_rotation']['axis_rms_m']>.05
+    with tempfile.TemporaryDirectory() as directory:
+        root=Path(directory);session=root/'source';session.mkdir()
+        original=session/'keep';original.write_text('raw evidence')
+        report=dict(runtime_connected=False,deployed=False)
+        result=(report,[],[],[])
+        for target in (session,session/'child',root):
+            try:export_review(session,target,result)
+            except ValueError:pass
+            else:raise AssertionError('Source/ancestor accepted as export target')
+        paths=export_review(session,root/'review',result)
+        assert all(p.exists() for p in paths) and original.read_text()=='raw evidence'
+        output=io.StringIO()
+        with patch('sys.argv',['debug','--motion-source-review',str(session)]), \
+             patch('motion_source_review.review_session',return_value=result), \
+             patch.object(debug,'run_capture',side_effect=AssertionError('device capture')), \
+             redirect_stdout(output):
+            assert debug.main()==0
+        assert json.loads(output.getvalue())==report
 
 
 def test_motion_response_offline():

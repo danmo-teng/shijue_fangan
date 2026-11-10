@@ -1,0 +1,61 @@
+{
+  "read_only": true,
+  "firmware_modified": false,
+  "flashed": false,
+  "read_from": "GitHub connector, pinned main snapshot",
+  "source_commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+  "actual_run_commit": "9434608a8c395d8506b36accf1753b9bf92dad24",
+  "actual_run_source_dirty": 1,
+  "latest_actual_not_requeried": true,
+  "files": [
+    {
+      "path": "Main/Src/Task.c",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/Task.c",
+      "read_snapshot_sha256": "327654e8c486d01716f25c994f6c06bfac57dee5e9e151f34d9a0d53de4871b6",
+      "bytes": 266434
+    },
+    {
+      "path": "Main/Src/motor.c",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/motor.c",
+      "read_snapshot_sha256": "d3cacc701775148d87af9a51d97aa3dd376c813d521b14bd68d1b3068c2a2177",
+      "bytes": 100669
+    },
+    {
+      "path": "Main/Src/mechanism.c",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/mechanism.c",
+      "read_snapshot_sha256": "44791918c8b1031c20e36b7727d828fbb9b0a0bb5120ba67b9d929cb2e442210",
+      "bytes": 8207
+    },
+    {
+      "path": "Main/Src/imu_uart.c",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/imu_uart.c",
+      "read_snapshot_sha256": "7e4dc20724c823428a379135cc2b2cd7131b58236cabd42d3f99c639e8b4cf53",
+      "bytes": 12160
+    },
+    {
+      "path": "Main/Src/imu.c",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/imu.c",
+      "read_snapshot_sha256": "796563d7257874a928565a4169a71d3f0c41abc8679aadda567883ad531b8695",
+      "bytes": 23953
+    },
+    {
+      "path": "Main/Src/Location.c",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Src/Location.c",
+      "read_snapshot_sha256": "1354d7800d5823b431f77d858feb894848d51c4f33c99c546ead104a7d8e5537",
+      "bytes": 8043
+    },
+    {
+      "path": "Main/Inc/app_config.h",
+      "commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "url": "https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/b56bc80007db69a756525b941310e4c4eb60dcc7/Main/Inc/app_config.h",
+      "read_snapshot_sha256": "b336c6e48b039171acb13904df3a9b669624ef7bc7a75782e819e5457a7b0698",
+      "bytes": 33645
+    }
+  ]
+}
