@@ -274,7 +274,14 @@
       "A": 4.99997652113858e-10
     },
     "real_ground_accuracy_verified": false,
-    "csv_line_endings": "15 derived tables normalized to LF; all parsed CSV cells unchanged; original logs untouched"
+    "csv_line_endings": "15 derived tables normalized to LF; all parsed CSV cells unchanged; original logs untouched",
+    "lower_reference_call_audit": {
+      "source_commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+      "files_read": 35,
+      "application_zero_yaw_calls_found": 0,
+      "firmware_modified": false,
+      "independent_historical_fault_root_cause_proven": false
+    }
   },
   "artifacts": [
     {
@@ -376,6 +383,11 @@
       "path": "docs/analysis/priority_todo_20261110/round2/scan_candidates.csv",
       "bytes": 4015176,
       "sha256": "a53710ddbfcb5e23047192bb7acf2c1c3062b23f603f02750e2ecd4318dede3f"
+    },
+    {
+      "path": "docs/analysis/priority_todo_20261110/zero_reference_call_sites.json",
+      "bytes": 9341,
+      "sha256": "0bc5b89617b647085a12c0774ecaa8eec5d615af10f626ffac16c25601007146"
     }
   ]
 }

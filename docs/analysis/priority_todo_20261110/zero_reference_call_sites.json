@@ -1,0 +1,349 @@
+{
+  "source_commit": "b56bc80007db69a756525b941310e4c4eb60dcc7",
+  "read_only": true,
+  "scope": "All Main/Src C files, Boards/F405/Src C files, Core main/interrupt source and imu/Location declarations; vendor drivers and all other headers not scanned",
+  "files_read": 35,
+  "main_source_c_files": 24,
+  "imu_zero_yaw_executable_call_sites_found": 0,
+  "imu_zero_yaw_definitions": [
+    "Main/Src/imu.c:695 (SPI build)",
+    "Main/Src/imu_uart.c:346 (current UART build)"
+  ],
+  "imu_zero_yaw_other_mentions": [
+    "Main/Inc/imu.h:55 (declaration)",
+    "Main/Src/Location.c:189 (comment, not a call)"
+  ],
+  "files": [
+    {
+      "path": "Boards/F405/Src/board_f405.c",
+      "line_count": 310,
+      "hits": [],
+      "git_blob_sha": "ec702e7d5becf2195e891a0eddd183c21db71e35"
+    },
+    {
+      "path": "Boards/F405/Src/diagnostics_f405.c",
+      "line_count": 71,
+      "hits": [],
+      "git_blob_sha": "c242d0c129d911287a272c8ce0b8f0343f7fd7ca"
+    },
+    {
+      "path": "Boards/F405/Src/encoder_f405.c",
+      "line_count": 92,
+      "hits": [],
+      "git_blob_sha": "5f3c73fab30ad25d83e997af21333d5bd8abd445"
+    },
+    {
+      "path": "Boards/F405/Src/interrupts_f405.c",
+      "line_count": 37,
+      "hits": [],
+      "git_blob_sha": "515b7b4c27a0fa49bdc3e0fa083fb5395ce176f1"
+    },
+    {
+      "path": "Boards/F405/Src/lcd_none.c",
+      "line_count": 14,
+      "hits": [],
+      "git_blob_sha": "85922f207a24c69662b049450bc73e571931106f"
+    },
+    {
+      "path": "Boards/F405/Src/motor_f405.c",
+      "line_count": 44,
+      "hits": [],
+      "git_blob_sha": "eeb74d80abb27f77cc1bccbc435061ca3e70ab77"
+    },
+    {
+      "path": "Boards/F405/Src/servo_f405.c",
+      "line_count": 199,
+      "hits": [],
+      "git_blob_sha": "3f6005cf279f372ec519d0e1b4fe69fbab24aba6"
+    },
+    {
+      "path": "Core/Src/main.c",
+      "line_count": 868,
+      "hits": [],
+      "git_blob_sha": "fa6deed417cd255e5a289d5099238201fc73d380"
+    },
+    {
+      "path": "Core/Src/stm32f4xx_it.c",
+      "line_count": 266,
+      "hits": [],
+      "git_blob_sha": "4a0c59e275de3127b5bf164204ed95c8fafad445"
+    },
+    {
+      "path": "Main/Inc/imu.h",
+      "line_count": 62,
+      "hits": [
+        {
+          "line": 55,
+          "text": "void IMU_ZeroYaw(void);"
+        },
+        {
+          "line": 57,
+          "text": "void IMU_ConfirmHeadingReference(void);"
+        }
+      ],
+      "git_blob_sha": "a3e178c49c5e56c14a52c1b18bb9a53011931bd8"
+    },
+    {
+      "path": "Main/Inc/Location.h",
+      "line_count": 35,
+      "hits": [
+        {
+          "line": 25,
+          "text": "void Location_Init(LocationStart start);"
+        },
+        {
+          "line": 26,
+          "text": "void Location_Reset(LocationStart start);"
+        },
+        {
+          "line": 29,
+          "text": "void Location_ResetReference(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg);"
+        },
+        {
+          "line": 31,
+          "text": "void Location_Reanchor(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg);"
+        }
+      ],
+      "git_blob_sha": "c150f1fe3eb752b27968a1df18885d877e2c8887"
+    },
+    {
+      "path": "Main/Src/CenteringTask.c",
+      "line_count": 188,
+      "hits": [],
+      "git_blob_sha": "653d7102ac15907e6e7f2ad4c85a01a77406c454"
+    },
+    {
+      "path": "Main/Src/Debug.c",
+      "line_count": 832,
+      "hits": [
+        {
+          "line": 241,
+          "text": "    Location_ResetReference(0, 0, 0);"
+        },
+        {
+          "line": 587,
+          "text": "  Location_ResetReference(0, 0, 0);"
+        }
+      ],
+      "git_blob_sha": "23b03da0a09479e39681ec453c90c83d0ba4d0d1"
+    },
+    {
+      "path": "Main/Src/DebugClock.c",
+      "line_count": 59,
+      "hits": [],
+      "git_blob_sha": "0b7e08302ad7509641622a2c6e82b00b77e98b8b"
+    },
+    {
+      "path": "Main/Src/DebugConsole.c",
+      "line_count": 335,
+      "hits": [],
+      "git_blob_sha": "3d8efd5dc0fbf06d665116cb1995f5821dd3d922"
+    },
+    {
+      "path": "Main/Src/DebugTelemetry.c",
+      "line_count": 326,
+      "hits": [],
+      "git_blob_sha": "080ab1b914253724c5bf5e548ecfde82e102f414"
+    },
+    {
+      "path": "Main/Src/encoder.c",
+      "line_count": 52,
+      "hits": [],
+      "git_blob_sha": "5fd98e049955031408744016510fbf1dfceeae2d"
+    },
+    {
+      "path": "Main/Src/Gamepad.c",
+      "line_count": 311,
+      "hits": [
+        {
+          "line": 214,
+          "text": "    IMU_ConfirmHeadingReference();"
+        },
+        {
+          "line": 229,
+          "text": "  Location_ResetReference(0, 0, 0);"
+        }
+      ],
+      "git_blob_sha": "593da50b0e9b439745e2d23fde852b568a3255cd"
+    },
+    {
+      "path": "Main/Src/imu_uart.c",
+      "line_count": 372,
+      "hits": [
+        {
+          "line": 346,
+          "text": "void IMU_ZeroYaw(void)"
+        },
+        {
+          "line": 354,
+          "text": "void IMU_ConfirmHeadingReference(void)"
+        }
+      ],
+      "git_blob_sha": "77dc6a61061ea937c1d5b3308444c27f5e2849a4"
+    },
+    {
+      "path": "Main/Src/imu.c",
+      "line_count": 715,
+      "hits": [
+        {
+          "line": 688,
+          "text": "void IMU_ConfirmHeadingReference(void)"
+        },
+        {
+          "line": 695,
+          "text": "void IMU_ZeroYaw(void)"
+        }
+      ],
+      "git_blob_sha": "adac9ea6957873edcb1d195926b11bebf0b5b796"
+    },
+    {
+      "path": "Main/Src/Lcd.c",
+      "line_count": 1095,
+      "hits": [],
+      "git_blob_sha": "e46b955c74c6c9ccdf806676f1bb83e62b3b078e"
+    },
+    {
+      "path": "Main/Src/Location.c",
+      "line_count": 256,
+      "hits": [
+        {
+          "line": 92,
+          "text": "void Location_Reset(LocationStart start)"
+        },
+        {
+          "line": 129,
+          "text": "void Location_Init(LocationStart start)"
+        },
+        {
+          "line": 131,
+          "text": "  Location_Reset(start);"
+        },
+        {
+          "line": 134,
+          "text": "void Location_ResetReference(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg)"
+        },
+        {
+          "line": 136,
+          "text": "  IMU_ConfirmHeadingReference();"
+        },
+        {
+          "line": 189,
+          "text": "    /* Reject an explicit IMU_ZeroYaw() discontinuity or a corrupt sample. */"
+        },
+        {
+          "line": 226,
+          "text": "void Location_Reanchor(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg)"
+        }
+      ],
+      "git_blob_sha": "cf6ae8f81ad7a936143d14942969ef5e0efd09ed"
+    },
+    {
+      "path": "Main/Src/mechanism.c",
+      "line_count": 266,
+      "hits": [],
+      "git_blob_sha": "a40dff39580b15f731e361f5e4d1c7d8cb407330"
+    },
+    {
+      "path": "Main/Src/MotionDiag.c",
+      "line_count": 311,
+      "hits": [],
+      "git_blob_sha": "dfc86987c86c289a29ec4d67386dcb30da325398"
+    },
+    {
+      "path": "Main/Src/motor.c",
+      "line_count": 2741,
+      "hits": [],
+      "git_blob_sha": "d0717d7ad017f64adae20fa332c7c75664dd564b"
+    },
+    {
+      "path": "Main/Src/pid.c",
+      "line_count": 93,
+      "hits": [],
+      "git_blob_sha": "af0e64a22c7f722c7634493606affd0e48d39ef9"
+    },
+    {
+      "path": "Main/Src/Rescue.c",
+      "line_count": 35,
+      "hits": [],
+      "git_blob_sha": "7ea8beb7ba0163e7ffc7417408af9acb86d100e9"
+    },
+    {
+      "path": "Main/Src/Robot.c",
+      "line_count": 726,
+      "hits": [
+        {
+          "line": 425,
+          "text": "  Location_Init(LOCATION_START_UNKNOWN);"
+        },
+        {
+          "line": 427,
+          "text": "  Location_Init(LOCATION_START_UNKNOWN);"
+        },
+        {
+          "line": 429,
+          "text": "  Location_Init(LOCATION_START_UNKNOWN);"
+        },
+        {
+          "line": 431,
+          "text": "  Location_Init((LocationStart)APP_LOCATION_DEMO_START_ZONE);"
+        }
+      ],
+      "git_blob_sha": "215eb6913f95152f94653ed0e1f1d5cab7e0df15"
+    },
+    {
+      "path": "Main/Src/route_demo.c",
+      "line_count": 259,
+      "hits": [],
+      "git_blob_sha": "42c55cd0af6d131dcd66ab54fdefca79724554e2"
+    },
+    {
+      "path": "Main/Src/servo.c",
+      "line_count": 45,
+      "hits": [],
+      "git_blob_sha": "8560ffb7603d52a09f12d222f59f28ecafc2cc40"
+    },
+    {
+      "path": "Main/Src/Task.c",
+      "line_count": 6939,
+      "hits": [
+        {
+          "line": 6503,
+          "text": "    Location_Reanchor(pose->x_mm, pose->y_mm, (int32_t)pose->heading_cdeg * 10);"
+        },
+        {
+          "line": 6504,
+          "text": "    IMU_ConfirmHeadingReference();"
+        },
+        {
+          "line": 6635,
+          "text": "        Location_Reset((LocationStart)vision.start_zone);"
+        }
+      ],
+      "git_blob_sha": "6c7d99de21cc983ac8110abf77feaff0000b0e73"
+    },
+    {
+      "path": "Main/Src/TaskDiag.c",
+      "line_count": 202,
+      "hits": [],
+      "git_blob_sha": "2ed3025c2c3c9f2c52e336091f23df12bd8c25bc"
+    },
+    {
+      "path": "Main/Src/Uart.c",
+      "line_count": 476,
+      "hits": [],
+      "git_blob_sha": "e18b1766e9b76e4c8832c2ffcdab6c91be3c92bd"
+    },
+    {
+      "path": "Main/Src/vision.c",
+      "line_count": 879,
+      "hits": [],
+      "git_blob_sha": "ac2fa8f44fa27b46d113336eb71ed83235b4ff6e"
+    },
+    {
+      "path": "Main/Src/WheelCheck.c",
+      "line_count": 1158,
+      "hits": [],
+      "git_blob_sha": "a94141922edbd63f3915174034be44273fa02ce9"
+    }
+  ]
+}

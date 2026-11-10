@@ -26,7 +26,25 @@ F405当前UART主gyro分支是收到AA/BB立即转换rate/yaw，BB原始角先�
 
 `imu_uart.c::lose_stream`在已有反馈后保留ready，`IMU_Update`无运行年龄资格，`IMU_GetData`里的age仅显示；`APP_IMU_UART_STALE_MS`常量存在不等于现行路径据它停车。`motor.c`的`sample_count`变化用于不重复累计修角停稳拍数，不是据上位机时间判IMU过期。这里不把合法任务行程/动作预算与新鲜度混为一谈，也不宣称审完了全仓所有错误分支。
 
-`Location_Update10ms`仍把单步累计yaw超过±30000毫度置零，随后`valid=true`。这是现存的F405-FAULT-01欠项，未因新无年龄门政策自动消失；它会丢掉大增量，但不能据旧日志证明本次MOTOR5就是它触发。最低候选是保留合法累计角增量、把显式本地归零与参考重建对应起来；需先核对全部归零调用并由人确认，再改固件。本轮没有偷偷删判断或把valid强设为真。
+`Location_Update10ms`仍把单步累计yaw超过±30000毫度置零，随后`valid=true`。这是现存的F405-FAULT-01欠项，未因新无年龄门政策自动消失；它会永久丢掉这一步角增量，不能据旧日志证明本次MOTOR5就是它触发。
+
+### 已补完归零调用审查，不能再笼统要求“先查调用”
+
+同一b56bc80快照，已读Main/Src全部24个C文件、Boards/F405/Src全部7个C文件、Core主程序/中断文件和imu/Location声明，共35文件；文件Git blob及匹配行见[调用清单](zero_reference_call_sites.json)。没有扫描无关厂商驱动或所有其他头文件，不称全仓编译证明。
+
+- `IMU_ZeroYaw`只见两种后端定义（当前UART为imu_uart.c:346、SPI为imu.c:695）、imu.h声明及Location注释，已审应用入口**没有实际调用**。不能为一个不存在的调用路径新增epoch/握手或中断。
+- 调试RESET（Debug.c:240～243）、Debug初始化（:587）和Gamepad初始化（Gamepad.c:229）使用`Location_ResetReference`；该函数从当前IMU累计yaw建立previous基准，不把gyro归零。
+- 正式收到起点配置在Task.c:6635调用`Location_Reset(start_zone)`；mode51在:6503使用`Location_Reanchor`，两者也读当前累计yaw并重新建参考。mode51流程及其原静止重建条件本轮不改。
+- UART首个BB角作为本地原点，后续按±180°绕回展开累计；运行重连`lose_stream`不重新置原点。IMU模块自身重启/异常角变化仍可能表现成错误增量，不能保证“收到且校验通过”就是真实转动。
+- 当前定角链是Debug.c:373的`debug_update_turn`→`Motor_TurnAngleSpeed`→`motor_update_debug_turn`，直接读`IMU_GetData().yaw_mdeg`。Location的30°截断不是此链的直接输入。现行motor内部仍有NO_PROGRESS/WRONG_WAY/OVERRUN/TRIM_LIMIT/TIMEOUT等子因；旧两次MOTOR5没有足够子因记录，不能据现行源码追认哪一个触发，更不能承诺删30°判断即可修好它们。
+
+### 给人决定的最小候选，不是新的固件实施命令
+
+建议仅在`Main/Src/Location.c::Location_Update10ms`去掉按`APP_LOCATION_MAX_YAW_STEP_MDEG`把合法累计角增量清零的分支；若已无其他引用，同时删除`Main/Inc/app_config.h`的30000LL常量。保留有数据/ready、数值协议、原参考重建及其余任务语义，不改gyro正方向、比例、主累计角或转角控制器，不加ISR/协议/遥测/测试代码。
+
+可检验行为：previous IMU yaw从100000到131000毫度时，旧代码丢掉31°，下一次132000只积1°；候选应依次积31°和1°。现有RESET/起点/mode51仍从当前IMU建新参考，不把重设场地参考当成真实转动。以上是代码推演，不是已烧录测试。
+
+取舍：删除后不再静默丢真实转动；代价是模块自身异常跳角也会进入Location，不能以固定幅值区分两者。保留原判断则继续承受累计角丢失，不能称错误处理已完善。当前建议采用最小删除，但**需用户确认后再向F405发布实施要求**；旧MOTOR5仍保留未确定原因，不顺带放宽转角容差或删除所有故障分支。本轮没有修改/编译/烧录下位机。
 
 ## 最短验收与后续取舍
 
