@@ -1,0 +1,10 @@
+{
+  "A": {
+    "source_blob": "c98f949b1b1bbac6e8d6b01727b03c88a0cee74a",
+    "patch_dry_run": true,
+    "vector_cases_passed": 16,
+    "firmware_built": false,
+    "board_written": false,
+    "ground_tested": false
+  }
+}

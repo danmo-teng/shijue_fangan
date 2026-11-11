@@ -20,7 +20,19 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
-## 当前：D已澄清为开局合爪后未出发；暂停MATCH-D-PITCH-20261111下位建议
+## 当前：MATCH-ABE-20261111（用户只批准A、B、E）
+
+本轮不实施C/D/F/G、ROI、模型或定位实验。A下位最小建议已准备；B上位选择修复和E最多两件材料配套正在逐项完成。接收方先说明接受/调整/拒绝理由，不整包套旧候选；不要求新测试代码、时间门、握手或FAULT。RDK窗口只读F405。
+
+A配套及当前源码依据：
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/A_MODE39.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/F405_MODE39_ENDPOINT.patch
+```
+
+A只改task_sweep_reverse_trace的DRIVE请求：越终点后不继续倒退、按场地向量消横差、复用原gyro锁角及110—120mm/s速度档；原容差、游标和其他流程保持。实际下位未改/未烧录，不能把补丁检查当现场已经修好。E配套待本轮上位实现后更新此处，不实施旧三件/固定双推补丁。
+
+## 已暂停：D已澄清为开局合爪后未出发；暂停MATCH-D-PITCH-20261111下位建议
 
 用户本轮指的是“刚到中心、合爪后镜头抬起，却没往对面安全区走”，不是安全区预备点mode48。精确故障日志/根因尚未匹配，RDK先只读取证，不要求下位改码。上一轮上位c42cbb0运输审核修复不能算此故障已修。
 

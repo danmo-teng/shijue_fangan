@@ -1,0 +1,48 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -4603,18 +4603,33 @@
+         sweep_reverse.phase = SWEEP_REVERSE_DONE;
+         return false;
+       }
+-      float correction = atanf(cross / APP_SAFE_SWEEP_SEGMENT_LOOKAHEAD_MM) *
+-                         (180.0f / 3.14159265358979323846f);
+-      correction = fmaxf(-15.0f, fminf(15.0f, correction));
+-      const float error = task_wrap_angle(sweep_reverse.heading + correction -
+-                                          pose.heading_mdeg * 0.001f);
+-      /* Positive cross requires a positive body yaw when travelling BACK. */
+-      task_status.sweep_reverse_forward_mm_s =
+-          -fminf(120.0f, fmaxf(20.0f, remaining * 4.0f));
+-      task_status.sweep_reverse_yaw_mm_s = nav_yaw(error);
+-      task_move_body(task_status.sweep_reverse_forward_mm_s, 0.0f,
+-                 task_status.sweep_reverse_yaw_mm_s);
+-      task_status.motors_active = true;
++      /* Correct the locked line with holonomic translation.
++       * Once its endpoint plane is reached, do not continue backing away
++       * merely to reduce cross-track error. Keep the existing DONE test. */
++      const float along_error = remaining > end_tolerance ? remaining : 0.0f;
++      const float cross_error = task_abs(cross) > cross_tolerance ? cross : 0.0f;
++      const float vx = -along_error * sweep_reverse.ux +
++                        cross_error * sweep_reverse.uy;
++      const float vy = -along_error * sweep_reverse.uy -
++                        cross_error * sweep_reverse.ux;
++      const float error_mm = sqrtf(vx * vx + vy * vy);
++      const float direction_deg = task_wrap_angle(
++          atan2f(vy, vx) * (180.0f / 3.14159265358979323846f) -
++          pose.heading_mdeg * 0.001f);
++      /* Minimum rises from 20 to the existing NAV fine speed;
++       * keep the original 120 mm/s cap. This heading-hold API does NOT
++       * enable Motor_MoveAngleFine's per-wheel deficit assist. */
++      const float speed_mm_s = fminf(120.0f,
++          fmaxf(APP_NAV_FINE_MIN_SPEED_MM_S, error_mm * 4.0f));
++      const bool command_accepted = Motor_MoveAngleHeading(speed_mm_s, direction_deg,
++                                                   sweep_reverse.heading);
++      task_status.sweep_reverse_forward_mm_s = command_accepted ?
++          speed_mm_s * cosf(direction_deg *
++              (3.14159265358979323846f / 180.0f)) : 0.0f;
++      /* This caller requests translation; that existing motor API owns its
++       * gyro heading hold. Do not run a second competing yaw controller. */
++      task_status.sweep_reverse_yaw_mm_s = 0.0f;
++      task_status.motors_active = command_accepted;
+       return false;
+     }
+ 
