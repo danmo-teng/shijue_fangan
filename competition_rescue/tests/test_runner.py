@@ -2410,3 +2410,62 @@ def test_warm_error_beep_waits_only_for_local_socket_binding():
         assert send.call_count==2  # No periodic UART resend/ACK polling.
         panel._beep(1)
         assert send.call_count==3 and panel._pending_beep is None
+
+
+def test_three_material_full_roi_wire_and_post_first_valid_candidate():
+    from collections import Counter
+    from state_machine import CargoBatch, TrackedCargo
+    # Existing capture producer retains all three and its mixed side marker;
+    # neither side_invalid nor UNKNOWN is invented for GREEN+CORE.
+    items = (TrackedCargo(1, "green_supply", .9, (430, 420, 80, 100), hits=5),
+             TrackedCargo(2, "core_black", .9, (510, 420, 80, 100), hits=5),
+             TrackedCargo(3, "core_black", .9, (700, 420, 80, 100), hits=5))
+    audit = runner_module.audit_from_cargo(items, side_by_track={1: "left", 2: "left", 3: "right"})
+    assert audit.total_count == 3 and audit.left_count == 2 and audit.right_count == 1
+    assert audit.left_class == "mixed_material" and audit.right_class == "core_black"
+    assert not (audit.left_invalid or audit.right_invalid or audit.unknown_present or audit.injury_mixed)
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    assert m._audit_valid(audit)
+    payload = m._audit_payload(audit)
+    frame = payload.frame(7)
+    assert frame[6] == 6 and frame[7] == 2  # MIXED_MATERIAL and CORE codes
+    assert frame[8] == (2 | (1 << 2)) and frame[11] == 3
+    m._latch_carried_manifest(audit)
+    assert m.carried_total_count == 3 and m.selected_batch.total_count == 3
+    assert Counter(m.carried_manifest) == Counter({"green_supply": 1, "core_black": 2})
+
+
+def test_multi_delivery_confirmation_requires_entire_known_manifest_candidate():
+    from types import SimpleNamespace
+    from state_machine import CargoBatch
+    from rescue_vision.models import TrackState
+    def track(track_id, name, bbox):
+        return SimpleNamespace(track_id=track_id, class_name=name, confidence=.95,
+            hits=8, misses=0, state=TrackState.CONFIRMED,
+            last_detection=SimpleNamespace(bbox=bbox, ground_xy_mm=None))
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1, 2, 3), ("green_supply", "core_black", "core_black"), "material"))
+    m.carried_manifest = m.selected_batch.classes
+    m.carried_total_count = 3
+    m.state = CompetitionState.DELIVERY_VERIFY
+    safe = (0, 0, 1280, 700)
+    known = (track(1, "green_supply", (400, 300, 80, 100)),
+             track(2, "core_black", (540, 300, 80, 100)),
+             track(3, "core_black", (680, 300, 80, 100)))
+    def view(tracks):
+        return runner_module.make_vision_snapshot([], tracks,
+            SimpleNamespace(calibrated=False), safe,
+            StmSnapshot(mode=15, flags=0, age_ms=0, camera_pitch_cdeg=12000), m, 100,
+            recent_carried_track_ids=(1, 2, 3))
+    assert view(known).delivery_target_inside_safe_zone
+    assert not view(known[:1]).delivery_target_inside_safe_zone
+    assert not view(known[:2] + (track(4, "core_black", (680, 300, 80, 100)),)).delivery_target_inside_safe_zone
+    assert not view(known[:2] + (track(3, "injured_orange", (680, 300, 80, 100)),)).delivery_target_inside_safe_zone
+    assert not view(known[:2] + (track(3, "core_black", (680, 750, 80, 100)),)).delivery_target_inside_safe_zone
+    # Single-item protocol/first-item behaviour is kept unchanged.
+    m.carried_manifest = ("green_supply",)
+    m.carried_total_count = 1
+    assert view(known[:1]).delivery_target_inside_safe_zone

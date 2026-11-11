@@ -501,7 +501,7 @@ class CompetitionSettings:
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
     capture_clearance_m: float = 0.16
-    max_batch_count: int = 1
+    max_batch_count: int = 3
     center_stop_radius_m: float = 0.0
     return_zero_tolerance_m: float = 0.080
     vision_stale_s: float = 0.30
@@ -545,8 +545,8 @@ class CompetitionSettings:
             raise ValueError("side must be red or blue")
         if self.start_zone not in {1, 2, 3, 4}:
             raise ValueError("start zone must be 1..4")
-        if self.max_batch_count != 1:
-            raise ValueError("formal material delivery must contain exactly one item")
+        if not 1 <= self.max_batch_count <= 3:
+            raise ValueError("post-first material delivery supports one to three items")
         if not 1 <= self.approach_center_tolerance_px <= CAMERA_IMAGE_CENTER_X_PX:
             raise ValueError("approach centre tolerance is outside the image")
         if (
@@ -3105,7 +3105,8 @@ class CompetitionMission:
         # before grabbing and in the mode23 post-grab audit.
         if self.selected_batch is not None and self.selected_batch.initial_stash:
             return audit.total_count > 0
-        if (audit.left_class == "mixed_material" or audit.right_class == "mixed_material" or
+        if (audit.left_count < 0 or audit.right_count < 0 or
+                audit.left_count > 3 or audit.right_count > 3 or
                 audit.left_count + audit.right_count != audit.total_count or
                 (audit.left_count == 0) != (audit.left_class in {"", "none"}) or
                 (audit.right_count == 0) != (audit.right_class in {"", "none"})):
@@ -3121,7 +3122,7 @@ class CompetitionMission:
             return False
         if (
             audit.danger_present or
-            audit.unknown_present or
+            audit.unknown_present or audit.left_invalid or audit.right_invalid or
             audit.left_class in {"danger_cyan", "unknown"} or
             audit.right_class in {"danger_cyan", "unknown"} or
             audit.injury_mixed
@@ -3130,7 +3131,9 @@ class CompetitionMission:
         if not self.first_common_delivered:
             return (
                 audit.total_count == 1 and
-                counts == Counter({"green_supply": 1})
+                counts == Counter({"green_supply": 1}) and
+                audit.left_class in {"", "none", "green_supply"} and
+                audit.right_class in {"", "none", "green_supply"}
             )
         if (
             audit.total_count == 1 and
@@ -3139,9 +3142,17 @@ class CompetitionMission:
             return True
         if "injured_orange" in counts:
             return False
-        return audit.total_count == 1 and counts in (
-            Counter({"green_supply": 1}), Counter({"core_black": 1}),
-        )
+        # Same-side GREEN+CORE is already represented by MIXED_MATERIAL on
+        # the existing wire format. Keep the complete ROI count and manifest;
+        # this is a post-first batch, never permission to mix casualties.
+        for category, count, green in (
+                (audit.left_class, audit.left_count, audit.left_green_count),
+                (audit.right_class, audit.right_count, audit.right_green_count)):
+            if count and category not in MATERIAL_CLASSES | {"mixed_material"}:
+                return False
+            if category == "mixed_material" and not (count >= 2 and 0 < green < count):
+                return False
+        return bool(counts) and set(counts).issubset(MATERIAL_CLASSES)
 
     def _cluster_audit_valid(self, audit: CargoAudit) -> bool:
         if self.selected_batch is None:
@@ -3167,7 +3178,7 @@ class CompetitionMission:
             return side_count == 1 and side_class == "injured_orange"
         return (
             1 <= side_count <= self.settings.max_batch_count and
-            side_class in {"green_supply", "core_black"}
+            side_class in {"green_supply", "core_black", "mixed_material"}
         )
 
     @staticmethod
