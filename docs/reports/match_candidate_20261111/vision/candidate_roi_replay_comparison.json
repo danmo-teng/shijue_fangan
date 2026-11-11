@@ -1,0 +1,254 @@
+{
+  "source_roi_sha256": "8335f94d3793875c62cb909636efc711dbc8b591509f47ee85cd21456a80fd8e",
+  "caveat": "sampled video windows; STM flags ready is necessary here but image actual geometry still reviewed; no ground truth, model rerun or whole-match exhaustive proof",
+  "counts": {
+    "20261111_140243_competition_wheel:all": 144,
+    "20261111_140243_competition_wheel:changed": 2,
+    "20261111_141241_competition_wheel:all": 184,
+    "20261111_141241_competition_wheel:changed": 9
+  },
+  "changes": [
+    {
+      "session": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "video_index": 31,
+      "frame": 13560,
+      "mode": 8,
+      "flags": 85,
+      "state": "GRAB",
+      "reason": "",
+      "track": 1130,
+      "class_name": "core_black",
+      "bbox": [
+        243,
+        418,
+        118,
+        145
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.5336645236703682,
+      "overlap_after": 1.0
+    },
+    {
+      "session": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "video_index": 32,
+      "frame": 13565,
+      "mode": 8,
+      "flags": 81,
+      "state": "GRAB",
+      "reason": "",
+      "track": 1130,
+      "class_name": "core_black",
+      "bbox": [
+        211,
+        464,
+        114,
+        163
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.37267247874286946,
+      "overlap_after": 1.0
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "video_index": 128,
+      "frame": 4749,
+      "mode": 43,
+      "flags": 73,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_pickup_audit",
+      "track": 388,
+      "class_name": "green_supply",
+      "bbox": [
+        197,
+        214,
+        281,
+        280
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.3595958312150483,
+      "overlap_after": 0.6733350279613625
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "video_index": 28,
+      "frame": 7239,
+      "mode": 48,
+      "flags": 3,
+      "state": "TRANSPORT_AUDIT",
+      "reason": "transport_audit_pending",
+      "track": 499,
+      "class_name": "core_black",
+      "bbox": [
+        879,
+        310,
+        151,
+        155
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.18872035889767144,
+      "overlap_after": 0.962358470412305
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "video_index": 29,
+      "frame": 7243,
+      "mode": 48,
+      "flags": 3,
+      "state": "TRANSPORT_AUDIT",
+      "reason": "transport_audit_pending",
+      "track": 499,
+      "class_name": "core_black",
+      "bbox": [
+        881,
+        308,
+        149,
+        155
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.17540593201991772,
+      "overlap_after": 0.9579995670058454
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "video_index": 0,
+      "frame": 8674,
+      "mode": 21,
+      "flags": 69,
+      "state": "CAPTURE_AUDIT",
+      "reason": "capture_empty_approach",
+      "track": 591,
+      "class_name": "green_supply",
+      "bbox": [
+        156,
+        226,
+        318,
+        269
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.32198218419022234,
+      "overlap_after": 0.6230740454981178
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "video_index": 1,
+      "frame": 8678,
+      "mode": 21,
+      "flags": 69,
+      "state": "CAPTURE_AUDIT",
+      "reason": "capture_empty_approach",
+      "track": 591,
+      "class_name": "green_supply",
+      "bbox": [
+        163,
+        245,
+        302,
+        257
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.34393279562965445,
+      "overlap_after": 0.6870152292112248
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "video_index": 2,
+      "frame": 8682,
+      "mode": 21,
+      "flags": 69,
+      "state": "CAPTURE_AUDIT",
+      "reason": "capture_empty_approach",
+      "track": 591,
+      "class_name": "green_supply",
+      "bbox": [
+        162,
+        249,
+        289,
+        265
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.33155317620944047,
+      "overlap_after": 0.6959717960436117
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "video_index": 3,
+      "frame": 8686,
+      "mode": 21,
+      "flags": 69,
+      "state": "CAPTURE_AUDIT",
+      "reason": "capture_empty_approach",
+      "track": 591,
+      "class_name": "green_supply",
+      "bbox": [
+        158,
+        249,
+        289,
+        262
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.3164901344462347,
+      "overlap_after": 0.6803534166248448
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "video_index": 6,
+      "frame": 8698,
+      "mode": 21,
+      "flags": 69,
+      "state": "CAPTURE_AUDIT",
+      "reason": "capture_empty_approach",
+      "track": 598,
+      "class_name": "green_supply",
+      "bbox": [
+        171,
+        249,
+        290,
+        270
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.3656577266922095,
+      "overlap_after": 0.7311111111111112
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "video_index": 7,
+      "frame": 8702,
+      "mode": 21,
+      "flags": 69,
+      "state": "CAPTURE_AUDIT",
+      "reason": "capture_empty_approach",
+      "track": 598,
+      "class_name": "green_supply",
+      "bbox": [
+        179,
+        249,
+        285,
+        268
+      ],
+      "before": false,
+      "after": true,
+      "overlap_before": 0.3802435192458759,
+      "overlap_after": 0.7494501178318932
+    }
+  ]
+}

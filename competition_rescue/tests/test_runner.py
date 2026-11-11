@@ -742,6 +742,76 @@ def test_held_injury_with_high_roi_overlap_does_not_require_projected_foot_insid
     assert view.capture_audit.left_class=='injured_orange'
 
 
+def test_candidate_capture_roi_keeps_lateral_claw_cargo_and_excludes_floor():
+    """Actual ready 140-degree replay boxes, not the earlier moving image."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, load_capture_rois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+
+    original_polygon = ((395, 313), (471, 264), (531, 245), (604, 231),
+        (661, 231), (740, 243), (801, 271), (853, 312), (911, 387),
+        (937, 455), (967, 563), (989, 680), (987, 711), (279, 699),
+        (264, 668), (263, 625), (283, 541), (301, 472), (332, 397), (363, 341))
+    original = CaptureRois(original_polygon, *split_capture_roi(original_polygon))
+    candidate = load_capture_rois(PROJECT_ROOT / "vision/config/capture_roi_match_candidate_20261111.json")
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((491,), ("injured_orange",), "injury"))
+    m.state = CompetitionState.TRANSPORT_AUDIT
+
+    def snapshot(items, rois, *, flags=3, mode=48):
+        with patch.object(runner_module, "tracked_cargo", return_value=items):
+            return runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+                StmSnapshot(mode=mode, flags=flags, age_ms=0, camera_pitch_cdeg=14000),
+                m, 7239, capture_rois=rois)
+
+    # Second run, frame7239: the right-side pyramid is physically held along
+    # with the injured block. It must not vanish from the whole-claw audit.
+    right_core = TrackedCargo(499, "core_black", .69, (879, 310, 151, 155), hits=8)
+    injury = TrackedCargo(491, "injured_orange", .93, (500, 141, 268, 363), hits=8)
+    before = snapshot((injury, right_core), original)
+    after = snapshot((injury, right_core), candidate)
+    assert before.capture_audit.total_count == 1
+    assert after.capture_observation_valid
+    assert dict(after.capture_audit.class_counts) == {"core_black": 1, "injured_orange": 1}
+    assert after.capture_audit.injury_mixed and not m._audit_valid(after.capture_audit)
+
+    # First run13565 and second8678: side contact changes the detector's box,
+    # while the object is still within the real claw reach, on either side.
+    left_core = TrackedCargo(1130, "core_black", .86, (211, 464, 114, 163), hits=8)
+    left_green = TrackedCargo(591, "green_supply", .36, (163, 245, 302, 257), hits=8)
+    for item in (right_core, left_core, left_green):
+        old = snapshot((item,), original, flags=1, mode=21)
+        new = snapshot((item,), candidate, flags=1, mode=21)
+        assert old.capture_audit.total_count == 0
+        assert new.capture_audit.total_count == 1
+        assert new.capture_audit.right_count == (1 if item is right_core else 0)
+        assert new.capture_audit.left_count == (0 if item is right_core else 1)
+
+    # Visible floor objects in the same actual clips remain outside the claw;
+    # neither front opening nor camera image boundary becomes a blanket ROI.
+    floor = (
+        TrackedCargo(306, "green_supply", .66, (375, 132, 223, 175), hits=8),
+        TrackedCargo(311, "green_supply", .70, (1077, 424, 200, 213), hits=8),
+        TrackedCargo(199, "green_supply", .90, (0, 408, 206, 213), hits=8),
+        TrackedCargo(202, "danger_cyan", .94, (717, 80, 241, 272), hits=8),
+    )
+    assert snapshot(floor, candidate).capture_audit.total_count == 0
+    assert snapshot((), candidate).capture_audit.total_count == 0
+
+    # Green+blue is a real mixed hazardous load, never a legal single green.
+    green = TrackedCargo(295, "green_supply", .86, (637, 278, 237, 228), hits=8)
+    blue = TrackedCargo(296, "danger_cyan", .95, (395, 280, 253, 227), hits=8)
+    mixed = snapshot((green, blue), candidate, flags=1, mode=21)
+    assert mixed.capture_observation_valid and mixed.capture_audit.total_count == 2
+    assert mixed.capture_audit.danger_present and not m._audit_valid(mixed.capture_audit)
+
+    # The reported angle can precede the changed image. A non-ready capture
+    # stays non-observable; candidate geometry cannot bypass that ownership.
+    assert snapshot((right_core,), candidate, flags=2).capture_audit is None
+
+
 def test_detection_logging() -> None:
     assert bbox_center_px((10, 20, 31, 41)) == (25, 40)
     detection = Detection(
@@ -817,7 +887,7 @@ def test_detection_logging() -> None:
     planner.lock = threading.Lock()
     planner.latest_vision, planner.paused, planner.period_s = view, False, 0.001
     published = []
-    def publish(_output):
+    def publish(_output, *, stm=None):
         published.append(_output)
         if len(published) == 2:
             planner.running = False
