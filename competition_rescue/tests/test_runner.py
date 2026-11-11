@@ -2010,6 +2010,9 @@ def test_incident_video_replay_and_log_only_timeout():
         assert [event['vision_frame_sequence'] for event in manifest['clips'][1]['events']]==[12]
         assert clip['post_window_end_ns']==2_080_000_000
         assert manifest['pending_events']==[] and manifest['event_overflow_count']==0
+        assert manifest['native_frames_per_clip']==0 and manifest['native_complete']
+        assert all(not item['native_frames'] for item in manifest['clips'])
+        assert not list(root.glob('*_native_*.npy'))
         assert rows[0]['pose']['age_ms'] is None and rows[0]['seconds_from_trigger']<0
         assert rows[-1]['seconds_from_trigger']>0 and clip['complete']
         cap=cv2.VideoCapture(str(root/clip['video']));count=0
@@ -2042,6 +2045,65 @@ def test_incident_video_replay_and_log_only_timeout():
         assert not inspect_session(parent,run.name,None,formal.WHEEL_FILES,owner=formal.WHEEL_OWNER)['reason']
         (run/'user.txt').write_text('keep')
         assert inspect_session(parent,run.name,None,formal.WHEEL_FILES,owner=formal.WHEEL_OWNER)['reason']
+        # Optional native evidence uses the exact already-queued NV12 array,
+        # with no overlays/resize/model inference. Five events stay capped at
+        # three different current images, including dedup within one image.
+        native_root=root/'native';native_root.mkdir()
+        native=VisionReplay(native_root,'native-fixture',pre_s=0.,post_s=.3,
+                            size=(192,128),native_frames=3)
+        native.start();originals={}
+        try:
+            deadline=time.monotonic()+3
+            while not (native_root/'vision_replay_manifest.json').exists() and time.monotonic()<deadline:time.sleep(.02)
+            for i in range(5):
+                original=np.full((1536,1280),20+i*10,np.uint8)
+                original[1024:]=128+i
+                originals[i+1]=original
+                stamp=10_000_000_000+i*130_000_000
+                event=dict(event='load_empty_reobserve',trigger_monotonic_ns=stamp)
+                native.record_event(event)
+                if i==0:native.record_event(event)
+                record=dict(frame_sequence=i+1,camera_frame_id=90+i,
+                    capture_monotonic_ns=stamp,source_size=[1280,1024],
+                    pose=dict(x_m=0.,y_m=0.,yaw_deg=0.),stm=dict(mode=23,camera_pitch_cdeg=14000))
+                assert native.submit(original,'nv12',record,now=10.+i*.13)
+                time.sleep(.03)
+        finally:native_result=native.close()
+        native_manifest=json.loads((native_root/'vision_replay_manifest.json').read_text())
+        assert native_result['error'] is None and native_result['native_error_count']==0
+        assert native_manifest['complete'] and native_manifest['native_complete']
+        entries=native_manifest['clips'][0]['native_frames']
+        assert [entry['frame_sequence'] for entry in entries]==[1,2,3]
+        assert len(list(native_root.glob('*_native_*.npy')))==3
+        for entry in entries:
+            assert entry['status']=='saved'
+            assert np.array_equal(np.load(native_root/entry['data'],allow_pickle=False),
+                                  originals[entry['frame_sequence']])
+            native_meta=json.loads((native_root/entry['metadata']).read_text())
+            assert native_meta['pixel_format']=='nv12' and native_meta['shape']==[1536,1280]
+            assert native_meta['frame_sequence']==entry['frame_sequence']
+            assert native_meta['capture_monotonic_ns']==entry['capture_monotonic_ns']
+            assert native_meta['model_preprocessed_tensor'] is False
+            assert native_meta['resized'] is False and native_meta['annotated'] is False
+
+        # Native-only I/O failure records its error and consumes its bounded
+        # attempt; it must not stop the existing video writer or recorder.
+        native_failure_root=root/'native_failure';native_failure_root.mkdir()
+        (native_failure_root/'safe_zone_replay_0001_native_01.npy').mkdir()
+        native_failure=VisionReplay(native_failure_root,'native-failure',pre_s=0.,
+            post_s=.3,size=(192,128),native_frames=1)
+        native_failure.start()
+        deadline=time.monotonic()+3
+        while not (native_failure_root/'vision_replay_manifest.json').exists() and time.monotonic()<deadline:time.sleep(.02)
+        native_failure.record_event(dict(event='load_empty_reobserve',trigger_monotonic_ns=stamp))
+        assert native_failure.submit(original,'nv12',record,now=11.)
+        failed=native_failure.close()
+        failure_manifest=json.loads((native_failure_root/'vision_replay_manifest.json').read_text())
+        assert failed['error'] is None and failed['native_error_count']==1
+        assert failure_manifest['complete'] and not failure_manifest['native_complete']
+        assert failure_manifest['clips'][0]['complete']
+        assert failure_manifest['clips'][0]['frames_written']==1
+        assert failure_manifest['clips'][0]['native_frames'][0]['status']=='error'
         # Worker-side disk failure is observable and cannot escape to control.
         broken=VisionReplay(root/'missing_directory','broken-replay')
         broken.start();broken.process.join(3)

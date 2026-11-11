@@ -26,7 +26,8 @@ def _write_json(path, value):
     temporary.replace(path)
 
 
-def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, size):
+def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, size,
+                  native_frames=0):
     import cv2
     import numpy as np
     import signal
@@ -36,6 +37,7 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
     manifest = dict(schema_version=1, sdk_session_id=session_id, complete=False,
         source='actual_YOLO_processed_camera_frames', playback_fps=fps,
         pre_seconds=pre_s, post_seconds=post_s, image_size=list(size),
+        native_frames_per_clip=native_frames, native_complete=True, native_errors=[],
         pose_alignment='latest planner snapshot at enqueue, not capture-synchronized ground truth',
         clips=[], dropped_frames=0, error=None)
     manifest_path = root / 'vision_replay_manifest.json'
@@ -94,6 +96,46 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
         clip['frames_written'] += 1
         clip['last_capture_ns'] = meta['capture_monotonic_ns']
 
+    def write_native(image, pixel_format, meta, event):
+        # The original array already crossed the existing bounded replay IPC.
+        # Only the first available image carrying an event is eligible, never
+        # a resized/annotated prebuffer image or an invented trigger-frame match.
+        if native_frames == 0:
+            return
+        saved = clip['native_frames']
+        identity = (meta['frame_sequence'], meta['capture_monotonic_ns'])
+        if (len(saved) >= native_frames or any(
+                (entry['frame_sequence'], entry['capture_monotonic_ns']) == identity
+                for entry in saved)):
+            return
+        stem = Path(clip['video']).stem + f'_native_{len(saved) + 1:02d}'
+        entry = dict(data=stem+'.npy', metadata=stem+'.json', status='pending',
+            frame_sequence=meta['frame_sequence'],
+            capture_monotonic_ns=meta['capture_monotonic_ns'])
+        # Count attempted frames too: a write error must not cause retries or
+        # unbounded files on later events in this clip.
+        saved.append(entry)
+        try:
+            np.save(root/entry['data'], image, allow_pickle=False)
+            _write_json(root/entry['metadata'], dict(schema_version=1,
+                sdk_session_id=session_id, data=entry['data'],
+                provenance='original_decoded_camera_array_from_existing_YOLO_result',
+                model_preprocessed_tensor=False, resized=False, annotated=False,
+                pixel_format=pixel_format, shape=list(image.shape), dtype=str(image.dtype),
+                data_nbytes=int(image.nbytes), source_size=meta['source_size'],
+                frame_sequence=meta['frame_sequence'],
+                camera_frame_id=meta.get('camera_frame_id'),
+                capture_monotonic_ns=meta['capture_monotonic_ns'],
+                snapshot_monotonic_ns=meta.get('snapshot_monotonic_ns'),
+                event=event['event'], trigger_monotonic_ns=event['trigger_monotonic_ns'],
+                event_frame_relation='first_available_enqueued_image_carrying_event; not exact trigger frame'))
+            entry['status'] = 'saved'
+        except Exception as error:
+            entry.update(status='error', error=str(error))
+            manifest['native_complete'] = False
+            manifest['native_errors'].append(dict(video=clip['video'],
+                frame_sequence=meta['frame_sequence'], error=str(error)))
+
     try:
         persist()
         while True:
@@ -120,7 +162,8 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
                     stem = f'safe_zone_replay_{number:04d}'
                     clip = dict(video=stem+'.avi', frames=stem+'.jsonl', complete=False,
                         trigger=event['event'], trigger_monotonic_ns=event_ns,
-                        events=[event], frames_written=0, first_capture_ns=None)
+                        events=[event], frames_written=0, first_capture_ns=None,
+                        native_frames=[])
                     manifest['clips'].append(clip); persist()
                     writer = cv2.VideoWriter(str(root/clip['video']),cv2.VideoWriter_fourcc(*'MJPG'),fps,(size[0],size[1]+96))
                     if not writer.isOpened(): raise RuntimeError('MJPG video encoder unavailable')
@@ -136,6 +179,7 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
                     clip['events'].append(event)
                     clip_end_ns = max(clip_end_ns,event_ns+round(post_s*1e9))
                 clip['post_window_end_ns'] = clip_end_ns
+                write_native(image, pixel_format, meta, event)
                 persist()
             if writer is not None and stamp > clip_end_ns:
                 finish('post_window_finished')
@@ -156,14 +200,17 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
 
 
 class VisionReplay:
-    def __init__(self, root, session_id, *, fps=8., pre_s=5., post_s=15., size=(960,768)):
+    def __init__(self, root, session_id, *, fps=8., pre_s=5., post_s=15., size=(960,768),
+                 native_frames=0):
+        if not isinstance(native_frames, int) or not 0 <= native_frames <= 3:
+            raise ValueError('native_frames must be an integer in 0..3')
         self.root, self.session_id = Path(root), session_id
         self.context = mp.get_context('spawn')
         self.inbox = self.context.Queue(maxsize=4)
         self.stop = self.context.Event()
         self.dropped = self.context.Value('L',0,lock=False)  # Sole parent producer.
         self.process = self.context.Process(target=replay_worker,
-            args=(self.root,session_id,self.inbox,self.stop,self.dropped,fps,pre_s,post_s,size),
+            args=(self.root,session_id,self.inbox,self.stop,self.dropped,fps,pre_s,post_s,size,native_frames),
             name='competition-incident-replay',daemon=True)
         self.period_s = 1./fps
         self.next_frame_s = 0.
@@ -224,8 +271,10 @@ class VisionReplay:
                 self.process.terminate();self.process.join(.5)
                 self.error = 'replay close interrupted; files kept as incomplete'
         self.inbox.cancel_join_thread();self.inbox.close()
+        native_error_count = None
         try:
             manifest = json.loads((self.root/'vision_replay_manifest.json').read_text())
+            native_error_count = len(manifest.get('native_errors', []))
             self.error = self.error or manifest.get('error')
             with self.event_lock:
                 pending_events = _finite(list(self.pending_events))
@@ -237,5 +286,6 @@ class VisionReplay:
         except (OSError,ValueError):
             self.error = self.error or 'replay manifest unavailable'
         return dict(dropped_frames=self.dropped.value,error=self.error,
+                    native_error_count=native_error_count,
                     pending_events=len(self.pending_events),event_overflow_count=self.event_overflow_count,
                     manifest=str(self.root/'vision_replay_manifest.json'))

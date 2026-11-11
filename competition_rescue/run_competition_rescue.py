@@ -156,6 +156,8 @@ def arguments() -> argparse.Namespace:
         help="识别日志采样频率；识别仍按vision-fps运行",
     )
     parser.add_argument("--no-display", action="store_true")
+    parser.add_argument("--replay-native-frames", type=int, choices=range(4), default=0,
+                        help="事件录像每片最多保存0–3张原生相机array（默认0关闭；不是模型输入张量）")
     parser.add_argument("--duration", type=float, default=0.0, help="seconds; 0 runs until stopped")
     parser.add_argument(
         "--disable-initial-stash",
@@ -2792,6 +2794,7 @@ def main() -> int:
         "vision_fps": args.vision_fps,
         "score_threshold": args.score_thres,
         "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
+        "replay_native_frames_per_clip": args.replay_native_frames,
     })
     try:
         pose_deadline = time.monotonic() + args.startup_timeout
@@ -2886,6 +2889,7 @@ def main() -> int:
             "max_material_batch_count": mission.settings.max_batch_count,
             "score_threshold": args.score_thres,
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
+            "replay_native_frames_per_clip": args.replay_native_frames,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
             "safe_sweep_capture_offset_ignored": True,
             **homography_diagnostics,
@@ -2922,7 +2926,8 @@ def main() -> int:
     replay_root = session.get('localization_log_dir')
     if replay_root and session.get('sdk_session_id'):
         try:
-            replay = VisionReplay(Path(replay_root), session['sdk_session_id'])
+            replay = VisionReplay(Path(replay_root), session['sdk_session_id'],
+                                  native_frames=args.replay_native_frames)
             replay.start()
             planner.replay_event_sink = replay.record_event
         except Exception as error:
