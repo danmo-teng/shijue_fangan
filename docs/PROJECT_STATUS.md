@@ -14,6 +14,8 @@ https://github.com/danmo-teng/shijue_fangan/blob/codex/match-prerepair-20261111/
 
 当前P0：爪内最右侧误丢、绿蓝混合停滞、开局抬镜头/停顿、无限搜索/灰黑框、贴围栏蓝块无限扫障。P1：首次后孤立单橙优先、绿黑漏出重推、橙块偏转后未投送恢复。逐项状态/未完成项见PROJECT_TODO当前比赛清单和候选报告，不按旧队列自动串行施工。
 
+用户本轮补充：首次之后2～3件普通/核心（含混合）可直接合爪运送，伤员仍单件；多件采用“推→抬整爪后退→放整爪再推→抬整爪后退”。本轮先做两端配套候选，不部署、不单改上位制造与旧F405单件规则冲突；首次及实际机械结果仍须准确区分。
+
 ## 已核对的本轮证据与边界
 
 两轮实际上位均ed07e32；下位自报e85c738/dirty1、NormalRun/TASK、921600。同名仓库提交不保证等于dirty烧录字节。约14:02业务日志在history/20261111_141241_competition/，传感器/视频在history/competition_wheel_input/20261111_140243_competition_wheel/；约14:12业务在history/20000101_080032_competition_15/，配套在history/competition_wheel_input/20261111_141241_competition_wheel/。均位于rescue_map/runtime/；第二轮未校时且缺正常收尾，视频只是事件片段。原始日志保留，不运行清理。
