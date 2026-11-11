@@ -743,6 +743,7 @@ class CompetitionMission:
         self.safe_zone_acquire_started_s: float | None = None
         self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_view_pitch_cdeg = 12000
+        self.safe_zone_higher_view_ready_s: float | None = None
         self.safe_zone_freeze_frame_floor: int | None = None
         self.safe_zone_freeze_last_frame_sequence: int | None = None
         self.safe_zone_freeze_hits = 0
@@ -1646,6 +1647,9 @@ class CompetitionMission:
                 self.settings.approach_center_tolerance_px):
             # Reuse the frame already requested by mode52. A small residual
             # error is acceptable; do not drive along an overshot heading.
+            # Pixel updates keep the action identity, but must advance the
+            # real visual frame exactly as ordinary target tracking does.
+            self._mark_target_seen(target, now)
             return CompetitionOutput(
                 self.state, self._approach_command(target),
                 "目标明显偏出中心容许范围，原地重新对准；小偏差直接定距前进",
@@ -1957,13 +1961,12 @@ class CompetitionMission:
                 self.audit_camera_ready_since = now if ready else None
                 self.audit_camera_floor = vision.frame_sequence
                 self._invalidate_audit_evidence()
-            if (not ready or self.audit_camera_ready_since is None or
-                    now - self.audit_camera_ready_since + 1e-6 < 0.25):
+            if not ready or self.audit_camera_ready_since is None:
                 self.audit_camera_floor = vision.frame_sequence
                 return self._audit_placeholder("audit_camera_settling")
             if (vision.frame_sequence <= self.audit_camera_floor or
                     (vision.observed_monotonic_s is not None and
-                     vision.observed_monotonic_s + 1e-6 < self.audit_camera_ready_since + 0.25)):
+                     vision.observed_monotonic_s + 1e-6 < self.audit_camera_ready_since)):
                 return self._audit_placeholder("audit_camera_frame_floor")
         else:
             key = ("capture", ready, stm.camera_pitch_cdeg, self.audit_epoch)
@@ -1992,12 +1995,27 @@ class CompetitionMission:
             if vision.frame_sequence <= self.audit_recheck_frame_floor:
                 return self._audit_placeholder("audit_recheck_wait_frame")
             self.audit_recheck_frame_floor = None
-        if (stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT} and
-                vision.capture_audit.total_count == 0 and
-                not self.empty_load_recheck_done):
-            first = not self.empty_load_recheck_pending
+        audit = vision.capture_audit
+        closed_load_missing = (
+            stm.mode in {STM_MODE_POST_GRAB_AUDIT, STM_MODE_TRANSPORT_AUDIT} and
+            stm.gripper_closed and
+            audit.total_count == audit.left_count == audit.right_count == 0 and
+            audit.left_class in {"", "none"} and audit.right_class in {"", "none"} and
+            not (audit.danger_present or audit.unknown_present or audit.injury_mixed)
+        )
+        if closed_load_missing:
+            # Missing detections revoke authorization, not the short window
+            # of actual positive samples. Camera changes/expiry still clear
+            # those samples through the existing paths above.
+            self._clear_pending_audit()
+            self.transport_audit_command = None
+            self.transport_audit_value = None
+            self.audit_recheck_frame_floor = max(vision.frame_sequence, self.audit_last_frame_sequence or 0)
+            if self.empty_load_recheck_pending or self.empty_load_recheck_done:
+                # Never turn two missed detections into a STABLE empty load.
+                # The MCU's existing finite re-observation/exit remains active.
+                return self._audit_placeholder("load_empty_gap")
             self.empty_load_recheck_pending = True
-            self._invalidate_audit_evidence()
             # An observed absence is not a proven empty claw. Keep it
             # non-STABLE; the MCU reuses its existing 138/142 -> 140 view.
             return CompetitionOutput(
@@ -2007,7 +2025,7 @@ class CompetitionMission:
                     audit_vision_frame=vision.frame_sequence),
                 "合爪载荷暂缺框，保持夹持并换视角复看，不直接双开放弃",
                 self.selected_batch,
-                event="load_empty_reobserve" if first else "",
+                event="load_empty_reobserve",
                 reason="load_empty_reobserve",
                 tx_policy="audit_unstable_publish",
                 expected_stm_modes=self.expected_stm_modes(),
@@ -4161,6 +4179,7 @@ class CompetitionMission:
         self.transport_audit_handoff_active = False
         self.safe_zone_acquire_started_s = now
         self.safe_zone_acquire_timeout_reported = False
+        self.safe_zone_higher_view_ready_s = None
         self.safe_zone_freeze_frame_floor = (
             vision.frame_sequence if vision.frame_sequence > 0 else None
         )
@@ -6205,6 +6224,37 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.ACQUIRE_SAFE_ZONE:
+            if self.safe_zone_view_pitch_cdeg == 11500:
+                # This is the MCU's reported commanded angle, not measured
+                # servo position. Exclude images captured before that change;
+                # there is no extra settling timer or new request handshake.
+                if stm.camera_pitch_cdeg != 11500:
+                    self.safe_zone_higher_view_ready_s = None
+                    self.safe_zone_freeze_frame_floor = vision.frame_sequence
+                    self.safe_zone_freeze_boxes.clear()
+                    self.safe_zone_freeze_hits = 0
+                elif self.safe_zone_higher_view_ready_s is None:
+                    self.safe_zone_higher_view_ready_s = now
+                    self.safe_zone_freeze_frame_floor = vision.frame_sequence
+                if (self.safe_zone_higher_view_ready_s is None or
+                        vision.frame_sequence <= (self.safe_zone_freeze_frame_floor or 0) or
+                        (vision.observed_monotonic_s is not None and
+                         vision.observed_monotonic_s + 1e-6 < self.safe_zone_higher_view_ready_s)):
+                    return CompetitionOutput(
+                        self.state, self._safe_zone_pose_align_command(),
+                        "已请求115°复看，沿用下位机角度回报后的新采集图像",
+                        self.selected_batch, tx_policy="normal_command",
+                        reason="safe_zone_higher_view_frame_wait",
+                        expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                    )
+            clipped_chain_interrupted = (
+                self.safe_zone_view_pitch_cdeg == 12000 and
+                any(box[1] <= 0 for box in self.safe_zone_freeze_boxes) and
+                self._vision_fresh(vision, now) and
+                vision.frame_sequence > (self.safe_zone_freeze_frame_floor or 0) and
+                vision.frame_sequence != self.safe_zone_freeze_last_frame_sequence and
+                (vision.safe_bbox is None or vision.safe_zone_filter_blocked)
+            )
             if self._observe_safe_zone_freeze(vision, now):
                 self.safe_zone_visual_align_initial_ack = stm.acknowledged_sequence
                 self.safe_zone_visual_align_tx_baseline = stm.relay_mission_tx_frames
@@ -6226,6 +6276,23 @@ class CompetitionMission:
                         STM_MODE_ALIGN_SAFE_ZONE,
                     ),
                 )
+            if clipped_chain_interrupted:
+                # A genuine missing image interrupted this short top-clipped
+                # chain. Reuse the one existing higher view immediately;
+                # consecutive real boxes still take the normal fast path.
+                self.safe_zone_view_pitch_cdeg = 11500
+                self.safe_zone_higher_view_ready_s = None
+                self.safe_zone_freeze_frame_floor = vision.frame_sequence
+                return CompetitionOutput(
+                    self.state,
+                    self._safe_zone_pose_align_command(),
+                    "顶部裁切安全区框的连续识别被漏检打断，保持载荷并请求一次115°复看",
+                    self.selected_batch,
+                    event="safe_zone_acquire_reobserve",
+                    tx_policy="normal_command",
+                    reason="safe_zone_clipped_reobserve",
+                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+                )
             if (
                 self.safe_zone_acquire_started_s is not None and
                 now - self.safe_zone_acquire_started_s >=
@@ -6233,8 +6300,9 @@ class CompetitionMission:
             ):
                 reason = "SAFE_CORRIDOR_UNAVAILABLE"
                 event = "" if self.safe_zone_acquire_timeout_reported else "safe_zone_acquire_no_box"
-                if not self.safe_zone_acquire_timeout_reported:
+                if self.safe_zone_view_pitch_cdeg != 11500:
                     self.safe_zone_view_pitch_cdeg = 11500
+                    self.safe_zone_higher_view_ready_s = None
                     self.safe_zone_freeze_boxes.clear()
                     self.safe_zone_freeze_hits = 0
                     self.safe_zone_freeze_frame_floor = vision.frame_sequence

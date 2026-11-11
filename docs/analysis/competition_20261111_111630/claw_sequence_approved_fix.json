@@ -1,0 +1,117 @@
+{
+  "committed": [
+    {
+      "frame": 8844,
+      "observed_s": 2085.1965116210004,
+      "real_count": 1,
+      "reason": "audit_camera_settling",
+      "wire_frame": 0,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 0,
+      "epoch": 0
+    },
+    {
+      "frame": 8847,
+      "observed_s": 2085.318721344,
+      "real_count": 1,
+      "reason": "audit_camera_settling",
+      "wire_frame": 0,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 0,
+      "epoch": 0
+    },
+    {
+      "frame": 8849,
+      "observed_s": 2085.410480231,
+      "real_count": 1,
+      "reason": "audit_camera_frame_floor",
+      "wire_frame": 0,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 0,
+      "epoch": 0
+    },
+    {
+      "frame": 8852,
+      "observed_s": 2085.5695623849997,
+      "real_count": 0,
+      "reason": "audit_wait_stable",
+      "wire_frame": null,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 1,
+      "epoch": 0
+    },
+    {
+      "frame": 8855,
+      "observed_s": 2085.6774305359995,
+      "real_count": 0,
+      "reason": "recheck_empty_pending_search",
+      "wire_frame": 8855,
+      "stable": true,
+      "wire_count": 0,
+      "hits": 2,
+      "epoch": 0
+    }
+  ],
+  "working_tree": [
+    {
+      "frame": 8844,
+      "observed_s": 2085.1965116210004,
+      "real_count": 1,
+      "reason": "audit_camera_frame_floor",
+      "wire_frame": 0,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 0,
+      "epoch": 0
+    },
+    {
+      "frame": 8847,
+      "observed_s": 2085.318721344,
+      "real_count": 1,
+      "reason": "audit_wait_stable",
+      "wire_frame": null,
+      "stable": false,
+      "wire_count": 1,
+      "hits": 1,
+      "epoch": 0
+    },
+    {
+      "frame": 8849,
+      "observed_s": 2085.410480231,
+      "real_count": 1,
+      "reason": "audit_wait_stable",
+      "wire_frame": null,
+      "stable": false,
+      "wire_count": 1,
+      "hits": 1,
+      "epoch": 0
+    },
+    {
+      "frame": 8852,
+      "observed_s": 2085.5695623849997,
+      "real_count": 0,
+      "reason": "load_empty_gap",
+      "wire_frame": 0,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 1,
+      "epoch": 0
+    },
+    {
+      "frame": 8855,
+      "observed_s": 2085.6774305359995,
+      "real_count": 0,
+      "reason": "load_empty_gap",
+      "wire_frame": 0,
+      "stable": false,
+      "wire_count": 0,
+      "hits": 1,
+      "epoch": 0
+    }
+  ],
+  "limits": "仅5个实际稀疏记录输入，不冒充全帧比赛回放。8847采集戳为录像精确值，其余原已有capture_to_publish重建；未构造额外真检测，未放宽100ms窗。"
+}

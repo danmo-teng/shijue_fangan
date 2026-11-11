@@ -1,0 +1,1014 @@
+{
+  "scope": "Offline original sidecar Track/bbox/ROI with approved modified snapshot; recorded states, not simulated vehicle/control success",
+  "rows": [
+    {
+      "clip": 10,
+      "frame": 9048,
+      "state": "TRANSPORT_AUDIT",
+      "reported_pitch": 14000,
+      "before": {
+        "ids": [],
+        "boxes": [],
+        "pitch": 0
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            258,
+            460,
+            266
+          ]
+        ],
+        "pitch": 14000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818,
+        821,
+        823
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9050,
+      "state": "TRANSPORT_AUDIT",
+      "reported_pitch": 14000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            258,
+            460,
+            266
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            460,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9054,
+      "state": "TRANSPORT_AUDIT",
+      "reported_pitch": 14000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            460,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            370,
+            254,
+            466,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9060,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "reported_pitch": 14000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            370,
+            254,
+            466,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9062,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818,
+        824
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9065,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818,
+        824,
+        825
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9070,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        815,
+        818,
+        824,
+        826
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9076,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [
+        828,
+        830,
+        831,
+        832,
+        833
+      ],
+      "ground_ids": [
+        829
+      ]
+    },
+    {
+      "clip": 10,
+      "frame": 9080,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [
+        831,
+        832,
+        833
+      ],
+      "ground_ids": []
+    },
+    {
+      "clip": 10,
+      "frame": 9087,
+      "state": "ENTER_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [
+        831,
+        832,
+        833
+      ],
+      "ground_ids": []
+    },
+    {
+      "clip": 10,
+      "frame": 9093,
+      "state": "ENTER_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          834
+        ],
+        "boxes": [
+          [
+            466,
+            470,
+            442,
+            330
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [
+        831,
+        832,
+        833
+      ],
+      "ground_ids": []
+    },
+    {
+      "clip": 1,
+      "frame": 1691,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            246,
+            250
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": []
+    },
+    {
+      "clip": 1,
+      "frame": 1694,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            246,
+            250
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            523,
+            247,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": []
+    },
+    {
+      "clip": 1,
+      "frame": 1697,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            523,
+            247,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            252
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        144
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1700,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            252
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            245,
+            250
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        144
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1703,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            245,
+            250
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            524,
+            246,
+            255
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        144
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1707,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            524,
+            246,
+            255
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            246,
+            251
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": []
+    },
+    {
+      "clip": 1,
+      "frame": 1710,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            246,
+            251
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            246,
+            251
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": []
+    },
+    {
+      "clip": 1,
+      "frame": 1713,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            246,
+            251
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            252
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        145
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1716,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            252
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            245,
+            250
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        145
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1720,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            527,
+            245,
+            250
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        146
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1723,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            252
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        146
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1726,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 12000,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            252
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        146
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1729,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 11500,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        147
+      ]
+    },
+    {
+      "clip": 1,
+      "frame": 1732,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reported_pitch": 11500,
+      "before": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            369,
+            525,
+            246,
+            253
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          136
+        ],
+        "boxes": [
+          [
+            361,
+            598,
+            252,
+            265
+          ]
+        ],
+        "pitch": 11500
+      },
+      "obstacle_id": null,
+      "corridor": "CLEAR",
+      "inside": [],
+      "ground_ids": [
+        147
+      ]
+    }
+  ]
+}

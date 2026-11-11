@@ -2,6 +2,8 @@
 
 2026-11-11，仅分析与方案，未修改生产代码、配置、原始日志或下位机，未启动设备。
 
+本文件保留60073cb时的故障分析；用户随后批准四项修改，实际交付与边界见[修复回执](../../COMPETITION_FLOW_RESPONSE_FIX_20261111.md)。
+
 ## 记录与证据边界
 
 - 实际最新比赛在`rescue_map/runtime/competition_events.jsonl`和`competition_detections.jsonl`，尚未归档；同名历史111630_competition目录是旧占位，不能用其空检测文件分析本场。

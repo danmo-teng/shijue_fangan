@@ -1264,6 +1264,8 @@ def test_range_recheck_accepts_small_error_and_realigns_large_overshoot() -> Non
         assert out.reason == "approach_range_realign"
         assert not out.command.flags & CMD_APPROACH_RANGE
         assert out.command.arg_a == cx
+        assert m.target_last_seen_s == 1.1 and m.target_last_center_px == target.center_px
+        assert m.locked_target_track_id == target.track_id
     for cx in (576, 640, 704):
         target = TrackedCargo(1, "green_supply", .9, (cx - 20, 200, 40, 40))
         out = m._range_approach_output(replace(first, frame_sequence=3,
@@ -1279,31 +1281,57 @@ def test_loaded_empty_reobserves_once_without_stable_empty_or_fake_load() -> Non
     for mode in (23, 48):
         m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
         m.state = CompetitionState.POST_GRAB_AUDIT if mode == 23 else CompetitionState.TRANSPORT_AUDIT
+        m.post_grab_audit_active = mode == 23
+        m._select_batch(CargoBatch((802,), ("injured_orange",), "injury"))
         status = replace(stm(mode=mode, flags=3), camera_pitch_cdeg=14000)
-        m.audit_camera_key = (mode, True, m.audit_epoch)
-        m.audit_camera_ready_since = 0.0
-        view = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1., capture_audit=CargoAudit())
-        out = m._audit_observation_wait(view, status, 1.)
+        positive = CargoAudit(left_class="injured_orange", left_count=1, total_count=1)
+
+        def observe(frame, now, audit=positive, current=status, captured=None):
+            return m.step(VisionSnapshot(frame_sequence=frame,
+                observed_monotonic_s=now if captured is None else captured,
+                capture_audit=audit), pose(), current, now)
+
+        first = observe(10, 1.)
+        assert first.reason == "audit_camera_frame_floor"
+        # No additional 250 ms after the MCU reported its camera ready.
+        old = observe(11, 1.005, captured=.99)
+        assert old.reason == "audit_camera_frame_floor" and m.audit_hits == 0
+        first_positive = observe(12, 1.01)
+        assert first_positive.command.audit.total_count == 1 and m.audit_hits == 1
+        out = observe(13, 1.04, CargoAudit())
         assert out.reason == "load_empty_reobserve" and out.event == "load_empty_reobserve"
         assert out.command.opcode == CMD_CARGO_AUDIT
         assert not out.command.audit.stable and out.command.audit.total_count == 0
-        assert out.command.audit_vision_frame == 10 and m.audit_hits == 0
-        again = m._audit_observation_wait(replace(view, frame_sequence=11,
-            observed_monotonic_s=1.1), status, 1.1)
-        assert again.reason == "load_empty_reobserve" and not again.event
-        seen = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
-        assert m._audit_observation_wait(replace(view, frame_sequence=12,
-            observed_monotonic_s=1.15, capture_audit=seen), status, 1.15) is None
+        assert out.command.audit_vision_frame == 13 and m.audit_hits == 1
+        epoch = m.audit_epoch
+        again = observe(14, 1.05, CargoAudit())
+        assert again.reason == "load_empty_gap" and not again.event
+        assert again.command.audit_vision_frame == 0 and m.audit_hits == 1
         # Reuse the MCU's existing camera nudge. No new timer or request ACK.
-        m._audit_observation_wait(replace(view, frame_sequence=12,
-            observed_monotonic_s=1.2), replace(status, camera_pitch_cdeg=13800, flags=2), 1.2)
-        m._audit_observation_wait(replace(view, frame_sequence=13,
-            observed_monotonic_s=1.3), status, 1.3)
-        assert m.empty_load_recheck_done
-        assert m._audit_observation_wait(replace(view, frame_sequence=14,
-            observed_monotonic_s=1.6), status, 1.6) is None
-        # A genuinely empty view after this physical re-observation can use
-        # the existing empty-audit path; do not invent a legal singleton.
+        observe(15, 1.06, CargoAudit(), replace(status, camera_pitch_cdeg=13800, flags=2))
+        returned = observe(16, 1.10, CargoAudit())
+        assert returned.reason == "audit_camera_frame_floor" and m.empty_load_recheck_done
+        observe(17, 1.11)
+        assert m.audit_hits == 1
+        gap = observe(18, 1.14, CargoAudit())
+        assert gap.command.audit_vision_frame == 0 and not gap.command.audit.stable
+        assert m.audit_hits == 1 and m.pending_audit is None and m.transport_audit_command is None
+        stable = observe(19, 1.23)
+        assert stable.command.audit.stable and stable.command.audit.total_count == 1
+        assert m.audit_hits == 2 and m.audit_epoch == epoch
+        # A later gap revokes cached STABLE authorization as well.
+        revoked = observe(20, 1.25, CargoAudit())
+        assert revoked.command.audit_vision_frame == 0 and not revoked.command.audit.stable
+        assert m.pending_audit is None and m.transport_audit_command is None
+        wire_started = m.audit_wire_mode_started_s
+        for frame, now in ((21, 1.26), (22, 2.0), (23, 2.04)):
+            missing = observe(frame, now, CargoAudit())
+            assert not missing.command.audit.stable and missing.command.audit_vision_frame == 0
+        assert m.audit_epoch == epoch and m.audit_wire_mode_started_s == wire_started
+        # Real nonempty contradictory evidence still reaches the original audit.
+        danger = replace(positive, danger_present=True)
+        assert m._audit_observation_wait(VisionSnapshot(frame_sequence=24,
+            observed_monotonic_s=2.1, capture_audit=danger), status, 2.1) is None
 
 
 def test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps() -> None:
@@ -1326,6 +1354,45 @@ def test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps() -
     out = m.step(obstacle, pose(), replace(status, mode=10), 6.3)
     assert out.state == CompetitionState.CLEAR_SAFE_ZONE
     assert out.command.opcode == CMD_CLEAR_SAFE_ZONE
+
+    def acquiring():
+        mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        mission._begin_safe_zone_acquire(VisionSnapshot(frame_sequence=1), 1.)
+        return mission
+
+    clipped = (200, 0, 800, 90)
+    normal = acquiring()
+    for frame, now in ((2, 1.01), (3, 1.06), (4, 1.10)):
+        fast = normal.step(VisionSnapshot(frame_sequence=frame,
+            observed_monotonic_s=now, safe_bbox=clipped), pose(), status, now)
+    assert fast.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    assert normal.safe_zone_view_pitch_cdeg == 12000  # Three real frames take the fast path.
+
+    retry = acquiring()
+    retry.step(VisionSnapshot(frame_sequence=2, observed_monotonic_s=1.01,
+        safe_bbox=clipped), pose(), status, 1.01)
+    lost = VisionSnapshot(frame_sequence=3, observed_monotonic_s=1.05,
+        safe_bbox=clipped, safe_zone_filter_blocked=True)  # Cached box, actual detection missing.
+    higher = retry.step(lost, pose(), status, 1.05)
+    assert higher.event == "safe_zone_acquire_reobserve" and higher.command.arg_b == 11500
+    assert retry.safe_zone_freeze_hits == 0
+    waiting = retry.step(replace(lost, frame_sequence=4, observed_monotonic_s=1.10),
+        pose(), status, 1.10)
+    assert not waiting.event and waiting.command == higher.command
+    reported = replace(status, camera_pitch_cdeg=11500)
+    # Reported commanded angle is not physical servo feedback; exclude old
+    # pipeline images, then count three real new captures with no extra timer.
+    retry.step(VisionSnapshot(frame_sequence=5, observed_monotonic_s=1.20,
+        safe_bbox=clipped), pose(), reported, 1.30)
+    old = retry.step(VisionSnapshot(frame_sequence=6, observed_monotonic_s=1.25,
+        safe_bbox=clipped), pose(), reported, 1.32)
+    assert old.reason == "safe_zone_higher_view_frame_wait" and retry.safe_zone_freeze_hits == 0
+    for frame, now, captured in ((7, 1.34, 1.31), (8, 1.37, 1.35), (9, 1.41, 1.39)):
+        observed = retry.step(VisionSnapshot(frame_sequence=frame,
+            observed_monotonic_s=captured, safe_bbox=(200, 0, 800, 155)), pose(), reported, now)
+    assert observed.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    assert retry.safe_zone_freeze_hits == 3 and retry.safe_zone_view_pitch_cdeg == 11500
 
 
 def test_range_cumulative_and_transport_sort() -> None:

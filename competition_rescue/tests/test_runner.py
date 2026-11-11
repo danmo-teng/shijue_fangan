@@ -550,9 +550,9 @@ def test_carried_identity_survives_verified_pitch_change_without_waiting():
                       anchor_pitch=12000, flags=0)
     assert opened.carried_reference_track_ids == (75,)
     assert opened.safe_corridor_obstacle_track_id == 76
-    # No verified 115-degree carrying geometry, and no same-angle replacement
-    # after a disappeared ID: preserve the old identity rather than guessing.
-    for pitch, anchor_pitch, flags in ((11500, 14000, 2), (12000, 12000, 2), (12000, 14000, 0)):
+    # Unsupported views, a spatially disjoint same-angle box and an opened
+    # gripper cannot turn a same-class replacement into carried cargo.
+    for pitch, anchor_pitch, flags in ((11000, 14000, 2), (12000, 12000, 2), (12000, 14000, 0)):
         unchanged = snapshot((replacement,), pitch, ids=(68,), boxes=(old.bbox,),
                              anchor_pitch=anchor_pitch, flags=flags)
         assert unchanged.carried_reference_track_ids == (68,)
@@ -601,6 +601,127 @@ def test_pitch_carried_reassociation_preserves_floor_obstacles_and_ambiguity():
     assert unchanged.safe_corridor_obstacle_track_id == 259
     missing_anchor = snapshot((held,), boxes=())
     assert missing_anchor.carried_reference_track_ids == (68,)
+
+
+def test_same_view_carried_identity_survives_initial_entry_tracker_replacement():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+
+    m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((819,), ('injured_orange',), 'injury'))
+    m.confirmed_delivery_destination = 'injury'
+    m.carried_manifest = ('injured_orange',)
+    m.carried_total_count = 1
+    m.state = CompetitionState.ENTER_SAFE_ZONE
+    polygon = ((250, 225), (1000, 225), (1000, 715), (250, 715))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    # Actual clip10: verified 120-degree ID819/frame9065, then ID834/frame9093.
+    old_box = (491, 488, 463, 309)
+    held = TrackedCargo(834, 'injured_orange', .34, (466, 470, 442, 330), hits=1)
+    inside = TrackedCargo(832, 'injured_orange', .8, (566, 0, 150, 66),
+                          hits=20, inside_safe_zone=True)
+
+    def snapshot(items, *, flags=2, mode=11, ids=(819,), boxes=(old_box,)):
+        with patch.object(runner_module, 'tracked_cargo', return_value=items):
+            return runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False),
+                (40, 0, 916, 124), StmSnapshot(mode=mode, flags=flags, age_ms=0,
+                    camera_pitch_cdeg=12000), m, 9093, capture_rois=rois,
+                recent_carried_track_ids=ids, recent_carried_bboxes=boxes,
+                recent_carried_pitch_cdeg=12000,
+                recent_corridor_obstacle=replace(held, visible=False, misses=1))
+
+    rebound = snapshot((inside, held))
+    assert rebound.carried_reference_track_ids == (834,)
+    assert rebound.carried_reference_bboxes == (held.bbox,)
+    assert rebound.delivery_target_found
+    assert rebound.safe_corridor_obstacle_track_id is None
+    # Known visible cargo takes precedence, while a different ground object
+    # of the same class must still be found in the actual forward corridor.
+    floor = replace(held, track_id=835, bbox=(580, 250, 100, 130))
+    external = snapshot((held, floor), ids=(834,), boxes=(held.bbox,))
+    assert external.carried_reference_track_ids == (834,)
+    assert external.safe_corridor_obstacle_track_id == 835
+    possible_second_load = replace(held, track_id=836, bbox=(500, 480, 440, 320))
+    ambiguous = snapshot((held, possible_second_load))
+    assert ambiguous.carried_reference_track_ids == (819,)
+    assert ambiguous.safe_corridor_obstacle_track_id in {834, 836}
+    # The old pitch-change shape-only rule would accept this similar box.
+    # At the same angle its actual bidirectional overlap is below 0.60.
+    disjoint = replace(held, track_id=837, bbox=(300, 470, 442, 330))
+    assert snapshot((disjoint,)).carried_reference_track_ids == (819,)
+    # Bottom861 also enters the original819 near-field fallback: releasing
+    # ownership must disable that fallback as well as explicit ID re-binding.
+    released = replace(held, bbox=(466, 531, 442, 330))
+    opened = snapshot((released,), flags=0)
+    assert opened.carried_reference_track_ids == (819,)
+    assert opened.safe_corridor_obstacle_track_id == 834
+    ram = snapshot((released,), mode=15)
+    assert ram.carried_reference_track_ids == (819,)
+    assert ram.safe_corridor_obstacle_track_id == 834
+    for state in (CompetitionState.CLEAR_SAFE_ZONE, CompetitionState.DELIVERY_VERIFY,
+                  CompetitionState.INVALID_RELEASE, CompetitionState.INITIAL_RELEASE):
+        m.state = state
+        stopped_ownership = snapshot((released,))
+        assert stopped_ownership.carried_reference_track_ids == (819,)
+        assert stopped_ownership.safe_corridor_obstacle_track_id == 834
+    m.state = CompetitionState.DELIVERY_VERIFY
+    known = snapshot((released,), ids=(834,), boxes=(released.bbox,))
+    assert known.carried_reference_track_ids == (834,)
+    assert known.delivery_target_found
+
+
+def test_115_degree_carried_view_uses_actual_platform_and_keeps_external_obstacle():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+
+    m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+    m._select_batch(CargoBatch((136,), ('green_supply',), 'material'))
+    m.confirmed_delivery_destination = 'material'
+    m.carried_manifest = ('green_supply',)
+    m.carried_total_count = 1
+    m.state = CompetitionState.ACQUIRE_SAFE_ZONE
+    polygon = ((250, 225), (1000, 225), (1000, 715), (250, 715))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    # Actual clip1: frame1729 reports115 while still showing the old view;
+    # frame1732 has the raised image, held136 and separate right-floor147.
+    old = TrackedCargo(136, 'green_supply', .7, (366, 529, 250, 257), hits=164)
+    held = replace(old, bbox=(361, 598, 252, 265))
+    floor = TrackedCargo(147, 'injured_orange', .56, (876, 502, 402, 457), hits=3)
+
+    def snapshot(items, *, ids=(136,), boxes=(old.bbox,), anchor_pitch=12000):
+        with patch.object(runner_module, 'tracked_cargo', return_value=items):
+            return runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False),
+                (301, 23, 795, 154), StmSnapshot(mode=11, flags=2, age_ms=0,
+                    camera_pitch_cdeg=11500), m, 1732, capture_rois=rois,
+                recent_carried_track_ids=ids, recent_carried_bboxes=boxes,
+                recent_carried_pitch_cdeg=anchor_pitch)
+
+    transition = snapshot((old,))
+    assert transition.carried_reference_track_ids == (136,)
+    assert transition.carried_reference_bboxes == ()
+    actual = snapshot((held, floor))
+    assert actual.carried_reference_track_ids == (136,)
+    assert actual.carried_reference_bboxes == (held.bbox,)
+    assert not runner_module.cargo_on_carrying_platform(floor, 11500)
+    assert floor in actual.cargo
+    assert floor.track_id not in actual.carried_reference_track_ids
+    # This actual object is at the right side, outside the material corridor;
+    # retaining it as ground cargo must not invent a blocked forward path.
+    assert actual.safe_corridor_obstacle_track_id is None
+    # If tracking changes during the lift, the manifest and compatible old
+    # box identify the load; then same-view replacement uses actual overlap.
+    changed = replace(held, track_id=148)
+    assert snapshot((changed, floor)).carried_reference_track_ids == (148,)
+    same_view = snapshot((replace(changed, track_id=149, bbox=(363, 601, 254, 262)),),
+                         ids=(148,), boxes=(changed.bbox,), anchor_pitch=11500)
+    assert same_view.carried_reference_track_ids == (149,)
 
 
 def test_held_injury_with_high_roi_overlap_does_not_require_projected_foot_inside():
@@ -776,17 +897,30 @@ def test_range_context_and_calibration() -> None:
                              task_id=planner.protocol_task, action_id=pixel_action,
                              accepted_command=CMD_APPROACH_TARGET, action_status=1)
         planner._output_for_cycle(view, PoseSnapshot(), status, False, 1.0)
-        view = replace(view, frame_sequence=11, observed_monotonic_s=1.1)
-        request = planner._output_for_cycle(view, PoseSnapshot(), status, False, 1.1)
+        # The real mode52 deadlock had new images but a frozen wire frame.
+        # Exercise the actual publisher and binary context, keeping the same
+        # pixel action while correcting a target just outside the tolerance.
+        off_center = replace(target, bbox=(543, 500, 40, 40))
+        for frame, now in ((11, 1.1), (12, 1.2)):
+            correction_view = replace(view, frame_sequence=frame,
+                observed_monotonic_s=now, cargo=(off_center,))
+            correction = planner._output_for_cycle(correction_view, PoseSnapshot(), status, False, now)
+            planner._publish(correction)
+            assert correction.reason == "approach_range_realign"
+            assert not correction.command.flags & CMD_APPROACH_RANGE
+            assert planner.protocol_action == pixel_action
+            assert int.from_bytes(planner.command_path.read_bytes()[8:12], "big") == frame
+        view = replace(view, frame_sequence=13, observed_monotonic_s=1.3)
+        request = planner._output_for_cycle(view, PoseSnapshot(), status, False, 1.3)
         planner._publish(request)
         action = planner.protocol_action
         assert action != pixel_action and request.command.flags & CMD_APPROACH_RANGE
         packet = planner.command_path.read_bytes()
         assert len(packet) == 30 and packet[3] == packet[18]
-        assert int.from_bytes(packet[8:12], "big") == 11
+        assert int.from_bytes(packet[8:12], "big") == 13
         for mode in (52,53):
-            later = planner._output_for_cycle(replace(view, frame_sequence=12, range_distances=((1,100),)),
-                                              PoseSnapshot(), replace(status, mode=mode), False, 1.2)
+            later = planner._output_for_cycle(replace(view, frame_sequence=14, range_distances=((1,100),)),
+                                              PoseSnapshot(), replace(status, mode=mode), False, 1.4)
             planner._publish(later)
             assert planner.protocol_action == action and later.command == request.command
 

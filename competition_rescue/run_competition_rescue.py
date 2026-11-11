@@ -96,6 +96,7 @@ from state_machine import (  # noqa: E402
     STM_MODE_TRANSPORT_AUDIT,
     STM_MODE_RECOVERY_WAIT,
     STM_MODE_NAVIGATE,
+    STM_MODE_ALIGN_SAFE_ZONE,
     STM_MODE_FACE_FIELD_CENTER,
     STM_MODE_SEARCH,
     cargo_in_front_region,
@@ -531,12 +532,17 @@ def safe_zone_corridor_polygon(safe_bbox, destination):
 
 
 def carried_view_foot_polygon(camera_pitch_cdeg: int):
-    # The 120-degree replay shows the front carrying platform here (native
-    # 1280x1024 pixels, without the replay's 96-pixel header). This is not the
-    # much larger 140-degree capture-audit ROI or the forward push corridor.
-    # No 115-degree carrying view has been verified, so it keeps known IDs only.
+    # Front carrying-platform foot bands in the actual 120/115-degree replays
+    # (native 1280x1024 pixels, excluding the replay's 96-pixel header). They are
+    # not the much larger 140-degree capture-audit ROI or forward push corridor.
     if camera_pitch_cdeg == 12000:
         return ((390, 735), (910, 735), (960, 895), (310, 895))
+    if camera_pitch_cdeg == 11500:
+        # Clip1/frame1732: held green136 has foot(487,863), on the platform;
+        # the separate orange147 at right has foot(1077,959), outside it.
+        # The earlier 120-degree image's foot(491,786) is outside this band,
+        # so an early angle report cannot overwrite its old image anchor.
+        return ((390, 805), (910, 805), (960, 965), (310, 965))
     return ()
 
 
@@ -551,14 +557,17 @@ def cargo_on_carrying_platform(item: TrackedCargo, camera_pitch_cdeg: int) -> bo
     ) >= 0
 
 
-def carried_boxes_shape_compatible(old_boxes, new_boxes) -> bool:
-    # Camera pitch moves a held object's image. Compare the boxes after only
-    # translating their centres together, using the existing 0.60 bidirectional
-    # overlap rule; do not mistake an arbitrary same-class floor box for cargo.
+def carried_boxes_shape_compatible(old_boxes, new_boxes, *, same_view=False) -> bool:
+    # In the same camera view require actual spatial overlap. Only a verified
+    # pitch change permits translating box centres together for shape matching.
+    # Both paths retain the existing 0.60 bidirectional overlap rule.
     if len(old_boxes) != len(new_boxes) or not old_boxes:
         return False
 
     def compatible(first, second):
+        if same_view:
+            return (bbox_overlap_ratio(first, second) >= 0.60 and
+                    bbox_overlap_ratio(second, first) >= 0.60)
         _, _, width_a, height_a = first
         _, _, width_b, height_b = second
         a = (-width_a / 2.0, -height_a / 2.0, width_a, height_a)
@@ -591,8 +600,12 @@ def carried_ids_after_pitch_change(cargo, stm, mission, known_ids,
             CompetitionState.ACQUIRE_SAFE_ZONE,
             CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
             CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+            CompetitionState.ENTER_SAFE_ZONE,
         } or not stm.gripper_closed or
-            recent_carried_pitch_cdeg != 14000 or stm.camera_pitch_cdeg != 12000 or
+            recent_carried_pitch_cdeg not in {11500, 12000, 14000} or
+            stm.camera_pitch_cdeg not in {11500, 12000} or
+            (mission.state == CompetitionState.ENTER_SAFE_ZONE and
+             stm.mode not in {STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE}) or
             not known_ids or not mission.carried_manifest or
             mission.carried_total_count != len(mission.carried_manifest) or
             len(recent_carried_bboxes) != mission.carried_total_count):
@@ -609,7 +622,8 @@ def carried_ids_after_pitch_change(cargo, stm, mission, known_ids,
     # possible greens for a one-green manifest, retain the old IDs, not a guess.
     if (Counter(item.class_name for item in candidates) != expected or
             not carried_boxes_shape_compatible(
-                recent_carried_bboxes, tuple(item.bbox for item in candidates))):
+                recent_carried_bboxes, tuple(item.bbox for item in candidates),
+                same_view=recent_carried_pitch_cdeg == stm.camera_pitch_cdeg)):
         return known_ids
     return {item.track_id for item in candidates}
 
@@ -938,19 +952,25 @@ def make_vision_snapshot(
         len(delivery_items) == mission.carried_total_count and
         Counter(item.class_name for item in delivery_items) ==
         Counter(mission.carried_manifest) and
-        (stm.camera_pitch_cdeg not in {11500, 12000} or
-         (stm.camera_pitch_cdeg == 12000 and all(
+        (stm.camera_pitch_cdeg not in {11500, 12000} or all(
              cargo_on_carrying_platform(item, stm.camera_pitch_cdeg)
-             for item in delivery_items)))
+             for item in delivery_items))
     ):
         current_carried_bboxes = tuple(item.bbox for item in delivery_items)
     carried_bbox_reference = current_carried_bboxes or (
         recent_carried_bboxes if recent_carried_pitch_cdeg == stm.camera_pitch_cdeg else ()
     )
-    if mission.state == CompetitionState.CLEAR_SAFE_ZONE or not stm.gripper_closed:
+    if (mission.state in {
+            CompetitionState.CLEAR_SAFE_ZONE,
+            CompetitionState.DELIVERY_VERIFY,
+            CompetitionState.INVALID_RELEASE,
+            CompetitionState.INITIAL_RELEASE,
+        } or not stm.gripper_closed or
+            (mission.state == CompetitionState.ENTER_SAFE_ZONE and
+             stm.mode not in {STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE})):
         # A sweep may have placed the original load on the ground. Keep its
-        # explicit IDs for the existing retrieve context, but do not identify
-        # an unknown floor track as held cargo from a stale overlapping box.
+        # explicit IDs for retrieve/delivery observation, but do not identify
+        # an unknown floor track from a box retained before release/ram.
         carried_bbox_reference = ()
     corridor_bbox = None if safe_zone_filter_blocked else safe_bbox
     corridor_destination = (
