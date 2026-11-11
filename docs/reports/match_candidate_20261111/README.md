@@ -1,5 +1,7 @@
 # 比赛候选预修复与统一决策单
 
+**最新范围覆盖：用户已提前暂停批量修复，当前只逐项推进右侧ROI；首次后材料上限改为2件，本文及b7f22fd保留的3件方案已不采用，旧批量源码/补丁不能原样上线。这里只保存已做候选与证据，不继续实施，不代表正式生效。**
+
 2026-11-11，14:46—16:46隔离预修复。此文说明候选实现与证据，**不是正式部署或下位机实施授权**。
 
 候选分支：`codex/match-prerepair-20261111`；工作树：`/home/sunrise/RDK_X5/worktrees/match-candidate-20261111`。正式分支`codex/gamepad-teleop`仅更新归档和任务说明，运行源码、用户ROI、模型、正式定位ELF保持原样。未启动相机、SDK、UART、电机，未修改或清理原始日志。未完成大融合已归档，不夹带恢复。
@@ -15,7 +17,7 @@
 | 开局回放及可选原生图证 | 复用原异步start_clear录像；`--replay-native-frames 0..3`默认0，最多3张不同事件携带原图，不增加相机/SDK | 原native数组不是640模型张量，也不保证精确触发帧；清理器未扩张，带原生文件会被保护，显式启用后需人选保留/清理 |
 | **首件后最多3件材料** | 2/3件普通green_supply、核心core_black，同类/混合直接GRAB；保完整manifest；多件视觉成功须整批可见且inside，不能只见一件算全批 | **必须与下位批量/双推成对采用**；首件、伤员单件、危险蓝和超量仍按原审核；未部署 |
 
-代码分项提交，允许逐项选择。ROI为`vision/config/capture_roi_match_candidate_20261111.json`；其余主要在`competition_rescue/state_machine.py`、`run_competition_rescue.py`、`incident_replay.py`及原测试模块。详见[视觉报告](vision/VISION_CANDIDATE_REVIEW.md)、[几何报告](FRONT_GEOMETRY_CANDIDATE.md)、[批量报告](batch/UPPER_BATCH_REVIEW.md)、[可选原生图证](vision/NATIVE_EVIDENCE_CANDIDATE.md)。
+代码分项提交，允许逐项选择。ROI为`vision/config/capture_roi_match_candidate_20261111.json`；其余主要在`competition_rescue/state_machine.py`、`run_competition_rescue.py`、`vision_replay.py`及原测试模块。详见[视觉报告](vision/VISION_CANDIDATE_REVIEW.md)、[几何报告](FRONT_GEOMETRY_CANDIDATE.md)、[批量报告](batch/UPPER_BATCH_REVIEW.md)、[可选原生图证](vision/NATIVE_EVIDENCE_CANDIDATE.md)。
 
 ## 需要人选择的下位配套候选
 
