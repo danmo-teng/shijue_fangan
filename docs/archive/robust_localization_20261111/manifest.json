@@ -1,0 +1,217 @@
+{
+  "state": "archived_incomplete_do_not_deploy",
+  "date": "2026-11-11",
+  "base_commit": "ed07e323e721649af19193dff1570d1147c2c89c",
+  "patch": "unfinished_source.patch",
+  "patch_sha256": "5d7827473f05fb23d2b028fd76fad145ac1b20ab8dad6ae0c967b452a9e7924a",
+  "source_files": [
+    {
+      "path": "docs/ROBUST_LOCALIZATION_EXPERIMENT_20261111.md",
+      "sha256": "c7a3b639749768543db19ebcbc6c2378134ba4a7cfbdf6fc6632477824626884"
+    },
+    {
+      "path": "localization/CMakeLists.txt",
+      "sha256": "1ab74b260e047c259076eca8d3a89bc3e323e3da9abff4bc0eb8237d2cb17045"
+    },
+    {
+      "path": "localization/include/debug_pose_publisher.hpp",
+      "sha256": "4b206eacb7ab828451b45c90e6de35476b161542925fe1146c59365a38a7b40c"
+    },
+    {
+      "path": "localization/include/fusion.hpp",
+      "sha256": "8cf27854a95f1d6ca0407f5e9ce8710d3184b2a752bce52d73bba2246f6ecb35"
+    },
+    {
+      "path": "localization/include/motion_source_native.hpp",
+      "sha256": "cc532a21c42c6745055b4a72897c1da15df8e68c5488f3311ac105c3d3c77691"
+    },
+    {
+      "path": "localization/include/primary_yaw_timeline.hpp",
+      "sha256": "5a92e65bbb90ed8dd9e203f7597d9cf1f0b2434005681c560efc66e20f7baa72"
+    },
+    {
+      "path": "localization/include/wheel_yaw_consistency.hpp",
+      "sha256": "bbf961e0078c84fc7fa3f694f7deb711351778c37bfdcc6aaeaad6cae2bfa8dd"
+    },
+    {
+      "path": "localization/src/dynamic_pose_relay.cpp",
+      "sha256": "6ff7751a41313f9edf166f476f585ed75fcde4bbb7cee6cdfea11141a127b95a"
+    },
+    {
+      "path": "localization/src/fusion.cpp",
+      "sha256": "992a00991e59ad5b94b6a5c3ec0d3c205d2f383e1837ce75e48ca0c57d33a706"
+    },
+    {
+      "path": "localization/src/main.cpp",
+      "sha256": "a04a0e12c32df659ca7a8d473853409ac40a1286985545fe46967bb0d01a4423"
+    },
+    {
+      "path": "localization/src/motion_runtime.cpp",
+      "sha256": "248c2eb5fad5f5ea451a0c805d4891495b5219704e674b71e5c624ec8c4f3257"
+    },
+    {
+      "path": "localization/src/motion_source_native.cpp",
+      "sha256": "442e61f6a06aa16968ad6c50b1d1c3229421fcb84abcc7a10c5397d5817bfabc"
+    },
+    {
+      "path": "localization/src/primary_yaw_timeline.cpp",
+      "sha256": "efee7bf9a80f009ff3b8971fb9e0d89ec4e5bc3e1dc0d11b65ab8ffc8ba1394c"
+    },
+    {
+      "path": "localization/src/wheel_yaw_consistency.cpp",
+      "sha256": "bf9e5c386b31400a20e523b59e48fb0fe0e5bc9fc38042f4fb07c9ce91c16122"
+    },
+    {
+      "path": "localization/tests/test_omni_localization.cpp",
+      "sha256": "1418f3c6ff15e916045fb8958952957874a5a85579959752084f9d9b27c01c48"
+    },
+    {
+      "path": "localization/tools/lidar_t265_motion_map.py",
+      "sha256": "f7289f88aba276a58bb648e8b867163c22b2e8e8e65899244eb3be23687eb03e"
+    },
+    {
+      "path": "localization/tools/lidar_yaw_debug/native_motion.py",
+      "sha256": "61044f99011b4a3b21c0d57b8ae9a1c9cc75cc868cb567ac4168fe53b1af7e14"
+    },
+    {
+      "path": "localization/tools/lidar_yaw_debug/worker.py",
+      "sha256": "38fe3fe7a76fc066ebbe18bdf61ce2af1560eab53eca1e7102e058e440e2ff7f"
+    },
+    {
+      "path": "localization/tools/motion_source_review.py",
+      "sha256": "49984c30e33f3fcba675fbc398dbb3026f65d4f635d6c050f1ba76125cf887aa"
+    },
+    {
+      "path": "localization/tools/t265_f407_debug.py",
+      "sha256": "7c5bbdd4d7d064c79c31f11179341345f0bc60de55604d3e6815d78bdee6720a"
+    },
+    {
+      "path": "localization/tools/test_f407_motion_protocol.py",
+      "sha256": "8982b3d55d7d44ddbf258d7c1ce2ed242e0585cefc64591c10fa7cba93b7e329"
+    }
+  ],
+  "local_reports": [
+    {
+      "path": "docs/reports/robust_localization_20261111/HEADING_BOUNDARY_AUDIT.md",
+      "size": 8196,
+      "sha256": "76c3bcc9f9564d8ac8c776885abf2fe0052638bf64b16e71226dc901534e6c22"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/NATIVE_REPLAY_ANALYSIS.md",
+      "size": 8139,
+      "sha256": "0b6640658b498c7560d0ea96c84411b08b31538c719df7c912ffd81b6aa42f0a"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/comparison_summary.json",
+      "size": 31639,
+      "sha256": "f108729474fda0a0e528caa1d6c1f9fcbeb19fc855b0bd540ac6c932d8069da9"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/CHECKPOINT.md",
+      "size": 2511,
+      "sha256": "c96ad321b938f846957a71b4c06553c70c2affea95cf33da0e57932449468f0d"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/PHASE_ANALYSIS.md",
+      "size": 5193,
+      "sha256": "886e1df8c8b4bc961681e9ac35b2ac00b6553190d3c42b8dcb9261beb94e3dee"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/comparison_summary.json",
+      "size": 17048,
+      "sha256": "0f324ef1c00b7c4d4b1b781f55a0185d64a37dd6f091c5ac8cc018589099b087"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/real_feedback_smoke.json",
+      "size": 13660,
+      "sha256": "1447c46208aac940b2c2ebb8e684aa722990167bba301b18bf235b06ecaa7e54"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round1/native_replay.json",
+      "size": 30873,
+      "sha256": "2cf256757e599c9e8658a62162dae5ee915ca924d82cc81760050e495edf36d0"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round1/source_events.jsonl",
+      "size": 33130,
+      "sha256": "03730731b3190887d5056a0b434ad1d0239f72f44d7a2667114abc4379a68a31"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round1/trajectory.csv",
+      "size": 11229789,
+      "sha256": "dee094f88553d5e2507c237de7a0f46c787b1d8681310ad52fff0ec015506558"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round1/wall_corrections.csv",
+      "size": 1479330,
+      "sha256": "409ed19d47acabb823514deccf6cb61e711a0ceef6f88c560a151d92e8e9bf62"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round2/native_replay.json",
+      "size": 31204,
+      "sha256": "4d1dd0a0694e01bc3afd9f11f559fa83d25ceee0f5c907f3070917e89313c1be"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round2/source_events.jsonl",
+      "size": 66858,
+      "sha256": "78e450c33439dcd73848451f2cd425b1fd0fbd64ecf6088d1e8ab8275ffbc81a"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round2/trajectory.csv",
+      "size": 13766199,
+      "sha256": "4150831e55cac11843cce971d92bc4b1874080613cbbeb4c0ba66a6864083132"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/phase_source_event/round2/wall_corrections.csv",
+      "size": 2176233,
+      "sha256": "6c2f1163e0a1cd2c58a45a9cd15c57051cd05027a95b6129f66cc4803b4d9172"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round1/native_replay.json",
+      "size": 20012,
+      "sha256": "377d9d7752767c2e8087082b6349531cdd992d57a06a1ca5a852eed2d2d649f6"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round1/source_events.jsonl",
+      "size": 18359,
+      "sha256": "dabe8161988d13de4a8882e0364ff03fc7c88a38d5e64d8b10f7168156a91bec"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round1/trajectory.csv",
+      "size": 7327170,
+      "sha256": "657a1332562014b4d3f434dfec4c6973b1bbe2e5fd8307eedbb5bf98e7e72bb3"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round1/wall_corrections.csv",
+      "size": 978521,
+      "sha256": "db93f1b49bd6a44f1c531ab1da1dc991a27d08b927c996573efd4f75c812f604"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round2/native_replay.json",
+      "size": 21292,
+      "sha256": "91aeaf02dcc2f8fa60db70ea938b01f3f52afba6b1035c99511315159c10aad9"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round2/source_events.jsonl",
+      "size": 39115,
+      "sha256": "b5f3a1ff822f9857880c5c5089771a3ed7320b28b4aa21fe8233c57dfc608735"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round2/trajectory.csv",
+      "size": 9002889,
+      "sha256": "3be96681cdcc7053c97c868464f2134d3d5e2d2d49be6804d8734f4a8b7c1998"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/round2/wall_corrections.csv",
+      "size": 1440843,
+      "sha256": "d21443f6b162fa6581abcafb85a458cec96b66ca6572d0409317f54330ad0435"
+    },
+    {
+      "path": "docs/reports/robust_localization_20261111/source_switch_audit.json",
+      "size": 45067,
+      "sha256": "2c96b92649d44c864a20feb984a58fb8424bfc46c99ae1dc1a1b0bb6b3e82f4f"
+    }
+  ],
+  "reports_note": "报告原路径在RDK保留；此清单不等于已提交全部报告。",
+  "formal_runtime_rebuilt": false
+}
