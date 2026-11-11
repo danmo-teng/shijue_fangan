@@ -1,0 +1,494 @@
+{
+  "scope": "Offline sampled sidecar inputs; original current snapshot function; no code changes or hardware",
+  "rows": [
+    {
+      "frame": 9048,
+      "capture_s": 2094.252981694,
+      "state": "TRANSPORT_AUDIT",
+      "pitch": 14000,
+      "closed": true,
+      "before": {
+        "ids": [],
+        "boxes": [],
+        "pitch": 0
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            258,
+            460,
+            266
+          ]
+        ],
+        "pitch": 14000
+      },
+      "emitted_boxes": [
+        [
+          373,
+          258,
+          460,
+          266
+        ]
+      ],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9050,
+      "capture_s": 2094.393311768,
+      "state": "TRANSPORT_AUDIT",
+      "pitch": 14000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            258,
+            460,
+            266
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            460,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "emitted_boxes": [
+        [
+          373,
+          254,
+          460,
+          270
+        ]
+      ],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9054,
+      "capture_s": 2094.602980931,
+      "state": "TRANSPORT_AUDIT",
+      "pitch": 14000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            460,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            370,
+            254,
+            466,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "emitted_boxes": [
+        [
+          370,
+          254,
+          466,
+          270
+        ]
+      ],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9060,
+      "capture_s": 2094.933158073,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "pitch": 14000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            370,
+            254,
+            466,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "emitted_boxes": [
+        [
+          373,
+          254,
+          463,
+          270
+        ]
+      ],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9062,
+      "capture_s": 2095.063128646,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "emitted_boxes": [],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9065,
+      "capture_s": 2095.204028964,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            373,
+            254,
+            463,
+            270
+          ]
+        ],
+        "pitch": 14000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "emitted_boxes": [
+        [
+          491,
+          488,
+          463,
+          309
+        ]
+      ],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9070,
+      "capture_s": 2095.463419828,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "emitted_boxes": [],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": []
+    },
+    {
+      "frame": 9076,
+      "capture_s": 2095.760365289,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "emitted_boxes": [],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": [
+        828,
+        830,
+        831,
+        832,
+        833
+      ]
+    },
+    {
+      "frame": 9080,
+      "capture_s": 2095.96864914,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "emitted_boxes": [],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": [
+        831,
+        832,
+        833
+      ]
+    },
+    {
+      "frame": 9087,
+      "capture_s": 2096.244476561,
+      "state": "ENTER_SAFE_ZONE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "emitted_boxes": [],
+      "corridor": "CLEAR",
+      "obstacle_id": null,
+      "obstacle_bbox": null,
+      "inside": [
+        831,
+        832,
+        833
+      ]
+    },
+    {
+      "frame": 9093,
+      "capture_s": 2096.519562912,
+      "state": "ENTER_SAFE_ZONE",
+      "pitch": 12000,
+      "closed": true,
+      "before": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "after": {
+        "ids": [
+          819
+        ],
+        "boxes": [
+          [
+            491,
+            488,
+            463,
+            309
+          ]
+        ],
+        "pitch": 12000
+      },
+      "emitted_boxes": [],
+      "corridor": "BLOCKED",
+      "obstacle_id": 834,
+      "obstacle_bbox": [
+        466,
+        470,
+        442,
+        330
+      ],
+      "inside": [
+        831,
+        832,
+        833
+      ]
+    }
+  ]
+}

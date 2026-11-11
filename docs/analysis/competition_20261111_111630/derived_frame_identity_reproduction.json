@@ -1,0 +1,23 @@
+[
+  {
+    "input_frame": 10,
+    "protocol_frame": 10,
+    "target_last_seen_s": 100.0
+  },
+  {
+    "input_frame": 11,
+    "reason": "approach_range_realign",
+    "target_center_x": 563,
+    "protocol_frame": 10,
+    "action_id": 31,
+    "target_last_seen_s": 100.0
+  },
+  {
+    "input_frame": 12,
+    "reason": "approach_range_realign",
+    "target_center_x": 563,
+    "protocol_frame": 10,
+    "action_id": 31,
+    "target_last_seen_s": 100.0
+  }
+]

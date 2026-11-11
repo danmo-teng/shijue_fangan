@@ -1,0 +1,27 @@
+Latest formal match, analysis only (2026-11-11)
+Source snapshot: /tmp/competition_20261111_latest_analysis_dso6dj1i
+Upper run: 7a51678b87be13a873a8a9546b38e5c38e81684b, including97235a3.
+Round token: 4d5a2f9f344205d1a8b54bf53139d4a7.
+SDK session: 433679539834ec77fcafcf5e89a77c88.
+Localization history: rescue_map/runtime/history/competition_wheel_input/20261111_111630_competition_wheel.
+
+Latest false sweep is own injured_orange834, not safe-zone resident832.
+- Event lines886/891/895/897/899/901: arrival2093.927 -> audit complete2094.998 -> acquire2096.082 -> visual align2096.193 -> corridor2096.261 -> ENTER2096.341 (seconds, event timestamps).
+- Sidecar clip10/video100/frame9093 capture2096.519562912: STMmode10 flags86, pitch12000, closed=true. Own cargo834 bbox466,470,442,330; foot687,800. Safe-zone resident832 bbox566,0,150,66 is correctly inside the detected safe box40,0,916,124 and excluded.
+- Event904/905/906 at2096.700/2096.701 selects injured_orange and changes ENTER to CLEAR. Actual lower mode39/command19 accepted in event907. No evidence of a real floor obstacle in the inspected frame.
+- Original140-degree audit819 bbox373,254,463,270; at9065 the same819 remains visible in the real120-degree view bbox491,488,463,309, so current code updates its bbox/pitch anchor to12000.819 then suffers repeated missed detections and vanishes. New834 appears only after ENTER began.
+- Existing helper only supports oldpitch14000 -> newpitch12000 and excludes ENTER_SAFE_ZONE. It therefore cannot re-associate834. The old near-field bbox exception also fails, because foot800 is above819; do not fix by simply changing819.
+- Offline sampled-sidecar reconstruction using original Track/ROI and current make_vision_snapshot reproduced CLEAR through9087 and BLOCKED834 at9093.834 is inside the current120 platform footprint and actual-position overlap with retained120 box is0.8834018922/0.9006479482, both above the existing0.60 threshold. See carry_snapshot_recalc.json.
+- Minimum proposed change, not implemented: retain current cross-angle case; while existing gripper flag remains closed and cargo has not been released, extend re-identification to120 ->120 and initial ENTER. Same-angle matching must use overlap at the actual image positions, not center-aligned shape only; keep manifest class/count, unique complete set, known visible IDs preferred, and platform evidence. More than one plausible match does not choose arbitrary cargo. CLEAR and opened-gripper lifecycle must keep its current prohibition; genuinely separate same-class floor objects remain obstacles. No new delay/age check/handshake or lower interface needed.
+-97235a3 is not simply absent: this run first green audit103 at140deg(frame1559 bbox690,251,258,236) becomes136 at120deg(frame1580 bbox370,520,245,257), foot492.5,777, and first delivery proceeds without a sweep. The new last-trip failure is same-angle disappearance/reappearance rather than that original cross-angle case.
+
+Staging waits (details safe_zone_phase_durations.json)
+Eight arrival->ENTER totals:8.612,1.798,3.277,2.068,2.047,6.629,1.987,2.415s.
+The eight corridor-check states total0.504s. They are not the multi-second bottleneck.
+First ACQUIRE5.334s:42 sampled10Hz rows,15 have raw safe_red. Existing120deg boxes touch image top(y0), height87..89px, scores mostly0.20..0.35. A single raw missed detection resets the three-consecutive-real-frame collection (state_machine4177..4197). At event110 after5.026s it requests existing115deg re-view. Shortly after, boxy17/23,height152..155,score0.82..0.87; freeze completes rapidly.
+Sixth ACQUIRE4.162s:34 sampled rows,9 raw safe_red;120deg y0,height97px and frequent real misses; it eventually gets a three-frame run before5s.
+Counterexample: fast trips2/3/4 also have y0 and height87..92px, so y0 alone is not a selective abnormality criterion. Always lifting on y0 would effectively change most trips to115deg.
+Minimum event-driven optimization option: after a real clipped box has been seen, if a subsequent real miss breaks the existing three-frame sequence, immediately invoke the existing once-only115deg re-view instead of waiting five seconds. Preserve three real frames after the camera move and the corridor check. No new age gate/time window/extra confirmation count. Review115deg carried-object geometry from this run before expanding its identity logic; the prior fix deliberately had no verified115deg footprint.
+Each transport audit is0.876..1.071s(total7.762s); current RDK state_machine1943..1967 adds a fixed250ms after ready and a capture-frame floor, plus existing100ms audit interframe/span. Do not attribute the entire1s to250ms or remove claw checks without examining actual lower settle and camera/exposure synchronization. Exact subcomponents require the lower-side/state timeline review.
+
+No code/config/raw logs changed. No devices/UART/SDK/motors started. Only derived /tmp artifacts and offline snapshot calculations.

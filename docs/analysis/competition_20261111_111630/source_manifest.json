@@ -1,0 +1,44 @@
+{
+  "competition_events.jsonl": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/competition_events.jsonl",
+    "sha256": "330a015441dd9bebb2678de2d5fa10a98333186e7134c52da5bc12f51ae0b0ed",
+    "size": 466890,
+    "mtime": "2026-11-11T11:23:43.681411"
+  },
+  "competition_detections.jsonl": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/competition_detections.jsonl",
+    "sha256": "c130a08eb908e6f9ad107ebb4b35bc870cd62a09c311f4ce911509c776f71dfa",
+    "size": 4716817,
+    "mtime": "2026-11-11T11:23:42.151428"
+  },
+  "competition_diagnostics.json": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/competition_diagnostics.json",
+    "sha256": "d8dacd6fb624c8bed7ed2c90f6d704cc2e1d8ef170ba74320677bec5652172d5",
+    "size": 9591,
+    "mtime": "2026-11-11T11:23:42.261427"
+  },
+  "competition_logging_status.json": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/competition_logging_status.json",
+    "sha256": "11c6c45f55c9b311928d8cf63007a49666a7d94d1717150f01f5f4cbf9897d5d",
+    "size": 227,
+    "mtime": "2026-11-11T11:23:43.711410"
+  },
+  "session.json": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/session.json",
+    "sha256": "65eb5fd768b4aa5cf2c19d7cc026e73c83a031c12bfbbaaea2478d3d573a9426",
+    "size": 5156,
+    "mtime": "2026-11-11T11:16:48.543390"
+  },
+  "stm32_status.json": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/stm32_status.json",
+    "sha256": "c0181dbd4fe9f1d934f5322b5c5c51f7de886b26d67c6090aba45844a2be340d",
+    "size": 635,
+    "mtime": "2026-11-11T11:23:43.981407"
+  },
+  "startup_events.jsonl": {
+    "source": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/startup_events.jsonl",
+    "sha256": "f7734da220b14066ee1c42cf718e2b2816a743e7b16edecd78217a53b9820906",
+    "size": 62018,
+    "mtime": "2026-11-11T11:16:48.553390"
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "event_time_basis": "event timestamp_monotonic_ns; does not claim physical servo timing",
+  "columns": [
+    "TRANSPORT_AUDIT",
+    "ALIGN_SAFE_ZONE_BY_POSE",
+    "ACQUIRE_SAFE_ZONE",
+    "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+    "SAFE_ZONE_CORRIDOR_CHECK"
+  ],
+  "trips": [
+    {
+      "trip": 1,
+      "target_class": "green_supply",
+      "navigation_s": 4.043994174,
+      "arrival_monotonic_s": 1758.896237566,
+      "entry_monotonic_s": 1767.508723691,
+      "pre_entry_s": 8.612486125,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 0.952233568,
+        "ALIGN_SAFE_ZONE_BY_POSE": 2.21138449,
+        "ACQUIRE_SAFE_ZONE": 5.334341798,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.077452924,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.036501474
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 98,
+        "ALIGN_SAFE_ZONE_BY_POSE": 103,
+        "ACQUIRE_SAFE_ZONE": 107,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 111,
+        "SAFE_ZONE_CORRIDOR_CHECK": 113
+      }
+    },
+    {
+      "trip": 2,
+      "target_class": "green_supply",
+      "navigation_s": 4.290890333,
+      "arrival_monotonic_s": 1799.660472791,
+      "entry_monotonic_s": 1801.458170557,
+      "pre_entry_s": 1.797697766,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 0.941144385,
+        "ALIGN_SAFE_ZONE_BY_POSE": 0.626012507,
+        "ACQUIRE_SAFE_ZONE": 0.157756924,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.03845432,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.033412009
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 182,
+        "ALIGN_SAFE_ZONE_BY_POSE": 186,
+        "ACQUIRE_SAFE_ZONE": 190,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 192,
+        "SAFE_ZONE_CORRIDOR_CHECK": 194
+      }
+    },
+    {
+      "trip": 3,
+      "target_class": "green_supply",
+      "navigation_s": 4.171663927,
+      "arrival_monotonic_s": 1822.346171592,
+      "entry_monotonic_s": 1825.622678069,
+      "pre_entry_s": 3.276506477,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 0.989865296,
+        "ALIGN_SAFE_ZONE_BY_POSE": 0.716228545,
+        "ACQUIRE_SAFE_ZONE": 0.140569428,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 1.382003582,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.047489878
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 238,
+        "ALIGN_SAFE_ZONE_BY_POSE": 243,
+        "ACQUIRE_SAFE_ZONE": 246,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 248,
+        "SAFE_ZONE_CORRIDOR_CHECK": 251
+      }
+    },
+    {
+      "trip": 4,
+      "target_class": "green_supply",
+      "navigation_s": 3.805733178,
+      "arrival_monotonic_s": 1871.396215287,
+      "entry_monotonic_s": 1873.464289458,
+      "pre_entry_s": 2.068074171,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 1.01958834,
+        "ALIGN_SAFE_ZONE_BY_POSE": 0.658715771,
+        "ACQUIRE_SAFE_ZONE": 0.283353036,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.063728098,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.040621058
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 335,
+        "ALIGN_SAFE_ZONE_BY_POSE": 340,
+        "ACQUIRE_SAFE_ZONE": 343,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 345,
+        "SAFE_ZONE_CORRIDOR_CHECK": 348
+      }
+    },
+    {
+      "trip": 5,
+      "target_class": "green_supply",
+      "navigation_s": 0.073818049,
+      "arrival_monotonic_s": 1909.216458202,
+      "entry_monotonic_s": 1911.263138497,
+      "pre_entry_s": 2.046680295,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 0.953812537,
+        "ALIGN_SAFE_ZONE_BY_POSE": 0.930675705,
+        "ACQUIRE_SAFE_ZONE": 0.076528625,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.054563322,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.030742358
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 450,
+        "ALIGN_SAFE_ZONE_BY_POSE": 454,
+        "ACQUIRE_SAFE_ZONE": 458,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 460,
+        "SAFE_ZONE_CORRIDOR_CHECK": 462
+      }
+    },
+    {
+      "trip": 6,
+      "target_class": "injured_orange",
+      "navigation_s": 3.569252928,
+      "arrival_monotonic_s": 1955.267939045,
+      "entry_monotonic_s": 1961.896559573,
+      "pre_entry_s": 6.628620528,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 0.958373365,
+        "ALIGN_SAFE_ZONE_BY_POSE": 0.914552288,
+        "ACQUIRE_SAFE_ZONE": 4.162319402,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.409334694,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.183487489
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 549,
+        "ALIGN_SAFE_ZONE_BY_POSE": 554,
+        "ACQUIRE_SAFE_ZONE": 557,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 561,
+        "SAFE_ZONE_CORRIDOR_CHECK": 563
+      }
+    },
+    {
+      "trip": 7,
+      "target_class": "green_supply",
+      "navigation_s": 3.950952339,
+      "arrival_monotonic_s": 2024.485376482,
+      "entry_monotonic_s": 2026.472864121,
+      "pre_entry_s": 1.987487639,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 0.8757449,
+        "ALIGN_SAFE_ZONE_BY_POSE": 0.870320168,
+        "ACQUIRE_SAFE_ZONE": 0.12349605,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.065032809,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.050954425
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 698,
+        "ALIGN_SAFE_ZONE_BY_POSE": 702,
+        "ACQUIRE_SAFE_ZONE": 706,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 708,
+        "SAFE_ZONE_CORRIDOR_CHECK": 711
+      }
+    },
+    {
+      "trip": 8,
+      "target_class": "injured_orange",
+      "navigation_s": 4.408613498,
+      "arrival_monotonic_s": 2093.926795346,
+      "entry_monotonic_s": 2096.341342949,
+      "pre_entry_s": 2.414547603,
+      "phase_s": {
+        "TRANSPORT_AUDIT": 1.07143745,
+        "ALIGN_SAFE_ZONE_BY_POSE": 1.083353915,
+        "ACQUIRE_SAFE_ZONE": 0.111005302,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 0.067979023,
+        "SAFE_ZONE_CORRIDOR_CHECK": 0.080394084
+      },
+      "event_lines": {
+        "TRANSPORT_AUDIT": 886,
+        "ALIGN_SAFE_ZONE_BY_POSE": 891,
+        "ACQUIRE_SAFE_ZONE": 895,
+        "ALIGN_SAFE_ZONE_BY_LOCKED_BOX": 897,
+        "SAFE_ZONE_CORRIDOR_CHECK": 899
+      }
+    }
+  ]
+}

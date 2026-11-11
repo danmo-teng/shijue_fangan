@@ -1,0 +1,1294 @@
+{
+  "time_basis": "seconds since competition_started timestamp1710055084207ns",
+  "source_snapshot": "/tmp/competition_20261111_latest_analysis_dso6dj1i",
+  "approach_locks": 34,
+  "accept_status_observed": 34,
+  "accept_status_delay_ms": {
+    "median": 35.708899000155725,
+    "max": 263.2476709998173
+  },
+  "search_count": 34,
+  "search_duration_s": 13.933518203000858,
+  "search_max_s": 1.46098972100026,
+  "range_wait_count": 29,
+  "range_wait_failures": 11,
+  "range_wait_failure_total_s": 54.961471298000106,
+  "range_wait_success_median_s": 0.1807060134999574,
+  "approach_episodes": [
+    {
+      "event_line": 13,
+      "state": "INITIAL_APPROACH",
+      "start_s": 8.86043801300002,
+      "next_s": 19.823697659000118,
+      "next_state": "INITIAL_OBSERVE",
+      "accept_delay_ms": 43.00523000006251,
+      "accepted": {
+        "time_s": 8.903443243000083,
+        "line": 23667,
+        "mode": 20,
+        "pitch_cdeg": 10500,
+        "flags": 8,
+        "ack": 9,
+        "fault": 0,
+        "task": 48866,
+        "action": 14044,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 21,
+      "state": "INITIAL_APPROACH",
+      "start_s": 19.906183285999987,
+      "next_s": 22.010622383000054,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 37.247900000011214,
+      "accepted": {
+        "time_s": 19.943431185999998,
+        "line": 33884,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 71,
+        "fault": 0,
+        "task": 48867,
+        "action": 14045,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 58,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 35.93034581000006,
+      "next_s": 40.198043608000035,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 32.51456399993913,
+      "accepted": {
+        "time_s": 35.962860374,
+        "line": 48572,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 105,
+        "fault": 0,
+        "task": 48868,
+        "action": 14053,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 130,
+      "state": "APPROACH",
+      "start_s": 70.05128115900015,
+      "next_s": 75.83988280800008,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 51.1821569998574,
+      "accepted": {
+        "time_s": 70.10246331600001,
+        "line": 79347,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 98,
+        "fault": 0,
+        "task": 48869,
+        "action": 14067,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 141,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 76.39277485700018,
+      "next_s": 78.952055944,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 9.722409999994852,
+      "accepted": {
+        "time_s": 76.40249726700017,
+        "line": 85203,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 209,
+        "fault": 0,
+        "task": 48870,
+        "action": 14068,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 213,
+      "state": "APPROACH",
+      "start_s": 103.965340965,
+      "next_s": 106.77461969800015,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 36.58329300014884,
+      "accepted": {
+        "time_s": 104.00192425800014,
+        "line": 109619,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 72,
+        "fault": 0,
+        "task": 48871,
+        "action": 14084,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 269,
+      "state": "APPROACH",
+      "start_s": 128.69060099900003,
+      "next_s": 134.40206721699997,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 31.009496000024228,
+      "accepted": {
+        "time_s": 128.72161049500005,
+        "line": 131632,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 183,
+        "fault": 0,
+        "task": 48872,
+        "action": 14096,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 279,
+      "state": "APPROACH",
+      "start_s": 134.922353896,
+      "next_s": 140.75543703200015,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 39.190382000015234,
+      "accepted": {
+        "time_s": 134.96154427800002,
+        "line": 137296,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 26,
+        "fault": 0,
+        "task": 48873,
+        "action": 14097,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 290,
+      "state": "APPROACH",
+      "start_s": 141.302342231,
+      "next_s": 147.30574819699996,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 19.08925700013242,
+      "accepted": {
+        "time_s": 141.32143148800014,
+        "line": 143228,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 155,
+        "fault": 0,
+        "task": 48874,
+        "action": 14098,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 300,
+      "state": "APPROACH",
+      "start_s": 147.66639233700016,
+      "next_s": 153.59847748700008,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 15.261898999824552,
+      "accepted": {
+        "time_s": 147.68165423599999,
+        "line": 149466,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 255,
+        "fault": 0,
+        "task": 48875,
+        "action": 14099,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 311,
+      "state": "APPROACH",
+      "start_s": 154.14360761700004,
+      "next_s": 156.17120171500005,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 17.909182000039436,
+      "accepted": {
+        "time_s": 154.16151679900008,
+        "line": 155480,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 92,
+        "fault": 0,
+        "task": 48876,
+        "action": 14100,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 368,
+      "state": "APPROACH",
+      "start_s": 177.4888325720001,
+      "next_s": 183.16305895699998,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 13.342661000024236,
+      "accepted": {
+        "time_s": 177.50217523300012,
+        "line": 176240,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 58,
+        "fault": 0,
+        "task": 48877,
+        "action": 14112,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 378,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 183.70737140899996,
+      "next_s": 187.20564389000015,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 34.83450500016261,
+      "accepted": {
+        "time_s": 183.74220591400012,
+        "line": 182316,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 157,
+        "fault": 0,
+        "task": 48878,
+        "action": 14113,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 394,
+      "state": "APPROACH",
+      "start_s": 189.62984159999996,
+      "next_s": 190.26301145499997,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 58.523551999996926,
+      "accepted": {
+        "time_s": 189.68836515199996,
+        "line": 187745,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 228,
+        "fault": 0,
+        "task": 48879,
+        "action": 14116,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 404,
+      "state": "APPROACH",
+      "start_s": 191.01688620100003,
+      "next_s": 191.67457952600012,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 43.90885199995864,
+      "accepted": {
+        "time_s": 191.060795053,
+        "line": 189184,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 104,
+        "fault": 0,
+        "task": 48880,
+        "action": 14117,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 413,
+      "state": "APPROACH",
+      "start_s": 192.49757105000003,
+      "next_s": 193.7790911310001,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 3.507155000079365,
+      "accepted": {
+        "time_s": 192.5010782050001,
+        "line": 190378,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 244,
+        "fault": 0,
+        "task": 48881,
+        "action": 14118,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 426,
+      "state": "APPROACH",
+      "start_s": 194.9941635340001,
+      "next_s": 197.03799378999997,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 26.87691000005543,
+      "accepted": {
+        "time_s": 195.02104044400016,
+        "line": 192635,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 242,
+        "fault": 0,
+        "task": 48882,
+        "action": 14119,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 481,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 214.6524653680001,
+      "next_s": 215.50913290100016,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 48.07018299993615,
+      "accepted": {
+        "time_s": 214.70053555100003,
+        "line": 209514,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 106,
+        "fault": 0,
+        "task": 48883,
+        "action": 14131,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 489,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 216.0274983690001,
+      "next_s": 221.28990420000014,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 54.28366399996776,
+      "accepted": {
+        "time_s": 216.08178203300008,
+        "line": 210700,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 242,
+        "fault": 0,
+        "task": 48884,
+        "action": 14132,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 506,
+      "state": "APPROACH",
+      "start_s": 224.30305276700005,
+      "next_s": 230.39268943000002,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 57.558449999987715,
+      "accepted": {
+        "time_s": 224.36061121700004,
+        "line": 217763,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 26,
+        "fault": 0,
+        "task": 48885,
+        "action": 14135,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 517,
+      "state": "APPROACH",
+      "start_s": 230.91622566499996,
+      "next_s": 237.2520698610001,
+      "next_state": "SEARCH",
+      "accept_delay_ms": 44.120536000036736,
+      "accepted": {
+        "time_s": 230.960346201,
+        "line": 223902,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 170,
+        "fault": 0,
+        "task": 48886,
+        "action": 14136,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 524,
+      "state": "APPROACH",
+      "start_s": 237.29155837100006,
+      "next_s": 240.0789325400001,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 29.434623000042848,
+      "accepted": {
+        "time_s": 237.3209929940001,
+        "line": 229712,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 21,
+        "fault": 0,
+        "task": 48887,
+        "action": 14137,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 582,
+      "state": "APPROACH",
+      "start_s": 267.39062198500005,
+      "next_s": 270.35425619800003,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 49.24011899993275,
+      "accepted": {
+        "time_s": 267.439862104,
+        "line": 256550,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 146,
+        "fault": 0,
+        "task": 48888,
+        "action": 14149,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 629,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 286.16511981300005,
+      "next_s": 290.28232451400004,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 234.9744109999392,
+      "accepted": {
+        "time_s": 286.400094224,
+        "line": 273388,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 204,
+        "fault": 0,
+        "task": 48889,
+        "action": 14157,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 674,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 306.5362152280002,
+      "next_s": 309.360165092,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 263.2476709998173,
+      "accepted": {
+        "time_s": 306.799462899,
+        "line": 291567,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 134,
+        "fault": 0,
+        "task": 48890,
+        "action": 14165,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 730,
+      "state": "APPROACH",
+      "start_s": 329.894418372,
+      "next_s": 335.8679383580002,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 6.054111000139528,
+      "accepted": {
+        "time_s": 329.90047248300016,
+        "line": 311640,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 75,
+        "fault": 0,
+        "task": 48891,
+        "action": 14177,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 741,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 336.4047360700001,
+      "next_s": 339.4152926260001,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 36.85071199993217,
+      "accepted": {
+        "time_s": 336.44158678200006,
+        "line": 317760,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 202,
+        "fault": 0,
+        "task": 48892,
+        "action": 14178,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 758,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 342.60157265600014,
+      "next_s": 344.205064255,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 21.420870999918407,
+      "accepted": {
+        "time_s": 342.62299352700006,
+        "line": 323486,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 42,
+        "fault": 0,
+        "task": 48893,
+        "action": 14181,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 768,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 344.82711881499995,
+      "next_s": 348.2124412810001,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 12.817056000130833,
+      "accepted": {
+        "time_s": 344.8399358710001,
+        "line": 325591,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 250,
+        "fault": 0,
+        "task": 48894,
+        "action": 14182,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 783,
+      "state": "APPROACH",
+      "start_s": 351.6346458640003,
+      "next_s": 357.0322596799999,
+      "next_state": "WAIT_SEARCH_RECOVERY",
+      "accept_delay_ms": 44.361282999943796,
+      "accepted": {
+        "time_s": 351.6790071470002,
+        "line": 331791,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 158,
+        "fault": 0,
+        "task": 48895,
+        "action": 14185,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 796,
+      "state": "CLUSTER_APPROACH",
+      "start_s": 357.5842950130002,
+      "next_s": 362.2675611340003,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 34.734678999939206,
+      "accepted": {
+        "time_s": 357.61902969200014,
+        "line": 337219,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 231,
+        "fault": 0,
+        "task": 48896,
+        "action": 14186,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 812,
+      "state": "APPROACH",
+      "start_s": 364.6731248140002,
+      "next_s": 366.7787609479999,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 25.643640999987838,
+      "accepted": {
+        "time_s": 364.69876845500016,
+        "line": 343758,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 142,
+        "fault": 0,
+        "task": 48897,
+        "action": 14189,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 838,
+      "state": "APPROACH",
+      "start_s": 370.93964386899984,
+      "next_s": 373.4398973959999,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 59.00598700009141,
+      "accepted": {
+        "time_s": 370.99864985599993,
+        "line": 349414,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 3,
+        "fault": 0,
+        "task": 48898,
+        "action": 14194,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    },
+    {
+      "event_line": 862,
+      "state": "APPROACH",
+      "start_s": 376.205798961,
+      "next_s": 378.3898342099999,
+      "next_state": "CAPTURE_AUDIT",
+      "accept_delay_ms": 14.434074999826407,
+      "accepted": {
+        "time_s": 376.22023303599985,
+        "line": 354144,
+        "mode": 20,
+        "pitch_cdeg": 12000,
+        "flags": 8,
+        "ack": 6,
+        "fault": 0,
+        "task": 48899,
+        "action": 14199,
+        "command": 9,
+        "status": 1,
+        "rejected": 0
+      }
+    }
+  ],
+  "search_episodes": [
+    {
+      "start_s": 35.21068675100014,
+      "duration_s": 0.7196590589999232,
+      "event_line": 54,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": {
+        "time_s": 35.69036959599998,
+        "line": 392,
+        "frame": 1250,
+        "ids": [
+          90
+        ]
+      },
+      "first_h2": {
+        "time_s": 35.91393240299999,
+        "line": 394,
+        "frame": 1255
+      }
+    },
+    {
+      "start_s": 69.30032559000006,
+      "duration_s": 0.750955569000098,
+      "event_line": 127,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 69.92785632599998,
+        "line": 662,
+        "frame": 2008,
+        "ids": [
+          183
+        ]
+      },
+      "first_h2": {
+        "time_s": 70.03649735900012,
+        "line": 663,
+        "frame": 2011
+      }
+    },
+    {
+      "start_s": 76.30764698600001,
+      "duration_s": 0.08512787100016794,
+      "event_line": 138,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 103.07955800400009,
+      "duration_s": 0.8857829609999044,
+      "event_line": 209,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 103.91959479599996,
+        "line": 933,
+        "frame": 2776,
+        "ids": [
+          269,
+          272
+        ]
+      },
+      "first_h2": {
+        "time_s": 103.91959479599996,
+        "line": 933,
+        "frame": 2776
+      }
+    },
+    {
+      "start_s": 127.78812224500007,
+      "duration_s": 0.9024787539999579,
+      "event_line": 265,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 127.82279726800016,
+        "line": 1119,
+        "frame": 3295,
+        "ids": [
+          341
+        ]
+      },
+      "first_h2": {
+        "time_s": 127.82279726800016,
+        "line": 1119,
+        "frame": 3295
+      }
+    },
+    {
+      "start_s": 134.872815639,
+      "duration_s": 0.0495382569999947,
+      "event_line": 277,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 134.9083644530001,
+        "line": 1178,
+        "frame": 3456,
+        "ids": [
+          349,
+          350,
+          354,
+          355,
+          356
+        ]
+      },
+      "first_h2": {
+        "time_s": 134.9083644530001,
+        "line": 1178,
+        "frame": 3456
+      }
+    },
+    {
+      "start_s": 141.23908727399998,
+      "duration_s": 0.06325495700002648,
+      "event_line": 288,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 141.26139072700016,
+        "line": 1229,
+        "frame": 3607,
+        "ids": [
+          349,
+          350,
+          357,
+          358
+        ]
+      },
+      "first_h2": {
+        "time_s": 141.26139072700016,
+        "line": 1229,
+        "frame": 3607
+      }
+    },
+    {
+      "start_s": 147.54042845200001,
+      "duration_s": 0.12596388500014655,
+      "event_line": 297,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 147.58843347300012,
+        "line": 1280,
+        "frame": 3757,
+        "ids": [
+          349,
+          359,
+          360,
+          365
+        ]
+      },
+      "first_h2": {
+        "time_s": 147.58843347300012,
+        "line": 1280,
+        "frame": 3757
+      }
+    },
+    {
+      "start_s": 154.08421526000006,
+      "duration_s": 0.0593923569999788,
+      "event_line": 308,
+      "next_state": "APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 176.28936880800006,
+      "duration_s": 1.1994637640000292,
+      "event_line": 363,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 176.93148612200002,
+        "line": 1506,
+        "frame": 4350,
+        "ids": [
+          437
+        ]
+      },
+      "first_h2": {
+        "time_s": 176.93148612200002,
+        "line": 1506,
+        "frame": 4350
+      }
+    },
+    {
+      "start_s": 183.643493046,
+      "duration_s": 0.06387836299995797,
+      "event_line": 375,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 188.94758141500006,
+      "duration_s": 0.6822601849999046,
+      "event_line": 389,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 189.54612209200013,
+        "line": 1607,
+        "frame": 4631,
+        "ids": [
+          453
+        ]
+      },
+      "first_h2": {
+        "time_s": 189.54612209200013,
+        "line": 1607,
+        "frame": 4631
+      }
+    },
+    {
+      "start_s": 190.87796862899995,
+      "duration_s": 0.13891757200008215,
+      "event_line": 400,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 190.89985047100004,
+        "line": 1618,
+        "frame": 4665,
+        "ids": [
+          453
+        ]
+      },
+      "first_h2": {
+        "time_s": 190.89985047100004,
+        "line": 1618,
+        "frame": 4665
+      }
+    },
+    {
+      "start_s": 192.17188401900012,
+      "duration_s": 0.3256870309999158,
+      "event_line": 410,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 192.27819645299996,
+        "line": 1629,
+        "frame": 4698,
+        "ids": [
+          453
+        ]
+      },
+      "first_h2": {
+        "time_s": 192.27819645299996,
+        "line": 1629,
+        "frame": 4698
+      }
+    },
+    {
+      "start_s": 194.33253069800003,
+      "duration_s": 0.6616328360000807,
+      "event_line": 421,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 194.37368010199998,
+        "line": 1646,
+        "frame": 4747,
+        "ids": [
+          455
+        ]
+      },
+      "first_h2": {
+        "time_s": 194.37368010199998,
+        "line": 1646,
+        "frame": 4747
+      }
+    },
+    {
+      "start_s": 213.48519665100002,
+      "duration_s": 1.16726871700007,
+      "event_line": 477,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": {
+        "time_s": 214.13163858100006,
+        "line": 1803,
+        "frame": 5186,
+        "ids": [
+          498
+        ]
+      },
+      "first_h2": {
+        "time_s": 214.13163858100006,
+        "line": 1803,
+        "frame": 5186
+      }
+    },
+    {
+      "start_s": 215.99288431000014,
+      "duration_s": 0.034614058999977715,
+      "event_line": 487,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 224.261632017,
+      "duration_s": 0.04142075000004297,
+      "event_line": 504,
+      "next_state": "APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 230.87147296500007,
+      "duration_s": 0.044752699999889956,
+      "event_line": 514,
+      "next_state": "APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 237.2520698610001,
+      "duration_s": 0.03948850999995557,
+      "event_line": 522,
+      "next_state": "APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 266.20546946800005,
+      "duration_s": 1.185152517000006,
+      "event_line": 578,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 266.263726271,
+        "line": 2222,
+        "frame": 6379,
+        "ids": [
+          572
+        ]
+      },
+      "first_h2": {
+        "time_s": 267.0042131360001,
+        "line": 2228,
+        "frame": 6396
+      }
+    },
+    {
+      "start_s": 276.79849121100006,
+      "duration_s": 0.12787400299998808,
+      "event_line": 621,
+      "next_state": "RETURN_CENTER",
+      "first_visible": {
+        "time_s": 276.8996176170001,
+        "line": 2307,
+        "frame": 6612,
+        "ids": [
+          591,
+          593,
+          596
+        ]
+      },
+      "first_h2": {
+        "time_s": 276.8996176170001,
+        "line": 2307,
+        "frame": 6612
+      }
+    },
+    {
+      "start_s": 286.12621703600007,
+      "duration_s": 0.038902776999975686,
+      "event_line": 627,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 295.92605645000003,
+      "duration_s": 0.013020550999954139,
+      "event_line": 666,
+      "next_state": "RETURN_CENTER",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 306.47157650500003,
+      "duration_s": 0.06463872300014373,
+      "event_line": 672,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": {
+        "time_s": 306.4864275120001,
+        "line": 2544,
+        "frame": 7266,
+        "ids": [
+          674,
+          717,
+          718,
+          721,
+          722,
+          723
+        ]
+      },
+      "first_h2": {
+        "time_s": 306.4864275120001,
+        "line": 2544,
+        "frame": 7266
+      }
+    },
+    {
+      "start_s": 328.68906040800016,
+      "duration_s": 1.2053579639998588,
+      "event_line": 725,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 329.33423714900005,
+        "line": 2724,
+        "frame": 7763,
+        "ids": [
+          778,
+          779
+        ]
+      },
+      "first_h2": {
+        "time_s": 329.6075774210001,
+        "line": 2726,
+        "frame": 7769
+      }
+    },
+    {
+      "start_s": 336.36889035600007,
+      "duration_s": 0.03584571400006098,
+      "event_line": 738,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 341.1405829349999,
+      "duration_s": 1.46098972100026,
+      "event_line": 751,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": {
+        "time_s": 341.6558082940003,
+        "line": 2821,
+        "frame": 8042,
+        "ids": [
+          793
+        ]
+      },
+      "first_h2": {
+        "time_s": 341.78391060499985,
+        "line": 2822,
+        "frame": 8045
+      }
+    },
+    {
+      "start_s": 344.7557646739999,
+      "duration_s": 0.0713541410000289,
+      "event_line": 766,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": {
+        "time_s": 344.79693837900027,
+        "line": 2846,
+        "frame": 8120,
+        "ids": [
+          799
+        ]
+      },
+      "first_h2": {
+        "time_s": 344.79693837900027,
+        "line": 2846,
+        "frame": 8120
+      }
+    },
+    {
+      "start_s": 350.21295239899996,
+      "duration_s": 1.4216934650003168,
+      "event_line": 778,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 351.43103436900014,
+        "line": 2898,
+        "frame": 8271,
+        "ids": [
+          801
+        ]
+      },
+      "first_h2": null
+    },
+    {
+      "start_s": 357.53976731199987,
+      "duration_s": 0.044527701000333764,
+      "event_line": 794,
+      "next_state": "CLUSTER_APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 364.5559505130002,
+      "duration_s": 0.11717430099997728,
+      "event_line": 809,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 364.5944552450003,
+        "line": 3006,
+        "frame": 8594,
+        "ids": [
+          805
+        ]
+      },
+      "first_h2": null
+    },
+    {
+      "start_s": 370.9040155549999,
+      "duration_s": 0.03562831399995048,
+      "event_line": 836,
+      "next_state": "APPROACH",
+      "first_visible": null,
+      "first_h2": null
+    },
+    {
+      "start_s": 376.13597880700013,
+      "duration_s": 0.06982015399989905,
+      "event_line": 860,
+      "next_state": "APPROACH",
+      "first_visible": {
+        "time_s": 376.1663356480001,
+        "line": 3098,
+        "frame": 8866,
+        "ids": [
+          810
+        ]
+      },
+      "first_h2": {
+        "time_s": 376.1663356480001,
+        "line": 3098,
+        "frame": 8866
+      }
+    }
+  ]
+}

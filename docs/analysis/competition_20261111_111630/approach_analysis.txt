@@ -1,0 +1,33 @@
+最新正式场选目标／对齐等待分析（只读）
+
+1. 最主要的问题与数量
+赛局competition_started=单调时刻1710.055084207s；以下均减去它。本场29次进入mode52，18次成功进入mode53，成功等待中位180.7ms；11次进入mode24，停留均4.979～5.040s，总计54.961s。不是所有数秒间隔都是YOLO慢：这些失败动作已经锁定且下位接受了。
+
+34段SEARCH合计13.934s，单段最长1.461s。34次锁定后的“锁定事件→接收已接受9且mode20状态”中位35.7ms，最大263.2ms。此为本地主机记录的状态到达差，不是物理运动启动或单向UART绝对延迟标定。
+
+2. 实例
+失败T48895/A14185：351.635s锁定（events:783），351.679s已接受9；351.980s进入mode52（uart_rx_native:332095），356.963s退出到mode24（:336634），随后357.499s回mode3（:337097）。
+期间352.525、354.585、356.622s上位均为approach_range_realign（events:786/788/790）。伤员ID802中心X=563.5/563.5/565px，hits=23/72/117且visible（detection:2907/2924/2940；前两条为最近已记录帧，检测日志10Hz抽样，非逐相机帧）。偏差75～76.5px大于当前64px阈值。499条实际wheel速度全部0，主yaw累计角变化0°，是车真实等待。
+
+成功对照T48876：154.461s进入mode52（uart:155738），154.702s进入mode53（:155919），仅241ms；定距完成后由下位抬相机，最终156.141s报mode21。这条从新图距离请求进入有限动作的接口本身正常。
+
+连续失败群：A14096 129.323～134.362；A14097 135.682～140.722；A14098 141.981～146.962；A14099 148.523～153.561。每次约5秒停52再恢复重选。
+
+3. 已定位的上位源帧身份冻结
+state_machine.py:1632在mode52取当前真实target，1644～1653偏离640±64px时发普通像素APPROACH，却不调用_mark_target_seen。常规靠近1742会更新它。
+run_competition_rescue.py:1593～1601仅target_last_seen_s改变才更新protocol_vision_frame。因此有新图、新坐标，协议中的视觉帧身份仍停在最后一次普通APPROACH的帧。
+
+已复用当前真实_range_approach_output和从现有AST提取的原_publish函数做无设备离线复现：输入frame10初始，再输入真实形状frame11、12；两次均产生approach_range_realign，但输出protocol_frame仍为10，action_id保持31，target_last_seen_s仍100。未改生产代码/新建测试框架；仅内存写帧替身，结果见derived_frame_identity_reproduction.json。这是软件行为复现，不是现场精度验证。
+
+4. F405已有功能，不需为这个问题新增固件功能
+实际自报e85c738/dirty1；只读取得e85c738 Task.c，不能把GitHub源码等同dirty烧录二进制。基线源码/tmp/f405_e85c738_Task.c:5621～5627已有非cluster的RANGE_WAIT接收新视觉后重回TRACK；6196～6198要求command_visual_new。上位冻结帧正好使此条件无法成立。2509～2513在RANGE_WAIT明确Motor_Stop；6365～6378现有5秒超时转24，与UART真实行为一致。
+
+最小候选：在mode52的真实可见target像素纠偏支路沿用_mark_target_seen，使_publish输出当前实际frame_sequence，保留同一业务action、64px阈值、原地对准和有限定距动作。不增握手/等待/保护，不改下位机，不用放宽阈值盲目前冲掩盖。另一种显式source_vision_frame贯穿普通像素发布也可做，但改动面更大，本轮不优先。待用户批准后实施。
+
+5. 其它间隔边界
+search_target_confirm_frames默认1（state_machine:506/1375～1395），普通批次hits>=2（2944～2984）；并没有默认等很多稳定帧。画面有框仍可能是历史misses、在安全区、危险类或未够2hits。返中mode3+相机120°+新帧交接在5460～5479；当前0.30s视觉条件在2832～2842，本场没有SEARCH/STALE拒绝，不能据此认定它造成55秒空等，也不建议新年龄门。
+18次成功定距后，140°相机运动中位0.419s，140°到夹内观察状态中位0.241s，合计0.660s；定距运动本身中位1.110s。初次开局20→52约5.16s为另一段实际对准，尚须独立分析，不以此次帧修复声称全解决。
+
+数据边界：位置/角度无独立地面真值；检测10Hz记录不等于每帧完整相机画面；状态回报间隔约60ms使接受时间量化；本报告不给绝对物理单向延迟或精度结论。原始日志、模型、配置、源码均未改，未连接设备/启动电机。
+
+派生文件：derived_statuses.json、derived_status_transitions.json含原始UART行号；derived_range_waits.json列全部29次mode52；derived_target_approach_analysis.json列锁定与SEARCH段；TARGET_APPROACH_ANALYSIS.md为扩展说明。
