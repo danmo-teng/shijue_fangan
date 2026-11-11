@@ -94,6 +94,10 @@ def test_async_diagnostics_coalesces_snapshots_and_disk_error_is_not_control_err
         planner = CompetitionPlanner(CompetitionMission(CompetitionSettings(side="red")),
             root / "pose", root / "stm", root / "command", root / "diagnostics.json", log, 50)
         for number in range(4):
+            planner.mission.first_common_delivered = True
+            planner.mission.first_green_visually_confirmed = number == 3
+            planner.mission.delivery_completion_basis = (
+                "delivery_visual_confirmed" if number == 3 else "delivery_visual_timeout")
             planner._diagnostics(CompetitionOutput(CompetitionState.SEARCH, None, str(number)),
                                  PoseSnapshot(), StmSnapshot(), VisionSnapshot(frame_sequence=number))
         assert writer.statistics()["pending_snapshots"] == 1
@@ -101,7 +105,10 @@ def test_async_diagnostics_coalesces_snapshots_and_disk_error_is_not_control_err
         assert not (root / "command").exists()
         release.set()
         assert not writer.close()["incomplete"]
-        assert json.loads((root / "diagnostics.json").read_text())["message"] == "3"
+        final = json.loads((root / "diagnostics.json").read_text())
+        assert final["message"] == "3"
+        assert final["first_common_delivered"] and final["first_green_visually_confirmed"]
+        assert final["delivery_completion_basis"] == "delivery_visual_confirmed"
 
         # A path whose parent is a file makes real background I/O fail.
         bad_parent = root / "not_a_directory"
@@ -810,6 +817,121 @@ def test_candidate_capture_roi_keeps_lateral_claw_cargo_and_excludes_floor():
     # The reported angle can precede the changed image. A non-ready capture
     # stays non-observable; candidate geometry cannot bypass that ownership.
     assert snapshot((right_core,), candidate, flags=2).capture_audit is None
+
+
+def test_safe_zone_membership_uses_live_contact_not_cached_bbox_area():
+    from types import SimpleNamespace
+    from state_machine import CargoBatch, cargo_in_front_region
+    from rescue_vision.models import TrackState
+
+    def track(track_id, class_name, bbox):
+        return SimpleNamespace(track_id=track_id, class_name=class_name, confidence=.96,
+            hits=12, misses=0, state=TrackState.CONFIRMED,
+            last_detection=SimpleNamespace(bbox=bbox, ground_xy_mm=None))
+
+    # Actual first-run frame14144: 97.5% of orange1160's box is over the
+    # old safe-zone colour, but its foot is outside:205 > 40+162.
+    safe = (503, 40, 773, 162)
+    front = track(1160, "injured_orange", (728, 84, 151, 121))
+    assert runner_module.bbox_overlap_ratio(front.last_detection.bbox, safe) > .97
+    front_cargo = runner_module.tracked_cargo((front,), safe)[0]
+    assert not front_cargo.inside_safe_zone
+    polygon = ((460, 0), (1279, 0), (1279, 1023), (460, 1023))
+    assert cargo_in_front_region(front_cargo, polygon, safe)
+
+    # Real supported inside objects retain the original per-class area gate;
+    # neither the contact boundary nor black's full-containment rule expands.
+    inside_green = track(1161, "green_supply", (700, 60, 100, 100))
+    inside_black = track(1162, "core_black", (900, 70, 90, 90))
+    boundary_green = track(1163, "green_supply", (700, 120, 100, 82))
+    partial_black = track(1164, "core_black", (480, 60, 100, 100))
+    values = runner_module.tracked_cargo((inside_green, inside_black, boundary_green,
+                                         partial_black), safe)
+    assert [item.inside_safe_zone for item in values] == [True, True, True, False]
+    assert not cargo_in_front_region(values[0], polygon, None)
+    assert not cargo_in_front_region(values[1], polygon, None)
+
+    # The very same rectangles are not independent inside evidence when the
+    # current safe bbox was not detected and only the old-angle cache remains.
+    mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    mission._select_batch(CargoBatch((1160,), ("injured_orange",), "injury"))
+    view = runner_module.make_vision_snapshot([], (front, inside_green),
+        SimpleNamespace(calibrated=False), safe,
+        StmSnapshot(mode=42, flags=12, camera_pitch_cdeg=11700), mission, 14144,
+        safe_zone_filter_blocked=True)
+    assert view.safe_zone_filter_blocked
+    assert not any(item.inside_safe_zone for item in view.cargo)
+
+    # First-run frame5436 contains one green already in the zone and another
+    # still on the carrying platform. Its bbox's 88.5% colour overlap alone
+    # must not establish first-delivery proof; the actual inside green stays.
+    delivery_safe = (53, 203, 1224, 656)
+    delivered = track(579, "green_supply", (472, 421, 176, 198))
+    held = track(583, "green_supply", (330, 658, 276, 227))
+    mission.state = CompetitionState.DELIVERY_VERIFY
+    mission._select_batch(CargoBatch((583,), ("green_supply",), "material"))
+    mission.carried_manifest = ("green_supply",)
+    mission.carried_total_count = 1
+    for expected_id, inside in ((583, False), (579, True)):
+        delivery = runner_module.make_vision_snapshot([], (delivered, held),
+            SimpleNamespace(calibrated=False), delivery_safe,
+            StmSnapshot(mode=10, flags=0, camera_pitch_cdeg=11500), mission, 5436,
+            recent_carried_track_ids=(expected_id,))
+        assert delivery.delivery_target_inside_safe_zone is inside
+        assert delivery.delivery_target_outside_safe_zone is not inside
+
+    # Joint path: real detector/Track geometry -> snapshot-derived inside and
+    # ground corridor -> full mission39/42 rebinding -> actual pixel command.
+    # The mode transitions here are offline inputs, not a physical UART run.
+    scenes = (
+        (4502, 335, "danger_cyan", (352, 4, 926, 245), 12000, False, (
+            (333, "green_supply", (476, 20, 98, 111)),
+            (334, "core_black", (758, 94, 76, 77)),
+            (335, "danger_cyan", (644, 155, 136, 155)),
+        )),
+        (14144, 1160, "injured_orange", (503, 40, 773, 162), 11700, True, (
+            (1160, "injured_orange", (728, 84, 151, 121)),
+            (1163, "danger_cyan", (897, 94, 101, 114)),
+            (1165, "danger_cyan", (563, 44, 86, 93)),
+        )),
+    )
+    for frame, target_id, target_class, safe_box, pitch, blocked, geometry in scenes:
+        for real_scene in (True, False):
+            m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+            m._select_batch(CargoBatch((700,), ("green_supply",), "material"))
+            m._start_safe_zone_clear(VisionSnapshot(frame_sequence=frame - 3,
+                safe_corridor_obstacle_class=target_class,
+                safe_corridor_obstacle_track_id=322,
+                safe_corridor_obstacle_bbox=(481, 106, 121, 138),
+                carried_reference_track_ids=(700,)), StmSnapshot(mode=11, age_ms=0), 1.)
+            records = tuple(track(item_id, name, box if real_scene or item_id != target_id
+                else (safe_box[0] + 100, safe_box[1] + 10, 100, 80))
+                for item_id, name, box in geometry)
+            p = PoseSnapshot(valid=True, x_m=.1, y_m=-.7, yaw_deg=270, age_ms=0)
+            for mode, scene_frame, now in ((39, frame - 2, 1.1),
+                                           (42, frame - 1, 1.2), (42, frame, 1.3)):
+                status = StmSnapshot(mode=mode, flags=6, age_ms=0, camera_pitch_cdeg=pitch)
+                snapshot = runner_module.make_vision_snapshot([], records,
+                    SimpleNamespace(calibrated=False), safe_box, status, m, scene_frame,
+                    # Negative geometry has a real current colour rectangle;
+                    # cached/unknown colour is never called confirmed inside.
+                    safe_zone_filter_blocked=blocked if real_scene else False,
+                    observed_s=now)
+                output = m.step(snapshot, p, status, now)
+                if mode == 42 and scene_frame == frame - 1:
+                    assert output.command.opcode == CMD_HOLD
+                    assert m.safe_sweep_pickup.target_id is None
+            target = next(item for item in snapshot.cargo if item.track_id == target_id)
+            if real_scene:
+                assert not target.inside_safe_zone
+                assert output.state == CompetitionState.CLEAR_SAFE_ZONE
+                assert output.command.opcode == CMD_APPROACH_TARGET
+                assert (output.command.arg_a, output.command.arg_b) == target.center_px
+                assert m.safe_sweep_pickup.target_id == target_id
+            else:
+                assert target.inside_safe_zone
+                assert output.command.opcode == CMD_HOLD
+                assert m.safe_sweep_pickup.target_id is None
 
 
 def test_detection_logging() -> None:
@@ -1856,14 +1978,17 @@ def test_incident_video_replay_and_log_only_timeout():
         planner = CompetitionPlanner(mission,root/'pose.json',root/'stm.json',root/'command.bin',
             root/'diagnostics.json',JsonlLog(root/'events.jsonl'),50.)
         planner.replay_event_sink = r.record_event
+        opening = CompetitionOutput(CompetitionState.INITIAL_OBSERVE, mission._hold(),
+            "已离开出发区，开始中心观察", event="start_clear")
         r.start()
         try:
             deadline=time.monotonic()+3
             while not (root/'vision_replay_manifest.json').exists() and time.monotonic()<deadline:time.sleep(.02)
-            for i in range(10):
+            for i in range(16):
                 image=np.full((128,192,3),(i*20,20,40),np.uint8)
-                if i in (4,6):
-                    planner._record_replay_event(a,p,s,VisionSnapshot(frame_sequence=i),1.+i*.13)
+                if i in (4,6,12):
+                    planner._record_replay_event(opening if i == 4 else a,p,s,
+                        VisionSnapshot(frame_sequence=i),1.+i*.13)
                 meta=dict(frame_sequence=i,capture_monotonic_ns=1_000_000_000+i*130_000_000,
                     source_size=[192,128],detections=[dict(bbox=[10,20,20,20],confidence=.8,**{'class':'green_supply'})],
                     pose=dict(x_m=.1,y_m=.2,yaw_deg=90,age_ms=float('inf')),stm=dict(mode=11,camera_pitch_cdeg=12000),
@@ -1875,10 +2000,14 @@ def test_incident_video_replay_and_log_only_timeout():
         finally:r.close()
         manifest=json.loads((root/'vision_replay_manifest.json').read_text())
         assert manifest['complete'] and manifest['error'] is None and manifest['dropped_frames']==0,manifest
-        assert len(manifest['clips'])==1
+        assert len(manifest['clips'])==2
         clip=manifest['clips'][0];rows=[json.loads(l) for l in (root/clip['frames']).read_text().splitlines()]
         assert [x['frame_sequence'] for x in rows]==[2,3,4,5,6,7,8]
         assert [event['vision_frame_sequence'] for event in clip['events']]==[4,6]
+        assert [event['event'] for event in clip['events']]==['start_clear','safe_zone_acquire_no_box']
+        assert clip['trigger']=='start_clear'
+        assert manifest['clips'][1]['trigger']=='safe_zone_acquire_no_box'
+        assert [event['vision_frame_sequence'] for event in manifest['clips'][1]['events']]==[12]
         assert clip['post_window_end_ns']==2_080_000_000
         assert manifest['pending_events']==[] and manifest['event_overflow_count']==0
         assert rows[0]['pose']['age_ms'] is None and rows[0]['seconds_from_trigger']<0

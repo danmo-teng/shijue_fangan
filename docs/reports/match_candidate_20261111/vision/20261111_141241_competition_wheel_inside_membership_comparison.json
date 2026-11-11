@@ -1,0 +1,776 @@
+{
+  "counts": {
+    "old_inside": 220,
+    "new_inside": 188
+  },
+  "changed": [
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0001.jsonl",
+      "frame": 2943,
+      "video_index": 48,
+      "state": "RETURN_CENTER",
+      "track": 224,
+      "cls": "danger_cyan",
+      "bbox": [
+        423,
+        228,
+        189,
+        198
+      ],
+      "safe": [
+        8,
+        0,
+        847,
+        421
+      ],
+      "blocked": false,
+      "ratio": 0.9747474747474747,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7230,
+      "video_index": 26,
+      "state": "TRANSPORT_AUDIT",
+      "track": 503,
+      "cls": "danger_cyan",
+      "bbox": [
+        230,
+        5,
+        95,
+        89
+      ],
+      "safe": [
+        86,
+        0,
+        878,
+        105
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 14000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7427,
+      "video_index": 43,
+      "state": "RETURN_CENTER",
+      "track": 515,
+      "cls": "injured_orange",
+      "bbox": [
+        756,
+        474,
+        297,
+        198
+      ],
+      "safe": [
+        27,
+        56,
+        1234,
+        607
+      ],
+      "blocked": false,
+      "ratio": 0.9545454545454546,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7435,
+      "video_index": 44,
+      "state": "RETURN_CENTER",
+      "track": 515,
+      "cls": "injured_orange",
+      "bbox": [
+        795,
+        319,
+        386,
+        218
+      ],
+      "safe": [
+        42,
+        27,
+        1226,
+        472
+      ],
+      "blocked": false,
+      "ratio": 0.8256880733944955,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7439,
+      "video_index": 45,
+      "state": "RETURN_CENTER",
+      "track": 515,
+      "cls": "injured_orange",
+      "bbox": [
+        732,
+        196,
+        300,
+        191
+      ],
+      "safe": [
+        41,
+        8,
+        1195,
+        363
+      ],
+      "blocked": false,
+      "ratio": 0.9162303664921466,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7443,
+      "video_index": 46,
+      "state": "RETURN_CENTER",
+      "track": 515,
+      "cls": "injured_orange",
+      "bbox": [
+        658,
+        129,
+        243,
+        166
+      ],
+      "safe": [
+        42,
+        9,
+        1035,
+        276
+      ],
+      "blocked": false,
+      "ratio": 0.9397590361445783,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7447,
+      "video_index": 47,
+      "state": "RETURN_CENTER",
+      "track": 515,
+      "cls": "injured_orange",
+      "bbox": [
+        651,
+        90,
+        221,
+        153
+      ],
+      "safe": [
+        35,
+        4,
+        1066,
+        231
+      ],
+      "blocked": false,
+      "ratio": 0.9477124183006536,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0004.jsonl",
+      "frame": 7458,
+      "video_index": 49,
+      "state": "RETURN_CENTER",
+      "track": 515,
+      "cls": "injured_orange",
+      "bbox": [
+        722,
+        78,
+        200,
+        144
+      ],
+      "safe": [
+        43,
+        1,
+        1069,
+        213
+      ],
+      "blocked": false,
+      "ratio": 0.9444444444444444,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4305,
+      "video_index": 45,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 320,
+      "cls": "green_supply",
+      "bbox": [
+        872,
+        0,
+        81,
+        56
+      ],
+      "safe": [
+        823,
+        0,
+        455,
+        175
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9100,
+      "video_index": 60,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 625,
+      "cls": "danger_cyan",
+      "bbox": [
+        657,
+        36,
+        86,
+        96
+      ],
+      "safe": [
+        435,
+        1,
+        843,
+        123
+      ],
+      "blocked": false,
+      "ratio": 0.9166666666666666,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9104,
+      "video_index": 61,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "track": 625,
+      "cls": "danger_cyan",
+      "bbox": [
+        658,
+        36,
+        85,
+        94
+      ],
+      "safe": [
+        431,
+        0,
+        847,
+        113
+      ],
+      "blocked": false,
+      "ratio": 0.8191489361702128,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9107,
+      "video_index": 62,
+      "state": "ENTER_SAFE_ZONE",
+      "track": 625,
+      "cls": "danger_cyan",
+      "bbox": [
+        658,
+        36,
+        86,
+        96
+      ],
+      "safe": [
+        428,
+        1,
+        850,
+        123
+      ],
+      "blocked": false,
+      "ratio": 0.9166666666666666,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9115,
+      "video_index": 63,
+      "state": "ENTER_SAFE_ZONE",
+      "track": 625,
+      "cls": "danger_cyan",
+      "bbox": [
+        636,
+        36,
+        85,
+        97
+      ],
+      "safe": [
+        416,
+        1,
+        841,
+        125
+      ],
+      "blocked": false,
+      "ratio": 0.9278350515463918,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9123,
+      "video_index": 65,
+      "state": "ENTER_SAFE_ZONE",
+      "track": 625,
+      "cls": "danger_cyan",
+      "bbox": [
+        599,
+        41,
+        92,
+        106
+      ],
+      "safe": [
+        348,
+        1,
+        890,
+        128
+      ],
+      "blocked": false,
+      "ratio": 0.8301886792452831,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8010,
+      "video_index": 27,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 563,
+      "cls": "injured_orange",
+      "bbox": [
+        244,
+        11,
+        171,
+        124
+      ],
+      "safe": [
+        0,
+        0,
+        502,
+        200
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8018,
+      "video_index": 29,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 563,
+      "cls": "injured_orange",
+      "bbox": [
+        637,
+        5,
+        151,
+        113
+      ],
+      "safe": [
+        37,
+        0,
+        894,
+        115
+      ],
+      "blocked": false,
+      "ratio": 0.9734513274336283,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8021,
+      "video_index": 30,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 563,
+      "cls": "injured_orange",
+      "bbox": [
+        640,
+        4,
+        155,
+        116
+      ],
+      "safe": [
+        40,
+        0,
+        912,
+        115
+      ],
+      "blocked": true,
+      "ratio": 0.9568965517241379,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8021,
+      "video_index": 30,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 566,
+      "cls": "green_supply",
+      "bbox": [
+        168,
+        0,
+        78,
+        49
+      ],
+      "safe": [
+        40,
+        0,
+        912,
+        115
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8021,
+      "video_index": 30,
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "track": 567,
+      "cls": "core_black",
+      "bbox": [
+        365,
+        13,
+        46,
+        42
+      ],
+      "safe": [
+        40,
+        0,
+        912,
+        115
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8029,
+      "video_index": 32,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "track": 563,
+      "cls": "injured_orange",
+      "bbox": [
+        640,
+        5,
+        155,
+        113
+      ],
+      "safe": [
+        33,
+        0,
+        895,
+        112
+      ],
+      "blocked": true,
+      "ratio": 0.9469026548672567,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8029,
+      "video_index": 32,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "track": 566,
+      "cls": "green_supply",
+      "bbox": [
+        168,
+        0,
+        75,
+        47
+      ],
+      "safe": [
+        33,
+        0,
+        895,
+        112
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8029,
+      "video_index": 32,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "track": 567,
+      "cls": "core_black",
+      "bbox": [
+        363,
+        11,
+        47,
+        43
+      ],
+      "safe": [
+        33,
+        0,
+        895,
+        112
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8038,
+      "video_index": 34,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "track": 568,
+      "cls": "danger_cyan",
+      "bbox": [
+        206,
+        134,
+        95,
+        89
+      ],
+      "safe": [
+        67,
+        58,
+        879,
+        151
+      ],
+      "blocked": false,
+      "ratio": 0.8426966292134831,
+      "pitch": 11500
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8042,
+      "video_index": 35,
+      "state": "ENTER_SAFE_ZONE",
+      "track": 568,
+      "cls": "danger_cyan",
+      "bbox": [
+        209,
+        134,
+        91,
+        89
+      ],
+      "safe": [
+        71,
+        58,
+        875,
+        151
+      ],
+      "blocked": false,
+      "ratio": 0.8426966292134831,
+      "pitch": 11500
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8046,
+      "video_index": 36,
+      "state": "ENTER_SAFE_ZONE",
+      "track": 568,
+      "cls": "danger_cyan",
+      "bbox": [
+        207,
+        136,
+        92,
+        90
+      ],
+      "safe": [
+        67,
+        61,
+        879,
+        150
+      ],
+      "blocked": false,
+      "ratio": 0.8333333333333334,
+      "pitch": 11500
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8204,
+      "video_index": 45,
+      "state": "RETURN_CENTER",
+      "track": 550,
+      "cls": "injured_orange",
+      "bbox": [
+        439,
+        334,
+        315,
+        208
+      ],
+      "safe": [
+        0,
+        126,
+        1205,
+        565
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8204,
+      "video_index": 45,
+      "state": "RETURN_CENTER",
+      "track": 563,
+      "cls": "injured_orange",
+      "bbox": [
+        456,
+        217,
+        261,
+        132
+      ],
+      "safe": [
+        0,
+        126,
+        1205,
+        565
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8403,
+      "video_index": 79,
+      "state": "APPROACH",
+      "track": 587,
+      "cls": "injured_orange",
+      "bbox": [
+        1260,
+        16,
+        18,
+        89
+      ],
+      "safe": [
+        807,
+        0,
+        471,
+        99
+      ],
+      "blocked": false,
+      "ratio": 0.9325842696629213,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8420,
+      "video_index": 82,
+      "state": "APPROACH",
+      "track": 579,
+      "cls": "danger_cyan",
+      "bbox": [
+        1013,
+        54,
+        79,
+        78
+      ],
+      "safe": [
+        845,
+        0,
+        433,
+        160
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8420,
+      "video_index": 82,
+      "state": "APPROACH",
+      "track": 589,
+      "cls": "green_supply",
+      "bbox": [
+        921,
+        0,
+        64,
+        59
+      ],
+      "safe": [
+        845,
+        0,
+        433,
+        160
+      ],
+      "blocked": true,
+      "ratio": 1.0,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8439,
+      "video_index": 85,
+      "state": "APPROACH",
+      "track": 579,
+      "cls": "danger_cyan",
+      "bbox": [
+        1109,
+        117,
+        121,
+        107
+      ],
+      "safe": [
+        884,
+        11,
+        394,
+        196
+      ],
+      "blocked": false,
+      "ratio": 0.8411214953271028,
+      "pitch": 12000
+    },
+    {
+      "session": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0005.jsonl",
+      "frame": 8447,
+      "video_index": 86,
+      "state": "APPROACH",
+      "track": 579,
+      "cls": "danger_cyan",
+      "bbox": [
+        1132,
+        136,
+        124,
+        114
+      ],
+      "safe": [
+        880,
+        16,
+        398,
+        212
+      ],
+      "blocked": false,
+      "ratio": 0.8070175438596491,
+      "pitch": 12000
+    }
+  ]
+}

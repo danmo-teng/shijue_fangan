@@ -365,11 +365,15 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
         inside = False
         if safe_bbox is not None:
             overlap_ratio = bbox_overlap_ratio(detection.bbox, safe_bbox)
+            x, y, width, height = detection.bbox
+            sx, sy, sw, sh = safe_bbox
+            foot_inside = (sx <= x + width * 0.5 <= sx + sw and
+                           sy <= y + height <= sy + sh)
             inside = (
                 overlap_ratio >= 1.0
                 if track.class_name == "core_black"
                 else overlap_ratio > 0.80
-            )
+            ) and foot_inside
         result.append(
             TrackedCargo(
                 track_id=track.track_id,
@@ -764,7 +768,11 @@ def make_vision_snapshot(
     recent_corridor_obstacle: TrackedCargo | None = None,
     recent_carried_pitch_cdeg: int = 0,
 ) -> VisionSnapshot:
-    cargo = tracked_cargo(tracks, safe_bbox)
+    # Cached colour rectangles can belong to the prior camera angle. They
+    # cannot establish a current object's support inside the zone. Current
+    # rectangle area plus its ground-contact proxy remains image evidence,
+    # not an independent semantic/ground-truth inside classification.
+    cargo = tracked_cargo(tracks, None if safe_zone_filter_blocked else safe_bbox)
     rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )
@@ -2262,6 +2270,7 @@ class CompetitionPlanner:
             "max_material_batch_count": self.mission.settings.max_batch_count,
             "initial_stash_done": self.mission.initial_stash_done,
             "first_common_delivered": self.mission.first_common_delivered,
+            "first_green_visually_confirmed": self.mission.first_green_visually_confirmed,
             "first_green_bump_used": self.mission.first_green_bump_used,
             "first_fault_code": self.mission.first_fault_code,
             "delivery_count": self.mission.delivery_count,
@@ -2363,7 +2372,7 @@ class CompetitionPlanner:
                 pass  # Failure to report diagnostics must not stop control.
 
     def _record_replay_event(self, output, pose, stm, vision, now: float) -> None:
-        if (output.event not in {"safe_zone_acquire_no_box", "load_empty_reobserve",
+        if (output.event not in {"start_clear", "safe_zone_acquire_no_box", "load_empty_reobserve",
                                  "safe_zone_entry", "safe_zone_clear_start"} or
                 self.replay_event_sink is None):
             return
@@ -3468,6 +3477,8 @@ def main() -> int:
             "state": mission.state.value,
             "delivery_count": mission.delivery_count,
             "first_common_delivered": mission.first_common_delivered,
+            "first_green_visually_confirmed": mission.first_green_visually_confirmed,
+            "delivery_completion_basis": mission.delivery_completion_basis,
             "first_fault_code": mission.first_fault_code,
             "exit_reason": exit_reason,
             "tx_policy": "termination_abort",
