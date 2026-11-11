@@ -29,7 +29,7 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 https://github.com/danmo-teng/shijue_fangan/blob/codex/match-prerepair-20261111/docs/reports/match_candidate_20261111/README.md
 ```
 
-下位相关候选仅针对mode39逆迹端点及42/43无效搜索出口，接收方先审当前实际源码与机构影响，人保留选择/拒绝权；不能见到补丁就自动应用。
+候选证据提交e45de52，批量上位源码b7f22fd。下位相关文本包含mode39逆迹端点、42/43有限取障出口、legacy HOLD/START一致性、两次仍堵后的成对寄存返中，以及用户本轮新提的首件后最多3件普通/核心与内部双推。每项可单独接受、缩小、替代或拒绝；接收方先审实际源码及机构影响，不能见补丁就自动应用。批量必须两端配对，55/86实物上下及二推300mm效果未验；首件现有阶段不等于实际得分证明。没有新增协议、时间门、反复握手或下位测试程序要求，未实施或烧录。
 本场下位实报e85c738/dirty1，不用main/expected代替实际，仓库e85参考也不保证等于dirty烧录字节。
 未完成大融合已暂停归档至docs/archive/robust_localization_20261111/README.md；下面旧RFC/请求仅按具体证据取用，不恢复成当前任务，也不要求重做已完成内容。
 
