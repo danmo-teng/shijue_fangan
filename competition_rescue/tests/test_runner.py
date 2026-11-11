@@ -2321,3 +2321,54 @@ def test_safe_zone_membership_uses_live_contact_not_cached_bbox_area():
                 assert target.inside_safe_zone
                 assert output.command.opcode == CMD_HOLD
                 assert m.safe_sweep_pickup.target_id is None
+
+
+def test_two_material_capture_keeps_full_count_and_existing_wire():
+    from collections import Counter
+    from state_machine import CargoBatch, TrackedCargo
+
+    items = (TrackedCargo(1, "green_supply", .9, (430, 420, 80, 100), hits=5),
+             TrackedCargo(2, "core_black", .9, (510, 420, 80, 100), hits=5))
+    audit = runner_module.audit_from_cargo(items, side_by_track={1: "left", 2: "left"})
+    assert audit.total_count == audit.left_count == 2 and audit.right_count == 0
+    assert audit.left_class == "mixed_material" and not audit.left_invalid
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    assert m._audit_valid(audit)
+    frame = m._audit_payload(audit).frame(7)
+    assert frame[6] == 6 and frame[7] == 0 and frame[8] == 2 and frame[11] == 2
+    m._latch_carried_manifest(audit)
+    assert m.carried_total_count == m.selected_batch.total_count == 2
+    assert Counter(m.carried_manifest) == Counter({"green_supply": 1, "core_black": 1})
+
+
+def test_two_material_delivery_confirmation_requires_both_known_items():
+    from types import SimpleNamespace
+    from state_machine import CargoBatch
+    from rescue_vision.models import TrackState
+
+    def track(track_id, name, bbox):
+        return SimpleNamespace(track_id=track_id, class_name=name, confidence=.95,
+            hits=8, misses=0, state=TrackState.CONFIRMED,
+            last_detection=SimpleNamespace(bbox=bbox, ground_xy_mm=None))
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1, 2), ("green_supply", "core_black"), "material"))
+    m.carried_manifest, m.carried_total_count = m.selected_batch.classes, 2
+    m.state = CompetitionState.DELIVERY_VERIFY
+    known = (track(1, "green_supply", (400, 300, 80, 100)),
+             track(2, "core_black", (540, 300, 80, 100)))
+    def view(tracks):
+        return runner_module.make_vision_snapshot([], tracks,
+            SimpleNamespace(calibrated=False), (0, 0, 1280, 700),
+            StmSnapshot(mode=15, flags=0, age_ms=0, camera_pitch_cdeg=12000), m, 100,
+            recent_carried_track_ids=(1, 2))
+    assert view(known).delivery_target_inside_safe_zone
+    assert not view(known[:1]).delivery_target_inside_safe_zone
+    for changed in (track(3, "core_black", (540, 300, 80, 100)),
+                    track(2, "injured_orange", (540, 300, 80, 100)),
+                    track(2, "core_black", (540, 750, 80, 100))):
+        assert not view(known[:1] + (changed,)).delivery_target_inside_safe_zone
+    m.carried_manifest, m.carried_total_count = ("green_supply",), 1
+    assert view(known[:1]).delivery_target_inside_safe_zone

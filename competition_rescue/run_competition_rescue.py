@@ -950,6 +950,16 @@ def make_vision_snapshot(
     )
     delivery_inside = bool(delivery_inside_ids)
     delivery_outside = bool(delivery_outside_ids)
+    if mission.carried_total_count > 1:
+        # A single surviving ID cannot prove that the whole audited batch
+        # entered. Keep the original observation timeout and exit behavior.
+        complete_batch = (
+            len(delivery_items) == mission.carried_total_count and
+            Counter(item.class_name for item in delivery_items) ==
+            Counter(mission.carried_manifest)
+        )
+        delivery_inside = (complete_batch and not delivery_outside and
+                           len(delivery_inside_ids) == mission.carried_total_count)
     danger, side = danger_ahead(cargo, approach_target)
     current_carried_bboxes = ()
     if (

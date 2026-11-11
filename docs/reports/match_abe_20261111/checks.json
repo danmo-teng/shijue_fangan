@@ -13,5 +13,62 @@
     "existing_regressions_passed": 2,
     "devices_opened": false,
     "ground_tested": false
+  },
+  "E": {
+    "baseline_failures_reproduced": 4,
+    "targeted_checks_passed": 5,
+    "existing_regressions_passed": 2,
+    "exact_C_upper_wire_cases_passed": 52,
+    "A_E_combined_patch_apply": true,
+    "full_firmware_built": false,
+    "ground_tested": false,
+    "raw_audit_rechecks": [
+      {
+        "session": "20261111_141241_competition",
+        "frame": 6087,
+        "post_first_phase": true,
+        "actual_total": 2,
+        "single_policy_valid": false,
+        "two_policy_valid": true
+      },
+      {
+        "session": "20261111_141241_competition",
+        "frame": 11427,
+        "post_first_phase": true,
+        "actual_total": 2,
+        "single_policy_valid": false,
+        "two_policy_valid": true
+      },
+      {
+        "session": "20000101_080032_competition_15",
+        "frame": 2017,
+        "post_first_phase": false,
+        "actual_total": 2,
+        "single_policy_valid": false,
+        "two_policy_valid": false
+      }
+    ]
+  },
+  "final": {
+    "checks_passed": [
+      "test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone",
+      "test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo",
+      "test_safe_zone_membership_uses_live_contact_not_cached_bbox_area",
+      "test_post_first_two_materials_follow_existing_grab_and_transport",
+      "test_two_material_policy_keeps_first_green_and_excludes_other_loads",
+      "test_two_material_capture_keeps_full_count_and_existing_wire",
+      "test_two_material_delivery_confirmation_requires_both_known_items",
+      "test_two_material_retrieval_keeps_actual_single_remaining",
+      "test_mode51_reference_audit_exits_and_budget",
+      "test_range_cumulative_and_transport_sort",
+      "test_transport_audit_continuing_frames_allow_delayed_relay_handoff"
+    ],
+    "syntax_files_passed": 4,
+    "protected_hashes_unchanged": 27,
+    "devices_opened": false,
+    "logs_deleted": false,
+    "firmware_built": false,
+    "board_written": false,
+    "existing_protocol_check_passed": true
   }
 }

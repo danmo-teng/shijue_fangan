@@ -1233,7 +1233,7 @@ def test_mode51_reference_audit_exits_and_budget() -> None:
     out = empty.step(observe(CargoAudit(), 8, 2.3), pose(), status(0, CMD_RETURN_CENTER, 3), 2.3)
     assert empty.disperse_attempts == 0 and not empty.recovery_task_locked
     assert empty.deferred_cluster_class == "green_supply" and empty.delivery_count == 4
-    invalid_audit = CargoAudit(left_class="green_supply", left_count=2, left_green_count=2, total_count=2)
+    invalid_audit = CargoAudit(left_class="green_supply", left_count=3, left_green_count=3, total_count=3)
     invalid = stable_audit(setup(), invalid_audit)
     out = invalid.step(observe(invalid_audit, 6, 2.02), pose(), status(1 | 64), 2.04)
     assert out.command.opcode == CMD_CARGO_AUDIT and invalid.state == CompetitionState.RECOVERY_WAIT
@@ -1435,7 +1435,7 @@ def test_range_cumulative_and_transport_sort() -> None:
     t.first_common_delivered = True
     t._select_batch(CargoBatch((1,), ("green_supply",), "material"))
     t._latch_carried_manifest(audit)
-    multi = replace(audit, left_count=2, left_green_count=2, total_count=2)
+    multi = replace(audit, left_count=3, left_green_count=3, total_count=3)
     status48 = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000)
     t._begin_transport_audit(VisionSnapshot(frame_sequence=1), pose(), status48, 3.0)
     for frame, now in ((2,3.3),(3,3.41)):
@@ -1833,3 +1833,133 @@ def test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo() -> No
         mission.step(replace(retrieve, frame_sequence=4507), pose(), stm(mode=44), 1.8)
         assert context.target_id == 700 and context.target_bbox == original_bbox
         assert context.recovering_original
+
+
+def test_post_first_two_materials_follow_existing_grab_and_transport() -> None:
+    from collections import Counter
+    from run_competition_rescue import audit_from_cargo
+    cases = ((("green_supply", "core_black"), ("left", "left")),
+             (("green_supply", "core_black"), ("left", "right")),
+             (("green_supply", "green_supply"), ("left", "right")),
+             (("core_black", "core_black"), ("right", "right")))
+    for names, sides, entry_mode in ((n, s, mode) for n, s in cases for mode in (21, 38)):
+        items = tuple(cargo(i + 1, name, 460 + 65 * i, 470) for i, name in enumerate(names))
+        audit = audit_from_cargo(items, side_by_track=dict(zip(range(1, len(items) + 1), sides)))
+        m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((1,), (names[0],), "material"))
+        m.state = CompetitionState.CAPTURE_AUDIT
+        assert m._audit_valid(audit)
+        m.cluster_audit_active = entry_mode == 38
+        status = replace(stm(mode=entry_mode, flags=1), camera_pitch_cdeg=14000)
+        for frame, now in ((1, 1.), (2, 1.12)):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+                                  capture_audit=audit)
+            out = m._audit_output(view, status, now)
+        assert out.command.opcode == CMD_CARGO_AUDIT and m.pending_audit_valid
+        if entry_mode == 38:
+            # The cluster audit is observed in38, then the board exposes37
+            # after accepting its stable audit. An ACK still in38 cannot
+            # authorize GRAB before the existing physical handoff.
+            still_auditing = replace(relay_stm(out, mode=38, flags=81),
+                                     camera_pitch_cdeg=14000)
+            waiting = m._audit_confirmation_output(view, still_auditing, 1.125)
+            assert waiting.state == CompetitionState.AUDIT_CONFIRM
+            assert waiting.command.opcode == CMD_CARGO_AUDIT
+        confirmation_mode = 37 if entry_mode == 38 else 21
+        acknowledged = replace(relay_stm(out, mode=confirmation_mode, flags=81),
+                               camera_pitch_cdeg=14000)
+        out = m._audit_confirmation_output(view, acknowledged, 1.13)
+        assert out.state == CompetitionState.GRAB and out.command.opcode == CMD_GRAB_CONFIRMED
+        assert m.disperse_attempts == 0
+        # Exercise the real mode23->22 handoff. Every actual item is bound;
+        # count is not reduced to the one SEARCH anchor track.
+        m._begin_post_grab_audit(view, 2.)
+        for frame, now in ((3, 2.), (4, 2.12), (5, 2.24)):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+                                  capture_audit=audit)
+            out = m._audit_output(view, replace(stm(mode=23, flags=3),
+                                               camera_pitch_cdeg=14000), now)
+        acknowledged = replace(relay_stm(out, mode=22, flags=83,
+            acknowledged_sequence=3, relay_mission_tx_frames=3),
+            camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+            accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        out = m._audit_confirmation_output(view, acknowledged, 2.25)
+        assert out.reason == "post_grab_audit_confirmed"
+        assert m.carried_total_count == len(names)
+        assert Counter(m.carried_manifest) == Counter(names)
+        assert m.selected_batch.total_count == len(names)
+        assert m.selected_batch.destination == "material"
+        assert m.carried_delivery_count() == len(names)
+        assert m.carried_delivery_classes() == frozenset(names)
+        # At mode48 the same legal batch aligns normally, never separates.
+        tx, ty = m._target_point()
+        staging_pose = PoseSnapshot(True, tx, ty, 270., 0.)
+        transport_status = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000)
+        view = VisionSnapshot(frame_sequence=6, observed_monotonic_s=3., capture_audit=audit)
+        m._begin_transport_audit(view, staging_pose, transport_status, 3.)
+        for frame, now in ((7, 3.12), (8, 3.24)):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now, capture_audit=audit)
+            out = m._transport_audit_output(view, staging_pose, transport_status, now)
+        acknowledged = replace(relay_stm(out, mode=48, flags=83,
+            acknowledged_sequence=4, relay_mission_tx_frames=4),
+            camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+            accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        out = m._transport_audit_output(view, staging_pose, acknowledged, 3.25)
+        assert out.reason == "transport_audit_valid" and m.disperse_attempts == 0
+        assert m.carried_total_count == len(names)
+
+
+def test_two_material_policy_keeps_first_green_and_excludes_other_loads() -> None:
+    from run_competition_rescue import audit_from_cargo
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    assert m.settings.max_batch_count == 2
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    def audited(names):
+        items = tuple(cargo(i + 1, name, 450 + 45 * i, 480) for i, name in enumerate(names))
+        return audit_from_cargo(items, side_by_track={item.track_id: "left" for item in items})
+    assert m._audit_valid(audited(("green_supply",)))
+    for names in (("green_supply", "green_supply"), ("green_supply", "core_black"),
+                  ("core_black",), ("injured_orange",)):
+        assert not m._audit_valid(audited(names))
+    m.first_common_delivered = True
+    assert m._audit_valid(audited(("injured_orange",)))
+    for names in (("green_supply",) * 3, ("injured_orange",) * 2,
+                  ("green_supply", "injured_orange"), ("green_supply", "danger_cyan")):
+        assert not m._audit_valid(audited(names))
+    legal = audited(("green_supply", "core_black"))
+    for invalid in (replace(legal, unknown_present=True), replace(legal, left_invalid=True),
+                    replace(legal, total_count=3), replace(legal, left_green_count=0)):
+        assert not m._audit_valid(invalid)
+    assert m._side_is_legal_for_task("mixed_material", 2)
+    assert not m._side_is_legal_for_task("injured_orange", 2)
+    for invalid_max in (0, 3):
+        try:
+            CompetitionSettings(side="red", max_batch_count=invalid_max)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("material batch must stay within one or two")
+
+
+def test_two_material_retrieval_keeps_actual_single_remaining():
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    m._latch_carried_manifest(CargoAudit(left_class="mixed_material", left_count=2,
+                                       left_green_count=1, total_count=2))
+    m.safe_sweep_reaudit_active = True
+    status = replace(stm(mode=23, flags=3), camera_pitch_cdeg=14000)
+    m._begin_post_grab_audit(VisionSnapshot(frame_sequence=1), 1.0)
+    actual = CargoAudit(right_class="core_black", right_count=1, total_count=1)
+    for frame, now in ((2, 1.01), (3, 1.13), (4, 1.25)):
+        view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+                              capture_audit=actual)
+        out = m._audit_output(view, status, now)
+    ack = replace(relay_stm(out, mode=40, flags=83, relay_mission_tx_frames=3),
+                  camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+                  accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    result = m._audit_confirmation_output(view, ack, 1.26)
+    assert result.reason == "safe_zone_clear_realign_start"
+    assert m.carried_manifest == ("core_black",)
+    assert m.carried_total_count == m.selected_batch.total_count == 1

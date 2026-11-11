@@ -1,0 +1,32 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -739,2 +739,2 @@
+-  if ((total != 1U) ||
++  if ((total == 0U) || (total > 2U) ||
+       ((uint8_t)(left_count + right_count) != total) ||
+@@ -742,4 +742,4 @@
+       ((right_count == 0U) != (right == VISION_CARGO_NONE)) ||
+-      (left == VISION_CARGO_MIXED_MATERIAL) ||
+-      (right == VISION_CARGO_MIXED_MATERIAL) ||
++      (left == VISION_CARGO_MIXED_MATERIAL && left_count < 2U) ||
++      (right == VISION_CARGO_MIXED_MATERIAL && right_count < 2U) ||
+       dangerous || unknown || injury_mixed) {
+@@ -759,4 +759,5 @@
+   }
+-  /* Formal transport is exactly one GREEN or CORE, never MIXED_MATERIAL.
+-   * Selection priority belongs to the host; a legal held CORE remains legal. */
++  /* Post-first material transport allows at most two GREEN/CORE objects.
++   * Class6 carries same-claw GREEN+CORE using the existing count fields.
++   * First GREEN, single casualty and the ordinary delivery motion stay unchanged. */
+   const bool material =
+@@ -765,6 +766,8 @@
+           (left == VISION_CARGO_GREEN) ||
+-          (left == VISION_CARGO_CORE)) &&
++          (left == VISION_CARGO_CORE) ||
++          (left == VISION_CARGO_MIXED_MATERIAL)) &&
+          ((right == VISION_CARGO_NONE) ||
+           (right == VISION_CARGO_GREEN) ||
+-          (right == VISION_CARGO_CORE));
++          (right == VISION_CARGO_CORE) ||
++          (right == VISION_CARGO_MIXED_MATERIAL));
+   return material ? AUDIT_SEMANTIC_MATERIAL_LEGAL :
