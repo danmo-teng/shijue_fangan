@@ -57,6 +57,7 @@ from run_yolo_x5 import (  # noqa: E402
 
 from protocol import (  # noqa: E402
     CMD_ABORT,
+    CMD_GRAB_CONFIRMED,
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
     CMD_PAUSE,
@@ -529,6 +530,90 @@ def safe_zone_corridor_polygon(safe_bbox, destination):
             (max(0, min(IMAGE_WIDTH - 1, left)), top))
 
 
+def carried_view_foot_polygon(camera_pitch_cdeg: int):
+    # The 120-degree replay shows the front carrying platform here (native
+    # 1280x1024 pixels, without the replay's 96-pixel header). This is not the
+    # much larger 140-degree capture-audit ROI or the forward push corridor.
+    # No 115-degree carrying view has been verified, so it keeps known IDs only.
+    if camera_pitch_cdeg == 12000:
+        return ((390, 735), (910, 735), (960, 895), (310, 895))
+    return ()
+
+
+def cargo_on_carrying_platform(item: TrackedCargo, camera_pitch_cdeg: int) -> bool:
+    polygon = carried_view_foot_polygon(camera_pitch_cdeg)
+    if not polygon:
+        return False
+    x, y, width, height = item.bbox
+    return cv2.pointPolygonTest(
+        np.asarray(polygon, dtype=np.float32),
+        (float(x + width * 0.5), float(y + height)), False,
+    ) >= 0
+
+
+def carried_boxes_shape_compatible(old_boxes, new_boxes) -> bool:
+    # Camera pitch moves a held object's image. Compare the boxes after only
+    # translating their centres together, using the existing 0.60 bidirectional
+    # overlap rule; do not mistake an arbitrary same-class floor box for cargo.
+    if len(old_boxes) != len(new_boxes) or not old_boxes:
+        return False
+
+    def compatible(first, second):
+        _, _, width_a, height_a = first
+        _, _, width_b, height_b = second
+        a = (-width_a / 2.0, -height_a / 2.0, width_a, height_a)
+        b = (-width_b / 2.0, -height_b / 2.0, width_b, height_b)
+        return (bbox_overlap_ratio(a, b) >= 0.60 and
+                bbox_overlap_ratio(b, a) >= 0.60)
+
+    matched_old = {}
+
+    def match(index, visited):
+        for old_index, old_box in enumerate(old_boxes):
+            if old_index in visited or not compatible(old_box, new_boxes[index]):
+                continue
+            visited.add(old_index)
+            if old_index not in matched_old or match(matched_old[old_index], visited):
+                matched_old[old_index] = index
+                return True
+        return False
+
+    return all(match(index, set()) for index in range(len(new_boxes)))
+
+
+def carried_ids_after_pitch_change(cargo, stm, mission, known_ids,
+                                   recent_carried_bboxes, recent_carried_pitch_cdeg):
+    # Rebind only the still-held, already audited load while preparing delivery.
+    # A sweep/release starts a different ownership lifecycle; matching its floor
+    # targets to the original manifest would hide real obstacles.
+    if (mission.state not in {
+            CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+            CompetitionState.ACQUIRE_SAFE_ZONE,
+            CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+            CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+        } or not stm.gripper_closed or
+            recent_carried_pitch_cdeg != 14000 or stm.camera_pitch_cdeg != 12000 or
+            not known_ids or not mission.carried_manifest or
+            mission.carried_total_count != len(mission.carried_manifest) or
+            len(recent_carried_bboxes) != mission.carried_total_count):
+        return known_ids
+    expected = Counter(mission.carried_manifest)
+    known_visible = [item for item in cargo if item.visible and item.track_id in known_ids]
+    if Counter(item.class_name for item in known_visible) == expected:
+        return known_ids
+    candidates = [item for item in cargo
+                  if item.visible and not item.inside_safe_zone and
+                  item.class_name in expected and
+                  cargo_on_carrying_platform(item, stm.camera_pitch_cdeg)]
+    # Every visible candidate of an expected class must be explained. With two
+    # possible greens for a one-green manifest, retain the old IDs, not a guess.
+    if (Counter(item.class_name for item in candidates) != expected or
+            not carried_boxes_shape_compatible(
+                recent_carried_bboxes, tuple(item.bbox for item in candidates))):
+        return known_ids
+    return {item.track_id for item in candidates}
+
+
 def safe_zone_push_corridor(
     cargo: tuple[TrackedCargo, ...],
     safe_bbox: tuple[int, int, int, int] | None,
@@ -663,6 +748,7 @@ def make_vision_snapshot(
     range_calibration: ApproachRangeCalibration | None = None,
     recent_carried_track_ids: tuple[int, ...] = (),
     recent_corridor_obstacle: TrackedCargo | None = None,
+    recent_carried_pitch_cdeg: int = 0,
 ) -> VisionSnapshot:
     cargo = tracked_cargo(tracks, safe_bbox)
     rois = capture_rois or load_capture_rois(
@@ -825,6 +911,10 @@ def make_vision_snapshot(
             (not expected_manifest or
              Counter(item.class_name for item in capture) == Counter(expected_manifest))):
         known_carried_ids = {item.track_id for item in capture}
+    known_carried_ids = carried_ids_after_pitch_change(
+        cargo, stm, mission, known_carried_ids,
+        recent_carried_bboxes, recent_carried_pitch_cdeg,
+    )
     exact_delivery_items = [
         item for item in cargo
         if item.visible and item.track_id in known_carried_ids
@@ -847,10 +937,21 @@ def make_vision_snapshot(
         mission.carried_total_count > 0 and
         len(delivery_items) == mission.carried_total_count and
         Counter(item.class_name for item in delivery_items) ==
-        Counter(mission.carried_manifest)
+        Counter(mission.carried_manifest) and
+        (stm.camera_pitch_cdeg not in {11500, 12000} or
+         (stm.camera_pitch_cdeg == 12000 and all(
+             cargo_on_carrying_platform(item, stm.camera_pitch_cdeg)
+             for item in delivery_items)))
     ):
         current_carried_bboxes = tuple(item.bbox for item in delivery_items)
-    carried_bbox_reference = current_carried_bboxes or recent_carried_bboxes
+    carried_bbox_reference = current_carried_bboxes or (
+        recent_carried_bboxes if recent_carried_pitch_cdeg == stm.camera_pitch_cdeg else ()
+    )
+    if mission.state == CompetitionState.CLEAR_SAFE_ZONE or not stm.gripper_closed:
+        # A sweep may have placed the original load on the ground. Keep its
+        # explicit IDs for the existing retrieve context, but do not identify
+        # an unknown floor track as held cargo from a stale overlapping box.
+        carried_bbox_reference = ()
     corridor_bbox = None if safe_zone_filter_blocked else safe_bbox
     corridor_destination = (
         mission.confirmed_delivery_destination or
@@ -1206,6 +1307,8 @@ class CompetitionPlanner:
         self.sweep_observation_key: tuple[int, int, bool] | None = None
         self.sweep_observation_started_s: float | None = None
         self.sweep_observation_start_pose: dict | None = None
+        self.sweep_rejection_identity: tuple[int, int, int] | None = None
+        self.sweep_rejection_modes: set[int] = set()
         self.termination_attempted = False
         self.termination_result: dict = {
             "attempted": False,
@@ -1651,22 +1754,38 @@ class CompetitionPlanner:
                 stm.mode in {23, 39, 42, 43, 44, 45}):
             return None
         pending = self.protocol_last_output.command
+        if pending is None or pending.opcode in {CMD_HOLD, CMD_PAUSE}:
+            return None  # An overlay is not a rejected mechanical request.
         if (pending is not None and stm.action_id == self.protocol_action and
                 stm.accepted_command == pending.opcode and stm.action_status & 1):
             # The MCU may reject a duplicate update while the accepted action
             # is already executing. Do not reset its pickup evidence in a loop.
             return None
+        identity = (stm.task_id, stm.rejected_action_id, stm.action_id)
+        if identity != self.sweep_rejection_identity:
+            self.sweep_rejection_identity = identity
+            self.sweep_rejection_modes.clear()
+        if stm.mode in self.sweep_rejection_modes:
+            return None
+        self.sweep_rejection_modes.add(stm.mode)
+        rejected_output = self.protocol_last_output
         self._adopt_recovery_context()
+        # HOLD keeps the accepted context while the original mode selects its
+        # next business command. It must not replace the rejected request's
+        # identity and make the same persistent rejection look new next cycle.
+        self.protocol_last_output = rejected_output
         current = replace(stm, context_matches=True)
         if stm.mode == 23:
             self.mission.safe_sweep_reaudit_active = True
             self.mission._begin_post_grab_audit(vision, now)
         else:
+            # Real mode/camera transitions already establish their own frame
+            # floor. Repeated status snapshots must not erase that evidence.
             pickup = self.mission.safe_sweep_pickup
-            if pickup is not None:
-                # Reset visual evidence, not the accepted CLEAR mechanics or
-                # the original load/obstacle identity.
-                pickup.mode = None
+            if (pickup is not None and pending.opcode == CMD_GRAB_CONFIRMED and
+                    stm.mode in {43, 45}):
+                # This GRAB never became an accepted action. Re-publish the
+                # existing audit without discarding its real visual evidence.
                 pickup.grab_started = False
                 pickup.audit_command = None
             self.mission.safe_sweep_command_accepted = True
@@ -2816,6 +2935,7 @@ def main() -> int:
     safe_zone_missing_frames = 0
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = ()
     recent_carried_track_ids: tuple[int, ...] = ()
+    recent_carried_pitch_cdeg = 0
     recent_corridor_obstacle: TrackedCargo | None = None
     corridor_memory_pitch = 0
     competition_started = False
@@ -2845,7 +2965,8 @@ def main() -> int:
     def prepare_operator_start():
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
-        nonlocal recent_carried_track_ids, recent_corridor_obstacle, corridor_memory_pitch
+        nonlocal recent_carried_track_ids, recent_carried_pitch_cdeg
+        nonlocal recent_corridor_obstacle, corridor_memory_pitch
         if operator_start_ready or operator_stopped or not args.wait_for_operator:
             return
         request = operator_start_request(args.operator_control,args.pose,args.reset_session_token)
@@ -2867,6 +2988,7 @@ def main() -> int:
         safe_zone_missing_frames = 0
         recent_carried_bboxes = ()
         recent_carried_track_ids = ()
+        recent_carried_pitch_cdeg = 0
         recent_corridor_obstacle = None
         corridor_memory_pitch = 0
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
@@ -3178,6 +3300,7 @@ def main() -> int:
                     range_calibration=range_calibration,
                     recent_carried_track_ids=recent_carried_track_ids,
                     recent_corridor_obstacle=recent_corridor_obstacle,
+                    recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
                 )
                 if (remember_corridor and latest_vision.safe_corridor_obstacle_class is not None):
                     recent_corridor_obstacle = TrackedCargo(
@@ -3193,10 +3316,15 @@ def main() -> int:
                     recent_carried_track_ids = ()
                 if not mission.carried_manifest:
                     recent_carried_bboxes = ()
+                    recent_carried_pitch_cdeg = 0
                 elif latest_vision.carried_reference_bboxes:
                     recent_carried_bboxes = (
                         latest_vision.carried_reference_bboxes
                     )
+                    # An angle report may precede the actual changed image.
+                    # Snapshot emits boxes only after this view's carrying
+                    # geometry matches, so the old 140-degree anchor survives.
+                    recent_carried_pitch_cdeg = stm.camera_pitch_cdeg
                 planner.set_vision(latest_vision)
                 if not warm_ready_written:
                     warm_ready_written = write_warm_status()
