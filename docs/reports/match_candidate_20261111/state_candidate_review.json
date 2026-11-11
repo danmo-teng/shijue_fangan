@@ -1,0 +1,73 @@
+{
+  "state_source_change": {
+    "files": [
+      "competition_rescue/state_machine.py",
+      "competition_rescue/tests/test_state_machine.py"
+    ],
+    "kind": "isolated undeployed candidate",
+    "search_policy": [
+      "First formal delivery remains one green.",
+      "After first delivered, one isolated casualty is eligible before a distant mixed-pile detour.",
+      "Use existing calibrated per-track approach distance bands shared by every compared candidate; fallback only to shared finite metric coordinates.",
+      "Prefer casualty if no farther than the nearest material. If distance cannot be compared, retain previous material priority.",
+      "A new priority never substitutes an already locked approach or carried manifest; non-isolated casualty still follows ordinary sorting."
+    ],
+    "tradeoff": "Range bands are coarse engineering calibration, not measured ground truth; equal-band priority optimizes score opportunities without claiming shortest physical path. Same-view singleton evidence cannot prove occluded cargo is absent; original claw review remains mandatory.",
+    "first_green_confirmation": "Two local markers: first_common_delivered retains original MCU-compatible TASK_COMPLETE phase; first_green_visually_confirmed is set only by the existing visual-confirmed outside-to-inside single-green result and only enables the added proactive isolated-orange priority. Missing proof retains original executable selection (green still first if present), without refusing an accidentally caught MCU-legal single black/orange. The first-green absolute-confirmation protocol risk remains unresolved and must not be called fixed.",
+    "front_region": "Sweep/corridor classify by bbox bottom-centre (contact proxy), retaining explicit inside_safe_zone and foot-in-safe exclusions. Frame4502 blue335 fixed. Original display colouring consumes same predicate; no display renderer change.",
+    "reviewed_rejected_variant": "Single-marker strict visual-only first_common_delivered was rejected BEFORE delivery: actual F405 would regard later black/orange as legal while RDK regarded it invalid, causing release/disperse refusal. No deployed code changed.",
+    "obstacle_view_rebinding": "At an actually observed non-retrieval mode39->42 transition, discard the pre-turn obstacle ID and image bbox; retain the obstacle class and original-cargo exclusions. Rebind from currently visible same-class front-floor candidates using the existing centre/area ranking, then retain the new ID within mode42. Mode44/45 original-load retrieval is unchanged. Actual old322 bbox brackets at frames4365/4368 reject new335 without this fix; full CLEAR->39->42->4502 sequence now emits APPROACH335.",
+    "obstacle_view_rebinding_tradeoff": "Same-class ground candidates after a chassis turn are not proof of physical identity; clearing any eligible obstacle of that class is an intentional candidate choice. Existing original IDs/inside/ground-region exclusions remain. A new-ID original load or camera-dependent inside flag is still an image-association risk to be reviewed with runner evidence."
+  },
+  "verification": {
+    "passed": [
+      "test_post_first_single_casualty_priority_uses_measured_bands",
+      "test_green_and_danger_claw_releases_without_authorizing_mixed_delivery",
+      "test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception",
+      "test_range_recheck_accepts_small_error_and_realigns_large_overshoot",
+      "test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps",
+      "test_first_green_priority_unlock_requires_actual_visual_confirmation",
+      "test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone",
+      "test_corridor_missed_obstacle_and_same_class_floor_object_are_not_load",
+      "test_same_view_carried_identity_survives_initial_entry_tracker_replacement",
+      "test_sweep_rejection_recovery_preserves_pickup_progress",
+      "test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo"
+    ],
+    "physical": "No UART, SDK, camera, motor, hardware or deployment started. Original logs unchanged.",
+    "scope": "Only targeted original test module and existing scene constructs; no new stand-alone test program."
+  },
+  "actual_lower_source": {
+    "sha": "e85c738075451574e4c29ea7da05daf5a8258b6b",
+    "path": "/tmp/match-prerepair-20261111/lower_e85c738/Task.c",
+    "findings": [
+      {
+        "line": 4999,
+        "behavior": "mode42 non-retrieval missing target rotates with no total turn/distance terminal; mode43 invalid audit after existing 3500ms returns42. Actual major long pauses also occur in39, not just42."
+      },
+      {
+        "line": 5116,
+        "behavior": "Existing empty-audit retry inside mode43 does not establish progress or return original parked cargo."
+      },
+      {
+        "line": 4500,
+        "behavior": "Reverse trace uses independent F405 Location wheel+gyro pose (not RDK T265/lidar control pose). Endpoint requires along-track crossing plus 20/30mm cross tolerance; remaining<=0 with cross error can keep commanding backward minimum20mm/s and cannot consume endpoint. Which actual subphase stalled is unobservable in the captured status contract."
+      },
+      {
+        "line": 4420,
+        "behavior": "trace_begin fabricates trace[0] at the pre-parking safe_center, not actual trace-start XY. Second-run reconstructed local Location differs by about35mm after parking; this synthetic final correction and actual observed tail near35mm are consistent with endpoint geometry stress, but no subphase readback proves it was the stalled branch."
+      }
+    ],
+    "boundary": "No new upper limit/timer/latch added; no false nonempty audit/GRAB invented. Existing protocol lacks upper command to skip a failed obstacle pickup and recover parked original cargo."
+  },
+  "latest_logs_scope": {
+    "green_blue": "Actual frame9436 in second replay is mode39 after obstacle grab with green+danger, not ordinary cargo auditing. Must not claim ordinary danger-release regression alone solves this long mechanical phase.",
+    "opening": "Both runs completed center observation, 140-degree audit and initial stash transport; missing opening continuous video prevents asserting a physical servo-angle fault from data.",
+    "first_green_markers": {
+      "first_run_first_finish_s": 70.5,
+      "first_run_basis": "delivery_visual_timeout",
+      "second_run_first_finish_s": 93.481,
+      "second_run_basis": "delivery_visual_confirmed"
+    },
+    "front_geometry_replay": "/tmp/match-prerepair-20261111/front_foot_predicate_replay.json"
+  }
+}

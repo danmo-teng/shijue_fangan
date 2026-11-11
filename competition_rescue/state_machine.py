@@ -138,7 +138,6 @@ def cargo_in_front_region(item: TrackedCargo, polygon: tuple[tuple[int, int], ..
     return point_in_polygon(foot, polygon)
 
 
-
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
@@ -658,6 +657,10 @@ class CompetitionMission:
         self.stash_zero_tx_baseline: int | None = None
         self.stash_handoff_hold_tx_baseline: int | None = None
         self.first_common_delivered = False
+        # TASK_COMPLETE advances the existing MCU phase even on a missed
+        # delivery observation. Keep that protocol phase separate from the
+        # image evidence used by the optional higher-value search preference.
+        self.first_green_visually_confirmed = False
         self.first_green_bump_used = False
         self.delivery_count = 0
         self.selected_batch: CargoBatch | None = None
@@ -2980,6 +2983,10 @@ class CompetitionMission:
         )
 
     def _choose_next_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
+        preferred_casualty = self._preferred_isolated_casualty(vision)
+        if preferred_casualty is not None:
+            return CargoBatch((preferred_casualty.track_id,),
+                              (preferred_casualty.class_name,), "injury")
         material = self._choose_material_batch(vision)
         if material is not None and material.classes == ("green_supply",):
             return material
@@ -3005,6 +3012,52 @@ class CompetitionMission:
         if casualty is not None:
             return CargoBatch((casualty.track_id,), (casualty.class_name,), "injury")
         return material
+
+    def _preferred_isolated_casualty(self, vision: VisionSnapshot) -> TrackedCargo | None:
+        """After the first delivery, prefer a reachable single casualty.
+
+        The existing measured range table provides distance bands; equal
+        bands may prefer the higher-value casualty, but never invent metric
+        depth from box area. Unknown comparisons keep the previous policy.
+        This is only a search decision, not permission to carry mixed cargo.
+        """
+        if not (self.first_common_delivered and self.first_green_visually_confirmed):
+            return None
+        visible = self._visible_cargo(vision)
+        isolated = [
+            item for item in visible
+            if item.class_name == "injured_orange" and item.hits >= 2 and
+            self._is_isolated(item, visible) and
+            # Mixed ground-coordinate availability must not make an image
+            # neighbour disappear from the singleton decision.
+            self._is_isolated(replace(item, relative_xy_m=None),
+                              (replace(other, relative_xy_m=None) for other in visible))
+        ]
+        if not isolated:
+            return None
+        materials = [item for item in visible
+                     if item.class_name in MATERIAL_CLASSES and item.hits >= 2]
+        if not materials:
+            return min(isolated, key=lambda item: (item.distance_m, -item.area_px,
+                                                  item.track_id))
+
+        # Compare only one representation shared by every candidate. The
+        # calibrated lookup is the normal live path; metric coordinates are
+        # a compatible fallback for calibrated callers and existing tools.
+        ranges = dict(vision.range_distances)
+        comparable = isolated + materials
+        if (vision.range_pitch_cdeg in {10500, 12000} and
+                all(item.track_id in ranges for item in comparable)):
+            distance = lambda item: ranges[item.track_id]
+        elif all(math.isfinite(item.distance_m) for item in comparable):
+            distance = lambda item: item.distance_m
+        else:
+            return None
+        candidate = min(isolated, key=lambda item: (distance(item), -item.area_px,
+                                                  item.track_id))
+        if distance(candidate) <= min(distance(item) for item in materials):
+            return candidate
+        return None
 
     def _pile_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
         cargo = [
@@ -3970,6 +4023,16 @@ class CompetitionMission:
             else STM_MODE_SAFE_SWEEP_AUDIT
         )
         role = "原物资找回（前进累计最多200 mm）" if context.recovering_original else "扫障取障"
+        if (not context.recovering_original and
+                context.mode == STM_MODE_SAFE_SWEEP and
+                stm.mode == STM_MODE_SAFE_SWEEP_APPROACH):
+            # mode39 parks the original cargo and turns the chassis before
+            # exposing mode42. Its old image coordinates and tracker ID are
+            # not a spatial prior in the new camera view (actual 322→335).
+            # Rebind only this obstacle role; original-cargo exclusions and
+            # the later mode44/45 retrieval identity remain unchanged.
+            context.target_id = None
+            context.target_bbox = None
         if context.grab_started and context.mode == stm.mode:
             return CompetitionOutput(
                 self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()),
@@ -4266,11 +4329,17 @@ class CompetitionMission:
         if not self.delivery_counted_for_batch:
             self.delivery_count += 1
             self.delivery_counted_for_batch = True
-        if (
-            self.carried_has_green or
-            (batch is not None and "green_supply" in batch.classes)
-        ):
+        if (self.carried_has_green or
+                (batch is not None and "green_supply" in batch.classes)):
+            # Preserve the phase shared with actual F405 TASK_COMPLETE. If
+            # only RDK treated a later single black/orange as illegal, MCU
+            # would reject the attempted release of its already-legal load.
             self.first_common_delivered = True
+        manifest = self.carried_manifest or (batch.classes if batch is not None else ())
+        count = self.carried_total_count or (batch.total_count if batch is not None else 0)
+        if (basis == "delivery_visual_confirmed" and self.delivery_visual_confirmed and
+                manifest == ("green_supply",) and count == 1):
+            self.first_green_visually_confirmed = True
         return CompetitionOutput(
             self.state,
             CommandRequest(CMD_TASK_COMPLETE, self._side_flags()),
@@ -5583,7 +5652,8 @@ class CompetitionMission:
                 )
             self._observe_search_candidate(None, vision)
         else:
-            if self._mixed_pile_requires_disperse(vision):
+            if (self._preferred_isolated_casualty(vision) is None and
+                    self._mixed_pile_requires_disperse(vision)):
                 if not self._observe_search_candidate(("mixed_pile",), vision):
                     return CompetitionOutput(
                         self.state,
@@ -6463,14 +6533,14 @@ class CompetitionMission:
         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
             assert self.safe_sweep_command is not None
             if stm.mode == STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED:
-                # F407 reports 46 only after opening and backing to the
+                # F405 reports 46 only after opening and backing to the
                 # staging point. This is an abandoned delivery, never DONE.
                 self._clear_search_recovery_context(vision, clear_carried=True)
                 self._reset_safe_zone_alignment()
                 self._reset_delivery_evidence()
                 self._begin_return(stm, now)
                 return replace(
-                    self._return_center_output(pose, now, "原物资200 mm内未找回，放弃本趟并返回场地中心"),
+                    self._return_center_output(pose, now, "扫障或原物资找回未完成，本趟未交付并返回场地中心"),
                     event="safe_sweep_retrieve_failed",
                     reason="safe_sweep_retrieve_failed_return",
                     expected_stm_modes=(STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED, STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH),

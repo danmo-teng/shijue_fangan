@@ -1,0 +1,792 @@
+{
+  "scope": "Actual captured replay frames, shared front-region predicate only; not a prediction of new physical sweep success",
+  "summary": {
+    "20261111_140243_competition_wheel": {
+      "counts": {
+        "checked": 365,
+        "newly_eligible": 14,
+        "class_core_black": 1,
+        "class_danger_cyan": 4,
+        "class_injured_orange": 9
+      },
+      "distinct_state_track_contexts": 8,
+      "examples": 7
+    },
+    "20261111_141241_competition_wheel": {
+      "counts": {
+        "checked": 349,
+        "newly_eligible": 15,
+        "class_danger_cyan": 15
+      },
+      "distinct_state_track_contexts": 8,
+      "examples": 8
+    }
+  },
+  "examples": [
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 5385,
+      "capture_ns": 299371250504,
+      "state": "ENTER_SAFE_ZONE",
+      "reason": "delivery_enter_safe_zone",
+      "pitch": 11500,
+      "mode": 10,
+      "track_id": 582,
+      "class": "core_black",
+      "confidence": 0.26124987645819786,
+      "bbox": [
+        373,
+        135,
+        56,
+        60
+      ],
+      "center": [
+        401.0,
+        165.0
+      ],
+      "foot": [
+        401.0,
+        195
+      ],
+      "safe_bbox": [
+        319,
+        33,
+        800,
+        153
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          719,
+          186
+        ],
+        [
+          319,
+          186
+        ]
+      ]
+    },
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "frame": 13970,
+      "capture_ns": 583755776569,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reason": "SAFE_CORRIDOR_UNAVAILABLE",
+      "pitch": 11500,
+      "mode": 11,
+      "track_id": 1141,
+      "class": "danger_cyan",
+      "confidence": 0.6805827773072346,
+      "bbox": [
+        388,
+        111,
+        97,
+        99
+      ],
+      "center": [
+        436.5,
+        160.5
+      ],
+      "foot": [
+        436.5,
+        210
+      ],
+      "safe_bbox": [
+        366,
+        39,
+        850,
+        142
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          791,
+          181
+        ],
+        [
+          366,
+          181
+        ]
+      ]
+    },
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "frame": 13979,
+      "capture_ns": 584040158097,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reason": "SAFE_CORRIDOR_UNAVAILABLE",
+      "pitch": 11500,
+      "mode": 11,
+      "track_id": 1141,
+      "class": "danger_cyan",
+      "confidence": 0.5134240732484915,
+      "bbox": [
+        390,
+        112,
+        95,
+        99
+      ],
+      "center": [
+        437.5,
+        161.5
+      ],
+      "foot": [
+        437.5,
+        211
+      ],
+      "safe_bbox": [
+        374,
+        39,
+        842,
+        142
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          795,
+          181
+        ],
+        [
+          374,
+          181
+        ]
+      ]
+    },
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "frame": 14133,
+      "capture_ns": 589445441431,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_zone_clear_mechanics_wait",
+      "pitch": 11500,
+      "mode": 39,
+      "track_id": 1160,
+      "class": "injured_orange",
+      "confidence": 0.6755092144012451,
+      "bbox": [
+        3,
+        165,
+        192,
+        119
+      ],
+      "center": [
+        99.0,
+        224.5
+      ],
+      "foot": [
+        99.0,
+        284
+      ],
+      "safe_bbox": [
+        8,
+        18,
+        632,
+        222
+      ],
+      "polygon": [
+        [
+          482,
+          1023
+        ],
+        [
+          798,
+          1023
+        ],
+        [
+          324,
+          240
+        ],
+        [
+          8,
+          240
+        ]
+      ]
+    },
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "frame": 14165,
+      "capture_ns": 590567634740,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_pixel_approach",
+      "pitch": 11800,
+      "mode": 42,
+      "track_id": 1160,
+      "class": "injured_orange",
+      "confidence": 0.6859903292679302,
+      "bbox": [
+        688,
+        138,
+        158,
+        128
+      ],
+      "center": [
+        767.0,
+        202.0
+      ],
+      "foot": [
+        767.0,
+        266
+      ],
+      "safe_bbox": [
+        487,
+        25,
+        789,
+        186
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          881,
+          211
+        ],
+        [
+          487,
+          211
+        ]
+      ]
+    },
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "frame": 14290,
+      "capture_ns": 595072255931,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_target_wait",
+      "pitch": 12000,
+      "mode": 42,
+      "track_id": 1196,
+      "class": "injured_orange",
+      "confidence": 0.8565261258482932,
+      "bbox": [
+        0,
+        221,
+        241,
+        160
+      ],
+      "center": [
+        120.5,
+        301.0
+      ],
+      "foot": [
+        120.5,
+        381
+      ],
+      "safe_bbox": [
+        8,
+        0,
+        613,
+        329
+      ],
+      "polygon": [
+        [
+          487,
+          1023
+        ],
+        [
+          793,
+          1023
+        ],
+        [
+          314,
+          329
+        ],
+        [
+          8,
+          329
+        ]
+      ]
+    },
+    {
+      "run": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0011.jsonl",
+      "frame": 14412,
+      "capture_ns": 599475483765,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_target_wait",
+      "pitch": 12000,
+      "mode": 42,
+      "track_id": 1227,
+      "class": "injured_orange",
+      "confidence": 0.7931085169315337,
+      "bbox": [
+        0,
+        264,
+        164,
+        179
+      ],
+      "center": [
+        82.0,
+        353.5
+      ],
+      "foot": [
+        82.0,
+        443
+      ],
+      "safe_bbox": [
+        0,
+        0,
+        530,
+        363
+      ],
+      "polygon": [
+        [
+          508,
+          1023
+        ],
+        [
+          772,
+          1023
+        ],
+        [
+          265,
+          363
+        ],
+        [
+          0,
+          363
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4323,
+      "capture_ns": 863182901564,
+      "state": "ACQUIRE_SAFE_ZONE",
+      "reason": "safe_zone_acquire_wait",
+      "pitch": 12000,
+      "mode": 11,
+      "track_id": 322,
+      "class": "danger_cyan",
+      "confidence": 0.800328331741178,
+      "bbox": [
+        586,
+        22,
+        88,
+        91
+      ],
+      "center": [
+        630.0,
+        67.5
+      ],
+      "foot": [
+        630.0,
+        113
+      ],
+      "safe_bbox": [
+        351,
+        0,
+        836,
+        90
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          769,
+          90
+        ],
+        [
+          351,
+          90
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4327,
+      "capture_ns": 863368281269,
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "reason": "command_context_pending",
+      "pitch": 12000,
+      "mode": 11,
+      "track_id": 322,
+      "class": "danger_cyan",
+      "confidence": 0.8280718000304979,
+      "bbox": [
+        587,
+        24,
+        87,
+        90
+      ],
+      "center": [
+        630.5,
+        69.0
+      ],
+      "foot": [
+        630.5,
+        114
+      ],
+      "safe_bbox": [
+        355,
+        0,
+        833,
+        92
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          771,
+          92
+        ],
+        [
+          355,
+          92
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4498,
+      "capture_ns": 869616687243,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_zone_clear_mechanics_wait",
+      "pitch": 12000,
+      "mode": 39,
+      "track_id": 335,
+      "class": "danger_cyan",
+      "confidence": 0.7868531225174666,
+      "bbox": [
+        542,
+        155,
+        137,
+        152
+      ],
+      "center": [
+        610.5,
+        231.0
+      ],
+      "foot": [
+        610.5,
+        307
+      ],
+      "safe_bbox": [
+        246,
+        4,
+        1030,
+        229
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          761,
+          233
+        ],
+        [
+          246,
+          233
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4502,
+      "capture_ns": 869732447863,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_target_wait",
+      "pitch": 12000,
+      "mode": 42,
+      "track_id": 335,
+      "class": "danger_cyan",
+      "confidence": 0.8506542423229577,
+      "bbox": [
+        644,
+        155,
+        136,
+        155
+      ],
+      "center": [
+        712.0,
+        232.5
+      ],
+      "foot": [
+        712.0,
+        310
+      ],
+      "safe_bbox": [
+        352,
+        4,
+        926,
+        245
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          815,
+          249
+        ],
+        [
+          352,
+          249
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4609,
+      "capture_ns": 873968895555,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_pixel_approach",
+      "pitch": 11500,
+      "mode": 42,
+      "track_id": 363,
+      "class": "danger_cyan",
+      "confidence": 0.8016263721374727,
+      "bbox": [
+        650,
+        206,
+        132,
+        148
+      ],
+      "center": [
+        716.0,
+        280.0
+      ],
+      "foot": [
+        716.0,
+        354
+      ],
+      "safe_bbox": [
+        363,
+        59,
+        915,
+        238
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          820,
+          297
+        ],
+        [
+          363,
+          297
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 4617,
+      "capture_ns": 874254169521,
+      "state": "CLEAR_SAFE_ZONE",
+      "reason": "safe_sweep_target_wait",
+      "pitch": 12000,
+      "mode": 42,
+      "track_id": 363,
+      "class": "danger_cyan",
+      "confidence": 0.938895923406587,
+      "bbox": [
+        659,
+        254,
+        132,
+        148
+      ],
+      "center": [
+        725.0,
+        328.0
+      ],
+      "foot": [
+        725.0,
+        402
+      ],
+      "safe_bbox": [
+        348,
+        90,
+        930,
+        254
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          813,
+          344
+        ],
+        [
+          348,
+          344
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9119,
+      "capture_ns": 1024695450894,
+      "state": "ENTER_SAFE_ZONE",
+      "reason": "delivery_enter_safe_zone",
+      "pitch": 12000,
+      "mode": 10,
+      "track_id": 625,
+      "class": "danger_cyan",
+      "confidence": 0.6482358117765159,
+      "bbox": [
+        604,
+        38,
+        88,
+        98
+      ],
+      "center": [
+        648.0,
+        87.0
+      ],
+      "foot": [
+        648.0,
+        136
+      ],
+      "safe_bbox": [
+        375,
+        0,
+        852,
+        113
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          801,
+          113
+        ],
+        [
+          375,
+          113
+        ]
+      ]
+    },
+    {
+      "run": "20261111_141241_competition_wheel",
+      "clip": "safe_zone_replay_0006.jsonl",
+      "frame": 9128,
+      "capture_ns": 1025080378182,
+      "state": "ENTER_SAFE_ZONE",
+      "reason": "delivery_enter_safe_zone",
+      "pitch": 12000,
+      "mode": 10,
+      "track_id": 625,
+      "class": "danger_cyan",
+      "confidence": 0.7264259009998417,
+      "bbox": [
+        585,
+        54,
+        96,
+        117
+      ],
+      "center": [
+        633.0,
+        112.5
+      ],
+      "foot": [
+        633.0,
+        171
+      ],
+      "safe_bbox": [
+        325,
+        1,
+        921,
+        138
+      ],
+      "polygon": [
+        [
+          460,
+          1023
+        ],
+        [
+          820,
+          1023
+        ],
+        [
+          785,
+          139
+        ],
+        [
+          325,
+          139
+        ]
+      ]
+    }
+  ]
+}
