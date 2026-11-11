@@ -6,5 +6,12 @@
     "firmware_built": false,
     "board_written": false,
     "ground_tested": false
+  },
+  "B": {
+    "baseline_failures_reproduced": 3,
+    "targeted_checks_passed": 3,
+    "existing_regressions_passed": 2,
+    "devices_opened": false,
+    "ground_tested": false
   }
 }

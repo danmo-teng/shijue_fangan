@@ -1742,3 +1742,94 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone() -> None:
+    from state_machine import SweepPickupContext, cargo_in_front_region
+    safe_bbox = (352, 4, 926, 245)
+    polygon = ((460, 1023), (820, 1023), (815, 249), (352, 249))
+    # Actual second-run frame4502: centre(712,232.5) projects over the
+    # safe-zone box; foot(712,310) is in the ground corridor in front.
+    blue = TrackedCargo(335, "danger_cyan", .85, (644, 155, 136, 155), hits=8)
+    assert cargo_in_front_region(blue, polygon, safe_bbox)
+    mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    mission.safe_sweep_pickup = SweepPickupContext(
+        target_id=335, target_class="danger_cyan", target_bbox=blue.bbox,
+        excluded_ids=frozenset())
+    assert mission.safe_sweep_target((blue,), polygon, safe_bbox).track_id == 335
+    # Explicit inside evidence and the complete contact threshold remain
+    # exclusions, even when the upper part of a tall object spans both regions.
+    assert not cargo_in_front_region(replace(blue, inside_safe_zone=True), polygon, safe_bbox)
+    inside = replace(blue, bbox=(662, 70, 100, 130))
+    assert not cargo_in_front_region(inside, polygon, safe_bbox)
+    threshold = replace(blue, bbox=(662, 94, 100, 155))  # Foot exactly at y249.
+    assert not cargo_in_front_region(threshold, polygon, safe_bbox)
+    assert cargo_in_front_region(replace(threshold, bbox=(662, 95, 100, 155)),
+                                 polygon, safe_bbox)
+    outside_path = replace(blue, bbox=(950, 155, 100, 155))
+    assert not cargo_in_front_region(outside_path, polygon, safe_bbox)
+    assert mission.safe_sweep_target((inside, outside_path), polygon, safe_bbox) is None
+
+
+def test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo() -> None:
+    safe_bbox = (352, 4, 926, 245)
+    polygon = ((460, 1023), (820, 1023), (815, 249), (352, 249))
+    blue = TrackedCargo(335, "danger_cyan", .85, (644, 155, 136, 155), hits=8)
+    # Adjacent actual frames4365/4368 bracket the original CLEAR target322.
+    # Neither old pixel neighbourhood admits the newly visible target335
+    # after the board's parking-and-turning mode39 movement.
+    for old_bbox in ((481, 106, 121, 138), (469, 139, 131, 151)):
+        mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+        mission._select_batch(CargoBatch((700,), ("green_supply",), "material"))
+        clear_view = VisionSnapshot(
+            frame_sequence=4368,
+            safe_corridor_obstacle_class="danger_cyan",
+            safe_corridor_obstacle_track_id=322,
+            safe_corridor_obstacle_bbox=old_bbox,
+            carried_reference_track_ids=(700,),
+        )
+        mission._start_safe_zone_clear(clear_view, stm(mode=11), 1.)
+        assert mission.safe_sweep_target((blue,), polygon, safe_bbox) is None
+        mission.step(replace(clear_view, frame_sequence=4369), pose(), stm(mode=39), 1.1)
+        entering = VisionSnapshot(frame_sequence=4501, cargo=(blue,), safe_bbox=safe_bbox,
+                                  safe_sweep_search_polygon=polygon)
+        output = mission.step(entering, pose(), stm(mode=42), 1.2)
+        assert output.command.opcode == CMD_HOLD
+        context = mission.safe_sweep_pickup
+        assert context.target_id is None and context.target_bbox is None
+        assert context.excluded_ids == frozenset({700})
+
+        # An original-load ID or truly inside target is never eligible.
+        # A current ground obstacle of the requested class is rebound after
+        # the turn; the pre-turn pixels cannot veto it.
+        original = replace(blue, track_id=700, bbox=(600, 440, 80, 100))
+        inside = replace(blue, track_id=701, bbox=(600, 440, 80, 100), inside_safe_zone=True)
+        other = replace(blue, track_id=336, bbox=(420, 300, 80, 100))
+        assert mission.safe_sweep_target((original, inside, other, blue), polygon, safe_bbox).track_id == 336
+        view = replace(entering, frame_sequence=4502, cargo=(original, inside, blue))
+        output = mission.step(view, pose(), stm(mode=42), 1.3)
+        assert output.command.opcode == CMD_APPROACH_TARGET
+        assert (output.command.arg_a, output.command.arg_b) == blue.center_px
+        assert context.target_id == 335 and context.target_bbox == blue.bbox
+        # Multiple same-class obstacles use the existing centre preference
+        # when unbound (above). Once335 is bound, the closer336 cannot cause
+        # switching on each subsequent view.
+        output = mission.step(replace(view, frame_sequence=4503, cargo=(original, inside, other, blue)),
+                              pose(), stm(mode=42), 1.4)
+        assert output.command.opcode == CMD_APPROACH_TARGET and context.target_id == 335
+
+        # Retrieval is a different role: obstacle335 is excluded and the
+        # original-load identity is eligible again. A later mechanical phase
+        # must not erase this original-load bbox/ID and select another green.
+        green = TrackedCargo(700, "green_supply", .9, (590, 330, 80, 100), hits=5)
+        retrieve = replace(view, frame_sequence=4504, cargo=(green, blue))
+        mission.step(retrieve, pose(), stm(mode=44), 1.5)
+        output = mission.step(replace(retrieve, frame_sequence=4505), pose(), stm(mode=44), 1.6)
+        assert output.command.opcode == CMD_APPROACH_TARGET
+        assert context.recovering_original and context.target_id == 700
+        assert context.excluded_ids == frozenset({335})
+        original_bbox = context.target_bbox
+        mission.step(replace(retrieve, frame_sequence=4506), pose(), stm(mode=39), 1.7)
+        mission.step(replace(retrieve, frame_sequence=4507), pose(), stm(mode=44), 1.8)
+        assert context.target_id == 700 and context.target_bbox == original_bbox
+        assert context.recovering_original

@@ -365,11 +365,15 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
         inside = False
         if safe_bbox is not None:
             overlap_ratio = bbox_overlap_ratio(detection.bbox, safe_bbox)
+            x, y, width, height = detection.bbox
+            sx, sy, sw, sh = safe_bbox
+            foot_inside = (sx <= x + width * 0.5 <= sx + sw and
+                           sy <= y + height <= sy + sh)
             inside = (
                 overlap_ratio >= 1.0
                 if track.class_name == "core_black"
                 else overlap_ratio > 0.80
-            )
+            ) and foot_inside
         result.append(
             TrackedCargo(
                 track_id=track.track_id,
@@ -764,7 +768,9 @@ def make_vision_snapshot(
     recent_corridor_obstacle: TrackedCargo | None = None,
     recent_carried_pitch_cdeg: int = 0,
 ) -> VisionSnapshot:
-    cargo = tracked_cargo(tracks, safe_bbox)
+    # A cached rectangle from another camera angle cannot prove membership
+    # in the current view. Retain the existing per-class area requirement.
+    cargo = tracked_cargo(tracks, None if safe_zone_filter_blocked else safe_bbox)
     rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )

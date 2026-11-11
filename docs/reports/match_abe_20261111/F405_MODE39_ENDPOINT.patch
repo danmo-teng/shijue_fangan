@@ -1,8 +1,6 @@
 --- a/Main/Src/Task.c
 +++ b/Main/Src/Task.c
-@@ -4603,18 +4603,33 @@
-         sweep_reverse.phase = SWEEP_REVERSE_DONE;
-         return false;
+@@ -4605,14 +4605,29 @@
        }
 -      float correction = atanf(cross / APP_SAFE_SWEEP_SEGMENT_LOOKAHEAD_MM) *
 -                         (180.0f / 3.14159265358979323846f);
@@ -44,5 +42,3 @@
 +      task_status.sweep_reverse_yaw_mm_s = 0.0f;
 +      task_status.motors_active = command_accepted;
        return false;
-     }
- 

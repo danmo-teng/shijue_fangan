@@ -2206,3 +2206,118 @@ def test_warm_error_beep_waits_only_for_local_socket_binding():
         assert send.call_count==2  # No periodic UART resend/ACK polling.
         panel._beep(1)
         assert send.call_count==3 and panel._pending_beep is None
+
+
+def test_safe_zone_membership_uses_live_contact_not_cached_bbox_area():
+    from types import SimpleNamespace
+    from state_machine import CargoBatch, cargo_in_front_region
+    from rescue_vision.models import TrackState
+
+    def track(track_id, class_name, bbox):
+        return SimpleNamespace(track_id=track_id, class_name=class_name, confidence=.96,
+            hits=12, misses=0, state=TrackState.CONFIRMED,
+            last_detection=SimpleNamespace(bbox=bbox, ground_xy_mm=None))
+
+    # Actual first-run frame14144: 97.5% of orange1160's box is over the
+    # old safe-zone colour, but its foot is outside:205 > 40+162.
+    safe = (503, 40, 773, 162)
+    front = track(1160, "injured_orange", (728, 84, 151, 121))
+    assert runner_module.bbox_overlap_ratio(front.last_detection.bbox, safe) > .97
+    front_cargo = runner_module.tracked_cargo((front,), safe)[0]
+    assert not front_cargo.inside_safe_zone
+    polygon = ((460, 0), (1279, 0), (1279, 1023), (460, 1023))
+    assert cargo_in_front_region(front_cargo, polygon, safe)
+
+    # Real supported inside objects retain the original per-class area gate;
+    # neither the contact boundary nor black's full-containment rule expands.
+    inside_green = track(1161, "green_supply", (700, 60, 100, 100))
+    inside_black = track(1162, "core_black", (900, 70, 90, 90))
+    boundary_green = track(1163, "green_supply", (700, 120, 100, 82))
+    partial_black = track(1164, "core_black", (480, 60, 100, 100))
+    values = runner_module.tracked_cargo((inside_green, inside_black, boundary_green,
+                                         partial_black), safe)
+    assert [item.inside_safe_zone for item in values] == [True, True, True, False]
+    assert not cargo_in_front_region(values[0], polygon, None)
+    assert not cargo_in_front_region(values[1], polygon, None)
+
+    # The very same rectangles are not independent inside evidence when the
+    # current safe bbox was not detected and only the old-angle cache remains.
+    mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    mission._select_batch(CargoBatch((1160,), ("injured_orange",), "injury"))
+    view = runner_module.make_vision_snapshot([], (front, inside_green),
+        SimpleNamespace(calibrated=False), safe,
+        StmSnapshot(mode=42, flags=12, camera_pitch_cdeg=11700), mission, 14144,
+        safe_zone_filter_blocked=True)
+    assert view.safe_zone_filter_blocked
+    assert not any(item.inside_safe_zone for item in view.cargo)
+
+    # First-run frame5436 contains one green already in the zone and another
+    # still on the carrying platform. Its bbox's 88.5% colour overlap alone
+    # must not establish first-delivery proof; the actual inside green stays.
+    delivery_safe = (53, 203, 1224, 656)
+    delivered = track(579, "green_supply", (472, 421, 176, 198))
+    held = track(583, "green_supply", (330, 658, 276, 227))
+    mission.state = CompetitionState.DELIVERY_VERIFY
+    mission._select_batch(CargoBatch((583,), ("green_supply",), "material"))
+    mission.carried_manifest = ("green_supply",)
+    mission.carried_total_count = 1
+    for expected_id, inside in ((583, False), (579, True)):
+        delivery = runner_module.make_vision_snapshot([], (delivered, held),
+            SimpleNamespace(calibrated=False), delivery_safe,
+            StmSnapshot(mode=10, flags=0, camera_pitch_cdeg=11500), mission, 5436,
+            recent_carried_track_ids=(expected_id,))
+        assert delivery.delivery_target_inside_safe_zone is inside
+        assert delivery.delivery_target_outside_safe_zone is not inside
+
+    # Joint path: real detector/Track geometry -> snapshot-derived inside and
+    # ground corridor -> full mission39/42 rebinding -> actual pixel command.
+    # The mode transitions here are offline inputs, not a physical UART run.
+    scenes = (
+        (4502, 335, "danger_cyan", (352, 4, 926, 245), 12000, False, (
+            (333, "green_supply", (476, 20, 98, 111)),
+            (334, "core_black", (758, 94, 76, 77)),
+            (335, "danger_cyan", (644, 155, 136, 155)),
+        )),
+        (14144, 1160, "injured_orange", (503, 40, 773, 162), 11700, True, (
+            (1160, "injured_orange", (728, 84, 151, 121)),
+            (1163, "danger_cyan", (897, 94, 101, 114)),
+            (1165, "danger_cyan", (563, 44, 86, 93)),
+        )),
+    )
+    for frame, target_id, target_class, safe_box, pitch, blocked, geometry in scenes:
+        for real_scene in (True, False):
+            m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+            m._select_batch(CargoBatch((700,), ("green_supply",), "material"))
+            m._start_safe_zone_clear(VisionSnapshot(frame_sequence=frame - 3,
+                safe_corridor_obstacle_class=target_class,
+                safe_corridor_obstacle_track_id=322,
+                safe_corridor_obstacle_bbox=(481, 106, 121, 138),
+                carried_reference_track_ids=(700,)), StmSnapshot(mode=11, age_ms=0), 1.)
+            records = tuple(track(item_id, name, box if real_scene or item_id != target_id
+                else (safe_box[0] + 100, safe_box[1] + 10, 100, 80))
+                for item_id, name, box in geometry)
+            p = PoseSnapshot(valid=True, x_m=.1, y_m=-.7, yaw_deg=270, age_ms=0)
+            for mode, scene_frame, now in ((39, frame - 2, 1.1),
+                                           (42, frame - 1, 1.2), (42, frame, 1.3)):
+                status = StmSnapshot(mode=mode, flags=6, age_ms=0, camera_pitch_cdeg=pitch)
+                snapshot = runner_module.make_vision_snapshot([], records,
+                    SimpleNamespace(calibrated=False), safe_box, status, m, scene_frame,
+                    # Negative geometry has a real current colour rectangle;
+                    # cached/unknown colour is never called confirmed inside.
+                    safe_zone_filter_blocked=blocked if real_scene else False,
+                    observed_s=now)
+                output = m.step(snapshot, p, status, now)
+                if mode == 42 and scene_frame == frame - 1:
+                    assert output.command.opcode == CMD_HOLD
+                    assert m.safe_sweep_pickup.target_id is None
+            target = next(item for item in snapshot.cargo if item.track_id == target_id)
+            if real_scene:
+                assert not target.inside_safe_zone
+                assert output.state == CompetitionState.CLEAR_SAFE_ZONE
+                assert output.command.opcode == CMD_APPROACH_TARGET
+                assert (output.command.arg_a, output.command.arg_b) == target.center_px
+                assert m.safe_sweep_pickup.target_id == target_id
+            else:
+                assert target.inside_safe_zone
+                assert output.command.opcode == CMD_HOLD
+                assert m.safe_sweep_pickup.target_id is None

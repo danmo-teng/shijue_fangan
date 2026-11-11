@@ -124,15 +124,16 @@ def cargo_in_front_region(item: TrackedCargo, polygon: tuple[tuple[int, int], ..
                           safe_bbox: tuple[int, int, int, int] | None) -> bool:
     """Sweep-only geometry; does not relax delivery success or claw audits."""
     x, y, w, h = item.bbox
-    center = (x + w / 2, y + h / 2)
     foot = (x + w / 2, y + h)
     if item.inside_safe_zone:
         return False
     if safe_bbox is not None:
         sx, sy, sw, sh = safe_bbox
-        if any(sx <= px <= sx + sw and sy <= py <= sy + sh for px, py in (center, foot)):
+        if sx <= foot[0] <= sx + sw and sy <= foot[1] <= sy + sh:
             return False
-    return point_in_polygon(center, polygon) and point_in_polygon(foot, polygon)
+    # The front region is on the ground. A tall block can project over the
+    # zone colour while its bbox foot remains on the floor in front.
+    return point_in_polygon(foot, polygon)
 
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -3966,6 +3967,14 @@ class CompetitionMission:
             else STM_MODE_SAFE_SWEEP_AUDIT
         )
         role = "原物资找回（前进累计最多200 mm）" if context.recovering_original else "扫障取障"
+        if (not context.recovering_original and
+                context.mode == STM_MODE_SAFE_SWEEP and
+                stm.mode == STM_MODE_SAFE_SWEEP_APPROACH):
+            # Parking and turning in mode39 changes the camera view. Rebind
+            # this obstacle without reusing pre-turn pixels or excluding the
+            # new ID; keep the original-load exclusions and retrieval role.
+            context.target_id = None
+            context.target_bbox = None
         if context.grab_started and context.mode == stm.mode:
             return CompetitionOutput(
                 self.state, CommandRequest(CMD_GRAB_CONFIRMED, self._side_flags()),
