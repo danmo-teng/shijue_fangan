@@ -1724,6 +1724,7 @@ class CompetitionPlanner:
         }
         if stm.mode == 24:
             return state in capture_states | {
+                CompetitionState.INITIAL_CLAW_CHECK,
                 CompetitionState.APPROACH, CompetitionState.INITIAL_APPROACH,
                 CompetitionState.CLUSTER_APPROACH,
             }
@@ -1738,6 +1739,11 @@ class CompetitionPlanner:
             return bool(stm.context_valid and stm.task_id == self.protocol_task and
                         pickup is not None and pickup.mode in {43, 45})
         if stm.mode == 3:
+            if state == CompetitionState.INITIAL_CLAW_CHECK:
+                return (self.mission.initial_claw_check_execution_seen or
+                        (stm.context_valid and stm.task_id == self.protocol_task and
+                         stm.action_id == self.protocol_action and
+                         stm.accepted_command == CMD_CARGO_AUDIT and bool(stm.action_status & 2)))
             if state in capture_states | {CompetitionState.BOUNDARY_RECOVERY}:
                 return True
             if state == CompetitionState.CLUSTER_APPROACH:
@@ -2020,6 +2026,7 @@ class CompetitionPlanner:
         if (stm.fresh and stm.context_valid and stm.task_id == self.protocol_task and
                 stm.mode in {21, 22, 23, 37, 38, 39, 40, 42, 43, 44, 45, 48, 49, 50} and
                 self.mission.state in {CompetitionState.CAPTURE_AUDIT,
+                    CompetitionState.INITIAL_CLAW_CHECK,
                     CompetitionState.POST_GRAB_AUDIT, CompetitionState.AUDIT_CONFIRM,
                     CompetitionState.TRANSPORT_AUDIT, CompetitionState.CLEAR_SAFE_ZONE}):
             # Re-evaluate evidence even while an audit ACK is in flight.
@@ -2285,6 +2292,8 @@ class CompetitionPlanner:
             "stash_point_m": list(self.mission.settings.stash_point),
             "max_material_batch_count": self.mission.settings.max_batch_count,
             "initial_stash_done": self.mission.initial_stash_done,
+            "initial_claw_check_started": self.mission.initial_claw_check_started,
+            "initial_claw_check_execution_seen": self.mission.initial_claw_check_execution_seen,
             "first_common_delivered": self.mission.first_common_delivered,
             "first_green_bump_used": self.mission.first_green_bump_used,
             "first_fault_code": self.mission.first_fault_code,

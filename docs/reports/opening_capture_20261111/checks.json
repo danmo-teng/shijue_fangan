@@ -1,0 +1,103 @@
+{
+  "request_id": "MATCH-OPENING-CAPTURE-20261111",
+  "checked_at": "2026-11-11T19:50:04.824589+08:00",
+  "upper_base": "9b810d05158995bb19deba5386eb3804e61f305c",
+  "upper_deployment": "source and commit only; no running process restarted",
+  "lower_source_commit": "7653af9b5f44ff18a1aa268eaf70d125ff0ee389",
+  "lower_task_blob": "cfc01337eb7e350382c00c61f132afaa45d669ff",
+  "lower_fixed_entry_blob": "ff38e836db9bcf2d60a140be2dda4852026247e4",
+  "lower_candidate_source_sha256": "4c3dced97c712e9522ae5c67c9b61bdc1c3165c983320035c1ef5611510e041a",
+  "upper_checks": [
+    {
+      "files": [
+        "competition_rescue/tests/test_state_machine.py",
+        "competition_rescue/tests/test_runner.py"
+      ],
+      "selection": "opening_checks_real_claw or opening_empty_probe or opening_claw_probe or initial_stash_preserves_existing or start_handshake_suppresses or range_recheck_accepts_small_error or range_move_camera_handoff or transport_audit_continuing_frames or published_post_grab_audit_survives or mode51_reference_audit_exits",
+      "result": "10 passed, 71 deselected"
+    },
+    {
+      "files": [
+        "competition_rescue/tests/test_state_machine.py"
+      ],
+      "selection": "post_first_two_materials_follow_existing_grab_and_transport",
+      "result": "1 passed, 35 deselected"
+    },
+    {
+      "check": "py_compile",
+      "files": [
+        "competition_rescue/state_machine.py",
+        "competition_rescue/run_competition_rescue.py",
+        "competition_rescue/tests/test_state_machine.py",
+        "competition_rescue/tests/test_runner.py"
+      ],
+      "result": "passed"
+    },
+    {
+      "check": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "lower_reference_checks": {
+    "environment": "temporary copy of lower archive; existing tools/test_audit_handshake.c host harness with temporary assertions, actual candidate Task.c and mechanism.c; not an ARM firmware build",
+    "candidate_file": "Main/Src/Task.c",
+    "six_scenarios": [
+      "opening camera request and repeats; real stable empty completion and old action rejection",
+      "real nonempty original GRAB, no fabricated zero-frame evidence",
+      "ordinary and cluster empty pickup keep original clock and exit at original 4s",
+      "existing zero-frame STABLE rejected",
+      "existing valid load retained",
+      "existing navigation handoffs and ABORT"
+    ],
+    "result": "6 targeted scenario functions passed",
+    "original_two_frame_stable_and_progressive_separation": "passed",
+    "patch_apply_check": "git apply --check against clean 7653af9 Task.c passed",
+    "lower_firmware_built": false,
+    "lower_repo_modified": false,
+    "flashed": false,
+    "temporary_work_dir": "/tmp/opening_stall_analysis_20261111/lower_reference"
+  },
+  "protected_files": {
+    "count": 23,
+    "all_hashes_unchanged": true,
+    "sha256": {
+      "docs/ROBUST_LOCALIZATION_EXPERIMENT_20261111.md": "c7a3b639749768543db19ebcbc6c2378134ba4a7cfbdf6fc6632477824626884",
+      "localization/CMakeLists.txt": "1ab74b260e047c259076eca8d3a89bc3e323e3da9abff4bc0eb8237d2cb17045",
+      "localization/include/fusion.hpp": "8cf27854a95f1d6ca0407f5e9ce8710d3184b2a752bce52d73bba2246f6ecb35",
+      "localization/include/motion_source_native.hpp": "cc532a21c42c6745055b4a72897c1da15df8e68c5488f3311ac105c3d3c77691",
+      "localization/src/dynamic_pose_relay.cpp": "6ff7751a41313f9edf166f476f585ed75fcde4bbb7cee6cdfea11141a127b95a",
+      "localization/src/fusion.cpp": "992a00991e59ad5b94b6a5c3ec0d3c205d2f383e1837ce75e48ca0c57d33a706",
+      "localization/src/main.cpp": "a04a0e12c32df659ca7a8d473853409ac40a1286985545fe46967bb0d01a4423",
+      "localization/src/motion_runtime.cpp": "248c2eb5fad5f5ea451a0c805d4891495b5219704e674b71e5c624ec8c4f3257",
+      "localization/src/motion_source_native.cpp": "442e61f6a06aa16968ad6c50b1d1c3229421fcb84abcc7a10c5397d5817bfabc",
+      "localization/tests/test_omni_localization.cpp": "1418f3c6ff15e916045fb8958952957874a5a85579959752084f9d9b27c01c48",
+      "localization/tools/lidar_t265_motion_map.py": "f7289f88aba276a58bb648e8b867163c22b2e8e8e65899244eb3be23687eb03e",
+      "localization/tools/lidar_yaw_debug/native_motion.py": "61044f99011b4a3b21c0d57b8ae9a1c9cc75cc868cb567ac4168fe53b1af7e14",
+      "localization/tools/lidar_yaw_debug/worker.py": "38fe3fe7a76fc066ebbe18bdf61ce2af1560eab53eca1e7102e058e440e2ff7f",
+      "localization/tools/motion_source_review.py": "49984c30e33f3fcba675fbc398dbb3026f65d4f635d6c050f1ba76125cf887aa",
+      "localization/tools/t265_f407_debug.py": "7c5bbdd4d7d064c79c31f11179341345f0bc60de55604d3e6815d78bdee6720a",
+      "localization/tools/test_f407_motion_protocol.py": "8982b3d55d7d44ddbf258d7c1ce2ed242e0585cefc64591c10fa7cba93b7e329",
+      "vision/config/capture_roi.json": "23dffb9d6c70d8adb4aa2af518a0031f421c74cac68a34a275c7c569d357b89e",
+      "localization/include/debug_pose_publisher.hpp": "4b206eacb7ab828451b45c90e6de35476b161542925fe1146c59365a38a7b40c",
+      "localization/include/primary_yaw_timeline.hpp": "5a92e65bbb90ed8dd9e203f7597d9cf1f0b2434005681c560efc66e20f7baa72",
+      "localization/include/wheel_yaw_consistency.hpp": "bbf961e0078c84fc7fa3f694f7deb711351778c37bfdcc6aaeaad6cae2bfa8dd",
+      "localization/src/primary_yaw_timeline.cpp": "efee7bf9a80f009ff3b8971fb9e0d89ec4e5bc3e1dc0d11b65ab8ffc8ba1394c",
+      "localization/src/wheel_yaw_consistency.cpp": "bf9e5c386b31400a20e523b59e48fb0fe0e5bc9fc38042f4fb07c9ce91c16122",
+      "yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065"
+    }
+  },
+  "devices_opened": false,
+  "motor_commands_sent": false,
+  "logs_modified_or_cleaned": false,
+  "field_acceptance": false,
+  "remaining": [
+    "F405 owner review, implementation, build/commit/push and actual flash identity",
+    "field opening with real nonempty/empty claw observations",
+    "mode21 executing with zero wheel counts: final PWM/output or mechanical subcause not established; no global speed/PID changes"
+  ],
+  "scope_exclusions": [
+    "ROI and model",
+    "localization and sensor inputs",
+    "other paused competition TODOs"
+  ]
+}

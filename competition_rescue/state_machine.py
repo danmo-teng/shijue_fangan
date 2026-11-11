@@ -453,6 +453,7 @@ class CompetitionState(str, Enum):
     WAIT_SEARCH_RECOVERY = "WAIT_SEARCH_RECOVERY"
     RECOVERY_WAIT = "RECOVERY_WAIT"
     INITIAL_OBSERVE = "INITIAL_OBSERVE"
+    INITIAL_CLAW_CHECK = "INITIAL_CLAW_CHECK"
     INITIAL_APPROACH = "INITIAL_APPROACH"
     CAPTURE_AUDIT = "CAPTURE_AUDIT"
     AUDIT_CONFIRM = "AUDIT_CONFIRM"
@@ -651,6 +652,8 @@ class CompetitionMission:
         self.state = CompetitionState.WAIT_START
         self.state_started_s = 0.0
         self.initial_stash_done = not settings.initial_stash_enabled
+        self.initial_claw_check_started = False
+        self.initial_claw_check_execution_seen = False
         self.stash_has_cargo = False
         self.stash_zero_tx_baseline: int | None = None
         self.stash_handoff_hold_tx_baseline: int | None = None
@@ -1091,6 +1094,9 @@ class CompetitionMission:
             return (STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_OBSERVE:
             return (STM_MODE_SEARCH,)
+        if self.state == CompetitionState.INITIAL_CLAW_CHECK:
+            return (STM_MODE_SEARCH, STM_MODE_APPROACH_TARGET,
+                    STM_MODE_CAPTURE_AUDIT, STM_MODE_APPROACH_RECOVER)
         if self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH}:
             return (
                 STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RANGE_WAIT, STM_MODE_APPROACH_RANGE_MOVE,
@@ -1364,6 +1370,31 @@ class CompetitionMission:
         )
         self.approach_command_accepted = False
         self.last_approach_command = None
+
+    def _initial_claw_check_output(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        completed = (stm.context_valid and stm.context_matches and
+                     stm.accepted_command == CMD_CARGO_AUDIT and
+                     bool(stm.action_status & 2))
+        if stm.mode == STM_MODE_APPROACH_RECOVER or (
+                stm.mode == STM_MODE_SEARCH and
+                (self.initial_claw_check_execution_seen or completed)):
+            return self._audit_reacquire_output(vision, stm, now)
+        if stm.mode == STM_MODE_APPROACH_TARGET:
+            self.initial_claw_check_execution_seen = True
+        if (stm.mode == STM_MODE_CAPTURE_AUDIT and stm.claw_visible and
+                stm.camera_pitch_cdeg == 14000):
+            self.initial_claw_check_execution_seen = True
+            self._begin_capture_audit(vision, now, cluster_active=False,
+                recheck_pending=False, recheck_context="none")
+            return self._audit_output(vision, stm, now)
+        # INITIAL_STASH + zero source frame is a camera/observation request,
+        # never a measured empty claw or permission to close the claws.
+        return replace(
+            self._audit_placeholder("initial_claw_check_request", wire_mode=STM_MODE_CAPTURE_AUDIT),
+            message="开局先静止观察夹内，等待下位机完成140°观察后按真实画面审核",
+        )
 
     def _update_search_scan_progress(self, pose: PoseSnapshot) -> None:
         if not self._pose_fresh(pose):
@@ -3478,11 +3509,16 @@ class CompetitionMission:
         if initial_empty:
             stable = replace(stable, stable=(self.audit_hits >= max(2, required_audit_frames) and
                                             self._audit_stability_span_sufficient(observed_s)))
+            opening_probe = (self.initial_claw_check_started and
+                             self.selected_batch.initial_stash and
+                             not self.selected_batch.track_ids)
             return CompetitionOutput(
                 self.state, CommandRequest(CMD_CARGO_AUDIT, CMD_VALID,
                     audit=self._audit_payload(stable), audit_vision_frame=vision.frame_sequence),
-                "初次空爪继续真实审核，F407控制200mm/s及同目标200mm补进额度",
-                self.selected_batch, stable, reason="capture_empty_approach",
+                ("开局静止观察为空，发送真实空爪审核后返回原接近流程" if opening_probe else
+                 "初次空爪继续真实审核，F405按原200mm补进额度及4秒决策出口执行"),
+                self.selected_batch, stable,
+                reason="initial_claw_check_empty" if opening_probe else "capture_empty_approach",
                 tx_policy="audit_stable_publish" if stable.stable else "audit_unstable_publish",
             )
         normal_multi_candidate = (
@@ -3548,6 +3584,15 @@ class CompetitionMission:
             self.cluster_keep_side_count = keep_count
         payload = self._audit_payload(stable)
         if stable.stable and audit_valid:
+            if (self.selected_batch.initial_stash and
+                    not self.selected_batch.track_ids and self.initial_claw_check_started):
+                # The opening view request began without assuming any cargo.
+                # Bind its batch to the actual qualifying in-claw observation.
+                ids = tuple(item.track_id for item in vision.capture_cargo)
+                self.selected_batch = replace(self.selected_batch, track_ids=ids,
+                    classes=self._manifest_for_audit(stable),
+                    confirmed_total_count=stable.total_count)
+                self.last_selected_track_ids = ids
             self._begin_audit_confirmation(
                 stable,
                 payload,
@@ -6029,7 +6074,7 @@ class CompetitionMission:
                 expected_stm_modes=(STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH),
             )
         if stm.mode == STM_MODE_APPROACH_RECOVER and self.state in {
-            CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
+            CompetitionState.INITIAL_CLAW_CHECK, CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
             CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT,
             CompetitionState.AUDIT_CONFIRM, CompetitionState.POST_GRAB_AUDIT,
             CompetitionState.GRAB, CompetitionState.DISPERSE,
@@ -6092,6 +6137,15 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.INITIAL_OBSERVE:
+            if not self.initial_stash_done and not self.initial_claw_check_started:
+                # Request a view before choosing any pile member. No cargo
+                # is assumed; the ordinary real nonempty audit still owns GRAB.
+                self._select_batch(CargoBatch((), (), "stash", initial_stash=True))
+                self.initial_claw_check_started = True
+                self.audit_epoch += 1
+                self._set_state(CompetitionState.INITIAL_CLAW_CHECK, now)
+                return replace(self._initial_claw_check_output(vision, stm, now),
+                               event="initial_claw_check_start")
             if self.search_epoch_frame_floor is not None:
                 if (
                     not self._vision_fresh(vision, now) or
@@ -6131,6 +6185,9 @@ class CompetitionMission:
                 now,
                 message="靠近中心物资堆",
             )
+
+        if self.state == CompetitionState.INITIAL_CLAW_CHECK:
+            return self._initial_claw_check_output(vision, stm, now)
 
         if self.state == CompetitionState.TRANSPORT_AUDIT:
             return self._transport_audit_output(vision, pose, stm, now)

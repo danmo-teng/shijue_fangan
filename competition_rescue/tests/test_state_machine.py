@@ -572,77 +572,98 @@ def test_detour_completion_requires_fresh_changed_ack() -> None:
     assert output.state == CompetitionState.APPROACH
 
 
-def test_initial_stash_and_invalid_release() -> None:
+def test_initial_stash_preserves_existing_nonempty_audit_semantics() -> None:
     mission = CompetitionMission(CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=True))
-    output = mission.step(VisionSnapshot(), pose(), stm(), 0.0)
-    assert output.state == CompetitionState.INITIAL_OBSERVE
-    pile = (
-        cargo(1, "green_supply", 400, 450),
-        cargo(2, "core_black", 540, 470),
-    )
-    vision = VisionSnapshot(
-        frame_sequence=1,
-        cargo=pile,
-        capture_cargo=pile,
-        capture_audit=CargoAudit(
-            left_class="mixed_material",
-            right_class="",
-            left_count=2,
-            right_count=0,
-            total_count=2,
-        ),
-    )
-    output = mission.step(vision, pose(), stm(), 0.1)
-    assert output.state == CompetitionState.INITIAL_APPROACH
-    output = mission.step(vision, pose(), stm(flags=1), 0.2)
-    assert output.state == CompetitionState.CAPTURE_AUDIT
-    for now, sequence in ((0.3, 2), (0.4, 3)):
-        output = mission.step(
-            replace(vision, frame_sequence=sequence), pose(), stm(flags=1), now
-        )
-    assert output.state == CompetitionState.AUDIT_CONFIRM
-    output = mission.step(
-        replace(vision, frame_sequence=4), pose(), relay_stm(output), 0.5
-    )
-    assert output.state == CompetitionState.GRAB
-    output = mission.step(vision, pose(), stm(mode=22, flags=3), 0.6)
-    assert output.state == CompetitionState.INITIAL_STASH_NAV
-    output = mission.step(vision, PoseSnapshot(True, -0.85, 0.55, 135.0, 5.0), stm(mode=10, flags=4, acknowledged_sequence=20), 1.0)
-    assert output.state == CompetitionState.INITIAL_RELEASE
-    output = mission.step(vision, PoseSnapshot(True, -0.85, 0.55, 135.0, 5.0), stm(mode=34, flags=0, acknowledged_sequence=21), 1.6)
-    assert output.state == CompetitionState.RETURN_CENTER
-    assert mission.initial_stash_done
-    assert mission.stash_has_cargo
+    mission._select_batch(CargoBatch((), (), "stash", initial_stash=True))
+    # Opening relocation retains its original nonempty-pile rule. Formal
+    # delivery exclusions must not be accidentally imposed on this probe.
+    for audit in (
+        CargoAudit(left_class="mixed_material", left_count=2, total_count=2),
+        CargoAudit(left_class="green_supply", left_count=1,
+                   right_class="danger_cyan", right_count=1, total_count=2,
+                   danger_present=True),
+    ):
+        assert mission._audit_valid(audit)
+    assert not mission._audit_valid(CargoAudit())
 
-    invalid_mission = CompetitionMission(
-        CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=True)
-    )
-    invalid_mission._set_state(CompetitionState.INITIAL_OBSERVE, 2.0)
-    invalid_mission.initial_stash_done = False
-    invalid_mission.selected_batch = CargoBatch(
-        (4, 5), ("green_supply", "danger_cyan"), "stash", initial_stash=True
-    )
-    invalid_mission._set_state(CompetitionState.CAPTURE_AUDIT, 2.0)
-    invalid = VisionSnapshot(
-        frame_sequence=2,
-        capture_audit=CargoAudit(
-            left_class="green_supply",
-            right_class="danger_cyan",
-            left_count=1,
-            right_count=1,
-            total_count=2,
-            danger_present=True,
-        ),
-    )
-    invalid_mission.step(invalid, pose(), stm(flags=1), 2.1)
-    invalid_mission.step(replace(invalid, frame_sequence=3), pose(), stm(flags=1), 2.2)
-    output = invalid_mission.step(replace(invalid, frame_sequence=4), pose(), stm(flags=1), 2.3)
-    assert output.state == CompetitionState.AUDIT_CONFIRM
-    output = invalid_mission.step(
-        replace(invalid, frame_sequence=5), pose(), relay_stm(output), 2.4
-    )
-    assert output.state == CompetitionState.INVALID_RELEASE
-    assert output.command and output.command.opcode == CMD_RELEASE_RIGHT
+
+def test_opening_checks_real_claw_view_before_tracking_pile() -> None:
+    m = CompetitionMission(CompetitionSettings(side="blue"))
+    p = PoseSnapshot(True, 0.0, 0.0, 135.0, 5.0)
+    pile = (cargo(7, "green_supply", 900, 700),)
+    old_view = VisionSnapshot(frame_sequence=10, cargo=pile, capture_cargo=pile,
+        capture_audit=CargoAudit(left_class="green_supply", left_count=1, total_count=1))
+    m.step(old_view, p, StmSnapshot(mode=3, camera_pitch_cdeg=10500, age_ms=5), 1.0)
+    out = m.step(old_view, p, StmSnapshot(mode=3, camera_pitch_cdeg=10500, age_ms=5), 1.02)
+    assert out.state == CompetitionState.INITIAL_CLAW_CHECK
+    assert out.command.opcode == CMD_CARGO_AUDIT
+    assert out.command.audit.initial_stash and not out.command.audit.stable
+    assert out.command.audit.total_count == 0 and out.command.audit_vision_frame == 0
+    assert m.selected_batch.total_count == 0  # The request is not a load observation.
+    # The moving camera and its old picture cannot authorize GRAB.
+    out = m.step(old_view, p, StmSnapshot(mode=20, camera_pitch_cdeg=14000, age_ms=5), 1.4)
+    assert out.command.audit_vision_frame == 0 and not out.command.audit.stable
+    ready = StmSnapshot(mode=21, flags=1, camera_pitch_cdeg=14000, age_ms=5)
+    out = m.step(old_view, p, ready, 1.7)
+    assert out.command.opcode == CMD_CARGO_AUDIT and not out.command.audit.stable
+    for now, frame in ((1.8, 11), (1.91, 12)):
+        out = m.step(replace(old_view, frame_sequence=frame, observed_monotonic_s=now), p, ready, now)
+    assert out.state == CompetitionState.AUDIT_CONFIRM
+    assert out.command.audit.stable and out.command.audit.total_count == 1
+    accepted = replace(relay_stm(out), camera_pitch_cdeg=14000, flags=81)
+    out = m.step(replace(old_view, frame_sequence=12, observed_monotonic_s=1.91), p, accepted, 1.92)
+    assert out.state == CompetitionState.GRAB and out.command.opcode == CMD_GRAB_CONFIRMED
+    assert m.selected_batch.track_ids == (7,)
+    assert m.selected_batch.classes == ("green_supply",) and m.selected_batch.total_count == 1
+    # Continue the original physical close -> real post-close audit -> NAV.
+    closed_view = replace(old_view, frame_sequence=13, observed_monotonic_s=2.0)
+    post = StmSnapshot(mode=23, flags=3, camera_pitch_cdeg=14000, age_ms=5)
+    out = m.step(closed_view, p, post, 2.0)
+    assert out.state == CompetitionState.POST_GRAB_AUDIT
+    for now, frame in ((2.12, 14), (2.24, 15)):
+        closed_view = replace(old_view, frame_sequence=frame, observed_monotonic_s=now)
+        out = m.step(closed_view, p, post, now)
+    done = replace(relay_stm(out, mode=22, flags=83, acknowledged_sequence=3,
+                            relay_mission_tx_frames=3), camera_pitch_cdeg=14000,
+                   context_valid=True, context_matches=True,
+                   accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    out = m.step(closed_view, p, done, 2.25)
+    assert out.reason == "post_grab_audit_confirmed"
+    out = m.step(closed_view, p, done, 2.26)
+    assert out.state == CompetitionState.INITIAL_STASH_NAV
+    assert out.command.opcode == CMD_NAVIGATE_WAYPOINT and m.carried_total_count == 1
+
+
+def test_opening_empty_probe_returns_to_approach_without_repeating_probe() -> None:
+    m = CompetitionMission(CompetitionSettings(side="blue"))
+    p = PoseSnapshot(True, 0.0, 0.0, 135.0, 5.0)
+    search = StmSnapshot(mode=3, camera_pitch_cdeg=10500, age_ms=5)
+    m.step(VisionSnapshot(), p, search, 1.0)
+    request = m.step(VisionSnapshot(frame_sequence=10), p, search, 1.02)
+    assert request.state == CompetitionState.INITIAL_CLAW_CHECK
+    m.step(VisionSnapshot(frame_sequence=11), p,
+        StmSnapshot(mode=20, camera_pitch_cdeg=13000, age_ms=5), 1.5)
+    ready = StmSnapshot(mode=21, flags=1, camera_pitch_cdeg=14000, age_ms=5)
+    m.step(VisionSnapshot(frame_sequence=12), p, ready, 1.8)
+    for frame, now in ((13, 1.9), (14, 2.01)):
+        out = m.step(VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+            capture_audit=CargoAudit()), p, ready, now)
+    assert out.command.audit.stable and out.command.audit.total_count == 0
+    assert out.command.opcode == CMD_CARGO_AUDIT  # No blind GRAB or release.
+    out = m.step(VisionSnapshot(frame_sequence=15), p, search, 2.04)
+    assert out.state == CompetitionState.INITIAL_OBSERVE
+    target = cargo(8, "green_supply", 600, 500)
+    view = VisionSnapshot(frame_sequence=16, observed_monotonic_s=2.1, cargo=(target,))
+    out = m.step(view, p, search, 2.1)
+    assert out.state == CompetitionState.INITIAL_APPROACH
+    assert out.command.opcode == CMD_APPROACH_TARGET
+    # A later target-loss recovery must not restart the one-off empty probe.
+    m.step(replace(view, frame_sequence=17), p,
+        StmSnapshot(mode=24, age_ms=5), 2.2)
+    m.step(replace(view, frame_sequence=18), p, search, 2.8)
+    out = m.step(replace(view, frame_sequence=19, observed_monotonic_s=2.9), p, search, 2.9)
+    assert out.state == CompetitionState.INITIAL_APPROACH
+    assert out.command.opcode == CMD_APPROACH_TARGET
 
 
 def test_material_priority_excludes_danger() -> None:

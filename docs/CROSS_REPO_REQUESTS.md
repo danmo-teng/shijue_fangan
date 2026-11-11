@@ -20,63 +20,68 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
 这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
 
-## 最新请求：MATCH-ABE-20261111
+## 最新请求：MATCH-OPENING-CAPTURE-20261111
 
-用户本轮只批准A、B、E，其他先不做。上位B/E已实现，以下是给下位负责人的完整配套说明。发布不等于对端已经审核/烧录；接收方先看实际代码，简短向人说明接受、缩小、替代或拒绝的理由，超范围仍由人决定。RDK窗口不写F405。
+用户本轮只批准开局两项：先静止检查夹内；空爪补进复用原4秒出口。
+上位代码已实现并通过必要检查；下位仅准备Task.c参考补丁，尚未实施/烧录。
+接收方先审当前代码，向人说明接受、调整或拒绝的理由；不把发布当作已审核或额外改动授权。
 
 ```text
-请求ID：MATCH-ABE-20261111
-范围：只做A的mode39返程修正、E的最多两件材料审核；B复用现有接口，无需下位新功能。
+请求ID：MATCH-OPENING-CAPTURE-20261111
+目的：解决中心已有货仍先对准物堆、空爪补进无进展长等。
+范围：只改Task.c，复用原协议、相机、审核、GRAB与恢复流程；不扩电机PID/全局速度。
 
-当前只读源码：F405 main的Main/Src/Task.c内容blob
-c98f949b1b1bbac6e8d6b01727b03c88a0cee74a
-固定入口blob：fa52e939c599c144dcb99a39a23ae47956eeb7b7
-两轮历史actual=e85c738/dirty1、NormalRun/TASK、921600，不代表此刻实机身份或干净烧录字节。
+已核对当前main：Task.c内容blob cfc01337eb7e350382c00c61f132afaa45d669ff，
+与7653af9b5f44ff18a1aa268eaf70d125ff0ee389的源文件一致。
+两轮实际自报7653af9/dirty1、NormalRun/TASK、921600；dirty设置不能用干净Git替代。
 
-A：绿＋危险蓝长停在mode39，不能按允许绿蓝混运解决。
-只改task_sweep_reverse_trace的SWEEP_REVERSE_DRIVE请求：
-1. 沿锁定段计算场地向量 -remaining*u-cross*n，越过终点后纵向项为0，只修超限横差，
-   不再用持续倒退＋偏航来消横差，避免越走越远。
-2. 转成当前车体系后复用Motor_MoveAngleHeading维持原锁定航向，不再外加一套yaw输出。
-3. 非零纠偏沿已有APP_NAV_FINE_MIN_SPEED_MM_S（当前110）到原120mm/s上限。
-   保原完成容差、段游标、转向及后续相机流程。
-影响：末端小纠偏比旧20mm/s请求更快，贴物横移可能更急；不是复用完整STAGE fine助推。
-日志无子阶段/PWM，不能断言这是现场唯一根因。先审实际diff及速度取舍，不扩为新电机接口。
-参考补丁只针对当前函数，可审后摘取；不整包套旧补丁。
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/A_MODE39.md
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/F405_MODE39_ENDPOINT.patch
+1. 开局先看夹内。
+上位在下位释放中心观察后发原0x18/CARGO_AUDIT：opcode=0x12、VALID，
+audit flags仅INITIAL_STASH，左右类别/计数/总数全0、无STABLE，0x1D源frame=0。
+这是请求视角，不是真实空爪结果。仅开局SEARCH、张爪且非运输/复审阶段接受，
+走原相机20→21、140°流程，静止，不启动200mm补进。
+同任务动作重复请求只确认、不重启相机/不记样本；沿用原task/action配对。
+到21以后收原真实两帧审核，真实稳定非空等原GRAB、后复审、藏点NAV，不自行合爪。
+真实稳定空爪回SEARCH，当前动作completed且非cancelled；重复完成包不重新进预检。
+上位只发起这次开局预检，确认空爪后用新任务转原接近，不反复看空爪。
 
-B：上位已修“中心投影在色框内但脚点在围栏前”的错误排除，以及39转车后42继续锁旧像素/ID。
-保留真正区内、走廊外、原载荷排除与44/45原货找回身份；灰框随原业务筛选结果变化。
-F405继续现有像素APPROACH/GRAB接口，不新增TYPE/opcode或回执步骤。
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/B_TARGET_SELECTION.md
+2. 普通/cluster初次空爪补进不能被每个空帧重置。
+保原200mm额度，复用capture_wait_active/started_ms与原
+APP_CAPTURE_DECISION_WAIT_MS=4000，持续空爪超出走原task_begin_capture_escape。
+这是原补进决策出口，不是新鲜度门、附加计时/等待或FAULT。
+代价：卡住/没货时更早退出重找，不再依赖轮程增加或长等待。
 
-E：只改task_audit_semantic的材料合法性，首次后上限2，绝不是3。
-1. first_delivery_done之前仍必须且只能单绿；开局临时藏点的原非空语义保持。
-2. 之后允许两绿、两黑或一绿一黑，同侧或分侧，都沿原合爪/复审/运输/投送。
-   伤员仍单件；危险蓝、未知、伤员混合、三件及计数/类别不一致仍非法。
-3. 用现有mixed_material=6表示同侧绿黑，只有该侧count=2才合法。
-   复用原0x18/CARGO_AUDIT、两侧计数、总数、角色与STABLE；保现有两帧审核/任务动作去重。
-4. 不改ENTER/EXIT、抬爪、退距或导航；不加入内部固定双推，也不做F的补推。
-上位默认已改2；当前下位仍单件，必须配套后再联调，不能只拿上位双件代码对旧固件运行。
-找回数量按新实际审核，原2件只剩1件时不为凑数等待。
-首件阶段沿原双方共享标志，不把TASK_COMPLETE/DONE当成真实得分证明，不单边改阶段语义。
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/E_TWO_MATERIALS.md
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_abe_20261111/F405_TWO_MATERIAL_AUDIT.patch
+尚未确定：18:57轮23.0—29.9秒690次三轮增量全0，gyro也不动，但模式21报执行中。
+源码请求200mm/s不等于PWM/实际运动。请结合已有TaskDiag目标/实测/PWM与输出归属
+定位具体子因；需要其他控制修改时先向人说明原因/影响，不盲调全局参数，不扩新遥测。
 
-本轮不做：C贴墙反复扫障出口、D开局/预备点切角、F补推、G侧绕、ROI、模型、定位实验、
-三件材料、主动单橙优先、固定双推。旧MATCH-D-PITCH-20261111仍暂停。
-不新增新鲜度/附加时间门、反复握手、延时等待、保护/FAULT或永久锁存。
-不要求下位新增测试代码或测试程序；只做必要构建/已有直接检查，commit/push，
-回传实际修改文件/行为、必要结果和烧录身份，未烧录就明确写未烧录。
+完整说明、接口及检查：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/OPENING_CAPTURE_FIX_20261111.md
+最小参考补丁（先审再摘取，不整包应用旧候选）：
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/opening_capture_20261111/F405_OPENING_CAPTURE.patch
+
+本轮不改ROI/模型/定位/其他比赛动作；不新增新鲜度、握手、延时等待、保护/FAULT或永久锁存。
+不要求新增测试代码/程序。必要构建及原入口直接检查后，commit/push并回传
+实际文件/行为、必要结果、未完成项及实际烧录身份；未烧录明确写未烧录。
+人保留对其他重要改动的知情、拒绝和选择权。
 ```
 
-## 本端实际结果与未完成
+## 本端结果与部署边界
 
-A的16组几何检查通过。B的3项改前失败改后通过、另2项相关回归通过；E的5项直接回归与原mode51/运输分离检查通过，52组上位实际报文字段与配套实际C语义一致，3组原始raw_audit复算符合两件/首件规则。最后联合11项相关检查、4文件语法、27项保护指纹通过。两份补丁可在当前源码副本组合应用。
+上位11项相关检查通过，含真实非空23→22→藏点NAV、空爪回接近、重复请求/延迟回执、原定距/运输/mode51。
+Task.c候选在已有C主机夹具的6项场景及原两帧/STABLE、渐进分离检查通过，补丁在当前干净源副本可应用。
+这不是完整F405构建或实车验收；旧固件不执行SEARCH里的新观察入口，必须配套后联调。
+本窗口未写/烧录下位机，未打开设备、启动电机或清日志；原ROI/模型/定位改动保留。
+具体回执见docs/reports/opening_capture_20261111/checks.json。
 
-上述C检查复用已有审核夹具，不是完整固件构建。没有写/烧录下位、开设备/电机或实车验收；原始日志未删，用户现场ROI/模型/正式定位产物未动。当前E不兼容下位旧单件合同，等待对端配套回执。
+## 已核对的上一轮回执
+
+F405固定入口当前blob ff38e836db9bcf2d60a140be2dda4852026247e4，已记录从ad1cc2d实施A/E；
+当前Task.c也包含mode39末端向量修正和首次后最多两件材料审核。B复用现接口。
+不再把“下位仍单件/未实现A”当当前状态，也不重新下发旧MATCH-ABE任务。
+18:51/18:57日志有7653af9/dirty1实际身份，但未因此宣称A/E实车效果或干净烧录版本已验收。
 
 ## 其他请求
 
-其他任务与旧请求本轮均不实施；历史要求/回执按Git历史或对应报告取证，不自动恢复。D仍未确定根因，ROI及局部黑目标归属交人工，F仍只考虑一绿一黑的有条件补推且未实施。
+D“合爪抬相机后不出发”仍未定位确切故障段，与本次合爪前卡顿分开；
+C/F/G、ROI/局部黑块人工单、大融合等均未恢复。历史按对应报告/Git取证，不自动实施。

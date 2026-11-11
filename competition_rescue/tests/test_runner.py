@@ -1074,6 +1074,50 @@ def test_pending_pixel_approach_continues_updating_camera_target():
         assert p.protocol_vision_frame == 20
 
 
+def test_opening_claw_probe_keeps_context_and_consumes_completed_empty_exit():
+    from dataclasses import replace
+    from protocol import CMD_CARGO_AUDIT
+    from state_machine import TrackedCargo
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        m = CompetitionMission(CompetitionSettings(side="blue"))
+        p = CompetitionPlanner(m, root/"pose", root/"stm", root/"cmd",
+            root/"diag", JsonlLog(root/"events"), 50)
+        pose = PoseSnapshot(True, 0., 0., 135., 5.)
+        search = StmSnapshot(mode=3, camera_pitch_cdeg=10500, age_ms=5)
+        view = VisionSnapshot(frame_sequence=10)
+        p._publish(p._output_for_cycle(view, pose, search, False, 1.))
+        start_ack = replace(search, context_valid=True, task_id=p.protocol_task,
+            action_id=p.protocol_action, accepted_command=CMD_HOLD, action_status=1)
+        out = p._output_for_cycle(view, pose, start_ack, False, 1.02)
+        p._publish(out)
+        task, action = p.protocol_task, p.protocol_action
+        wire = (root/"cmd").read_bytes()
+        assert wire[15+4] == CMD_CARGO_AUDIT and wire[15+9] == 1
+        assert wire[8:12] == b"\0\0\0\0"  # No camera result manufactured for the request.
+        # A delayed entry ACK must keep the same request, not send PAUSE or APP.
+        settling = StmSnapshot(mode=20, camera_pitch_cdeg=12500, age_ms=5,
+            context_valid=True, task_id=task, action_id=(action-1)&65535,
+            accepted_command=CMD_HOLD, action_status=1)
+        out = p._output_for_cycle(replace(view, frame_sequence=11), pose, settling, False, 1.5)
+        p._publish(out)
+        assert (p.protocol_task, p.protocol_action) == (task, action)
+        assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit_vision_frame == 0
+        # If mode21 was not observed, the existing paired completed status is
+        # still enough to consume the MCU's empty-view return to SEARCH.
+        completed = replace(search, context_valid=True, task_id=task, action_id=action,
+            accepted_command=CMD_CARGO_AUDIT, action_status=3)
+        out = p._output_for_cycle(replace(view, frame_sequence=12), pose, completed, False, 2.)
+        p._publish(out)
+        assert out.state == CompetitionState.INITIAL_OBSERVE
+        target = TrackedCargo(9, "green_supply", .9, (600,500,40,40), hits=3)
+        out = p._output_for_cycle(VisionSnapshot(frame_sequence=13,
+            observed_monotonic_s=2.1, cargo=(target,)), pose, completed, False, 2.1)
+        p._publish(out)
+        assert out.command.opcode == CMD_APPROACH_TARGET
+        assert p.protocol_task != task
+
+
 def test_wheel_bridge_coalesces_ready_velocities_without_age_rejection():
     import socket
     sys.path.insert(0, str(PROJECT_ROOT/'localization/tools'))

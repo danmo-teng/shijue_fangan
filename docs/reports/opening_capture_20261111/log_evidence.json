@@ -1,0 +1,79 @@
+{
+  "20261111_141241": {
+    "upper_commit": "ed07e323e721649af19193dff1570d1147c2c89c",
+    "lower_actual_commit": "e85c738075451574e4c29ea7da05daf5a8258b6b",
+    "lower_source_dirty": 1,
+    "lower_actual_mode": "NormalRun",
+    "sensor_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261111_140243_competition_wheel",
+    "opening_times_s": {
+      "center_observe": 7.898207,
+      "capture_audit": 12.52838,
+      "grab_command": 12.874033,
+      "stash_nav": 13.547258
+    },
+    "center_to_grab_s": 4.975826,
+    "motion_windows": []
+  },
+  "20261111_185108": {
+    "upper_commit": "9b810d05158995bb19deba5386eb3804e61f305c",
+    "lower_actual_commit": "7653af9b5f44ff18a1aa268eaf70d125ff0ee389",
+    "lower_source_dirty": 1,
+    "lower_actual_mode": "NormalRun",
+    "sensor_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261111_184648_competition_wheel",
+    "opening_times_s": {
+      "center_observe": 10.221091,
+      "capture_audit": 43.704799,
+      "grab_command": 43.885386,
+      "stash_nav": 44.65961
+    },
+    "center_to_grab_s": 33.664295,
+    "motion_windows": [
+      {
+        "from_s": 21.5,
+        "to_s": 27.4,
+        "wheel_samples": 590,
+        "all_three_deltas_zero": 504,
+        "raw_counter_unique_triplets": 86,
+        "gyro_samples": 587,
+        "yaw_change_deg": -0.264,
+        "gyro_rate_abs_p95_dps": 28.729
+      },
+      {
+        "from_s": 28.1,
+        "to_s": 34.0,
+        "wheel_samples": 590,
+        "all_three_deltas_zero": 513,
+        "raw_counter_unique_triplets": 77,
+        "gyro_samples": 587,
+        "yaw_change_deg": -0.104,
+        "gyro_rate_abs_p95_dps": 27.978
+      }
+    ]
+  },
+  "20261111_185718": {
+    "upper_commit": "9b810d05158995bb19deba5386eb3804e61f305c",
+    "lower_actual_commit": "7653af9b5f44ff18a1aa268eaf70d125ff0ee389",
+    "lower_source_dirty": 1,
+    "lower_actual_mode": "NormalRun",
+    "sensor_dir": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261111_185108_competition_wheel",
+    "opening_times_s": {
+      "center_observe": 12.927632,
+      "capture_audit": 16.461926,
+      "grab_command": 30.61875,
+      "stash_nav": 31.334992
+    },
+    "center_to_grab_s": 17.691118,
+    "motion_windows": [
+      {
+        "from_s": 23,
+        "to_s": 29.9,
+        "wheel_samples": 690,
+        "all_three_deltas_zero": 690,
+        "raw_counter_unique_triplets": 1,
+        "gyro_samples": 688,
+        "yaw_change_deg": 0.0,
+        "gyro_rate_abs_p95_dps": 0.0
+      }
+    ]
+  }
+}
