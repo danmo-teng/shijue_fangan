@@ -1,0 +1,99 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -394,6 +394,8 @@
+ static float safe_sweep_heading_deg;
+ static bool safe_sweep_recheck_pending;
+ static bool safe_sweep_visual_pickup;
++/* Candidate cancel-and-park role, kept until a new RETURN action leaves46. */
++static bool sweep_abandon_after_park;
+ static int32_t safe_sweep_center_x_mm;
+ static int32_t safe_sweep_center_y_mm;
+ static SweepPickupPhase sweep_pickup_phase;
+@@ -1377,6 +1379,7 @@
+     cluster_claws_ready = false;
+     safe_sweep_recheck_pending = false;
+     safe_sweep_visual_pickup = false;
++    sweep_abandon_after_park = false;
+     sweep_pickup_target_active = false;
+     sweep_audit_consistent_count = 0U;
+     sweep_audit_last_id_valid = false;
+@@ -1667,6 +1670,7 @@
+   safe_sweep_heading_deg = 0.0f;
+   safe_sweep_recheck_pending = false;
+   safe_sweep_visual_pickup = false;
++  sweep_abandon_after_park = false;
+   safe_sweep_center_x_mm = 0;
+   safe_sweep_center_y_mm = 0;
+   sweep_pickup_phase = SWEEP_PICKUP_SEARCH;
+@@ -4315,6 +4319,7 @@
+       safe_enter_resume_push_ms = push_end_ms - nav_final_push_started_ms;
+     }
+   }
++  sweep_abandon_after_park = false;
+   sweep_original_injury = audit_destination_injury;
+   sweep_original_left = audit_last_left_class;
+   sweep_original_right = audit_last_right_class;
+@@ -4654,8 +4659,18 @@
+       break;
+     case VS_FACE_OBSTACLE:
+       if (task_sweep_turn(safe_sweep_heading_deg, now_ms)) {
+-        task_sweep_trace_begin();
+-        task_enter(TASK_SAFE_SWEEP_APPROACH, now_ms);
++        if (sweep_abandon_after_park) {
++          /* Parking prefix completed with open claws. No obstacle pickup,
++           * fake DONE40, or consumption of the old cancellation action. */
++          safe_sweep_recheck_pending = false;
++          sweep_trace_recording = false;
++          sweep_retrieving = false;
++          task_clear_audit_result();
++          task_enter(TASK_SAFE_SWEEP_RETRIEVE_FAILED, now_ms);
++        } else {
++          task_sweep_trace_begin();
++          task_enter(TASK_SAFE_SWEEP_APPROACH, now_ms);
++        }
+       }
+       break;
+     case VS_GRAB_OBSTACLE:
+@@ -5840,6 +5855,34 @@
+     task_status.acknowledged_sequence = command->sequence;
+     command_accepted = true;
+   } else if ((command->command == VISION_CMD_RETURN_CENTER) &&
++             (state == TASK_ALIGN_SAFE_ZONE) && safe_align_done &&
++             safe_align_visual_confirmed && task_status.gripper_closed &&
++             audit_received && audit_valid && !audit_initial_stash &&
++             command->action_id != accepted_context.action_id &&
++             task_distance_command_valid(command, VISION_CMD_RETURN_CENTER)) {
++    /* Paired upper candidate: cancel blocked delivery and park legal cargo.
++     * The wrapper already validated task/new-action ownership and payload.
++     * D/H are unused in this mode11-only cancellation role. */
++    VisionMissionCommand park = *command;
++    park.target_x_mm = 0;
++    park.target_y_mm = audit_destination_injury ?
++        -(int16_t)APP_SAFE_SWEEP_PLACEMENT_MM : (int16_t)APP_SAFE_SWEEP_PLACEMENT_MM;
++    task_status.acknowledged_sequence = command->sequence;
++    command_accepted = true;
++    task_begin_safe_sweep(&park, now_ms);
++    sweep_abandon_after_park = true;
++  } else if ((command->command == VISION_CMD_RETURN_CENTER) &&
++             sweep_abandon_after_park &&
++             ((state == TASK_SAFE_SWEEP) ||
++              (state == TASK_SAFE_SWEEP_RETRIEVE_FAILED)) &&
++             command->task_id == accepted_context.task_id &&
++             command->action_id == accepted_context.action_id &&
++             task_distance_command_valid(command, VISION_CMD_RETURN_CENTER)) {
++    /* Old cancellation duplicates ACK only, even in46. They cannot hide46
++     * by starting centre navigation before the host issues a new action. */
++    task_status.acknowledged_sequence = command->sequence;
++    command_accepted = true;
++  } else if ((command->command == VISION_CMD_RETURN_CENTER) &&
+              (state == TASK_CAPTURE_RETURN_WAIT) &&
+              task_distance_command_valid(command, VISION_CMD_RETURN_CENTER)) {
+     task_status.acknowledged_sequence = command->sequence;
+@@ -5851,6 +5894,7 @@
+              task_distance_command_valid(command, VISION_CMD_RETURN_CENTER)) {
+     task_status.acknowledged_sequence = command->sequence;
+     command_accepted = true;
++    sweep_abandon_after_park = false;
+     task_enter(TASK_FACE_FIELD_CENTER, now_ms);
+   } else if ((command->command == VISION_CMD_RETURN_CENTER) &&
+              (state == TASK_EXIT_SAFE_ZONE) &&

@@ -1,0 +1,785 @@
+[
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 13970,
+    "capture_s": 583.755776569,
+    "state": "ACQUIRE_SAFE_ZONE",
+    "reason": "SAFE_CORRIDOR_UNAVAILABLE",
+    "mode": 11,
+    "bbox": [
+      388,
+      111,
+      97,
+      99
+    ],
+    "class": "danger_cyan",
+    "id": 1141,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      366,
+      39,
+      850,
+      142
+    ],
+    "video_frame_index": 85
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 13979,
+    "capture_s": 584.040158097,
+    "state": "ACQUIRE_SAFE_ZONE",
+    "reason": "SAFE_CORRIDOR_UNAVAILABLE",
+    "mode": 11,
+    "bbox": [
+      390,
+      112,
+      95,
+      99
+    ],
+    "class": "danger_cyan",
+    "id": 1141,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      374,
+      39,
+      842,
+      142
+    ],
+    "video_frame_index": 86
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 13999,
+    "capture_s": 584.68420434,
+    "state": "ACQUIRE_SAFE_ZONE",
+    "reason": "SAFE_CORRIDOR_UNAVAILABLE",
+    "mode": 11,
+    "bbox": [
+      390,
+      111,
+      95,
+      98
+    ],
+    "class": "danger_cyan",
+    "id": 1141,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      366,
+      40,
+      850,
+      141
+    ],
+    "video_frame_index": 88
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14007,
+    "capture_s": 585.075064945,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_zone_clear_mechanics_wait",
+    "mode": 39,
+    "bbox": [
+      391,
+      111,
+      94,
+      98
+    ],
+    "class": "danger_cyan",
+    "id": 1141,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      368,
+      39,
+      848,
+      142
+    ],
+    "video_frame_index": 89
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14133,
+    "capture_s": 589.445441431,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_zone_clear_mechanics_wait",
+    "mode": 39,
+    "bbox": [
+      3,
+      165,
+      192,
+      119
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      8,
+      18,
+      632,
+      222
+    ],
+    "video_frame_index": 111
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14165,
+    "capture_s": 590.56763474,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_pixel_approach",
+    "mode": 42,
+    "bbox": [
+      688,
+      138,
+      158,
+      128
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      487,
+      25,
+      789,
+      186
+    ],
+    "video_frame_index": 116
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14169,
+    "capture_s": 590.720769891,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_pixel_approach",
+    "mode": 42,
+    "bbox": [
+      722,
+      147,
+      165,
+      128
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      510,
+      28,
+      768,
+      203
+    ],
+    "video_frame_index": 117
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14173,
+    "capture_s": 590.860280132,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_pixel_approach",
+    "mode": 42,
+    "bbox": [
+      715,
+      196,
+      163,
+      131
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      510,
+      87,
+      766,
+      183
+    ],
+    "video_frame_index": 118
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14181,
+    "capture_s": 591.197433399,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_pixel_approach",
+    "mode": 42,
+    "bbox": [
+      709,
+      181,
+      186,
+      148
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      506,
+      63,
+      772,
+      231
+    ],
+    "video_frame_index": 119
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14185,
+    "capture_s": 591.315524219,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_pixel_approach",
+    "mode": 42,
+    "bbox": [
+      723,
+      249,
+      188,
+      148
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      514,
+      127,
+      763,
+      231
+    ],
+    "video_frame_index": 120
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14189,
+    "capture_s": 591.451025158,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_target_wait",
+    "mode": 42,
+    "bbox": [
+      723,
+      266,
+      195,
+      144
+    ],
+    "class": "injured_orange",
+    "id": 1160,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      487,
+      130,
+      791,
+      218
+    ],
+    "video_frame_index": 121
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14290,
+    "capture_s": 595.072255931,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_target_wait",
+    "mode": 42,
+    "bbox": [
+      0,
+      221,
+      241,
+      160
+    ],
+    "class": "injured_orange",
+    "id": 1196,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      8,
+      0,
+      613,
+      329
+    ],
+    "video_frame_index": 139
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14412,
+    "capture_s": 599.475483765,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_target_wait",
+    "mode": 42,
+    "bbox": [
+      0,
+      264,
+      164,
+      179
+    ],
+    "class": "injured_orange",
+    "id": 1227,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      0,
+      0,
+      530,
+      363
+    ],
+    "video_frame_index": 162
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 5385,
+    "capture_s": 299.371250504,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      373,
+      135,
+      56,
+      60
+    ],
+    "class": "core_black",
+    "id": 582,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      319,
+      33,
+      800,
+      153
+    ],
+    "video_frame_index": 57
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4323,
+    "capture_s": 863.182901564,
+    "state": "ACQUIRE_SAFE_ZONE",
+    "reason": "safe_zone_acquire_wait",
+    "mode": 11,
+    "bbox": [
+      586,
+      22,
+      88,
+      91
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      351,
+      0,
+      836,
+      90
+    ],
+    "video_frame_index": 49
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4327,
+    "capture_s": 863.368281269,
+    "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+    "reason": "command_context_pending",
+    "mode": 11,
+    "bbox": [
+      587,
+      24,
+      87,
+      90
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      355,
+      0,
+      833,
+      92
+    ],
+    "video_frame_index": 50
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4335,
+    "capture_s": 863.668387064,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      594,
+      27,
+      84,
+      88
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      356,
+      0,
+      839,
+      95
+    ],
+    "video_frame_index": 51
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4339,
+    "capture_s": 863.797933322,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      600,
+      25,
+      86,
+      96
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      355,
+      0,
+      868,
+      100
+    ],
+    "video_frame_index": 52
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4343,
+    "capture_s": 863.968632249,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      584,
+      37,
+      95,
+      100
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      344,
+      0,
+      881,
+      108
+    ],
+    "video_frame_index": 53
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4352,
+    "capture_s": 864.237544979,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      547,
+      53,
+      98,
+      113
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      283,
+      4,
+      939,
+      130
+    ],
+    "video_frame_index": 54
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4356,
+    "capture_s": 864.349430712,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      525,
+      65,
+      101,
+      115
+    ],
+    "class": "danger_cyan",
+    "id": 322,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      243,
+      0,
+      976,
+      145
+    ],
+    "video_frame_index": 55
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4498,
+    "capture_s": 869.616687243,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_zone_clear_mechanics_wait",
+    "mode": 39,
+    "bbox": [
+      542,
+      155,
+      137,
+      152
+    ],
+    "class": "danger_cyan",
+    "id": 335,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      246,
+      4,
+      1030,
+      229
+    ],
+    "video_frame_index": 79
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4502,
+    "capture_s": 869.732447863,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_target_wait",
+    "mode": 42,
+    "bbox": [
+      644,
+      155,
+      136,
+      155
+    ],
+    "class": "danger_cyan",
+    "id": 335,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      352,
+      4,
+      926,
+      245
+    ],
+    "video_frame_index": 80
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4609,
+    "capture_s": 873.968895555,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_pixel_approach",
+    "mode": 42,
+    "bbox": [
+      650,
+      206,
+      132,
+      148
+    ],
+    "class": "danger_cyan",
+    "id": 363,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      363,
+      59,
+      915,
+      238
+    ],
+    "video_frame_index": 100
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4617,
+    "capture_s": 874.254169521,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_target_wait",
+    "mode": 42,
+    "bbox": [
+      659,
+      254,
+      132,
+      148
+    ],
+    "class": "danger_cyan",
+    "id": 363,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      348,
+      90,
+      930,
+      254
+    ],
+    "video_frame_index": 101
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0003",
+    "frame": 4620,
+    "capture_s": 874.391874402,
+    "state": "CLEAR_SAFE_ZONE",
+    "reason": "safe_sweep_target_wait",
+    "mode": 42,
+    "bbox": [
+      703,
+      219,
+      143,
+      151
+    ],
+    "class": "danger_cyan",
+    "id": 363,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      371,
+      42,
+      907,
+      292
+    ],
+    "video_frame_index": 102
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0006",
+    "frame": 9119,
+    "capture_s": 1024.695450894,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      604,
+      38,
+      88,
+      98
+    ],
+    "class": "danger_cyan",
+    "id": 625,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      375,
+      0,
+      852,
+      113
+    ],
+    "video_frame_index": 64
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0006",
+    "frame": 9128,
+    "capture_s": 1025.080378182,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      585,
+      54,
+      96,
+      117
+    ],
+    "class": "danger_cyan",
+    "id": 625,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      325,
+      1,
+      921,
+      138
+    ],
+    "video_frame_index": 66
+  },
+  {
+    "session": "20261111_141241_competition_wheel",
+    "clip": "safe_zone_replay_0006",
+    "frame": 9137,
+    "capture_s": 1025.335886698,
+    "state": "ENTER_SAFE_ZONE",
+    "reason": "delivery_enter_safe_zone",
+    "mode": 10,
+    "bbox": [
+      600,
+      86,
+      112,
+      129
+    ],
+    "class": "danger_cyan",
+    "id": 625,
+    "inside": false,
+    "old": false,
+    "new": true,
+    "safe": [
+      338,
+      0,
+      940,
+      171
+    ],
+    "video_frame_index": 67
+  }
+]

@@ -1,0 +1,480 @@
+{
+  "baseline": {
+    "main_exit": 1,
+    "main_stdout": "",
+    "main_stderr": "Traceback (most recent call last):\n  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 1896, in <module>\n    main()\n  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 1877, in main\n    test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions()\n  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 125, in test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions\n    assert output.state == CompetitionState.CAPTURE_AUDIT\nAssertionError\n",
+    "per_function_exit": 0,
+    "results": [
+      {
+        "name": "test_start_handshake_suppresses_task_frames_until_start_clear",
+        "result": "PASS"
+      },
+      {
+        "name": "test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 125, in test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions",
+          "    assert output.state == CompetitionState.CAPTURE_AUDIT",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_search_recovery_follows_f407_modes_without_local_timeout",
+        "result": "PASS"
+      },
+      {
+        "name": "test_target_reassociation_and_only_real_abort_sources",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 258, in test_target_reassociation_and_only_real_abort_sources",
+          "    assert output.state == CompetitionState.FAULT",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_return_stash_requires_confirmed_cargo_and_search_handoff",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 311, in test_return_stash_requires_confirmed_cargo_and_search_handoff",
+          "    assert output.reason == \"stash_return_start_gate\"",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_delivery_window_and_two_observation_timeout",
+        "result": "FAIL",
+        "error": "RuntimeError('formal delivery destination is not audit-confirmed')",
+        "last_trace": [
+          "    target = self._target_point()",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/state_machine.py\", line 4375, in _target_point",
+          "    raise RuntimeError(\"formal delivery destination is not audit-confirmed\")",
+          "RuntimeError: formal delivery destination is not audit-confirmed"
+        ]
+      },
+      {
+        "name": "test_detour_completion_requires_fresh_changed_ack",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 548, in test_detour_completion_requires_fresh_changed_ack",
+          "    assert output.state == CompetitionState.DETOUR",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_initial_stash_and_invalid_release",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 598, in test_initial_stash_and_invalid_release",
+          "    assert output.state == CompetitionState.CAPTURE_AUDIT",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_material_priority_excludes_danger",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 662, in test_material_priority_excludes_danger",
+          "    assert output.state == CompetitionState.APPROACH",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_post_first_single_casualty_priority_uses_measured_bands",
+        "result": "PASS"
+      },
+      {
+        "name": "test_green_and_danger_claw_releases_without_authorizing_mixed_delivery",
+        "result": "PASS"
+      },
+      {
+        "name": "test_first_green_priority_unlock_requires_actual_visual_confirmation",
+        "result": "PASS"
+      },
+      {
+        "name": "test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone",
+        "result": "PASS"
+      },
+      {
+        "name": "test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo",
+        "result": "PASS"
+      },
+      {
+        "name": "test_stable_audit_is_invalidated_by_change_or_expiry",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 960, in test_stable_audit_is_invalidated_by_change_or_expiry",
+          "    assert output.state == CompetitionState.AUDIT_CONFIRM",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_disperse_requires_fresh_green_and_respects_limit",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 1011, in test_disperse_requires_fresh_green_and_respects_limit",
+          "    assert output.state == CompetitionState.DISPERSE",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_release_side_selection",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "    assert _run_invalid_audit(_audit_mission(), danger_left).command.opcode == CMD_RELEASE_LEFT",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 938, in _run_invalid_audit",
+          "    assert output.state == CompetitionState.AUDIT_CONFIRM",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_single_release_recheck_and_final_both_release",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "    output = _run_invalid_audit(mission, invalid.capture_audit)",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 938, in _run_invalid_audit",
+          "    assert output.state == CompetitionState.AUDIT_CONFIRM",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_return_center_sends_zero_until_search",
+        "result": "PASS"
+      },
+      {
+        "name": "test_delivery_requires_outside_to_inside_transition",
+        "result": "FAIL",
+        "error": "RuntimeError('formal delivery destination is not audit-confirmed')",
+        "last_trace": [
+          "    target = self._target_point()",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/state_machine.py\", line 4375, in _target_point",
+          "    raise RuntimeError(\"formal delivery destination is not audit-confirmed\")",
+          "RuntimeError: formal delivery destination is not audit-confirmed"
+        ]
+      },
+      {
+        "name": "test_boundary_guard_points_back_into_field",
+        "result": "FAIL",
+        "error": "AttributeError(\"'CompetitionMission' object has no attribute '_boundary_risk'\")",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_baseline_20261111/competition_rescue/tests/test_state_machine.py\", line 1271, in test_boundary_guard_points_back_into_field",
+          "    assert mission._boundary_risk(",
+          "AttributeError: 'CompetitionMission' object has no attribute '_boundary_risk'"
+        ]
+      },
+      {
+        "name": "test_4071_separation_evidence_and_fault_latch",
+        "result": "PASS"
+      },
+      {
+        "name": "test_4071_injury_pending_and_missing_audit_exit",
+        "result": "PASS"
+      },
+      {
+        "name": "test_mode51_reference_audit_exits_and_budget",
+        "result": "PASS"
+      },
+      {
+        "name": "test_range_recheck_accepts_small_error_and_realigns_large_overshoot",
+        "result": "PASS"
+      },
+      {
+        "name": "test_loaded_empty_reobserves_once_without_stable_empty_or_fake_load",
+        "result": "PASS"
+      },
+      {
+        "name": "test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps",
+        "result": "PASS"
+      },
+      {
+        "name": "test_range_cumulative_and_transport_sort",
+        "result": "PASS"
+      },
+      {
+        "name": "test_safe_staging_arrival_keeps_zero_handoff_and_stash_window",
+        "result": "PASS"
+      },
+      {
+        "name": "test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception",
+        "result": "PASS"
+      },
+      {
+        "name": "test_progressive_sorting_allows_third_action_and_counts_only_real_attempts",
+        "result": "PASS"
+      },
+      {
+        "name": "test_post_grab_multigreen_reuses_accepted_audit_without_release_backoff",
+        "result": "PASS"
+      }
+    ],
+    "per_function_stderr": ""
+  },
+  "candidate": {
+    "main_exit": 1,
+    "main_stdout": "",
+    "main_stderr": "Traceback (most recent call last):\n  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1896, in <module>\n    main()\n  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1872, in main\n    test_range_cumulative_and_transport_sort()\n  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1682, in test_range_cumulative_and_transport_sort\n    assert curve.command.opcode == CMD_DISPERSE_PILE and curve.command.flags & CMD_SIDE_VALID\nAssertionError\n",
+    "per_function_exit": 0,
+    "results": [
+      {
+        "name": "test_start_handshake_suppresses_task_frames_until_start_clear",
+        "result": "PASS"
+      },
+      {
+        "name": "test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 125, in test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions",
+          "    assert output.state == CompetitionState.CAPTURE_AUDIT",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_search_recovery_follows_f407_modes_without_local_timeout",
+        "result": "PASS"
+      },
+      {
+        "name": "test_target_reassociation_and_only_real_abort_sources",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 258, in test_target_reassociation_and_only_real_abort_sources",
+          "    assert output.state == CompetitionState.FAULT",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_return_stash_requires_confirmed_cargo_and_search_handoff",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 311, in test_return_stash_requires_confirmed_cargo_and_search_handoff",
+          "    assert output.reason == \"stash_return_start_gate\"",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_delivery_window_and_two_observation_timeout",
+        "result": "FAIL",
+        "error": "RuntimeError('formal delivery destination is not audit-confirmed')",
+        "last_trace": [
+          "    target = self._target_point()",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/state_machine.py\", line 4386, in _target_point",
+          "    raise RuntimeError(\"formal delivery destination is not audit-confirmed\")",
+          "RuntimeError: formal delivery destination is not audit-confirmed"
+        ]
+      },
+      {
+        "name": "test_detour_completion_requires_fresh_changed_ack",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 548, in test_detour_completion_requires_fresh_changed_ack",
+          "    assert output.state == CompetitionState.DETOUR",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_initial_stash_and_invalid_release",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 598, in test_initial_stash_and_invalid_release",
+          "    assert output.state == CompetitionState.CAPTURE_AUDIT",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_material_priority_excludes_danger",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 662, in test_material_priority_excludes_danger",
+          "    assert output.state == CompetitionState.APPROACH",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_post_first_single_casualty_priority_uses_measured_bands",
+        "result": "PASS"
+      },
+      {
+        "name": "test_green_and_danger_claw_releases_without_authorizing_mixed_delivery",
+        "result": "PASS"
+      },
+      {
+        "name": "test_first_green_priority_unlock_requires_actual_visual_confirmation",
+        "result": "PASS"
+      },
+      {
+        "name": "test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone",
+        "result": "PASS"
+      },
+      {
+        "name": "test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo",
+        "result": "PASS"
+      },
+      {
+        "name": "test_stable_audit_is_invalidated_by_change_or_expiry",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 960, in test_stable_audit_is_invalidated_by_change_or_expiry",
+          "    assert output.state == CompetitionState.AUDIT_CONFIRM",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_disperse_requires_fresh_green_and_respects_limit",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1011, in test_disperse_requires_fresh_green_and_respects_limit",
+          "    assert output.state == CompetitionState.DISPERSE",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_release_side_selection",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "    assert _run_invalid_audit(_audit_mission(), danger_left).command.opcode == CMD_RELEASE_LEFT",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 938, in _run_invalid_audit",
+          "    assert output.state == CompetitionState.AUDIT_CONFIRM",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_single_release_recheck_and_final_both_release",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "    output = _run_invalid_audit(mission, invalid.capture_audit)",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 938, in _run_invalid_audit",
+          "    assert output.state == CompetitionState.AUDIT_CONFIRM",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_return_center_sends_zero_until_search",
+        "result": "PASS"
+      },
+      {
+        "name": "test_delivery_requires_outside_to_inside_transition",
+        "result": "FAIL",
+        "error": "RuntimeError('formal delivery destination is not audit-confirmed')",
+        "last_trace": [
+          "    target = self._target_point()",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/state_machine.py\", line 4386, in _target_point",
+          "    raise RuntimeError(\"formal delivery destination is not audit-confirmed\")",
+          "RuntimeError: formal delivery destination is not audit-confirmed"
+        ]
+      },
+      {
+        "name": "test_boundary_guard_points_back_into_field",
+        "result": "FAIL",
+        "error": "AttributeError(\"'CompetitionMission' object has no attribute '_boundary_risk'\")",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1271, in test_boundary_guard_points_back_into_field",
+          "    assert mission._boundary_risk(",
+          "AttributeError: 'CompetitionMission' object has no attribute '_boundary_risk'"
+        ]
+      },
+      {
+        "name": "test_4071_separation_evidence_and_fault_latch",
+        "result": "PASS"
+      },
+      {
+        "name": "test_4071_injury_pending_and_missing_audit_exit",
+        "result": "PASS"
+      },
+      {
+        "name": "test_mode51_reference_audit_exits_and_budget",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1482, in test_mode51_reference_audit_exits_and_budget",
+          "    assert out.command.opcode == CMD_RELEASE_BOTH and invalid.delivery_count == 4",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_range_recheck_accepts_small_error_and_realigns_large_overshoot",
+        "result": "PASS"
+      },
+      {
+        "name": "test_loaded_empty_reobserves_once_without_stable_empty_or_fake_load",
+        "result": "PASS"
+      },
+      {
+        "name": "test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps",
+        "result": "PASS"
+      },
+      {
+        "name": "test_range_cumulative_and_transport_sort",
+        "result": "FAIL",
+        "error": "AssertionError()",
+        "last_trace": [
+          "  File \"<string>\", line 6, in <module>",
+          "  File \"/tmp/match_batch_candidate_20261111/competition_rescue/tests/test_state_machine.py\", line 1682, in test_range_cumulative_and_transport_sort",
+          "    assert curve.command.opcode == CMD_DISPERSE_PILE and curve.command.flags & CMD_SIDE_VALID",
+          "AssertionError"
+        ]
+      },
+      {
+        "name": "test_safe_staging_arrival_keeps_zero_handoff_and_stash_window",
+        "result": "PASS"
+      },
+      {
+        "name": "test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception",
+        "result": "PASS"
+      },
+      {
+        "name": "test_progressive_sorting_allows_third_action_and_counts_only_real_attempts",
+        "result": "PASS"
+      },
+      {
+        "name": "test_post_grab_multigreen_reuses_accepted_audit_without_release_backoff",
+        "result": "PASS"
+      },
+      {
+        "name": "test_post_first_material_batch_two_three_grab_and_manifest_candidate",
+        "result": "PASS"
+      },
+      {
+        "name": "test_batch_policy_preserves_first_and_rejects_overload_injury_danger_candidate",
+        "result": "PASS"
+      }
+    ],
+    "per_function_stderr": ""
+  }
+}

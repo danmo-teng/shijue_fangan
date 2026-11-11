@@ -1,0 +1,63 @@
+{
+  "kind": "isolated source application and static assertions only; no firmware build or board access",
+  "results": [
+    {
+      "source": "e85_repository_reference",
+      "base_Task.c_sha256": "58be4a29468a6a10365e0f356bfb59314dc700932417d52808fda4b6d3d8bbef",
+      "patches": [
+        {
+          "name": "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+          "sha256": "64f47ec22734e69e4e45dcfe549a0a437975351013475be394cf0adafac89c06",
+          "exit_code": 0,
+          "stderr": ""
+        },
+        {
+          "name": "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+          "sha256": "4240daac1907d5e6a20f54c59a2eee7efe2747f334838c5cb2275d25e640dd04",
+          "exit_code": 0,
+          "stderr": ""
+        },
+        {
+          "name": "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+          "sha256": "d8ea4c683d85b17658546df06064ed615290e8ca2c709df62f9d29a62b77cac9",
+          "exit_code": 0,
+          "stderr": ""
+        }
+      ],
+      "combined_Task.c_sha256": "8d93a4cae2ec306dc74fda11c1307c2a883c173f76faaedfa1305b0eaec93cc5",
+      "assertions": [
+        "only new CLEAR resets net search angle",
+        "existing command-accepted API retained, no phantom motor symbol"
+      ]
+    },
+    {
+      "source": "captured_main_blob_c98f949",
+      "base_Task.c_sha256": "8b190f830a9a7b125f5c897ef7d309ba3735d56d25f51e1f6edd3527177a28a1",
+      "patches": [
+        {
+          "name": "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+          "sha256": "64f47ec22734e69e4e45dcfe549a0a437975351013475be394cf0adafac89c06",
+          "exit_code": 0,
+          "stderr": ""
+        },
+        {
+          "name": "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+          "sha256": "4240daac1907d5e6a20f54c59a2eee7efe2747f334838c5cb2275d25e640dd04",
+          "exit_code": 0,
+          "stderr": ""
+        },
+        {
+          "name": "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+          "sha256": "d8ea4c683d85b17658546df06064ed615290e8ca2c709df62f9d29a62b77cac9",
+          "exit_code": 0,
+          "stderr": ""
+        }
+      ],
+      "combined_Task.c_sha256": "07384a0c3c532ec4ae103ee55ffb181a3fe49c590281ea3db04da8b8dcf66579",
+      "assertions": [
+        "only new CLEAR resets net search angle",
+        "existing command-accepted API retained, no phantom motor symbol"
+      ]
+    }
+  ]
+}

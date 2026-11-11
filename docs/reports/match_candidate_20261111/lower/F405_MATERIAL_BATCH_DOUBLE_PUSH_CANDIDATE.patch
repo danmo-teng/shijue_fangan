@@ -1,0 +1,193 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -271,6 +271,11 @@
+ static uint32_t safe_enter_resume_mm, safe_enter_resume_push_ms;
+ static uint32_t delivery_exit_start_path_mm;
+ static uint8_t delivery_exit_phase;
++/* Latched from the legal audit at ENTER, never from a desired batch count. */
++static uint8_t delivery_push_material_count;
++/* task_enter clears nav_locked_heading_deg, so preserve this ENTER heading. */
++static float delivery_push_heading_deg;
++static bool delivery_double_push_done;
+ static uint32_t delivery_exit_phase_ready_ms;
+ static bool capture_budget_active, capture_wait_active, capture_escape_active;
+ static bool capture_escape_return_center;
+@@ -736,12 +741,12 @@
+         AUDIT_SEMANTIC_STASH_NONEMPTY : AUDIT_SEMANTIC_INVALID;
+   }
+ 
+-  if ((total != 1U) ||
++  if ((total == 0U) || (total > 3U) ||
+       ((uint8_t)(left_count + right_count) != total) ||
+       ((left_count == 0U) != (left == VISION_CARGO_NONE)) ||
+       ((right_count == 0U) != (right == VISION_CARGO_NONE)) ||
+-      (left == VISION_CARGO_MIXED_MATERIAL) ||
+-      (right == VISION_CARGO_MIXED_MATERIAL) ||
++      (left == VISION_CARGO_MIXED_MATERIAL && left_count < 2U) ||
++      (right == VISION_CARGO_MIXED_MATERIAL && right_count < 2U) ||
+       dangerous || unknown || injury_mixed) {
+     return AUDIT_SEMANTIC_INVALID;
+   }
+@@ -757,16 +762,20 @@
+     return (destination_injury && (total == 1U)) ?
+         AUDIT_SEMANTIC_INJURY_SINGLE : AUDIT_SEMANTIC_INVALID;
+   }
+-  /* Formal transport is exactly one GREEN or CORE, never MIXED_MATERIAL.
+-   * Selection priority belongs to the host; a legal held CORE remains legal. */
++  /* In the existing post-first phase, one to three GREEN/CORE objects
++   * may share a material delivery. This phase is not score proof.
++   * MIXED_MATERIAL is existing wire class6,
++   * not permission for injured/danger/unknown or uncounted cargo. */
+   const bool material =
+          !destination_injury &&
+          ((left == VISION_CARGO_NONE) ||
+           (left == VISION_CARGO_GREEN) ||
+-          (left == VISION_CARGO_CORE)) &&
++          (left == VISION_CARGO_CORE) ||
++          (left == VISION_CARGO_MIXED_MATERIAL)) &&
+          ((right == VISION_CARGO_NONE) ||
+           (right == VISION_CARGO_GREEN) ||
+-          (right == VISION_CARGO_CORE));
++          (right == VISION_CARGO_CORE) ||
++          (right == VISION_CARGO_MIXED_MATERIAL));
+   return material ? AUDIT_SEMANTIC_MATERIAL_LEGAL :
+                     AUDIT_SEMANTIC_INVALID;
+ }
+@@ -1501,10 +1510,21 @@
+     boundary_turn_done = false;
+   } else if (next == TASK_GRAB_ROTATE) {
+     task_reset_turn_tracker();
++  } else if (next == TASK_OPEN_FOR_RAM) {
++    delivery_exit_phase = 0U;
++    delivery_double_push_done = false;
+   } else if (next == TASK_EXIT_SAFE_ZONE) {
+-    delivery_exit_phase = 0U;
+-    delivery_exit_phase_ready_ms = now_ms + Lift_PositionWaitMs(APP_LIFT_START_ANGLE);
+-    Lift_SetStartPosition();
++    if (delivery_double_push_done) {
++      /* The bulk mode12 sequence already made its second raised retreat.
++       * Do not add the ordinary mode16 third retreat. */
++      delivery_exit_phase = 2U;
++      delivery_exit_phase_ready_ms = now_ms + Lift_PositionWaitMs(APP_LIFT_TRAVEL_ANGLE);
++      Lift_SetTravelPosition();
++    } else {
++      delivery_exit_phase = 0U;
++      delivery_exit_phase_ready_ms = now_ms + Lift_PositionWaitMs(APP_LIFT_START_ANGLE);
++      Lift_SetStartPosition();
++    }
+     Camera_SetAngle(APP_DELIVERY_CAMERA_ANGLE);
+     camera_angle = (float)APP_DELIVERY_CAMERA_ANGLE;
+   } else if ((next == TASK_NAVIGATE) ||
+@@ -1560,6 +1580,9 @@
+   step_started_ms = now_ms;
+   status_sent_ms = now_ms - APP_TASK_STATUS_PERIOD_MS;
+   delivery_exit_phase = 0U;
++  delivery_push_material_count = 0U;
++  delivery_push_heading_deg = 0.0f;
++  delivery_double_push_done = false;
+   capture_budget_active = capture_wait_active = capture_escape_active = false;
+   capture_escape_return_center = false;
+   capture_escape_reclose = capture_return_closed = capture_return_opening = false;
+@@ -3885,6 +3908,78 @@
+   }
+ }
+ 
++/* Bulk delivery only. The first push already completed through ENTER.
++ * Reuse the existing S1 exit order (55, reverse,86) and its servo travel
++ * estimate, not a new fixed delay or feedback qualification. No state15 is
++ * published until both pushes and raised retreats have actually progressed
++ * through this local mechanical state machine. */
++static void task_process_material_double_push(uint32_t now_ms)
++{
++  if (delivery_exit_phase == 0U) {
++    Motor_Stop();
++    task_status.motors_active = false;
++    if (Claw_Open(now_ms)) {
++      task_status.gripper_closed = false;
++      Camera_SetAngle(APP_DELIVERY_CAMERA_ANGLE);
++      camera_angle = (float)APP_DELIVERY_CAMERA_ANGLE;
++      step_started_ms = now_ms;
++      delivery_exit_phase_ready_ms = now_ms + Lift_PositionWaitMs(APP_LIFT_START_ANGLE);
++      Lift_SetStartPosition();
++      delivery_exit_phase = 1U;
++    }
++    return;
++  }
++  if (delivery_exit_phase == 1U || delivery_exit_phase == 3U ||
++      delivery_exit_phase == 5U) {
++    Motor_Stop();
++    task_status.motors_active = false;
++    if ((int32_t)(now_ms - delivery_exit_phase_ready_ms) >= 0) {
++      ++delivery_exit_phase;
++      delivery_exit_path_valid = false;
++    }
++    return;
++  }
++  if (delivery_exit_phase == 2U || delivery_exit_phase == 4U ||
++      delivery_exit_phase == 6U) {
++    LocationPose pose;
++    if (!task_get_location_pose(&pose, now_ms)) { return; }
++    if (!delivery_exit_path_valid) {
++      delivery_exit_start_path_mm = pose.path_mm;
++      delivery_exit_path_valid = true;
++    }
++    const uint32_t target_mm =
++        (uint32_t)(APP_DELIVERY_EXIT_DISTANCE_M * 1000.0f + 0.5f);
++    const uint32_t used = pose.path_mm - delivery_exit_start_path_mm;
++    MotorDistanceStatus result = MOTOR_DISTANCE_DONE;
++    if (used < target_mm) {
++      const bool second_push = delivery_exit_phase == 4U;
++      const float distance_m = (float)(target_mm - used) * 0.001f;
++      result = Motor_MoveDistanceHeading(second_push ? distance_m : -distance_m,
++          second_push ? APP_SAFE_FINAL_PUSH_SPEED_MM_S : APP_DELIVERY_EXIT_SPEED_MM_S,
++          delivery_push_heading_deg);
++    }
++    task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
++    if (result == MOTOR_DISTANCE_DONE) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      if (delivery_exit_phase == 6U) {
++        delivery_double_push_done = true;
++        task_enter(TASK_RAM_VERIFY, now_ms);
++      } else {
++        const bool lower_for_second_push = delivery_exit_phase == 2U;
++        delivery_exit_phase_ready_ms = now_ms + Lift_PositionWaitMs(
++            lower_for_second_push ? APP_LIFT_TRAVEL_ANGLE : APP_LIFT_START_ANGLE);
++        if (lower_for_second_push) { Lift_SetTravelPosition(); }
++        else { Lift_SetStartPosition(); }
++        ++delivery_exit_phase;
++      }
++    } else if (distance_failed(result)) {
++      task_stop(TASK_FAULT_MOTOR, now_ms);
++    }
++    return;
++  }
++}
++
+ static void task_process_face_center(const VisionData *vision,
+                                      uint32_t now_ms)
+ {
+@@ -5813,7 +5908,12 @@
+     task_enter(TASK_NAVIGATE, now_ms);
+     delivery_enter_active = true;
+     delivery_stage_only = false;
++    delivery_push_material_count =
++        first_delivery_done && audit_last_semantic == AUDIT_SEMANTIC_MATERIAL_LEGAL ?
++        audit_last_total_count : 0U;
++    delivery_double_push_done = false;
+     nav_locked_heading_deg = task_safe_zone_heading();
++    delivery_push_heading_deg = nav_locked_heading_deg;
+     nav_heading_locked = true;
+     nav_ready = true;
+     task_status.nav_heading_locked = true;
+@@ -6851,6 +6951,10 @@
+       break;
+ 
+     case TASK_OPEN_FOR_RAM:
++      if (delivery_push_material_count >= 2U) {
++        task_process_material_double_push(now_ms);
++        break;
++      }
+       if (!delivery_enter_command_ok(&vision.mission)) {
+         /* Opening is safe to pause. Keep the state and wait for a fresh,
+          * matching ENTER command instead of latching a communication fault. */

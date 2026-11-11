@@ -1,0 +1,26 @@
+{
+  "kind": "source-only consistency patch, not actual cause or deployment",
+  "reference": "repository e85c738, actual board dirty1; flashed bytes unverified",
+  "change": "Legacy HOLD ACK-only exemptions match existing runtime HOLD and PAUSE exemptions for WAIT_CONFIG, START, OPEN_CLAW",
+  "unchanged": [
+    "manual ABORT/STOP/PAUSE semantics",
+    "start speeds, timeout, distance, arrival thresholds",
+    "initial claw mechanism",
+    "protocol fields and context pairing"
+  ],
+  "evidence_limit": "Both logged START periods had no accepted HOLD; this potential branch mismatch is not a proven explanation of the observed20second zero-encoder interval.",
+  "patch_dry_runs": [
+    {
+      "base": "e85_repository_reference",
+      "exit_code": 0,
+      "stdout": "checking file Main/Src/Task.c\n",
+      "stderr": ""
+    },
+    {
+      "base": "main_camera_order_reference",
+      "exit_code": 0,
+      "stdout": "checking file Main/Src/Task.c\nHunk #1 succeeded at 5407 (offset 8 lines).\n",
+      "stderr": ""
+    }
+  ]
+}

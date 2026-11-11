@@ -1,0 +1,66 @@
+{
+  "kind": "Applied only to isolated /tmp source copies, no lower repository or device changed. Not a full firmware compile.",
+  "results": [
+    {
+      "base": "e85_repository_reference",
+      "source_copy": "/tmp/match-prerepair-20261111/combined_patch_source_check/e85_repository_reference/Main/Src/Task.c",
+      "patches": [
+        {
+          "patch": "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+          "exit_code": 0,
+          "stdout": "patching file Main/Src/Task.c\nHunk #1 succeeded at 4592 (offset -11 lines).\n",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+          "exit_code": 0,
+          "stdout": "patching file Main/Src/Task.c\nHunk #4 succeeded at 5017 (offset 15 lines).\nHunk #5 succeeded at 5048 (offset 15 lines).\nHunk #6 succeeded at 5160 (offset 15 lines).\n",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+          "exit_code": 0,
+          "stdout": "patching file Main/Src/Task.c\nHunk #1 succeeded at 5455 (offset 56 lines).\n",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "base": "main_camera_order_reference",
+      "source_copy": "/tmp/match-prerepair-20261111/combined_patch_source_check/main_camera_order_reference/Main/Src/Task.c",
+      "patches": [
+        {
+          "patch": "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+          "exit_code": 0,
+          "stdout": "patching file Main/Src/Task.c\n",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+          "exit_code": 0,
+          "stdout": "patching file Main/Src/Task.c\nHunk #3 succeeded at 4332 (offset 5 lines).\nHunk #4 succeeded at 5025 (offset 23 lines).\nHunk #5 succeeded at 5056 (offset 23 lines).\nHunk #6 succeeded at 5168 (offset 23 lines).\n",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+          "exit_code": 0,
+          "stdout": "patching file Main/Src/Task.c\nHunk #1 succeeded at 5463 (offset 64 lines).\n",
+          "stderr": ""
+        }
+      ]
+    }
+  ],
+  "source_references": {
+    "repository_e85_reference": {
+      "commit": "e85c738075451574e4c29ea7da05daf5a8258b6b",
+      "Task.c_sha256": "58be4a29468a6a10365e0f356bfb59314dc700932417d52808fda4b6d3d8bbef",
+      "not_flashing_proof": "device reported dirty1"
+    },
+    "main_camera_order_reference": {
+      "commit": null,
+      "Task.c_blob_sha": "c98f949b1b1bbac6e8d6b01727b03c88a0cee74a",
+      "Task.c_sha256": "8b190f830a9a7b125f5c897ef7d309ba3735d56d25f51e1f6edd3527177a28a1",
+      "description": "captured content fingerprint; main is moving, resolved repository commit was not returned. Do not treat future main as identical."
+    }
+  }
+}

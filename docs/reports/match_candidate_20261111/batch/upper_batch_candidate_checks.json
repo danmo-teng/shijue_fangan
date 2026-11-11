@@ -1,0 +1,196 @@
+{
+  "kind": "isolated_tmp_source_checks_not_full_UART_firmware_or_car_validation",
+  "checks": [
+    {
+      "check": "test_post_first_material_batch_two_three_grab_and_manifest_candidate",
+      "result": "PASS"
+    },
+    {
+      "check": "test_batch_policy_preserves_first_and_rejects_overload_injury_danger_candidate",
+      "result": "PASS"
+    },
+    {
+      "check": "test_post_first_single_casualty_priority_uses_measured_bands",
+      "result": "PASS"
+    },
+    {
+      "check": "test_green_and_danger_claw_releases_without_authorizing_mixed_delivery",
+      "result": "PASS"
+    },
+    {
+      "check": "test_three_material_full_roi_wire_and_post_first_valid_candidate",
+      "result": "PASS"
+    },
+    {
+      "check": "test_multi_delivery_confirmation_requires_entire_known_manifest_candidate",
+      "result": "PASS"
+    }
+  ],
+  "real_audit_replay": [
+    {
+      "session": "20261111_141241_competition",
+      "frame": 6087,
+      "state": "TRANSPORT_AUDIT",
+      "first_common_delivered_for_actual_phase": true,
+      "raw_audit": {
+        "left_class": "green_supply",
+        "right_class": "core_black",
+        "left_count": 1,
+        "right_count": 1,
+        "left_green_count": 1,
+        "right_green_count": 0,
+        "total_count": 2,
+        "danger_present": false,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": false,
+        "right_invalid": false,
+        "left_selected_count": 0,
+        "right_selected_count": 0,
+        "left_track_stability": 152,
+        "right_track_stability": 417,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": 618,
+        "right_stable_track_id": 606,
+        "class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "left_class_counts": [
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "right_class_counts": [
+          [
+            "core_black",
+            1
+          ]
+        ],
+        "left_isolated_green": false,
+        "right_isolated_green": false
+      },
+      "candidate_legal": true,
+      "change": "becomes legal and follows normal GRAB"
+    },
+    {
+      "session": "20261111_141241_competition",
+      "frame": 11427,
+      "state": "DISPERSE",
+      "first_common_delivered_for_actual_phase": true,
+      "raw_audit": {
+        "left_class": "mixed_material",
+        "right_class": "",
+        "left_count": 2,
+        "right_count": 0,
+        "left_green_count": 1,
+        "right_green_count": 0,
+        "total_count": 2,
+        "danger_present": false,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": false,
+        "right_invalid": false,
+        "left_selected_count": 1,
+        "right_selected_count": 0,
+        "left_track_stability": 314,
+        "right_track_stability": 0,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": 941,
+        "right_stable_track_id": null,
+        "class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "left_class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "right_class_counts": [],
+        "left_isolated_green": false,
+        "right_isolated_green": false
+      },
+      "candidate_legal": true,
+      "change": "becomes legal and follows normal GRAB"
+    },
+    {
+      "session": "20000101_080032_competition_15",
+      "frame": 2017,
+      "state": "TRANSPORT_AUDIT",
+      "first_common_delivered_for_actual_phase": false,
+      "raw_audit": {
+        "left_class": "mixed_material",
+        "right_class": "",
+        "left_count": 2,
+        "right_count": 0,
+        "left_green_count": 1,
+        "right_green_count": 0,
+        "total_count": 2,
+        "danger_present": false,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": false,
+        "right_invalid": false,
+        "left_selected_count": 0,
+        "right_selected_count": 0,
+        "left_track_stability": 189,
+        "right_track_stability": 0,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": 100,
+        "right_stable_track_id": null,
+        "class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "left_class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "right_class_counts": [],
+        "left_isolated_green": false,
+        "right_isolated_green": false
+      },
+      "candidate_legal": false,
+      "change": "first-green restriction unchanged"
+    }
+  ],
+  "source_state_sha256": "1a44d964638e1667e804d24af3d69416024f7adcb458405925a9c398abc660be",
+  "actual_method_chain": "21 audit->GRAB->23/22 full manifest handoff->48 transport audit->ALIGN, synthetic mode/context inputs only"
+}

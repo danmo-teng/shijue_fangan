@@ -1,0 +1,41 @@
+{
+  "kind": "pure_C_geometric_boundary_check_not_firmware_or_car_validation",
+  "cases": 1344,
+  "max_speed_mm_s": 120,
+  "floor_mm_s_from_existing_stage_fine": 110,
+  "example": {
+    "heading_deg": 0,
+    "remaining_mm": -20,
+    "cross_mm": 40,
+    "legacy_forward_mm_s": -20,
+    "candidate_forward_mm_s": -5.245366537565133e-06,
+    "candidate_left_mm_s": -120.0
+  },
+  "claims_not_supported": [
+    "actual stuck trace subphase",
+    "real motor response",
+    "wheel slip",
+    "F405 compile/link",
+    "full-match physical recovery"
+  ],
+  "base_task_blob_sha": "c98f949b1b1bbac6e8d6b01727b03c88a0cee74a",
+  "base_task_sha256": "8b190f830a9a7b125f5c897ef7d309ba3735d56d25f51e1f6edd3527177a28a1",
+  "patch_sha256": "64f47ec22734e69e4e45dcfe549a0a437975351013475be394cf0adafac89c06",
+  "actuator_api": "Motor_MoveAngleHeading(speed_mm_s, direction_deg, sweep_reverse.heading)",
+  "actuator_semantics": "existing absolute gyro heading-hold API, low rear-wheel deadband; fine_correction remains false; no per-wheel NAV fine deficit assist",
+  "behavior_change": "minimum requested translation rises 20 to 110 mm/s, original 120 mm/s cap retained; higher near-obstacle motion needs human/physical review",
+  "api_return": "command accepted, not measured movement; motors_active remains intent/status, not wheel speed proof",
+  "source_references": {
+    "repository_e85_reference": {
+      "commit": "e85c738075451574e4c29ea7da05daf5a8258b6b",
+      "Task.c_sha256": "58be4a29468a6a10365e0f356bfb59314dc700932417d52808fda4b6d3d8bbef",
+      "not_flashing_proof": "device reported dirty1"
+    },
+    "main_camera_order_reference": {
+      "commit": null,
+      "Task.c_blob_sha": "c98f949b1b1bbac6e8d6b01727b03c88a0cee74a",
+      "Task.c_sha256": "8b190f830a9a7b125f5c897ef7d309ba3735d56d25f51e1f6edd3527177a28a1",
+      "description": "captured content fingerprint; main is moving, resolved repository commit was not returned. Do not treat future main as identical."
+    }
+  }
+}

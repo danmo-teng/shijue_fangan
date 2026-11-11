@@ -1,0 +1,250 @@
+[
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14144,
+    "capture": 589.854550025,
+    "mode": 42,
+    "pitch": 11700,
+    "reason": "safe_sweep_pixel_approach",
+    "safe_bbox": [
+      503,
+      40,
+      773,
+      162
+    ],
+    "object": {
+      "id": 1160,
+      "class": "injured_orange",
+      "confidence": 0.7295101989658178,
+      "bbox": [
+        728,
+        84,
+        151,
+        121
+      ],
+      "relative_xy_m": null,
+      "hits": 12,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 0.9752066115702479
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14144,
+    "capture": 589.854550025,
+    "mode": 42,
+    "pitch": 11700,
+    "reason": "safe_sweep_pixel_approach",
+    "safe_bbox": [
+      503,
+      40,
+      773,
+      162
+    ],
+    "object": {
+      "id": 1163,
+      "class": "danger_cyan",
+      "confidence": 0.8210163699283048,
+      "bbox": [
+        897,
+        94,
+        101,
+        114
+      ],
+      "relative_xy_m": null,
+      "hits": 11,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 0.9473684210526315
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14144,
+    "capture": 589.854550025,
+    "mode": 42,
+    "pitch": 11700,
+    "reason": "safe_sweep_pixel_approach",
+    "safe_bbox": [
+      503,
+      40,
+      773,
+      162
+    ],
+    "object": {
+      "id": 1165,
+      "class": "danger_cyan",
+      "confidence": 0.44302840611415917,
+      "bbox": [
+        563,
+        44,
+        86,
+        93
+      ],
+      "relative_xy_m": null,
+      "hits": 6,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 1.0
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14152,
+    "capture": 590.136215594,
+    "mode": 42,
+    "pitch": 12000,
+    "reason": "safe_sweep_target_wait",
+    "safe_bbox": [
+      574,
+      19,
+      704,
+      197
+    ],
+    "object": {
+      "id": 1167,
+      "class": "green_supply",
+      "confidence": 0.36042373656545834,
+      "bbox": [
+        719,
+        51,
+        92,
+        60
+      ],
+      "relative_xy_m": null,
+      "hits": 7,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 1.0
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14209,
+    "capture": 592.179635757,
+    "mode": 42,
+    "pitch": 12000,
+    "reason": "safe_sweep_target_wait",
+    "safe_bbox": [
+      911,
+      49,
+      367,
+      274
+    ],
+    "object": {
+      "id": 1165,
+      "class": "danger_cyan",
+      "confidence": 0.7321246012150837,
+      "bbox": [
+        1017,
+        170,
+        167,
+        140
+      ],
+      "relative_xy_m": null,
+      "hits": 70,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 1.0
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14209,
+    "capture": 592.179635757,
+    "mode": 42,
+    "pitch": 12000,
+    "reason": "safe_sweep_target_wait",
+    "safe_bbox": [
+      911,
+      49,
+      367,
+      274
+    ],
+    "object": {
+      "id": 1175,
+      "class": "core_black",
+      "confidence": 0.4159709125066418,
+      "bbox": [
+        1157,
+        135,
+        59,
+        61
+      ],
+      "relative_xy_m": null,
+      "hits": 9,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 1.0
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0011",
+    "frame": 14209,
+    "capture": 592.179635757,
+    "mode": 42,
+    "pitch": 12000,
+    "reason": "safe_sweep_target_wait",
+    "safe_bbox": [
+      911,
+      49,
+      367,
+      274
+    ],
+    "object": {
+      "id": 1176,
+      "class": "green_supply",
+      "confidence": 0.6749029112251493,
+      "bbox": [
+        1163,
+        90,
+        115,
+        99
+      ],
+      "relative_xy_m": null,
+      "hits": 12,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 1.0
+  },
+  {
+    "session": "20261111_140243_competition_wheel",
+    "clip": "safe_zone_replay_0002",
+    "frame": 3747,
+    "capture": 246.089130861,
+    "mode": 42,
+    "pitch": 12000,
+    "reason": "safe_sweep_target_wait",
+    "safe_bbox": [
+      120,
+      0,
+      821,
+      100
+    ],
+    "object": {
+      "id": 359,
+      "class": "green_supply",
+      "confidence": 0.3289635351778991,
+      "bbox": [
+        470,
+        0,
+        62,
+        41
+      ],
+      "relative_xy_m": null,
+      "hits": 7,
+      "misses": 0,
+      "visible": true
+    },
+    "ratio": 1.0
+  }
+]

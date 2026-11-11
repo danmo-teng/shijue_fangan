@@ -1,0 +1,151 @@
+{
+  "warning": "Repository e85 dirty1 reference is not proof of flashed bytes; no firmware build or hardware run",
+  "results": [
+    {
+      "base": "lower_e85c738",
+      "patches": [
+        "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch"
+      ],
+      "kind": "apply only to /tmp source, not firmware compilation",
+      "steps": [
+        {
+          "patch": "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "base": "lower_e85c738",
+      "patches": [
+        "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch"
+      ],
+      "kind": "apply only to /tmp source, not firmware compilation",
+      "steps": [
+        {
+          "patch": "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "base": "lower_e85c738",
+      "patches": [
+        "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+        "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+        "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+        "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch",
+        "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch"
+      ],
+      "kind": "apply only to /tmp source, not firmware compilation",
+      "steps": [
+        {
+          "patch": "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 4592 (offset -11 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #4 succeeded at 5017 (offset 15 lines).\nHunk #5 succeeded at 5048 (offset 15 lines).\nHunk #6 succeeded at 5160 (offset 15 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 5455 (offset 56 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 398 (offset 4 lines).\nHunk #2 succeeded at 1402 (offset 23 lines).\nHunk #3 succeeded at 1693 (offset 23 lines).\nHunk #4 succeeded at 4346 (offset 27 lines).\nHunk #5 succeeded at 4701 (offset 42 lines).\nHunk #6 succeeded at 5914 (offset 59 lines).\nHunk #7 succeeded at 5953 (offset 59 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 275 (offset 4 lines).\nHunk #2 succeeded at 766 (offset 25 lines).\nHunk #3 succeeded at 787 (offset 25 lines).\nHunk #4 succeeded at 1536 (offset 26 lines).\nHunk #5 succeeded at 1606 (offset 26 lines).\nHunk #6 succeeded at 3935 (offset 27 lines).\nHunk #7 succeeded at 5982 (offset 74 lines).\nHunk #8 succeeded at 7054 (offset 103 lines).",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "base": "lower_main",
+      "patches": [
+        "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch"
+      ],
+      "kind": "apply only to /tmp source, not firmware compilation",
+      "steps": [
+        {
+          "patch": "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #4 succeeded at 4324 (offset 5 lines).\nHunk #5 succeeded at 4670 (offset 11 lines).\nHunk #6 succeeded at 5863 (offset 8 lines).\nHunk #7 succeeded at 5902 (offset 8 lines).",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "base": "lower_main",
+      "patches": [
+        "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch"
+      ],
+      "kind": "apply only to /tmp source, not firmware compilation",
+      "steps": [
+        {
+          "patch": "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #7 succeeded at 5916 (offset 8 lines).\nHunk #8 succeeded at 6959 (offset 8 lines).",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "base": "lower_main",
+      "patches": [
+        "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+        "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+        "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+        "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch",
+        "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch"
+      ],
+      "kind": "apply only to /tmp source, not firmware compilation",
+      "steps": [
+        {
+          "patch": "F405_REVERSE_ENDPOINT_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_SWEEP_SEARCH_COMPLETION_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #3 succeeded at 4332 (offset 5 lines).\nHunk #4 succeeded at 5025 (offset 23 lines).\nHunk #5 succeeded at 5056 (offset 23 lines).\nHunk #6 succeeded at 5168 (offset 23 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_START_HOLD_CONSISTENCY_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 5463 (offset 64 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_BLOCKED_CORRIDOR_RETREAT_PAIR_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 398 (offset 4 lines).\nHunk #2 succeeded at 1402 (offset 23 lines).\nHunk #3 succeeded at 1693 (offset 23 lines).\nHunk #4 succeeded at 4351 (offset 32 lines).\nHunk #5 succeeded at 4712 (offset 53 lines).\nHunk #6 succeeded at 5922 (offset 67 lines).\nHunk #7 succeeded at 5961 (offset 67 lines).",
+          "stderr": ""
+        },
+        {
+          "patch": "F405_MATERIAL_BATCH_DOUBLE_PUSH_CANDIDATE.patch",
+          "returncode": 0,
+          "output": "patching file Main/Src/Task.c\nHunk #1 succeeded at 275 (offset 4 lines).\nHunk #2 succeeded at 766 (offset 25 lines).\nHunk #3 succeeded at 787 (offset 25 lines).\nHunk #4 succeeded at 1536 (offset 26 lines).\nHunk #5 succeeded at 1606 (offset 26 lines).\nHunk #6 succeeded at 3935 (offset 27 lines).\nHunk #7 succeeded at 5990 (offset 82 lines).\nHunk #8 succeeded at 7062 (offset 111 lines).",
+          "stderr": ""
+        }
+      ]
+    }
+  ]
+}

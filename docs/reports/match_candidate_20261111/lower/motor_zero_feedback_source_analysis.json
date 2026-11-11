@@ -1,0 +1,196 @@
+{
+  "source_sha": "e85c738075451574e4c29ea7da05daf5a8258b6b",
+  "kind": "actual_pid.c deterministic ideal zero-feedback analysis, not motor test",
+  "assumptions": [
+    "One wheel sustained constant target; all encoder feedback zero; normal non-fine non-MotionDebug PI path; no sign reversal or reset; 10ms Update",
+    "PWM physical breakaway threshold NOT measured; 150/200/250/300 are comparisons only",
+    "Does not establish which sweep subphase or actual PWM occurred in either log"
+  ],
+  "records": [
+    {
+      "requested_wheel_mm_s": 20.0,
+      "target_counts_per_10ms": 0.9651774179728548,
+      "feedforward_pwm_per_mille": 106,
+      "samples": {
+        "0.01": {
+          "pwm_per_mille": 110,
+          "integral": 0.9651774168014526
+        },
+        "1.0": {
+          "pwm_per_mille": 122,
+          "integral": 96.51775360107422
+        },
+        "5.0": {
+          "pwm_per_mille": 168,
+          "integral": 482.5895080566406
+        },
+        "12.0": {
+          "pwm_per_mille": 249,
+          "integral": 1158.2032470703125
+        },
+        "20.0": {
+          "pwm_per_mille": 342,
+          "integral": 1930.3712158203125
+        },
+        "30.0": {
+          "pwm_per_mille": 410,
+          "integral": 2500.0
+        }
+      },
+      "first_ideal_zero_feedback_crossing_s": {
+        "150": 3.39,
+        "200": 7.7,
+        "250": 12.02,
+        "300": 16.34
+      }
+    },
+    {
+      "requested_wheel_mm_s": 30.0,
+      "target_counts_per_10ms": 1.4477661269592823,
+      "feedforward_pwm_per_mille": 110,
+      "samples": {
+        "0.01": {
+          "pwm_per_mille": 117,
+          "integral": 1.4477661848068237
+        },
+        "1.0": {
+          "pwm_per_mille": 134,
+          "integral": 144.77674865722656
+        },
+        "5.0": {
+          "pwm_per_mille": 204,
+          "integral": 723.8795166015625
+        },
+        "12.0": {
+          "pwm_per_mille": 325,
+          "integral": 1737.3072509765625
+        },
+        "20.0": {
+          "pwm_per_mille": 417,
+          "integral": 2500.0
+        },
+        "30.0": {
+          "pwm_per_mille": 417,
+          "integral": 2500.0
+        }
+      },
+      "first_ideal_zero_feedback_crossing_s": {
+        "150": 1.89,
+        "200": 4.77,
+        "250": 7.65,
+        "300": 10.52
+      }
+    },
+    {
+      "requested_wheel_mm_s": 80.0,
+      "target_counts_per_10ms": 3.8607096718914193,
+      "feedforward_pwm_per_mille": 126,
+      "samples": {
+        "0.01": {
+          "pwm_per_mille": 145,
+          "integral": 3.8607096672058105
+        },
+        "1.0": {
+          "pwm_per_mille": 191,
+          "integral": 386.0710144042969
+        },
+        "5.0": {
+          "pwm_per_mille": 376,
+          "integral": 1930.3580322265625
+        },
+        "12.0": {
+          "pwm_per_mille": 445,
+          "integral": 2500.0
+        },
+        "20.0": {
+          "pwm_per_mille": 445,
+          "integral": 2500.0
+        },
+        "30.0": {
+          "pwm_per_mille": 445,
+          "integral": 2500.0
+        }
+      },
+      "first_ideal_zero_feedback_crossing_s": {
+        "150": 0.11,
+        "200": 1.19,
+        "250": 2.26,
+        "300": 3.34
+      }
+    },
+    {
+      "requested_wheel_mm_s": 110.0,
+      "target_counts_per_10ms": 5.308475798850701,
+      "feedforward_pwm_per_mille": 137,
+      "samples": {
+        "0.01": {
+          "pwm_per_mille": 164,
+          "integral": 5.308475971221924
+        },
+        "1.0": {
+          "pwm_per_mille": 227,
+          "integral": 530.8473510742188
+        },
+        "5.0": {
+          "pwm_per_mille": 463,
+          "integral": 2500.0
+        },
+        "12.0": {
+          "pwm_per_mille": 463,
+          "integral": 2500.0
+        },
+        "20.0": {
+          "pwm_per_mille": 463,
+          "integral": 2500.0
+        },
+        "30.0": {
+          "pwm_per_mille": 463,
+          "integral": 2500.0
+        }
+      },
+      "first_ideal_zero_feedback_crossing_s": {
+        "150": 0.01,
+        "200": 0.58,
+        "250": 1.36,
+        "300": 2.15
+      }
+    },
+    {
+      "requested_wheel_mm_s": 120.0,
+      "target_counts_per_10ms": 5.791064507837129,
+      "feedforward_pwm_per_mille": 140,
+      "samples": {
+        "0.01": {
+          "pwm_per_mille": 169,
+          "integral": 5.791064739227295
+        },
+        "1.0": {
+          "pwm_per_mille": 238,
+          "integral": 579.1069946289062
+        },
+        "5.0": {
+          "pwm_per_mille": 468,
+          "integral": 2500.0
+        },
+        "12.0": {
+          "pwm_per_mille": 468,
+          "integral": 2500.0
+        },
+        "20.0": {
+          "pwm_per_mille": 468,
+          "integral": 2500.0
+        },
+        "30.0": {
+          "pwm_per_mille": 468,
+          "integral": 2500.0
+        }
+      },
+      "first_ideal_zero_feedback_crossing_s": {
+        "150": 0.01,
+        "200": 0.45,
+        "250": 1.17,
+        "300": 1.89
+      }
+    }
+  ]
+}

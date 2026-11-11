@@ -1,0 +1,147 @@
+--- a/competition_rescue/state_machine.py
++++ b/competition_rescue/state_machine.py
+@@ -733,6 +733,8 @@
+         self.return_search_frame_floor: int | None = None
+         self.return_search_mode_seen = False
+         self.return_arrival_latched = False
++        # Distinguish cancel-and-park from the subsequent real centre route.
++        self.return_command_epoch = 0
+         self.stash_zero_initial_ack: int | None = None
+         self.stash_handoff_initial_ack: int | None = None
+         self.cargo_recheck_pending = False
+@@ -1165,9 +1167,11 @@
+             CompetitionState.ACQUIRE_SAFE_ZONE,
+             CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+             CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+-            CompetitionState.WAIT_SAFE_ZONE_CLEAR,
+         }:
+             return (STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE)
++        if self.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR:
++            return (STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_SAFE_SWEEP,
++                    STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED)
+         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
+             return (
+                 STM_MODE_ALIGN_SAFE_ZONE,
+@@ -3958,6 +3962,33 @@
+             tx_policy="normal_command",
+             reason="safe_zone_corridor_blocked",
+             expected_stm_modes=(STM_MODE_SAFE_SWEEP,),
++        )
++
++    def _blocked_safe_zone_retreat_output(self, stm: StmSnapshot) -> CompetitionOutput:
++        if stm.mode == STM_MODE_SAFE_SWEEP:
++            return CompetitionOutput(
++                self.state, self._hold(),
++                "取消本趟：下位机寄存原货并退回，保持载荷记录直到真实mode46",
++                self.selected_batch, tx_policy="hold",
++                reason="safe_zone_abandon_parking",
++                expected_stm_modes=(STM_MODE_SAFE_SWEEP, STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED),
++            )
++        # Paired F405 candidate only: RETURN in aligned mode11 means park the
++        # current legal load and abandon this delivery, not centre navigation.
++        # D/H are explicitly unused in this role. Only the later new action
++        # after actual mode46 carries the real centre distance and bearing.
++        command = CommandRequest(
++            CMD_RETURN_CENTER,
++            self._side_flags() | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING | CMD_DISTANCE_VALID,
++            0, 0, 0,
++        )
++        return CompetitionOutput(
++            self.state, command,
++            "入口两次扫障后仍阻挡，取消本趟并请求原货侧寄存，不推进安全区",
++            self.selected_batch, motion_expected=True, tx_policy="normal_command",
++            reason="safe_zone_abandon_park_request",
++            expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_SAFE_SWEEP,
++                                STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED),
+         )
+ 
+     def safe_sweep_target(self, cargo: tuple[TrackedCargo, ...],
+@@ -6470,16 +6501,12 @@
+             if vision.safe_corridor_obstacle_class is not None:
+                 if self.safe_sweep_attempts < 2:
+                     return self._start_safe_zone_clear(vision, stm, now)
++                self.return_command_epoch += 1
+                 self._set_state(CompetitionState.WAIT_SAFE_ZONE_CLEAR, now)
+-                return CompetitionOutput(
+-                    self.state,
+-                    self._pause(),
+-                    "本趟已完成2次扫障但推进走廊仍有阻挡，保持停车等待处理",
+-                    self.selected_batch,
+-                    event="safe_zone_clear_limit_reached",
+-                    tx_policy="pause",
+-                    reason="safe_zone_clear_limit_reached",
+-                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
++                return replace(
++                    self._blocked_safe_zone_retreat_output(stm),
++                    event="safe_zone_delivery_abandon_start",
++                    reason="safe_zone_corridor_still_blocked_abandon",
+                 )
+             self.enter_initial_ack = stm.acknowledged_sequence
+             self.enter_tx_baseline = stm.relay_mission_tx_frames
+@@ -6497,38 +6524,22 @@
+             )
+ 
+         if self.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR:
+-            new_corridor_frame = (
+-                self._vision_fresh(vision, now) and
+-                vision.frame_sequence > 0 and
+-                vision.frame_sequence != self.safe_corridor_last_frame_sequence and
+-                bool(vision.safe_corridor_polygon)
+-            )
+-            if new_corridor_frame:
+-                self.safe_corridor_last_frame_sequence = vision.frame_sequence
+-                if vision.safe_corridor_obstacle_class is None:
+-                    self.enter_initial_ack = stm.acknowledged_sequence
+-                    self.enter_tx_baseline = stm.relay_mission_tx_frames
+-                    self.enter_command_accepted = False
+-                    self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
+-                    return CompetitionOutput(
+-                        self.state,
+-                        self._enter_safe_zone_command(),
+-                        "人工处理后推进走廊已清空，解除PAUSE并进入安全区",
+-                        self.selected_batch,
+-                        event="safe_zone_clear_wait_resolved",
+-                        tx_policy="normal_command",
+-                        reason="safe_zone_clear_wait_resolved",
+-                        expected_stm_modes=(STM_MODE_RAM_VERIFY,),
+-                    )
+-            return CompetitionOutput(
+-                self.state,
+-                self._pause(),
+-                "扫障次数已达2次且走廊仍被阻挡，保持当前阶段停车",
+-                self.selected_batch,
+-                tx_policy="pause",
+-                reason="safe_zone_clear_limit_wait",
+-                expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
+-            )
++            if stm.mode == STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED:
++                # A real mode46 proves that parking/open/back/heading finished.
++                # The next RETURN must own a NEW action, never the old cancel.
++                self.return_command_epoch += 1
++                self._clear_search_recovery_context(vision, clear_carried=True)
++                self._reset_safe_zone_alignment()
++                self._reset_delivery_evidence()
++                self._begin_return(stm, now)
++                return replace(
++                    self._return_center_output(pose, now, "入口仍阻挡，原货已寄存，本趟未交付并返中"),
++                    event="safe_zone_delivery_abandoned",
++                    reason="safe_zone_parked_load_return",
++                    expected_stm_modes=(STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED,
++                                        STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH),
++                )
++            return self._blocked_safe_zone_retreat_output(stm)
+ 
+         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
+             assert self.safe_sweep_command is not None
+--- a/competition_rescue/run_competition_rescue.py
++++ b/competition_rescue/run_competition_rescue.py
+@@ -1603,7 +1603,8 @@
+             else None
+         )
+         range_epoch = self.mission.range_epoch if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE else None
+-        key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
++        return_epoch = self.mission.return_command_epoch if command.opcode == CMD_RETURN_CENTER else None
++        key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch, return_epoch)
+         if not overlay or (self.protocol_accepted is None and self.protocol_action_key is None):
+             if key != self.protocol_action_key:
+                 self.protocol_action_cursor = (self.protocol_action_cursor + 1) & 0xFFFF

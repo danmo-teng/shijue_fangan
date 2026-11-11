@@ -1,0 +1,399 @@
+{
+  "kind": "counterfactual_real_frame_selection_only_no_device_BPU_motor",
+  "first_common_delivered": true,
+  "first_green_visually_confirmed": true,
+  "old_strategy": "ed07e32 CompetitionMission._choose_next_batch on same candidate snapshot",
+  "current_geometry": "current candidate make_vision_snapshot including current inside rules",
+  "range_source": "vision/config/approach_range.json existing measured command-travel bands, not independent metric truth",
+  "counts": {
+    "eligible_live_views": 397,
+    "difference": 41
+  },
+  "changed_examples": [
+    {
+      "session": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0001.jsonl",
+      "frame": 2193,
+      "source_state": "RETURN_CENTER",
+      "source_mode": 17,
+      "pitch": 12000,
+      "safe_bbox": null,
+      "safe_zone_filter_blocked": false,
+      "range_reason": "range_measured",
+      "ranges_mm": [
+        [
+          176,
+          300
+        ],
+        [
+          178,
+          300
+        ],
+        [
+          179,
+          300
+        ],
+        [
+          182,
+          300
+        ],
+        [
+          183,
+          300
+        ],
+        [
+          185,
+          380
+        ]
+      ],
+      "visible": [
+        {
+          "id": 176,
+          "cls": "injured_orange",
+          "bbox": [
+            262,
+            123,
+            143,
+            175
+          ],
+          "hits": 46,
+          "is_isolated": true,
+          "range_mm": 300
+        },
+        {
+          "id": 178,
+          "cls": "danger_cyan",
+          "bbox": [
+            681,
+            44,
+            89,
+            117
+          ],
+          "hits": 37,
+          "is_isolated": false,
+          "range_mm": 300
+        },
+        {
+          "id": 179,
+          "cls": "danger_cyan",
+          "bbox": [
+            547,
+            36,
+            79,
+            104
+          ],
+          "hits": 37,
+          "is_isolated": false,
+          "range_mm": 300
+        },
+        {
+          "id": 182,
+          "cls": "green_supply",
+          "bbox": [
+            615,
+            30,
+            91,
+            123
+          ],
+          "hits": 33,
+          "is_isolated": false,
+          "range_mm": 300
+        },
+        {
+          "id": 183,
+          "cls": "core_black",
+          "bbox": [
+            761,
+            80,
+            57,
+            74
+          ],
+          "hits": 31,
+          "is_isolated": false,
+          "range_mm": 300
+        },
+        {
+          "id": 185,
+          "cls": "danger_cyan",
+          "bbox": [
+            450,
+            0,
+            63,
+            20
+          ],
+          "hits": 10,
+          "is_isolated": true,
+          "range_mm": 380
+        }
+      ],
+      "old": {
+        "ids": [
+          182
+        ],
+        "classes": [
+          "green_supply"
+        ]
+      },
+      "candidate": {
+        "ids": [
+          176
+        ],
+        "classes": [
+          "injured_orange"
+        ]
+      }
+    },
+    {
+      "session": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0003.jsonl",
+      "frame": 5649,
+      "source_state": "RETURN_CENTER",
+      "source_mode": 17,
+      "pitch": 12000,
+      "safe_bbox": null,
+      "safe_zone_filter_blocked": false,
+      "range_reason": "range_measured",
+      "ranges_mm": [
+        [
+          601,
+          300
+        ],
+        [
+          603,
+          380
+        ],
+        [
+          605,
+          380
+        ],
+        [
+          606,
+          300
+        ]
+      ],
+      "visible": [
+        {
+          "id": 601,
+          "cls": "injured_orange",
+          "bbox": [
+            247,
+            74,
+            191,
+            141
+          ],
+          "hits": 36,
+          "is_isolated": true,
+          "range_mm": 300
+        },
+        {
+          "id": 603,
+          "cls": "danger_cyan",
+          "bbox": [
+            597,
+            9,
+            81,
+            89
+          ],
+          "hits": 23,
+          "is_isolated": true,
+          "range_mm": 380
+        },
+        {
+          "id": 605,
+          "cls": "green_supply",
+          "bbox": [
+            697,
+            1,
+            135,
+            111
+          ],
+          "hits": 21,
+          "is_isolated": false,
+          "range_mm": 380
+        },
+        {
+          "id": 606,
+          "cls": "core_black",
+          "bbox": [
+            832,
+            40,
+            61,
+            74
+          ],
+          "hits": 19,
+          "is_isolated": true,
+          "range_mm": 300
+        }
+      ],
+      "old": {
+        "ids": [
+          605
+        ],
+        "classes": [
+          "green_supply"
+        ]
+      },
+      "candidate": {
+        "ids": [
+          601
+        ],
+        "classes": [
+          "injured_orange"
+        ]
+      }
+    }
+  ],
+  "unchanged_examples": [
+    {
+      "session": "20261111_140243_competition_wheel",
+      "clip": "safe_zone_replay_0001.jsonl",
+      "frame": 2150,
+      "source_state": "RETURN_CENTER",
+      "source_mode": 17,
+      "pitch": 12000,
+      "safe_bbox": null,
+      "safe_zone_filter_blocked": false,
+      "range_reason": "range_measured",
+      "ranges_mm": [
+        [
+          167,
+          20
+        ],
+        [
+          170,
+          150
+        ],
+        [
+          172,
+          300
+        ],
+        [
+          173,
+          300
+        ],
+        [
+          174,
+          150
+        ],
+        [
+          175,
+          150
+        ],
+        [
+          176,
+          380
+        ]
+      ],
+      "visible": [
+        {
+          "id": 167,
+          "cls": "core_black",
+          "bbox": [
+            163,
+            767,
+            127,
+            207
+          ],
+          "hits": 76,
+          "is_isolated": true,
+          "range_mm": 20
+        },
+        {
+          "id": 170,
+          "cls": "green_supply",
+          "bbox": [
+            857,
+            135,
+            143,
+            169
+          ],
+          "hits": 30,
+          "is_isolated": false,
+          "range_mm": 150
+        },
+        {
+          "id": 172,
+          "cls": "injured_orange",
+          "bbox": [
+            825,
+            77,
+            231,
+            129
+          ],
+          "hits": 15,
+          "is_isolated": false,
+          "range_mm": 300
+        },
+        {
+          "id": 173,
+          "cls": "green_supply",
+          "bbox": [
+            1036,
+            116,
+            118,
+            127
+          ],
+          "hits": 27,
+          "is_isolated": false,
+          "range_mm": 300
+        },
+        {
+          "id": 174,
+          "cls": "green_supply",
+          "bbox": [
+            737,
+            218,
+            138,
+            166
+          ],
+          "hits": 25,
+          "is_isolated": false,
+          "range_mm": 150
+        },
+        {
+          "id": 175,
+          "cls": "core_black",
+          "bbox": [
+            941,
+            218,
+            83,
+            83
+          ],
+          "hits": 19,
+          "is_isolated": false,
+          "range_mm": 150
+        },
+        {
+          "id": 176,
+          "cls": "injured_orange",
+          "bbox": [
+            350,
+            0,
+            70,
+            38
+          ],
+          "hits": 3,
+          "is_isolated": true,
+          "range_mm": 380
+        }
+      ],
+      "old": {
+        "ids": [
+          170
+        ],
+        "classes": [
+          "green_supply"
+        ]
+      },
+      "candidate": {
+        "ids": [
+          170
+        ],
+        "classes": [
+          "green_supply"
+        ]
+      }
+    }
+  ],
+  "scope": "Only three selected real-view counterfactual calls, not full mission replay. Source views are RETURN_CENTER, not live SEARCH selection. Metadata and real track bboxes/hits retained; no camera/BPU/UART/device started."
+}

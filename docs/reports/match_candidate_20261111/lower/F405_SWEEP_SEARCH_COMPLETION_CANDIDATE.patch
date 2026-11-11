@@ -1,0 +1,85 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -233,6 +233,10 @@
+ static Pid_t camera_pid;
+ static TaskState state;
+ static TurnTracker turn_tracker;
++/* Candidate obstacle-search geometry only; not a timeout or UART gate. */
++static int32_t sweep_search_last_heading_mdeg;
++static int64_t sweep_search_net_turn_mdeg;
++static bool sweep_search_heading_valid;
+ static SearchPhase search_phase;
+ static ApproachPhase approach_phase;
+ static uint32_t state_started_ms;
+@@ -659,6 +663,25 @@
+   return task_turn_magnitude_reached(APP_SEARCH_FULL_TURN_MDEG);
+ }
+ 
++/* Net turn, rather than sum(abs(delta)): left/right corrections are not a
++ * complete physical revolution. Only a new CLEAR business resets this;
++ * HOLD and mode43 retries cannot restart the search angle budget.
++ * It is an angle budget, not a guarantee of camera coverage or visibility. */
++static bool task_sweep_search_circle_reached(const LocationPose *pose)
++{
++  if (sweep_search_heading_valid) {
++    int32_t delta = pose->heading_mdeg - sweep_search_last_heading_mdeg;
++    if (delta > 180000) { delta -= 360000; }
++    else if (delta < -180000) { delta += 360000; }
++    sweep_search_net_turn_mdeg += delta;
++  } else {
++    sweep_search_heading_valid = true;
++  }
++  sweep_search_last_heading_mdeg = pose->heading_mdeg;
++  return sweep_search_net_turn_mdeg >= (int64_t)APP_SEARCH_FULL_TURN_MDEG ||
++         sweep_search_net_turn_mdeg <= -(int64_t)APP_SEARCH_FULL_TURN_MDEG;
++}
++
+ static uint8_t task_protocol_mode(void)
+ {
+   if (state == TASK_ALIGN_SAFE_ZONE) {
+@@ -4304,6 +4327,10 @@
+                                   uint32_t now_ms)
+ {
+   const LocationPose pose = Location_GetPose();
++  /* One budget per CLEAR, not per mode42/43 retry. The first actual mode42
++   * sample establishes its heading, excluding mode39 parking and turning. */
++  sweep_search_net_turn_mdeg = 0;
++  sweep_search_heading_valid = false;
+   if (state == TASK_NAVIGATE && delivery_enter_active && safe_enter_path_valid) {
+     /* Sweep returns to the interruption point. Credit completed ENTER travel
+      * without adding the distance or time spent on the sweep. */
+@@ -4975,6 +5002,8 @@
+     sweep_forward_commanded = false;
+     return;
+   }
++  const bool search_circle_complete = !sweep_retrieving &&
++      task_sweep_search_circle_reached(&pose);
+   if (task_sweep_retrieve_expired(now_ms)) {
+     task_sweep_fail(now_ms);
+     return;
+@@ -5004,6 +5033,12 @@
+         approach_speed_mm_s = APP_SAFE_SWEEP_APPROACH_SPEED_MM_S;
+         sweep_pickup_phase = SWEEP_PICKUP_TRACK;
+         (void)task_track_target(vision, true);
++        return;
++      }
++      if (!sweep_retrieving && !target_visible && search_circle_complete) {
++        /* This action has consumed one net revolution and has no target.
++         * Use the existing open/back/heading/46 route, never fake DONE40. */
++        task_sweep_fail(now_ms);
+         return;
+       }
+       Camera_SetAngle(APP_SEARCH_HIGH_CAMERA_ANGLE);
+@@ -5110,6 +5145,12 @@
+                (now_ms - sweep_audit_started_ms >= APP_SAFE_SWEEP_AUDIT_TIMEOUT_MS)) {
+       task_enter(TASK_SAFE_SWEEP_RETRIEVE, now_ms);
+     }
++    return;
++  }
++  if (sweep_audit_ready && !sweep_audit_nonempty) {
++    /* Existing two-view/STABLE evidence says empty. Missing images and audit
++     * placeholders never set READY and are not reinterpreted as empty. */
++    task_sweep_fail(now_ms);
+     return;
+   }
+   if (!sweep_audit_valid &&

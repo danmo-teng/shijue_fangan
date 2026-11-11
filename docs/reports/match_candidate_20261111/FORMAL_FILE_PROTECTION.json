@@ -1,0 +1,42 @@
+{
+  "scope": "formal runtime source, original user ROI and three localization binaries; no raw log cleanup",
+  "all_unchanged": true,
+  "checks": [
+    {
+      "file": "competition_rescue/state_machine.py",
+      "expected": "49f471c2f106e498a9b8bd3a27680094887a2e06bfa25b3cff72438c894757e9",
+      "actual": "49f471c2f106e498a9b8bd3a27680094887a2e06bfa25b3cff72438c894757e9",
+      "unchanged": true
+    },
+    {
+      "file": "competition_rescue/run_competition_rescue.py",
+      "expected": "87b75d4ac1b42a65d8559e23826a6ed962d5916b77170115b8811f133a38b0cb",
+      "actual": "87b75d4ac1b42a65d8559e23826a6ed962d5916b77170115b8811f133a38b0cb",
+      "unchanged": true
+    },
+    {
+      "file": "vision/config/capture_roi.json",
+      "expected": "8335f94d3793875c62cb909636efc711dbc8b591509f47ee85cd21456a80fd8e",
+      "actual": "8335f94d3793875c62cb909636efc711dbc8b591509f47ee85cd21456a80fd8e",
+      "unchanged": true
+    },
+    {
+      "file": "localization/build/t265_omni_localizer",
+      "expected": "9450e224dd13eb71638b1afdb819b734a980d3be2b3e27ae2d59be05339fd174",
+      "actual": "9450e224dd13eb71638b1afdb819b734a980d3be2b3e27ae2d59be05339fd174",
+      "unchanged": true
+    },
+    {
+      "file": "localization/build/libmotion_runtime.so",
+      "expected": "b2d2e8d30161a5c99edf594daf62c7b4520c50ee614d0dd054df1d08752d1baa",
+      "actual": "b2d2e8d30161a5c99edf594daf62c7b4520c50ee614d0dd054df1d08752d1baa",
+      "unchanged": true
+    },
+    {
+      "file": "localization/build/liblidar_geometry.so",
+      "expected": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975",
+      "actual": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975",
+      "unchanged": true
+    }
+  ]
+}

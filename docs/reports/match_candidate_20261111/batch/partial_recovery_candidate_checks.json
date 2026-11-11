@@ -1,0 +1,49 @@
+{
+  "kind": "existing actual methods with synthetic mode/context only; no UART/physical recovery verification",
+  "checks": [
+    {
+      "original_count": 2,
+      "recovered_actual_audit_count": 1,
+      "method_chain": "post-grab23 -> accepted40 -> latch current manifest -> ALIGN",
+      "carried_total_count": 1,
+      "selected_confirmed_total_count": 1,
+      "carried_manifest": [
+        "green_supply"
+      ],
+      "upper_command_opcode": 4,
+      "source_state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "missing_on_field_not_claimed_recovered": 1,
+      "result": "PASS"
+    },
+    {
+      "original_count": 3,
+      "recovered_actual_audit_count": 1,
+      "method_chain": "post-grab23 -> accepted40 -> latch current manifest -> ALIGN",
+      "carried_total_count": 1,
+      "selected_confirmed_total_count": 1,
+      "carried_manifest": [
+        "green_supply"
+      ],
+      "upper_command_opcode": 4,
+      "source_state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "missing_on_field_not_claimed_recovered": 2,
+      "result": "PASS"
+    },
+    {
+      "original_count": 3,
+      "recovered_actual_audit_count": 2,
+      "method_chain": "post-grab23 -> accepted40 -> latch current manifest -> ALIGN",
+      "carried_total_count": 2,
+      "selected_confirmed_total_count": 2,
+      "carried_manifest": [
+        "green_supply",
+        "green_supply"
+      ],
+      "upper_command_opcode": 4,
+      "source_state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "missing_on_field_not_claimed_recovered": 1,
+      "result": "PASS"
+    }
+  ],
+  "lower_boundary": "double push must latch current accepted audit count, not old sweep_original_total"
+}

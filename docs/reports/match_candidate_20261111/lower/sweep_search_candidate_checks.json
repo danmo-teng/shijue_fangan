@@ -1,0 +1,45 @@
+{
+  "kind": "source-only candidate checks; no lower firmware build, no board writes, no motor commands",
+  "source_reference": "repository e85c738; deployed firmware reported dirty1, so flashed bytes not verified",
+  "angle_checks": [
+    "positive360 with wrapped heading",
+    "negative360 with wrapped heading",
+    "20 left/right90 oscillations do not count one net turn",
+    "359999mdeg is below full revolution, next1mdeg completes",
+    "new action reset removes prior turn progress"
+  ],
+  "angle_source_compiler": "cc -std=c11 -Wall -Wextra -Werror; extracted exact candidate helper, minimal LocationPose",
+  "patch_dry_runs": [
+    {
+      "base": "e85_repository_reference",
+      "exit_code": 0,
+      "stdout": "checking file Main/Src/Task.c\n",
+      "stderr": ""
+    },
+    {
+      "base": "main_camera_order_reference",
+      "exit_code": 0,
+      "stdout": "checking file Main/Src/Task.c\nHunk #3 succeeded at 4332 (offset 5 lines).\nHunk #4 succeeded at 5010 (offset 8 lines).\nHunk #5 succeeded at 5041 (offset 8 lines).\nHunk #6 succeeded at 5153 (offset 8 lines).\n",
+      "stderr": ""
+    }
+  ],
+  "limits": [
+    "Angle budget includes physical rotation during the mode42 action, not proof of unobstructed camera coverage",
+    "Net budget resets only on new CLEAR; mode43->42 retries preserve it. Missing visual evidence still follows the original audit behavior; only existing READY and NONEMPTY false means confirmed empty.",
+    "46 exit still depends on mode39 reverse route and may leave original parked cargo on field"
+  ],
+  "reset_scope": "Source inspected: mode42 entered only by initial VS_FACE_OBSTACLE and audit43 retry. New CLEAR clears net and marks heading invalid; first actual42 sample establishes origin, excluding preceding39. After obstacle grab39 proceeds44; failed39 proceeds46.",
+  "source_references": {
+    "repository_e85_reference": {
+      "commit": "e85c738075451574e4c29ea7da05daf5a8258b6b",
+      "Task.c_sha256": "58be4a29468a6a10365e0f356bfb59314dc700932417d52808fda4b6d3d8bbef",
+      "not_flashing_proof": "device reported dirty1"
+    },
+    "main_camera_order_reference": {
+      "commit": null,
+      "Task.c_blob_sha": "c98f949b1b1bbac6e8d6b01727b03c88a0cee74a",
+      "Task.c_sha256": "8b190f830a9a7b125f5c897ef7d309ba3735d56d25f51e1f6edd3527177a28a1",
+      "description": "captured content fingerprint; main is moving, resolved repository commit was not returned. Do not treat future main as identical."
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "reference": "repository e85c738; device dirty1 means flashed bytes not verified",
+  "kind": "source-only exact helper C checks; actuator stubs, not physical test or full firmware build",
+  "audit_cases": [
+    "first_single_green",
+    "first_two_green_rejected",
+    "first_black_rejected",
+    "two_green",
+    "three_core",
+    "two_mixed_one_side",
+    "green_and_core",
+    "mixed_plus_green_three",
+    "orange_single",
+    "orange_two_rejected",
+    "mixed_one_impossible",
+    "four_material_rejected",
+    "danger_mixed_rejected",
+    "unknown_rejected",
+    "injured_material_rejected",
+    "unassigned_total_rejected"
+  ],
+  "mechanical_checks": [
+    "first push is existing ENTER beforemode12",
+    "ENTER actual audit count 1/2/3 replaces prior batch count; first phase and injury do not latch a multi-material push",
+    "dedicated ENTER heading remains270 after generic nav heading is reset to0",
+    "S1 command order55->back300->86->forward300->55->back300",
+    "first/second raised retreat negative400mm/s; second push positive330mm/s; all hold dedicated delivery_push_heading_deg copied from the same ENTER-locked nav_locked_heading_deg; generic task_enter clearing cannot change it",
+    "existing path origin survives a paused partial stroke:150mm travelled leaves150mm, no restart from300",
+    "mode15 not entered before final raised retreat completes",
+    "mode16 source branch skips a third retreat and restores86"
+  ],
+  "limits": [
+    "55/86 physical lift direction not independently verified",
+    "Lift travel delay is existing estimate101ms for31degrees, not servo feedback",
+    "Wheel progress/slip still cannot prove true displacement or all cargo entered; original visual verification follows only after both pushes",
+    "Existing initial stash and single-cargo paths retained; existing core50mm approach retained"
+  ]
+}

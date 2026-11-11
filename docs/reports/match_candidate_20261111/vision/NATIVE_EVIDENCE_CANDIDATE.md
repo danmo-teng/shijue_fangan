@@ -6,7 +6,7 @@
 
 在现有比赛runner的原启动参数后显式附加`--replay-native-frames 1`（可选0、1、2、3；默认0关闭）。未改正式启动器或默认行为。启用后，每个既有事件clip最多尝试保存指定数量的**不同事件携带帧**：从原8Hz、有界队列已送入录像worker的帧中，保存该帧所携带事件的第一张可用原生array。同一帧携带多个事件不会重复保存；单个事件不会自动补存后续两帧。它不能追溯精确触发帧、前5秒原生图或全部连续漏框帧，原队列丢帧语义仍保留。
 
-文件沿用原clip命名：`safe_zone_replay_0001_native_01.npy`和同名`.json`。`.npy`以`allow_pickle=False`保存既有YOLO结果中的原解码相机array，未经本录像worker的BGR变换、缩放或叠字。侧车JSON记录像素格式、shape、dtype、字节数、frame_sequence、camera_frame_id、采集时间、SDK会话、事件与来源，并显式声明`model_preprocessed_tensor=false`。现NV12 1280×1024约1.97MB/帧，最多约5.90MB/clip，另有少量JSON；不能拿它冒称NN精确640预处理输入。
+文件沿用原clip命名：`safe_zone_replay_0001_native_01.npy`和同名`.json`。`.npy`以`allow_pickle=False`保存既有YOLO结果中的原解码相机array，未经本录像worker的BGR变换、缩放或叠字。侧车JSON记录像素格式、shape、dtype、字节数、frame_sequence、camera_frame_id、采集时间、SDK会话、事件与来源，并显式声明`model_preprocessed_tensor=false`。现NV12 1280×1024约1.97MB/帧，最多约5.90MB/clip；BGR回退约3.93MB/帧、最多11.80MB/clip，另有少量JSON；不能拿它冒称NN精确640预处理输入。
 
 写盘复用原录像worker，无新增IPC、相机、推理、定时器、时间门或控制等待。原队列容量4、8Hz取样和前5后15秒录像范围不变；默认0没有新增图像传输/文件。启用会增加worker偶发写盘和占用，队列仍有界，不能承诺存储拥堵时完全不丢录像帧。失败尝试也消耗上限，不反复重试；native-only失败写入manifest的`native_errors`并置`native_complete=false`，不会把成功录像改成失败或抛回控制。现有总体录像错误/丢帧仍独立如实记录。
 

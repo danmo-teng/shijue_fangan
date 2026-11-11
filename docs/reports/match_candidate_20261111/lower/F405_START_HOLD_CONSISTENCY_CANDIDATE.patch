@@ -1,0 +1,14 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -5399,7 +5399,10 @@
+       approach_hold_pending = true;
+       approach_hold_started_ms = now_ms;
+     }
+-    if ((state == TASK_APPROACH && task_approach_runs_without_target()) ||
++    if ((state == TASK_WAIT_CONFIG) ||
++        (state == TASK_START) ||
++        (state == TASK_OPEN_CLAW) ||
++        (state == TASK_APPROACH && task_approach_runs_without_target()) ||
+         (state == TASK_BOUNDARY_RECOVER) ||
+         ((state == TASK_APPROACH_RECOVER) && capture_escape_active) ||
+         (state == TASK_SAFE_SWEEP) ||

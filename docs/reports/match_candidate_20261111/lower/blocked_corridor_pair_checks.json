@@ -1,0 +1,15 @@
+{
+  "kind": "isolated /tmp upper source execution and original publisher to /tmp command file, no UART/SDK/device",
+  "cancel_action": 21,
+  "actual_return_action": 22,
+  "task": 10,
+  "checks": [
+    "two-blocked enters cancellation, not ENTER/PAUSE",
+    "repeated request same action",
+    "mode39 HOLD keeps original cargo and action",
+    "only actual46 clears cargo",
+    "post46 RETURN owns new existing action id, not a new task",
+    "no TASK_COMPLETE or delivery count increment"
+  ],
+  "lower_review": "Source checked wrapper task/action ownership, legacy start and duplicateACK, active_mission, no39/46 continuous-input block, HOLD/PAUSE resume; not full firmware compiled"
+}

@@ -1,0 +1,39 @@
+{
+  "scope": "targeted existing tests only; no hardware/UART/SDK; not firmware or field validation",
+  "passed_functions": [
+    "test_post_first_single_casualty_priority_uses_measured_bands",
+    "test_green_and_danger_claw_releases_without_authorizing_mixed_delivery",
+    "test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception",
+    "test_range_recheck_accepts_small_error_and_realigns_large_overshoot",
+    "test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps",
+    "test_first_green_priority_unlock_requires_actual_visual_confirmation",
+    "test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone",
+    "test_corridor_missed_obstacle_and_same_class_floor_object_are_not_load",
+    "test_same_view_carried_identity_survives_initial_entry_tracker_replacement",
+    "test_sweep_rejection_recovery_preserves_pickup_progress",
+    "test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo",
+    "test_candidate_capture_roi_keeps_lateral_claw_cargo_and_excludes_floor",
+    "test_safe_zone_membership_uses_live_contact_not_cached_bbox_area",
+    "test_incident_video_replay_and_log_only_timeout",
+    "test_post_first_material_batch_two_three_grab_and_manifest_candidate",
+    "test_batch_policy_preserves_first_and_rejects_overload_injury_danger_candidate",
+    "test_three_material_full_roi_wire_and_post_first_valid_candidate",
+    "test_multi_delivery_confirmation_requires_entire_known_manifest_candidate",
+    "test_mode51_reference_audit_exits_and_budget",
+    "test_range_cumulative_and_transport_sort"
+  ],
+  "passed_count": 20,
+  "syntax_passed": [
+    "competition_rescue/state_machine.py",
+    "competition_rescue/run_competition_rescue.py",
+    "competition_rescue/vision_replay.py",
+    "competition_rescue/tests/test_state_machine.py",
+    "competition_rescue/tests/test_runner.py"
+  ],
+  "execution_note": "All listed functions completed in the final import-based run; its post-test syntax command named nonexistent incident_replay.py. Correct vision_replay.py syntax checked separately; no product source failure.",
+  "cluster_batch_handoff": "3 batch manifests x real21->21 and38->37 handoffs, then23/22->48; same38 ACK remains waiting",
+  "legacy_fixture_updates": "2 obsolete two-green-invalid examples replaced by actual four-green overload; both original branches pass",
+  "whole_suite": "not claimed passing: earlier baseline comparison has13 pre-existing state test failures; no unrelated repairs",
+  "original_logs": "read-only; no cleanup",
+  "lower_patch_checks": "see lower/paired_bulk_combined_source_checks.json; two snapshot bases, fuzz=0 application; local C checks are not firmware build"
+}
