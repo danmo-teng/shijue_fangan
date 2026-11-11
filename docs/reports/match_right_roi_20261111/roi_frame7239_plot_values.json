@@ -1,0 +1,50 @@
+{
+  "source_video": "rescue_map/runtime/history/competition_wheel_input/20261111_141241_competition_wheel/safe_zone_replay_0004.avi",
+  "video_frame_index": 28,
+  "frame_sequence": 7239,
+  "note": "Exact data-coordinate scientific overlay, not imagegen redrawn photo; proposed active uncommitted ROI remains unvalidated",
+  "objects": [
+    {
+      "id": 491,
+      "class": "injured_orange",
+      "bbox": [
+        500,
+        141,
+        268,
+        363
+      ],
+      "old_overlap": 0.7305003906089388,
+      "proposed_overlap": 0.7305003906089388,
+      "old_counted": true,
+      "proposed_counted": true
+    },
+    {
+      "id": 499,
+      "class": "core_black",
+      "bbox": [
+        879,
+        310,
+        151,
+        155
+      ],
+      "old_overlap": 0.18872035889767144,
+      "proposed_overlap": 0.962358470412305,
+      "old_counted": false,
+      "proposed_counted": true
+    },
+    {
+      "id": 500,
+      "class": "green_supply",
+      "bbox": [
+        1009,
+        85,
+        262,
+        253
+      ],
+      "old_overlap": 0.0,
+      "proposed_overlap": 0.0005280149654527352,
+      "old_counted": false,
+      "proposed_counted": false
+    }
+  ]
+}
