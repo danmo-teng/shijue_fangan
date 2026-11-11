@@ -1747,6 +1747,14 @@ class CompetitionPlanner:
         if not (self.mission.transport_audit_handoff_active or
                 self.mission.state == CompetitionState.TRANSPORT_AUDIT):
             return None
+        pending = self.protocol_last_output.command
+        if pending is None or pending.opcode in {CMD_HOLD, CMD_PAUSE}:
+            return None
+        if (stm.action_id == self.protocol_action and
+                stm.accepted_command == pending.opcode and stm.action_status & 1):
+            # A rejected duplicate update cannot undo this accepted action.
+            # Match both the action and opcode, as in sweep recovery below.
+            return None
         if stm.mode not in {10, STM_MODE_TRANSPORT_AUDIT}:
             return None
         self._adopt_recovery_context()

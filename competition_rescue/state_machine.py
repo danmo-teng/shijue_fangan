@@ -5282,18 +5282,34 @@ class CompetitionMission:
                     self._audit_stability_span_sufficient(observed_s)
                 ),
             )
+            payload = self._audit_payload(self.transport_audit_value)
+            if (payload.stable and previous_command is not None and
+                    previous_command.audit.stable and
+                    stm.audit_ready and stm.audit_valid == valid and
+                    self._opcode_acceptance_seen(
+                        stm, CMD_CARGO_AUDIT, self.transport_audit_tx_baseline,
+                        self.transport_audit_initial_ack, False,
+                    ) and
+                    replace(payload, audit_id=previous_command.audit.audit_id) == previous_command.audit):
+                # Only after the MCU has its real two-frame evidence, hold the
+                # unchanged wire payload long enough for relay reporting to
+                # catch up. Before READY, keep new IDs for the MCU's sample
+                # counter. The source image still advances on every new frame.
+                payload = previous_command.audit
             self.transport_audit_command = CommandRequest(
-                CMD_CARGO_AUDIT, CMD_VALID, audit=self._audit_payload(self.transport_audit_value),
+                CMD_CARGO_AUDIT, CMD_VALID, audit=payload,
                 audit_vision_frame=vision.frame_sequence,
             )
         audit = self.transport_audit_value
+        current_command = self.transport_audit_command
         valid = audit is not None and self._audit_valid(audit)
         confirmed = (
             audit is not None and self.audit_hits >= self.settings.audit_stable_frames and
+            current_command is not None and current_command.audit.stable and
             previous_command is not None and previous_command.audit.stable and
             previous_signature == self.audit_last_signature and
             stm.audit_ready and stm.audit_valid == valid and
-            self._relay_sent_since(stm, previous_command, self.transport_audit_tx_baseline) and
+            self._relay_sent_since(stm, current_command, self.transport_audit_tx_baseline) and
             self._opcode_acceptance_seen(
                 stm, CMD_CARGO_AUDIT, self.transport_audit_tx_baseline,
                 self.transport_audit_initial_ack, False,

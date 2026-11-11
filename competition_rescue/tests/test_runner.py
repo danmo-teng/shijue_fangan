@@ -1177,6 +1177,63 @@ def test_range_move_camera_handoff_never_rearms_pixel_approach():
             assert m.state == CompetitionState.CAPTURE_AUDIT
 
 
+def test_transport_duplicate_rejection_preserves_audit_and_real_reject_recovers():
+    from dataclasses import replace
+    from protocol import CMD_CARGO_AUDIT, CMD_NAVIGATE_WAYPOINT
+    from state_machine import CargoAudit, CargoBatch
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        audit = CargoAudit(left_class="green_supply", left_count=1,
+                           left_green_count=1, total_count=1)
+        m._latch_carried_manifest(audit)
+        x, y = m._target_point()
+        pose = PoseSnapshot(True, x, y, 90.0, 0.0)
+        p = CompetitionPlanner(m, root/"pose", root/"stm", root/"cmd",
+                               root/"diag", JsonlLog(root/"events"), 50)
+        status = StmSnapshot(mode=48, flags=3, age_ms=0, camera_pitch_cdeg=14000)
+        m._begin_transport_audit(VisionSnapshot(frame_sequence=1), pose, status, 1.0)
+        for frame in (2, 3):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=1 + frame * .13,
+                                  capture_audit=audit)
+            p._publish(m._transport_audit_output(view, pose, status, 1 + frame * .13))
+        epoch, task, action = m.audit_epoch, p.protocol_task, p.protocol_action
+        accepted = replace(status, context_valid=True, task_id=task, action_id=action,
+                           accepted_command=CMD_CARGO_AUDIT, action_status=1|4,
+                           rejected_action_id=action)
+        for frame in (4, 5):
+            view = replace(view, frame_sequence=frame, observed_monotonic_s=1 + frame * .13)
+            out = p._output_for_cycle(view, pose, accepted, False, 1 + frame * .13)
+            assert out.event != "transport_audit_request_rejected"
+            assert m.audit_epoch == epoch and m.audit_hits >= 2 and out.command.audit.stable
+            p._publish(out)
+            assert (p.protocol_task, p.protocol_action) == (task, action)
+
+        # A real, unaccepted request must still re-observe under a new action.
+        rejected = replace(accepted, action_id=action - 1, action_status=1|4,
+                           accepted_command=CMD_NAVIGATE_WAYPOINT)
+        wrong_task = replace(rejected, task_id=task + 1)
+        assert p._reconcile_transport_rejection(view, pose, wrong_task, 1.8) is None
+        recovered = p._output_for_cycle(view, pose, rejected, False, 1.8)
+        assert recovered.event == "transport_audit_request_rejected"
+        assert m.audit_epoch == epoch + 1 and not recovered.command.audit.stable
+        p._publish(recovered)
+        assert p.protocol_action != action
+        next_view = replace(view, frame_sequence=6, observed_monotonic_s=1.91)
+        resumed = p._output_for_cycle(next_view, pose, rejected, False, 1.91)
+        assert resumed.event != "transport_audit_request_rejected"
+        assert m.audit_epoch == epoch + 1
+        p._publish(resumed)
+        assert m.audit_hits == 1  # New visual evidence survives the old rejection.
+        original = p.protocol_last_output
+        p.protocol_last_output = CompetitionOutput(m.state, CommandRequest(CMD_HOLD), "overlay")
+        current_reject = replace(rejected, rejected_action_id=p.protocol_action)
+        assert p._reconcile_transport_rejection(next_view, pose, current_reject, 1.92) is None
+        p.protocol_last_output = original
+
+
 def test_sweep_duplicate_rejection_does_not_reset_accepted_pickup():
     from dataclasses import replace
     from protocol import CMD_CARGO_AUDIT, CargoAuditPayload

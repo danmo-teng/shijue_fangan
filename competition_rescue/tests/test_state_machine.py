@@ -1470,6 +1470,89 @@ def test_range_cumulative_and_transport_sort() -> None:
     assert nav.command.flags & (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING) == (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING)
 
 
+def test_transport_audit_continuing_frames_allow_delayed_relay_handoff() -> None:
+    from protocol import CMD_ALIGN_SAFE_ZONE
+
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    audit = CargoAudit(left_class="green_supply", left_count=1,
+                       left_green_count=1, total_count=1)
+    m._latch_carried_manifest(audit)
+    x, y = m._target_point()
+    current_pose = pose(x, y)
+    status = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000,
+                     context_valid=True, context_matches=True,
+                     accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    m._begin_transport_audit(VisionSnapshot(frame_sequence=1), current_pose, status, 1.0)
+    outputs = []
+    for frame in range(2, 22):
+        now = 1.0 + (frame - 1) * 0.13
+        received = status
+        if len(outputs) >= 2:
+            # Actual relay reporting trails the live camera by two frames.
+            received = replace(relay_stm(outputs[-2], mode=48, flags=83,
+                                        relay_mission_tx_frames=frame - 2),
+                               camera_pitch_cdeg=14000, context_valid=True,
+                               context_matches=True, accepted_command=CMD_CARGO_AUDIT,
+                               action_status=1)
+        view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+                              capture_audit=audit)
+        out = m._transport_audit_output(view, current_pose, received, now)
+        if out.command.opcode == CMD_ALIGN_SAFE_ZONE:
+            break
+        assert out.command.opcode == CMD_CARGO_AUDIT
+        assert out.command.audit_vision_frame == frame  # Never freeze the source image.
+        outputs.append(out)
+    assert out.command.opcode == CMD_ALIGN_SAFE_ZONE
+    assert frame <= 6
+    # Before MCU READY, distinct visual samples still have distinct IDs.
+    assert outputs[0].command.audit.audit_id != outputs[1].command.audit.audit_id
+    assert m.carried_total_count == 1
+
+
+def test_transport_audit_handoff_retains_exact_payload_and_observation_checks() -> None:
+    for changed in ("side", "missing", "camera", "context", "not_ready"):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        audit = CargoAudit(left_class="green_supply", left_count=1,
+                           left_green_count=1, total_count=1)
+        m._latch_carried_manifest(audit)
+        x, y = m._target_point()
+        current_pose = pose(x, y)
+        status = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000,
+                         context_valid=True, context_matches=True,
+                         accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        m._begin_transport_audit(VisionSnapshot(frame_sequence=1), current_pose, status, 1.0)
+        for frame in (2, 3):
+            now = 1.0 + frame * 0.13
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+                                  capture_audit=audit)
+            out = m._transport_audit_output(view, current_pose, status, now)
+        published = out.command
+        received = replace(relay_stm(out, mode=48, flags=83, relay_mission_tx_frames=5),
+                           camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+                           accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        view = replace(view, frame_sequence=4, observed_monotonic_s=1.52)
+        if changed == "side":
+            view = replace(view, capture_audit=CargoAudit(right_class="green_supply",
+                right_count=1, right_green_count=1, total_count=1))
+        elif changed == "missing":
+            view = replace(view, capture_audit=None, capture_observation_valid=False)
+        elif changed == "camera":
+            received = replace(received, camera_pitch_cdeg=13800)
+        elif changed == "context":
+            received = replace(received, context_matches=False)
+        else:
+            received = replace(received, flags=3)
+        out = m._transport_audit_output(view, current_pose, received, 1.52)
+        assert m.state == CompetitionState.TRANSPORT_AUDIT, changed
+        if changed in {"missing", "camera"}:
+            assert not out.command.audit.stable
+            assert m.transport_audit_command is None
+        else:
+            assert out.command.audit.audit_id != published.audit.audit_id, changed
+
+
 def test_safe_staging_arrival_keeps_zero_handoff_and_stash_window() -> None:
     from protocol import CMD_STAGE_ONLY
 
