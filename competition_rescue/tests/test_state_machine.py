@@ -679,6 +679,34 @@ def test_material_priority_excludes_danger() -> None:
     assert output.batch.classes == ("injured_orange",)
 
 
+def test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone() -> None:
+    from state_machine import SweepPickupContext, cargo_in_front_region
+    safe_bbox = (352, 4, 926, 245)
+    polygon = ((460, 1023), (820, 1023), (815, 249), (352, 249))
+    # Actual second-run frame4502: centre(712,232.5) projects over the
+    # safe-zone box; foot(712,310) is in the ground corridor in front.
+    blue = TrackedCargo(335, "danger_cyan", .85, (644, 155, 136, 155), hits=8)
+    assert cargo_in_front_region(blue, polygon, safe_bbox)
+    mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    mission.safe_sweep_pickup = SweepPickupContext(
+        target_id=335, target_class="danger_cyan", target_bbox=blue.bbox,
+        excluded_ids=frozenset())
+    assert mission.safe_sweep_target((blue,), polygon, safe_bbox).track_id == 335
+    # Explicit inside evidence and the complete contact threshold remain
+    # exclusions, even when the upper part of a tall object spans both regions.
+    assert not cargo_in_front_region(replace(blue, inside_safe_zone=True), polygon, safe_bbox)
+    inside = replace(blue, bbox=(662, 70, 100, 130))
+    assert not cargo_in_front_region(inside, polygon, safe_bbox)
+    threshold = replace(blue, bbox=(662, 94, 100, 155))  # Foot exactly at y249.
+    assert not cargo_in_front_region(threshold, polygon, safe_bbox)
+    assert cargo_in_front_region(replace(threshold, bbox=(662, 95, 100, 155)),
+                                 polygon, safe_bbox)
+    outside_path = replace(blue, bbox=(950, 155, 100, 155))
+    assert not cargo_in_front_region(outside_path, polygon, safe_bbox)
+    assert mission.safe_sweep_target((inside, outside_path), polygon, safe_bbox) is None
+
+
+
 def _audit_mission(destination: str = "material") -> CompetitionMission:
     mission = CompetitionMission(
         CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)

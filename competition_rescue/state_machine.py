@@ -124,15 +124,19 @@ def cargo_in_front_region(item: TrackedCargo, polygon: tuple[tuple[int, int], ..
                           safe_bbox: tuple[int, int, int, int] | None) -> bool:
     """Sweep-only geometry; does not relax delivery success or claw audits."""
     x, y, w, h = item.bbox
-    center = (x + w / 2, y + h / 2)
     foot = (x + w / 2, y + h)
     if item.inside_safe_zone:
         return False
     if safe_bbox is not None:
         sx, sy, sw, sh = safe_bbox
-        if any(sx <= px <= sx + sw and sy <= py <= sy + sh for px, py in (center, foot)):
+        if sx <= foot[0] <= sx + sw and sy <= foot[1] <= sy + sh:
             return False
-    return point_in_polygon(center, polygon) and point_in_polygon(foot, polygon)
+    # These are ground-plane regions. A standing block's centre can overlap
+    # the safe-zone colour while its support remains on the floor in front
+    # (actual frame4502/blue335). Its bbox bottom-centre is only an image
+    # contact proxy; explicit inside classification continues to take priority.
+    return point_in_polygon(foot, polygon)
+
 
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
