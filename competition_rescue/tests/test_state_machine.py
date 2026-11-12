@@ -1022,6 +1022,52 @@ def test_return_center_sends_zero_until_search() -> None:
     assert not mission.return_arrival_latched
 
 
+def test_post_delivery_returns_to_own_side_with_loose_latched_arrival() -> None:
+    for side, sign, heading in (("red", 1.0, 27000), ("blue", -1.0, 9000)):
+        for exit_mode in (16, 17):
+            mission = CompetitionMission(CompetitionSettings(side=side))
+            mission.state = CompetitionState.TASK_COMPLETE
+            mission.selected_batch = CargoBatch((1,), ("green_supply",), "material")
+            initial = StmSnapshot(mode=exit_mode, age_ms=0, context_valid=True,
+                                  context_matches=True, task_id=1, action_id=2,
+                                  accepted_command=CMD_RETURN_CENTER, action_status=1)
+            output = mission.step(VisionSnapshot(), pose(0.0, sign * 0.8), initial, 0.1)
+            assert output.state == CompetitionState.RETURN_CENTER
+            assert mission.return_after_delivery and mission.selected_batch is None
+            assert output.command.opcode == CMD_RETURN_CENTER
+            assert output.command.arg_a == 500 and output.command.aux == heading
+            assert mission.settings.post_delivery_return_point == (0.0, sign * 0.30)
+
+            # The field centre is not the new arrival point. A small diagonal
+            # error outside 15 cm still moves, rather than checking each axis.
+            output = mission.step(VisionSnapshot(), pose(0.0, 0.0), initial, 0.2)
+            assert output.command.arg_a == 300
+            assert output.command.aux == (9000 if side == "red" else 27000)
+            output = mission.step(VisionSnapshot(), pose(0.12, sign * 0.40), initial, 0.3)
+            assert output.command.arg_a == 156
+            output = mission.step(VisionSnapshot(), pose(0.12, sign * 0.38), initial, 0.4)
+            assert output.command.arg_a == 0
+            assert output.state == CompetitionState.RETURN_CENTER
+
+            # Once close enough, pose jitter cannot restart fine correction;
+            # retain the original return acceptance and SEARCH handoff.
+            output = mission.step(VisionSnapshot(), pose(0.18, sign * 0.50), initial, 0.5)
+            assert output.command.arg_a == 0
+            output = mission.step(VisionSnapshot(), pose(), replace(initial, mode=3), 0.6)
+            assert output.state == CompetitionState.SEARCH
+            assert output.command.opcode == CMD_HOLD
+            assert output.event == "return_search_gate_start"
+
+            # A later abandoned capture/search return retains its own centre
+            # target and original 8 cm tolerance; it cannot inherit delivery.
+            mission._begin_return(initial, 0.7)
+            assert not mission.return_after_delivery and not mission.return_arrival_latched
+            output = mission.step(VisionSnapshot(), pose(0.0, sign * 0.30), initial, 0.8)
+            assert output.command.arg_a == 300 and output.command.aux == heading
+            output = mission.step(VisionSnapshot(), pose(0.0, sign * 0.12), initial, 0.9)
+            assert output.command.arg_a == 120
+
+
 def test_delivery_requires_outside_to_inside_transition() -> None:
     mission = CompetitionMission(
         CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)
@@ -1756,6 +1802,7 @@ def main() -> None:
     test_release_side_selection()
     test_single_release_recheck_and_final_both_release()
     test_return_center_sends_zero_until_search()
+    test_post_delivery_returns_to_own_side_with_loose_latched_arrival()
     test_delivery_requires_outside_to_inside_transition()
     test_boundary_guard_points_back_into_field()
     print("competition state machine PASS")

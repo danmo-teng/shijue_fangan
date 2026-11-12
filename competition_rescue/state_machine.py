@@ -504,6 +504,8 @@ class CompetitionSettings:
     max_batch_count: int = 2
     center_stop_radius_m: float = 0.0
     return_zero_tolerance_m: float = 0.080
+    post_delivery_return_offset_m: float = 0.30
+    post_delivery_return_tolerance_m: float = 0.15
     vision_stale_s: float = 0.30
     search_min_turn_deg: float = 720.0
     search_target_confirm_frames: int = 1
@@ -559,7 +561,9 @@ class CompetitionSettings:
             self.delivery_visual_frames <= 0
         ):
             raise ValueError("audit frame counts must be positive")
-        if self.center_stop_radius_m < 0 or self.return_zero_tolerance_m <= 0:
+        if (self.center_stop_radius_m < 0 or self.return_zero_tolerance_m <= 0 or
+                self.post_delivery_return_offset_m <= 0 or
+                self.post_delivery_return_tolerance_m <= 0):
             raise ValueError("return distance thresholds are invalid")
         if self.vision_stale_s <= 0:
             raise ValueError("vision stale threshold must be positive")
@@ -614,6 +618,11 @@ class CompetitionSettings:
     @property
     def safe_heading_deg(self) -> float:
         return 90.0 if self.side == "red" else 270.0
+
+    @property
+    def post_delivery_return_point(self) -> tuple[float, float]:
+        # Centre-to-own-fence normal: stay 30 cm on our half after delivery.
+        return 0.0, self.side_sign * self.post_delivery_return_offset_m
 
     @property
     def fence_stop_y_m(self) -> float:
@@ -735,6 +744,7 @@ class CompetitionMission:
         self.return_search_frame_floor: int | None = None
         self.return_search_mode_seen = False
         self.return_arrival_latched = False
+        self.return_after_delivery = False
         self.stash_zero_initial_ack: int | None = None
         self.stash_handoff_initial_ack: int | None = None
         self.cargo_recheck_pending = False
@@ -4558,15 +4568,24 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 self._pause(),
-                "返中定位暂时无效，冻结当前阶段等待定位恢复",
+                "返程定位暂时无效，冻结当前阶段等待定位恢复",
                 motion_expected=False,
                 tx_policy="pause",
                 reason="return_pose_stale",
             )
-        distance = math.hypot(pose.x_m, pose.y_m)
-        heading = math.degrees(math.atan2(-pose.y_m, -pose.x_m)) % 360.0
+        target_x, target_y = (
+            self.settings.post_delivery_return_point if self.return_after_delivery
+            else (0.0, 0.0)
+        )
+        tolerance = (
+            self.settings.post_delivery_return_tolerance_m if self.return_after_delivery
+            else self.settings.return_zero_tolerance_m
+        )
+        dx, dy = target_x - pose.x_m, target_y - pose.y_m
+        distance = math.hypot(dx, dy)
+        heading = math.degrees(math.atan2(dy, dx)) % 360.0
         self.return_arrival_latched = (self.return_arrival_latched or
-                                       distance <= self.settings.return_zero_tolerance_m)
+                                       distance <= tolerance)
         remaining = 0.0 if self.return_arrival_latched else distance
         if self.return_arrival_latched:
             heading = pose.yaw_deg % 360.0
@@ -4579,12 +4598,16 @@ class CompetitionMission:
                 0,
                 round(heading * 100.0) % 36000,
             ),
-            f"{message}，剩余{remaining * 1000.0:.0f} mm，等待F407进入SEARCH",
+            f"{message}，目标({target_x:.2f},{target_y:.2f}) m，"
+            f"剩余{remaining * 1000.0:.0f} mm，等待F405进入SEARCH",
             motion_expected=True,
         )
 
-    def _begin_return(self, stm: StmSnapshot, now: float) -> None:
+    def _begin_return(
+        self, stm: StmSnapshot, now: float, *, after_delivery: bool = False,
+    ) -> None:
         self.return_arrival_latched = False
+        self.return_after_delivery = after_delivery
         self.return_initial_ack = (
             stm.acknowledged_sequence if stm.fresh else None
         )
@@ -6938,11 +6961,11 @@ class CompetitionMission:
                 }
             ):
                 self._clear_selected_batch()
-                self._begin_return(stm, now)
+                self._begin_return(stm, now, after_delivery=True)
                 return self._return_center_output(
                     pose,
                     now,
-                    "F407已进入本地退出/转向阶段，持续发送RETURN_CENTER",
+                    "F405已进入本地退出/转向阶段，返回己方距中心30cm搜索点",
                 )
             if self._fresh_mode_after(
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
@@ -6975,13 +6998,17 @@ class CompetitionMission:
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
-                    f"回到中心搜索区，等待相机120°和新视觉帧；已完成{self.delivery_count}件",
+                    f"回到{'己方' if self.return_after_delivery else '中心'}搜索区，"
+                    f"等待相机120°和新视觉帧；已完成{self.delivery_count}件",
                     event="return_search_gate_start",
                     tx_policy="hold",
                     reason="return_search_frame_gate",
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
-            return self._return_center_output(pose, now, "持续返回中心")
+            return self._return_center_output(
+                pose, now,
+                "持续返回己方搜索点" if self.return_after_delivery else "持续返回中心",
+            )
 
         return CompetitionOutput(
             self.state,
