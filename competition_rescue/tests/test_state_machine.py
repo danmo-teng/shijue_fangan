@@ -1636,16 +1636,17 @@ def test_safe_staging_arrival_keeps_zero_handoff_and_stash_window() -> None:
             x, y = m._target_point()
             status = stm(mode=STM_MODE_NAVIGATE, flags=2)
 
-            # Errors outside either axis and an invalid pose still cannot
-            # latch arrival. Changing the staging window must not widen X.
+            # Widen only the STAGE lateral window; retain its axial window
+            # and the original invalid-pose behaviour.
             for sample in (
-                pose(x, y + 0.051), pose(x + 0.061, y),
+                pose(x, y + 0.051), pose(x + 0.101, y),
                 replace(pose(x, y), valid=False),
             ):
                 m._navigate(VisionSnapshot(), sample, status, 1.0)
                 assert m.staging_zero_tx_baseline is None
 
-            sample = pose(x + 0.012, y + m.settings.side_sign * 0.0427)
+            sample = pose(x + 0.09, y + m.settings.side_sign * 0.0427)
+            assert not m._at_target(sample, (x, y))  # Generic/stash window stays narrow.
             requested = m._navigate(VisionSnapshot(), sample, status, 1.1)
             assert requested.state == CompetitionState.NAVIGATE
             assert requested.command and requested.command.opcode == CMD_NAVIGATE_WAYPOINT
@@ -1672,6 +1673,54 @@ def test_safe_staging_arrival_keeps_zero_handoff_and_stash_window() -> None:
     assert output.state == CompetitionState.INITIAL_STASH_NAV
     assert output.command and output.command.arg_a == 43
     assert stash.staging_zero_tx_baseline is None
+    output = stash._navigate(VisionSnapshot(), pose(x + 0.09, y),
+        stm(mode=STM_MODE_NAVIGATE, acknowledged_sequence=1), 2.1)
+    assert output.state == CompetitionState.INITIAL_STASH_NAV
+    assert output.command and output.command.arg_a == 90
+    assert stash.staging_zero_tx_baseline is None
+
+
+def test_safe_staging_terminal_only_corrects_out_of_window_axes() -> None:
+    from protocol import CMD_STAGE_ONLY
+
+    for side in ("red", "blue"):
+        for destination, class_name in (
+            ("material", "green_supply"), ("injury", "injured_orange")
+        ):
+            m = CompetitionMission(CompetitionSettings(side=side))
+            m._select_batch(CargoBatch((1,), (class_name,), destination))
+            m.confirmed_delivery_destination = destination
+            target = m._target_point()
+            for x_sign in (-1, 1):
+                for y_sign in (-1, 1):
+                    def command(dx, dy, *, stage=True):
+                        return m._navigation_command(
+                            pose(target[0] + dx * x_sign, target[1] + dy * y_sign),
+                            target, staging_only=stage,
+                        )
+
+                    # X is already acceptable: move only along field Y.
+                    axial = command(0.09, 0.07)
+                    assert axial.flags & CMD_STAGE_ONLY
+                    assert axial.arg_a == 70
+                    assert axial.aux == (27000 if y_sign > 0 else 9000)
+                    # Y is already acceptable: move only along field X.
+                    lateral = command(0.11, 0.04)
+                    assert lateral.arg_a == 110
+                    assert lateral.aux == (18000 if x_sign > 0 else 0)
+                    # Both axes need correction, so retain the diagonal vector.
+                    diagonal, geometric = command(0.11, 0.07), command(0.11, 0.07, stage=False)
+                    assert diagonal.arg_a == geometric.arg_a == 130
+                    assert diagonal.aux == geometric.aux
+                    # Outside the original 18 cm fine-entry range, keep the
+                    # coarse H/D even when one axis lies inside the window.
+                    coarse, geometric = command(0.09, 0.20), command(0.09, 0.20, stage=False)
+                    assert coarse.arg_a == geometric.arg_a == 219
+                    assert coarse.aux == geometric.aux
+                    # Non-STAGE navigation must not inherit per-axis masking.
+                    generic = command(0.09, 0.07, stage=False)
+                    assert generic.arg_a == 114
+                    assert generic.aux != axial.aux
 
 
 def test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception() -> None:
@@ -1784,6 +1833,7 @@ def main() -> None:
     test_progressive_sorting_allows_third_action_and_counts_only_real_attempts()
     test_post_grab_multigreen_reuses_accepted_audit_without_release_backoff()
     test_safe_staging_arrival_keeps_zero_handoff_and_stash_window()
+    test_safe_staging_terminal_only_corrects_out_of_window_axes()
     test_range_cumulative_and_transport_sort()
     test_mode51_reference_audit_exits_and_budget()
     test_4071_separation_evidence_and_fault_latch()

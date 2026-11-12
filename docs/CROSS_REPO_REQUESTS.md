@@ -16,7 +16,7 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 当前审阅：MATCH-RETURN-20261112 / MATCH-TERMINAL-DRIVE-20261112
+## 当前交付：MATCH-RETURN-20261112 / MATCH-TERMINAL-DRIVE-20261112
 
 已读取F405文档回复提交bbb719c4d3d9035cc1905efbb782b2aace4180e2，较0d52ef8仅改三份文档；
 没有末端驱动固件改动。固定入口blob 19cdd37c72b3dbf2e6009874282b26adfa9cda00，完整答复blob
@@ -24,7 +24,7 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 dff0959ae3dcb1fe4cb7c2ab1715674ecf5853d1、app_config.h blob
 6a7ee6c6502e5ac28cd3f43a31ac1aca570b5774、motor.c blob
 d0717d7ad017f64adae20fa332c7c75664dd564b。此次未打开UART读actual；源码不是烧录证明。
-用户本轮要求根据回复分析可行方案，没有授权实施下面的新候选。
+用户本轮已批准上位区域到位方案。下方为本轮实现与接口回执，不要求F405新增功能或修改驱动。
 
 ```text
 完整下位答复（固定提交）：
@@ -41,7 +41,7 @@ MATCH-RETURN-20261112：上位已实现，告知接口行为，不要求下位�
 F405现有返程消费H/D，未自行写死中心；收到D=0沿原完成即可，不新增专门返程协议。
 开局藏点释放、抓取放弃和搜索失败等原中心返程未更换目标/8cm容差。
 
-MATCH-TERMINAL-DRIVE-20261112：已读回复；本端方案待用户选择，没有实施授权。
+MATCH-TERMINAL-DRIVE-20261112：已按用户批准在上位实现；下位驱动候选未实施。
 
 认可的源码结论：
 - 普通RETURN末端120—200mm/s用MoveAngle，STAGE为110—180mm/s用MoveAngleFine。
@@ -50,29 +50,37 @@ MATCH-TERMINAL-DRIVE-20261112：已读回复；本端方案待用户选择，没
   API接受、motors_active及软件PWM命令不证明真实轮运动；本次没有补采现场输出。
 - 原返程30cm偏置/15cm锁D=0已可兼容，不需再放宽下位全局80mm。
 
-上位推荐的下一个小任务（候选，等用户决定）：
+上位已实现：
 1. 仅给STAGE预备点独立横向到位范围：X±100mm，纵向仍Y±50mm。
-   当前实际仍X±60/Y±50mm；不修改通用fence_lateral_tolerance_m，不波及藏点/放货等路径。
-2. 末端只修超出上述范围的轴，已在范围内的轴不再往点中心追；粗段保留。
+   使用独立safe_zone_staging_lateral_tolerance_m，不修改通用fence_lateral_tolerance_m，不波及藏点等路径。
+2. 原几何距离≤180mm时只修超出上述范围的轴，已在范围内的轴分量为0；粗段保持原H/D。
+   180mm与当前F405 APP_NAV_STAGE_FINE_ENTRY_MM一致，控制的是空间阶段，不是新增时间/年龄检查。
+   末端D为仍需修正的分量合成长度、H为其场地方向；车头航向仍由F405原gyro保持。
    同task/action继续实时H/D，只有两轴都到位才锁D=0，复用原完成/载荷复审交接。
    例如横差90/纵差40mm可直接到位；横差90/纵差70mm只沿纵向修正，不同时横移90mm。
-   这两个数例是人工几何核对，不是实测，也不证明现场卡住由方向翻转造成。
+   正反方向及红蓝两侧均按同一规则；数例已由现有状态机检查覆盖，不是实测或现场根因证明。
 3. 后续仍由主gyro对正法向，视觉仅大偏差才横移，再走原ENTER。
    纵向暂不放宽：F405从ENTER本地原点执行固定670mm，视觉横移不补起推距离；不能把所有到位范围一起放大。
 
-候选优点是减少没有业务必要的横向追点，不提速、不新增等待/握手；代价是转入视觉时横向误差可能更大，
+改动减少没有业务必要的横向追点，不提速、不新增等待/握手；代价是转入视觉时横向误差可能更大，
 需要原视觉横移完成，仍可能把部分定位微调时间转为视觉调整。100mm是工程初值，未实车标定。
 它不保证消除纵向容差外的电机停滞；该部分仍需按同段已有TARGET/PWM/ACTUAL/RAW32及H/D、动作身份区分。
 
 下位只改RETURN/FINE为现有MoveAngleFine的建议保留为第二步候选：若15cm到位外仍停，再决定是否采用。
 它不解决已用Fine的STAGE，也不取消换向流程；可能增大瞬态PWM及短距过冲，不在此窗口自动要求实施。
-不新增测试代码/程序、遥测、ISR、新鲜度/资格等待、反复握手、延时或保护停车。
+不要求下位新增测试代码/程序、遥测或ISR；本轮不新增新鲜度/资格等待、反复握手、延时或保护停车。
 ```
 
-上次返程交付4项直接相关检查通过，语法/diff检查通过；本次只核对源码、既有日志及人工几何例子，不重复跑无关检查。
-本次只更新审阅文档，未改比赛运行代码、启动车轮或清日志，候选未实车验证。
-另外旧test_return_stash_requires_confirmed_cargo_and_search_handoff在c907be0及修改后均因
-NO_CANDIDATE而非stash_return_start_gate失败，已记录，未借本轮返程改动顺手改藏点业务。
+本轮仅改competition_rescue/state_machine.py、原tests/test_state_machine.py及本端当前状态/待办/固定入口。
+上位原0x03 STAGE、0x1D布局/flags和动作配对不变，下位收到原D=0沿原完成即可，无需新增协议或固件改动。
+下位普通RETURN改Fine仍未选用，不把这次上位交付当成该固件候选已获授权。
+
+必要检查：旧代码先复现区域到位和单轴指向两项不符，修后8项直接相关检查通过；
+覆盖红蓝/物资及伤员、正负X/Y、只修超限轴/双轴向量、18cm外粗段、D=0交接及抖动保持、藏点/原返程、
+视觉大偏差及载荷平台复审。补充藏点横差90mm仍须导航的原检查通过；语法/diff通过。
+本次未开串口/设备、启动车轮、重启正式程序或清日志；真实等待时间、起动及投送效果仍待原入口实车验证。
+此前6edf4a0交付时确认旧test_return_stash_requires_confirmed_cargo_and_search_handoff在c907be0及当次修改后均因
+NO_CANDIDATE而非stash_return_start_gate失败，已记录，本轮不重跑或借STAGE改动顺手改其藏点搜索业务。
 
 ## 前次请求：MATCH-DELIVERY-OPENING-20261112（下位已有源码回执，部署待确认）
 

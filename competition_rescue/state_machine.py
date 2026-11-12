@@ -522,7 +522,9 @@ class CompetitionSettings:
     safe_zone_inner_edge_m: float = 1.20
     safe_fence_face_m: float = 1.14
     safe_zone_staging_distance_m: float = 0.60
+    safe_zone_staging_lateral_tolerance_m: float = 0.100
     safe_zone_staging_axial_tolerance_m: float = 0.050
+    safe_zone_staging_fine_entry_m: float = 0.180  # F405 APP_NAV_STAGE_FINE_ENTRY_MM.
     safe_zone_freeze_frames: int = 3
     safe_zone_lateral_start_px: int = 64
     safe_zone_lateral_tolerance_px: int = 32
@@ -583,7 +585,9 @@ class CompetitionSettings:
             raise ValueError("boundary margin cannot be negative")
         if (
             self.safe_zone_staging_distance_m <= 0 or
+            self.safe_zone_staging_lateral_tolerance_m <= 0 or
             self.safe_zone_staging_axial_tolerance_m <= 0 or
+            self.safe_zone_staging_fine_entry_m <= 0 or
             self.safe_zone_freeze_frames <= 0 or
             self.safe_zone_lateral_tolerance_px <= 0 or
             self.safe_zone_lateral_start_px < self.safe_zone_lateral_tolerance_px or
@@ -4404,13 +4408,17 @@ class CompetitionMission:
     ) -> bool:
         # The staging point is followed by cargo audit and final alignment.
         # Keep its arrival window separate from the temporary stash point.
+        lateral_tolerance = (
+            self.settings.safe_zone_staging_lateral_tolerance_m if staging_only
+            else self.settings.fence_lateral_tolerance_m
+        )
         axial_tolerance = (
             self.settings.safe_zone_staging_axial_tolerance_m if staging_only
             else self.settings.fence_axial_tolerance_m
         )
         return (
             pose.valid and
-            abs(pose.x_m - target[0]) <= self.settings.fence_lateral_tolerance_m and
+            abs(pose.x_m - target[0]) <= lateral_tolerance and
             abs(pose.y_m - target[1]) <= axial_tolerance
         )
 
@@ -4436,11 +4444,18 @@ class CompetitionMission:
             return self._pause()
         dx, dy = target[0] - pose.x_m, target[1] - pose.y_m
         distance = math.hypot(dx, dy)
+        if staging_only and distance <= self.settings.safe_zone_staging_fine_entry_m:
+            # Fine approach aims for the arrival region. An acceptable axis
+            # must not keep steering towards the point centre while the other
+            # axis still needs correction. Coarse H/D remains geometric.
+            if abs(dx) <= self.settings.safe_zone_staging_lateral_tolerance_m:
+                dx = 0.0
+            if abs(dy) <= self.settings.safe_zone_staging_axial_tolerance_m:
+                dy = 0.0
+            distance = math.hypot(dx, dy)
         heading = math.degrees(math.atan2(dy, dx)) % 360.0
-        # Keep the geometric target bearing all the way to the staging point.
-        # This is the field-frame translation bearing, not a final body yaw.
-        # Terminal holonomic control must hold body yaw separately in F405;
-        # the existing STAGE payload/flags and D=0 arrival remain unchanged.
+        # H is field-frame translation, not body yaw. F405 holds yaw; retain
+        # the existing STAGE payload/flags and D=0 completion handoff.
         flags = (
             self._side_flags() | CMD_DISTANCE_VALID | CMD_STAGE_ONLY
             if staging_only else
