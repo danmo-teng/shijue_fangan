@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "recorded_date": "2026-11-05",
-  "source": "User-provided centimetre values applied to saved per-angle range-view partitions; no additional distance correction.",
+  "recorded_date": "2026-11-12",
+  "source": "User-requested travel increments on 2026-11-12: all 105-degree bands +100mm; 120-degree B1/B2/B3 +80mm, B4 +50mm, B5 unchanged. Original layout and measurement flags retained; no new independent measurement.",
   "angles": {
     "10500": {
       "measured": false,
@@ -18,25 +18,25 @@
           "band": "B1",
           "y_min": 0,
           "y_max": 150,
-          "advance_mm": 400,
+          "advance_mm": 500,
           "measured": false,
           "source": "user_requested_placeholder",
-          "note": "过远，用户要求暂用40cm；不是精确实测距离。"
+          "note": "过远，原暂用40cm按用户要求增加10cm，现暂用50cm；不是精确实测距离。"
         },
         {
           "band": "B2",
           "y_min": 150,
           "y_max": 291,
-          "advance_mm": 400,
+          "advance_mm": 500,
           "measured": false,
           "source": "user_requested_placeholder",
-          "note": "过远，用户要求暂用40cm；不是精确实测距离。"
+          "note": "过远，原暂用40cm按用户要求增加10cm，现暂用50cm；不是精确实测距离。"
         },
         {
           "band": "B3",
           "y_min": 291,
           "y_max": 432,
-          "advance_mm": 370,
+          "advance_mm": 470,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"
@@ -45,7 +45,7 @@
           "band": "B4",
           "y_min": 432,
           "y_max": 603,
-          "advance_mm": 160,
+          "advance_mm": 260,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"
@@ -54,7 +54,7 @@
           "band": "B5",
           "y_min": 603,
           "y_max": 1024,
-          "advance_mm": 40,
+          "advance_mm": 140,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"
@@ -76,7 +76,7 @@
           "band": "B1",
           "y_min": 0,
           "y_max": 73,
-          "advance_mm": 380,
+          "advance_mm": 460,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"
@@ -85,7 +85,7 @@
           "band": "B2",
           "y_min": 73,
           "y_max": 217,
-          "advance_mm": 300,
+          "advance_mm": 380,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"
@@ -94,7 +94,7 @@
           "band": "B3",
           "y_min": 217,
           "y_max": 381,
-          "advance_mm": 150,
+          "advance_mm": 230,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"
@@ -103,7 +103,7 @@
           "band": "B4",
           "y_min": 381,
           "y_max": 580,
-          "advance_mm": 50,
+          "advance_mm": 100,
           "measured": true,
           "source": "user_measurement",
           "note": "用户提供测距值；未提供误差范围。"

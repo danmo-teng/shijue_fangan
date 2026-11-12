@@ -869,8 +869,8 @@ def test_range_context_and_calibration() -> None:
     # Production tables use the saved, different partitions for each angle.
     actual = ApproachRangeCalibration.load(PROJECT_ROOT / "vision/config/approach_range.json")
     for pitch, edges, distances in (
-        (10500, (0,150,291,432,603,1024), (400,400,370,160,40)),
-        (12000, (0,73,217,381,580,1024), (380,300,150,50,20)),
+        (10500, (0,150,291,432,603,1024), (500,500,470,260,140)),
+        (12000, (0,73,217,381,580,1024), (460,380,230,100,20)),
     ):
         for index, (low, high, mm) in enumerate(zip(edges, edges[1:], distances)):
             reason = "range_user_approved_provisional" if pitch == 10500 and index < 2 else "range_measured"
