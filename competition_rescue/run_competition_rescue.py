@@ -57,6 +57,7 @@ from run_yolo_x5 import (  # noqa: E402
 
 from protocol import (  # noqa: E402
     CMD_ABORT,
+    CMD_ALIGN_SAFE_ZONE,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
@@ -70,6 +71,7 @@ from protocol import (  # noqa: E402
     CMD_RELEASE_BOTH,
     CMD_RETURN_CENTER,
     CMD_TARGET_RIGHT,
+    CMD_VISUAL_CORRECTION_VALID,
     command_context_frame,
 )
 from capture_roi import (  # noqa: E402
@@ -396,8 +398,11 @@ def audit_from_cargo(
     side_by_track: dict[int, str] | None = None,
     *,
     isolated_track_ids: set[int] | None = None,
+    remembered_items: tuple[TrackedCargo, ...] = (),
 ) -> CargoAudit | None:
-    visible = [item for item in items if item.visible]
+    # Remembered positives are explicitly supplied only by the closed-load
+    # evidence path. Their detector visibility stays false in snapshots/logs.
+    visible = [item for item in items if item.visible] + list(remembered_items)
     if not visible:
         return CargoAudit()
     side_by_track = side_by_track or {}
@@ -665,7 +670,7 @@ def safe_zone_push_corridor(
     )
     blocking_classes = (
         CARGO_CLASSES
-        if not first_common_delivered else
+        if not first_common_delivered or destination == "injury" else
         frozenset({"danger_cyan", "injured_orange"})
     )
     corridor_items: list[tuple[TrackedCargo, tuple[float, float]]] = []
@@ -749,6 +754,58 @@ def capture_image_quality(image, pixel_format: str, rois: CaptureRois,
     return ""
 
 
+class HeldCargoEvidence:
+    """Positive 140-degree load evidence, scoped to physical claw holding.
+
+    This is not a detector track or a fresh observation. It only prevents an
+    already seen casualty/material mixture becoming legal on missed frames.
+    Opening, releasing or separating the load clears the evidence.
+    """
+
+    HOLD_MODES = frozenset({10, 11, 22, 23, 40, 48, 51})
+
+    def __init__(self):
+        self.items: dict[str, tuple[TrackedCargo, int]] = {}
+        self.view_140_confirmed = False
+
+    def clear(self):
+        self.items.clear()
+        self.view_140_confirmed = False
+
+    def observe(self, cargo, stm, rois, frame_sequence, image_quality_reason):
+        if not stm.gripper_closed or stm.mode not in self.HOLD_MODES:
+            self.clear()
+            return
+        if stm.camera_pitch_cdeg != 14000:
+            self.view_140_confirmed = False
+            return
+        if stm.claw_visible:
+            self.view_140_confirmed = True
+        if not self.view_140_confirmed or image_quality_reason:
+            return
+        for item in cargo:
+            if (not item.visible or item.hits < 2 or
+                    item.class_name not in {"green_supply", "core_black", "injured_orange"}):
+                continue
+            x, y, width, height = item.bbox
+            if (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
+                    y + height >= IMAGE_HEIGHT - 1):
+                continue
+            if bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60):
+                self.items[item.class_name] = (item, frame_sequence)
+
+    def missing_incompatible(self, current):
+        classes = {item.class_name for item in current}
+        combined = classes | self.items.keys()
+        if (not current or "injured_orange" not in combined or
+                not combined.intersection({"green_supply", "core_black"})):
+            return ()
+        # Keep one actual positive example of each missing incompatible class;
+        # never extrapolate counts or manufacture cargo in an empty picture.
+        return tuple((replace(item, visible=False), frame)
+                     for name, (item, frame) in self.items.items() if name not in classes)
+
+
 def make_vision_snapshot(
     detections,
     tracks,
@@ -767,6 +824,7 @@ def make_vision_snapshot(
     recent_carried_track_ids: tuple[int, ...] = (),
     recent_corridor_obstacle: TrackedCargo | None = None,
     recent_carried_pitch_cdeg: int = 0,
+    held_cargo_evidence: HeldCargoEvidence | None = None,
 ) -> VisionSnapshot:
     # A cached rectangle from another camera angle cannot prove membership
     # in the current view. Retain the existing per-class area requirement.
@@ -786,10 +844,11 @@ def make_vision_snapshot(
                                  not capture_quality_reason)
     image_observation_valid = capture_observation_valid
     image_quality_reason = capture_quality_reason
+    claw_cargo = tracked_cargo(tracks, None) if capture_enabled or held_cargo_evidence is not None else ()
     target_quality: dict[int, str] = {}
     roi_decisions = []
     if capture_enabled:
-        for item in tracked_cargo(tracks, None):
+        for item in claw_cargo:
             if not item.visible:
                 continue
             x, y, width, height = item.bbox
@@ -829,6 +888,19 @@ def make_vision_snapshot(
                 "left" if item.center_px[0] <= IMAGE_WIDTH // 2 else "right"
             )
     capture = tuple(capture_items)
+    remembered_capture = ()
+    if held_cargo_evidence is not None:
+        held_cargo_evidence.observe(claw_cargo, stm, rois,
+                                   frame_sequence, image_quality_reason)
+        if capture_enabled and capture_observation_valid:
+            remembered_capture = held_cargo_evidence.missing_incompatible(capture)
+            for item, source_frame in remembered_capture:
+                capture_side_by_track[item.track_id] = capture_side_for_bbox(
+                    item.bbox, rois, minimum_overlap_ratio=0.60, overall_included=True,
+                ) or ("left" if item.center_px[0] <= IMAGE_WIDTH // 2 else "right")
+                roi_decisions.append(dict(track_id=item.track_id, **{"class": item.class_name},
+                    included=True, reason="held_incompatible_cargo_remembered",
+                    remembered_source_frame=source_frame))
     for index, item in enumerate(capture):
         for other in capture[index + 1:]:
             if (bbox_overlap_ratio(item.bbox, other.bbox) >= 0.85 or
@@ -870,6 +942,7 @@ def make_vision_snapshot(
                     not mission._boxes_overlap(item.bbox, other.bbox)
                     for other in capture)
             },
+            remembered_items=tuple(item for item, _ in remembered_capture),
         )
         if capture_observation_valid else None
     )
@@ -993,6 +1066,17 @@ def make_vision_snapshot(
         mission.confirmed_delivery_destination or
         (selected.destination if selected is not None else None)
     )
+    incompatible_classes = (
+        {"green_supply", "core_black", "danger_cyan"}
+        if corridor_destination == "injury" else
+        {"injured_orange", "danger_cyan"}
+        if corridor_destination == "material" else set()
+    )
+    incompatible_cargo = tuple(
+        item for item in cargo if stm.gripper_closed and item.visible and item.hits >= 2 and
+        not item.inside_safe_zone and item.class_name in incompatible_classes and
+        cargo_on_carrying_platform(item, stm.camera_pitch_cdeg)
+    )
     corridor_excluded_track_ids = known_carried_ids
     corridor_cargo = cargo
     if (recent_corridor_obstacle is not None and
@@ -1050,6 +1134,7 @@ def make_vision_snapshot(
         delivery_target_inside_track_ids=delivery_inside_ids,
         delivery_target_outside_track_ids=delivery_outside_ids,
         safe_zone_filter_blocked=safe_zone_filter_blocked,
+        carried_incompatible_cargo=incompatible_cargo,
         low_conf_green_seen=low_conf_green_seen,
         safe_corridor_polygon=corridor,
         safe_corridor_obstacle_class=(
@@ -1625,6 +1710,8 @@ class CompetitionPlanner:
                 self.protocol_vision_frame = 0
         if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
             self.protocol_vision_frame = command.source_vision_frame or 0
+        elif command.opcode == CMD_ALIGN_SAFE_ZONE and command.flags & CMD_VISUAL_CORRECTION_VALID:
+            self.protocol_vision_frame = command.source_vision_frame or 0
         elif command.opcode == CMD_APPROACH_TARGET:
             stamp = (
                 pickup.last_seen_s if pickup is not None else
@@ -2032,6 +2119,12 @@ class CompetitionPlanner:
             # Re-evaluate evidence even while an audit ACK is in flight.
             # Otherwise the context gate can keep transmitting expired STABLE.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (stm.fresh and not stm.fault and stm.mode in {10, 11} and
+                self.mission.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX):
+            # Keep dynamic pixels moving through an in-flight ACK or a PAUSE
+            # overlay. Otherwise a missing box could leave PAUSE retransmitting
+            # forever after the actual image has recovered.
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.protocol_last_output is not None and stm.fresh and
                 not matches and stm.mode != 41 and not stm.fault):
             pending = self.protocol_last_output.command
@@ -2207,9 +2300,14 @@ class CompetitionPlanner:
             ),
             "locked_safe_target_x_px": self.mission.locked_safe_target_x_px,
             "safe_zone_visual_pixel_error": self.mission.safe_zone_visual_pixel_error,
+            "safe_zone_visual_frame": self.mission.safe_zone_visual_frame,
+            "safe_zone_lateral_start_px": self.mission.settings.safe_zone_lateral_start_px,
+            "safe_zone_lateral_tolerance_px": self.mission.settings.safe_zone_lateral_tolerance_px,
+            "safe_zone_lateral_active": self.mission.safe_zone_lateral_active,
             "safe_zone_visual_locked": self.mission.safe_zone_visual_locked,
             "safe_zone_fallback": self.mission.safe_zone_fallback,
             "safe_corridor_obstacle_remembered": vision.safe_corridor_obstacle_remembered,
+            "carried_incompatible_track_ids": [item.track_id for item in vision.carried_incompatible_cargo],
             "safe_zone_view_pitch_cdeg": self.mission.safe_zone_view_pitch_cdeg,
             "empty_load_recheck_pending": self.mission.empty_load_recheck_pending,
             "empty_load_view_moved": self.mission.empty_load_view_moved,
@@ -2397,7 +2495,8 @@ class CompetitionPlanner:
 
     def _record_replay_event(self, output, pose, stm, vision, now: float) -> None:
         if (output.event not in {"safe_zone_acquire_no_box", "load_empty_reobserve",
-                                 "safe_zone_entry", "safe_zone_clear_start"} or
+                                 "safe_zone_entry", "safe_zone_clear_start",
+                                 "carried_incompatible_reaudit"} or
                 self.replay_event_sink is None):
             return
         try:
@@ -2989,6 +3088,7 @@ def main() -> int:
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = ()
     recent_carried_track_ids: tuple[int, ...] = ()
     recent_carried_pitch_cdeg = 0
+    held_cargo_evidence = HeldCargoEvidence()
     recent_corridor_obstacle: TrackedCargo | None = None
     corridor_memory_pitch = 0
     competition_started = False
@@ -3042,6 +3142,7 @@ def main() -> int:
         recent_carried_bboxes = ()
         recent_carried_track_ids = ()
         recent_carried_pitch_cdeg = 0
+        held_cargo_evidence.clear()
         recent_corridor_obstacle = None
         corridor_memory_pitch = 0
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
@@ -3354,6 +3455,7 @@ def main() -> int:
                     recent_carried_track_ids=recent_carried_track_ids,
                     recent_corridor_obstacle=recent_corridor_obstacle,
                     recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
+                    held_cargo_evidence=held_cargo_evidence,
                 )
                 if (remember_corridor and latest_vision.safe_corridor_obstacle_class is not None):
                     recent_corridor_obstacle = TrackedCargo(

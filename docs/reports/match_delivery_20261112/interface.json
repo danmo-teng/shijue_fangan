@@ -1,0 +1,51 @@
+{
+  "request_id": "MATCH-DELIVERY-OPENING-20261112",
+  "upper_base": "ad4a108",
+  "lower_source_commit": "19ec9f718d0cdb9431748c89d18b229d9251063b",
+  "transport": {
+    "context_type": "0x1D",
+    "command_type": "0x18",
+    "frame_bytes": 15,
+    "layout_changed": false
+  },
+  "visual_align": {
+    "opcode": "0x04",
+    "arg_a": "signed int16 pixels: zone subsection point minus image center 640; positive means target right",
+    "arg_b": {
+      "0": "120 degrees",
+      "11500": "115 degrees"
+    },
+    "aux": 0,
+    "flags": {
+      "VALID": "0x01",
+      "RED_SIDE": "0x08",
+      "VISUAL_CORRECTION_VALID": "0x40"
+    },
+    "injury_target_fraction": 0.6666666666666666,
+    "material_target_fraction": 0.3333333333333333,
+    "lateral_start_abs_error_px_exclusive": 64,
+    "lateral_stop_abs_error_px_inclusive": 32,
+    "body_left_velocity_sign": "opposite to arg_a",
+    "heading_reference": "primary gyro; field normal red90/blue270; no T265 XY steering in ENTER",
+    "updates": "same task/action, source frame in existing 0x1D, no new handshake or sensor age conditions",
+    "completion": "ACK alone is insufficient; mode11 + completed + current pixel error in permitted band after hysteresis",
+    "example": {
+      "task": 7,
+      "action": 11,
+      "source_vision_frame": 1001,
+      "error_px": 201,
+      "context_hex": "a3 b3 1d 00 00 07 00 0b 00 00 03 e9 f2 17 c3",
+      "command_hex": "a3 b3 18 00 04 49 00 c9 00 00 00 00 f5 5f c3"
+    }
+  },
+  "platform_load_reaudit": {
+    "opcode": "0x12",
+    "wire_role": "existing formal transport audit, injury destination retained",
+    "request": "source frame0, zero classes/counts/total, no STABLE, no new observation",
+    "allowed_lower_state": "closed claw TASK_ALIGN_SAFE_ZONE, before ENTER, not arbitrary NAV mode10 or open/released load",
+    "target_state": "existing TASK_TRANSPORT_AUDIT/mode48; original camera preparation and 2-frame audit/separation"
+  },
+  "opening": "complete existing 1.10m local-wheel forward leg, then existing SEARCH/140-degree probe; remove map-center 80mm convergence prerequisite",
+  "lower_implementation_status": "request only; not changed or flashed by RDK",
+  "no_new_tests_requested_from_lower": true
+}

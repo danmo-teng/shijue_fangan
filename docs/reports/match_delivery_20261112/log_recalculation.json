@@ -1,0 +1,106 @@
+{
+  "baseline": "ad4a108",
+  "sensor_log": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/competition_wheel_input/20261112_125830_competition_wheel",
+  "business_log": "/home/sunrise/RDK_X5/shijue_fangan/rescue_map/runtime/history/20000101_080032_competition",
+  "type": "offline same-frame recalculation; no devices or real motion",
+  "real_camera_ready_seed_frame": 2930,
+  "frames": [
+    {
+      "frame": 3083,
+      "t_s": 124.161207423,
+      "mode": 10,
+      "flags": 86,
+      "instantaneous_count": null,
+      "revised_count": null,
+      "revised_mixed": null,
+      "remembered": [],
+      "incompatible_platform_ids": []
+    },
+    {
+      "frame": 3115,
+      "t_s": 125.268345343,
+      "mode": 48,
+      "flags": 2,
+      "instantaneous_count": null,
+      "revised_count": null,
+      "revised_mixed": null,
+      "remembered": [],
+      "incompatible_platform_ids": []
+    },
+    {
+      "frame": 3119,
+      "t_s": 125.48077594,
+      "mode": 48,
+      "flags": 2,
+      "instantaneous_count": null,
+      "revised_count": null,
+      "revised_mixed": null,
+      "remembered": [],
+      "incompatible_platform_ids": []
+    },
+    {
+      "frame": 3123,
+      "t_s": 125.637152605,
+      "mode": 48,
+      "flags": 3,
+      "instantaneous_count": 1,
+      "revised_count": 2,
+      "revised_mixed": true,
+      "remembered": [
+        {
+          "track_id": 234,
+          "class": "green_supply",
+          "included": true,
+          "reason": "held_incompatible_cargo_remembered",
+          "remembered_source_frame": 3115
+        }
+      ],
+      "incompatible_platform_ids": []
+    },
+    {
+      "frame": 3127,
+      "t_s": 125.807241842,
+      "mode": 48,
+      "flags": 3,
+      "instantaneous_count": 1,
+      "revised_count": 2,
+      "revised_mixed": true,
+      "remembered": [
+        {
+          "track_id": 234,
+          "class": "green_supply",
+          "included": true,
+          "reason": "held_incompatible_cargo_remembered",
+          "remembered_source_frame": 3115
+        }
+      ],
+      "incompatible_platform_ids": []
+    },
+    {
+      "frame": 3139,
+      "t_s": 126.389877716,
+      "mode": 10,
+      "flags": 86,
+      "instantaneous_count": null,
+      "revised_count": null,
+      "revised_mixed": null,
+      "remembered": [],
+      "incompatible_platform_ids": [
+        238
+      ]
+    },
+    {
+      "frame": 3156,
+      "t_s": 127.121019994,
+      "mode": 11,
+      "flags": 82,
+      "instantaneous_count": null,
+      "revised_count": null,
+      "revised_mixed": null,
+      "remembered": [],
+      "incompatible_platform_ids": [
+        238
+      ]
+    }
+  ]
+}

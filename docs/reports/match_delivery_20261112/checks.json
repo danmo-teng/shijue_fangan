@@ -1,0 +1,109 @@
+{
+  "request_id": "MATCH-DELIVERY-OPENING-20261112",
+  "checked_at": "2026-11-12T14:05:30.685412+08:00",
+  "upper_base": "ad4a108d3993e8cb9c9f42327f623cce62ac2439",
+  "lower_read_only_review": {
+    "github_main_commit": "19ec9f718d0cdb9431748c89d18b229d9251063b",
+    "github_compare": "identical; ahead0/behind0",
+    "Task.c_blob": "3a7d26b19a5d64eae4aa83b26b2c7b07c4d1993d",
+    "fixed_entry_blob": "543c39c3cc7841805f93e5b007c720b680a8caaa",
+    "actual_log_firmware": "19ec9f718d0cdb9431748c89d18b229d9251063b",
+    "actual_source_dirty": true,
+    "actual_mode": "NormalRun TASK",
+    "actual_baud": 921600,
+    "implementation_this_request": "not performed by RDK; fixed-entry request published; no firmware build or flash"
+  },
+  "upper_checks": [
+    {
+      "files": [
+        "competition_rescue/tests/test_runner.py",
+        "competition_rescue/tests/test_state_machine.py"
+      ],
+      "selection": "held_mixture or injury_delivery_distinguishes or pending_visual_lateral or visual_lateral_uses or platform_mixture or safe_zone_lateral_only or opening_checks_real or opening_empty_probe or opening_claw_probe or post_first_two_materials or two_material_policy or two_material_capture or transport_audit_continuing or transport_audit_handoff_retains or mode51_reference or carried_identity_survives_verified or safe_zone_no_box or safe_staging_arrival or range_recheck_accepts_small_error or published_post_grab_audit_survives or initial_stash_preserves_existing",
+      "result": "21 passed, 66 deselected; 3.56s",
+      "coverage": [
+        "actual mixed-load boxes through detector dropout and physical separation/reset",
+        "extra platform cargo vs floor obstacle and safe-zone contents",
+        "live pixels/source frame through pending ACK, PAUSE and recovery, unchanged action identity",
+        "ACK/completed without visual alignment cannot cause ENTER",
+        "64px no-correction / 65px activation / 32px finish hysteresis",
+        "local straight ENTER payload unaffected by erroneous map pose",
+        "actual ALIGN mode10 vs unfinished generic NAV mode10",
+        "existing opening, two-material, transport and mode51 handoffs"
+      ]
+    },
+    {
+      "check": "py_compile",
+      "result": "passed for the 4 changed production/test Python files"
+    },
+    {
+      "check": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "offline_log_recalculation": {
+    "file": "log_recalculation.json",
+    "input": "unchanged original replay tracks/STM observations, same ROI; not new detector inference or motor test",
+    "actual_camera_ready_seed_frame": 2930,
+    "frame3123": {
+      "instantaneous_count": 1,
+      "revised_count": 2,
+      "injury_mixed": true
+    },
+    "frame3127": {
+      "instantaneous_count": 1,
+      "revised_count": 2,
+      "injury_mixed": true
+    },
+    "frame3139_incompatible_platform_track_ids": [
+      238
+    ]
+  },
+  "protected_files": {
+    "all_unchanged": true,
+    "count": 23,
+    "sha256": {
+      "docs/ROBUST_LOCALIZATION_EXPERIMENT_20261111.md": "c7a3b639749768543db19ebcbc6c2378134ba4a7cfbdf6fc6632477824626884",
+      "localization/CMakeLists.txt": "1ab74b260e047c259076eca8d3a89bc3e323e3da9abff4bc0eb8237d2cb17045",
+      "localization/include/fusion.hpp": "8cf27854a95f1d6ca0407f5e9ce8710d3184b2a752bce52d73bba2246f6ecb35",
+      "localization/include/motion_source_native.hpp": "cc532a21c42c6745055b4a72897c1da15df8e68c5488f3311ac105c3d3c77691",
+      "localization/src/dynamic_pose_relay.cpp": "6ff7751a41313f9edf166f476f585ed75fcde4bbb7cee6cdfea11141a127b95a",
+      "localization/src/fusion.cpp": "992a00991e59ad5b94b6a5c3ec0d3c205d2f383e1837ce75e48ca0c57d33a706",
+      "localization/src/main.cpp": "a04a0e12c32df659ca7a8d473853409ac40a1286985545fe46967bb0d01a4423",
+      "localization/src/motion_runtime.cpp": "248c2eb5fad5f5ea451a0c805d4891495b5219704e674b71e5c624ec8c4f3257",
+      "localization/src/motion_source_native.cpp": "442e61f6a06aa16968ad6c50b1d1c3229421fcb84abcc7a10c5397d5817bfabc",
+      "localization/tests/test_omni_localization.cpp": "1418f3c6ff15e916045fb8958952957874a5a85579959752084f9d9b27c01c48",
+      "localization/tools/lidar_t265_motion_map.py": "f7289f88aba276a58bb648e8b867163c22b2e8e8e65899244eb3be23687eb03e",
+      "localization/tools/lidar_yaw_debug/native_motion.py": "61044f99011b4a3b21c0d57b8ae9a1c9cc75cc868cb567ac4168fe53b1af7e14",
+      "localization/tools/lidar_yaw_debug/worker.py": "38fe3fe7a76fc066ebbe18bdf61ce2af1560eab53eca1e7102e058e440e2ff7f",
+      "localization/tools/motion_source_review.py": "49984c30e33f3fcba675fbc398dbb3026f65d4f635d6c050f1ba76125cf887aa",
+      "localization/tools/t265_f407_debug.py": "7c5bbdd4d7d064c79c31f11179341345f0bc60de55604d3e6815d78bdee6720a",
+      "localization/tools/test_f407_motion_protocol.py": "8982b3d55d7d44ddbf258d7c1ce2ed242e0585cefc64591c10fa7cba93b7e329",
+      "vision/config/capture_roi.json": "23dffb9d6c70d8adb4aa2af518a0031f421c74cac68a34a275c7c569d357b89e",
+      "localization/include/debug_pose_publisher.hpp": "4b206eacb7ab828451b45c90e6de35476b161542925fe1146c59365a38a7b40c",
+      "localization/include/primary_yaw_timeline.hpp": "5a92e65bbb90ed8dd9e203f7597d9cf1f0b2434005681c560efc66e20f7baa72",
+      "localization/include/wheel_yaw_consistency.hpp": "bbf961e0078c84fc7fa3f694f7deb711351778c37bfdcc6aaeaad6cae2bfa8dd",
+      "localization/src/primary_yaw_timeline.cpp": "efee7bf9a80f009ff3b8971fb9e0d89ec4e5bc3e1dc0d11b65ab8ffc8ba1394c",
+      "localization/src/wheel_yaw_consistency.cpp": "bf9e5c386b31400a20e523b59e48fb0fe0e5bc9fc38042f4fb07c9ce91c16122",
+      "yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065"
+    }
+  },
+  "devices_opened": false,
+  "motors_started": false,
+  "logs_modified_or_cleaned": false,
+  "runtime_process_restarted": false,
+  "field_acceptance": false,
+  "remaining": [
+    "F405 owner review/implementation/build/commit/push and actual flash identity",
+    "existing entry field check of opening handoff, visual lateral sign/speed and no-correction band",
+    "existing mode48 mixed separation and real local-wheel straight delivery",
+    "T265 phase jumps and weak radar constraints unchanged; large fusion stays paused",
+    "mode22 ~1.8s handoff-tail subcause not established"
+  ],
+  "scope_exclusions": [
+    "manual ROI/model/threshold changes",
+    "localization/SDK/wheel-injection algorithm changes",
+    "other paused match tasks",
+    "new tests or standalone test programs requested from F405"
+  ]
+}

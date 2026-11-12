@@ -1984,3 +1984,83 @@ def test_two_material_retrieval_keeps_actual_single_remaining():
     assert result.reason == "safe_zone_clear_realign_start"
     assert m.carried_manifest == ("core_black",)
     assert m.carried_total_count == m.selected_batch.total_count == 1
+
+
+def test_visual_lateral_uses_live_target_not_ack_and_keeps_local_straight_enter():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE, CMD_PAUSE
+    for side in ("red", "blue"):
+        m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+        m.first_common_delivered = True
+        m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        m._update_safe_zone_visual_target((216, 0, 941, 113), 10)
+        status = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000,
+            context_valid=True, context_matches=True, accepted_command=CMD_ALIGN_SAFE_ZONE, action_status=3)
+        view = VisionSnapshot(frame_sequence=11, safe_bbox=(216, 0, 941, 113))
+        out = m.step(view, pose(), status, 1.)
+        assert out.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        assert out.command.arg_a == 203  # A fake/legacy completed ACK cannot bypass visual error.
+        missing = m.step(replace(view, frame_sequence=12, safe_bbox=None), pose(), status, 1.01)
+        assert missing.command.opcode == CMD_PAUSE
+        centered = replace(view, frame_sequence=13, safe_bbox=(16, 0, 936, 113))
+        accepted_only = m.step(centered, pose(), replace(status, action_status=1), 1.02)
+        assert accepted_only.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        ready = m.step(centered, pose(), status, 1.03)
+        assert ready.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+        corridor = replace(centered, frame_sequence=14,
+            safe_corridor_polygon=((460,1023),(820,1023),(952,113),(484,113)))
+        # A bad map position cannot steer the final local-odometry ENTER.
+        enter = m.step(corridor, PoseSnapshot(True, -.8, -.5, 170., 0), status, 1.04)
+        assert enter.command.opcode == CMD_ENTER_SAFE_ZONE
+        assert enter.command.arg_a == enter.command.arg_b == enter.command.aux == 0
+        assert enter.state == CompetitionState.ENTER_SAFE_ZONE
+
+
+def test_platform_mixture_returns_to_existing_load_audit_before_enter():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_CLEAR_SAFE_ZONE
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((239,), ("injured_orange",), "injury"))
+    m.first_common_delivered = True
+    m.carried_manifest = ("injured_orange",)
+    m.state = CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+    green = TrackedCargo(238, "green_supply", .8, (309,554,278,216), hits=6)
+    view = VisionSnapshot(frame_sequence=3139, carried_incompatible_cargo=(green,))
+    status = StmSnapshot(mode=11, flags=2, camera_pitch_cdeg=12000, age_ms=0)
+    out = m.step(view, pose(), status, 1.)
+    assert out.state == CompetitionState.TRANSPORT_AUDIT and out.command.opcode == CMD_CARGO_AUDIT
+    assert out.command.audit_vision_frame == 0 and not out.command.audit.stable
+    assert out.command.audit.total_count == 0 and out.command.opcode != CMD_CLEAR_SAFE_ZONE
+    assert out.reason == "carried_incompatible_reaudit"
+    assert m.carried_manifest == ("injured_orange",)  # Reobserve, don't invent an approved new manifest.
+    m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    moving = replace(status, mode=10, context_valid=True, context_matches=True,
+        accepted_command=CMD_ALIGN_SAFE_ZONE)
+    assert m.step(view, pose(), moving, 1.01).reason == "carried_incompatible_reaudit"
+    # A generic NAV mode10 is not proof that the MCU reached its ALIGN state.
+    m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    still_staging = replace(moving, accepted_command=CMD_NAVIGATE_WAYPOINT, context_matches=False)
+    assert m.step(view, pose(), still_staging, 1.02).state != CompetitionState.TRANSPORT_AUDIT
+
+
+def test_safe_zone_lateral_only_starts_for_large_error_and_finishes_without_zero_chasing():
+    from protocol import CMD_ALIGN_SAFE_ZONE
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+    m.first_common_delivered = True
+    m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    status = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000,
+        context_valid=True, context_matches=True, accepted_command=CMD_ALIGN_SAFE_ZONE, action_status=3)
+    # Injury point = x + 936*2/3; x=80 gives +64 px. Small errors skip lateral movement.
+    m._update_safe_zone_visual_target((80, 0, 936, 113), 10)
+    assert m.safe_zone_visual_pixel_error == 64 and not m.safe_zone_lateral_active
+    out = m.step(VisionSnapshot(frame_sequence=10, safe_bbox=(80,0,936,113)), pose(), status, 1.)
+    assert out.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+    # Beyond 64 px activates one correction; it finishes inside 32 px, not at zero.
+    m._update_safe_zone_visual_target((81, 0, 936, 113), 11)
+    assert m.safe_zone_visual_pixel_error == 65 and m.safe_zone_lateral_active
+    m._update_safe_zone_visual_target((66, 0, 936, 113), 12)
+    assert m.safe_zone_visual_pixel_error == 50 and m.safe_zone_lateral_active
+    m._update_safe_zone_visual_target((48, 0, 936, 113), 13)
+    assert m.safe_zone_visual_pixel_error == 32 and not m.safe_zone_lateral_active
+    m._update_safe_zone_visual_target((66, 0, 936, 113), 14)
+    assert not m.safe_zone_lateral_active  # Do not restart for detection jitter in the small band.

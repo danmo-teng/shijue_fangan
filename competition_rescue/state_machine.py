@@ -337,6 +337,7 @@ class VisionSnapshot:
     delivery_target_inside_track_ids: tuple[int, ...] = ()
     delivery_target_outside_track_ids: tuple[int, ...] = ()
     safe_zone_filter_blocked: bool = False
+    carried_incompatible_cargo: tuple[TrackedCargo, ...] = ()
     low_conf_green_seen: bool = False
     safe_corridor_polygon: tuple[tuple[int, int], ...] = ()
     safe_corridor_obstacle_class: str | None = None
@@ -521,6 +522,8 @@ class CompetitionSettings:
     safe_zone_staging_distance_m: float = 0.60
     safe_zone_staging_axial_tolerance_m: float = 0.050
     safe_zone_freeze_frames: int = 3
+    safe_zone_lateral_start_px: int = 64
+    safe_zone_lateral_tolerance_px: int = 32
     safe_zone_acquire_timeout_s: float = 5.0
     safe_sweep_capture_offset_mm: float = 150.0  # Legacy config; visual sweep ignores it.
     audit_min_interframe_s: float = 0.100
@@ -578,6 +581,8 @@ class CompetitionSettings:
             self.safe_zone_staging_distance_m <= 0 or
             self.safe_zone_staging_axial_tolerance_m <= 0 or
             self.safe_zone_freeze_frames <= 0 or
+            self.safe_zone_lateral_tolerance_px <= 0 or
+            self.safe_zone_lateral_start_px < self.safe_zone_lateral_tolerance_px or
             self.safe_zone_acquire_timeout_s <= 0
         ):
             raise ValueError("safe-zone staging parameters must be positive")
@@ -757,6 +762,8 @@ class CompetitionMission:
         self.locked_safe_bbox: tuple[int, int, int, int] | None = None
         self.locked_safe_target_x_px: int | None = None
         self.safe_zone_visual_pixel_error = 0
+        self.safe_zone_visual_frame = 0
+        self.safe_zone_lateral_active = False
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
         self.safe_corridor_frame_floor: int | None = None
@@ -3874,6 +3881,8 @@ class CompetitionMission:
         self.locked_safe_bbox = None
         self.locked_safe_target_x_px = None
         self.safe_zone_visual_pixel_error = 0
+        self.safe_zone_visual_frame = 0
+        self.safe_zone_lateral_active = False
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
         self.safe_corridor_frame_floor = None
@@ -3900,6 +3909,7 @@ class CompetitionMission:
             self._side_flags() | CMD_VISUAL_CORRECTION_VALID,
             max(-32768, min(32767, self.safe_zone_visual_pixel_error)),
             11500 if self.safe_zone_view_pitch_cdeg == 11500 else 0,
+            source_vision_frame=self.safe_zone_visual_frame,
         )
 
     def _begin_safe_corridor_check(
@@ -4253,6 +4263,8 @@ class CompetitionMission:
         self.locked_safe_bbox = None
         self.locked_safe_target_x_px = None
         self.safe_zone_visual_pixel_error = 0
+        self.safe_zone_visual_frame = 0
+        self.safe_zone_lateral_active = False
         self.safe_zone_visual_locked = False
         self.safe_zone_fallback = False
         self._set_state(CompetitionState.ACQUIRE_SAFE_ZONE, now)
@@ -4283,8 +4295,14 @@ class CompetitionMission:
             round(median(box[index] for box in boxes))
             for index in range(4)
         )
-        self.locked_safe_bbox = locked
-        x, _, width, _ = locked
+        self._update_safe_zone_visual_target(locked, vision.frame_sequence)
+        return True
+
+    def _update_safe_zone_visual_target(
+        self, bbox: tuple[int, int, int, int], frame_sequence: int
+    ) -> None:
+        self.locked_safe_bbox = bbox
+        x, _, width, _ = bbox
         fraction = (
             2.0 / 3.0
             if self.selected_batch is not None and
@@ -4295,7 +4313,12 @@ class CompetitionMission:
         self.safe_zone_visual_pixel_error = (
             self.locked_safe_target_x_px - CAMERA_IMAGE_CENTER_X_PX
         )
-        return True
+        self.safe_zone_visual_frame = frame_sequence
+        error = abs(self.safe_zone_visual_pixel_error)
+        if error > self.settings.safe_zone_lateral_start_px:
+            self.safe_zone_lateral_active = True
+        elif error <= self.settings.safe_zone_lateral_tolerance_px:
+            self.safe_zone_lateral_active = False
 
     def _enter_safe_zone_command(self) -> CommandRequest:
         flags = self._side_flags() | CMD_DRIVE_STRAIGHT
@@ -6277,6 +6300,26 @@ class CompetitionMission:
         if self.state == CompetitionState.POST_GRAB_AUDIT:
             return self._audit_output(vision, stm, now)
 
+        if (self.state in {
+                CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+                CompetitionState.ACQUIRE_SAFE_ZONE,
+                CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+                CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+            } and (stm.mode == STM_MODE_ALIGN_SAFE_ZONE or
+                   (stm.mode == STM_MODE_NAVIGATE and stm.context_matches and
+                    stm.accepted_command == CMD_ALIGN_SAFE_ZONE)) and stm.gripper_closed and
+                vision.carried_incompatible_cargo):
+            # Platform cargo must go back through the load audit, rather than
+            # becoming a floor-sweep target while still held in the claw.
+            self._reset_safe_zone_alignment()
+            self._reset_delivery_evidence()
+            return replace(
+                self._begin_transport_audit(vision, pose, stm, now),
+                message="换角后发现平台异类载荷，保持闭爪回原140°运输复审与分离",
+                event="carried_incompatible_reaudit",
+                reason="carried_incompatible_reaudit",
+            )
+
         if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE:
             pose_align_command = self._safe_zone_pose_align_command()
             self.safe_zone_align_command_accepted = self._command_acceptance_seen(
@@ -6356,8 +6399,8 @@ class CompetitionMission:
                     self.state,
                     self._safe_zone_visual_align_command(),
                     (
-                        "连续3帧安全区已冻结，按"
-                        f"{self.locked_safe_target_x_px}px目标执行一次视觉转向"
+                        "安全区已识别，保持垂直航向并横移对准"
+                        f"{self.locked_safe_target_x_px}px分区点"
                     ),
                     self.selected_batch,
                     event="safe_zone_bbox_locked",
@@ -6423,6 +6466,17 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
+            if (vision.safe_bbox is None or vision.safe_zone_filter_blocked or
+                    stm.camera_pitch_cdeg != self.safe_zone_view_pitch_cdeg):
+                return CompetitionOutput(
+                    self.state, self._pause(),
+                    "当前画面无安全区分区点，暂停横移并保留本次对准动作",
+                    self.selected_batch, tx_policy="pause",
+                    reason="safe_zone_visual_box_missing",
+                    expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE),
+                )
+            if vision.frame_sequence > self.safe_zone_visual_frame:
+                self._update_safe_zone_visual_target(vision.safe_bbox, vision.frame_sequence)
             visual_align_command = self._safe_zone_visual_align_command()
             self.safe_zone_visual_align_command_accepted = (
                 self._command_acceptance_seen(
@@ -6436,14 +6490,16 @@ class CompetitionMission:
             if (
                 stm.fresh and
                 stm.mode == STM_MODE_ALIGN_SAFE_ZONE and
-                self.safe_zone_visual_align_command_accepted
+                self.safe_zone_visual_align_command_accepted and
+                not self.safe_zone_lateral_active and
+                (not stm.context_valid or bool(stm.action_status & 2))
             ):
                 self.safe_zone_visual_locked = True
                 self._begin_safe_corridor_check(vision, now)
                 return CompetitionOutput(
                     self.state,
                     visual_align_command,
-                    "第二次视觉ALIGN完成，建立安全半区入口推进走廊并检查障碍",
+                    "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推",
                     self.selected_batch,
                     event="safe_zone_corridor_check_start",
                     tx_policy="normal_command",
@@ -6453,7 +6509,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 visual_align_command,
-                "按冻结安全区分区点执行一次视觉修正转向",
+                f"保持垂直航向，按实时偏差{self.safe_zone_visual_pixel_error:+d}px横移对准分区",
                 self.selected_batch,
                 tx_policy="normal_command",
                 reason="safe_zone_visual_align_wait",
@@ -6464,6 +6520,19 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK:
+            if (vision.safe_bbox is not None and not vision.safe_zone_filter_blocked and
+                    stm.camera_pitch_cdeg == self.safe_zone_view_pitch_cdeg and
+                    vision.frame_sequence > self.safe_zone_visual_frame):
+                self._update_safe_zone_visual_target(vision.safe_bbox, vision.frame_sequence)
+                if self.safe_zone_lateral_active:
+                    self.safe_zone_visual_locked = False
+                    self._set_state(CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX, now)
+                    return CompetitionOutput(
+                        self.state, self._safe_zone_visual_align_command(),
+                        "入口新画面仍有横向偏差，沿同一视觉动作完成横移",
+                        self.selected_batch, reason="safe_zone_visual_lateral_continue",
+                        expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE),
+                    )
             new_corridor_frame = (
                 self._vision_fresh(vision, now) and
                 vision.frame_sequence > 0 and

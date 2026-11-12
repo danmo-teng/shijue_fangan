@@ -2416,3 +2416,113 @@ def test_two_material_delivery_confirmation_requires_both_known_items():
         assert not view(known[:1] + (changed,)).delivery_target_inside_safe_zone
     m.carried_manifest, m.carried_total_count = ("green_supply",), 1
     assert view(known[:1]).delivery_target_inside_safe_zone
+
+
+def test_held_mixture_survives_detector_gap_and_clears_on_physical_separation():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from state_machine import CargoBatch, TrackedCargo
+    from capture_roi import load_capture_rois
+
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((204,), ("injured_orange",), "injury"))
+    m.first_common_delivered = True
+    m.state = CompetitionState.POST_GRAB_AUDIT
+    memory = runner_module.HeldCargoEvidence()
+    rois = load_capture_rois(PROJECT_ROOT / "vision/config/capture_roi.json")
+    orange = TrackedCargo(204, "injured_orange", .85, (528, 167, 402, 318), hits=398)
+    green = TrackedCargo(224, "green_supply", .32, (306, 276, 264, 217), hits=91)
+
+    def observe(items, frame, mode=48, flags=3, pitch=14000):
+        with patch.object(runner_module, "tracked_cargo", return_value=items):
+            return runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), None,
+                StmSnapshot(mode=mode, flags=flags, camera_pitch_cdeg=pitch, age_ms=0),
+                m, frame, capture_rois=rois, held_cargo_evidence=memory)
+
+    observe((orange,), 2900, mode=23)  # Existing camera-ready view; no new waiting.
+    m.state = CompetitionState.NAVIGATE
+    observe((orange, green), 3083, mode=10, flags=2)
+    m.state = CompetitionState.TRANSPORT_AUDIT
+    observe((orange,), 3119, flags=2)
+    for frame in (3123, 3126):
+        actual = observe((orange,), frame)
+        assert actual.capture_audit.total_count == 2 and actual.capture_audit.injury_mixed
+        assert not m._audit_valid(actual.capture_audit)
+        assert actual.capture_cargo == (orange,)  # Not a fabricated detector box.
+        remembered = [d for d in actual.roi_decisions if "remembered_source_frame" in d]
+        assert remembered[0]["remembered_source_frame"] == 3083
+    assert observe((), 3127).capture_audit.total_count == 0
+    observe((orange,), 3128, mode=25, flags=2)  # Actual separation clears old load evidence.
+    clean = observe((orange,), 3130)
+    assert clean.capture_audit.total_count == 1 and m._audit_valid(clean.capture_audit)
+    observe((orange, green), 3131)
+    observe((), 3132, flags=0)
+    assert not memory.items
+    # An outside/truncated green cannot create incompatible load evidence.
+    outside = replace(green, bbox=(0, 0, 70, 70))
+    observe((orange, outside), 3133)
+    assert observe((orange,), 3134).capture_audit.total_count == 1
+
+
+def test_injury_delivery_distinguishes_platform_mixture_floor_obstacle_and_zone_contents():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from state_machine import CargoBatch, TrackedCargo
+
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((239,), ("injured_orange",), "injury"))
+    m.first_common_delivered = True
+    m.confirmed_delivery_destination = "injury"
+    m.carried_manifest = ("injured_orange",)
+    m.state = CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+    orange = TrackedCargo(239, "injured_orange", .8, (528, 451, 400, 317), hits=6)
+    green = TrackedCargo(238, "green_supply", .8, (309, 554, 278, 216), hits=6)
+    inside = TrackedCargo(241, "green_supply", .8, (30, 0, 109, 85), hits=6, inside_safe_zone=True)
+    with patch.object(runner_module, "tracked_cargo", return_value=(orange, green, inside)):
+        snapshot = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False),
+            (24, 1, 751, 130), StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000),
+            m, 3139, recent_carried_track_ids=(239,))
+    assert snapshot.carried_incompatible_cargo == (green,)
+    floor = replace(green, bbox=(600, 400, 80, 100))
+    assert runner_module.safe_zone_push_corridor((floor,), (200, 0, 800, 100),
+        "injury", True)[1] == floor
+    assert runner_module.safe_zone_push_corridor((floor,), (200, 0, 800, 100),
+        "material", True)[1] is None
+    assert runner_module.safe_zone_push_corridor((inside,), (200, 0, 800, 100),
+        "injury", True)[1] is None
+
+
+def test_pending_visual_lateral_updates_same_action_and_source_frame():
+    from dataclasses import replace
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_VISUAL_CORRECTION_VALID
+    from state_machine import CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+        m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        m._update_safe_zone_visual_target((216, 0, 941, 113), 10)
+        planner = CompetitionPlanner(m, root/"pose", root/"stm", root/"command",
+            root/"diag", JsonlLog(root/"events"), 50)
+        planner._publish(CompetitionOutput(m.state, m._safe_zone_visual_align_command(), "old"))
+        task, action = planner.protocol_task, planner.protocol_action
+        status = StmSnapshot(mode=11, age_ms=500, camera_pitch_cdeg=12000, context_valid=True,
+            task_id=task, action_id=(action-1)&65535, action_status=1)
+        view = VisionSnapshot(frame_sequence=11, safe_bbox=(116, 0, 941, 113))
+        out = planner._output_for_cycle(view, PoseSnapshot(valid=True), status, False, 1.)
+        assert out.command.opcode == CMD_ALIGN_SAFE_ZONE and out.command.flags & CMD_VISUAL_CORRECTION_VALID
+        assert out.command.arg_a == 103 and out.command.source_vision_frame == 11
+        planner._publish(out)
+        assert (planner.protocol_task, planner.protocol_action) == (task, action)
+        assert planner.protocol_vision_frame == 11
+        missing = planner._output_for_cycle(replace(view, frame_sequence=12, safe_bbox=None),
+            PoseSnapshot(valid=True), status, False, 1.01)
+        planner._publish(missing)
+        recovered = planner._output_for_cycle(replace(view, frame_sequence=13),
+            PoseSnapshot(valid=True), status, False, 1.02)
+        assert recovered.command.opcode == CMD_ALIGN_SAFE_ZONE
+        planner._publish(recovered)
+        assert (planner.protocol_task, planner.protocol_action) == (task, action)
+        assert planner.protocol_vision_frame == 13

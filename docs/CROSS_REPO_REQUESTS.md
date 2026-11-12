@@ -1,87 +1,88 @@
 # 两端最新修改要求
 
-更新：2026-11-11。只维护当前相关请求和回执；旧请求按Git历史取证，不自动恢复任务。
-发布、读取、镜像要求均不等于审核通过或实施授权。接收方先审实际代码，向人说明影响，
-可以接受、缩小、替代或拒绝。人保留知情、拒绝和选择权；已明确批准范围不重复审批。
-协作约束见本仓库AGENTS.md和docs/CHANGE_WORKFLOW.md，不增加时间门、握手或故障锁存。
+更新：2026-11-12。只维护当前相关请求与回执，历史按Git取证，不自动恢复。
+发布或读取不等于接收方已审核/实施；先核对实际代码，向人说明接受、调整或拒绝的理由。
+重要范围变化由人决定，已批准范围不重复审批。规则见AGENTS.md和CHANGE_WORKFLOW.md。
 
-## 固定位置及启用状态
+## 固定位置
 
 ```text
-RDK仓库：danmo-teng/shijue_fangan，分支codex/gamepad-teleop
+RDK：danmo-teng/shijue_fangan，codex/gamepad-teleop
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/CROSS_REPO_REQUESTS.md
-
-F405仓库：kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot，分支main
+F405：kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot，main
 https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS_REPO_REQUESTS.md
 ```
 
-两端固定入口均已建立。F405的AGENTS及同名文件在41e46994420b825394b728220e5d672ce19c4828核对，
-已记录人的知情/拒绝/选择权、请求不等于授权以及直接读取对端GitHub的规则。
-当前GitHub连接对F405仍只有读权限；双方AI更新自己仓库相关要求/回执，不再逐次请用户转交。
-这不是常驻执行服务；每次相关跨端工作先核对源文件当前提交和请求ID，避免拿缓存或旧版本执行。
+双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
+这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 最新请求：MATCH-OPENING-CAPTURE-20261111
+## 当前请求：MATCH-DELIVERY-OPENING-20261112
 
-用户本轮只批准开局两项：先静止检查夹内；空爪补进复用原4秒出口。
-上位代码已实现并通过必要检查；下位仅准备Task.c参考补丁，尚未实施/烧录。
-接收方先审当前代码，向人说明接受、调整或拒绝的理由；不把发布当作已审核或额外改动授权。
+用户已批准按最后125830比赛分析修复，并追加“安全区视觉只有偏差较大才修正”。
+上位基线ad4a108；只读核对F405 main为19ec9f718d0cdb9431748c89d18b229d9251063b，
+Task.c blob 3a7d26b19a5d64eae4aa83b26b2c7b07c4d1993d；固定入口blob 543c39c3cc7841805f93e5b007c720b680a8caaa。
+本场actual同提交/dirty1、NormalRun/TASK、921600；dirty字节不以干净源码替代。
 
 ```text
-请求ID：MATCH-OPENING-CAPTURE-20261111
-目的：解决中心已有货仍先对准物堆、空爪补进无进展长等。
-范围：只改Task.c，复用原协议、相机、审核、GRAB与恢复流程；不扩电机PID/全局速度。
+请求ID：MATCH-DELIVERY-OPENING-20261112
 
-已核对当前main：Task.c内容blob cfc01337eb7e350382c00c61f132afaa45d669ff，
-与7653af9b5f44ff18a1aa268eaf70d125ff0ee389的源文件一致。
-两轮实际自报7653af9/dirty1、NormalRun/TASK、921600；dirty设置不能用干净Git替代。
+为什么改：
+1. 开局主等待在START_CENTER_APPROACH：距中心估计114mm仍追80mm，10—27.5秒几乎无轮运动。
+   原140°静止预检已经真正运行，不重套MATCH-OPENING-CAPTURE-20261111旧补丁。
+2. 绿+伤员确实同时在爪内，运输复审有效帧恰好漏绿；120°重新看到后没有回完整载荷审核。
+3. 上位发送+201px视觉偏差，但当前视觉ALIGN只ACK不执行，随后按固定场地方向推。
 
-1. 开局先看夹内。
-上位在下位释放中心观察后发原0x18/CARGO_AUDIT：opcode=0x12、VALID，
-audit flags仅INITIAL_STASH，左右类别/计数/总数全0、无STABLE，0x1D源frame=0。
-这是请求视角，不是真实空爪结果。仅开局SEARCH、张爪且非运输/复审阶段接受，
-走原相机20→21、140°流程，静止，不启动200mm补进。
-同任务动作重复请求只确认、不重启相机/不记样本；沿用原task/action配对。
-到21以后收原真实两帧审核，真实稳定非空等原GRAB、后复审、藏点NAV，不自行合爪。
-真实稳定空爪回SEARCH，当前动作completed且非cancelled；重复完成包不重新进预检。
-上位只发起这次开局预检，确认空爪后用新任务转原接近，不反复看空爪。
+最小配套：
+A. task_process_start完成原1.10m快速前行本地轮程后，直接原task_finish_start释放中心观察。
+   取消融合位置提前转START_CENTER_APPROACH及距中心80mm的抓取前提；粗段后偏差交给现有视觉。
+   保原后退、180°、开爪、速度/PID与既有超时，不改其他NAV容差。上位原140°预检、非空合爪/空爪接近接手。
 
-2. 普通/cluster初次空爪补进不能被每个空帧重置。
-保原200mm额度，复用capture_wait_active/started_ms与原
-APP_CAPTURE_DECISION_WAIT_MS=4000，持续空爪超出走原task_begin_capture_escape。
-这是原补进决策出口，不是新鲜度门、附加计时/等待或FAULT。
-代价：卡住/没货时更早退出重找，不再依赖轮程增加或长等待。
+B. 实现原0x04视觉ALIGN的真实横移，保持车头垂直入口：
+   先用主gyro对场地法向（红90°、蓝270°），随后保持该航向，视觉只控制左右横移。
+   arg_a是有符号像素偏差：分区点减640，正值需车体右移，负值左移；arg_b仍0选120°/11500选115°，aux仍0。
+   初始|偏差|≤64px不横移；>64px才开始，回≤32px结束；完成后64px内不反复微调。
+   110—180mm/s复用原末端速度范围，1mm/s/px为工程初值；接收方核对实际MoveAngle方向并复用斜坡/主gyro控向。
+   不把像素当毫米，不改gyro正向，不加目标转向或在ENTER中用融合XY纠偏。
+   同一task/action实时更新arg_a与原0x1D源frame，不按SEQ重启。ALIGN需要走动态输入；定位ALIGN重发不重启。
+   横移实际执行中用原mode10，真正对准后mode11；原completed须反映视觉动作完成，不能刚ACK或仅粗转正就置完成，
+   后续新大偏修正不能继承旧completed。上位也结合实时偏差判断，不再把ACK当完成。
+   原ENTER继续同一场地法向＋本地里程计直推，原0.67m动作、开爪/后退及扫障恢复保持；无需重写ENTER。
 
-尚未确定：18:57轮23.0—29.9秒690次三轮增量全0，gyro也不动，但模式21报执行中。
-源码请求200mm/s不等于PWM/实际运动。请结合已有TaskDiag目标/实测/PWM与输出归属
-定位具体子因；需要其他控制修改时先向人说明原因/影响，不盲调全局参数，不扩新遥测。
+C. 推进前如果承载平台重新看见异类，回原140°运输复审：
+   对闭爪TASK_ALIGN_SAFE_ZONE，允许现有0x12/CARGO_AUDIT占位请求进入原TASK_TRANSPORT_AUDIT/mode48。
+   请求source frame=0、左右类别/计数/总数0、非STABLE，只保留本次目的地位；这是视角请求，不能计作空爪样本。
+   停止横移、保持载荷，原相机准备后收真实两帧审核，非法走原分离、合法才重新ALIGN。
+   同动作重发不能重启相机或清审核；不扩到任意NAV mode10、ENTER或已开爪/放货后的状态。
+   当前mode10若实际是TASK_ALIGN_SAFE_ZONE横移中仍属此入口；上位结合已接受的ALIGN上下文识别。
 
-完整说明、接口及检查：
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/OPENING_CAPTURE_FIX_20261111.md
-最小参考补丁（先审再摘取，不整包应用旧候选）：
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/opening_capture_20261111/F405_OPENING_CAPTURE.patch
+上位已做：
+- 闭爪期间衔接原140°ROI内明确看到的异类证据，历史帧单独记录，不向原始检测添加假框；释放/分离/放货清除。
+- 平台混装与地面障碍分开，推进前回原140°复审；运伤员的地面走廊不再无条件豁免绿/黑。
+- 实时视觉横移、64/32px规则、原0x1D源帧与同动作更新；缺实际框用原PAUSE，恢复后原动作继续，不增加计时等待。
+- ENTER的定位XY没有新增纠偏；原mode51、首件单绿、首次后最多两件绿/黑、单伤员等保持。
 
-本轮不改ROI/模型/定位/其他比赛动作；不新增新鲜度、握手、延时等待、保护/FAULT或永久锁存。
-不要求新增测试代码/程序。必要构建及原入口直接检查后，commit/push并回传
-实际文件/行为、必要结果、未完成项及实际烧录身份；未烧录明确写未烧录。
-人保留对其他重要改动的知情、拒绝和选择权。
+不要求新增测试代码或独立测试程序。只复用现有构建/原入口做必要检查；
+不得新增新鲜度、反复握手、资格等待、延时、保护停车/FAULT、永久锁存或额外ISR/遥测。
+接收方可接受、缩小、替代或拒绝，先向人说明其他重要变更。代码及本端回执commit/push，
+回传实际文件/行为、必要结果、未完成项、构建与烧录情况；expected不能冒充actual。
+```
+
+完整实现说明及必要检查：
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_DELIVERY_OPENING_FIX_20261112.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_delivery_20261112/interface.json
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/match_delivery_20261112/checks.json
 ```
 
 ## 本端结果与部署边界
 
-上位11项相关检查通过，含真实非空23→22→藏点NAV、空爪回接近、重复请求/延迟回执、原定距/运输/mode51。
-Task.c候选在已有C主机夹具的6项场景及原两帧/STABLE、渐进分离检查通过，补丁在当前干净源副本可应用。
-这不是完整F405构建或实车验收；旧固件不执行SEARCH里的新观察入口，必须配套后联调。
-本窗口未写/烧录下位机，未打开设备、启动电机或清日志；原ROI/模型/定位改动保留。
-具体回执见docs/reports/opening_capture_20261111/checks.json。
+上位必要检查和本场同帧复算完成；3123/3127帧不再以单橙放行，3139帧识别平台额外绿238。
+这是离线结果，不是实车横移或精度验收。本窗口未开设备、发运动命令、重启正式程序或清原日志。
+本轮F405实现/构建/烧录未完成；旧固件不能执行横移，上位也不会把其ACK伪装成大偏差已经修正。
+大融合、ROI/模型、C/F/G等其他待办均未恢复。T265跳变与弱雷达约束未根治，不宣称由动作修复治愈定位。
 
-## 已核对的上一轮回执
+## 已核对的前次回执
 
-F405固定入口当前blob ff38e836db9bcf2d60a140be2dda4852026247e4，已记录从ad1cc2d实施A/E；
-当前Task.c也包含mode39末端向量修正和首次后最多两件材料审核。B复用现接口。
-不再把“下位仍单件/未实现A”当当前状态，也不重新下发旧MATCH-ABE任务。
-18:51/18:57日志有7653af9/dirty1实际身份，但未因此宣称A/E实车效果或干净烧录版本已验收。
-
-## 其他请求
-
-D“合爪抬相机后不出发”仍未定位确切故障段，与本次合爪前卡顿分开；
-C/F/G、ROI/局部黑块人工单、大融合等均未恢复。历史按对应报告/Git取证，不自动实施。
+19ec9f7已实现原开局静止预检与4秒空爪出口，本场预检→GRAB已有实跑证据；
+A的mode39末端纠偏、E的最多两件材料及原载荷保持也已在当前源码，不重复下旧任务。
+原下位入口已保留人的知情/拒绝/选择权，规则无需重发；本次没有将历史任务整包带回。
