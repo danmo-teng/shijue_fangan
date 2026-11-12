@@ -12,10 +12,14 @@
 语法及diff检查通过。额外旧藏点检查test_return_stash_requires_confirmed_cargo_and_search_handoff失败，
 已加载未修改c907be0同函数复现同一NO_CANDIDATE断言，不在本轮扩展修复。没有实车动作、清日志或修改ROI/定位。
 
-第二项“末端低速修不动”仅分析/询问，未提高速度或放宽安全区预备点窗口。
-F405普通RETURN末端是120—200mm/s的Motor_MoveAngle，预备点是110—180mm/s的Motor_MoveAngleFine；
-后者有额外细调轮死区/驱动补偿。当前没有实际PWM证据，不能断言只需提高速度。
-问题和具体待核查项已放CROSS_REPO_REQUESTS.md，收到方案后再定，不授权批量改PID/全局速度。
+第二项已读F405文档回复bbb719c，运行源码仍为0d52ef8，没有新驱动修复或已烧录证明。
+认可普通RETURN为120—200mm/s的MoveAngle、STAGE已用110—180mm/s的Fine及额外补偿；
+6mm/s轮死区不能解释完整非零平移下三轮全不动，现场唯一根因仍未证实。
+推荐待用户决定的下一小步：只给STAGE独立X±100mm/Y±50mm区域，末端只修超限轴，
+区域内沿原锁D=0交接，后续视觉修横差；纵向不放宽，因为ENTER仍固定670mm。
+当前实际仍X±60/Y±50mm，本次没有改代码/速度/PID。人工90/40及90/70mm几何例子仅说明候选行为，非实测。
+普通RETURN单独切Fine保留为后续候选，不把它当STAGE修复，不自动要求下位实施。
+完整理由、代价及回复提交已同步CROSS_REPO_REQUESTS.md，等待用户选择。
 
 ## 前次交付保留：开局、混装与安全区横移
 
@@ -38,13 +42,13 @@ F405普通RETURN末端是120—200mm/s的Motor_MoveAngle，预备点是110—180
 
 ## F405实际状态及配套
 
-本轮只读核对main已前进到0d52ef81c30541ea69c5f13b53b3509cfe643e2f；Task.c blob
-dff0959ae3dcb1fe4cb7c2ab1715674ecf5853d1，固定入口blob ab70fd1631c7edb0b8bd42b057ca8b54795d0ae9。
+本轮只读核对main为bbb719c4d3d9035cc1905efbb782b2aace4180e2，仅新增末端答复文档；运行源码沿用0d52ef8。
+Task.c blob dff0959ae3dcb1fe4cb7c2ab1715674ecf5853d1，固定入口blob 19cdd37c72b3dbf2e6009874282b26adfa9cda00。
 本场历史actual仍是19ec9f7/dirty1，未读取此刻实板；不能把仓库更新当成已烧录。
 此前开局静止预检及原4秒空爪出口已经源码实现，本场预检→GRAB有实际记录，不重复下旧任务。
 
 0d52ef8源码与回执已含前次开局轮程交接、视觉实际横移和闭爪ALIGN回mode48；构建/夹具通过据下位回执，
-该回执明确未烧录，实车仍待验。此次返程点改动本身无需下位改协议；末端低速问题先询问。
+该回执明确未烧录，实车仍待验。此次返程点改动本身无需下位改协议；末端到位候选待用户决定。
 请求及接口放在[固定入口](CROSS_REPO_REQUESTS.md)，不附加测试程序任务；原ENTER直推、mode51及两件审核保留。
 
 ## 保留未完成项
