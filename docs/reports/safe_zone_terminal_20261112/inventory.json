@@ -1,0 +1,125 @@
+{
+  "runs": [
+    {
+      "business": "20261112_161739_competition",
+      "sensor": "20261112_161636_competition_wheel",
+      "upper": "800ea4447353e3a979334bdb0de7f1dc8bd75563",
+      "round_token": "2d8d6a375aaae7ab34aeeb0fad38b271",
+      "duration_s": 28.181,
+      "has_stop": true,
+      "end_state": "RETURN_CENTER",
+      "delivery_count": 0,
+      "stage_visits": 0,
+      "visual_visits": 0
+    },
+    {
+      "business": "20000101_080032_competition_02",
+      "sensor": "20261112_162802_competition_wheel",
+      "upper": "42d668b53f41d90c534af86d90befbee029d784b",
+      "round_token": "457a174a4c8b43d8570fc1a249a5befe",
+      "duration_s": 114.85,
+      "has_stop": true,
+      "end_state": "RETURN_CENTER",
+      "delivery_count": 0,
+      "stage_visits": 0,
+      "visual_visits": 0
+    },
+    {
+      "business": "20261112_164708_competition",
+      "sensor": "20261112_164547_competition_wheel",
+      "upper": "42d668b53f41d90c534af86d90befbee029d784b",
+      "round_token": "ad0d965e94121ae0826cd6a591ed49e1",
+      "duration_s": 22.501,
+      "has_stop": true,
+      "end_state": "RETURN_CENTER",
+      "delivery_count": 0,
+      "stage_visits": 0,
+      "visual_visits": 0
+    },
+    {
+      "business": "20261112_165025_competition",
+      "sensor": "20261112_164708_competition_wheel",
+      "upper": "42d668b53f41d90c534af86d90befbee029d784b",
+      "round_token": "45a5372994e650ab06192e29be767396",
+      "duration_s": null,
+      "last_event_elapsed_s": 29.959,
+      "has_stop": false,
+      "bad_event_lines": [
+        50
+      ],
+      "delivery_count": null,
+      "stage_visits": 0,
+      "visual_visits": 0
+    },
+    {
+      "business": "20261112_165601_competition",
+      "sensor": "20261112_165225_competition_wheel",
+      "upper": "42d668b53f41d90c534af86d90befbee029d784b",
+      "round_token": "4c38707b46a2276bbcd3e3449fdaf23c",
+      "duration_s": 185.488,
+      "has_stop": true,
+      "end_state": "RETURN_CENTER",
+      "delivery_count": 0,
+      "stage_visits": 2,
+      "visual_visits": 1
+    },
+    {
+      "business": "20261112_165835_competition",
+      "sensor": "20261112_165601_competition_wheel",
+      "upper": "42d668b53f41d90c534af86d90befbee029d784b",
+      "round_token": "4aa0df7c241749e7fbbcc42eaca01c64",
+      "duration_s": 102.238,
+      "has_stop": true,
+      "end_state": "CLEAR_SAFE_ZONE",
+      "delivery_count": 0,
+      "stage_visits": 1,
+      "visual_visits": 1
+    },
+    {
+      "business": "20000101_080033_competition_04",
+      "sensor": "20261112_165835_competition_wheel",
+      "upper": "42d668b53f41d90c534af86d90befbee029d784b",
+      "round_token": "12b5290e86516a7104484d6f3f81d644",
+      "duration_s": 429.619,
+      "has_stop": true,
+      "end_state": "WAIT_SEARCH_RECOVERY",
+      "delivery_count": 5,
+      "stage_visits": 7,
+      "visual_visits": 6
+    }
+  ],
+  "prewarm_no_start": [
+    {
+      "business": "20261112_161532_competition",
+      "rows": 7
+    },
+    {
+      "business": "20261112_165225_competition",
+      "rows": 7
+    },
+    {
+      "business": "20261112_161443_competition",
+      "rows": 7
+    },
+    {
+      "business": "20261112_164547_competition",
+      "rows": 7
+    },
+    {
+      "business": "20261112_161833_competition",
+      "rows": 7
+    },
+    {
+      "business": "20261112_161636_competition",
+      "rows": 7
+    },
+    {
+      "business": "20261112_162802_competition",
+      "rows": 7
+    },
+    {
+      "business": "20000101_080033_competition",
+      "rows": 6
+    }
+  ]
+}

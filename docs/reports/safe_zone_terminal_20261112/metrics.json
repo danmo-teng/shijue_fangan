@@ -1,0 +1,752 @@
+{
+  "t0_ns": 551695416199,
+  "visual": [
+    {
+      "a": 75.483,
+      "b": 81.21,
+      "duration": 5.727,
+      "start": {
+        "t": 75.48728298,
+        "xy": [
+          -0.159340003840321,
+          0.495034120736229
+        ],
+        "yaw": 91.2640000000017,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.123472414903197,
+          0.597062652981933
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 81.208762381,
+        "xy": [
+          0.0293046291439727,
+          0.52658029076598
+        ],
+        "yaw": 91.1236209723936,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.312117047887491,
+          0.628608823011684
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "T265_PHASE_NO_WHEEL": 1301
+      },
+      "yaw_range": [
+        90.63,
+        105.63
+      ],
+      "wheel_samples": 573,
+      "zero_wheel_fraction": 0.677,
+      "gyro_change": -0.13,
+      "gyro_span": 15.0,
+      "wheel_body_integral_m": [
+        0.0061,
+        -0.2292
+      ],
+      "wheel_field_integral_m": [
+        0.2243,
+        0.0434
+      ],
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 81.251,
+      "b": 90.182,
+      "duration": 8.931,
+      "start": {
+        "t": 81.25381549,
+        "xy": [
+          0.049408454290389,
+          0.530979618834719
+        ],
+        "yaw": 89.2041893787011,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.332220873033907,
+          0.633008151080423
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 90.179080103,
+        "xy": [
+          -0.204254312884131,
+          0.579036681969957
+        ],
+        "yaw": 81.9654376600665,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.0785581058593867,
+          0.68106521421566
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "T265_PHASE_NO_WHEEL": 2122
+      },
+      "yaw_range": [
+        70.14,
+        97.47
+      ],
+      "wheel_samples": 893,
+      "zero_wheel_fraction": 0.502,
+      "gyro_change": -7.08,
+      "gyro_span": 27.33,
+      "wheel_body_integral_m": [
+        -0.0138,
+        0.2895
+      ],
+      "wheel_field_integral_m": [
+        -0.2862,
+        0.0558
+      ],
+      "visual_px_range": [
+        31,
+        237
+      ],
+      "replay_frames": 33,
+      "right_clipped_fraction": 1.0,
+      "pause_fraction": 0.0,
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 141.619,
+      "b": 176.141,
+      "duration": 34.522,
+      "start": {
+        "t": 141.622855458,
+        "xy": [
+          -0.253528761253979,
+          0.380116626491059
+        ],
+        "yaw": 88.869000000002,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.0658352392838677,
+          0.45461326696426
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 176.137882718,
+        "xy": [
+          -0.260882606233616,
+          0.611254287307424
+        ],
+        "yaw": 87.5098825994569,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.0584813943042308,
+          0.685750927780625
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "T265_PHASE_NO_WHEEL": 8018
+      },
+      "yaw_range": [
+        75.0,
+        106.14
+      ],
+      "wheel_samples": 3452,
+      "zero_wheel_fraction": 0.668,
+      "gyro_change": -1.42,
+      "gyro_span": 31.14,
+      "wheel_body_integral_m": [
+        0.0234,
+        -0.0961
+      ],
+      "wheel_field_integral_m": [
+        0.1172,
+        0.0898
+      ],
+      "visual_px_range": [
+        -265,
+        243
+      ],
+      "replay_frames": 75,
+      "right_clipped_fraction": 0.162,
+      "pause_fraction": 0.173,
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 230.119,
+      "b": 259.595,
+      "duration": 29.476,
+      "start": {
+        "t": 230.11971626,
+        "xy": [
+          -0.234117937589313,
+          0.463451290532699
+        ],
+        "yaw": 92.7690000000011,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.0656203994937228,
+          0.514651076975942
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 259.594023186,
+        "xy": [
+          -0.171228141545617,
+          0.676522283277462
+        ],
+        "yaw": 90.1633947522196,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.128510195537418,
+          0.727722069720705
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "T265_PHASE_NO_WHEEL": 6875
+      },
+      "yaw_range": [
+        74.29,
+        100.84
+      ],
+      "wheel_samples": 2948,
+      "zero_wheel_fraction": 0.712,
+      "gyro_change": -2.6,
+      "gyro_span": 26.55,
+      "wheel_body_integral_m": [
+        0.2092,
+        -0.0871
+      ],
+      "wheel_field_integral_m": [
+        0.0863,
+        0.2326
+      ],
+      "visual_px_range": [
+        -196,
+        113
+      ],
+      "replay_frames": 35,
+      "right_clipped_fraction": 0.273,
+      "pause_fraction": 0.8,
+      "pose_jumps_over_2cm": [
+        {
+          "t": 255.049,
+          "m": 0.024,
+          "raw_m": 0.024,
+          "dt": 0.005,
+          "source_before": "T265_PHASE_NO_WHEEL",
+          "source_after": "T265_PHASE_NO_WHEEL"
+        },
+        {
+          "t": 259.214,
+          "m": 0.022,
+          "raw_m": 0.022,
+          "dt": 0.005,
+          "source_before": "T265_PHASE_NO_WHEEL",
+          "source_after": "T265_PHASE_NO_WHEEL"
+        }
+      ]
+    },
+    {
+      "a": 297.43,
+      "b": 303.398,
+      "duration": 5.968,
+      "start": {
+        "t": 297.432829742,
+        "xy": [
+          -0.225545725237941,
+          0.485722143442278
+        ],
+        "yaw": 93.7410000000013,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.132757388075444,
+          0.424698263097784
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 303.394874163,
+        "xy": [
+          -0.161671545532361,
+          0.530065358007137
+        ],
+        "yaw": 88.7201221077466,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.196631567781024,
+          0.469041477662643
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "T265_PHASE_NO_WHEEL": 1193
+      },
+      "yaw_range": [
+        88.72,
+        96.58
+      ],
+      "wheel_samples": 596,
+      "zero_wheel_fraction": 0.57,
+      "gyro_change": -5.01,
+      "gyro_span": 7.85,
+      "wheel_body_integral_m": [
+        -0.0004,
+        -0.1334
+      ],
+      "wheel_field_integral_m": [
+        0.1335,
+        0.0032
+      ],
+      "visual_px_range": [
+        54,
+        173
+      ],
+      "replay_frames": 33,
+      "right_clipped_fraction": 0.939,
+      "pause_fraction": 0.0,
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 366.469,
+      "b": 368.192,
+      "duration": 1.723,
+      "start": {
+        "t": 366.471393312,
+        "xy": [
+          0.0207902829776876,
+          0.484949522243
+        ],
+        "yaw": 95.1360000000022,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.395372658412362,
+          0.45523098183592
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 368.188429684,
+        "xy": [
+          0.0517842922881835,
+          0.493880617058259
+        ],
+        "yaw": 90.6579500116213,
+        "source": "T265_PHASE_NO_WHEEL",
+        "raw_t265": [
+          0.426366667722858,
+          0.464162076651179
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "T265_PHASE_NO_WHEEL": 414
+      },
+      "yaw_range": [
+        90.6,
+        95.22
+      ],
+      "wheel_samples": 173,
+      "zero_wheel_fraction": 0.503,
+      "gyro_change": -4.48,
+      "gyro_span": 4.62,
+      "wheel_body_integral_m": [
+        0.0011,
+        -0.0222
+      ],
+      "wheel_field_integral_m": [
+        0.0221,
+        0.002
+      ],
+      "visual_px_range": [
+        121,
+        121
+      ],
+      "replay_frames": 3,
+      "right_clipped_fraction": 0.0,
+      "pause_fraction": 0.0,
+      "pose_jumps_over_2cm": []
+    }
+  ],
+  "stage": [
+    {
+      "a": 70.5,
+      "b": 74.369,
+      "duration": 3.87,
+      "start": {
+        "t": 70.50313794,
+        "xy": [
+          -0.151219708973997,
+          0.129328767886395
+        ],
+        "yaw": 137.285000000001,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.126652856476702,
+          0.263873491488967
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 74.36249498,
+        "xy": [
+          -0.160883314375455,
+          0.495357454283855
+        ],
+        "yaw": 91.1574661278021,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.120140568998569,
+          0.597883169708413
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 714
+      },
+      "yaw_range": [
+        84.71,
+        137.29
+      ],
+      "wheel_samples": 387,
+      "zero_wheel_fraction": 0.036,
+      "gyro_change": -46.11,
+      "gyro_span": 52.58,
+      "wheel_body_integral_m": [
+        0.3675,
+        0.0083
+      ],
+      "wheel_field_integral_m": [
+        -0.0098,
+        0.3661
+      ],
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 120.354,
+      "b": 137.639,
+      "duration": 17.286,
+      "start": {
+        "t": 120.368980396,
+        "xy": [
+          -0.637804988338497,
+          0.215381100973158
+        ],
+        "yaw": 259.124000000001,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          -0.199909419020018,
+          0.383887465498097
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 137.632087301,
+        "xy": [
+          -0.247788625410662,
+          0.492342799401678
+        ],
+        "yaw": 356.779117538066,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.0695640750822175,
+          0.574289200444345
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 2747
+      },
+      "yaw_range": [
+        0.06,
+        359.99
+      ],
+      "wheel_samples": 1728,
+      "zero_wheel_fraction": 0.48,
+      "gyro_change": 97.66,
+      "gyro_span": 140.32,
+      "wheel_body_integral_m": [
+        0.473,
+        0.0392
+      ],
+      "wheel_field_integral_m": [
+        0.3906,
+        0.2765
+      ],
+      "visual_px_range": null,
+      "replay_frames": 30,
+      "right_clipped_fraction": null,
+      "pause_fraction": 0.0,
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 225.067,
+      "b": 228.323,
+      "duration": 3.256,
+      "start": {
+        "t": 225.071586777,
+        "xy": [
+          -0.65299018557041,
+          0.334447312557661
+        ],
+        "yaw": 331.540000000001,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          -0.25934641708468,
+          0.328781275806097
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 228.322196318,
+        "xy": [
+          -0.250440100747461,
+          0.513297184843145
+        ],
+        "yaw": 23.2970000000014,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.0392712447656018,
+          0.558109059409175
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 626
+      },
+      "yaw_range": [
+        0.68,
+        359.72
+      ],
+      "wheel_samples": 326,
+      "zero_wheel_fraction": 0.031,
+      "gyro_change": 51.76,
+      "gyro_span": 55.5,
+      "wheel_body_integral_m": [
+        0.4417,
+        0.0086
+      ],
+      "wheel_field_integral_m": [
+        0.4027,
+        0.1788
+      ],
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 290.868,
+      "b": 294.523,
+      "duration": 3.655,
+      "start": {
+        "t": 290.876630626,
+        "xy": [
+          -0.481901216702993,
+          0.154193233017054
+        ],
+        "yaw": 306.579000000002,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          -0.0991208903015341,
+          0.0871946488872759
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 294.517175584,
+        "xy": [
+          -0.240193663215002,
+          0.491431203848513
+        ],
+        "yaw": 44.1354337334483,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.113109503292818,
+          0.438034157549109
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 715
+      },
+      "yaw_range": [
+        1.03,
+        360.0
+      ],
+      "wheel_samples": 365,
+      "zero_wheel_fraction": 0.03,
+      "gyro_change": 97.55,
+      "gyro_span": 107.85,
+      "wheel_body_integral_m": [
+        0.4169,
+        0.0284
+      ],
+      "wheel_field_integral_m": [
+        0.2418,
+        0.3373
+      ],
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 341.035,
+      "b": 346.835,
+      "duration": 5.799,
+      "start": {
+        "t": 341.04039099,
+        "xy": [
+          -0.513000313393576,
+          0.129654019793396
+        ],
+        "yaw": 228.422000000002,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          -0.0586686151973077,
+          0.11975184896954
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 346.8290763,
+        "xy": [
+          0.0887643391914776,
+          0.494603285997111
+        ],
+        "yaw": 33.8738086357007,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.466098956230262,
+          0.430858405438609
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 1047
+      },
+      "yaw_range": [
+        0.42,
+        359.64
+      ],
+      "wheel_samples": 580,
+      "zero_wheel_fraction": 0.183,
+      "gyro_change": 165.43,
+      "gyro_span": 170.32,
+      "wheel_body_integral_m": [
+        0.6788,
+        0.014
+      ],
+      "wheel_field_integral_m": [
+        0.6019,
+        0.3652
+      ],
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 351.309,
+      "b": 352.795,
+      "duration": 1.487,
+      "start": {
+        "t": 351.310746733,
+        "xy": [
+          0.00118421430784044,
+          0.413773435147969
+        ],
+        "yaw": 45.3300000000017,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.41325647793461,
+          0.362056259905049
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 352.789339731,
+        "xy": [
+          0.065602312271275,
+          0.490699550819102
+        ],
+        "yaw": 38.0704505785407,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.458052100891407,
+          0.432074437368318
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 283
+      },
+      "yaw_range": [
+        38.07,
+        47.82
+      ],
+      "wheel_samples": 149,
+      "zero_wheel_fraction": 0.047,
+      "gyro_change": -7.31,
+      "gyro_span": 9.79,
+      "wheel_body_integral_m": [
+        0.0992,
+        0.0073
+      ],
+      "wheel_field_integral_m": [
+        0.0645,
+        0.0769
+      ],
+      "pose_jumps_over_2cm": []
+    },
+    {
+      "a": 357.726,
+      "b": 358.91,
+      "duration": 1.184,
+      "start": {
+        "t": 357.72906853,
+        "xy": [
+          -0.0318755217670574,
+          0.407204947019063
+        ],
+        "yaw": 21.242000000002,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.364669255828406,
+          0.36223550629827
+        ],
+        "axes": []
+      },
+      "end": {
+        "t": 358.900315461,
+        "xy": [
+          0.057258372872856,
+          0.493257852160391
+        ],
+        "yaw": 16.9960000000001,
+        "source": "WHEEL_FALLBACK",
+        "raw_t265": [
+          0.424469879724046,
+          0.455405200168974
+        ],
+        "axes": []
+      },
+      "source_counts": {
+        "WHEEL_FALLBACK": 208
+      },
+      "yaw_range": [
+        16.99,
+        21.47
+      ],
+      "wheel_samples": 118,
+      "zero_wheel_fraction": 0.059,
+      "gyro_change": -4.25,
+      "gyro_span": 4.48,
+      "wheel_body_integral_m": [
+        0.1132,
+        0.0497
+      ],
+      "wheel_field_integral_m": [
+        0.0892,
+        0.086
+      ],
+      "pose_jumps_over_2cm": []
+    }
+  ]
+}

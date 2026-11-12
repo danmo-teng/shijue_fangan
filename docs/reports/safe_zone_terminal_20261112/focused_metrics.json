@@ -1,0 +1,253 @@
+[
+  {
+    "a": 74.36,
+    "b": 75.48,
+    "pose_delta_m": [
+      0.001,
+      -0.0005
+    ],
+    "wheel_delta_field_m": [
+      0.0,
+      0.0
+    ],
+    "wheel_zero_fraction": 1.0,
+    "yaw_delta_deg": 0.12,
+    "replay_frames": 0,
+    "pause_frames": 0,
+    "visual_cmds": [],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 116,
+      "WHEEL_FALLBACK": 64
+    }
+  },
+  {
+    "a": 137.63,
+    "b": 141.62,
+    "pose_delta_m": [
+      -0.0057,
+      -0.1122
+    ],
+    "wheel_delta_field_m": [
+      -0.0238,
+      -0.1676
+    ],
+    "wheel_zero_fraction": 0.501,
+    "yaw_delta_deg": 92.08,
+    "replay_frames": 8,
+    "pause_frames": 0,
+    "visual_cmds": [],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 618,
+      "WHEEL_FALLBACK": 160
+    }
+  },
+  {
+    "a": 142.5,
+    "b": 151.95,
+    "pose_delta_m": [
+      0.0061,
+      0.0028
+    ],
+    "wheel_delta_field_m": [
+      0.0019,
+      -0.0001
+    ],
+    "wheel_zero_fraction": 0.855,
+    "yaw_delta_deg": -0.12,
+    "replay_frames": 41,
+    "pause_frames": 12,
+    "visual_cmds": [
+      131,
+      125,
+      124,
+      124,
+      123,
+      124,
+      121,
+      122,
+      125,
+      124,
+      121,
+      120,
+      123,
+      116,
+      124,
+      122,
+      120,
+      120,
+      121,
+      127,
+      121,
+      123,
+      122,
+      124,
+      128
+    ],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 2092
+    }
+  },
+  {
+    "a": 171.39,
+    "b": 172.75,
+    "pose_delta_m": [
+      0.1359,
+      0.0415
+    ],
+    "wheel_delta_field_m": [
+      0.1658,
+      0.0439
+    ],
+    "wheel_zero_fraction": 0.0,
+    "yaw_delta_deg": -2.33,
+    "replay_frames": 9,
+    "pause_frames": 0,
+    "visual_cmds": [
+      174,
+      179,
+      179,
+      201,
+      207,
+      222,
+      243,
+      222,
+      189
+    ],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 376
+    }
+  },
+  {
+    "a": 172.75,
+    "b": 175.97,
+    "pose_delta_m": [
+      -0.1484,
+      0.0365
+    ],
+    "wheel_delta_field_m": [
+      -0.1438,
+      0.0287
+    ],
+    "wheel_zero_fraction": 0.022,
+    "yaw_delta_deg": -9.17,
+    "replay_frames": 22,
+    "pause_frames": 0,
+    "visual_cmds": [
+      69,
+      1,
+      -129,
+      -208,
+      -182,
+      -184,
+      -186,
+      -189,
+      -203,
+      -212,
+      -200,
+      -149,
+      -122,
+      -116,
+      -136,
+      -173,
+      -193,
+      -243,
+      -252,
+      -265,
+      -240,
+      -82
+    ],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 834
+    }
+  },
+  {
+    "a": 254.72,
+    "b": 259.42,
+    "pose_delta_m": [
+      -0.0784,
+      0.1073
+    ],
+    "wheel_delta_field_m": [
+      -0.0619,
+      0.2171
+    ],
+    "wheel_zero_fraction": 0.296,
+    "yaw_delta_deg": 2.2,
+    "replay_frames": 33,
+    "pause_frames": 28,
+    "visual_cmds": [
+      -69,
+      75,
+      113,
+      15,
+      -196
+    ],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 1227
+    }
+  },
+  {
+    "a": 298.64,
+    "b": 300.46,
+    "pose_delta_m": [
+      0.0031,
+      0.0106
+    ],
+    "wheel_delta_field_m": [
+      0.0054,
+      0.0007
+    ],
+    "wheel_zero_fraction": 0.813,
+    "yaw_delta_deg": 0.82,
+    "replay_frames": 12,
+    "pause_frames": 0,
+    "visual_cmds": [
+      125,
+      125,
+      122,
+      121,
+      124,
+      124,
+      125,
+      127,
+      124,
+      127,
+      127,
+      121
+    ],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 363
+    }
+  },
+  {
+    "a": 301.1,
+    "b": 302.6,
+    "pose_delta_m": [
+      0.0022,
+      0.007
+    ],
+    "wheel_delta_field_m": [
+      0.0027,
+      -0.0001
+    ],
+    "wheel_zero_fraction": 0.833,
+    "yaw_delta_deg": -0.16,
+    "replay_frames": 10,
+    "pause_frames": 0,
+    "visual_cmds": [
+      168,
+      171,
+      171,
+      173,
+      166,
+      171,
+      168,
+      171,
+      173,
+      173
+    ],
+    "source_counts": {
+      "T265_PHASE_NO_WHEEL": 300
+    }
+  }
+]
