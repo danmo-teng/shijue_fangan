@@ -7,18 +7,22 @@ existing test bridge; the field start and mission/task pairing stay formal.
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
+
+import cv2
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
 sys.path.insert(0, str(PROJECT_ROOT / "rescue_map"))
 sys.path.insert(0, str(PROJECT_ROOT / "localization/tools"))
 
-from map_app import RUNTIME, RescueMapApp, parse_args  # noqa: E402
+from map_app import RUNTIME, WINDOW_NAME, RescueMapApp, parse_args  # noqa: E402
 from competition_wheel_input import CompetitionWheelInput
 from competition_dynamic_localization import CompetitionDynamicLocalization
 from lidar_yaw_debug.diagnostic import load_config
@@ -52,6 +56,7 @@ class CompetitionMapApp(RescueMapApp):
         self.start_released = False
         self.warm_ready_announced = False
         self.warm_error = None
+        self.window_exit_requested = False
         self.warm_status_path = RUNTIME / 'operator_warm_status.json'
         if self.localization_mode == "t265" or self.official_wheel_input:
             # Mounting is independent of SDK wheel injection. The normal writer
@@ -420,8 +425,47 @@ class CompetitionMapApp(RescueMapApp):
                 (920, 515, 1245, 555), self.dynamic.lidar_enabled)
             if state.get('transport_error'):
                 self.message = '定位链错误：' + state['transport_error']
+        self.button(canvas, text, 'window_minimize', '最小化', (920, 6, 1020, 40))
+        self.button(canvas, text, 'window_fullscreen',
+            '窗口' if self.fullscreen else '全屏', (1030, 6, 1130, 40))
+        self.button(canvas, text, 'window_exit', '退出',
+            (1140, 6, 1245, 40), True, (55, 55, 160))
+
+    def minimize_window(self):
+        # Restrict the desktop request to this process's map window. Hiding
+        # the GUI must not stop or reset the running competition session.
+        xdotool = shutil.which('xdotool')
+        if xdotool is None:
+            self.message = '最小化不可用：系统缺少xdotool，可点“窗口”使用系统标题栏'
+            return
+        try:
+            result = subprocess.run(
+                [xdotool, 'search', '--pid', str(os.getpid()), '--name',
+                 f'^{WINDOW_NAME}$', 'windowminimize'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            if result.returncode:
+                self.message = '窗口最小化未成功，可点“窗口”使用系统标题栏'
+        except OSError as error:
+            self.message = f'窗口最小化未成功：{error}'
+
+    def toggle_window_fullscreen(self):
+        self.fullscreen = not self.fullscreen
+        cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN,
+            cv2.WINDOW_FULLSCREEN if self.fullscreen else cv2.WINDOW_NORMAL)
+        if not self.fullscreen:
+            cv2.resizeWindow(WINDOW_NAME, self.width, self.height)
 
     def select_at(self, x, y):
+        for name, action in (
+            ('window_minimize', self.minimize_window),
+            ('window_fullscreen', self.toggle_window_fullscreen),
+            ('window_exit', lambda: setattr(self, 'window_exit_requested', True)),
+        ):
+            rect = self.hitboxes.get(name)
+            if rect and rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]:
+                action()
+                return
         rect = self.hitboxes.get('lidar_toggle')
         if self.dynamic is not None and rect and rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]:
             self.dynamic.set_lidar_enabled(not self.dynamic.lidar_enabled)
@@ -429,6 +473,11 @@ class CompetitionMapApp(RescueMapApp):
         super().select_at(x, y)
 
     def handle_key(self, key):
+        if self.window_exit_requested:
+            return False  # The existing run-loop finally owns STOP and cleanup.
+        if key & 0xFF in (ord('f'), ord('F')):
+            self.toggle_window_fullscreen()
+            return True
         if key & 0xFF in (ord('l'), ord('L')) and self.dynamic is not None:
             self.dynamic.set_lidar_enabled(not self.dynamic.lidar_enabled)
             return True
