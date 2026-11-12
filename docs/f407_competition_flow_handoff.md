@@ -1,5 +1,9 @@
 # 完整智能救援流程的 F407 配合说明
 
+> 当前范围/回执以[两端固定入口](CROSS_REPO_REQUESTS.md)为准。本页含历史接口说明，旧“最新/新增”不自动恢复为本轮任务。
+> 2026-11-12本轮只更新APPROACH_TARGET取点：聚堆也跟同一个物资锚点，不再追联合框中心；
+> 见[上位实施回执](COMPETITION_ANCHOR_FIX_20261112.md)。安全区三条配套另见[当前要求](SAFE_ZONE_YAW_FIRST_20261112.md)。
+
 > 最新规则：[单件正式运输、分离总次数与mode48拒绝恢复](f407_single_cargo_stage_reject.md)。
 > 进攻藏点改为围栏前40 cm；0x1E保留位携带同任务拒绝action，须与F407配套。
 
@@ -100,7 +104,7 @@ APPROACH目标短暂消失时，上位机在`max(0.30秒, 2.5×平均视觉帧�
 
 ```text
 SEARCH
-→ APPROACH_TARGET(flags=VALID|CLUSTER_TARGET，X/Y=聚集区域中心)
+→ APPROACH_TARGET(flags=VALID|CLUSTER_TARGET，X/Y=锁定物资锚点中心)
 → F407摄像头130°完成水平对正，再转到140°并上报mode=38
 → 上位机立即进入夹爪ROI审核；无物资时持续发送非STABLE全零CARGO_AUDIT
 → 连续稳定非空CARGO_AUDIT被ACK后，F407停车并上报mode=37
@@ -115,8 +119,10 @@ SEARCH
 → 最终RELEASE_BOTH收到本次mode34和接受证据后清空批次并回SEARCH
 ```
 
-`CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为聚集区域中心X，P4/P5为
-聚集区域中心Y。F407只有完成聚集靠近并进入140°夹内观察后才上报mode38；收到稳定非空审核后
+`CLUSTER_TARGET=P1 bit5(0x20)`只能出现在`APPROACH_TARGET`，P2/P3为锁定物资锚点中心X，P4/P5为
+同一锚点中心Y。2026-11-12按用户要求取消联合框中心转向，对准与测距使用同一锚点；邻居保留作后续分离信息。
+字段布局、聚堆夹内审核及分离流程不变；tracker换ID沿用已有空间关联，不冻结首帧像素。
+F407只有完成聚集靠近并进入140°夹内观察后才上报mode38；收到稳定非空审核后
 停车并上报mode37。mode37之前收到GRAB或DISPERSE必须拒绝。确认前若进入mode3或mode24，上位机
 清除旧审核、待发送GRAB/DISPERSE、最后APPROACH坐标和锁定批次，记录恢复frame floor并持续HOLD，
 只从mode3之后的新视觉帧重新进入目标选择。普通APPROACH目标超过动态缺帧窗口后也持续发送HOLD；
@@ -366,7 +372,7 @@ A3 B3 18 SEQ P0 P1 P2 P3 P4 P5 P6 P7 CRC_LO CRC_HI C3
 |---|---:|---|---|---|
 | `PAUSE` | `0x01` | 0 | 0 | 0 |
 | `ALIGN_SAFE_ZONE` | `0x04` | 定位对正时0；视觉修正时有符号像素误差 | 0 | 定位对正航向或0 |
-| `APPROACH_TARGET` | `0x09` | 目标或聚集区域中心X | 目标或聚集区域中心Y | 0 |
+| `APPROACH_TARGET` | `0x09` | 锁定物资锚点中心X | 同一锚点中心Y | 0 |
 | `HOLD` | `0x0A` | 0 | 0 | 0 |
 | `YIELD_BACKOFF` | `0x0B` | 有符号后退距离mm | 0 | 0 |
 | `ESCAPE_MANEUVER` | `0x0C` | 有符号旋转角度deg | 有符号横移距离mm | 0 |

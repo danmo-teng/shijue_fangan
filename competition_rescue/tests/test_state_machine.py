@@ -1314,6 +1314,75 @@ def test_mode51_reference_audit_exits_and_budget() -> None:
     assert out.command.opcode == CMD_RELEASE_BOTH and invalid.delivery_count == 4
 
 
+def test_cluster_approach_tracks_anchor_when_neighbours_change() -> None:
+    from protocol import CMD_CLUSTER_TARGET
+
+    for first_delivered in (False, True):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = first_delivered
+        anchor = TrackedCargo(101, "green_supply", .9, (540, 360, 200, 200), hits=5)
+        left = TrackedCargo(102, "green_supply", .8, (360, 380, 160, 160), hits=5)
+        right = TrackedCargo(103, "core_black", .8, (760, 380, 160, 160), hits=5)
+        first = VisionSnapshot(frame_sequence=10, cargo=(anchor, left))
+        out = m._start_cluster_approach(first, stm(), 1.0)
+        assert out.command.opcode == CMD_APPROACH_TARGET
+        assert out.command.flags & CMD_CLUSTER_TARGET
+        assert (out.command.arg_a, out.command.arg_b) == (640, 460)
+        assert m.cluster_target_track_id == 101
+        left_extent = m.cluster_bbox
+
+        status = replace(stm(mode=20), camera_pitch_cdeg=13000)
+        for frame, items in ((11, (anchor, right)), (12, (anchor, left)), (13, (anchor,))):
+            out = m.step(VisionSnapshot(frame_sequence=frame, cargo=items), pose(), status, 1.0 + frame / 100.)
+            assert out.state == CompetitionState.CLUSTER_APPROACH
+            assert out.command.flags & CMD_CLUSTER_TARGET
+            assert (out.command.arg_a, out.command.arg_b) == (640, 460)
+            assert m.cluster_target_track_id == m.locked_target_track_id == 101
+            if frame == 11:
+                assert m.cluster_bbox != left_extent  # Neighbours remain available for pile context.
+
+        moved = replace(anchor, bbox=(564, 380, 200, 200))
+        out = m.step(VisionSnapshot(frame_sequence=14, cargo=(moved, right)), pose(), status, 1.2)
+        assert (out.command.arg_a, out.command.arg_b) == (664, 480)  # Track A, do not freeze its pixels.
+        assert m.selected_batch.track_ids == (101,)
+
+
+def test_cluster_range_uses_same_anchor_resolver_and_keeps_finite_request() -> None:
+    from protocol import CMD_APPROACH_RANGE, CMD_CLUSTER_TARGET
+
+    for reassociated in (False, True):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        anchor = TrackedCargo(101, "green_supply", .9, (540, 360, 200, 200), hits=5)
+        left = TrackedCargo(102, "green_supply", .8, (360, 380, 160, 160), hits=5)
+        first = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1., cargo=(anchor, left))
+        m._start_cluster_approach(first, stm(), 1.)
+        status = replace(stm(mode=52), camera_pitch_cdeg=12000)
+        m.step(replace(first, range_pitch_cdeg=12000), pose(), status, 1.)
+        if reassociated:
+            # Existing spatial reassociation may resolve a changed tracker ID.
+            # Ranging must use that same decision instead of a second selector.
+            anchor = replace(anchor, track_id=104, bbox=(530, 360, 200, 200))
+            neighbour = replace(anchor, track_id=105, bbox=(550, 360, 200, 200))
+        else:
+            neighbour = left
+        view = VisionSnapshot(frame_sequence=11, observed_monotonic_s=1.1,
+            cargo=(anchor, neighbour), range_pitch_cdeg=12000,
+            range_distances=((anchor.track_id, 230), (neighbour.track_id, 550)))
+        out = m.step(view, pose(), status, 1.1)
+        assert out.reason == "approach_range_request"
+        assert out.command.flags & CMD_APPROACH_RANGE and out.command.flags & CMD_CLUSTER_TARGET
+        assert out.command.arg_a == 230 and out.command.arg_b == 12000
+        assert out.command.source_vision_frame == 11
+        assert m.cluster_target_track_id == m.locked_target_track_id == anchor.track_id
+        assert m.selected_batch.track_ids == (anchor.track_id,)
+        direction = m._cluster_approach_command(view)
+        assert (direction.arg_a, direction.arg_b) == anchor.center_px
+        repeated = m.step(replace(view, frame_sequence=12, observed_monotonic_s=1.2,
+            range_distances=((anchor.track_id, 900),)), pose(), replace(status, mode=53), 1.2)
+        assert repeated.command == out.command  # Do not restart a finite move on a new image.
+
+
 def test_range_recheck_accepts_small_error_and_realigns_large_overshoot() -> None:
     from protocol import CMD_APPROACH_RANGE
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))

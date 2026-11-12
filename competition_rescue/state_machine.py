@@ -2915,6 +2915,8 @@ class CompetitionMission:
     def _target_for_batch(self, vision: VisionSnapshot) -> TrackedCargo | None:
         if self.selected_batch is None:
             return None
+        if self.state == CompetitionState.CLUSTER_APPROACH:
+            return self._cluster_target_for_vision(vision)
         visible = self._visible_cargo(vision)
         if self.locked_target_track_id is not None:
             locked = next(
@@ -4839,17 +4841,14 @@ class CompetitionMission:
         if target is None:
             return None
         items = self._cluster_members_for_target(vision, target)
-        if not items:
-            return None
-        cluster_bbox = self._items_bbox(items)
-        assert cluster_bbox is not None
-        self.cluster_bbox = cluster_bbox
-        left, top, width, height = cluster_bbox
+        # Keep pile context for separation/reassociation, not steering.
+        self.cluster_bbox = self._items_bbox(items) or target.bbox
+        x, y = target.center_px
         return CommandRequest(
             CMD_APPROACH_TARGET,
             CMD_VALID | CMD_CLUSTER_TARGET,
-            left + width // 2,
-            top + height // 2,
+            x,
+            y,
         )
 
     @staticmethod
@@ -4940,7 +4939,7 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 self._hold(),
-                "锁定目标当前无法确认所属聚集区域，保持当前状态重新观察",
+                "锁定物资当前不可见，保持当前状态重新观察",
                 self.selected_batch,
                 tx_policy="hold",
                 reason="cluster_signature_unavailable",
@@ -4960,7 +4959,7 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             command,
-            "聚集目标已锁定，持续靠近并等待F407上报mode=38夹内观察",
+            "物资锚点已锁定，按该物资对准并靠近，等待F407上报mode=38夹内观察",
             event="cluster_approach_start",
             motion_expected=True,
             tx_policy="cluster_approach",
@@ -5078,7 +5077,7 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             self.cluster_command,
-            "持续发送CLUSTER_TARGET靠近聚集区域，等待F407 mode=38夹内观察",
+            "持续跟随同一物资锚点靠近，等待F407 mode=38夹内观察",
             motion_expected=True,
             tx_policy="cluster_approach",
             reason="cluster_capture_audit_pending",
