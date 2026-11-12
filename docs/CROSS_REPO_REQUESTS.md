@@ -18,6 +18,18 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 
 ## 当前证据：MATCH-SAFE-VISUAL-20261112（分析，不是固件实施任务）
 
+续查补充：RDK用原帧9731/9758/9781复现围栏外橙色802被safe bbox标成区内，目标选择返回None；
+建议真实围栏前沿/区域共用于分区与区内外，几何候选尚未实现，不把改为115°或平滑bbox当完整修复。
+新增MATCH-PILE-ALIGN-20261112分析：首绿7次进入mode52、6次回20；聚堆锚点虽锁定，发送点却是动态邻居联合框中心，
+测距又改用锚点。建议上位统一对准/测距锚点；下位普通目标近中心减旋已经存在，不能再发一遍旧实施要求，
+聚堆目前!cluster_target_active条件排除该优化、仍40px/最低60mm/s，可讨论沿用原近中策略。
+本轮只提修法，尚未批准代码或固件实施；不新增时间门、等待、握手、测试程序/遥测或ISR。
+详细原帧、实际状态交接与抽样重算边界：
+
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/safe_zone_terminal_20261112/FOLLOWUP.md
+```
+
 最新运行已配对：业务20000101_080033_competition_04，传感器20261112_165835_competition_wheel；
 上位42d668b，下位实际回包c7a9e7a/dirty1、NormalRun/TASK、921600。已读c7a9e7a源码，运行文件仍0d52ef8；
 dirty内容未知。下位最新固定入口认可800ea44，后续提交只改文档，没有新的驱动修复，不将expected当actual。

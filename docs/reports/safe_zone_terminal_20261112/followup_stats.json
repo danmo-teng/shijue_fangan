@@ -1,0 +1,2900 @@
+{
+  "analysis_only": true,
+  "basis": "original logs; offline reconstruction is sampled 10Hz, not complete runtime command replay",
+  "upper_at_analysis": "ced6b24",
+  "upper_at_run": "42d668b",
+  "lower_actual": "c7a9e7a/source_dirty=1",
+  "intervals": [
+    {
+      "a": 8.371,
+      "b": 14.909,
+      "state": "INITIAL_APPROACH",
+      "gyro_span": 51.3,
+      "gyro_net": -14.79,
+      "gyro_total": 104.99,
+      "active_sign_flips": 1
+    },
+    {
+      "a": 33.741,
+      "b": 38.441,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 43.36,
+      "gyro_net": 38.78,
+      "gyro_total": 50.63,
+      "active_sign_flips": 1,
+      "pixel_sign_flips": 1,
+      "anchor_changes": 7,
+      "large_midpoint_jumps": [
+        {
+          "a": 33.886,
+          "b": 34.024,
+          "jump_px": 179,
+          "ids": [
+            122,
+            129
+          ],
+          "anchor_dx": 208,
+          "members": [
+            [
+              122,
+              123,
+              125,
+              126,
+              128,
+              129,
+              131
+            ],
+            [
+              123,
+              125,
+              128,
+              129,
+              130
+            ]
+          ]
+        },
+        {
+          "a": 34.833,
+          "b": 34.975,
+          "jump_px": 169,
+          "ids": [
+            129,
+            129
+          ],
+          "anchor_dx": 159,
+          "members": [
+            [
+              123,
+              125,
+              126,
+              129,
+              130,
+              133
+            ],
+            [
+              123,
+              125,
+              128,
+              129,
+              130,
+              142,
+              143
+            ]
+          ]
+        },
+        {
+          "a": 36.645,
+          "b": 36.768,
+          "jump_px": 142,
+          "ids": [
+            142,
+            126
+          ],
+          "anchor_dx": -130,
+          "members": [
+            [
+              123,
+              126,
+              131,
+              142,
+              143
+            ],
+            [
+              123,
+              126,
+              143,
+              148
+            ]
+          ]
+        },
+        {
+          "a": 36.768,
+          "b": 36.903,
+          "jump_px": -138,
+          "ids": [
+            126,
+            142
+          ],
+          "anchor_dx": 139,
+          "members": [
+            [
+              123,
+              126,
+              143,
+              148
+            ],
+            [
+              123,
+              131,
+              142,
+              143
+            ]
+          ]
+        },
+        {
+          "a": 37.021,
+          "b": 37.141,
+          "jump_px": 105,
+          "ids": [
+            142,
+            142
+          ],
+          "anchor_dx": 19,
+          "members": [
+            [
+              123,
+              126,
+              131,
+              142,
+              143,
+              149
+            ],
+            [
+              126,
+              142,
+              143,
+              149
+            ]
+          ]
+        },
+        {
+          "a": 37.141,
+          "b": 37.254,
+          "jump_px": -163,
+          "ids": [
+            142,
+            149
+          ],
+          "anchor_dx": -170,
+          "members": [
+            [
+              126,
+              142,
+              143,
+              149
+            ],
+            [
+              131,
+              135,
+              143,
+              145,
+              149
+            ]
+          ]
+        },
+        {
+          "a": 37.254,
+          "b": 37.356,
+          "jump_px": 153,
+          "ids": [
+            149,
+            126
+          ],
+          "anchor_dx": 102,
+          "members": [
+            [
+              131,
+              135,
+              143,
+              145,
+              149
+            ],
+            [
+              126,
+              143,
+              150
+            ]
+          ]
+        },
+        {
+          "a": 37.577,
+          "b": 37.764,
+          "jump_px": 109,
+          "ids": [
+            126,
+            142
+          ],
+          "anchor_dx": 58,
+          "members": [
+            [
+              126,
+              149,
+              151
+            ],
+            [
+              142
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "a": 47.162,
+      "b": 47.265,
+      "state": "APPROACH",
+      "gyro_span": 9.99,
+      "gyro_net": 9.99,
+      "gyro_total": 9.99,
+      "active_sign_flips": 0
+    },
+    {
+      "a": 57.355,
+      "b": 66.592,
+      "state": "APPROACH",
+      "gyro_span": 31.31,
+      "gyro_net": 2.63,
+      "gyro_total": 152.76,
+      "active_sign_flips": 7
+    },
+    {
+      "a": 101.463,
+      "b": 102.408,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 12.2,
+      "gyro_net": 11.99,
+      "gyro_total": 12.42,
+      "active_sign_flips": 0,
+      "pixel_sign_flips": 0,
+      "anchor_changes": 0,
+      "large_midpoint_jumps": [
+        {
+          "a": 101.331,
+          "b": 101.47,
+          "jump_px": 186,
+          "ids": [
+            336,
+            336
+          ],
+          "anchor_dx": 183,
+          "members": [
+            [
+              334,
+              335,
+              336
+            ],
+            [
+              334,
+              335,
+              336
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "a": 102.985,
+      "b": 106.998,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 38.51,
+      "gyro_net": -35.78,
+      "gyro_total": 44.27,
+      "active_sign_flips": 0,
+      "pixel_sign_flips": 1,
+      "anchor_changes": 0,
+      "large_midpoint_jumps": [
+        {
+          "a": 104.123,
+          "b": 104.286,
+          "jump_px": -157,
+          "ids": [
+            344,
+            344
+          ],
+          "anchor_dx": -156,
+          "members": [
+            [
+              340,
+              341,
+              344
+            ],
+            [
+              340,
+              341,
+              344
+            ]
+          ]
+        },
+        {
+          "a": 105.245,
+          "b": 105.374,
+          "jump_px": -118,
+          "ids": [
+            344,
+            344
+          ],
+          "anchor_dx": -51,
+          "members": [
+            [
+              340,
+              341,
+              344
+            ],
+            [
+              337,
+              340,
+              344
+            ]
+          ]
+        },
+        {
+          "a": 105.505,
+          "b": 105.75,
+          "jump_px": -102,
+          "ids": [
+            344,
+            344
+          ],
+          "anchor_dx": -102,
+          "members": [
+            [
+              344
+            ],
+            [
+              344
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "a": 111.702,
+      "b": 116.7,
+      "state": "APPROACH",
+      "gyro_span": 19.82,
+      "gyro_net": 17.8,
+      "gyro_total": 28.29,
+      "active_sign_flips": 0
+    },
+    {
+      "a": 188.058,
+      "b": 194.147,
+      "state": "APPROACH",
+      "gyro_span": 39.83,
+      "gyro_net": -25.21,
+      "gyro_total": 59.71,
+      "active_sign_flips": 1
+    },
+    {
+      "a": 199.95,
+      "b": 204.562,
+      "state": "APPROACH",
+      "gyro_span": 38.11,
+      "gyro_net": 19.62,
+      "gyro_total": 63.65,
+      "active_sign_flips": 1
+    },
+    {
+      "a": 210.086,
+      "b": 214.731,
+      "state": "APPROACH",
+      "gyro_span": 9.68,
+      "gyro_net": 8.23,
+      "gyro_total": 26.27,
+      "active_sign_flips": 1
+    },
+    {
+      "a": 217.331,
+      "b": 223.656,
+      "state": "APPROACH",
+      "gyro_span": 85.31,
+      "gyro_net": 78.64,
+      "gyro_total": 116.54,
+      "active_sign_flips": 2
+    },
+    {
+      "a": 271.389,
+      "b": 276.104,
+      "state": "APPROACH",
+      "gyro_span": 16.7,
+      "gyro_net": 12.75,
+      "gyro_total": 40.13,
+      "active_sign_flips": 1
+    },
+    {
+      "a": 279.877,
+      "b": 286.038,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 93.64,
+      "gyro_net": 93.64,
+      "gyro_total": 93.77,
+      "active_sign_flips": 0,
+      "pixel_sign_flips": 1,
+      "anchor_changes": 1,
+      "large_midpoint_jumps": [
+        {
+          "a": 280.015,
+          "b": 280.117,
+          "jump_px": -172,
+          "ids": [
+            619,
+            619
+          ],
+          "anchor_dx": -115,
+          "members": [
+            [
+              617,
+              618,
+              619,
+              620,
+              621
+            ],
+            [
+              619,
+              621,
+              622,
+              625
+            ]
+          ]
+        },
+        {
+          "a": 280.372,
+          "b": 280.546,
+          "jump_px": 118,
+          "ids": [
+            619,
+            619
+          ],
+          "anchor_dx": 0,
+          "members": [
+            [
+              619,
+              622,
+              625
+            ],
+            [
+              619,
+              622,
+              625,
+              626
+            ]
+          ]
+        },
+        {
+          "a": 280.546,
+          "b": 280.649,
+          "jump_px": -117,
+          "ids": [
+            619,
+            619
+          ],
+          "anchor_dx": 0,
+          "members": [
+            [
+              619,
+              622,
+              625,
+              626
+            ],
+            [
+              619,
+              622,
+              625
+            ]
+          ]
+        },
+        {
+          "a": 280.649,
+          "b": 280.793,
+          "jump_px": 132,
+          "ids": [
+            619,
+            619
+          ],
+          "anchor_dx": 5,
+          "members": [
+            [
+              619,
+              622,
+              625
+            ],
+            [
+              619,
+              622,
+              625,
+              626
+            ]
+          ]
+        },
+        {
+          "a": 285.466,
+          "b": 285.579,
+          "jump_px": 182,
+          "ids": [
+            619,
+            626
+          ],
+          "anchor_dx": 341,
+          "members": [
+            [
+              619,
+              620,
+              622,
+              623,
+              625,
+              626,
+              630
+            ],
+            [
+              618,
+              620,
+              622,
+              623,
+              626,
+              627,
+              630
+            ]
+          ]
+        },
+        {
+          "a": 285.579,
+          "b": 285.687,
+          "jump_px": 139,
+          "ids": [
+            626,
+            626
+          ],
+          "anchor_dx": 167,
+          "members": [
+            [
+              618,
+              620,
+              622,
+              623,
+              626,
+              627,
+              630
+            ],
+            [
+              618,
+              619,
+              620,
+              623,
+              626,
+              627,
+              630,
+              636
+            ]
+          ]
+        },
+        {
+          "a": 285.687,
+          "b": 285.79,
+          "jump_px": 213,
+          "ids": [
+            626,
+            626
+          ],
+          "anchor_dx": 212,
+          "members": [
+            [
+              618,
+              619,
+              620,
+              623,
+              626,
+              627,
+              630,
+              636
+            ],
+            [
+              617,
+              618,
+              619,
+              623,
+              626,
+              627,
+              630,
+              637
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "a": 286.493,
+      "b": 289.785,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 29.77,
+      "gyro_net": -26.53,
+      "gyro_total": 40.27,
+      "active_sign_flips": 0,
+      "pixel_sign_flips": 3,
+      "anchor_changes": 1,
+      "large_midpoint_jumps": [
+        {
+          "a": 286.913,
+          "b": 287.161,
+          "jump_px": -234,
+          "ids": [
+            640,
+            640
+          ],
+          "anchor_dx": -129,
+          "members": [
+            [
+              618,
+              638,
+              640
+            ],
+            [
+              638,
+              640
+            ]
+          ]
+        },
+        {
+          "a": 287.161,
+          "b": 287.386,
+          "jump_px": -131,
+          "ids": [
+            640,
+            640
+          ],
+          "anchor_dx": -128,
+          "members": [
+            [
+              638,
+              640
+            ],
+            [
+              638,
+              640
+            ]
+          ]
+        },
+        {
+          "a": 287.507,
+          "b": 287.624,
+          "jump_px": -122,
+          "ids": [
+            640,
+            640
+          ],
+          "anchor_dx": -105,
+          "members": [
+            [
+              618,
+              638,
+              640
+            ],
+            [
+              618,
+              638,
+              640
+            ]
+          ]
+        },
+        {
+          "a": 288.013,
+          "b": 288.127,
+          "jump_px": -317,
+          "ids": [
+            640,
+            622
+          ],
+          "anchor_dx": -351,
+          "members": [
+            [
+              618,
+              638,
+              640
+            ],
+            [
+              622,
+              638
+            ]
+          ]
+        },
+        {
+          "a": 288.625,
+          "b": 288.73,
+          "jump_px": -167,
+          "ids": [
+            622,
+            622
+          ],
+          "anchor_dx": -37,
+          "members": [
+            [
+              622,
+              638
+            ],
+            [
+              622
+            ]
+          ]
+        },
+        {
+          "a": 288.73,
+          "b": 288.862,
+          "jump_px": 119,
+          "ids": [
+            622,
+            622
+          ],
+          "anchor_dx": -4,
+          "members": [
+            [
+              622
+            ],
+            [
+              622,
+              638
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "a": 314.804,
+      "b": 322.218,
+      "state": "APPROACH",
+      "gyro_span": 34.64,
+      "gyro_net": 26.27,
+      "gyro_total": 70.56,
+      "active_sign_flips": 3
+    },
+    {
+      "a": 326.27,
+      "b": 328.337,
+      "state": "APPROACH",
+      "gyro_span": 33.88,
+      "gyro_net": -33.83,
+      "gyro_total": 33.92,
+      "active_sign_flips": 0
+    },
+    {
+      "a": 331.405,
+      "b": 337.785,
+      "state": "APPROACH",
+      "gyro_span": 53.5,
+      "gyro_net": 40.48,
+      "gyro_total": 81.01,
+      "active_sign_flips": 3
+    },
+    {
+      "a": 379.053,
+      "b": 382.321,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 1.21,
+      "gyro_net": -1.1,
+      "gyro_total": 4.46,
+      "active_sign_flips": 0,
+      "pixel_sign_flips": 3,
+      "anchor_changes": 0,
+      "large_midpoint_jumps": [
+        {
+          "a": 382.016,
+          "b": 382.159,
+          "jump_px": -105,
+          "ids": [
+            759,
+            759
+          ],
+          "anchor_dx": -6,
+          "members": [
+            [
+              759,
+              792
+            ],
+            [
+              759
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "a": 393.727,
+      "b": 403.483,
+      "state": "APPROACH",
+      "gyro_span": 31.32,
+      "gyro_net": 27.43,
+      "gyro_total": 56.37,
+      "active_sign_flips": 2
+    },
+    {
+      "a": 404.024,
+      "b": 408.215,
+      "state": "APPROACH",
+      "gyro_span": 18.9,
+      "gyro_net": -11.25,
+      "gyro_total": 26.54,
+      "active_sign_flips": 1
+    },
+    {
+      "a": 412.503,
+      "b": 415.759,
+      "state": "APPROACH",
+      "gyro_span": 40.99,
+      "gyro_net": 39.74,
+      "gyro_total": 42.29,
+      "active_sign_flips": 0
+    },
+    {
+      "a": 417.021,
+      "b": 418.476,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 11.5,
+      "gyro_net": -11.32,
+      "gyro_total": 11.67,
+      "active_sign_flips": 0,
+      "pixel_sign_flips": 0,
+      "anchor_changes": 0,
+      "large_midpoint_jumps": []
+    },
+    {
+      "a": 422.209,
+      "b": 423.096,
+      "state": "APPROACH",
+      "gyro_span": 1.97,
+      "gyro_net": -1.97,
+      "gyro_total": 1.97,
+      "active_sign_flips": 0
+    },
+    {
+      "a": 424.833,
+      "b": 427.241,
+      "state": "CLUSTER_APPROACH",
+      "gyro_span": 16.67,
+      "gyro_net": 0.1,
+      "gyro_total": 33.24,
+      "active_sign_flips": 1,
+      "pixel_sign_flips": 0,
+      "anchor_changes": 0,
+      "large_midpoint_jumps": []
+    },
+    {
+      "a": 427.348,
+      "b": 428.433,
+      "state": "APPROACH",
+      "gyro_span": 1.76,
+      "gyro_net": -1.76,
+      "gyro_total": 1.76,
+      "active_sign_flips": 0
+    }
+  ],
+  "first_green_status_transitions": [
+    {
+      "t": 57.362060034,
+      "mode": 3,
+      "flags": 4,
+      "pitch": 12000,
+      "ack": 96,
+      "fault": 0,
+      "seq": 7,
+      "task": 14557,
+      "action": 53986,
+      "accepted": 8,
+      "status": 3
+    },
+    {
+      "t": 57.425019125,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 102,
+      "fault": 0,
+      "seq": 8,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 57.661751506,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 122,
+      "fault": 0,
+      "seq": 12,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 57.722089885,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 127,
+      "fault": 0,
+      "seq": 13,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 58.382777583,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 186,
+      "fault": 0,
+      "seq": 24,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 58.681795679,
+      "mode": 20,
+      "flags": 12,
+      "pitch": 12000,
+      "ack": 214,
+      "fault": 0,
+      "seq": 29,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 59.101807782,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 254,
+      "fault": 0,
+      "seq": 36,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 59.401837254,
+      "mode": 20,
+      "flags": 12,
+      "pitch": 12000,
+      "ack": 26,
+      "fault": 0,
+      "seq": 41,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 59.94248828,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 76,
+      "fault": 0,
+      "seq": 50,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 60.121837371,
+      "mode": 20,
+      "flags": 12,
+      "pitch": 12000,
+      "ack": 94,
+      "fault": 0,
+      "seq": 53,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 62.701741324,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 73,
+      "fault": 0,
+      "seq": 96,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 62.942587712,
+      "mode": 20,
+      "flags": 12,
+      "pitch": 12000,
+      "ack": 97,
+      "fault": 0,
+      "seq": 100,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 63.301811519,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 130,
+      "fault": 0,
+      "seq": 106,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 63.542105447,
+      "mode": 20,
+      "flags": 12,
+      "pitch": 12000,
+      "ack": 154,
+      "fault": 0,
+      "seq": 110,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 63.902668007,
+      "mode": 52,
+      "flags": 8,
+      "pitch": 12000,
+      "ack": 189,
+      "fault": 0,
+      "seq": 116,
+      "task": 14558,
+      "action": 53987,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 64.082021431,
+      "mode": 53,
+      "flags": 12,
+      "pitch": 12000,
+      "ack": 206,
+      "fault": 0,
+      "seq": 119,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 65.822092054,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 12100,
+      "ack": 115,
+      "fault": 0,
+      "seq": 148,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 65.882597265,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 12400,
+      "ack": 120,
+      "fault": 0,
+      "seq": 149,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 65.941677184,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 12700,
+      "ack": 125,
+      "fault": 0,
+      "seq": 150,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 66.001733645,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 13000,
+      "ack": 131,
+      "fault": 0,
+      "seq": 151,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 66.062141273,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 13300,
+      "ack": 136,
+      "fault": 0,
+      "seq": 152,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 66.121866234,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 13600,
+      "ack": 141,
+      "fault": 0,
+      "seq": 153,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 66.181943695,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 13900,
+      "ack": 146,
+      "fault": 0,
+      "seq": 154,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 66.242871866,
+      "mode": 20,
+      "flags": 8,
+      "pitch": 14000,
+      "ack": 151,
+      "fault": 0,
+      "seq": 155,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 1
+    },
+    {
+      "t": 66.482159251,
+      "mode": 21,
+      "flags": 5,
+      "pitch": 14000,
+      "ack": 170,
+      "fault": 0,
+      "seq": 159,
+      "task": 14558,
+      "action": 53988,
+      "accepted": 9,
+      "status": 7
+    }
+  ],
+  "selected_offline_cluster_frames": [
+    {
+      "t": 37.021445378,
+      "frame": 1782,
+      "anchor_id": 142,
+      "anchor_class": "green_supply",
+      "anchor_center": [
+        1157,
+        875
+      ],
+      "anchor_bbox": [
+        1036,
+        733,
+        242,
+        285
+      ],
+      "cluster_bbox": [
+        647,
+        542,
+        631,
+        481
+      ],
+      "cmd": [
+        962,
+        782
+      ],
+      "members": [
+        123,
+        126,
+        131,
+        142,
+        143,
+        149
+      ]
+    },
+    {
+      "t": 37.141030758,
+      "frame": 1785,
+      "anchor_id": 142,
+      "anchor_class": "green_supply",
+      "anchor_center": [
+        1176,
+        895
+      ],
+      "anchor_bbox": [
+        1074,
+        769,
+        204,
+        253
+      ],
+      "cluster_bbox": [
+        856,
+        550,
+        422,
+        472
+      ],
+      "cmd": [
+        1067,
+        786
+      ],
+      "members": [
+        126,
+        142,
+        143,
+        149
+      ]
+    },
+    {
+      "t": 280.37246348,
+      "frame": 7200,
+      "anchor_id": 619,
+      "anchor_class": "injured_orange",
+      "anchor_center": [
+        64,
+        646
+      ],
+      "anchor_bbox": [
+        0,
+        508,
+        129,
+        276
+      ],
+      "cluster_bbox": [
+        0,
+        261,
+        158,
+        686
+      ],
+      "cmd": [
+        79,
+        604
+      ],
+      "members": [
+        619,
+        622,
+        625
+      ]
+    },
+    {
+      "t": 280.545514368,
+      "frame": 7203,
+      "anchor_id": 619,
+      "anchor_class": "injured_orange",
+      "anchor_center": [
+        64,
+        648
+      ],
+      "anchor_bbox": [
+        0,
+        513,
+        129,
+        271
+      ],
+      "cluster_bbox": [
+        0,
+        261,
+        395,
+        686
+      ],
+      "cmd": [
+        197,
+        604
+      ],
+      "members": [
+        619,
+        622,
+        625,
+        626
+      ]
+    },
+    {
+      "t": 280.648772153,
+      "frame": 7206,
+      "anchor_id": 619,
+      "anchor_class": "injured_orange",
+      "anchor_center": [
+        64,
+        644
+      ],
+      "anchor_bbox": [
+        0,
+        508,
+        129,
+        273
+      ],
+      "cluster_bbox": [
+        0,
+        261,
+        160,
+        685
+      ],
+      "cmd": [
+        80,
+        603
+      ],
+      "members": [
+        619,
+        622,
+        625
+      ]
+    },
+    {
+      "t": 288.729954996,
+      "frame": 7385,
+      "anchor_id": 622,
+      "anchor_class": "green_supply",
+      "anchor_center": [
+        55,
+        808
+      ],
+      "anchor_bbox": [
+        0,
+        677,
+        111,
+        262
+      ],
+      "cluster_bbox": [
+        0,
+        677,
+        111,
+        262
+      ],
+      "cmd": [
+        55,
+        808
+      ],
+      "members": [
+        622
+      ]
+    }
+  ],
+  "actual_replay_393_400": [
+    {
+      "t": 393.755785742,
+      "frame_sequence": 9695,
+      "capture_monotonic_ns": 945358829934,
+      "snapshot_monotonic_ns": 945451201941,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 264,
+        "arg_b": 127,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": null,
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 759,
+          "class": "injured_orange",
+          "confidence": 0.9078791462647391,
+          "bbox": [
+            130,
+            11,
+            268,
+            230
+          ],
+          "relative_xy_m": null,
+          "hits": 1002,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 394.066065179,
+      "frame_sequence": 9702,
+      "capture_monotonic_ns": 945670407931,
+      "snapshot_monotonic_ns": 945761481378,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 303,
+        "arg_b": 412,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        18,
+        29,
+        875,
+        337
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.8516986013259739,
+          "bbox": [
+            181,
+            281,
+            247,
+            265
+          ],
+          "relative_xy_m": null,
+          "hits": 5,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 394.34631347,
+      "frame_sequence": 9708,
+      "capture_monotonic_ns": 945915929962,
+      "snapshot_monotonic_ns": 946041729669,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 331,
+        "arg_b": 407,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        28,
+        22,
+        911,
+        345
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9262136678132634,
+          "bbox": [
+            213,
+            268,
+            253,
+            267
+          ],
+          "relative_xy_m": null,
+          "hits": 11,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 394.502675933,
+      "frame_sequence": 9711,
+      "capture_monotonic_ns": 946052151346,
+      "snapshot_monotonic_ns": 946198092132,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 358,
+        "arg_b": 400,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        16,
+        22,
+        949,
+        349
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.7306725350262273,
+          "bbox": [
+            227,
+            262,
+            262,
+            272
+          ],
+          "relative_xy_m": null,
+          "hits": 14,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 394.78856741,
+      "frame_sequence": 9718,
+      "capture_monotonic_ns": 946396944317,
+      "snapshot_monotonic_ns": 946483983609,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 375,
+        "arg_b": 393,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        5,
+        9,
+        1054,
+        386
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9366446776155122,
+          "bbox": [
+            290,
+            256,
+            278,
+            269
+          ],
+          "relative_xy_m": null,
+          "hits": 21,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 394.920073646,
+      "frame_sequence": 9721,
+      "capture_monotonic_ns": 946508192075,
+      "snapshot_monotonic_ns": 946615489845,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 375,
+        "arg_b": 393,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        15,
+        2,
+        1145,
+        433
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9437690964364854,
+          "bbox": [
+            384,
+            255,
+            267,
+            255
+          ],
+          "relative_xy_m": null,
+          "hits": 24,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 395.19986629,
+      "frame_sequence": 9728,
+      "capture_monotonic_ns": 946752713729,
+      "snapshot_monotonic_ns": 946895282489,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        134,
+        0,
+        1144,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9402331078102875,
+          "bbox": [
+            602,
+            261,
+            280,
+            248
+          ],
+          "relative_xy_m": null,
+          "hits": 31,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 395.354297633,
+      "frame_sequence": 9731,
+      "capture_monotonic_ns": 946956511697,
+      "snapshot_monotonic_ns": 947049713832,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        149,
+        0,
+        1129,
+        532
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9575731697929323,
+          "bbox": [
+            616,
+            262,
+            277,
+            247
+          ],
+          "relative_xy_m": null,
+          "hits": 34,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 395.701712796,
+      "frame_sequence": 9738,
+      "capture_monotonic_ns": 947265572117,
+      "snapshot_monotonic_ns": 947397128995,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        153,
+        0,
+        1125,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9632783481434504,
+          "bbox": [
+            617,
+            261,
+            277,
+            248
+          ],
+          "relative_xy_m": null,
+          "hits": 41,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 395.834411937,
+      "frame_sequence": 9742,
+      "capture_monotonic_ns": 947400893992,
+      "snapshot_monotonic_ns": 947529828136,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        163,
+        0,
+        1115,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9635777801976345,
+          "bbox": [
+            618,
+            262,
+            279,
+            246
+          ],
+          "relative_xy_m": null,
+          "hits": 45,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 396.113824354,
+      "frame_sequence": 9750,
+      "capture_monotonic_ns": 947710634781,
+      "snapshot_monotonic_ns": 947809240553,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        164,
+        0,
+        1114,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9651799159129344,
+          "bbox": [
+            618,
+            262,
+            277,
+            246
+          ],
+          "relative_xy_m": null,
+          "hits": 53,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 396.383214021,
+      "frame_sequence": 9758,
+      "capture_monotonic_ns": 947997041875,
+      "snapshot_monotonic_ns": 948078630220,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        152,
+        0,
+        1126,
+        532
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9615842657396028,
+          "bbox": [
+            615,
+            262,
+            282,
+            247
+          ],
+          "relative_xy_m": null,
+          "hits": 61,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 396.532396773,
+      "frame_sequence": 9762,
+      "capture_monotonic_ns": 948118305429,
+      "snapshot_monotonic_ns": 948227812972,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        149,
+        0,
+        1129,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9635849623524804,
+          "bbox": [
+            615,
+            260,
+            282,
+            249
+          ],
+          "relative_xy_m": null,
+          "hits": 65,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 396.846235976,
+      "frame_sequence": 9772,
+      "capture_monotonic_ns": 948457545254,
+      "snapshot_monotonic_ns": 948541652175,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        142,
+        0,
+        1136,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9661527116266048,
+          "bbox": [
+            618,
+            266,
+            276,
+            242
+          ],
+          "relative_xy_m": null,
+          "hits": 75,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 397.1367773,
+      "frame_sequence": 9781,
+      "capture_monotonic_ns": 948746110647,
+      "snapshot_monotonic_ns": 948832193499,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        159,
+        0,
+        1119,
+        539
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9642014424333363,
+          "bbox": [
+            615,
+            262,
+            279,
+            247
+          ],
+          "relative_xy_m": null,
+          "hits": 84,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 397.311984571,
+      "frame_sequence": 9785,
+      "capture_monotonic_ns": 948891487089,
+      "snapshot_monotonic_ns": 949007400770,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        163,
+        0,
+        1115,
+        532
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.962796209097112,
+          "bbox": [
+            616,
+            262,
+            279,
+            247
+          ],
+          "relative_xy_m": null,
+          "hits": 88,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 397.480663473,
+      "frame_sequence": 9789,
+      "capture_monotonic_ns": 949024497117,
+      "snapshot_monotonic_ns": 949176079672,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_realign",
+      "message": "目标明显偏出中心容许范围，原地重新对准；小偏差直接定距前进",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 755,
+        "arg_b": 385,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        171,
+        0,
+        1107,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9638186700168629,
+          "bbox": [
+            619,
+            262,
+            278,
+            246
+          ],
+          "relative_xy_m": null,
+          "hits": 92,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 397.772248485,
+      "frame_sequence": 9795,
+      "capture_monotonic_ns": 949314475347,
+      "snapshot_monotonic_ns": 949467664684,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_briefly_missing",
+      "message": "目标短暂缺帧，在动态窗口531 ms内保留最后APPROACH坐标",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 619,
+        "arg_b": 381,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        115,
+        0,
+        1163,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9582247636233865,
+          "bbox": [
+            574,
+            259,
+            269,
+            248
+          ],
+          "relative_xy_m": null,
+          "hits": 98,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 398.062814047,
+      "frame_sequence": 9800,
+      "capture_monotonic_ns": 949634210859,
+      "snapshot_monotonic_ns": 949758230246,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        64,
+        2,
+        1116,
+        426
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9586151447932498,
+          "bbox": [
+            396,
+            257,
+            268,
+            256
+          ],
+          "relative_xy_m": null,
+          "hits": 103,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 398.34077473,
+      "frame_sequence": 9805,
+      "capture_monotonic_ns": 949874921664,
+      "snapshot_monotonic_ns": 950036190929,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 530,
+        "arg_b": 385,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        61,
+        6,
+        1123,
+        426
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.91240187821424,
+          "bbox": [
+            400,
+            258,
+            271,
+            252
+          ],
+          "relative_xy_m": null,
+          "hits": 108,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 398.515186606,
+      "frame_sequence": 9809,
+      "capture_monotonic_ns": 950097248931,
+      "snapshot_monotonic_ns": 950210602805,
+      "upper_state": "APPROACH",
+      "reason": "approach_target_fresh",
+      "message": "靠近锁定批次",
+      "command": {
+        "opcode": 9,
+        "flags": 9,
+        "arg_a": 608,
+        "arg_b": 381,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        82,
+        1,
+        1196,
+        497
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 20,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9451596997248146,
+          "bbox": [
+            522,
+            257,
+            266,
+            252
+          ],
+          "relative_xy_m": null,
+          "hits": 112,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 398.839386516,
+      "frame_sequence": 9815,
+      "capture_monotonic_ns": 950400104863,
+      "snapshot_monotonic_ns": 950534802715,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        133,
+        0,
+        1145,
+        535
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9574927858916145,
+          "bbox": [
+            558,
+            258,
+            267,
+            250
+          ],
+          "relative_xy_m": null,
+          "hits": 118,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 399.136403985,
+      "frame_sequence": 9821,
+      "capture_monotonic_ns": 950732113586,
+      "snapshot_monotonic_ns": 950831820184,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        116,
+        1,
+        1162,
+        530
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.963469406134559,
+          "bbox": [
+            558,
+            259,
+            271,
+            249
+          ],
+          "relative_xy_m": null,
+          "hits": 124,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 399.290052843,
+      "frame_sequence": 9824,
+      "capture_monotonic_ns": 950863501048,
+      "snapshot_monotonic_ns": 950985469042,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        112,
+        0,
+        1166,
+        527
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9602727763834324,
+          "bbox": [
+            558,
+            257,
+            267,
+            251
+          ],
+          "relative_xy_m": null,
+          "hits": 127,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 399.560253272,
+      "frame_sequence": 9830,
+      "capture_monotonic_ns": 951159194094,
+      "snapshot_monotonic_ns": 951255669471,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        104,
+        1,
+        1174,
+        530
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9623611164488098,
+          "bbox": [
+            557,
+            257,
+            272,
+            251
+          ],
+          "relative_xy_m": null,
+          "hits": 133,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 399.836214493,
+      "frame_sequence": 9836,
+      "capture_monotonic_ns": 951378478545,
+      "snapshot_monotonic_ns": 951531630692,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        129,
+        0,
+        1149,
+        531
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9645568743912953,
+          "bbox": [
+            558,
+            257,
+            269,
+            251
+          ],
+          "relative_xy_m": null,
+          "hits": 139,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 399.962792438,
+      "frame_sequence": 9839,
+      "capture_monotonic_ns": 951519419034,
+      "snapshot_monotonic_ns": 951658208637,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        129,
+        0,
+        1149,
+        531
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9599187827706854,
+          "bbox": [
+            559,
+            259,
+            270,
+            250
+          ],
+          "relative_xy_m": null,
+          "hits": 142,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 400.228958629,
+      "frame_sequence": 9845,
+      "capture_monotonic_ns": 951820917601,
+      "snapshot_monotonic_ns": 951924374828,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        112,
+        0,
+        1165,
+        527
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9572172929994006,
+          "bbox": [
+            560,
+            257,
+            265,
+            251
+          ],
+          "relative_xy_m": null,
+          "hits": 148,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "t": 400.527669295,
+      "frame_sequence": 9851,
+      "capture_monotonic_ns": 952110124924,
+      "snapshot_monotonic_ns": 952223085494,
+      "upper_state": "APPROACH",
+      "reason": "approach_range_wait",
+      "message": "mode52等待对准后新图及对应角度分区距离表：range_measured",
+      "command": {
+        "opcode": 10,
+        "flags": 1,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "safe_bbox": [
+        127,
+        1,
+        1151,
+        529
+      ],
+      "safe_zone_filter_blocked": false,
+      "stm": {
+        "mode": 52,
+        "camera_pitch_cdeg": 12000,
+        "task_id": 14573,
+        "action_id": 54093,
+        "accepted_command": 9,
+        "action_status": 1
+      },
+      "orange_tracks": [
+        {
+          "id": 802,
+          "class": "injured_orange",
+          "confidence": 0.9637159709869443,
+          "bbox": [
+            557,
+            257,
+            272,
+            251
+          ],
+          "relative_xy_m": null,
+          "hits": 154,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "actual_target_method_reproduction": [
+    {
+      "t_s": 395.354297633,
+      "frame": 9731,
+      "bbox_overlap": 1.0,
+      "bbox_marks_inside": true,
+      "actual_method_target": null,
+      "counterfactual_outside_target": 802,
+      "counterfactual_note": "仅按原帧明确在围栏外的物理事实更正归属；不是新算法输出"
+    },
+    {
+      "t_s": 396.383214021,
+      "frame": 9758,
+      "bbox_overlap": 1.0,
+      "bbox_marks_inside": true,
+      "actual_method_target": null,
+      "counterfactual_outside_target": 802,
+      "counterfactual_note": "仅按原帧明确在围栏外的物理事实更正归属；不是新算法输出"
+    },
+    {
+      "t_s": 397.1367773,
+      "frame": 9781,
+      "bbox_overlap": 1.0,
+      "bbox_marks_inside": true,
+      "actual_method_target": null,
+      "counterfactual_outside_target": 802,
+      "counterfactual_note": "仅按原帧明确在围栏外的物理事实更正归属；不是新算法输出"
+    }
+  ]
+}
