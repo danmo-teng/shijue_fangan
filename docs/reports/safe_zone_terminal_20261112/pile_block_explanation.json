@@ -1,0 +1,146 @@
+{
+  "illustration_only": true,
+  "not_real_run_data": true,
+  "source_upper": "13f9971",
+  "source_function": "CompetitionMission._cluster_approach_command",
+  "unchanged_anchor": [
+    540,
+    360,
+    200,
+    200
+  ],
+  "frames": [
+    {
+      "frame": 1,
+      "visible_ids": [
+        101,
+        102
+      ],
+      "locked_anchor_id": 101,
+      "anchor_center_px": [
+        640,
+        460
+      ],
+      "union_bbox": [
+        360,
+        360,
+        380,
+        200
+      ],
+      "actual_current_function_command": {
+        "opcode": 9,
+        "flags": 33,
+        "x": 550,
+        "y": 460
+      },
+      "error_px": -90
+    },
+    {
+      "frame": 2,
+      "visible_ids": [
+        101,
+        103
+      ],
+      "locked_anchor_id": 101,
+      "anchor_center_px": [
+        640,
+        460
+      ],
+      "union_bbox": [
+        540,
+        360,
+        380,
+        200
+      ],
+      "actual_current_function_command": {
+        "opcode": 9,
+        "flags": 33,
+        "x": 730,
+        "y": 460
+      },
+      "error_px": 90
+    },
+    {
+      "frame": 3,
+      "visible_ids": [
+        101,
+        102
+      ],
+      "locked_anchor_id": 101,
+      "anchor_center_px": [
+        640,
+        460
+      ],
+      "union_bbox": [
+        360,
+        360,
+        380,
+        200
+      ],
+      "actual_current_function_command": {
+        "opcode": 9,
+        "flags": 33,
+        "x": 550,
+        "y": 460
+      },
+      "error_px": -90
+    }
+  ],
+  "candidate_anchor_x": [
+    640,
+    640,
+    640
+  ],
+  "candidate_implemented": false,
+  "kinematic_illustration": [
+    {
+      "name": "normal",
+      "commanded_feedback_wheel_mm_s": [
+        -60,
+        -60,
+        120
+      ],
+      "assumed_actual_feedback_wheel_mm_s": [
+        -60,
+        -60,
+        120
+      ],
+      "model_forward_mm_s": 0.0,
+      "model_left_mm_s": 120.0,
+      "model_wheel_yaw_term_mm_s": 0.0
+    },
+    {
+      "name": "rear_blocked",
+      "commanded_feedback_wheel_mm_s": [
+        -60,
+        -60,
+        120
+      ],
+      "assumed_actual_feedback_wheel_mm_s": [
+        -60,
+        -60,
+        0
+      ],
+      "model_forward_mm_s": 0.0,
+      "model_left_mm_s": 40.0,
+      "model_wheel_yaw_term_mm_s": -40.0
+    },
+    {
+      "name": "rear_blocked_heading_compensation",
+      "commanded_feedback_wheel_mm_s": [
+        0,
+        0,
+        180
+      ],
+      "assumed_actual_feedback_wheel_mm_s": [
+        0,
+        0,
+        0
+      ],
+      "model_forward_mm_s": 0.0,
+      "model_left_mm_s": 0.0,
+      "model_wheel_yaw_term_mm_s": 0.0
+    }
+  ],
+  "kinematic_note": "当前F405统一反馈符号；假定轮地正常滚动，例子不是实车轮速/PWM或角速度测量，未代入未标定旋转半径"
+}

@@ -23,6 +23,17 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 第一趟初始yaw约91°、横移中偏到105°，所以修复不能只限开始前对正。
 Task.c:3593横移和3602 done早退均跳过后方主yaw判断；5829又仅按像素设置safe_align_done，完成可绕过yaw。
 
+**本轮卡料讨论的重要边界（先审，不机械实施）：**严格先回正也可能因单轮不跟随而停滞，不能称已解决机械卡料。
+现普通堵转/反转停机已关闭，但原turn_to→Motor_TurnAngle仍有10秒超时→TURN_FAULT→task_stop路径。
+因此“先回正”是控制目标，不是直接前移旧turn_to的实施命令；先说明同ALIGN连续控向与有限定角的影响再定。
+Fine＋Heading可作为有限阻力补偿候选，硬卡可能需退让，但均未在本次讨论获准实施；
+不全局提PWM、不新增检测/故障，不擅自改原ENTER；纵向退让后不能直接沿原670mm投送。
+新说明、运动学例子及图：
+
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/safe_zone_terminal_20261112/BLOCKED_WHEEL_AND_PILE.md
+```
+
 最小配套是先处理法向/回正，再横移或完成；明显偏航时只回正，同task/action恢复横移，不重开相机/载荷审核。
 复用原3°到位/6°保持角度参数作为审查起点，done/COMPLETED同时符合yaw与像素，不让收像素包单独宣布完成。
 本次只涉及Task.c安全区ALIGN顺序/完成与同动作衔接；不要求Fine/PWM/PID、STAGE、ENTER或其他导航改动。
