@@ -1665,6 +1665,7 @@ def test_formal_dynamic_start_wiring():
                 assert cmd.count('--motion-feedback-socket')==1
                 assert cmd[cmd.index('--motion-feedback-socket')+1]=='@'+app.dynamic.radar.feedback_address[1:]
                 vision = app.vision_command()
+                assert vision.count('--enable-bulldozer') == 1
                 assert vision[vision.index('--localization-wheel-policy-socket')+1] == '@'+app.dynamic.wheel_policy_address[1:]
                 assert vision[vision.index('--localization-wheel-policy-session')+1] == app.dynamic.session_id
                 # Parent diagnostics must not resend the direct raw 07/08 stream.
@@ -2449,6 +2450,134 @@ def test_bulldozer_steps_pair_actions_and_keep_live_distance_updates():
         planner._publish(updated)
         assert (planner.protocol_task,planner.protocol_action)==live_ids
         assert (root/'command').read_bytes()[19]==CMD_BULLDOZER_STEP
+
+
+def test_published_enter_cannot_roll_back_on_a_later_obstacle_or_missing_box():
+    from dataclasses import replace
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE
+    from state_machine import CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False,bulldozer_enabled=True))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.confirmed_delivery_destination='material';m.carried_manifest=('green_supply',)
+        m.state=CompetitionState.SAFE_ZONE_CORRIDOR_CHECK;m.safe_zone_visual_locked=True
+        m._update_safe_zone_visual_target((320,0,960,100),10)
+        p=PoseSnapshot(True,-.15,.54,90,0)
+        s=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=12000,
+            context_valid=True,context_matches=True,accepted_command=CMD_ALIGN_SAFE_ZONE,action_status=3)
+        v=VisionSnapshot(frame_sequence=11,safe_bbox=(320,0,960,100),
+            safe_corridor_polygon=((201,727),(1067,727),(1067,100),(201,100)))
+        out=m.step(v,p,s,1.)
+        assert out.command.opcode==CMD_ENTER_SAFE_ZONE and not m.enter_command_published
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        planner._publish(out)
+        task,action=planner.protocol_task,planner.protocol_action
+        assert m.enter_command_published and not m.enter_command_accepted
+        late=replace(v,frame_sequence=12,safe_bbox=None,safe_zone_filter_blocked=True,
+            safe_corridor_obstacle_class='danger_cyan')
+        # Directly exercise the ACK-in-flight window as well as actual ACCEPT.
+        waiting=m.step(late,p,replace(s,context_matches=False),1.01)
+        assert waiting.command.opcode==CMD_ENTER_SAFE_ZONE and m.state==CompetitionState.ENTER_SAFE_ZONE
+        accepted=replace(s,mode=10,task_id=task,action_id=action,
+                         accepted_command=CMD_ENTER_SAFE_ZONE,action_status=1)
+        continued=planner._output_for_cycle(late,p,accepted,False,1.02)
+        assert continued.command.opcode==CMD_ENTER_SAFE_ZONE and m.obstacle_route is None
+        assert m.enter_command_accepted and m.carried_manifest==('green_supply',)
+        planner._publish(continued)
+        assert (planner.protocol_task,planner.protocol_action)==(task,action)
+        paused=planner._output_for_cycle(late,p,accepted,True,1.03)
+        assert paused.command.opcode==runner_module.CMD_PAUSE
+        done=planner._output_for_cycle(late,p,replace(accepted,mode=15),False,1.04)
+        assert done.state==CompetitionState.DELIVERY_VERIFY
+
+
+def test_explicit_align_rejection_restores_the_exact_accepted_enter_action():
+    from dataclasses import replace
+    from protocol import CMD_ENTER_SAFE_ZONE
+    from state_machine import CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.carried_manifest=('green_supply',);m.confirmed_delivery_destination='material'
+        m.state=CompetitionState.ENTER_SAFE_ZONE;m.safe_zone_visual_locked=True
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        planner.protocol_task=planner.protocol_task_cursor=24051
+        planner.protocol_action_cursor=31235
+        enter=m._enter_safe_zone_command()
+        planner._publish(CompetitionOutput(m.state,enter,'fixture'))
+        assert planner.protocol_action==31236
+        # Reproduce the recorded old rollback: ENTER31236, then ALIGN31237.
+        m._begin_safe_zone_acquire(VisionSnapshot(frame_sequence=100),1.)
+        m.safe_zone_reobserve_visual=True;m.safe_zone_view_pitch_cdeg=11500
+        planner._publish(CompetitionOutput(m.state,m._safe_zone_acquire_command(),'old rollback'))
+        assert planner.protocol_action==31237 and not m.safe_zone_visual_locked
+        rejected=StmSnapshot(mode=10,flags=2,age_ms=0,camera_pitch_cdeg=11500,
+            context_valid=True,task_id=24051,action_id=31236,accepted_command=CMD_ENTER_SAFE_ZONE,
+            action_status=5,rejected_action_id=31237)
+        view=VisionSnapshot(frame_sequence=101)
+        pose=PoseSnapshot(True,-.15,.54,90,0)
+        for unrelated in (replace(rejected,task_id=24052),replace(rejected,rejected_action_id=31235),
+                          replace(rejected,action_status=1)):
+            assert planner._reconcile_safe_zone_rejection(view,pose,unrelated,1.1) is None
+        out=planner._output_for_cycle(view,pose,rejected,False,1.2)
+        assert out.event=='safe_zone_request_reconciled' and out.command==enter
+        assert m.enter_command_published and m.enter_command_accepted and m.safe_zone_visual_locked
+        assert m.state==CompetitionState.ENTER_SAFE_ZONE and m.carried_manifest==('green_supply',)
+        planner._publish(out)
+        assert planner.protocol_action==31236 and planner.protocol_action_cursor==31237
+        assert (root/'command').read_bytes()[19:27]==enter.to_frame(0)[4:12]
+        again=planner._output_for_cycle(view,pose,rejected,False,1.3)
+        assert again.command==enter and again.event!='safe_zone_request_reconciled'
+        planner._publish(again);assert planner.protocol_action==31236
+        finished=m._finish_delivery(rejected,2.,basis='fixture',message='fixture',event='fixture')
+        planner._publish(finished)
+        assert planner.protocol_action==31238  # Never reuse rejected31237.
+
+
+def test_rejected_enter_returns_to_accepted_align_then_rechecks_for_bulldozer():
+    from dataclasses import replace
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE, CMD_BULLDOZER_STEP
+    from state_machine import CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False,bulldozer_enabled=True))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.confirmed_delivery_destination='material'
+        m.state=CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        m.safe_zone_view_pitch_cdeg=11500
+        m._update_safe_zone_visual_target((320,0,960,100),42)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        align=m._safe_zone_visual_align_command()
+        planner._publish(CompetitionOutput(m.state,align,'fixture'))
+        task,action=planner.protocol_task,planner.protocol_action
+        m._set_state(CompetitionState.ENTER_SAFE_ZONE,1.);m.safe_zone_visual_locked=True
+        planner._publish(CompetitionOutput(m.state,m._enter_safe_zone_command(),'fixture'))
+        denied=planner.protocol_action
+        status=StmSnapshot(mode=10,flags=2,age_ms=0,camera_pitch_cdeg=11500,context_valid=True,
+            task_id=task,action_id=action,accepted_command=CMD_ALIGN_SAFE_ZONE,action_status=5,
+            rejected_action_id=denied)
+        view=VisionSnapshot(frame_sequence=43,safe_bbox=(320,0,960,100))
+        p=PoseSnapshot(True,-.15,.54,90,0)
+        restored=planner._output_for_cycle(view,p,status,False,1.1)
+        assert restored.event=='safe_zone_request_reconciled' and restored.command==align
+        assert not m.enter_command_published and not m.enter_command_accepted
+        planner._publish(restored)
+        assert planner.protocol_action==action and planner.protocol_action_cursor==denied
+        waiting=planner._output_for_cycle(view,p,status,False,1.2)
+        assert waiting.state==CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        planner._publish(waiting)
+        done=replace(status,mode=11,action_status=3,rejected_action_id=0)
+        corridor=planner._output_for_cycle(replace(view,frame_sequence=44),p,done,False,1.3)
+        assert corridor.state==CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+        planner._publish(corridor)
+        obstacle=replace(view,frame_sequence=45,safe_corridor_obstacle_class='danger_cyan',
+            safe_corridor_polygon=((201,727),(1067,727),(1067,100),(201,100)))
+        swept=planner._output_for_cycle(obstacle,p,done,False,1.4)
+        assert swept.state==CompetitionState.OBSTACLE_ROUTE and swept.command.opcode==CMD_BULLDOZER_STEP
+        planner._publish(swept)
+        assert planner.protocol_action!=denied
 
 
 def test_locked_single_target_keeps_whole_claw_audit_in_every_view():

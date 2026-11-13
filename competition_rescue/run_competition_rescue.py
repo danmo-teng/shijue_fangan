@@ -59,6 +59,8 @@ from run_yolo_x5 import (  # noqa: E402
 from protocol import (  # noqa: E402
     CMD_ABORT,
     CMD_ALIGN_SAFE_ZONE,
+    CMD_ENTER_SAFE_ZONE,
+    CMD_BULLDOZER_STEP,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
@@ -1436,6 +1438,7 @@ class CompetitionPlanner:
         self.protocol_vision_frame = 0
         self.protocol_vision = VisionSnapshot()
         self.protocol_last_output: CompetitionOutput | None = None
+        self.published_safe_commands: dict[int, tuple[int, int, CommandRequest]] = {}
         self.published_audit_handoff = None
         self.running = False
         self.error: Exception | None = None
@@ -1699,6 +1702,7 @@ class CompetitionPlanner:
         command = output.command or CommandRequest(CMD_HOLD)
         overlay = command.opcode in {CMD_HOLD, CMD_PAUSE}
         if not overlay and self.protocol_task_generation != self.mission.task_generation:
+            self.published_safe_commands.clear()
             self.protocol_task_generation = self.mission.task_generation
             if self.mission.disperse_attempts == 0 and not self.mission.recovery_task_locked:
                 self.protocol_task_cursor = (self.protocol_task_cursor + 1) & 0xFFFF
@@ -1761,6 +1765,13 @@ class CompetitionPlanner:
             } else 0,
         )
         write_command_frame(self.command_path, context + command.to_frame(self.sequence))
+        if command.opcode in {CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE}:
+            self.published_safe_commands[command.opcode] = (
+                self.protocol_task, self.protocol_action, command)
+        if command.opcode == CMD_ENTER_SAFE_ZONE:
+            # IPC publication commits the request; it is not an MCU ACCEPT or
+            # proof of motion. Latch before the next image/late status arrives.
+            self.mission.enter_command_published = True
         if (command.opcode == CMD_CARGO_AUDIT and command.audit is not None and
                 command.audit.stable and command.audit == self.mission.pending_audit_payload and
                 command.audit_vision_frame == self.mission.pending_audit_frame_sequence and
@@ -1871,6 +1882,73 @@ class CompetitionPlanner:
             return (state == CompetitionState.RETURN_CENTER and stm.context_valid and
                     stm.accepted_command == CMD_RETURN_CENTER and bool(stm.action_status & 1))
         return False
+
+    def _reconcile_safe_zone_rejection(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        pending = self.protocol_last_output.command if self.protocol_last_output else None
+        if (not stm.context_valid or stm.fault or not stm.action_status & 4 or
+                not stm.action_status & 1 or stm.task_id != self.protocol_task or
+                stm.rejected_action_id != self.protocol_action or
+                stm.action_id == self.protocol_action or pending is None or
+                self.mission.selected_batch is None or self.mission.selected_batch.initial_stash):
+            return None
+        states = {CompetitionState.ALIGN_SAFE_ZONE_BY_POSE, CompetitionState.ACQUIRE_SAFE_ZONE,
+                  CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX, CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                  CompetitionState.WAIT_SAFE_ZONE_CLEAR, CompetitionState.ENTER_SAFE_ZONE,
+                  CompetitionState.OBSTACLE_ROUTE}
+        if self.mission.state not in states:
+            return None
+        if pending.opcode == CMD_BULLDOZER_STEP:
+            route = self.mission.obstacle_route
+            if route is None or route.index != 0:
+                return None  # Do not reinterpret an already executing route.
+        elif pending.opcode not in {CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE}:
+            return None
+        if stm.accepted_command == CMD_ENTER_SAFE_ZONE:
+            if stm.mode not in {10, 11, 12, 15}:
+                return None
+            restored_state = CompetitionState.ENTER_SAFE_ZONE
+        elif stm.accepted_command == CMD_ALIGN_SAFE_ZONE and pending.opcode in {
+                CMD_ENTER_SAFE_ZONE, CMD_BULLDOZER_STEP} and stm.mode in {10, 11}:
+            restored_state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        else:
+            return None
+        saved = self.published_safe_commands.get(stm.accepted_command)
+        if saved is None or saved[:2] != (stm.task_id, stm.action_id):
+            return None  # Never guess the payload/flags of an unrelated action.
+        command = saved[2]
+        rejected_action = self.protocol_action
+        self.protocol_accepted = stm
+        self._adopt_recovery_context()
+        # _adopt keeps the allocation high-water mark. Restore this exact key
+        # so publishing does not allocate a new action or restart the MCU.
+        self.protocol_action_key = (command.opcode, command.flags, None, None, None)
+        self.protocol_vision_frame = command.source_vision_frame or 0
+        if self.mission.state == CompetitionState.OBSTACLE_ROUTE:
+            self.mission.obstacle_route = None  # The rejected first step never executed.
+        if restored_state == CompetitionState.ENTER_SAFE_ZONE:
+            self.mission._set_state(restored_state, now)
+            self.mission.enter_command_published = True
+            self.mission.enter_command_accepted = True
+            self.mission.safe_zone_visual_locked = bool(command.flags & CMD_VISUAL_CORRECTION_VALID)
+        else:
+            visual = bool(command.flags & CMD_VISUAL_CORRECTION_VALID)
+            if not visual:
+                restored_state = CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+            self.mission._set_state(restored_state, now)
+            self.mission.safe_zone_visual_locked = False
+            self.mission.safe_zone_view_pitch_cdeg = 11500 if command.arg_b == 11500 else 12000
+            self.mission.safe_zone_visual_frame = command.source_vision_frame or 0
+            self.mission.safe_zone_visual_pixel_error = command.arg_a
+            self.mission.safe_zone_visual_align_command_accepted = visual
+            self.mission.safe_zone_align_command_accepted = not visual
+        output = CompetitionOutput(restored_state, command,
+            f"请求{rejected_action}被拒绝，续接下位已接受的{command.opcode:#04x}/action={stm.action_id}",
+            self.mission.selected_batch, event="safe_zone_request_reconciled",
+            reason="safe_zone_request_reconciled")
+        self.protocol_last_output = output
+        return output
 
     def _reconcile_transport_rejection(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
@@ -2128,6 +2206,9 @@ class CompetitionPlanner:
             )
         matches = (stm.context_valid and stm.task_id == self.protocol_task and
                    stm.action_id == self.protocol_action)
+        reconciled = self._reconcile_safe_zone_rejection(vision, pose, stm, now)
+        if reconciled is not None:
+            return reconciled
         reconciled = self._reconcile_transport_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
@@ -2496,6 +2577,7 @@ class CompetitionPlanner:
             "staging_camera_pitch_cdeg": stm.camera_pitch_cdeg,
             "enter_initial_ack": self.mission.enter_initial_ack,
             "enter_command_accepted": self.mission.enter_command_accepted,
+            "enter_command_published": self.mission.enter_command_published,
             "task_complete_initial_ack": self.mission.task_complete_initial_ack,
             "return_initial_ack": self.mission.return_initial_ack,
             "return_relay_tx_baseline": self.mission.return_relay_tx_baseline,

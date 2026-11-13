@@ -587,6 +587,7 @@ class CompetitionMapApp(RescueMapApp):
             "--reset-request", str(self.reset_request_path),
             "--reset-session-token", self.reset_session_token,
             "--window-mode", "normal",
+            "--enable-bulldozer",
             "--startup-timeout", f"{max(60.0, self.relocalization_timeout_s + 20.0):.3f}",
         ]
         if self.operator is not None:

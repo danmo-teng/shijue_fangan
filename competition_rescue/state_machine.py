@@ -915,6 +915,7 @@ class CompetitionMission:
         self.delivery_counted_for_batch = False
         self.enter_tx_baseline: int | None = None
         self.enter_command_accepted = False
+        self.enter_command_published = False
 
     def _set_state(self, state: CompetitionState, now: float) -> None:
         if self.state != state:
@@ -1008,6 +1009,7 @@ class CompetitionMission:
             }:
                 self.enter_tx_baseline = None
                 self.enter_command_accepted = False
+                self.enter_command_published = False
             if state == CompetitionState.SEARCH:
                 self.search_yaw_accum_deg = 0.0
                 self.search_last_yaw_deg = None
@@ -4328,6 +4330,7 @@ class CompetitionMission:
         self.enter_initial_ack = None
         self.enter_tx_baseline = None
         self.enter_command_accepted = False
+        self.enter_command_published = False
         self.task_complete_initial_ack = None
         self.return_initial_ack = None
         self.return_relay_tx_baseline = None
@@ -6933,10 +6936,6 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
-            if (stm.mode in {STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_NAVIGATE} and
-                    stm.gripper_closed and
-                    vision.safe_corridor_obstacle_class is not None):
-                return self._blocked_corridor_output(vision, stm, now, pose=pose)
             self.enter_command_accepted = self._opcode_acceptance_seen(
                 stm,
                 CMD_ENTER_SAFE_ZONE,
@@ -6944,6 +6943,14 @@ class CompetitionMission:
                 self.enter_initial_ack,
                 self.enter_command_accepted,
             )
+            # A queued ENTER may already be executing while status still says
+            # mode10/11 and closed claws. Never replace that committed action
+            # with sweep/ALIGN on a later image; the corridor was checked before
+            # publishing. An unsubmitted decision can still use the new image.
+            if (not self.enter_command_published and not self.enter_command_accepted and
+                    stm.mode in {STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_NAVIGATE} and
+                    stm.gripper_closed and vision.safe_corridor_obstacle_class is not None):
+                return self._blocked_corridor_output(vision, stm, now, pose=pose)
             if (
                 stm.fresh and
                 stm.mode == STM_MODE_RAM_VERIFY and
