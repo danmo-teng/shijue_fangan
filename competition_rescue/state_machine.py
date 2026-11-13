@@ -3213,7 +3213,7 @@ class CompetitionMission:
     def _side_is_disperse_candidate(self, audit: CargoAudit, side: str) -> bool:
         """A side worth separating is not permission to transport its contents."""
         if (self.selected_batch is None or side not in {"left", "right"} or
-                audit.danger_present or audit.unknown_present or
+                (audit.unknown_present and not audit.danger_present) or
                 audit.total_count != audit.left_count + audit.right_count):
             return False
         category = audit.left_class if side == "left" else audit.right_class
@@ -3221,6 +3221,13 @@ class CompetitionMission:
         green = self._side_green_count(audit, side)
         invalid = audit.left_invalid if side == "left" else audit.right_invalid
         composition = dict(audit.left_class_counts if side == "left" else audit.right_class_counts)
+        if audit.danger_present:
+            # A dangerous side may be physically separated; it is still NEVER
+            # legal transport. Known histogram guides a mixed-side attempt.
+            counts = composition or {category: count}
+            eligible = ({'green_supply'} if not self.first_common_delivered else
+                        {'green_supply','core_black','mixed_material','injured_orange'})
+            return count > 0 and any(counts.get(name,0)>0 for name in eligible)
         known_mixture = (
             category == "unknown" and count > 1 and
             sum(composition.values()) == count and
@@ -3329,6 +3336,20 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
+        keep = self._preferred_keep_side(audit)
+        if keep is not None and stm.mode != STM_MODE_RECOVERY_WAIT and not self._separation_limit_reached():
+            self.cluster_keep_side = keep
+            self.post_grab_audit_active = False
+            self.post_grab_camera_ready = None
+            if self.state == CompetitionState.TRANSPORT_AUDIT:
+                self.transport_separation_active = True
+                self.transport_audit_handoff_active = False
+                self._reset_safe_zone_alignment()
+                self._reset_delivery_evidence()
+                self._clear_pending_audit()
+                self.transport_audit_command = None
+                self.transport_audit_value = None
+            return self._start_disperse(audit, stm, now, danger_separation=True)
         # F407 task_release_command_valid only accepts RELEASE_BOTH while
         # cargo_recheck_pending (after RELEASE/YIELD or either DISPERSE).
         side = "both" if self.cargo_recheck_pending else self._danger_release_side(audit)
@@ -5252,12 +5273,12 @@ class CompetitionMission:
         self.target_last_class = "green_supply"
 
     def _start_disperse(
-        self, audit: CargoAudit, stm: StmSnapshot, now: float
+        self, audit: CargoAudit, stm: StmSnapshot, now: float, *, danger_separation: bool = False
     ) -> CompetitionOutput:
         self._review_separation_result(audit)
         if self._separation_limit_reached():
             return self._start_capture_abandon(audit, stm, now, limit_reached=True)
-        if audit.danger_present:
+        if audit.danger_present and not danger_separation:
             return self._start_danger_release(audit, stm, now)
         self._prefer_green_batch(audit)
         # Use this audit's stable side. The previous accepted side tracks the
@@ -5325,6 +5346,7 @@ class CompetitionMission:
             )
         if (
             not self.disperse_command_accepted and
+            self.disperse_context == 'first_green_bump' and
             self._vision_fresh(vision, now) and
             vision.capture_audit is not None and
             vision.capture_audit.danger_present and

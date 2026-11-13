@@ -82,6 +82,8 @@ def parse_args() -> argparse.Namespace:
         help="fusion uses T265 plus encoders; t265 outputs T265 directly with wheel reference logs",
     )
     parser.add_argument("--localization-json", type=Path)
+    parser.add_argument("--disk-control-ipc", action="store_true",
+                        help="正式入口对照调试：实时交换文件使用原磁盘路径")
     parser.add_argument(
         "--localization-log",
         type=Path,
@@ -218,6 +220,8 @@ class RescueMapApp:
             raise ValueError("T265 translation scale must be in (0,2]")
         initial_pose(self.zone, self.corner_offset_m)  # validates parameters
         self.localization_json = options.localization_json or (RUNTIME / "localization_result.json")
+        self.uart_command_path = RUNTIME / "uart_command.bin"
+        self.stm_status_path = RUNTIME / "stm32_status.json"
         self.localization_log = Path(
             getattr(options, "localization_log", None) or (RUNTIME / "localization_debug.csv")
         )
@@ -614,8 +618,8 @@ class RescueMapApp:
                 command = self.localization_command()
                 self.localization_json.unlink(missing_ok=True)
                 self.localization_log.unlink(missing_ok=True)
-                (RUNTIME / "uart_command.bin").unlink(missing_ok=True)
-                (RUNTIME / "stm32_status.json").unlink(missing_ok=True)
+                (self.uart_command_path).unlink(missing_ok=True)
+                (self.stm_status_path).unlink(missing_ok=True)
                 (RUNTIME / "localization_events.jsonl").unlink(missing_ok=True)
                 self.localization_process = self.start_owned_process(command, PROJECT_ROOT / "localization")
                 self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
@@ -660,8 +664,8 @@ class RescueMapApp:
             self.archive_previous_runtime()
             self.runtime_archived_on_reset = True
         for path in (
-            self.localization_json, RUNTIME / "stm32_status.json",
-            RUNTIME / "uart_command.bin", RUNTIME / "mission_diagnostics.json",
+            self.localization_json, self.stm_status_path,
+            self.uart_command_path, RUNTIME / "mission_diagnostics.json",
             RUNTIME / "competition_diagnostics.json", RUNTIME / "delivery_contact_pose.json",
         ):
             path.unlink(missing_ok=True)
@@ -681,12 +685,12 @@ class RescueMapApp:
             self.localization_log,
             RUNTIME / "session.json",
             RUNTIME / "localization.conf",
-            RUNTIME / "stm32_status.json",
+            self.stm_status_path,
             RUNTIME / "localization_events.jsonl",
             RUNTIME / "mission_diagnostics.json",
             RUNTIME / "delivery_contact_pose.json",
             RUNTIME / "delivery_observation.jsonl",
-            RUNTIME / "uart_command.bin",
+            self.uart_command_path,
         )
         existing = [path for path in candidates if path.is_file()]
         if not existing:
@@ -716,8 +720,8 @@ class RescueMapApp:
             "--tx-rate", str(self.options.tx_rate),
         ]
         command += [
-            "--command-file", str(RUNTIME / "uart_command.bin"),
-            "--stm-status", str(RUNTIME / "stm32_status.json"),
+            "--command-file", str(self.uart_command_path),
+            "--stm-status", str(self.stm_status_path),
             "--events", str(RUNTIME / "localization_events.jsonl"),
         ]
         if self.t265_map_enabled:

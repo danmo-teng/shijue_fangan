@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import tempfile
 import shutil
 import subprocess
 import sys
@@ -41,6 +42,16 @@ class CompetitionMapApp(RescueMapApp):
 
     def __init__(self, options) -> None:
         super().__init__(options)
+        self.control_ipc_dir = RUNTIME
+        if not getattr(options, "disk_control_ipc", False):
+            try:
+                self.control_ipc_dir = Path(tempfile.mkdtemp(prefix="rdk-rescue-control-", dir="/dev/shm"))
+            except OSError:
+                pass  # Continue with the established paths; never add a start interlock.
+        if self.control_ipc_dir != RUNTIME:
+            self.localization_json = self.control_ipc_dir / "localization_result.json"
+            self.uart_command_path = self.control_ipc_dir / "uart_command.bin"
+            self.stm_status_path = self.control_ipc_dir / "stm32_status.json"
         self.reset_request_path = RUNTIME / "startup_reset_request.json"
         self.reset_session_token = None
         self.dynamic_localization = getattr(options, "dynamic_localization", False)
@@ -271,6 +282,9 @@ class CompetitionMapApp(RescueMapApp):
         config = {k.strip(): v.strip() for k, v in config.items()}
         self.wheel_input = CompetitionWheelInput(run_dir, config, session_id)
         metadata = read_json(RUNTIME / "session.json")
+        metadata['control_ipc'] = dict(pose=str(self.localization_json),
+            stm_status=str(self.stm_status_path),command=str(self.uart_command_path),
+            memory_backed=self.control_ipc_dir!=RUNTIME,persistent_logs=str(RUNTIME))
         # The old formal template's expected F407 identity is not actual F405.
         for key in ("expected_lower_firmware", "expected_lower_mode"):
             metadata.pop(key, None)
@@ -577,8 +591,8 @@ class CompetitionMapApp(RescueMapApp):
             str(PROJECT_ROOT / "competition_rescue/run_competition_rescue.sh"),
             "--session", str(RUNTIME / "session.json"),
             "--pose", str(self.localization_json),
-            "--stm-status", str(RUNTIME / "stm32_status.json"),
-            "--command-file", str(RUNTIME / "uart_command.bin"),
+            "--stm-status", str(self.stm_status_path),
+            "--command-file", str(self.uart_command_path),
             "--config", str(PROJECT_ROOT / "vision/config/rescue_vision.json"),
             "--homography", str(PROJECT_ROOT / "vision/config/homography.txt"),
             "--diagnostics", str(RUNTIME / "competition_diagnostics.json"),

@@ -3419,6 +3419,38 @@ def test_wall_supported_source_arbitration():
     print('PASS wall-supported arbitration / one-axis ambiguity / capture-time source rebase / confidence=3 jump')
 
 
+def test_phase_coordinate_jump_and_live_wall_correction():
+    """Recorded SDK frames; no SDK/UART. A paused wheel is not a paused radar."""
+    import math
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime
+    from lidar_yaw_debug.motion_source import MotionSource
+    samples=json.loads((Path(__file__).resolve().parents[1]/'tests/fixtures/phase_sdk_jump_20261113.json').read_text())
+    ref=dict(pose_origin=[0.,0.],start_center_xy_m=[0.,0.],vio_rotation=0.,yaw_offset=0.,
+             reference_sample_ns=samples[0]['timestamp_monotonic_ns'])
+    native=NativeMotionRuntime(dict(feedback_fd=-1,pose_fd=-1));python=MotionSource()
+    try:
+        native.command('configure',ref);python.configure(ref)
+        native.command('lidar_state',dict(enabled=True,connected=True))
+        native.command('wheel_suppression',dict(suppressed=True,reason='safe_zone_low_speed'))
+        python.set_wheel_suppressed(True,'safe_zone_low_speed');selected=[]
+        for p in samples:
+            native.command('pose',p);python.pose(p)
+            s=native.snapshot(dict(kind='histories'));xy=s['history'][-1][1:3]
+            assert max(abs(a-b) for a,b in zip(xy,list(python.history)[-1][1:3]))<1e-10
+            selected.append(xy)
+        raw=math.hypot(samples[3]['x_m']-samples[2]['x_m'],samples[3]['y_m']-samples[2]['y_m'])
+        step=math.dist(selected[2],selected[3]);assert raw>2 and step<.004
+        assert s['motion_selection']['phase_position_bridges']==1
+        last=native.snapshot();assert last['last']['lidar_corrections_enabled']
+        native.command('apply_wall',dict(revision=last['revision'],scan_id='one-wall-while-wheel-paused',
+            reference_ns=samples[-1]['timestamp_monotonic_ns'],position_observed_axes=['y'],
+            candidate_center_xy_m=[selected[-1][0]+1,selected[-1][1]+.02]))
+        corrected=native.snapshot();assert abs(corrected['offset'][0])<1e-10
+        assert abs(corrected['offset'][1]-.02)<1e-10
+        print('PASS recorded phase jump %.6fm -> %.6fm; radar Y correction remains active'%(raw,step))
+    finally:native.close()
+
+
 def test_native_runtime_motion_source_parity():
     """Same production source handlers, offline; no UART, SDK or motion.
 

@@ -50,6 +50,8 @@ class MotionSource:
         self.last_raw_xy=None
         self.last_tracked_ns=None;self.last_tracked_xy=None
         self.phase_wheel_suppressed=False;self.phase_wheel_reason=''
+        self.phase_restore_wheel_fallback=False;self.phase_position_bridges=0
+        self.phase_previous_frame=None;self.phase_previous_velocity=None
         self.resume_anchor_ns=None;self.resume_anchor_xy=None
         self.wheel_suspect=False
         self.wall_window=None;self.wall_evidence=None
@@ -68,6 +70,7 @@ class MotionSource:
             if suppressed:self.phase_wheel_reason=str(reason);self.reason=str(reason)
             return
         previous_mode=self.mode
+        if suppressed:self.phase_restore_wheel_fallback=previous_mode=='WHEEL_FALLBACK'
         self.phase_wheel_suppressed=suppressed
         self.phase_wheel_reason=str(reason) if suppressed else ''
         selected=(np.asarray(self.history[-1][1:3],float) if self.history else
@@ -93,7 +96,8 @@ class MotionSource:
             self.resume_anchor_ns=max(t,self.wheels[-1][0]) if self.wheels else t
             self.resume_anchor_xy=selected.copy()
             self.anchor=None;self.anchor_wheel=None
-            self.mode='T265_WITH_WHEEL_TAIL';self.reason='phase_exit_rebased'
+            self.mode='WHEEL_FALLBACK' if self.phase_restore_wheel_fallback else 'T265_WITH_WHEEL_TAIL'
+            self.reason='phase_exit_rebased'
             self._process()
         else:
             self.mode='T265_NO_WHEEL_REFERENCE';self.reason='no_measured_wheel_reference'
@@ -134,6 +138,25 @@ class MotionSource:
         t=int(p['timestamp_monotonic_ns']);xy=np.array([p['x_m'],p['y_m']],float)
         if not np.isfinite(xy).all():return
         if self.last_raw_ns is not None and t<=self.last_raw_ns:return
+        velocity=np.asarray([p['vx_local_mps'],p['vy_local_mps']],float) if (
+            'vx_local_mps' in p and 'vy_local_mps' in p) else None
+        if (self.phase_wheel_suppressed and p['tracker_confidence']>0 and
+                self.last_confidence is not None and self.last_confidence>0 and
+                self.last_raw_ns is not None and self.phase_previous_velocity is not None and
+                self.phase_previous_frame is not None and
+                p.get('frame_number')==self.phase_previous_frame+1 and
+                velocity is not None and np.isfinite(velocity).all()):
+            dt=(t-self.last_raw_ns)/1e9
+            step=xy-self.last_raw_xy
+            physical=.5*(velocity+self.phase_previous_velocity)*dt
+            if _norm2(step-physical)>.05+10.*dt*dt:
+                self.bias+=physical-step
+                self.phase_position_bridges+=1;self.phase_restore_wheel_fallback=True
+                self.events.append(dict(event='phase_SDK_coordinate_jump_bridged',sample_monotonic_ns=t,
+                    raw_step_m=step.tolist(),velocity_step_m=physical.tolist(),
+                    bridge_count=self.phase_position_bridges,raw_pose_preserved=True))
+        self.phase_previous_frame=p.get('frame_number')
+        self.phase_previous_velocity=(velocity.copy() if velocity is not None and np.isfinite(velocity).all() else None)
         raw_step=(_norm2(xy-self.last_raw_xy) if self.mode=='T265_PRIMARY_WHEEL_SUSPECT' and self.last_raw_xy is not None else 0.)
         self.last_raw_ns=t;self.last_raw_xy=xy;self.last_confidence=p['tracker_confidence']
         if p['tracker_confidence']>0:self.last_tracked_ns=t;self.last_tracked_xy=xy.copy()
@@ -400,6 +423,8 @@ class MotionSource:
             wheel_motion_suspect=self.wheel_suspect,wall_motion_evidence=self.wall_evidence,
             phase_wheel_suppressed=self.phase_wheel_suppressed,
             phase_wheel_suppression_reason=self.phase_wheel_reason,
+            phase_position_bridges=self.phase_position_bridges,
+            phase_restore_wheel_fallback=self.phase_restore_wheel_fallback,
             wheel_input_policy=dict(pause_requested=self.wheel_input_paused(),reason=self.wheel_input_reason(),
                 dependency_persists_after_pause=True),
             wheel_and_gyro_are_sdk_dependencies=True,independent_ground_truth=False)

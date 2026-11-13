@@ -1151,7 +1151,8 @@ def test_4071_separation_evidence_and_fault_latch() -> None:
     assert not mission._audit_valid(mixed)
     assert not mission._side_is_disperse_candidate(replace(mixed, class_counts=()), "left")
     assert not mission._side_is_disperse_candidate(replace(mixed, unknown_present=True), "left")
-    assert not mission._side_is_disperse_candidate(replace(mixed, danger_present=True), "left")
+    assert mission._side_is_disperse_candidate(replace(mixed, danger_present=True), "left")
+    assert not mission._audit_valid(replace(mixed,danger_present=True))
     vote_mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     vote_mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
     greens = CargoAudit(left_class="green_supply", right_class="green_supply",
@@ -2376,6 +2377,33 @@ def test_bulldozer_same_zone_pickup_uses_normal_whole_claw_audit_and_returns_for
     assert m.obstacle_route.pickup_role == "original"
 
 
+def test_blue_with_recoverable_cargo_uses_existing_disperse_without_rearming():
+    for side in ('left','right'):
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        a=CargoAudit(left_class='green_supply' if side=='left' else 'danger_cyan',
+            right_class='danger_cyan' if side=='left' else 'green_supply',
+            left_count=1,right_count=1,total_count=2,danger_present=True,
+            left_green_count=int(side=='left'),right_green_count=int(side=='right'),stable=True)
+        s=StmSnapshot(mode=21,flags=1,age_ms=0,camera_pitch_cdeg=14000)
+        out=m._start_danger_release(a,s,1.)
+        assert out.command.opcode==CMD_DISPERSE_PILE and out.command.flags&64
+        assert bool(out.command.flags&128)==(side=='right')
+        assert not m._audit_valid(a)
+        epoch=m.separation_request_epoch
+        waiting=m._disperse_output(VisionSnapshot(frame_sequence=10,capture_audit=a),s,1.1)
+        assert waiting.command==out.command and m.separation_request_epoch==epoch
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    same=CargoAudit(left_class='unknown',left_count=2,right_count=0,total_count=2,
+        left_green_count=1,danger_present=True,left_invalid=True,
+        left_class_counts=(('green_supply',1),('danger_cyan',1)),
+        class_counts=(('green_supply',1),('danger_cyan',1)),stable=True)
+    assert m._start_danger_release(same,s,2.).command.opcode==CMD_DISPERSE_PILE
+    only=CargoAudit(left_class='danger_cyan',left_count=1,total_count=1,danger_present=True,stable=True)
+    assert not m._side_is_disperse_candidate(only,'left')  # No useful cargo to retain.
+
+
 def test_single_anchor_audits_actual_load_before_grab_and_separates_overload():
     from protocol import CMD_CARGO_AUDIT, CMD_DISPERSE_PILE, CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT
     for danger in (False, True):
@@ -2404,8 +2432,35 @@ def test_single_anchor_audits_actual_load_before_grab_and_separates_overload():
             relay_last_mission_payload=tuple(out.command.to_frame(0)[4:12]))
         decided = m.step(replace(view, frame_sequence=5, observed_monotonic_s=1.8),
                          PoseSnapshot(valid=True), ready, 1.8)
-        if danger:
-            assert decided.state == CompetitionState.INVALID_RELEASE  # Existing danger separation/release.
-        else:
-            assert decided.command.opcode == CMD_DISPERSE_PILE
+        assert decided.command.opcode == CMD_DISPERSE_PILE
         assert decided.command.opcode not in (CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT)
+
+
+def test_blue_separation_after_closed_and_transport_audit_keeps_original_handoff():
+    audit = CargoAudit(left_class="danger_cyan", right_class="green_supply",
+        left_count=1, right_count=1, right_green_count=1, total_count=2,
+        danger_present=True)
+    for mode in (23, 48):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+        status = replace(stm(mode=mode, flags=3), camera_pitch_cdeg=14000)
+        if mode == 23:
+            m.post_grab_audit_active = True
+            m._set_state(CompetitionState.POST_GRAB_AUDIT, 1.)
+        else:
+            m._begin_transport_audit(VisionSnapshot(frame_sequence=1), pose(), status, 1.)
+        for frame in (2, 3, 4):
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=1.+frame*.15,
+                capture_audit=audit, capture_observation_valid=True)
+            out = m.step(view, pose(), status, 1.+frame*.15)
+            assert out.command.opcode == CMD_CARGO_AUDIT  # No separation before the existing ACK.
+        accepted = replace(relay_stm(out, mode=mode, flags=67), camera_pitch_cdeg=14000,
+            context_valid=True, context_matches=True, accepted_command=CMD_CARGO_AUDIT,
+            action_status=1)
+        out = m.step(replace(view, frame_sequence=5, observed_monotonic_s=1.8),
+            pose(), accepted, 1.8)
+        assert out.command.opcode == CMD_DISPERSE_PILE and out.command.flags & CMD_TARGET_RIGHT
+        assert not m.post_grab_audit_active and not m._audit_valid(audit)
+        if mode == 48:
+            assert m.transport_separation_active and not m.transport_audit_handoff_active
+            assert m.transport_audit_command is None and m.transport_audit_value is None

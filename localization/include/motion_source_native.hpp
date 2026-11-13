@@ -88,6 +88,10 @@ public:
     NativeMotionValue<Vec2> last_tracked_xy, resume_anchor_xy;
     bool phase_wheel_suppressed = false;
     std::string phase_wheel_reason;
+    bool phase_restore_wheel_fallback = false;
+    std::uint64_t phase_position_bridges = 0;
+    NativeMotionValue<std::uint64_t> phase_previous_frame;
+    NativeMotionValue<Vec2> phase_previous_velocity;
     bool wheel_suspect = false;
     NativeMotionValue<WallWindow> wall_window;
     Json wall_evidence = nullptr;

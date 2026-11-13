@@ -1,0 +1,196 @@
+{
+  "sensor_source": "rescue_map/runtime/history/competition_wheel_input/20261113_204813_competition_wheel",
+  "business_source": "rescue_map/runtime/history/20000101_080034_competition_03/competition_events.jsonl",
+  "sdk_session": "a3935bec6755633aa0a075c4bc428ce6",
+  "round_token": "58ac15cceca21bf0620a245c33e2d355",
+  "round_start_monotonic_ns": 2420499298269,
+  "planner_snapshots": [
+    {
+      "snapshot_monotonic_ns": 2472597505058,
+      "frame_sequence": 1699,
+      "pose": {
+        "valid": true,
+        "x_m": -0.553700142004808,
+        "y_m": 0.607973373108571,
+        "yaw_deg": 2.94249312451172,
+        "age_ms": 18.686674,
+        "wheel_progress_m": null
+      },
+      "command": {
+        "opcode": 20,
+        "flags": 105,
+        "arg_a": 352,
+        "arg_b": 9000,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "upper_state": "OBSTACLE_ROUTE",
+      "reason": "bulldozer_left_to_sweep"
+    },
+    {
+      "snapshot_monotonic_ns": 2473736141074,
+      "frame_sequence": 1732,
+      "pose": {
+        "valid": true,
+        "x_m": -0.553700142004808,
+        "y_m": 0.607973373108571,
+        "yaw_deg": 2.94249312451172,
+        "age_ms": 18.686674,
+        "wheel_progress_m": null
+      },
+      "command": {
+        "opcode": 20,
+        "flags": 105,
+        "arg_a": 352,
+        "arg_b": 9000,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "upper_state": "OBSTACLE_ROUTE",
+      "reason": "bulldozer_left_to_sweep"
+    },
+    {
+      "snapshot_monotonic_ns": 2698920961465,
+      "frame_sequence": 7050,
+      "pose": {
+        "valid": true,
+        "x_m": -0.558280533470573,
+        "y_m": 0.503900079008537,
+        "yaw_deg": 359.73941875935,
+        "age_ms": 12.745798,
+        "wheel_progress_m": null
+      },
+      "command": {
+        "opcode": 20,
+        "flags": 105,
+        "arg_a": 456,
+        "arg_b": 9000,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "upper_state": "OBSTACLE_ROUTE",
+      "reason": "bulldozer_left_to_sweep"
+    },
+    {
+      "snapshot_monotonic_ns": 2703815565368,
+      "frame_sequence": 7238,
+      "pose": {
+        "valid": true,
+        "x_m": -0.558280533470573,
+        "y_m": 0.503900079008537,
+        "yaw_deg": 359.73941875935,
+        "age_ms": 12.745798,
+        "wheel_progress_m": null
+      },
+      "command": {
+        "opcode": 20,
+        "flags": 105,
+        "arg_a": 456,
+        "arg_b": 9000,
+        "aux": 0,
+        "audit": null,
+        "audit_vision_frame": null,
+        "source_vision_frame": null
+      },
+      "upper_state": "OBSTACLE_ROUTE",
+      "reason": "bulldozer_left_to_sweep"
+    }
+  ],
+  "native_control_packets": [
+    {
+      "timestamp_monotonic_ns": 2472597194144,
+      "packet_id": 9800,
+      "pose": {
+        "x_m": -0.550744917879153,
+        "y_m": 0.786393882463247,
+        "yaw_deg": 0.764000000001723
+      },
+      "current_wall_axes": [
+        "x",
+        "y"
+      ],
+      "lidar_corrections_enabled": true,
+      "motion_source": "T265_PHASE_NO_WHEEL"
+    },
+    {
+      "timestamp_monotonic_ns": 2473698441982,
+      "packet_id": 10079,
+      "pose": {
+        "x_m": -0.544938146862918,
+        "y_m": 1.1494521861609,
+        "yaw_deg": 0.989907168336992
+      },
+      "current_wall_axes": [
+        "x",
+        "y"
+      ],
+      "lidar_corrections_enabled": true,
+      "motion_source": "T265_PHASE_NO_WHEEL"
+    },
+    {
+      "timestamp_monotonic_ns": 2474499349754,
+      "packet_id": 10309,
+      "pose": {
+        "x_m": -0.537728000526201,
+        "y_m": 1.36466227444549,
+        "yaw_deg": 357.358000000002
+      },
+      "current_wall_axes": [
+        "y"
+      ],
+      "lidar_corrections_enabled": true,
+      "motion_source": "T265_PHASE_NO_WHEEL"
+    },
+    {
+      "timestamp_monotonic_ns": 2698900997651,
+      "packet_id": 63361,
+      "pose": {
+        "x_m": -0.559096265901269,
+        "y_m": 0.652065076063629,
+        "yaw_deg": 0.192480330519004
+      },
+      "current_wall_axes": [
+        "x",
+        "y"
+      ],
+      "lidar_corrections_enabled": true,
+      "motion_source": "T265_PHASE_NO_WHEEL"
+    },
+    {
+      "timestamp_monotonic_ns": 2700497849322,
+      "packet_id": 63803,
+      "pose": {
+        "x_m": -0.554027486216312,
+        "y_m": 1.18479104451248,
+        "yaw_deg": 1.82237995076633
+      },
+      "current_wall_axes": [
+        "x",
+        "y"
+      ],
+      "lidar_corrections_enabled": true,
+      "motion_source": "T265_PHASE_NO_WHEEL"
+    },
+    {
+      "timestamp_monotonic_ns": 2703100797158,
+      "packet_id": 64404,
+      "pose": {
+        "x_m": -0.54841390811571,
+        "y_m": 1.36588046934119,
+        "yaw_deg": 357.589000000002
+      },
+      "current_wall_axes": [
+        "y"
+      ],
+      "lidar_corrections_enabled": true,
+      "motion_source": "T265_PHASE_NO_WHEEL"
+    }
+  ],
+  "note": "Replay stores latest planner state, not exposure-synchronized pose; frozen age_ms is itself stale. No independent ground truth."
+}

@@ -1658,7 +1658,8 @@ def test_formal_dynamic_start_wiring():
                 assert app.dynamic.field_start == dict(x_m=1.35,y_m=1.35,yaw_deg=45.)
                 assert cmd.count('--uart') == 1 and cmd[cmd.index('--uart')+1] == '/dev/ttyS1'
                 assert cmd[cmd.index('--baud')+1] == '921600'
-                assert cmd[cmd.index('--dynamic-pose-output')+1] == str(runtime/'pose.json')
+                assert cmd[cmd.index('--dynamic-pose-output')+1] == str(app.localization_json)
+                assert app.control_ipc_dir.parent == Path('/dev/shm')
                 assert Path(cmd[cmd.index('--output')+1]).name == 'raw_t265_result.json'
                 assert '--debug-pose-socket' in cmd and '--wheel-feedback-socket' in cmd
                 assert app.dynamic.native_feedback and app.dynamic.radar.feedback_socket.fileno()>=0
@@ -1666,6 +1667,11 @@ def test_formal_dynamic_start_wiring():
                 assert cmd[cmd.index('--motion-feedback-socket')+1]=='@'+app.dynamic.radar.feedback_address[1:]
                 vision = app.vision_command()
                 assert vision.count('--enable-bulldozer') == 1
+                for key in ('--command-file','--stm-status'):
+                    assert cmd[cmd.index(key)+1] == vision[vision.index(key)+1]
+                    assert Path(cmd[cmd.index(key)+1]).parent == app.control_ipc_dir
+                assert vision[vision.index('--pose')+1] == str(app.localization_json)
+                assert Path(vision[vision.index('--events-log')+1]).parent == runtime
                 assert vision[vision.index('--localization-wheel-policy-socket')+1] == '@'+app.dynamic.wheel_policy_address[1:]
                 assert vision[vision.index('--localization-wheel-policy-session')+1] == app.dynamic.session_id
                 # Parent diagnostics must not resend the direct raw 07/08 stream.
@@ -2578,6 +2584,43 @@ def test_rejected_enter_returns_to_accepted_align_then_rechecks_for_bulldozer():
         assert swept.state==CompetitionState.OBSTACLE_ROUTE and swept.command.opcode==CMD_BULLDOZER_STEP
         planner._publish(swept)
         assert planner.protocol_action!=denied
+
+
+def test_closed_partial_orange_is_mixed_evidence_not_single_injury_permission():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois,split_capture_roi
+    from state_machine import CargoBatch,TrackedCargo
+    poly=((100,300),(1180,300),(1180,950),(100,950))
+    roi=CaptureRois(poly,*split_capture_roi(poly))
+    green=TrackedCargo(1,'green_supply',.9,(500,320,200,200),hits=5)
+    orange=TrackedCargo(2,'injured_orange',.9,(600,100,200,250),hits=5)
+    far=replace(orange,bbox=(900,100,200,250))
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'));m.state=CompetitionState.POST_GRAB_AUDIT
+    status=StmSnapshot(mode=23,flags=3,age_ms=0,camera_pitch_cdeg=14000)
+    def view(items,s):
+        with patch.object(runner_module,'tracked_cargo',return_value=items):
+            return runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,s,m,10,capture_rois=roi)
+    mixed=view((green,orange),status)
+    assert mixed.capture_audit.total_count==2 and mixed.capture_audit.injury_mixed
+    assert not m._audit_valid(mixed.capture_audit)
+    assert any(r['reason']=='partial_orange_mixed_separation_only' for r in mixed.roi_decisions)
+    assert view((green,orange),replace(status,flags=1)).capture_audit.total_count==1
+    assert view((green,far),status).capture_audit.total_count==1
+    assert view((orange,),status).capture_audit.total_count==0
+    assert view((green,replace(orange,inside_safe_zone=True)),status).capture_audit.total_count==1
+    held=runner_module.HeldCargoEvidence()
+    held.observe((green,orange),status,roi,10,'',(orange.track_id,))
+    assert {x.class_name for x,_ in held.missing_incompatible((green,))}=={'injured_orange'}
+    held.observe((green,),replace(status,mode=25),roi,11,'')
+    assert held.missing_incompatible((green,))==()
+    blue=replace(orange,class_name='danger_cyan',bbox=(680,350,120,100))
+    held.observe((green,blue),status,roi,12,'')
+    assert {x.class_name for x,_ in held.missing_incompatible((green,))}=={'danger_cyan'}
+    held.observe((),replace(status,flags=1),roi,13,'')
+    assert held.missing_incompatible((green,))==()
 
 
 def test_locked_single_target_keeps_whole_claw_audit_in_every_view():

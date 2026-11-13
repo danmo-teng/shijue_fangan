@@ -117,6 +117,7 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
         return;
     }
     const auto previous_mode = mode;
+    if (suppressed) phase_restore_wheel_fallback = previous_mode == "WHEEL_FALLBACK";
     phase_wheel_suppressed = suppressed; phase_wheel_reason = suppressed ? why : "";
     NativeMotionValue<Vec2> selected;
     NativeMotionValue<std::int64_t> t;
@@ -147,7 +148,8 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
         resume_anchor_ns = wheels.empty() ? *t : std::max(*t, static_cast<std::int64_t>(wheels.back()[0]));
         resume_anchor_xy = *selected;
         anchor.reset(); anchor_wheel.reset();
-        mode = robust_odometry_enabled && t265_suspect ? "WHEEL_FALLBACK" : "T265_WITH_WHEEL_TAIL";
+        mode = (phase_restore_wheel_fallback || (robust_odometry_enabled && t265_suspect))
+            ? "WHEEL_FALLBACK" : "T265_WITH_WHEEL_TAIL";
         reason = "phase_exit_rebased";
         process();
     } else { mode = "T265_NO_WHEEL_REFERENCE"; reason = "no_measured_wheel_reference"; }
@@ -258,9 +260,36 @@ void NativeMotionSource::pose(const Json &p) {
     const auto t = p.at("timestamp_monotonic_ns").get<std::int64_t>();
     const Vec2 xy{{p.at("x_m").get<double>(), p.at("y_m").get<double>()}};
     if (!finite(xy) || (last_raw_ns && t <= *last_raw_ns)) return;
+    const int confidence = p.at("tracker_confidence").get<int>();
+    const bool have_velocity = p.count("vx_local_mps") && p.count("vy_local_mps");
+    const Vec2 velocity = have_velocity
+        ? Vec2{{p.at("vx_local_mps").get<double>(), p.at("vy_local_mps").get<double>()}}
+        : Vec2{{0., 0.}};
+    if (phase_wheel_suppressed && confidence > 0 && last_confidence && *last_confidence > 0 &&
+            last_raw_ns && last_raw_xy && phase_previous_frame && phase_previous_velocity &&
+            p.count("frame_number") && p.at("frame_number").get<std::uint64_t>() == *phase_previous_frame + 1 &&
+            have_velocity && finite(velocity)) {
+        const double dt = (t - *last_raw_ns) / 1e9;
+        const Vec2 step = subtract(xy, *last_raw_xy);
+        const Vec2 physical{{.5 * (velocity[0] + (*phase_previous_velocity)[0]) * dt,
+                             .5 * (velocity[1] + (*phase_previous_velocity)[1]) * dt}};
+        // Adjacent SDK displacement/velocity consistency, not an age gate.
+        // A conservative 20m/s^2 envelope permits genuine acceleration across
+        // longer capture intervals instead of erasing real travelled distance.
+        if (norm2(subtract(step, physical)) > .05 + 10. * dt * dt) {
+            bias = add(bias, subtract(physical, step));
+            ++phase_position_bridges; phase_restore_wheel_fallback = true;
+            event({{"event", "phase_SDK_coordinate_jump_bridged"}, {"sample_monotonic_ns", t},
+                   {"raw_step_m", step}, {"velocity_step_m", physical},
+                   {"bridge_count", phase_position_bridges}, {"raw_pose_preserved", true}});
+        }
+    }
+    if (p.count("frame_number")) phase_previous_frame = p.at("frame_number").get<std::uint64_t>();
+    else phase_previous_frame.reset();
+    if (have_velocity && finite(velocity)) phase_previous_velocity = velocity;
+    else phase_previous_velocity.reset();
     const double raw_step = mode == "T265_PRIMARY_WHEEL_SUSPECT" && last_raw_xy
         ? norm2(subtract(xy, *last_raw_xy)) : 0.;
-    const int confidence = p.at("tracker_confidence").get<int>();
     last_raw_ns = t; last_raw_xy = xy; last_confidence = confidence;
     if (confidence > 0) { last_tracked_ns = t; last_tracked_xy = xy; }
     if (phase_wheel_suppressed) {
@@ -754,6 +783,8 @@ NativeMotionSource::Json NativeMotionSource::snapshot(bool include_evidence) con
         {"recovery_two_axis_fixes", wall_fixes}, {"t265_translation_rebase_m", bias}, {"policy", policy()},
         {"wheel_motion_suspect", wheel_suspect}, {"wall_motion_evidence", wall_evidence},
         {"phase_wheel_suppressed", phase_wheel_suppressed}, {"phase_wheel_suppression_reason", phase_wheel_reason},
+        {"phase_position_bridges", phase_position_bridges},
+        {"phase_restore_wheel_fallback", phase_restore_wheel_fallback},
         {"wheel_input_policy", {{"pause_requested", wheel_input_paused()},
             {"reason", wheel_input_reason()},
             {"dependency_persists_after_pause", true}}},

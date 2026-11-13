@@ -1394,6 +1394,42 @@ void test_motion_feedback_tap()
     }
 }
 
+void test_phase_motion_source()
+{
+    using S = omni::NativeMotionSource;
+    using J = S::Json;
+    const std::int64_t t = 1000000000;
+    auto init = [&](S &m, double velocity) {
+        m.configure({{"pose_origin", {0., 0.}}, {"start_center_xy_m", {0., 0.}},
+            {"vio_rotation", 0.}, {"yaw_offset", 0.}, {"reference_sample_ns", t}});
+        m.pose({{"timestamp_monotonic_ns",t},{"frame_number",10},{"x_m",0.},{"y_m",0.},
+            {"vx_local_mps",velocity},{"vy_local_mps",0.},{"tracker_confidence",3}});
+        m.history.push_back({{static_cast<double>(t),0.,0.,0.}});
+        m.mode="WHEEL_FALLBACK";
+        m.set_wheel_suppressed(true,"safe_zone_low_speed");
+    };
+    S jump; init(jump,.93);
+    jump.pose({{"timestamp_monotonic_ns",t+5000000},{"frame_number",11},{"x_m",-2.06},{"y_m",0.},
+        {"vx_local_mps",-.03},{"vy_local_mps",0.},{"tracker_confidence",3}});
+    check(near(jump.history.back()[1],.00225) && jump.phase_position_bridges==1,
+          "confidence3 phase coordinate reset bridges even when SDK velocity changes abruptly");
+    check(near((*jump.last_raw_xy)[0],-2.06),"phase bridge retains original SDK observation");
+    jump.wheels.push_back({{static_cast<double>(t+5000000),0.,0.,0.}});
+    jump.set_wheel_suppressed(false,"normal_motion");
+    check(jump.mode=="WHEEL_FALLBACK" && near((*jump.anchor)[0],.00225),
+          "phase exit inherits continuous anchor and prior source dispute, not bad SDK coordinates");
+    S fast; init(fast,4.);
+    fast.pose({{"timestamp_monotonic_ns",t+5000000},{"frame_number",11},{"x_m",.02},{"y_m",0.},
+        {"vx_local_mps",4.},{"vy_local_mps",0.},{"tracker_confidence",3}});
+    check(near(fast.history.back()[1],.02) && fast.phase_position_bridges==0,
+          "genuine high-speed motion is retained, no velocity admission cap");
+    S long_interval; init(long_interval,0.);
+    long_interval.pose({{"timestamp_monotonic_ns",t+1000000000},{"frame_number",11},{"x_m",2.},{"y_m",0.},
+        {"vx_local_mps",0.},{"vy_local_mps",0.},{"tracker_confidence",3}});
+    check(near(long_interval.history.back()[1],2.) && long_interval.phase_position_bridges==0,
+          "capture interval physical envelope does not erase travelled distance or gate old samples");
+}
+
 void test_robust_motion_source()
 {
     using Source = omni::NativeMotionSource;
@@ -1571,6 +1607,10 @@ void test_robust_motion_source()
 
 int main(int argc,char **argv)
 {
+    if(argc==2 && std::string(argv[1])=="--phase-motion-core") {
+        test_phase_motion_source();
+        return failures ? EXIT_FAILURE : EXIT_SUCCESS;
+    }
     if(argc==2 && std::string(argv[1])=="--robust-motion-core") {
         test_robust_motion_source();
         if(failures) return EXIT_FAILURE;

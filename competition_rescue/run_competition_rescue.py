@@ -793,7 +793,7 @@ class HeldCargoEvidence:
         self.items.clear()
         self.view_140_confirmed = False
 
-    def observe(self, cargo, stm, rois, frame_sequence, image_quality_reason):
+    def observe(self, cargo, stm, rois, frame_sequence, image_quality_reason, partial_orange_ids=()):
         if not stm.gripper_closed or stm.mode not in self.HOLD_MODES:
             self.clear()
             return
@@ -806,7 +806,10 @@ class HeldCargoEvidence:
             return
         for item in cargo:
             if (not item.visible or item.hits < 2 or
-                    item.class_name not in {"green_supply", "core_black", "injured_orange"}):
+                    item.class_name not in {"green_supply", "core_black", "injured_orange", "danger_cyan"}):
+                continue
+            if item.track_id in partial_orange_ids:
+                self.items[item.class_name]=(item,frame_sequence)
                 continue
             x, y, width, height = item.bbox
             if (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
@@ -818,13 +821,33 @@ class HeldCargoEvidence:
     def missing_incompatible(self, current):
         classes = {item.class_name for item in current}
         combined = classes | self.items.keys()
-        if (not current or "injured_orange" not in combined or
-                not combined.intersection({"green_supply", "core_black"})):
+        mixed_injury = ('injured_orange' in combined and
+                        bool(combined.intersection({'green_supply','core_black'})))
+        mixed_danger = ('danger_cyan' in combined and
+                        bool(combined.intersection({'green_supply','core_black','injured_orange'})))
+        if not current or not (mixed_injury or mixed_danger):
             return ()
         # Keep one actual positive example of each missing incompatible class;
         # never extrapolate counts or manufacture cargo in an empty picture.
         return tuple((replace(item, visible=False), frame)
                      for name, (item, frame) in self.items.items() if name not in classes)
+
+
+def partial_orange_mixed_evidence(cargo, capture, polygon):
+    """Contact evidence for closed-claw separation, never single-injury permission."""
+    materials = [item for item in capture if item.class_name in MATERIAL_CLASSES]
+    ids = {item.track_id for item in capture}
+    result = []
+    for item in cargo:
+        if (item.class_name != 'injured_orange' or item.track_id in ids or
+                not item.visible or item.inside_safe_zone or
+                bbox_capture_roi_overlap_ratio(item.bbox, polygon) <= 0):
+            continue
+        x,y,w,h=item.bbox
+        if any(x <= a.bbox[0]+a.bbox[2] and x+w >= a.bbox[0] and
+               y <= a.bbox[1]+a.bbox[3] and y+h >= a.bbox[1] for a in materials):
+            result.append(item)
+    return tuple(result)
 
 
 def make_vision_snapshot(
@@ -920,11 +943,19 @@ def make_vision_snapshot(
             capture_side_by_track[item.track_id] = capture_side or (
                 "left" if item.center_px[0] <= IMAGE_WIDTH // 2 else "right"
             )
+    partial_orange_ids = set()
+    if capture_enabled and stm.gripper_closed:
+        for item in partial_orange_mixed_evidence(cargo,capture_items,rois.overall):
+            capture_items.append(item);partial_orange_ids.add(item.track_id)
+            capture_side_by_track[item.track_id] = 'left' if item.center_px[0] <= IMAGE_WIDTH//2 else 'right'
+            for decision in roi_decisions:
+                if decision['track_id']==item.track_id:
+                    decision.update(included=True,reason='partial_orange_mixed_separation_only',transport_eligible=False)
     capture = tuple(capture_items)
     remembered_capture = ()
     if held_cargo_evidence is not None:
         held_cargo_evidence.observe(claw_cargo, stm, rois,
-                                   frame_sequence, image_quality_reason)
+                                   frame_sequence, image_quality_reason, partial_orange_ids)
         if capture_enabled and capture_observation_valid:
             remembered_capture = held_cargo_evidence.missing_incompatible(capture)
             for item, source_frame in remembered_capture:
@@ -936,6 +967,8 @@ def make_vision_snapshot(
                     remembered_source_frame=source_frame))
     for index, item in enumerate(capture):
         for other in capture[index + 1:]:
+            if item.track_id in partial_orange_ids or other.track_id in partial_orange_ids:
+                continue  # Real incompatible evidence cannot become an occlusion wait.
             if (bbox_overlap_ratio(item.bbox, other.bbox) >= 0.85 or
                     bbox_overlap_ratio(other.bbox, item.bbox) >= 0.85):
                 known_pair = (
