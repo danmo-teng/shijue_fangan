@@ -12,6 +12,7 @@ import csv
 import hashlib
 import json
 import multiprocessing as mp
+import os
 import pickle
 from pathlib import Path
 import signal
@@ -78,11 +79,12 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def display_process(slot, stop, rois, directory, fps, measure_start, deadline):
+def display_process(slot, stop, rois, directory, fps, measure_start, deadline, profile=False):
     """Separate GUI process, matching the competition's nonblocking preview."""
     cv2.setNumThreads(1)
     last_frame = None
     times, latencies = [], []
+    profile_rows = []
     next_display = 0.0
     shown_sequence = 0
     output = formal.CompetitionOutput(formal.CompetitionState.WAIT_START, None, 'model comparison')
@@ -91,10 +93,14 @@ def display_process(slot, stop, rois, directory, fps, measure_start, deadline):
         cv2.resizeWindow(WINDOW, 640, 512)
         while not stop.is_set():
             now = time.monotonic()
+            observation = None
             if now >= next_display:
                 job = slot.receive(shown_sequence)
                 if job is not None:
                     shown_sequence, image, pixel_format, vision, dets, metrics = job
+                    if profile:
+                        observation = dict(frame_id=metrics['frame_id'], begin_s=now,
+                            shared_slot_read_ms=(time.monotonic()-now)*1000)
                     # Preview only: halve NV12 before color conversion. The
                     # recognition worker still receives the full native image.
                     if pixel_format == 'nv12':
@@ -121,12 +127,19 @@ def display_process(slot, stop, rois, directory, fps, measure_start, deadline):
                     cv2.putText(view, f'Result {metrics["latency_ms"]:.1f} ms | preview {age_ms:.1f} ms | Q quit',
                         (8, 46), cv2.FONT_HERSHEY_SIMPLEX, .52, (240, 240, 240), 1, cv2.LINE_AA)
                     cv2.imshow(WINDOW, view)
+                    if observation is not None:
+                        observation['render_and_imshow_ms'] = (time.monotonic()-now)*1000
                     last_frame = view
                     if measure_start <= shown < deadline:
                         times.append(shown - measure_start)
                         latencies.append(age_ms)
                     next_display = shown + 1 / fps
-            if cv2.waitKey(1) & 0xff in (27, ord('q'), ord('Q')):
+            event_begin = time.monotonic() if profile else None
+            key = cv2.waitKey(1)
+            if observation is not None:
+                observation['highgui_event_ms'] = (time.monotonic()-event_begin)*1000
+                profile_rows.append(observation)
+            if key & 0xff in (27, ord('q'), ord('Q')):
                 stop.set()
             if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                 stop.set()
@@ -138,6 +151,9 @@ def display_process(slot, stop, rois, directory, fps, measure_start, deadline):
             cv2.imwrite(str(Path(directory, 'last_preview.jpg')), last_frame)
         Path(directory, 'display.json').write_text(json.dumps({'frames':len(times), 'times_s':times,
             'capture_to_preview_ms':percentiles(latencies)}))
+        if profile:
+            from yolo26_benchmark_profile import write_csv
+            write_csv(Path(directory, 'profile_display.csv'), profile_rows)
         cv2.destroyAllWindows()
 
 
@@ -164,12 +180,16 @@ def arguments():
     parser.add_argument('--warmup', type=float, default=5)
     parser.add_argument('--display-fps', type=float, default=40)
     parser.add_argument('--no-display', action='store_true')
+    parser.add_argument('--profile', action='store_true', help='独立测速中追加逐帧流转及1Hz CPU/BPU数据；不改变正式代码')
+    parser.add_argument('--cached-perf', type=Path, help='使用profile_cached_native.nv12做连续缓存推理，不打开相机')
     parser.add_argument('--capture-roi', type=Path, default=ROOT / 'config/capture_roi.json')
     parser.add_argument('--output', type=Path, default=ROOT / 'captures/yolo26_benchmark')
     args = parser.parse_args()
     if not (0 < args.score_thres < 1 and 0 < args.nms_thres < 1 and args.duration >= 0 and
             args.warmup >= 0 and min(args.decode_fps, args.vision_fps, args.display_fps, args.camera_fps) > 0):
         parser.error('invalid threshold/timing')
+    if args.cached_perf and args.duration == 0:
+        parser.error('缓存分析需要正数duration（每个模式的测量秒数）')
     if args.labels is None:
         sibling = args.model.parent / 'classes.txt'
         args.labels = sibling if sibling.is_file() else ROOT / 'config/yolo_labels.txt'
@@ -178,6 +198,9 @@ def arguments():
 
 def main():
     args = arguments()
+    if args.cached_perf:
+        from yolo26_benchmark_profile import cached_performance
+        return cached_performance(args)
     cv2.setNumThreads(1)
     source_labels = load_labels(args.labels)
     labels = [BENCHMARK_LABEL_ALIASES.get(name, name) for name in source_labels]
@@ -199,6 +222,7 @@ def main():
     # No live MCU input is fabricated: camera pitch/audit/manifest remain unknown.
     stm = formal.StmSnapshot()
     detector = camera = gui = None
+    resource_sampler = cached_native = None
     context = mp.get_context('spawn')
     stop = context.Event()
     preview = None if args.no_display else PreviewSlot(context)
@@ -225,13 +249,20 @@ def main():
             ROOT/'rescue_vision/tracker.py')},
         'scope':'same recognition worker/thresholds/tracker/ROI/snapshot, no planner or control; MCU state unknown',
         'latency_reference':'host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency'}
+    if args.profile:
+        from yolo26_benchmark_profile import ObservedCamera, ObservedPipeline, ResourceSampler, finish_profile
+        metadata['profile_code_sha256'] = sha256(ROOT/'yolo26_benchmark_profile.py')
+        (directory/'benchmark_source_snapshot.py').write_bytes(Path(__file__).read_bytes())
+        (directory/'profile_source_snapshot.py').write_bytes((ROOT/'yolo26_benchmark_profile.py').read_bytes())
     try:
-        detector = Yolo26Pipeline(args.model, labels, args.score_thres, args.nms_thres,
-            args.priority, args.bpu_cores, args.preprocess)
+        detector_type = ObservedPipeline if args.profile else Yolo26Pipeline
+        detector = detector_type(args.model, labels, args.score_thres, args.nms_thres,
+            args.priority, args.bpu_cores, args.preprocess, **({'directory':directory} if args.profile else {}))
         metadata.update(output_shapes=detector.shapes, preprocess_actual=detector.preprocess)
         (directory/'metadata.json').write_text(json.dumps(metadata, default=str, ensure_ascii=False, indent=2))
         print(f'Model: {args.model}\nLabels: {source_labels} -> {metadata["semantic_labels"]}\nLogs: {directory}', flush=True)
-        camera = LatestFrameCamera(resolve_camera_device(args.device), 1280, 1024,
+        camera_type = ObservedCamera if args.profile else LatestFrameCamera
+        camera = camera_type(resolve_camera_device(args.device), 1280, 1024,
             args.camera_fps, decoder='jpu', decode_fps=args.decode_fps, output_format='nv12')
         camera.start()
         start = time.monotonic()
@@ -239,8 +270,12 @@ def main():
         deadline = measure_start + args.duration if args.duration else float('inf')
         if not args.no_display:
             gui = context.Process(target=display_process, args=(preview, stop, rois,
-                str(directory), args.display_fps, measure_start, deadline))
+                str(directory), args.display_fps, measure_start, deadline, args.profile))
             gui.start()
+        if args.profile:
+            resource_sampler = ResourceSampler(dict(parent=os.getpid(), inference=detector.process.pid,
+                **({'display':gui.pid} if gui is not None else {})), directory)
+            resource_sampler.start()
         while not stop.is_set() and time.monotonic() < deadline:
             now = time.monotonic()
             error = camera.check_error()
@@ -256,6 +291,7 @@ def main():
             if result is not None:
                 packet, detections, timing = result
                 snapshot_start = time.monotonic()
+                snapshot_cpu = time.thread_time() if args.profile else None
                 sequence += 1
                 low_conf_green = any(item.class_name == 'green_supply' and
                     item.confidence < formal.GREEN_SUPPLY_SCORE_THRESHOLD for item in detections)
@@ -280,6 +316,10 @@ def main():
                         rois, args.capture_roi.is_file()), observed_s=packet.published_ns/1e9,
                     range_calibration=range_calibration)
                 finished = time.monotonic()
+                if args.profile:
+                    timing['profile_snapshot_cpu_ms'] = (time.thread_time()-snapshot_cpu)*1000
+                    if cached_native is None:
+                        cached_native = packet.image.copy()
                 recent.append(finished)
                 while recent and recent[0] <= finished - 1:
                     recent.popleft()
@@ -300,7 +340,7 @@ def main():
                         next_sample = finished + 1
                 if gui is not None:
                     if not preview.publish(packet.image, packet.pixel_format, vision, detections,
-                            dict(fps=len(recent), latency_ms=latency, inference_ms=timing['inference_ms'])):
+                            dict(fps=len(recent), latency_ms=latency, inference_ms=timing['inference_ms'], frame_id=packet.frame_id)):
                         dropped['preview_busy'] += 1
             if now - last_report >= 1:
                 phase = 'WARMUP' if now < measure_start else 'MEASURE'
@@ -315,6 +355,8 @@ def main():
         errors.append(traceback.format_exc())
     finally:
         end = min(time.monotonic(), deadline)
+        if resource_sampler is not None:
+            resource_sampler.close()
         stop.set()
         if detector is not None:
             detector.close()
@@ -345,6 +387,10 @@ def main():
         latency_reference=metadata['latency_reference'])
     for key in ('preprocess_ms', 'inference_ms', 'postprocess_ms', 'snapshot_ms', 'latency_ms'):
         summary[key] = percentiles([r[key] for r in rows])
+    if args.profile:
+        summary['profile'] = finish_profile(directory, camera, detector, rows, measure_start, end)
+        if cached_native is not None:
+            cached_native.tofile(directory/'profile_cached_native.nv12')
     (directory/'summary.json').write_text(json.dumps(summary, indent=2))
     if rows:
         with (directory/'frames.csv').open('w') as file:

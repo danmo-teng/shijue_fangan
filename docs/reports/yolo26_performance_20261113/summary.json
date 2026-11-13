@@ -1,0 +1,3118 @@
+{
+  "date": "2026-11-13",
+  "base_commit": "92397ff7bc7508c89297207af0111df877bb48b1",
+  "scope": "Only opt-in independent benchmark observations and offline experiments; no formal behavior/model/config or CPU/BPU scheduling changes.",
+  "model": {
+    "name": "yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12",
+    "sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+    "family": "YOLO26n from conversion provenance and actual model_info",
+    "input": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "classes": 6
+  },
+  "live_configuration": {
+    "camera_nominal_fps": 180,
+    "decode_cap_fps": 60,
+    "submit_cap_fps": 50,
+    "opencv_threads": 1,
+    "bpu_cores": [
+      0
+    ],
+    "cpu_affinity_main_threads": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "score_threshold": 0.2,
+    "nms_iou": 0.45
+  },
+  "live": {
+    "live_display_profiled": {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185206_510929_competition",
+      "summary": {
+        "source": "live_camera",
+        "pipeline": "competition",
+        "seconds": 30.0,
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "unique_results": 1260,
+        "mean_fps": 42.0,
+        "fps_1s": [
+          43,
+          43,
+          43,
+          44,
+          43,
+          43,
+          43,
+          43,
+          42,
+          41,
+          43,
+          43,
+          42,
+          44,
+          43,
+          43,
+          43,
+          43,
+          43,
+          41,
+          39,
+          36,
+          39,
+          35,
+          42,
+          41,
+          43,
+          44,
+          43,
+          42
+        ],
+        "min_fps_1s": 35,
+        "stable_30fps": true,
+        "max_result_gap_ms": 91.13756799979456,
+        "display_fps": 22.466666666666665,
+        "capture_to_preview_ms": {
+          "p50": 84.6716789999391,
+          "p95": 102.44510619995708,
+          "p99": 122.04220225993588
+        },
+        "display_fps_1s": [
+          23,
+          23,
+          22,
+          23,
+          24,
+          22,
+          23,
+          22,
+          23,
+          21,
+          22,
+          24,
+          22,
+          23,
+          24,
+          23,
+          22,
+          24,
+          21,
+          24,
+          20,
+          19,
+          22,
+          19,
+          23,
+          23,
+          24,
+          24,
+          23,
+          22
+        ],
+        "dropped_including_warmup": {
+          "submit_full": 2,
+          "preview_busy": 14
+        },
+        "detection_class_frame_counts": {
+          "green_supply": 1548,
+          "core_black": 1260,
+          "danger_cyan": 1260,
+          "injured_orange": 1260
+        },
+        "camera_captured": 6359,
+        "camera_decoded": 2124,
+        "errors": [],
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "preprocess_ms": {
+          "p50": 4.4031455001913855,
+          "p95": 5.40653085008671,
+          "p99": 6.479368060004184
+        },
+        "inference_ms": {
+          "p50": 13.381935500092368,
+          "p95": 15.281126250101806,
+          "p99": 23.761916839894187
+        },
+        "postprocess_ms": {
+          "p50": 3.4720040000593144,
+          "p95": 4.8124180499371505,
+          "p99": 5.937678059785872
+        },
+        "snapshot_ms": {
+          "p50": 3.005048499971963,
+          "p95": 5.266333250028765,
+          "p99": 7.366466400094436
+        },
+        "latency_ms": {
+          "p50": 61.46212249996097,
+          "p95": 72.54943599980379,
+          "p99": 83.93557318004697
+        },
+        "profile": {
+          "sample_period_s": 1,
+          "latency_parts_ms": {
+            "capture_to_decode_ready_ms": {
+              "p50": 8.272773000044253,
+              "p95": 13.208155099960095,
+              "p99": 17.239440179819287,
+              "max": 39.11693899999591
+            },
+            "jpeg_wait_before_decode_ms": {
+              "p50": 2.71913249980571,
+              "p95": 7.206054900029812,
+              "p99": 8.320823619915249,
+              "max": 15.424883999912709
+            },
+            "jpu_decode_ms": {
+              "p50": 5.219870999781051,
+              "p95": 7.146969849941342,
+              "p99": 10.467786529948187,
+              "max": 34.57179399993038
+            },
+            "decode_to_submit_ms": {
+              "p50": 8.484146500222778,
+              "p95": 16.37840074986343,
+              "p99": 18.316765969871085,
+              "max": 79.09720799989373
+            },
+            "copy_and_submit_ms": {
+              "p50": 1.2475359999370994,
+              "p95": 2.1897666999166168,
+              "p99": 3.0435238102245443,
+              "max": 4.514104000008956
+            },
+            "queue_wait_lower_ms": {
+              "p50": 14.176888500060159,
+              "p95": 16.821082999877035,
+              "p99": 18.920780340026795,
+              "max": 22.27335200041125
+            },
+            "queue_wait_upper_ms": {
+              "p50": 15.579527999989295,
+              "p95": 18.11432175011305,
+              "p99": 20.416238700036054,
+              "max": 23.478013000385545
+            },
+            "dequeue_to_infer_ms": {
+              "p50": 0.32001899990063976,
+              "p95": 0.5885574499870924,
+              "p99": 0.7797902200627511,
+              "max": 2.2843219999231223
+            },
+            "infer_to_result_put_ms": {
+              "p50": 0.0544370000170602,
+              "p95": 0.1038865001646627,
+              "p99": 0.15732428014871416,
+              "max": 0.556622000203788
+            },
+            "result_put_to_receive_ms": {
+              "p50": 2.5964459998704115,
+              "p95": 4.362359299966556,
+              "p99": 7.9745811501106925,
+              "max": 57.3598949999905
+            },
+            "receive_copy_ms": {
+              "p50": 1.6503049998846109,
+              "p95": 2.937413100039521,
+              "p99": 4.2753381601687614,
+              "max": 16.680587999871932
+            },
+            "total_to_snapshot_ms": {
+              "p50": 61.46212249996097,
+              "p95": 72.54943599980379,
+              "p99": 83.93557318004697,
+              "max": 135.32377599995016
+            }
+          },
+          "stages": {
+            "camera_mjpeg_received": {
+              "count": 5267,
+              "fps": 175.56666666666666,
+              "fps_1s": [
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                173,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                176,
+                170,
+                176,
+                173,
+                165,
+                175,
+                166,
+                177,
+                177,
+                177,
+                176
+              ],
+              "interarrival_ms": {
+                "p50": 4.684144000066226,
+                "p95": 9.08087325001361,
+                "p99": 10.533749649903264,
+                "max": 76.90680199993949
+              }
+            },
+            "decoded_published": {
+              "count": 1757,
+              "fps": 58.56666666666667,
+              "fps_1s": [
+                59,
+                59,
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                60,
+                58,
+                57,
+                58,
+                58,
+                51,
+                59,
+                55,
+                60,
+                59,
+                59,
+                58
+              ],
+              "interarrival_ms": {
+                "p50": 16.870668999899863,
+                "p95": 19.39965550013767,
+                "p99": 23.867259249982453,
+                "max": 84.91130599986718
+              }
+            },
+            "submit_attempts": {
+              "count": 1290,
+              "fps": 43.0,
+              "fps_1s": [
+                43,
+                43,
+                43,
+                44,
+                44,
+                43,
+                44,
+                43,
+                43,
+                42,
+                43,
+                43,
+                43,
+                45,
+                42,
+                44,
+                43,
+                43,
+                44,
+                42,
+                44,
+                42,
+                42,
+                40,
+                42,
+                41,
+                43,
+                44,
+                44,
+                44
+              ],
+              "interarrival_ms": {
+                "p50": 22.904136999841285,
+                "p95": 26.948751600048126,
+                "p99": 31.34007851969725,
+                "max": 90.88194400010252
+              }
+            },
+            "submit_accepted": {
+              "count": 1288,
+              "fps": 42.93333333333333,
+              "fps_1s": [
+                43,
+                43,
+                43,
+                44,
+                44,
+                43,
+                44,
+                43,
+                43,
+                42,
+                43,
+                43,
+                43,
+                45,
+                42,
+                44,
+                43,
+                43,
+                44,
+                42,
+                43,
+                41,
+                42,
+                40,
+                42,
+                41,
+                43,
+                44,
+                44,
+                44
+              ],
+              "interarrival_ms": {
+                "p50": 22.90930399976787,
+                "p95": 26.973904599981324,
+                "p99": 31.685199119838245,
+                "max": 90.88194400010252
+              }
+            },
+            "worker_completed": {
+              "count": 1261,
+              "fps": 42.03333333333333,
+              "fps_1s": [
+                43,
+                43,
+                44,
+                44,
+                42,
+                43,
+                43,
+                43,
+                42,
+                41,
+                43,
+                43,
+                43,
+                43,
+                43,
+                43,
+                44,
+                43,
+                42,
+                41,
+                40,
+                37,
+                38,
+                35,
+                42,
+                41,
+                44,
+                43,
+                43,
+                42
+              ],
+              "interarrival_ms": {
+                "p50": 23.196722499960742,
+                "p95": 27.13350559995433,
+                "p99": 37.43629350988613,
+                "max": 79.22875000031127
+              }
+            },
+            "parent_received": {
+              "count": 1260,
+              "fps": 42.0,
+              "fps_1s": [
+                43,
+                43,
+                44,
+                43,
+                43,
+                43,
+                43,
+                43,
+                42,
+                41,
+                43,
+                43,
+                43,
+                43,
+                43,
+                43,
+                43,
+                44,
+                42,
+                41,
+                40,
+                36,
+                38,
+                35,
+                42,
+                41,
+                43,
+                44,
+                43,
+                42
+              ],
+              "interarrival_ms": {
+                "p50": 23.284843000055844,
+                "p95": 27.501871599861254,
+                "p99": 39.73785757985754,
+                "max": 78.86387600001399
+              }
+            }
+          },
+          "profile_receive_calls": 22894,
+          "profile_empty_receive_calls": 21424,
+          "notes": [
+            "Camera timestamps are host JPEG reception, not sensor exposure.",
+            "Queue lower/upper bounds include parent put return races; negative lower bounds are retained.",
+            "CPU% is 100 per busy CPU; BPU ratio is a sampled driver statistic, not a per-frame integral.",
+            "Instrumented test only: no timing admission, affinity, scheduling or queue-rule changes."
+          ],
+          "resources": {
+            "roles": {
+              "parent": {
+                "cpu_percent": {
+                  "p50": 89.98217201941874,
+                  "p95": 94.97905651189323,
+                  "p99": 95.67868542501797,
+                  "max": 95.96295330994235
+                },
+                "rss_bytes": {
+                  "p50": 104067072.0,
+                  "p95": 109473792.0,
+                  "p99": 109665730.56,
+                  "max": 109744128.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              },
+              "inference": {
+                "cpu_percent": {
+                  "p50": 48.955992288599916,
+                  "p95": 49.99039382502536,
+                  "p99": 49.992226379990164,
+                  "max": 49.9927258584116
+                },
+                "rss_bytes": {
+                  "p50": 76918784.0,
+                  "p95": 77225369.6,
+                  "p99": 77267353.6,
+                  "max": 77279232.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              },
+              "display": {
+                "cpu_percent": {
+                  "p50": 38.99087883006115,
+                  "p95": 41.99337836023905,
+                  "p99": 43.41227230756759,
+                  "max": 43.99180903310112
+                },
+                "rss_bytes": {
+                  "p50": 80224256.0,
+                  "p95": 80494592.0,
+                  "p99": 80494592.0,
+                  "max": 80494592.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              }
+            },
+            "bpu": {
+              "utilization_percent": {
+                "p50": 41.0,
+                "p95": 42.0,
+                "p99": 42.71,
+                "max": 43.0
+              },
+              "frequency_hz": {
+                "p50": 996000000.0,
+                "p95": 996000000.0,
+                "p99": 996000000.0,
+                "max": 996000000.0
+              },
+              "cpu_frequency_khz": {
+                "p50": 1800000.0,
+                "p95": 1800000.0,
+                "p99": 1800000.0,
+                "max": 1800000.0
+              }
+            },
+            "sampler_wall_ms": {
+              "p50": 14.114640000116196,
+              "p95": 24.35642835014277,
+              "p99": 27.739902009961956,
+              "max": 28.69406899981186
+            },
+            "sampler_cpu_ms": {
+              "p50": 6.644107499999999,
+              "p95": 9.457351950000005,
+              "p99": 10.076847690000006,
+              "max": 10.190046
+            },
+            "system_cpu_percent": {
+              "p50": 38.75586533643114,
+              "p95": 67.99224317428663,
+              "p99": 71.17274112140376,
+              "max": 71.55388471177945
+            }
+          },
+          "display_ms": {
+            "shared_slot_read_ms": {
+              "p50": 1.2031189999106573,
+              "p95": 1.9520196001394647,
+              "p99": 2.4305714199726935,
+              "max": 4.429020000316086
+            },
+            "render_and_imshow_ms": {
+              "p50": 11.472069999854284,
+              "p95": 13.373789300158021,
+              "p99": 14.588513900089309,
+              "max": 23.3531359999688
+            },
+            "highgui_event_ms": {
+              "p50": 22.925434000171663,
+              "p95": 54.50194069985628,
+              "p99": 67.6514372800284,
+              "max": 105.99924400003147
+            }
+          }
+        }
+      },
+      "metadata": {
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "labels": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/classes.txt",
+        "device": "/dev/video0",
+        "camera_fps": 180,
+        "decode_fps": 60,
+        "vision_fps": 50,
+        "pipeline": "competition",
+        "preprocess": "auto",
+        "score_thres": 0.2,
+        "nms_thres": 0.45,
+        "priority": 0,
+        "bpu_cores": [
+          0
+        ],
+        "side": "red",
+        "duration": 30.0,
+        "warmup": 5.0,
+        "display_fps": 40,
+        "no_display": false,
+        "profile": true,
+        "cached_perf": null,
+        "capture_roi": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/capture_roi.json",
+        "output": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark",
+        "source": "live_camera",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "source_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "blueteam",
+          "redteam"
+        ],
+        "worker_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "safe_blue",
+          "safe_red"
+        ],
+        "semantic_labels": [
+          "green_supply",
+          "core_black",
+          "danger_cyan",
+          "injured_orange",
+          "safe_blue",
+          "safe_red"
+        ],
+        "label_mapping": {
+          "blueteam": "safe_blue",
+          "redteam": "safe_red"
+        },
+        "config_sha256": "c33ed74fb9e2a0050c62f1fcb688db45b1ac88c3a6c78a9197ca1eac0b36613d",
+        "capture_roi_sha256": "23dffb9d6c70d8adb4aa2af518a0031f421c74cac68a34a275c7c569d357b89e",
+        "homography_calibrated": false,
+        "shared_code_sha256": {
+          "vision/benchmark_yolo26_x5.py": "730d700f33917e7ea4bc13fe6347933fe7e0a091763ed6eef859004d44b90319",
+          "competition_rescue/run_competition_rescue.py": "e7f0255f54b2152c1c470a46668b7df747004fe4cadbb2c587706f52c4292ced",
+          "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+          "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+          "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+          "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e"
+        },
+        "scope": "same recognition worker/thresholds/tracker/ROI/snapshot, no planner or control; MCU state unknown",
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "profile_code_sha256": "386a954e2dffc8d8b651e4547070965d379361c48f806c60351977f1db82600c",
+        "output_shapes": {
+          "602": [
+            1,
+            40,
+            40,
+            4
+          ],
+          "616": [
+            1,
+            20,
+            20,
+            6
+          ],
+          "594": [
+            1,
+            40,
+            40,
+            6
+          ],
+          "624": [
+            1,
+            20,
+            20,
+            4
+          ],
+          "580": [
+            1,
+            80,
+            80,
+            4
+          ],
+          "output0": [
+            1,
+            80,
+            80,
+            6
+          ]
+        },
+        "preprocess_actual": "vse"
+      },
+      "newer_decoded_frame_at_infer_start": {
+        "percent": 92.53968253968254,
+        "possible_capture_timestamp_improvement_ms": {
+          "p50": 16.263610999885714,
+          "p95": 24.006016949829245,
+          "p99": 35.42151579010806,
+          "max": 44.64120400007232
+        },
+        "interpretation": "Offline observation of existing newer decoded images, not a measured latency improvement or a new input admission rule."
+      },
+      "frame_checks": {
+        "received_completed_submitted_ids_match": true,
+        "decoded_ids_unique": true,
+        "decoded_frames_have_distinct_received_JPEG_timestamps": true,
+        "per_frame_ordering_passed": true
+      },
+      "worker_thread_cpu_ms": {
+        "profile_infer_cpu_ms": {
+          "p50": 8.151289999999811,
+          "p95": 9.880953400000347,
+          "p99": 10.94793918999999,
+          "max": 16.19716899999979
+        },
+        "profile_runtime_cpu_ms": {
+          "p50": 1.9894790000001272,
+          "p95": 2.7030253000004834,
+          "p99": 3.247144949999702,
+          "max": 4.565874999999053
+        },
+        "profile_decode_cpu_ms": {
+          "p50": 2.9617915000001993,
+          "p95": 4.011864900000273,
+          "p99": 4.603484689999632,
+          "max": 5.639540999998971
+        },
+        "profile_snapshot_cpu_ms": {
+          "p50": 2.478666500000948,
+          "p95": 3.7182563999988534,
+          "p99": 4.301049739999675,
+          "max": 71.00195900000017
+        }
+      },
+      "role_mean_cpu_percent": {
+        "parent": 90.03252559208632,
+        "inference": 48.348304811819986,
+        "display": 39.01864458930375
+      },
+      "mean_temperatures_millideg": {
+        "thermal-cpu": 63744.6
+      },
+      "latency_parts_mean_ms": {
+        "capture_to_decode_ready_ms": 8.774019555560352,
+        "jpeg_wait_before_decode_ms": 3.131463343646872,
+        "jpu_decode_ms": 5.550151240483848,
+        "decode_to_submit_ms": 8.422998030154563,
+        "copy_and_submit_ms": 1.3787755253981722,
+        "queue_wait_lower_ms": 13.86603371745892,
+        "queue_wait_upper_ms": 15.244809242857093,
+        "dequeue_to_infer_ms": 0.35581440238455264,
+        "infer_to_result_put_ms": 0.062496980959506815,
+        "result_put_to_receive_ms": 2.929069279353927,
+        "receive_copy_ms": 1.8819460745990433,
+        "total_to_snapshot_ms": 61.67212253095668
+      },
+      "whole_run_busy_threads": {
+        "parent": [
+          {
+            "tid": "25152",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 53.177925063279744,
+            "rss_bytes": 109887488,
+            "last_cpu": 7
+          },
+          {
+            "tid": "25199",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 15.316156815646394,
+            "rss_bytes": 110157824,
+            "last_cpu": 1
+          },
+          {
+            "tid": "25200",
+            "comm": "queue0:src",
+            "state": "S",
+            "cpu_percent": 11.801441725488733,
+            "rss_bytes": 111509504,
+            "last_cpu": 5
+          },
+          {
+            "tid": "25201",
+            "comm": "v4l2src0:src",
+            "state": "S",
+            "cpu_percent": 3.057516379242844,
+            "rss_bytes": 111779840,
+            "last_cpu": 5
+          },
+          {
+            "tid": "25197",
+            "comm": "jpg_decoder-0",
+            "state": "S",
+            "cpu_percent": 2.5717427488958498,
+            "rss_bytes": 109887488,
+            "last_cpu": 0
+          }
+        ],
+        "inference": [
+          {
+            "tid": "25166",
+            "comm": "python3",
+            "state": "S",
+            "cpu_percent": 38.43326663627686,
+            "rss_bytes": 77279232,
+            "last_cpu": 0
+          },
+          {
+            "tid": "25189",
+            "comm": "DNN_BPUSchWk",
+            "state": "S",
+            "cpu_percent": 0.9715472606939878,
+            "rss_bytes": 77279232,
+            "last_cpu": 0
+          },
+          {
+            "tid": "25180",
+            "comm": "DNN_WkCor0_2",
+            "state": "S",
+            "cpu_percent": 0.6572231469400506,
+            "rss_bytes": 77279232,
+            "last_cpu": 1
+          },
+          {
+            "tid": "25183",
+            "comm": "DNN_WkCor0_5",
+            "state": "S",
+            "cpu_percent": 0.6572231469400506,
+            "rss_bytes": 77279232,
+            "last_cpu": 1
+          },
+          {
+            "tid": "25184",
+            "comm": "DNN_WkCor0_6",
+            "state": "S",
+            "cpu_percent": 0.6572231469400506,
+            "rss_bytes": 77279232,
+            "last_cpu": 0
+          }
+        ],
+        "display": [
+          {
+            "tid": "25203",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 41.20503382119795,
+            "rss_bytes": 80494592,
+            "last_cpu": 1
+          }
+        ]
+      }
+    },
+    "live_no_display_profiled": {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185357_492909_competition",
+      "summary": {
+        "source": "live_camera",
+        "pipeline": "competition",
+        "seconds": 30.0,
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "unique_results": 1370,
+        "mean_fps": 45.666666666666664,
+        "fps_1s": [
+          46,
+          45,
+          46,
+          46,
+          46,
+          46,
+          45,
+          46,
+          46,
+          45,
+          46,
+          46,
+          45,
+          45,
+          47,
+          45,
+          46,
+          46,
+          45,
+          46,
+          46,
+          45,
+          46,
+          46,
+          46,
+          43,
+          47,
+          46,
+          45,
+          46
+        ],
+        "min_fps_1s": 43,
+        "stable_30fps": true,
+        "max_result_gap_ms": 86.06178699983502,
+        "display_fps": 0.0,
+        "capture_to_preview_ms": null,
+        "display_fps_1s": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "dropped_including_warmup": {
+          "submit_full": 0,
+          "preview_busy": 0
+        },
+        "detection_class_frame_counts": {
+          "green_supply": 1822,
+          "core_black": 1370,
+          "danger_cyan": 1370,
+          "injured_orange": 1370
+        },
+        "camera_captured": 6395,
+        "camera_decoded": 2144,
+        "errors": [],
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "preprocess_ms": {
+          "p50": 4.180045500106644,
+          "p95": 4.619125900080689,
+          "p99": 5.021221079882706
+        },
+        "inference_ms": {
+          "p50": 12.829219999957786,
+          "p95": 13.413373449679966,
+          "p99": 13.904583959865704
+        },
+        "postprocess_ms": {
+          "p50": 3.2055085000592953,
+          "p95": 3.8525101497725696,
+          "p99": 4.213415329886629
+        },
+        "snapshot_ms": {
+          "p50": 2.7509474998623773,
+          "p95": 3.8746930001025235,
+          "p99": 4.558065289984369
+        },
+        "latency_ms": {
+          "p50": 59.7519950001697,
+          "p95": 68.7123262498062,
+          "p99": 72.26433068994993
+        },
+        "profile": {
+          "sample_period_s": 1,
+          "latency_parts_ms": {
+            "capture_to_decode_ready_ms": {
+              "p50": 7.717677000073309,
+              "p95": 12.130456650265842,
+              "p99": 13.116248539868138,
+              "max": 18.077509000249847
+            },
+            "jpeg_wait_before_decode_ms": {
+              "p50": 2.804030500101362,
+              "p95": 7.110054600161674,
+              "p99": 7.812031250191465,
+              "max": 9.02038000003813
+            },
+            "jpu_decode_ms": {
+              "p50": 4.752147500084902,
+              "p95": 5.661167099947306,
+              "p99": 6.198901020056837,
+              "max": 9.902250999857642
+            },
+            "decode_to_submit_ms": {
+              "p50": 8.988838500044949,
+              "p95": 16.451544750066205,
+              "p99": 17.333669369750165,
+              "max": 78.57177500000034
+            },
+            "copy_and_submit_ms": {
+              "p50": 1.1275574997853255,
+              "p95": 1.7233095500387208,
+              "p99": 2.090780789831113,
+              "max": 2.627406000101473
+            },
+            "queue_wait_lower_ms": {
+              "p50": 15.128022999988389,
+              "p95": 16.395119049980167,
+              "p99": 17.022614770098695,
+              "max": 20.571709999785526
+            },
+            "queue_wait_upper_ms": {
+              "p50": 16.237830500131167,
+              "p95": 17.672891100073684,
+              "p99": 18.358675670019693,
+              "max": 21.487830999831203
+            },
+            "dequeue_to_infer_ms": {
+              "p50": 0.26208250005765876,
+              "p95": 0.4264625499899921,
+              "p99": 0.5347320200962712,
+              "max": 1.4358280000124068
+            },
+            "infer_to_result_put_ms": {
+              "p50": 0.04679199992096983,
+              "p95": 0.08218910008963576,
+              "p99": 0.11073299991949156,
+              "max": 0.45854000018152874
+            },
+            "result_put_to_receive_ms": {
+              "p50": 2.3452830002952396,
+              "p95": 3.2593201500731084,
+              "p99": 3.8525339600209887,
+              "max": 52.77950099980444
+            },
+            "receive_copy_ms": {
+              "p50": 1.4695145000587218,
+              "p95": 2.1931680498710193,
+              "p99": 2.6888862499436064,
+              "max": 5.239061999873229
+            },
+            "total_to_snapshot_ms": {
+              "p50": 59.7519950001697,
+              "p95": 68.7123262498062,
+              "p99": 72.26433068994993,
+              "max": 119.75427900006252
+            }
+          },
+          "stages": {
+            "camera_mjpeg_received": {
+              "count": 5300,
+              "fps": 176.66666666666666,
+              "fps_1s": [
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                167,
+                177,
+                177,
+                178,
+                176
+              ],
+              "interarrival_ms": {
+                "p50": 4.494566000175837,
+                "p95": 8.68467780001083,
+                "p99": 9.28004614012934,
+                "max": 70.37218100003884
+              }
+            },
+            "decoded_published": {
+              "count": 1778,
+              "fps": 59.266666666666666,
+              "fps_1s": [
+                60,
+                59,
+                59,
+                60,
+                59,
+                60,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                60,
+                59,
+                60,
+                59,
+                59,
+                60,
+                59,
+                60,
+                59,
+                59,
+                60,
+                59,
+                59,
+                56,
+                59,
+                60,
+                59,
+                60
+              ],
+              "interarrival_ms": {
+                "p50": 16.866557999946963,
+                "p95": 17.933462200016947,
+                "p99": 18.59649216010439,
+                "max": 79.59639599994262
+              }
+            },
+            "submit_attempts": {
+              "count": 1372,
+              "fps": 45.733333333333334,
+              "fps_1s": [
+                46,
+                45,
+                46,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                45,
+                46,
+                46,
+                46,
+                45,
+                47,
+                45,
+                46,
+                46,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                46,
+                43,
+                47,
+                46,
+                45,
+                46
+              ],
+              "interarrival_ms": {
+                "p50": 21.67124800007514,
+                "p95": 23.73678000003565,
+                "p99": 25.146378200042808,
+                "max": 86.03182900014872
+              }
+            },
+            "submit_accepted": {
+              "count": 1372,
+              "fps": 45.733333333333334,
+              "fps_1s": [
+                46,
+                45,
+                46,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                45,
+                46,
+                46,
+                46,
+                45,
+                47,
+                45,
+                46,
+                46,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                46,
+                43,
+                47,
+                46,
+                45,
+                46
+              ],
+              "interarrival_ms": {
+                "p50": 21.67124800007514,
+                "p95": 23.73678000003565,
+                "p99": 25.146378200042808,
+                "max": 86.03182900014872
+              }
+            },
+            "worker_completed": {
+              "count": 1369,
+              "fps": 45.63333333333333,
+              "fps_1s": [
+                45,
+                46,
+                45,
+                46,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                45,
+                46,
+                45,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                45,
+                46,
+                46,
+                46,
+                46,
+                45,
+                44,
+                46,
+                46,
+                45,
+                46
+              ],
+              "interarrival_ms": {
+                "p50": 21.753703000058522,
+                "p95": 22.984179200034305,
+                "p99": 24.18907652994221,
+                "max": 71.25597000003836
+              }
+            },
+            "parent_received": {
+              "count": 1370,
+              "fps": 45.666666666666664,
+              "fps_1s": [
+                46,
+                45,
+                46,
+                46,
+                46,
+                46,
+                45,
+                46,
+                46,
+                46,
+                45,
+                46,
+                45,
+                46,
+                46,
+                46,
+                45,
+                46,
+                45,
+                46,
+                46,
+                46,
+                45,
+                47,
+                45,
+                44,
+                46,
+                46,
+                45,
+                46
+              ],
+              "interarrival_ms": {
+                "p50": 21.773788999780663,
+                "p95": 23.24409019993254,
+                "p99": 24.34203492004598,
+                "max": 72.13321599965639
+              }
+            }
+          },
+          "profile_receive_calls": 29739,
+          "profile_empty_receive_calls": 28146,
+          "notes": [
+            "Camera timestamps are host JPEG reception, not sensor exposure.",
+            "Queue lower/upper bounds include parent put return races; negative lower bounds are retained.",
+            "CPU% is 100 per busy CPU; BPU ratio is a sampled driver statistic, not a per-frame integral.",
+            "Instrumented test only: no timing admission, affinity, scheduling or queue-rule changes."
+          ],
+          "resources": {
+            "roles": {
+              "inference": {
+                "cpu_percent": {
+                  "p50": 45.99266131909011,
+                  "p95": 46.99221742438306,
+                  "p99": 46.99241147087003,
+                  "max": 46.99243280854145
+                },
+                "rss_bytes": {
+                  "p50": 76988416.0,
+                  "p95": 77292339.2,
+                  "p99": 77325885.44,
+                  "max": 77336576.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              },
+              "parent": {
+                "cpu_percent": {
+                  "p50": 76.97847649965927,
+                  "p95": 79.53861017519144,
+                  "p99": 80.69359699087617,
+                  "max": 80.98150714399591
+                },
+                "rss_bytes": {
+                  "p50": 101453824.0,
+                  "p95": 105644032.0,
+                  "p99": 106022092.8,
+                  "max": 106176512.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              }
+            },
+            "bpu": {
+              "utilization_percent": {
+                "p50": 43.0,
+                "p95": 44.55,
+                "p99": 45.71,
+                "max": 46.0
+              },
+              "frequency_hz": {
+                "p50": 996000000.0,
+                "p95": 996000000.0,
+                "p99": 996000000.0,
+                "max": 996000000.0
+              },
+              "cpu_frequency_khz": {
+                "p50": 1800000.0,
+                "p95": 1800000.0,
+                "p99": 1800000.0,
+                "max": 1800000.0
+              }
+            },
+            "sampler_wall_ms": {
+              "p50": 9.606920500118576,
+              "p95": 15.353981249973,
+              "p99": 20.24691504002022,
+              "max": 22.039035000034346
+            },
+            "sampler_cpu_ms": {
+              "p50": 4.734721499999997,
+              "p95": 7.008447899999996,
+              "p99": 8.722976370000001,
+              "max": 9.391005000000002
+            },
+            "system_cpu_percent": {
+              "p50": 19.862655626266,
+              "p95": 25.364127859389132,
+              "p99": 26.259093577756556,
+              "max": 26.55298416565165
+            }
+          }
+        }
+      },
+      "metadata": {
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "labels": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/classes.txt",
+        "device": "/dev/video0",
+        "camera_fps": 180,
+        "decode_fps": 60,
+        "vision_fps": 50,
+        "pipeline": "competition",
+        "preprocess": "auto",
+        "score_thres": 0.2,
+        "nms_thres": 0.45,
+        "priority": 0,
+        "bpu_cores": [
+          0
+        ],
+        "side": "red",
+        "duration": 30.0,
+        "warmup": 5.0,
+        "display_fps": 40,
+        "no_display": true,
+        "profile": true,
+        "cached_perf": null,
+        "capture_roi": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/capture_roi.json",
+        "output": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark",
+        "source": "live_camera",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "source_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "blueteam",
+          "redteam"
+        ],
+        "worker_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "safe_blue",
+          "safe_red"
+        ],
+        "semantic_labels": [
+          "green_supply",
+          "core_black",
+          "danger_cyan",
+          "injured_orange",
+          "safe_blue",
+          "safe_red"
+        ],
+        "label_mapping": {
+          "blueteam": "safe_blue",
+          "redteam": "safe_red"
+        },
+        "config_sha256": "c33ed74fb9e2a0050c62f1fcb688db45b1ac88c3a6c78a9197ca1eac0b36613d",
+        "capture_roi_sha256": "23dffb9d6c70d8adb4aa2af518a0031f421c74cac68a34a275c7c569d357b89e",
+        "homography_calibrated": false,
+        "shared_code_sha256": {
+          "vision/benchmark_yolo26_x5.py": "b941cfd15d821c5187d0955186b6958624991c9ff59e06c96c0cc1c2d8f3798e",
+          "competition_rescue/run_competition_rescue.py": "e7f0255f54b2152c1c470a46668b7df747004fe4cadbb2c587706f52c4292ced",
+          "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+          "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+          "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+          "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e"
+        },
+        "scope": "same recognition worker/thresholds/tracker/ROI/snapshot, no planner or control; MCU state unknown",
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "profile_code_sha256": "386a954e2dffc8d8b651e4547070965d379361c48f806c60351977f1db82600c",
+        "output_shapes": {
+          "602": [
+            1,
+            40,
+            40,
+            4
+          ],
+          "616": [
+            1,
+            20,
+            20,
+            6
+          ],
+          "594": [
+            1,
+            40,
+            40,
+            6
+          ],
+          "624": [
+            1,
+            20,
+            20,
+            4
+          ],
+          "580": [
+            1,
+            80,
+            80,
+            4
+          ],
+          "output0": [
+            1,
+            80,
+            80,
+            6
+          ]
+        },
+        "preprocess_actual": "vse"
+      },
+      "newer_decoded_frame_at_infer_start": {
+        "percent": 98.39416058394161,
+        "possible_capture_timestamp_improvement_ms": {
+          "p50": 16.26839350001319,
+          "p95": 27.479246399866494,
+          "p99": 36.006525799984956,
+          "max": 40.18925299988041
+        },
+        "interpretation": "Offline observation of existing newer decoded images, not a measured latency improvement or a new input admission rule."
+      },
+      "frame_checks": {
+        "received_completed_submitted_ids_match": true,
+        "decoded_ids_unique": true,
+        "decoded_frames_have_distinct_received_JPEG_timestamps": true,
+        "per_frame_ordering_passed": true
+      },
+      "worker_thread_cpu_ms": {
+        "profile_infer_cpu_ms": {
+          "p50": 7.323749499999366,
+          "p95": 8.184085450000245,
+          "p99": 8.959287729999136,
+          "max": 12.22100000000026
+        },
+        "profile_runtime_cpu_ms": {
+          "p50": 1.7688759999998638,
+          "p95": 2.2055906000013614,
+          "p99": 2.5223622500003984,
+          "max": 3.7003759999993946
+        },
+        "profile_decode_cpu_ms": {
+          "p50": 2.7294584999997262,
+          "p95": 3.2860994500002234,
+          "p99": 3.564562500000025,
+          "max": 4.450751000000253
+        },
+        "profile_snapshot_cpu_ms": {
+          "p50": 2.300355500000073,
+          "p95": 3.0342634500000187,
+          "p99": 3.532457520000007,
+          "max": 65.50070699999999
+        }
+      },
+      "role_mean_cpu_percent": {
+        "inference": 46.18951462660638,
+        "parent": 76.94918553805357
+      },
+      "mean_temperatures_millideg": {
+        "thermal-cpu": 60740.26666666667
+      },
+      "latency_parts_mean_ms": {
+        "capture_to_decode_ready_ms": 8.070300700731682,
+        "jpeg_wait_before_decode_ms": 3.129886165698158,
+        "jpu_decode_ms": 4.86126975328341,
+        "decode_to_submit_ms": 8.925919004375656,
+        "copy_and_submit_ms": 1.1992017671580297,
+        "queue_wait_lower_ms": 14.878997527740221,
+        "queue_wait_upper_ms": 16.07819929489825,
+        "dequeue_to_infer_ms": 0.28393921240196346,
+        "infer_to_result_put_ms": 0.05235960583921533,
+        "result_put_to_receive_ms": 2.4450832715365656,
+        "receive_copy_ms": 1.5771239109467952,
+        "total_to_snapshot_ms": 59.65337215912457
+      },
+      "whole_run_busy_threads": {
+        "parent": [
+          {
+            "tid": "27140",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 46.23111812915348,
+            "rss_bytes": 106618880,
+            "last_cpu": 4
+          },
+          {
+            "tid": "27197",
+            "comm": "python3",
+            "state": "S",
+            "cpu_percent": 13.257873184133013,
+            "rss_bytes": 106618880,
+            "last_cpu": 5
+          },
+          {
+            "tid": "27198",
+            "comm": "queue0:src",
+            "state": "S",
+            "cpu_percent": 9.429090842163564,
+            "rss_bytes": 106618880,
+            "last_cpu": 6
+          },
+          {
+            "tid": "27199",
+            "comm": "v4l2src0:src",
+            "state": "S",
+            "cpu_percent": 2.3429862092648857,
+            "rss_bytes": 106618880,
+            "last_cpu": 2
+          },
+          {
+            "tid": "27195",
+            "comm": "jpg_decoder-0",
+            "state": "S",
+            "cpu_percent": 2.2286941990568425,
+            "rss_bytes": 106618880,
+            "last_cpu": 3
+          }
+        ],
+        "inference": [
+          {
+            "tid": "27158",
+            "comm": "python3",
+            "state": "S",
+            "cpu_percent": 37.05918430995801,
+            "rss_bytes": 77340672,
+            "last_cpu": 1
+          },
+          {
+            "tid": "27187",
+            "comm": "DNN_BPUSchWk",
+            "state": "S",
+            "cpu_percent": 0.9143360816643458,
+            "rss_bytes": 77340672,
+            "last_cpu": 1
+          },
+          {
+            "tid": "27178",
+            "comm": "DNN_WkCor0_2",
+            "state": "S",
+            "cpu_percent": 0.6286060561442377,
+            "rss_bytes": 77340672,
+            "last_cpu": 6
+          },
+          {
+            "tid": "27179",
+            "comm": "DNN_WkCor0_3",
+            "state": "S",
+            "cpu_percent": 0.6286060561442377,
+            "rss_bytes": 77340672,
+            "last_cpu": 3
+          },
+          {
+            "tid": "27180",
+            "comm": "DNN_WkCor0_4",
+            "state": "S",
+            "cpu_percent": 0.6286060561442377,
+            "rss_bytes": 77340672,
+            "last_cpu": 1
+          }
+        ]
+      }
+    },
+    "live_display_unprofiled": {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185932_495320_competition",
+      "summary": {
+        "source": "live_camera",
+        "pipeline": "competition",
+        "seconds": 30.0,
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "unique_results": 1275,
+        "mean_fps": 42.5,
+        "fps_1s": [
+          44,
+          44,
+          42,
+          36,
+          37,
+          28,
+          44,
+          43,
+          37,
+          40,
+          44,
+          43,
+          45,
+          44,
+          44,
+          44,
+          44,
+          45,
+          44,
+          44,
+          44,
+          43,
+          44,
+          44,
+          45,
+          44,
+          44,
+          44,
+          44,
+          43
+        ],
+        "min_fps_1s": 28,
+        "stable_30fps": false,
+        "max_result_gap_ms": 82.48959399998057,
+        "display_fps": 27.733333333333334,
+        "capture_to_preview_ms": {
+          "p50": 81.15147549983703,
+          "p95": 100.48402854997674,
+          "p99": 125.48926823007605
+        },
+        "display_fps_1s": [
+          28,
+          28,
+          27,
+          27,
+          26,
+          23,
+          28,
+          29,
+          24,
+          27,
+          29,
+          28,
+          28,
+          28,
+          29,
+          28,
+          28,
+          28,
+          29,
+          28,
+          28,
+          28,
+          29,
+          28,
+          28,
+          28,
+          28,
+          29,
+          28,
+          28
+        ],
+        "dropped_including_warmup": {
+          "submit_full": 7,
+          "preview_busy": 19
+        },
+        "detection_class_frame_counts": {
+          "green_supply": 225,
+          "core_black": 1275,
+          "danger_cyan": 1275,
+          "injured_orange": 1275
+        },
+        "camera_captured": 6336,
+        "camera_decoded": 2121,
+        "errors": [],
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "preprocess_ms": {
+          "p50": 4.450739999811049,
+          "p95": 5.340799799978413,
+          "p99": 6.47895692007296
+        },
+        "inference_ms": {
+          "p50": 13.297719000092911,
+          "p95": 14.842360400189134,
+          "p99": 27.681012320044825
+        },
+        "postprocess_ms": {
+          "p50": 3.3484499999758555,
+          "p95": 4.579068599832681,
+          "p99": 5.858646159795171
+        },
+        "snapshot_ms": {
+          "p50": 2.8132009997534624,
+          "p95": 4.495564999706402,
+          "p99": 6.860137500079871
+        },
+        "latency_ms": {
+          "p50": 60.52277300022979,
+          "p95": 71.766006100097,
+          "p99": 94.21974283986856
+        }
+      },
+      "metadata": {
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "labels": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/classes.txt",
+        "device": "/dev/video0",
+        "camera_fps": 180,
+        "decode_fps": 60,
+        "vision_fps": 50,
+        "pipeline": "competition",
+        "preprocess": "auto",
+        "score_thres": 0.2,
+        "nms_thres": 0.45,
+        "priority": 0,
+        "bpu_cores": [
+          0
+        ],
+        "side": "red",
+        "duration": 30.0,
+        "warmup": 5.0,
+        "display_fps": 40,
+        "no_display": false,
+        "profile": false,
+        "cached_perf": null,
+        "capture_roi": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/capture_roi.json",
+        "output": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark",
+        "source": "live_camera",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "source_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "blueteam",
+          "redteam"
+        ],
+        "worker_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "safe_blue",
+          "safe_red"
+        ],
+        "semantic_labels": [
+          "green_supply",
+          "core_black",
+          "danger_cyan",
+          "injured_orange",
+          "safe_blue",
+          "safe_red"
+        ],
+        "label_mapping": {
+          "blueteam": "safe_blue",
+          "redteam": "safe_red"
+        },
+        "config_sha256": "c33ed74fb9e2a0050c62f1fcb688db45b1ac88c3a6c78a9197ca1eac0b36613d",
+        "capture_roi_sha256": "23dffb9d6c70d8adb4aa2af518a0031f421c74cac68a34a275c7c569d357b89e",
+        "homography_calibrated": false,
+        "shared_code_sha256": {
+          "vision/benchmark_yolo26_x5.py": "b941cfd15d821c5187d0955186b6958624991c9ff59e06c96c0cc1c2d8f3798e",
+          "competition_rescue/run_competition_rescue.py": "e7f0255f54b2152c1c470a46668b7df747004fe4cadbb2c587706f52c4292ced",
+          "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+          "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+          "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+          "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e"
+        },
+        "scope": "same recognition worker/thresholds/tracker/ROI/snapshot, no planner or control; MCU state unknown",
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "output_shapes": {
+          "602": [
+            1,
+            40,
+            40,
+            4
+          ],
+          "616": [
+            1,
+            20,
+            20,
+            6
+          ],
+          "594": [
+            1,
+            40,
+            40,
+            6
+          ],
+          "624": [
+            1,
+            20,
+            20,
+            4
+          ],
+          "580": [
+            1,
+            80,
+            80,
+            4
+          ],
+          "output0": [
+            1,
+            80,
+            80,
+            6
+          ]
+        },
+        "preprocess_actual": "vse"
+      }
+    },
+    "live_input_identity_aux": {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_190909_197907_competition",
+      "summary": {
+        "source": "live_camera",
+        "pipeline": "competition",
+        "seconds": 30.0,
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "unique_results": 1273,
+        "mean_fps": 42.43333333333333,
+        "fps_1s": [
+          44,
+          43,
+          43,
+          43,
+          43,
+          44,
+          43,
+          43,
+          43,
+          44,
+          43,
+          43,
+          44,
+          43,
+          44,
+          43,
+          44,
+          43,
+          43,
+          43,
+          44,
+          43,
+          43,
+          44,
+          40,
+          43,
+          41,
+          28,
+          38,
+          43
+        ],
+        "min_fps_1s": 28,
+        "stable_30fps": false,
+        "max_result_gap_ms": 91.83170399955998,
+        "display_fps": 27.666666666666668,
+        "capture_to_preview_ms": {
+          "p50": 81.56993749980757,
+          "p95": 98.49492815033045,
+          "p99": 130.75021231000397
+        },
+        "display_fps_1s": [
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          27,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          28,
+          27,
+          28,
+          27,
+          23,
+          26,
+          28
+        ],
+        "dropped_including_warmup": {
+          "submit_full": 5,
+          "preview_busy": 36
+        },
+        "detection_class_frame_counts": {
+          "green_supply": 2255,
+          "core_black": 1273,
+          "danger_cyan": 1273,
+          "injured_orange": 1273
+        },
+        "camera_captured": 6363,
+        "camera_decoded": 2121,
+        "errors": [],
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "preprocess_ms": {
+          "p50": 4.397008000523783,
+          "p95": 5.257559800156741,
+          "p99": 6.0324230000333
+        },
+        "inference_ms": {
+          "p50": 13.360900000407128,
+          "p95": 14.299602000392042,
+          "p99": 22.593893920638866
+        },
+        "postprocess_ms": {
+          "p50": 3.536547999829054,
+          "p95": 4.612958200232242,
+          "p99": 5.543081039941169
+        },
+        "snapshot_ms": {
+          "p50": 3.2205470006374526,
+          "p95": 5.110843200054659,
+          "p99": 7.988788719594591
+        },
+        "latency_ms": {
+          "p50": 60.96765700021933,
+          "p95": 70.54600599985861,
+          "p99": 99.69277056014081
+        },
+        "profile": {
+          "sample_period_s": 1,
+          "latency_parts_ms": {
+            "capture_to_decode_ready_ms": {
+              "p50": 8.099847999801568,
+              "p95": 13.118441199549123,
+              "p99": 15.138242799803253,
+              "max": 77.10597200002667
+            },
+            "jpeg_wait_before_decode_ms": {
+              "p50": 2.6336300006732927,
+              "p95": 7.235288200354262,
+              "p99": 8.378190280018314,
+              "max": 72.30242100013129
+            },
+            "jpu_decode_ms": {
+              "p50": 5.179634000342048,
+              "p95": 6.886963600118179,
+              "p99": 8.88707947968214,
+              "max": 27.181755999663437
+            },
+            "decode_to_submit_ms": {
+              "p50": 8.798516000751988,
+              "p95": 16.340846400271403,
+              "p99": 17.643549719687144,
+              "max": 20.823623000069347
+            },
+            "copy_and_submit_ms": {
+              "p50": 1.2465019999581273,
+              "p95": 2.1038787999714255,
+              "p99": 2.691254519959329,
+              "max": 10.031558999799017
+            },
+            "queue_wait_lower_ms": {
+              "p50": 13.967609000246739,
+              "p95": 16.20962059969315,
+              "p99": 19.239606719856962,
+              "max": 39.193902000079106
+            },
+            "queue_wait_upper_ms": {
+              "p50": 15.344776999882015,
+              "p95": 17.47970800024632,
+              "p99": 20.52240772030926,
+              "max": 41.46819800007506
+            },
+            "dequeue_to_infer_ms": {
+              "p50": 0.32000000010157237,
+              "p95": 0.6075588000385321,
+              "p99": 0.8569714802069933,
+              "max": 12.481480999667838
+            },
+            "infer_to_result_put_ms": {
+              "p50": 0.05395799962570891,
+              "p95": 0.09846720040513897,
+              "p99": 0.1433805198757909,
+              "max": 0.5294590000630706
+            },
+            "result_put_to_receive_ms": {
+              "p50": 2.5750049999260227,
+              "p95": 4.110624199711308,
+              "p99": 8.061796840302096,
+              "max": 53.12197000057495
+            },
+            "receive_copy_ms": {
+              "p50": 1.6733370002839365,
+              "p95": 2.9260056002385655,
+              "p99": 4.916598759882617,
+              "max": 13.250814999992144
+            },
+            "total_to_snapshot_ms": {
+              "p50": 60.96765700021933,
+              "p95": 70.54600599985861,
+              "p99": 99.69277056014081,
+              "max": 142.6196689999415
+            }
+          },
+          "stages": {
+            "camera_mjpeg_received": {
+              "count": 5287,
+              "fps": 176.23333333333332,
+              "fps_1s": [
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                176,
+                178,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                177,
+                167,
+                177,
+                177,
+                164,
+                177,
+                177
+              ],
+              "interarrival_ms": {
+                "p50": 4.653592000067874,
+                "p95": 9.033516750378112,
+                "p99": 10.171144800006003,
+                "max": 72.82675600072253
+              }
+            },
+            "decoded_published": {
+              "count": 1763,
+              "fps": 58.766666666666666,
+              "fps_1s": [
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                59,
+                60,
+                59,
+                59,
+                59,
+                59,
+                56,
+                59,
+                58,
+                53,
+                58,
+                59
+              ],
+              "interarrival_ms": {
+                "p50": 16.895115000352234,
+                "p95": 18.97753980001653,
+                "p99": 22.62956449022565,
+                "max": 80.3733109996756
+              }
+            },
+            "submit_attempts": {
+              "count": 1296,
+              "fps": 43.2,
+              "fps_1s": [
+                43,
+                44,
+                43,
+                43,
+                45,
+                44,
+                43,
+                44,
+                43,
+                45,
+                43,
+                43,
+                44,
+                43,
+                44,
+                43,
+                44,
+                44,
+                43,
+                44,
+                44,
+                43,
+                43,
+                44,
+                40,
+                43,
+                42,
+                39,
+                43,
+                43
+              ],
+              "interarrival_ms": {
+                "p50": 22.822416000053636,
+                "p95": 26.40705590019934,
+                "p99": 29.661659980101803,
+                "max": 89.06165999997029
+              }
+            },
+            "submit_accepted": {
+              "count": 1292,
+              "fps": 43.06666666666667,
+              "fps_1s": [
+                43,
+                44,
+                43,
+                43,
+                45,
+                44,
+                43,
+                44,
+                43,
+                45,
+                43,
+                43,
+                44,
+                43,
+                44,
+                43,
+                44,
+                44,
+                43,
+                44,
+                44,
+                43,
+                43,
+                44,
+                40,
+                43,
+                42,
+                36,
+                42,
+                43
+              ],
+              "interarrival_ms": {
+                "p50": 22.8510009992533,
+                "p95": 26.49125849984557,
+                "p99": 31.61346499973659,
+                "max": 89.06165999997029
+              }
+            },
+            "worker_completed": {
+              "count": 1273,
+              "fps": 42.43333333333333,
+              "fps_1s": [
+                44,
+                43,
+                43,
+                44,
+                43,
+                43,
+                44,
+                42,
+                44,
+                43,
+                43,
+                43,
+                44,
+                44,
+                43,
+                44,
+                43,
+                43,
+                43,
+                43,
+                44,
+                43,
+                44,
+                43,
+                41,
+                43,
+                40,
+                28,
+                38,
+                43
+              ],
+              "interarrival_ms": {
+                "p50": 23.01822999970682,
+                "p95": 25.317785750257826,
+                "p99": 39.83412921973465,
+                "max": 73.9570060004553
+              }
+            },
+            "parent_received": {
+              "count": 1273,
+              "fps": 42.43333333333333,
+              "fps_1s": [
+                44,
+                43,
+                43,
+                44,
+                43,
+                43,
+                44,
+                42,
+                44,
+                43,
+                43,
+                43,
+                44,
+                44,
+                43,
+                44,
+                43,
+                43,
+                43,
+                43,
+                44,
+                43,
+                43,
+                44,
+                41,
+                43,
+                40,
+                28,
+                38,
+                43
+              ],
+              "interarrival_ms": {
+                "p50": 23.043375500037655,
+                "p95": 25.714405800181343,
+                "p99": 39.384134730262254,
+                "max": 85.91894299934211
+              }
+            }
+          },
+          "profile_receive_calls": 22014,
+          "profile_empty_receive_calls": 20533,
+          "notes": [
+            "Camera timestamps are host JPEG reception, not sensor exposure.",
+            "Queue lower/upper bounds include parent put return races; negative lower bounds are retained.",
+            "CPU% is 100 per busy CPU; BPU ratio is a sampled driver statistic, not a per-frame integral.",
+            "Instrumented test only: no timing admission, affinity, scheduling or queue-rule changes."
+          ],
+          "source_identity": {
+            "gst_offsets_observed": 5287,
+            "gst_offsets_unique": 5287,
+            "gst_pts_interarrival_ms": {
+              "p50": 4.0735835,
+              "p95": 8.08420825,
+              "p99": 8.1773169,
+              "max": 63.945333
+            },
+            "decoded_luma_samples": 1763,
+            "decoded_luma_samples_unique": 1763,
+            "checksum_scope": "Every 16th Y row/column, CRC32; observations only, never used to admit/reject frames.",
+            "limitation": "GStreamer source offsets/PTS and changing pixels do not calibrate physical exposure timing."
+          },
+          "resources": {
+            "roles": {
+              "parent": {
+                "cpu_percent": {
+                  "p50": 92.97539500011521,
+                  "p95": 94.53508928063474,
+                  "p99": 96.36667894518284,
+                  "max": 96.93097428997284
+                },
+                "rss_bytes": {
+                  "p50": 105791488.0,
+                  "p95": 112820224.0,
+                  "p99": 113204101.12,
+                  "max": 113360896.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              },
+              "display": {
+                "cpu_percent": {
+                  "p50": 50.99094190398744,
+                  "p95": 51.991799146440634,
+                  "p99": 52.6808616032327,
+                  "max": 52.96228492132536
+                },
+                "rss_bytes": {
+                  "p50": 81518592.0,
+                  "p95": 81788928.0,
+                  "p99": 81788928.0,
+                  "max": 81788928.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              },
+              "inference": {
+                "cpu_percent": {
+                  "p50": 48.955608519455076,
+                  "p95": 49.968524982309376,
+                  "p99": 49.98619713320704,
+                  "max": 49.99204341635244
+                },
+                "rss_bytes": {
+                  "p50": 78360576.0,
+                  "p95": 78684569.6,
+                  "p99": 78694072.32,
+                  "max": 78696448.0
+                },
+                "affinity": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              }
+            },
+            "bpu": {
+              "utilization_percent": {
+                "p50": 41.0,
+                "p95": 42.55,
+                "p99": 43.71,
+                "max": 44.0
+              },
+              "frequency_hz": {
+                "p50": 996000000.0,
+                "p95": 996000000.0,
+                "p99": 996000000.0,
+                "max": 996000000.0
+              },
+              "cpu_frequency_khz": {
+                "p50": 1800000.0,
+                "p95": 1800000.0,
+                "p99": 1800000.0,
+                "max": 1800000.0
+              }
+            },
+            "sampler_wall_ms": {
+              "p50": 12.865189999956783,
+              "p95": 18.246269400424346,
+              "p99": 19.84846038007163,
+              "max": 20.151329999862355
+            },
+            "sampler_cpu_ms": {
+              "p50": 6.561813000000006,
+              "p95": 8.305603300000008,
+              "p99": 8.663578600000005,
+              "max": 8.783917000000002
+            },
+            "system_cpu_percent": {
+              "p50": 31.343283582089555,
+              "p95": 52.22622856753835,
+              "p99": 76.22703504129072,
+              "max": 83.54430379746836
+            }
+          },
+          "display_ms": {
+            "shared_slot_read_ms": {
+              "p50": 1.1009609997927328,
+              "p95": 1.5059190000101808,
+              "p99": 1.9245403998866124,
+              "max": 2.903756000705471
+            },
+            "render_and_imshow_ms": {
+              "p50": 10.949520000394841,
+              "p95": 12.108689500109904,
+              "p99": 14.106267699844468,
+              "max": 21.287120999659237
+            },
+            "highgui_event_ms": {
+              "p50": 7.319305999772041,
+              "p95": 8.178744000360894,
+              "p99": 12.284467400149888,
+              "max": 27.639339999950607
+            }
+          }
+        }
+      },
+      "metadata": {
+        "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+        "labels": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/classes.txt",
+        "device": "/dev/video0",
+        "camera_fps": 180,
+        "decode_fps": 60,
+        "vision_fps": 50,
+        "pipeline": "competition",
+        "preprocess": "auto",
+        "score_thres": 0.2,
+        "nms_thres": 0.45,
+        "priority": 0,
+        "bpu_cores": [
+          0
+        ],
+        "side": "red",
+        "duration": 30.0,
+        "warmup": 5.0,
+        "display_fps": 40,
+        "no_display": false,
+        "profile": true,
+        "cached_perf": null,
+        "capture_roi": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/capture_roi.json",
+        "output": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark",
+        "source": "live_camera",
+        "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+        "source_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "blueteam",
+          "redteam"
+        ],
+        "worker_labels": [
+          "common",
+          "kernel",
+          "risk",
+          "wound",
+          "safe_blue",
+          "safe_red"
+        ],
+        "semantic_labels": [
+          "green_supply",
+          "core_black",
+          "danger_cyan",
+          "injured_orange",
+          "safe_blue",
+          "safe_red"
+        ],
+        "label_mapping": {
+          "blueteam": "safe_blue",
+          "redteam": "safe_red"
+        },
+        "config_sha256": "c33ed74fb9e2a0050c62f1fcb688db45b1ac88c3a6c78a9197ca1eac0b36613d",
+        "capture_roi_sha256": "23dffb9d6c70d8adb4aa2af518a0031f421c74cac68a34a275c7c569d357b89e",
+        "homography_calibrated": false,
+        "shared_code_sha256": {
+          "vision/benchmark_yolo26_x5.py": "b941cfd15d821c5187d0955186b6958624991c9ff59e06c96c0cc1c2d8f3798e",
+          "competition_rescue/run_competition_rescue.py": "0d0bd6e57fe457b173911f2fe0276d08a9481cf509ece52f93082090a8c0ea57",
+          "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+          "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+          "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+          "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e"
+        },
+        "scope": "same recognition worker/thresholds/tracker/ROI/snapshot, no planner or control; MCU state unknown",
+        "latency_reference": "host MJPEG reception to completed tracked vision snapshot; not exposure or physical display latency",
+        "profile_code_sha256": "dcf322557e136a1c937fb64ab40684f32399c6df90599fb59f40e96cfddf9fdf",
+        "output_shapes": {
+          "602": [
+            1,
+            40,
+            40,
+            4
+          ],
+          "616": [
+            1,
+            20,
+            20,
+            6
+          ],
+          "594": [
+            1,
+            40,
+            40,
+            6
+          ],
+          "624": [
+            1,
+            20,
+            20,
+            4
+          ],
+          "580": [
+            1,
+            80,
+            80,
+            4
+          ],
+          "output0": [
+            1,
+            80,
+            80,
+            6
+          ]
+        },
+        "preprocess_actual": "vse"
+      },
+      "newer_decoded_frame_at_infer_start": {
+        "percent": 92.61586802827965,
+        "possible_capture_timestamp_improvement_ms": {
+          "p50": 16.291197999635187,
+          "p95": 23.602193799706583,
+          "p99": 32.10867115984001,
+          "max": 50.11458799981483
+        },
+        "interpretation": "Offline observation of existing newer decoded images, not a measured latency improvement or a new input admission rule."
+      },
+      "frame_checks": {
+        "received_completed_submitted_ids_match": true,
+        "decoded_ids_unique": true,
+        "decoded_frames_have_distinct_received_JPEG_timestamps": true,
+        "per_frame_ordering_passed": true
+      },
+      "worker_thread_cpu_ms": {
+        "profile_infer_cpu_ms": {
+          "p50": 8.114751000000808,
+          "p95": 9.579081999999413,
+          "p99": 10.809245239999676,
+          "max": 13.904038999999813
+        },
+        "profile_runtime_cpu_ms": {
+          "p50": 1.973585,
+          "p95": 2.596850000000117,
+          "p99": 2.9595872399993786,
+          "max": 3.679834999999798
+        },
+        "profile_decode_cpu_ms": {
+          "p50": 3.012499000000446,
+          "p95": 3.9000836000003143,
+          "p99": 4.489328240000887,
+          "max": 6.133540999998743
+        },
+        "profile_snapshot_cpu_ms": {
+          "p50": 2.5911679999985893,
+          "p95": 3.6051567999997745,
+          "p99": 4.153207479999139,
+          "max": 66.165582
+        }
+      },
+      "role_mean_cpu_percent": {
+        "parent": 92.65751863589101,
+        "display": 51.01022279710963,
+        "inference": 48.21200310073454
+      },
+      "mean_temperatures_millideg": {
+        "thermal-cpu": 60323.46666666667
+      },
+      "latency_parts_mean_ms": {
+        "capture_to_decode_ready_ms": 8.59986427572836,
+        "jpeg_wait_before_decode_ms": 3.089758094264005,
+        "jpu_decode_ms": 5.41950266144236,
+        "decode_to_submit_ms": 8.393474450913303,
+        "copy_and_submit_ms": 1.3607741531688355,
+        "queue_wait_lower_ms": 13.777707302440156,
+        "queue_wait_upper_ms": 15.138481455608993,
+        "dequeue_to_infer_ms": 0.37050447524844615,
+        "infer_to_result_put_ms": 0.060490779255068544,
+        "result_put_to_receive_ms": 2.851818922246888,
+        "receive_copy_ms": 1.8699609332344715,
+        "total_to_snapshot_ms": 61.296782084065
+      },
+      "whole_run_busy_threads": {
+        "parent": [
+          {
+            "tid": "35802",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 53.32100241775504,
+            "rss_bytes": 113782784,
+            "last_cpu": 2
+          },
+          {
+            "tid": "35858",
+            "comm": "python3",
+            "state": "S",
+            "cpu_percent": 16.202040927581514,
+            "rss_bytes": 113782784,
+            "last_cpu": 7
+          },
+          {
+            "tid": "35859",
+            "comm": "queue0:src",
+            "state": "S",
+            "cpu_percent": 13.773163539848838,
+            "rss_bytes": 113782784,
+            "last_cpu": 5
+          },
+          {
+            "tid": "35860",
+            "comm": "v4l2src0:src",
+            "state": "S",
+            "cpu_percent": 2.943227893370187,
+            "rss_bytes": 113782784,
+            "last_cpu": 5
+          },
+          {
+            "tid": "35856",
+            "comm": "jpg_decoder-0",
+            "state": "S",
+            "cpu_percent": 2.5146024720055964,
+            "rss_bytes": 113782784,
+            "last_cpu": 4
+          }
+        ],
+        "inference": [
+          {
+            "tid": "35812",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 38.51913786663118,
+            "rss_bytes": 78733312,
+            "last_cpu": 0
+          },
+          {
+            "tid": "35848",
+            "comm": "DNN_BPUSchWk",
+            "state": "S",
+            "cpu_percent": 0.9144008989111261,
+            "rss_bytes": 78733312,
+            "last_cpu": 2
+          },
+          {
+            "tid": "35840",
+            "comm": "DNN_WkCor0_3",
+            "state": "S",
+            "cpu_percent": 0.6572256460923719,
+            "rss_bytes": 78733312,
+            "last_cpu": 3
+          },
+          {
+            "tid": "35839",
+            "comm": "DNN_WkCor0_2",
+            "state": "S",
+            "cpu_percent": 0.6286506180013991,
+            "rss_bytes": 78733312,
+            "last_cpu": 0
+          },
+          {
+            "tid": "35841",
+            "comm": "DNN_WkCor0_4",
+            "state": "S",
+            "cpu_percent": 0.6286506180013991,
+            "rss_bytes": 78733312,
+            "last_cpu": 6
+          }
+        ],
+        "display": [
+          {
+            "tid": "35862",
+            "comm": "python3",
+            "state": "R",
+            "cpu_percent": 52.86380196829947,
+            "rss_bytes": 81788928,
+            "last_cpu": 6
+          }
+        ]
+      }
+    }
+  },
+  "cached": {
+    "model": "/home/sunrise/RDK_X5/x5_output_640_yolo26n/yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin",
+    "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+    "source": "same_cached_frame_not_live_camera",
+    "runs": [
+      {
+        "mode": "runtime_only",
+        "source": "same_cached_frame_not_live_camera",
+        "measure_start_s": 3643.647577474,
+        "end_s": 3653.647577474,
+        "frames": 808,
+        "fps": 80.8,
+        "wall_ms": {
+          "p50": 12.278980000019146,
+          "p95": 12.780403400074647,
+          "p99": 13.315261000225288,
+          "max": 17.564900000252237
+        },
+        "main_thread_cpu_ms": {
+          "p50": 1.6377709999999546,
+          "p95": 1.8392506500000128,
+          "p99": 2.106780320000022,
+          "max": 2.2662489999998314
+        },
+        "bpu_sampled_percent": {
+          "p50": 76.0,
+          "p95": 77.0,
+          "p99": 77.0,
+          "max": 77.0
+        },
+        "mean_cpu_percent": 24.18718746302381
+      },
+      {
+        "mode": "prepared_plus_postprocess",
+        "source": "same_cached_frame_not_live_camera",
+        "measure_start_s": 3655.657731753,
+        "end_s": 3665.657731753,
+        "frames": 641,
+        "fps": 64.1,
+        "wall_ms": {
+          "p50": 15.461907999906543,
+          "p95": 16.24148900009459,
+          "p99": 16.794103600113885,
+          "max": 19.42239599975437
+        },
+        "main_thread_cpu_ms": {
+          "p50": 4.800083999999316,
+          "p95": 5.31058299999998,
+          "p99": 5.672498599999899,
+          "max": 6.962084999999618
+        },
+        "bpu_sampled_percent": {
+          "p50": 60.0,
+          "p95": 62.099999999999994,
+          "p99": 62.82,
+          "max": 63.0
+        },
+        "mean_cpu_percent": 39.72100231546127
+      },
+      {
+        "mode": "full_preprocess_runtime_postprocess",
+        "source": "same_cached_frame_not_live_camera",
+        "measure_start_s": 3667.662308895,
+        "end_s": 3677.662308895,
+        "frames": 509,
+        "fps": 50.9,
+        "wall_ms": {
+          "p50": 19.45627199984301,
+          "p95": 20.43390979997639,
+          "p99": 21.29619543984518,
+          "max": 28.381242999785172
+        },
+        "main_thread_cpu_ms": {
+          "p50": 6.471249000000512,
+          "p95": 7.227908399999805,
+          "p99": 7.889708920000302,
+          "max": 8.986788000000523
+        },
+        "bpu_sampled_percent": {
+          "p50": 48.0,
+          "p95": 48.55,
+          "p99": 48.91,
+          "max": 49.0
+        },
+        "mean_cpu_percent": 40.61114009459055
+      }
+    ],
+    "output": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185607_137718_cached_profile"
+  },
+  "hrt": [
+    {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185752_hrt_profile/threads_1",
+      "fields": {
+        "thread_num": "1",
+        "core_id": "1",
+        "frame_count": "1000",
+        "run_time": "10315.947",
+        "model_name": "yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12",
+        "average_latency": "10.301369667053223",
+        "FPS": "96.93729523813955",
+        "BPU_inference_time_cost": [
+          "9.708620000000002",
+          "10.675",
+          "9.612",
+          ""
+        ],
+        "CPU_inference_time_cost": [
+          "0.40967200000000004",
+          "1.1119999999999999",
+          "0.377",
+          ""
+        ],
+        "TaskPendingTime": [
+          "18446744069952.777",
+          "1.8446744069952748e+16",
+          "0.015",
+          ""
+        ],
+        "TaskRunningTime": [
+          "10.223606",
+          "11.405",
+          "0.0",
+          ""
+        ]
+      },
+      "bpu_sampled_percent": {
+        "p50": 90.0,
+        "p95": 92.0,
+        "p99": 92.0,
+        "max": 92.0
+      },
+      "bpu_ratio_samples": [
+        0,
+        73,
+        82,
+        89,
+        90,
+        91,
+        90,
+        91,
+        91,
+        92,
+        92,
+        12
+      ],
+      "input": "tool-generated perf data; no live camera",
+      "warnings": [
+        "somstatus cpuinfo_cur_freq reads were denied; displayed zeros are unavailable frequency data, not measured throttling.",
+        "TaskPendingTime has an impossible large value; preserve raw output and exclude this field from latency attribution. No effect on frame handling."
+      ]
+    },
+    {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185752_hrt_profile/threads_2",
+      "fields": {
+        "thread_num": "2",
+        "core_id": "1",
+        "frame_count": "1000",
+        "run_time": "9452.956",
+        "model_name": "yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12",
+        "average_latency": "18.876691818237305",
+        "FPS": "105.78701519397742",
+        "BPU_inference_time_cost": [
+          "18.22917",
+          "19.156",
+          "10.22",
+          ""
+        ],
+        "CPU_inference_time_cost": [
+          "0.422059",
+          "0.83",
+          "0.389",
+          ""
+        ],
+        "TaskPendingTime": [
+          "0.029599",
+          "0.151",
+          "0.018",
+          ""
+        ],
+        "TaskRunningTime": [
+          "18.795087",
+          "20.141",
+          "11.062",
+          ""
+        ]
+      },
+      "bpu_sampled_percent": {
+        "p50": 99.0,
+        "p95": 99.5,
+        "p99": 99.9,
+        "max": 100.0
+      },
+      "bpu_ratio_samples": [
+        0,
+        79,
+        98,
+        99,
+        99,
+        99,
+        99,
+        100,
+        99,
+        99,
+        48
+      ],
+      "input": "tool-generated perf data; no live camera",
+      "warnings": [
+        "somstatus cpuinfo_cur_freq reads were denied; displayed zeros are unavailable frequency data, not measured throttling."
+      ]
+    }
+  ],
+  "concurrency": {
+    "throughput_gain_percent": 9.12932420292658,
+    "per_task_latency_increase_percent": 83.24448523200228
+  },
+  "excluded_initial_observer_runs": [
+    {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_184741_002318_competition",
+      "reason": "Initial all-thread-per-second observer was too costly; not used for final speed claims. Source snapshot v1 retained in first directory."
+    },
+    {
+      "directory": "/home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_184909_370322_competition",
+      "reason": "Initial all-thread-per-second observer was too costly; not used for final speed claims. Source snapshot v1 retained in first directory."
+    }
+  ],
+  "observer_notes": [
+    "Opt-in --profile only; desktop defaults and formal modules unchanged.",
+    "1 Hz process/CPU/BPU/one temperature samples, thread snapshots before/after the run; no per-frame disk writes.",
+    "Light observer median sampler CPU 4.7-6.6ms per second; per-frame wrappers add some unisolated overhead. GStreamer offsets/PTS and sampled decoded luminance CRC are observations, never input gates.",
+    "Profiled vs unprofiled GUI runs were serial, with varying desktop background load; close means do not prove zero observer effect."
+  ],
+  "conclusions": [
+    "No fixed 30 FPS lock observed. True JPEG receipt, decoded publication, submission, completed result and GUI FPS are distinct.",
+    "BPU-only speed ceiling is much higher than 30; a single SDK call and CPU pre/post are serial in the present worker.",
+    "There is measurable decode-to-submit and request-queue residence; prioritize newest-frame pickup/queue analysis before extra inference workers.",
+    "The current submit cap is 50 FPS, so a parallel worker alone cannot yield 60 distinct results per second.",
+    "Two SDK workers have not been implemented or tested; official tool concurrency is a distinct test, not a delivery guarantee."
+  ],
+  "proposals_not_implemented": [
+    {
+      "priority": 1,
+      "change": "Benchmark an idle worker claiming the newest complete decoded frame, retaining sole SDK ownership and same frame/result pairing.",
+      "benefit": "Potentially reduce one frame of input residence; newer-image timestamp differences are offline bounds, not achieved improvements.",
+      "cost": "Requires a separate change to shared frame ownership/pickup semantics and P95/throughput comparison."
+    },
+    {
+      "priority": 2,
+      "change": "Evaluate pipelined CPU preprocessing/postprocessing while preserving detector thresholds and outputs.",
+      "benefit": "Cached full-stage ceiling 50.9 FPS versus runtime-only 80.8 calls/s indicates CPU work outside the SDK matters.",
+      "cost": "Requires new scheduling and ordering assessment; additional concurrent SDK work increased per-task time in the tool test."
+    }
+  ],
+  "limitations": [
+    "Stationary camera scene and independent benchmark, no robot motion, localization, UART or full competition planner load.",
+    "Latency begins at host received JPEG, not physical exposure; preview timestamp precedes imshow and is not physical screen time.",
+    "Cached tests repeat the same real image and never count as live unique-frame performance.",
+    "Per-stage percentiles cannot be added to produce end-to-end percentiles.",
+    "The final input-identity run used a different formal-runner fingerprint from the matched performance comparison; it is auxiliary source validation, not a controlled speed comparison. External formal worktree changes were preserved and are outside this task.",
+    "No new age gates, handshakes, waits, error-to-stop policy, affinity or frequency changes."
+  ],
+  "checks": {
+    "real_live_frame_lineage_passed": true,
+    "formal_sources_at_baseline": {
+      "competition_rescue/run_competition_rescue.py": "e7f0255f54b2152c1c470a46668b7df747004fe4cadbb2c587706f52c4292ced",
+      "competition_rescue/state_machine.py": "70856351b06393f79231317f3973d997ac8456a72d508293cf3a431ea9a4cf98",
+      "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+      "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+      "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+      "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e",
+      "vision/run_yolo_x5.py": "233a0514914ca13c6387b6932a277425ca819c644868fb0ffa6b40d8fa2bc971",
+      "vision/config/yolo_labels.txt": "4a0dc2064562aa0b8d6572c4215a57e9026943223b77d1060dc5103703eda4dd",
+      "yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065"
+    },
+    "formal_sources_current": {
+      "competition_rescue/run_competition_rescue.py": "0d0bd6e57fe457b173911f2fe0276d08a9481cf509ece52f93082090a8c0ea57",
+      "competition_rescue/state_machine.py": "22aa652c54070ed407ebc0fea425d8a88a9d70882e295b91a4bc1f6c08f6f648",
+      "vision/rescue_vision/yolo26.py": "060c72d1776e048d2f510a06f417afe9ff42c0387ac1a55fad33aaf36e4b5102",
+      "vision/rescue_vision/yolo26_pipeline.py": "38d2ab90fdbcabd104229cde239761bcfae3512fb425eea7dce162f295e602ed",
+      "vision/rescue_vision/camera.py": "34c8c2fb056da79f60c85cb4e14ff8365f4407cc0af2dc1f5449b03b37b6b766",
+      "vision/rescue_vision/tracker.py": "695220a42b8c8d72768180221d5db7f210fb6394da344373a4ecc4d67335a26e",
+      "vision/run_yolo_x5.py": "233a0514914ca13c6387b6932a277425ca819c644868fb0ffa6b40d8fa2bc971",
+      "vision/config/yolo_labels.txt": "4a0dc2064562aa0b8d6572c4215a57e9026943223b77d1060dc5103703eda4dd",
+      "yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065"
+    },
+    "external_formal_worktree_changes_not_in_this_task": [
+      "competition_rescue/run_competition_rescue.py",
+      "competition_rescue/state_machine.py"
+    ],
+    "matched_comparison_runner_fingerprint_verified": true,
+    "model_bytes_match_previous_new_model": true,
+    "final_aux_benchmark_source_matches_files": true,
+    "final_aux_profile_helper_source_matches_file": true
+  },
+  "official_sources": [
+    "https://developer.d-robotics.cc/sdk_doc/versions/2.0.0/en/toolchain_development/intermediate/runtime_sample.html",
+    "https://developer.d-robotics.cc/oe_x5_doc/en/runtime/source/tool_introduction/hrt_model_exec.html"
+  ]
+}

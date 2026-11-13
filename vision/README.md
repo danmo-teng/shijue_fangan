@@ -341,6 +341,54 @@ python3 -m py_compile run_editor.py run_detector.py calibrate_ground.py rescue_v
 合成测试通过只说明代码和基本颜色规则正常；现场阈值仍需使用真实材料校准。
 
 
+## YOLO26性能取证（2026-11-13，仅独立测速）
+
+原入口新增可选`--profile`，默认关闭。只在测速进程中包装原相机/SDK/队列调用，正式源文件不加计时。
+不改变原模型、阈值、输入尺寸、CPU/BPU调度、队列容量或选帧规则，不启动比赛/定位/UART/电机。
+增加源offset/PTS、解码亮度抽样CRC、解码/提交/出队/SDK/结果接收时间、线程CPU时间及1Hz进程/CPU/BPU数据。
+逐线程统计仅在运行前后采样，不逐帧写盘；校验值、时间和统计结果均不参与帧准入。
+
+```bash
+# 可从原桌面程序对应launcher开启同一分析模式：
+bash vision/benchmark_yolo26_launcher.sh --profile --duration 30 --warmup 5
+python3 vision/benchmark_yolo26_x5.py --profile --no-display --duration 30 --warmup 5
+# 用上一轮生成的真实NV12缓存做三个连续推理测试；每个模式测10秒，重复图不算实时新帧：
+python3 vision/benchmark_yolo26_x5.py --cached-perf /home/sunrise/RDK_X5/shijue_fangan/vision/captures/yolo26_benchmark/20261113_185206_510929_competition/profile_cached_native.nv12 --duration 10 --warmup 2
+```
+
+官方工具基础吞吐复现（同一BPU上的1/2个任务，不包含本程序取帧/跟踪/ROI）：
+
+```bash
+hrt_model_exec perf --model_file /home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin --frame_count 1000 --thread_num 1 --core_id 1
+hrt_model_exec perf --model_file /home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin --frame_count 1000 --thread_num 2 --core_id 1
+```
+
+本节SDK指`hbm_runtime`模型推理接口，不涉及T265 SDK。
+在原每轮目录追加`profile_summary.json`、`profile_captures.csv`、`profile_decoded.csv`、
+`profile_submissions.csv`、`profile_receptions.csv`、`profile_worker.json`、`profile_latency_parts.csv`、
+`profile_resources.json`、`profile_threads.json`及可用的`profile_display.csv`；保留源码指纹和分析源码副本。
+帧号联结已检查到相机接收/解码、成功提交、工作线程完成、父进程接收，不拿重复刷屏凑识别FPS。
+
+同一正式辅助代码指纹的30秒对照：原路径42.50FPS、P95 71.77ms；分析版带预览42.00FPS、P95 72.55ms，
+无预览45.67FPS、P95 68.71ms。带预览CPU均值为父进程90.0%、推理48.3%、预览39.0%（100%=一个CPU核）；
+BPU占用中位41%，主线程允许CPU0～7，OpenCV内部线程数为1；没有固定30FPS锁，确有60FPS解码/50FPS提交上限。
+主要P50片段：JPEG接收→解码8.27ms、解码→提交8.48ms、复制/提交1.25ms、队列驻留约14.18～15.58ms，
+SDK调用13.38ms、CPU预处理4.40ms/后处理3.47ms、跟踪/ROI快照3.01ms。各段分位数不能直接相加得到整链分位数。
+92.54%的SDK开跑时已有更新解码图，采集时间差中位16.26ms；这是离线机会量，不是已实现的延迟收益。
+
+缓存SDK调用80.8次/s，加后处理64.1次/s，完整预处理/SDK/后处理50.9次/s。官方工具同一模型1000帧：
+单任务96.94FPS/均值10.30ms，双任务105.79FPS/18.88ms；吞吐+9.13%，每任务耗时+83.24%。
+不能把多任务吞吐当单帧延迟降低，也未实施双SDK工作进程。优先建议在独立测速评估空闲worker领取最新完整解码帧，
+保单SDK拥有者及帧/结果配对；改变共享帧所有权、前后处理流水化及正式迁移另行选择，本次未实施。
+
+补充输入身份轮：30秒5287个不同源offset、1763个不同解码亮度抽样CRC，未见重复画面凑帧。
+该轮正式辅助代码因工作区其他任务已有不同指纹，只作输入身份辅助证据，不混入上述性能对照；其他改动未纳入本次提交。
+初版逐秒遍历所有线程的观察器开销过大，其两轮记录保留且不用于最终速度结论；轻量采样CPU中位约4.7～6.6ms/秒。
+原路径有最低28FPS的一秒窗口，不能以均值承诺长期每秒≥30或每帧33.3ms硬截止；本轮未跑比赛联合负载。
+SDK/结果时延从主机收到JPEG算起，非曝光→屏幕物理时延。官方profiler一项TaskPendingTime大数异常已保留原值，未用于归因；
+somstatus部分cpuinfo_cur_freq无读权限，0不作降频证据，改记录可读的scaling_cur_freq/BPU cur_freq。
+汇总和图：`docs/reports/yolo26_performance_20261113/`，所有原始轮次仍保存在`vision/captures/yolo26_benchmark/`。
+
 ## YOLO26n 640×640 新模型对比（2026-11-09）
 
 桌面“YOLO26-640实时测速”仍使用原入口 `benchmark_yolo26_x5.py`，默认模型改为：
