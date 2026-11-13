@@ -2548,3 +2548,78 @@ def test_rectangle_entry_checks_current_extra_objects_and_preserves_local_enter(
             out=m.step(snapshot((held,),21),PoseSnapshot(valid=True,yaw_deg=90),status,1.1)
         assert out.command.opcode==CMD_ENTER_SAFE_ZONE
         assert out.command.arg_a==out.command.arg_b==out.command.aux==0
+
+
+def test_search_and_approach_exclude_all_current_red_and_blue_safe_boxes():
+    from types import SimpleNamespace
+    from rescue_vision.models import TrackState
+    from state_machine import CargoBatch
+    def track(i,name,box):
+        return SimpleNamespace(track_id=i,class_name=name,confidence=.95,hits=6,misses=0,
+            state=TrackState.CONFIRMED,last_detection=SimpleNamespace(bbox=box,ground_xy_mm=None))
+    boxes={'safe_red':(80,100,300,260),'safe_blue':(500,350,400,350)}
+    detections=[SimpleNamespace(class_name=k,bbox=v) for k,v in boxes.items()]
+    detections.append(SimpleNamespace(class_name='safe_red',bbox=(1020,100,180,180)))
+    items=(track(1,'green_supply',(150,150,60,60)),track(2,'green_supply',(550,400,60,60)),
+           track(3,'core_black',(750,450,70,80)),track(4,'green_supply',(980,750,100,100)),
+           track(5,'injured_orange',(600,640,60,65)),track(6,'green_supply',(1080,120,40,60)),
+           track(7,'danger_cyan',(600,450,80,100)))
+    for side in ('red','blue'):
+        m=CompetitionMission(CompetitionSettings(side=side,initial_stash_enabled=False))
+        m.state=CompetitionState.SEARCH
+        own=boxes['safe_'+side]
+        def snapshot(values,regions=detections,blocked=False):
+            return runner_module.make_vision_snapshot(regions,values,SimpleNamespace(calibrated=False),
+                own,StmSnapshot(mode=3,age_ms=0,camera_pitch_cdeg=12000),m,10,
+                safe_zone_filter_blocked=blocked,observed_s=1.)
+        v=snapshot(items)
+        assert {x.track_id for x in v.cargo if x.inside_safe_zone}=={1,2,3,6,7}
+        assert m._choose_initial_green(v).track_id==4
+        assert not v.danger_ahead
+        m._select_batch(CargoBatch((2,),('green_supply',),'material'))
+        m.locked_target_track_id=2;m.state=CompetitionState.APPROACH
+        assert m._target_for_batch(v).track_id==4
+        m.state=CompetitionState.SEARCH
+        protected=tuple(x for x in items if x.track_id in {1,2,3,6,7})
+        out=m.step(snapshot(protected),PoseSnapshot(valid=True),StmSnapshot(mode=3,age_ms=0),1.)
+        assert out.state==CompetitionState.SEARCH and out.command.opcode==CMD_HOLD
+        # A real opponent box remains usable while only the OWN cached box is missing.
+        other='safe_blue' if side=='red' else 'safe_red'
+        v=snapshot(items,[SimpleNamespace(class_name=other,bbox=boxes[other])],True)
+        own_id,other_id=(1,2) if side=='red' else (2,1)
+        flags={x.track_id:x.inside_safe_zone for x in v.cargo}
+        assert flags[other_id] and not flags[own_id]
+
+
+def test_opponent_exclusion_does_not_confirm_delivery_or_hide_claw_load():
+    from types import SimpleNamespace
+    from rescue_vision.models import TrackState
+    from capture_roi import CaptureRois,split_capture_roi
+    from state_machine import CargoBatch
+    def track(i,name,box):
+        return SimpleNamespace(track_id=i,class_name=name,confidence=.95,hits=6,misses=0,
+            state=TrackState.CONFIRMED,last_detection=SimpleNamespace(bbox=box,ground_xy_mm=None))
+    boxes={'safe_red':(100,100,300,250),'safe_blue':(500,350,400,350)}
+    detections=[SimpleNamespace(class_name=k,bbox=v) for k,v in boxes.items()]
+    red=track(1,'green_supply',(150,150,60,60));blue=track(2,'green_supply',(550,400,60,60))
+    for side in ('red','blue'):
+        m=CompetitionMission(CompetitionSettings(side=side,initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.carried_manifest=('green_supply',);m.carried_total_count=1
+        m.state=CompetitionState.DELIVERY_VERIFY
+        for known in (1,2):
+            v=runner_module.make_vision_snapshot(detections,(red,blue),SimpleNamespace(calibrated=False),
+                boxes['safe_'+side],StmSnapshot(mode=15,age_ms=0,camera_pitch_cdeg=12000),m,20,
+                recent_carried_track_ids=(known,))
+            assert all(x.inside_safe_zone for x in v.cargo)
+            inside=(known==(1 if side=='red' else 2))
+            assert v.delivery_target_inside_safe_zone==inside
+            assert v.delivery_target_outside_safe_zone!=inside
+    # Already-held cargo remains a WHOLE claw audit even when projected on a safe colour.
+    m.state=CompetitionState.POST_GRAB_AUDIT
+    cyan=track(3,'danger_cyan',(650,450,80,100))
+    poly=((1,1),(1278,1),(1278,1022),(1,1022));rois=CaptureRois(poly,*split_capture_roi(poly))
+    v=runner_module.make_vision_snapshot(detections,(blue,cyan),SimpleNamespace(calibrated=False),
+        boxes['safe_blue'],StmSnapshot(mode=23,flags=3,age_ms=0,camera_pitch_cdeg=14000),m,21,
+        capture_rois=rois)
+    assert v.capture_audit.total_count==2 and v.capture_audit.danger_present

@@ -352,6 +352,18 @@ def bbox_overlap_ratio(
     return float(overlap_width * overlap_height) / float(tw * th)
 
 
+def bbox_inside_safe_zone(bbox, safe_bbox, class_name: str) -> bool:
+    if safe_bbox is None:
+        return False
+    overlap_ratio = bbox_overlap_ratio(bbox, safe_bbox)
+    x, y, width, height = bbox
+    sx, sy, sw, sh = safe_bbox
+    foot_inside = (sx <= x + width * 0.5 <= sx + sw and
+                   sy <= y + height <= sy + sh)
+    return (overlap_ratio >= 1.0 if class_name == "core_black"
+            else overlap_ratio > 0.80) and foot_inside
+
+
 def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
     result: list[TrackedCargo] = []
     for track in tracks:
@@ -364,18 +376,7 @@ def tracked_cargo(tracks, safe_bbox) -> tuple[TrackedCargo, ...]:
                 float(detection.ground_xy_mm[0]) / 1000.0,
                 float(detection.ground_xy_mm[1]) / 1000.0,
             )
-        inside = False
-        if safe_bbox is not None:
-            overlap_ratio = bbox_overlap_ratio(detection.bbox, safe_bbox)
-            x, y, width, height = detection.bbox
-            sx, sy, sw, sh = safe_bbox
-            foot_inside = (sx <= x + width * 0.5 <= sx + sw and
-                           sy <= y + height <= sy + sh)
-            inside = (
-                overlap_ratio >= 1.0
-                if track.class_name == "core_black"
-                else overlap_ratio > 0.80
-            ) and foot_inside
+        inside = bbox_inside_safe_zone(detection.bbox, safe_bbox, track.class_name)
         result.append(
             TrackedCargo(
                 track_id=track.track_id,
@@ -505,6 +506,7 @@ def danger_ahead(
     candidates = [
         item for item in cargo
         if item.class_name == "danger_cyan" and item.visible and item.hits >= 2
+        and not item.inside_safe_zone
     ]
     if not candidates:
         return False, "unknown"
@@ -833,7 +835,19 @@ def make_vision_snapshot(
 ) -> VisionSnapshot:
     # A cached rectangle from another camera angle cannot prove membership
     # in the current view. Retain the existing per-class area requirement.
-    cargo = tracked_cargo(tracks, None if safe_zone_filter_blocked else safe_bbox)
+    own_zone_cargo = tracked_cargo(tracks, None if safe_zone_filter_blocked else safe_bbox)
+    # Both colours exclude search/approach targets. Only the selected own
+    # rectangle remains delivery evidence; never credit the opponent's zone.
+    current_safe_boxes = tuple(item.bbox for item in detections
+                               if item.class_name in {"safe_red", "safe_blue"})
+    cargo = tuple(
+        replace(item, inside_safe_zone=True)
+        if not item.inside_safe_zone and any(
+            bbox_inside_safe_zone(item.bbox, box, item.class_name)
+            for box in current_safe_boxes
+        ) else item
+        for item in own_zone_cargo
+    )
     rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )
@@ -998,7 +1012,7 @@ def make_vision_snapshot(
         recent_carried_bboxes, recent_carried_pitch_cdeg,
     )
     exact_delivery_items = [
-        item for item in cargo
+        item for item in own_zone_cargo
         if item.visible and item.track_id in known_carried_ids
     ]
     # Do not turn an arbitrary, nearer same-class floor object into the load

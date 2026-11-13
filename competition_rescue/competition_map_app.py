@@ -33,6 +33,7 @@ from field_model import initial_pose
 
 WHEEL_OWNER = "competition_wheel_input"
 WHEEL_FILES = WHEEL_SESSION_FILES
+VISION_WINDOW_NAME = "complete_rescue_competition"
 
 
 class CompetitionMapApp(RescueMapApp):
@@ -425,11 +426,28 @@ class CompetitionMapApp(RescueMapApp):
                 (920, 515, 1245, 555), self.dynamic.lidar_enabled)
             if state.get('transport_error'):
                 self.message = '定位链错误：' + state['transport_error']
-        self.button(canvas, text, 'window_minimize', '最小化', (920, 6, 1020, 40))
+        self.button(canvas, text, 'window_minimize', '最小化', (920, 6, 1000, 40))
         self.button(canvas, text, 'window_fullscreen',
-            '窗口' if self.fullscreen else '全屏', (1030, 6, 1130, 40))
+            '窗口' if self.fullscreen else '全屏', (1006, 6, 1066, 40))
+        self.button(canvas, text, 'window_vision', '识别窗口', (1072, 6, 1176, 40))
         self.button(canvas, text, 'window_exit', '退出',
-            (1140, 6, 1245, 40), True, (55, 55, 160))
+            (1182, 6, 1245, 40), True, (55, 55, 160))
+
+    def show_vision_window(self):
+        xdotool = shutil.which('xdotool')
+        if xdotool is None:
+            self.message = '当前桌面无法调出识别窗口，请使用系统窗口列表'
+            return
+        try:
+            result = subprocess.run(
+                [xdotool, 'search', '--name', f'^{VISION_WINDOW_NAME}$',
+                 'windowmap', 'windowraise', 'windowactivate'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            if result.returncode:
+                self.message = '识别窗口尚未打开或已关闭；识别进程未重启'
+        except OSError as error:
+            self.message = f'识别窗口置前未成功：{error}'
 
     def minimize_window(self):
         # Restrict the desktop request to this process's map window. Hiding
@@ -460,6 +478,7 @@ class CompetitionMapApp(RescueMapApp):
         for name, action in (
             ('window_minimize', self.minimize_window),
             ('window_fullscreen', self.toggle_window_fullscreen),
+            ('window_vision', self.show_vision_window),
             ('window_exit', lambda: setattr(self, 'window_exit_requested', True)),
         ):
             rect = self.hitboxes.get(name)
