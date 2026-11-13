@@ -2092,7 +2092,7 @@ def test_two_material_retrieval_keeps_actual_single_remaining():
 
 
 def test_visual_lateral_uses_live_target_not_ack_and_keeps_local_straight_enter():
-    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE, CMD_PAUSE
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE
     for side in ("red", "blue"):
         m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False))
         m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
@@ -2105,8 +2105,6 @@ def test_visual_lateral_uses_live_target_not_ack_and_keeps_local_straight_enter(
         out = m.step(view, pose(), status, 1.)
         assert out.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
         assert out.command.arg_a == 203  # A fake/legacy completed ACK cannot bypass visual error.
-        missing = m.step(replace(view, frame_sequence=12, safe_bbox=None), pose(), status, 1.01)
-        assert missing.command.opcode == CMD_PAUSE
         centered = replace(view, frame_sequence=13, safe_bbox=(16, 0, 936, 113))
         accepted_only = m.step(centered, pose(), replace(status, action_status=1), 1.02)
         assert accepted_only.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
@@ -2119,6 +2117,60 @@ def test_visual_lateral_uses_live_target_not_ack_and_keeps_local_straight_enter(
         assert enter.command.opcode == CMD_ENTER_SAFE_ZONE
         assert enter.command.arg_a == enter.command.arg_b == enter.command.aux == 0
         assert enter.state == CompetitionState.ENTER_SAFE_ZONE
+
+
+def test_locked_safe_zone_loss_reacquires_higher_view_without_losing_cargo():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_VISUAL_CORRECTION_VALID
+    for side in ("red", "blue"):
+        for pitch, lost_kind in ((12000, "missing"), (12000, "filtered"),
+                                 (12000, "pitch"), (11500, "missing")):
+            m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False))
+            batch = CargoBatch((1,), ("green_supply",), "material")
+            m._select_batch(batch)
+            m.carried_manifest = batch.classes
+            m.carried_total_count = 1
+            m.confirmed_delivery_destination = "material"
+            m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+            m.safe_zone_view_pitch_cdeg = pitch
+            m._update_safe_zone_visual_target((216, 0, 941, 113), 10)
+            status = StmSnapshot(mode=11, flags=2, camera_pitch_cdeg=pitch, age_ms=0,
+                context_valid=True, context_matches=True,
+                accepted_command=CMD_ALIGN_SAFE_ZONE, action_status=3)
+            view = VisionSnapshot(frame_sequence=11, observed_monotonic_s=1.,
+                safe_bbox=None if lost_kind == "missing" else (216, 0, 941, 113),
+                safe_zone_filter_blocked=lost_kind == "filtered")
+            if lost_kind == "pitch":
+                status = replace(status, camera_pitch_cdeg=14000)
+            lost = m.step(view, pose(), status, 1.)
+            assert lost.state == CompetitionState.ACQUIRE_SAFE_ZONE
+            assert lost.event == "safe_zone_visual_reobserve"
+            assert lost.command.opcode == CMD_ALIGN_SAFE_ZONE
+            assert lost.command.flags & CMD_VISUAL_CORRECTION_VALID
+            assert lost.command.arg_a == lost.command.source_vision_frame == 0
+            assert lost.command.arg_b == 11500
+            assert m.locked_safe_bbox is None and not m.safe_zone_lateral_active
+            assert m.selected_batch == batch and m.carried_manifest == batch.classes
+            assert m.carried_total_count == 1 and m.confirmed_delivery_destination == "material"
+            # A DONE for the zero-translation request is not a visual fix.
+            reported = replace(status, camera_pitch_cdeg=11500)
+            waiting = m.step(replace(view, frame_sequence=12, safe_bbox=None), pose(), reported, 1.01)
+            assert waiting.state == CompetitionState.ACQUIRE_SAFE_ZONE
+            assert not waiting.event and waiting.command == lost.command
+            # Existing new-view ownership and three-frame acquisition are reused.
+            centered = (320, 0, 960, 113)
+            for frame, now in ((13, 1.02), (14, 1.03), (15, 1.04)):
+                recovered = m.step(VisionSnapshot(frame_sequence=frame, safe_bbox=centered,
+                    observed_monotonic_s=now), pose(), reported, now)
+                if frame < 15:
+                    assert recovered.state == CompetitionState.ACQUIRE_SAFE_ZONE
+            assert recovered.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+            assert recovered.command.source_vision_frame == 15
+            assert recovered.command.arg_b == 11500 and recovered.command.arg_a == 0
+            assert recovered.event == "safe_zone_bbox_locked"
+            assert m.step(VisionSnapshot(frame_sequence=16, safe_bbox=centered), pose(),
+                reported, 1.05).state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+            m._reset_safe_zone_alignment()
+            assert not m.safe_zone_reobserve_visual and m.safe_zone_higher_view_ready_s is None
 
 
 def test_platform_mixture_returns_to_existing_load_audit_before_enter():
@@ -2145,6 +2197,32 @@ def test_platform_mixture_returns_to_existing_load_audit_before_enter():
     m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
     still_staging = replace(moving, accepted_command=CMD_NAVIGATE_WAYPOINT, context_matches=False)
     assert m.step(view, pose(), still_staging, 1.02).state != CompetitionState.TRANSPORT_AUDIT
+
+
+def test_preentry_locked_safe_zone_loss_reobserves_without_bypassing_obstacles():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_PAUSE
+    for state in (CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                  CompetitionState.WAIT_SAFE_ZONE_CLEAR):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        batch = CargoBatch((1,), ("green_supply",), "material")
+        m._select_batch(batch)
+        m.state = state
+        m.safe_zone_visual_locked = True
+        m._update_safe_zone_visual_target((320, 0, 960, 113), 10)
+        status = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000)
+        blocked = VisionSnapshot(frame_sequence=11, safe_bbox=(320, 0, 960, 113),
+            safe_corridor_polygon=((201, 727), (1067, 727), (1067, 113), (201, 113)),
+            safe_corridor_obstacle_class="danger_cyan")
+        obstacle = m.step(blocked, pose(), status, 1.)
+        assert obstacle.command.opcode == CMD_PAUSE
+        assert m.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR
+        missing = m.step(replace(blocked, frame_sequence=12, safe_bbox=None,
+            safe_corridor_polygon=()), pose(), status, 1.01)
+        assert missing.event == "safe_zone_visual_reobserve"
+        assert m.state == CompetitionState.ACQUIRE_SAFE_ZONE
+        assert missing.command.opcode == CMD_ALIGN_SAFE_ZONE
+        assert missing.command.arg_a == 0 and missing.command.arg_b == 11500
+        assert m.selected_batch == batch and not m.safe_zone_visual_locked
 
 
 def test_safe_zone_lateral_only_starts_for_large_error_and_finishes_without_zero_chasing():

@@ -119,7 +119,7 @@ def replay_worker(root, session_id, inbox, stop, dropped, fps, pre_s, post_s, si
                     number = len(manifest['clips']) + 1
                     stem = f'safe_zone_replay_{number:04d}'
                     clip = dict(video=stem+'.avi', frames=stem+'.jsonl', complete=False,
-                        trigger='safe_zone_acquire_no_box', trigger_monotonic_ns=event_ns,
+                        trigger=event['event'], trigger_monotonic_ns=event_ns,
                         events=[event], frames_written=0, first_capture_ns=None)
                     manifest['clips'].append(clip); persist()
                     writer = cv2.VideoWriter(str(root/clip['video']),cv2.VideoWriter_fourcc(*'MJPG'),fps,(size[0],size[1]+96))

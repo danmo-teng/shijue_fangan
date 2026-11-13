@@ -1771,6 +1771,11 @@ def test_incident_video_replay_and_log_only_timeout():
     b = mission.step(VisionSnapshot(frame_sequence=3,observed_monotonic_s=6.2),p,s,6.2)
     assert a.event=='safe_zone_acquire_no_box' and not b.event
     assert a.state==b.state==CompetitionState.ACQUIRE_SAFE_ZONE and a.command==b.command
+    mission.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    mission._update_safe_zone_visual_target((216, 0, 941, 113), 3)
+    reobserve = mission.step(VisionSnapshot(frame_sequence=4), p,
+        replace(s, camera_pitch_cdeg=11500), 6.3)
+    assert reobserve.event == 'safe_zone_visual_reobserve'
     with tempfile.TemporaryDirectory() as directory:
         root=Path(directory);r=VisionReplay(root,'replay-fixture',fps=8,pre_s=.3,post_s=.3,size=(192,128))
         planner = CompetitionPlanner(mission,root/'pose.json',root/'stm.json',root/'command.bin',
@@ -1783,7 +1788,8 @@ def test_incident_video_replay_and_log_only_timeout():
             for i in range(10):
                 image=np.full((128,192,3),(i*20,20,40),np.uint8)
                 if i in (4,6):
-                    planner._record_replay_event(a,p,s,VisionSnapshot(frame_sequence=i),1.+i*.13)
+                    planner._record_replay_event(reobserve if i == 4 else a,
+                        p,s,VisionSnapshot(frame_sequence=i),1.+i*.13)
                 meta=dict(frame_sequence=i,capture_monotonic_ns=1_000_000_000+i*130_000_000,
                     source_size=[192,128],detections=[dict(bbox=[10,20,20,20],confidence=.8,**{'class':'green_supply'})],
                     pose=dict(x_m=.1,y_m=.2,yaw_deg=90,age_ms=float('inf')),stm=dict(mode=11,camera_pitch_cdeg=12000),
@@ -1799,6 +1805,10 @@ def test_incident_video_replay_and_log_only_timeout():
         clip=manifest['clips'][0];rows=[json.loads(l) for l in (root/clip['frames']).read_text().splitlines()]
         assert [x['frame_sequence'] for x in rows]==[2,3,4,5,6,7,8]
         assert [event['vision_frame_sequence'] for event in clip['events']]==[4,6]
+        assert clip['trigger'] == 'safe_zone_visual_reobserve'
+        assert [event['event'] for event in clip['events']] == [
+            'safe_zone_visual_reobserve', 'safe_zone_acquire_no_box']
+        assert clip['events'][0]['command']['arg_b'] == 11500
         assert clip['post_window_end_ns']==2_080_000_000
         assert manifest['pending_events']==[] and manifest['event_overflow_count']==0
         assert rows[0]['pose']['age_ms'] is None and rows[0]['seconds_from_trigger']<0
@@ -2354,15 +2364,30 @@ def test_pending_visual_lateral_updates_same_action_and_source_frame():
         planner._publish(out)
         assert (planner.protocol_task, planner.protocol_action) == (task, action)
         assert planner.protocol_vision_frame == 11
+        assert int.from_bytes((root/"command").read_bytes()[8:12], "big") == 11
         missing = planner._output_for_cycle(replace(view, frame_sequence=12, safe_bbox=None),
             PoseSnapshot(valid=True), status, False, 1.01)
         planner._publish(missing)
-        recovered = planner._output_for_cycle(replace(view, frame_sequence=13),
-            PoseSnapshot(valid=True), status, False, 1.02)
-        assert recovered.command.opcode == CMD_ALIGN_SAFE_ZONE
-        planner._publish(recovered)
+        assert missing.event == "safe_zone_visual_reobserve"
+        assert missing.command.arg_a == 0 and missing.command.arg_b == 11500
         assert (planner.protocol_task, planner.protocol_action) == (task, action)
-        assert planner.protocol_vision_frame == 13
+        assert int.from_bytes((root/"command").read_bytes()[8:12], "big") == 0
+        waiting = planner._output_for_cycle(replace(view, frame_sequence=13),
+            PoseSnapshot(valid=True), status, False, 1.02)
+        assert waiting.state == CompetitionState.ACQUIRE_SAFE_ZONE and not waiting.event
+        assert waiting.command == missing.command
+        raised = replace(status, camera_pitch_cdeg=11500)
+        planner._publish(planner._output_for_cycle(replace(view, frame_sequence=14),
+            PoseSnapshot(valid=True), raised, False, 1.03))
+        for frame, now in ((15, 1.04), (16, 1.05), (17, 1.06)):
+            recovered = planner._output_for_cycle(replace(view, frame_sequence=frame),
+                PoseSnapshot(valid=True), raised, False, now)
+            planner._publish(recovered)
+        assert recovered.command.opcode == CMD_ALIGN_SAFE_ZONE
+        assert recovered.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        assert (planner.protocol_task, planner.protocol_action) == (task, action)
+        assert planner.protocol_vision_frame == 17
+        assert int.from_bytes((root/"command").read_bytes()[8:12], "big") == 17
 
 
 def test_locked_single_target_keeps_whole_claw_audit_in_every_view():

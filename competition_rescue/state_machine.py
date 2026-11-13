@@ -765,6 +765,7 @@ class CompetitionMission:
         self.safe_zone_acquire_started_s: float | None = None
         self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_view_pitch_cdeg = 12000
+        self.safe_zone_reobserve_visual = False
         self.safe_zone_higher_view_ready_s: float | None = None
         self.safe_zone_freeze_frame_floor: int | None = None
         self.safe_zone_freeze_last_frame_sequence: int | None = None
@@ -3889,6 +3890,8 @@ class CompetitionMission:
         self.safe_zone_acquire_started_s = None
         self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_view_pitch_cdeg = 12000
+        self.safe_zone_reobserve_visual = False
+        self.safe_zone_higher_view_ready_s = None
         self.safe_zone_freeze_frame_floor = None
         self.safe_zone_freeze_last_frame_sequence = None
         self.safe_zone_freeze_hits = 0
@@ -3926,6 +3929,13 @@ class CompetitionMission:
             11500 if self.safe_zone_view_pitch_cdeg == 11500 else 0,
             source_vision_frame=self.safe_zone_visual_frame,
         )
+
+    def _safe_zone_acquire_command(self) -> CommandRequest:
+        # Once visual ALIGN is accepted, the MCU no longer accepts its initial
+        # pose-only form. Keep the same visual action while changing the view.
+        if self.safe_zone_reobserve_visual:
+            return self._safe_zone_visual_align_command()
+        return self._safe_zone_pose_align_command()
 
     def _begin_safe_corridor_check(
         self, vision: VisionSnapshot, now: float
@@ -4237,6 +4247,7 @@ class CompetitionMission:
         self.transport_audit_handoff_active = False
         self.safe_zone_acquire_started_s = now
         self.safe_zone_acquire_timeout_reported = False
+        self.safe_zone_reobserve_visual = False
         self.safe_zone_higher_view_ready_s = None
         self.safe_zone_freeze_frame_floor = (
             vision.frame_sequence if vision.frame_sequence > 0 else None
@@ -6381,7 +6392,7 @@ class CompetitionMission:
                         (vision.observed_monotonic_s is not None and
                          vision.observed_monotonic_s + 1e-6 < self.safe_zone_higher_view_ready_s)):
                     return CompetitionOutput(
-                        self.state, self._safe_zone_pose_align_command(),
+                        self.state, self._safe_zone_acquire_command(),
                         "已请求115°复看，沿用下位机角度回报后的新采集图像",
                         self.selected_batch, tx_policy="normal_command",
                         reason="safe_zone_higher_view_frame_wait",
@@ -6425,7 +6436,7 @@ class CompetitionMission:
                 self.safe_zone_freeze_frame_floor = vision.frame_sequence
                 return CompetitionOutput(
                     self.state,
-                    self._safe_zone_pose_align_command(),
+                    self._safe_zone_acquire_command(),
                     "顶部裁切安全区框的连续识别被漏检打断，保持载荷并请求一次115°复看",
                     self.selected_batch,
                     event="safe_zone_acquire_reobserve",
@@ -6449,7 +6460,7 @@ class CompetitionMission:
                 self.safe_zone_acquire_timeout_reported = True
                 return CompetitionOutput(
                     self.state,
-                    self._safe_zone_pose_align_command(),
+                    self._safe_zone_acquire_command(),
                     f"{reason}：保持载荷，已请求115°抬高复看一次，沿用安全区观察流程",
                     self.selected_batch,
                     event=event,
@@ -6459,7 +6470,7 @@ class CompetitionMission:
                 )
             return CompetitionOutput(
                 self.state,
-                self._safe_zone_pose_align_command(),
+                self._safe_zone_acquire_command(),
                 (
                     "保持定位正方向，等待连续3帧本方安全区："
                     f"{self.safe_zone_freeze_hits}/{self.settings.safe_zone_freeze_frames}"
@@ -6470,16 +6481,28 @@ class CompetitionMission:
                 expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
             )
 
-        if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
+        if (self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX or
+                (self.safe_zone_visual_locked and self.state in {
+                    CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                    CompetitionState.WAIT_SAFE_ZONE_CLEAR,
+                })):
             if (vision.safe_bbox is None or vision.safe_zone_filter_blocked or
                     stm.camera_pitch_cdeg != self.safe_zone_view_pitch_cdeg):
+                self._begin_safe_zone_acquire(vision, now)
+                self.safe_zone_view_pitch_cdeg = 11500
+                self.safe_zone_reobserve_visual = True
+                # arg_a=0 requests zero lateral translation; frame=0 means no
+                # image measurement. ACQUIRE cannot treat a resulting MCU DONE
+                # as image alignment: it must acquire real boxes again first.
                 return CompetitionOutput(
-                    self.state, self._pause(),
-                    "当前画面无安全区分区点，暂停横移并保留本次对准动作",
-                    self.selected_batch, tx_policy="pause",
-                    reason="safe_zone_visual_box_missing",
+                    self.state, self._safe_zone_acquire_command(),
+                    "锁框后安全区失框或视角改变，保留载荷并请求115°复看，重新确认分区方向",
+                    self.selected_batch, event="safe_zone_visual_reobserve",
+                    tx_policy="normal_command",
+                    reason="safe_zone_visual_reobserve",
                     expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE),
                 )
+        if self.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
             if vision.frame_sequence > self.safe_zone_visual_frame:
                 self._update_safe_zone_visual_target(vision.safe_bbox, vision.frame_sequence)
             visual_align_command = self._safe_zone_visual_align_command()

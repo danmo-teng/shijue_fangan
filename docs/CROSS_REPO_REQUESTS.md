@@ -16,16 +16,25 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 最新161039比赛只分析：锁框后失框缺复看回接（尚无新下位实施任务）
+## MATCH-SAFE-BOX-20261113：RDK后续失框复看已修，无新下位任务
 
-实际日志配对20000101_080033_competition_10与20261113_161039_competition_wheel，
-实跑metadata上位661bdf7，下位实际UART回包6c2ce2d/dirty1、NormalRun/TASK；不是旧134947的13b5cc7。
-最后卡段导航已完成，停在视觉横移；无框只PAUSE，原5秒抬高复看只在初次ACQUIRE中，未覆盖成功锁框后再次失框。
-同局214.832s发过115°且角度命令回报变115°；尾段477.465—491.7s均120°，未发115请求，不归咎下位当次拒绝。
-本轮只分析、未主动读UART或改固件/代码；复看同动作衔接与115°仍失败的可执行出口需按实际代码审查后让用户决定。
-不得据此自动新增超时、年龄门、握手或故障。完整证据：
+用户已批准修复锁框后再次失框。基于25c48ac增量：视觉横移及已锁框的入口检查/阻挡等待，
+失框时清旧横差，同task/action的0x04视觉形式请求115°，重新识别后继续，不退回初始定位形式。
+复看请求arg_a=0、arg_b=11500、aux=0、vision_frame=0仅表示零平移/无新测量；
+RDK不会把此时的COMPLETED当对准成功。复用原新视图/3帧识别，再发送实际横差和真实帧号。
+修复runner原已记录却漏写入0x1D的ALIGN source_vision_frame；原协议布局及帧号排序规则不变。
+事件接原异步视频回放；没有新增握手/年龄门/故障或额外延时，也未改正在进行的本地直推。
+
+本轮已读对端main固定入口（blob c05ba53bfdf7e34528594fcf84e79f3be40e17e5）；其ALIGN帧号遗漏提示已按上位实际代码核实并在本任务内修复，
+RETURN配对建议是另一个排队任务，本轮不自动实施。接口核查基于最近实跑实际身份6c2ce2d的Task.c
+（blob 6bb899d1566358ce071b7fc775ae16247cff550c）：视觉ALIGN同动作支持115°和frame0，flags不变；无需新增下位代码/协议/测试程序。
+dirty1说明实跑仍可能有未提交差异，不把远端源码或expected当实际完整固件快照；本轮没有主动开UART或烧录。
+7项必要检查、原12421帧离线旧PAUSE→新复看对照及回放编码回读通过，实际抬镜/重新识别尚待实车。
+下位无需为本请求添加保护/握手/时间限制；115°仍看不到时继续持货观察，不承诺必恢复。
+实现及原日志证据：
 
 ```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_SAFE_ZONE_REOBSERVE_20261113.md
 https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/reports/safe_zone_stall_20261113_161039/README.md
 ```
 

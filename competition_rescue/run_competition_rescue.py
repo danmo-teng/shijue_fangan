@@ -1740,7 +1740,9 @@ class CompetitionPlanner:
             self.sequence,
             owner.task_id if owner is not None else self.protocol_task,
             owner.action_id if owner is not None else self.protocol_action,
-            self.protocol_vision_frame if command.opcode in {CMD_APPROACH_TARGET, CMD_CARGO_AUDIT} else 0,
+            self.protocol_vision_frame if command.opcode in {
+                CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE,
+            } else 0,
         )
         write_command_frame(self.command_path, context + command.to_frame(self.sequence))
         if (command.opcode == CMD_CARGO_AUDIT and command.audit is not None and
@@ -2129,10 +2131,13 @@ class CompetitionPlanner:
             # Otherwise the context gate can keep transmitting expired STABLE.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (stm.fresh and not stm.fault and stm.mode in {10, 11} and
-                self.mission.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX):
+                (self.mission.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX or
+                 (self.mission.state == CompetitionState.ACQUIRE_SAFE_ZONE and
+                  self.mission.safe_zone_reobserve_visual))):
             # Keep dynamic pixels moving through an in-flight ACK or a PAUSE
             # overlay. Otherwise a missing box could leave PAUSE retransmitting
-            # forever after the actual image has recovered.
+            # forever after the actual image has recovered. Higher-view
+            # reacquisition belongs to that same dynamic visual action.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.protocol_last_output is not None and stm.fresh and
                 not matches and stm.mode != 41 and not stm.fault):
@@ -2503,7 +2508,8 @@ class CompetitionPlanner:
                 pass  # Failure to report diagnostics must not stop control.
 
     def _record_replay_event(self, output, pose, stm, vision, now: float) -> None:
-        if (output.event not in {"safe_zone_acquire_no_box", "load_empty_reobserve",
+        if (output.event not in {"safe_zone_acquire_no_box", "safe_zone_visual_reobserve",
+                                 "load_empty_reobserve",
                                  "safe_zone_entry", "safe_zone_clear_start",
                                  "carried_incompatible_reaudit"} or
                 self.replay_event_sink is None):
@@ -2688,7 +2694,7 @@ class CompetitionPlanner:
                                 "gripper_closed": stm.gripper_closed,
                                 "camera_pitch_cdeg": stm.camera_pitch_cdeg,
                             })
-                        if output.event == "safe_zone_acquire_no_box":
+                        if output.event in {"safe_zone_acquire_no_box", "safe_zone_visual_reobserve"}:
                             event_data.update(dict(vision_frame_sequence=vision.frame_sequence,
                                 observed_monotonic_s=vision.observed_monotonic_s,
                                 pose=asdict(pose), camera_pitch_cdeg=stm.camera_pitch_cdeg,
