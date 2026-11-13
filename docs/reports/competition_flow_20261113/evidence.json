@@ -1,0 +1,622 @@
+{
+  "analysis_only": true,
+  "time_zero_monotonic_ns": 84285779798,
+  "upper_commit": "a88b031bd743493b2fd6db0d8ddd1f8d157ac834",
+  "actual_lower_commit": "13b5cc7f174dc8746a8395af7a78224eb256f37f",
+  "actual_lower_source_dirty": true,
+  "source_business": "rescue_map/runtime/competition_events.jsonl",
+  "source_sensor": "rescue_map/runtime/history/competition_wheel_input/20261113_134947_competition_wheel",
+  "round_token": "e28f8bf75c837ce56809f4f86759513f",
+  "sdk_session_id": "5a856eb6443d1616be03a22277968b7e",
+  "selected_raw_events": [
+    {
+      "timestamp_monotonic_ns": 84285779798,
+      "event": "competition_started",
+      "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+      "model_family": "YOLO26",
+      "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+      "model_input_wh": [
+        640,
+        640
+      ],
+      "model_output_shapes": {
+        "602": [
+          1,
+          40,
+          40,
+          4
+        ],
+        "616": [
+          1,
+          20,
+          20,
+          6
+        ],
+        "594": [
+          1,
+          40,
+          40,
+          6
+        ],
+        "624": [
+          1,
+          20,
+          20,
+          4
+        ],
+        "580": [
+          1,
+          80,
+          80,
+          4
+        ],
+        "output0": [
+          1,
+          80,
+          80,
+          6
+        ]
+      },
+      "initial_preprocess_backend": "vse",
+      "side": "red",
+      "start_zone": 1,
+      "initial_stash_enabled": true,
+      "initial_stash_done": false,
+      "opening_strategy": "attack",
+      "stash_point_m": [
+        0.15,
+        -0.69
+      ],
+      "max_material_batch_count": 2,
+      "score_threshold": 0.2,
+      "green_supply_score_threshold": 0.2,
+      "safe_sweep_capture_offset_mm": 150.0,
+      "safe_sweep_capture_offset_ignored": true,
+      "homography": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/homography.txt",
+      "metadata": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/homography.txt.meta.json",
+      "required_resolution": [
+        1280,
+        1024
+      ],
+      "localizer.calibrated": false,
+      "required_for_delivery": false,
+      "safe_sweep_control": "pixel_approach",
+      "homography_calibrated": false,
+      "capture_roi": "/home/sunrise/RDK_X5/shijue_fangan/vision/config/capture_roi.json",
+      "capture_polygon_px": [
+        [
+          637,
+          203
+        ],
+        [
+          733,
+          213
+        ],
+        [
+          813,
+          232
+        ],
+        [
+          901,
+          281
+        ],
+        [
+          960,
+          321
+        ],
+        [
+          1016,
+          393
+        ],
+        [
+          1047,
+          515
+        ],
+        [
+          1053,
+          608
+        ],
+        [
+          1067,
+          727
+        ],
+        [
+          201,
+          715
+        ],
+        [
+          201,
+          600
+        ],
+        [
+          223,
+          516
+        ],
+        [
+          243,
+          447
+        ],
+        [
+          268,
+          361
+        ],
+        [
+          329,
+          296
+        ],
+        [
+          417,
+          251
+        ],
+        [
+          493,
+          219
+        ],
+        [
+          564,
+          204
+        ]
+      ],
+      "capture_left_polygon_px": [
+        [
+          637,
+          203
+        ],
+        [
+          640,
+          203
+        ],
+        [
+          640,
+          721
+        ],
+        [
+          201,
+          715
+        ],
+        [
+          201,
+          600
+        ],
+        [
+          223,
+          516
+        ],
+        [
+          243,
+          447
+        ],
+        [
+          268,
+          361
+        ],
+        [
+          329,
+          296
+        ],
+        [
+          417,
+          251
+        ],
+        [
+          493,
+          219
+        ],
+        [
+          564,
+          204
+        ]
+      ],
+      "capture_right_polygon_px": [
+        [
+          640,
+          203
+        ],
+        [
+          733,
+          213
+        ],
+        [
+          813,
+          232
+        ],
+        [
+          901,
+          281
+        ],
+        [
+          960,
+          321
+        ],
+        [
+          1016,
+          393
+        ],
+        [
+          1047,
+          515
+        ],
+        [
+          1053,
+          608
+        ],
+        [
+          1067,
+          727
+        ],
+        [
+          640,
+          721
+        ]
+      ],
+      "display_fps": 10.0,
+      "detection_log_fps": 10.0,
+      "vision_fps": 50.0,
+      "startup_pose": {
+        "valid": true,
+        "x_m": -1.32107385922313,
+        "y_m": 1.32112401469651,
+        "yaw_deg": 135.0,
+        "age_ms": 4.976934,
+        "wheel_progress_m": null
+      },
+      "first_vision_sequence": 16,
+      "start_basis": "warm_operator_start_and_reference_bound"
+    },
+    {
+      "timestamp_monotonic_ns": 127596191928,
+      "event": "state_changed",
+      "from": "TRANSPORT_AUDIT",
+      "to": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN"
+    },
+    {
+      "timestamp_monotonic_ns": 128767389227,
+      "event": "state_changed",
+      "from": "ALIGN_SAFE_ZONE_BY_POSE",
+      "to": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "timestamp_monotonic_ns": 128942411801,
+      "event": "state_changed",
+      "from": "ACQUIRE_SAFE_ZONE",
+      "to": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准520px分区点"
+    },
+    {
+      "timestamp_monotonic_ns": 169873910608,
+      "event": "state_changed",
+      "from": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "to": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "timestamp_monotonic_ns": 169919899623,
+      "event": "state_changed",
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "CLEAR_SAFE_ZONE",
+      "message": "安全区推进走廊保留此前漏检的green_supply阻挡，执行第1次扫障"
+    },
+    {
+      "timestamp_monotonic_ns": 169920217471,
+      "event": "safe_zone_clear_start",
+      "state": "CLEAR_SAFE_ZONE",
+      "message": "安全区推进走廊保留此前漏检的green_supply阻挡，执行第1次扫障"
+    },
+    {
+      "timestamp_monotonic_ns": 205205702067,
+      "event": "safe_sweep_retrieve_failed",
+      "state": "RETURN_CENTER",
+      "message": "原物资200 mm内未找回，放弃本趟并返回场地中心，目标(0.00,0.00) m，剩余670 mm，等待F405进入SEARCH"
+    },
+    {
+      "timestamp_monotonic_ns": 461579466009,
+      "event": "safe_zone_clear_start",
+      "state": "CLEAR_SAFE_ZONE",
+      "message": "安全区推进走廊发现danger_cyan阻挡，执行第1次扫障"
+    },
+    {
+      "timestamp_monotonic_ns": 521910939654,
+      "event": "safe_sweep_retrieve_failed",
+      "state": "RETURN_CENTER",
+      "message": "原物资200 mm内未找回，放弃本趟并返回场地中心，目标(0.00,0.00) m，剩余518 mm，等待F405进入SEARCH"
+    },
+    {
+      "timestamp_monotonic_ns": 781798729190,
+      "event": "capture_decision",
+      "state": "RETURN_CENTER",
+      "reason": "",
+      "frame": 16820,
+      "observed_monotonic_s": 781.66083529,
+      "camera_pitch_cdeg": 10500,
+      "stm_age_ms": 44.441405,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 0,
+      "separation_no_progress_attempts": 0,
+      "task_id": 13340,
+      "action_id": 52659,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 13340,
+      "request_action_id": 52658
+    },
+    {
+      "timestamp_monotonic_ns": 781799290988,
+      "event": "state_changed",
+      "from": "SEARCH",
+      "to": "RETURN_CENTER",
+      "message": "120°和105°两圈未找到合法目标，返回场地中心重启搜索，目标(0.00,0.00) m，剩余374 mm，等待F405进入SEARCH"
+    },
+    {
+      "timestamp_monotonic_ns": 781835047407,
+      "event": "state_changed",
+      "from": "RETURN_CENTER",
+      "to": "SEARCH",
+      "message": "回到中心搜索区，等待相机120°和新视觉帧；已完成13件"
+    },
+    {
+      "timestamp_monotonic_ns": 782334257372,
+      "event": "capture_decision",
+      "state": "SEARCH",
+      "reason": "return_search_frame_gate",
+      "frame": 16833,
+      "observed_monotonic_s": 782.169343044,
+      "camera_pitch_cdeg": 10500,
+      "stm_age_ms": 47.209064,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 0,
+      "separation_no_progress_attempts": 0,
+      "task_id": 13340,
+      "action_id": 52658,
+      "rejected_action_id": 52659,
+      "matched_rejection": false,
+      "request_task_id": 13340,
+      "request_action_id": 52658
+    },
+    {
+      "timestamp_monotonic_ns": 855127037097,
+      "event": "operator_stopped",
+      "competition_started": true,
+      "session_token": "e28f8bf75c837ce56809f4f86759513f",
+      "action": "observe_without_further_commands"
+    }
+  ],
+  "raw_status_tail_transitions": [
+    {
+      "t": 685.027863664,
+      "type": 30,
+      "task": 13340,
+      "action": 52657,
+      "command": 6,
+      "status": 1,
+      "rejected": 0
+    },
+    {
+      "t": 685.027863664,
+      "type": 23,
+      "flags": 80,
+      "mode": 15,
+      "pitch": 12000,
+      "ack": 212,
+      "fault": 0
+    },
+    {
+      "t": 685.449011276,
+      "type": 30,
+      "task": 13340,
+      "action": 52657,
+      "command": 6,
+      "status": 3,
+      "rejected": 0
+    },
+    {
+      "t": 685.449011276,
+      "type": 23,
+      "flags": 80,
+      "mode": 16,
+      "pitch": 12000,
+      "ack": 254,
+      "fault": 0
+    },
+    {
+      "t": 685.510713536,
+      "type": 30,
+      "task": 13340,
+      "action": 52658,
+      "command": 8,
+      "status": 1,
+      "rejected": 0
+    },
+    {
+      "t": 685.568943612,
+      "type": 23,
+      "flags": 84,
+      "mode": 16,
+      "pitch": 12000,
+      "ack": 11,
+      "fault": 0
+    },
+    {
+      "t": 687.307808375,
+      "type": 23,
+      "flags": 80,
+      "mode": 16,
+      "pitch": 12000,
+      "ack": 170,
+      "fault": 0
+    },
+    {
+      "t": 687.367631455,
+      "type": 23,
+      "flags": 80,
+      "mode": 17,
+      "pitch": 12000,
+      "ack": 176,
+      "fault": 0
+    },
+    {
+      "t": 687.42768381,
+      "type": 23,
+      "flags": 84,
+      "mode": 17,
+      "pitch": 12000,
+      "ack": 181,
+      "fault": 0
+    },
+    {
+      "t": 688.389436778,
+      "type": 23,
+      "flags": 80,
+      "mode": 17,
+      "pitch": 12000,
+      "ack": 9,
+      "fault": 0
+    },
+    {
+      "t": 688.449239918,
+      "type": 23,
+      "flags": 84,
+      "mode": 17,
+      "pitch": 12000,
+      "ack": 15,
+      "fault": 0
+    },
+    {
+      "t": 690.007677788,
+      "type": 30,
+      "task": 13340,
+      "action": 52658,
+      "command": 8,
+      "status": 3,
+      "rejected": 0
+    },
+    {
+      "t": 690.007677788,
+      "type": 23,
+      "flags": 0,
+      "mode": 3,
+      "pitch": 12000,
+      "ack": 167,
+      "fault": 0
+    },
+    {
+      "t": 690.308927686,
+      "type": 23,
+      "flags": 4,
+      "mode": 3,
+      "pitch": 12000,
+      "ack": 197,
+      "fault": 0
+    },
+    {
+      "t": 693.669169872,
+      "type": 23,
+      "flags": 0,
+      "mode": 3,
+      "pitch": 11800,
+      "ack": 11,
+      "fault": 0
+    },
+    {
+      "t": 694.267673763,
+      "type": 23,
+      "flags": 4,
+      "mode": 3,
+      "pitch": 10500,
+      "ack": 72,
+      "fault": 0
+    },
+    {
+      "t": 697.574520017,
+      "type": 30,
+      "task": 13340,
+      "action": 52658,
+      "command": 8,
+      "status": 7,
+      "rejected": 52659
+    },
+    {
+      "t": 769.809288765,
+      "type": 30,
+      "task": 0,
+      "action": 0,
+      "command": 0,
+      "status": 0,
+      "rejected": 0
+    },
+    {
+      "t": 769.809391892,
+      "type": 23,
+      "flags": 0,
+      "mode": 0,
+      "pitch": 9000,
+      "ack": 0,
+      "fault": 0
+    },
+    {
+      "t": 770.40797568,
+      "type": 23,
+      "flags": 128,
+      "mode": 18,
+      "pitch": 9000,
+      "ack": 0,
+      "fault": 1
+    }
+  ],
+  "first_visual_align": {
+    "start_s": 44.657,
+    "end_s": 85.588,
+    "retained_detection_frames": 330,
+    "frames_without_safe_red": 188,
+    "note": "约10Hz留存帧，不冒充完整50Hz视觉流"
+  },
+  "clear_attempts": [
+    {
+      "start_s": 85.634,
+      "failed_s": 120.92,
+      "duration_s": 35.286,
+      "trigger": "remembered_green_supply"
+    },
+    {
+      "start_s": 377.294,
+      "failed_s": 437.625,
+      "duration_s": 60.331,
+      "trigger": "danger_cyan"
+    }
+  ],
+  "gyro_tail": {
+    "start_s": 698.001187385,
+    "end_s": 769.499235289,
+    "start_yaw_deg": 4805.7,
+    "end_yaw_deg": 10283.807,
+    "delta_deg": 5478.107,
+    "note": "主yaw累计变化，非独立地面转角真值"
+  }
+}
