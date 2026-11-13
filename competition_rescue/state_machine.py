@@ -23,7 +23,6 @@ from protocol import (
     CMD_APPROACH_TARGET,
     CMD_APPROACH_RANGE,
     CMD_CARGO_AUDIT,
-    CMD_CLEAR_SAFE_ZONE,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISTANCE_VALID,
@@ -3937,52 +3936,21 @@ class CompetitionMission:
         self.safe_corridor_last_frame_sequence = None
         self._set_state(CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, now)
 
-    def _start_safe_zone_clear(
+    def _blocked_corridor_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
-        destination = (
-            self.confirmed_delivery_destination or
-            (self.selected_batch.destination if self.selected_batch else None)
-        )
-        # Sign selects the original-load side; magnitude is the forward
-        # placement stroke after a 90-degree turn, not a lateral translation.
-        placement_mm = -200 if destination == "injury" else 200
-        self.safe_sweep_command = CommandRequest(
-            CMD_CLEAR_SAFE_ZONE,
-            self._side_flags(),
-            0,  # Pixel-guided pickup, not a predicted forward distance.
-            placement_mm,
-            0,
-        )
-        self.safe_sweep_initial_ack = stm.acknowledged_sequence
-        self.safe_sweep_tx_baseline = stm.relay_mission_tx_frames
-        self.safe_sweep_command_accepted = False
-        self.safe_sweep_execution_seen = False
-        self.safe_sweep_attempts += 1
-        self._set_state(CompetitionState.CLEAR_SAFE_ZONE, now)
-        original_ids = set(vision.carried_reference_track_ids)
-        self.safe_sweep_pickup = SweepPickupContext(
-            target_id=vision.safe_corridor_obstacle_track_id,
-            target_class=vision.safe_corridor_obstacle_class,
-            target_bbox=vision.safe_corridor_obstacle_bbox,
-            excluded_ids=frozenset(original_ids),
-            original_ids=frozenset(original_ids),
-            original_classes=frozenset(self.carried_manifest or (
-                self.selected_batch.classes if self.selected_batch else ()
-            )),
-            frame_floor=vision.frame_sequence,
-        )
+        # Retire the release/pickup/retrieve sweep; retain the existing
+        # blocked-corridor state for the replacement route.
+        self.safe_sweep_command = None
+        self.safe_sweep_pickup = None
+        self._set_state(CompetitionState.WAIT_SAFE_ZONE_CLEAR, now)
         return CompetitionOutput(
-            self.state,
-            self.safe_sweep_command,
-            f"安全区推进走廊{'保留此前漏检的' if vision.safe_corridor_obstacle_remembered else '发现'}"
-            f"{vision.safe_corridor_obstacle_class}阻挡，执行第{self.safe_sweep_attempts}次扫障",
+            self.state, self._pause(),
+            "旧清障已停用，保持载荷和本次投送；真实走廊阻挡待新绕行/清障接管",
             self.selected_batch,
-            event="safe_zone_clear_start",
-            motion_expected=True,
-            tx_policy="normal_command",
-            reason="safe_zone_corridor_blocked",
-            expected_stm_modes=(STM_MODE_SAFE_SWEEP,),
+            event="legacy_safe_sweep_disabled", tx_policy="pause",
+            reason="legacy_safe_sweep_disabled",
+            expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE),
         )
 
     def safe_sweep_target(self, cargo: tuple[TrackedCargo, ...],
@@ -6592,19 +6560,7 @@ class CompetitionMission:
                 )
             self.safe_corridor_last_frame_sequence = vision.frame_sequence
             if vision.safe_corridor_obstacle_class is not None:
-                if self.safe_sweep_attempts < 2:
-                    return self._start_safe_zone_clear(vision, stm, now)
-                self._set_state(CompetitionState.WAIT_SAFE_ZONE_CLEAR, now)
-                return CompetitionOutput(
-                    self.state,
-                    self._pause(),
-                    "本趟已完成2次扫障但推进走廊仍有阻挡，保持停车等待处理",
-                    self.selected_batch,
-                    event="safe_zone_clear_limit_reached",
-                    tx_policy="pause",
-                    reason="safe_zone_clear_limit_reached",
-                    expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
-                )
+                return self._blocked_corridor_output(vision, stm, now)
             self.enter_initial_ack = stm.acknowledged_sequence
             self.enter_tx_baseline = stm.relay_mission_tx_frames
             self.enter_command_accepted = False
@@ -6637,7 +6593,7 @@ class CompetitionMission:
                     return CompetitionOutput(
                         self.state,
                         self._enter_safe_zone_command(),
-                        "人工处理后推进走廊已清空，解除PAUSE并进入安全区",
+                        "推进走廊已清空，沿原投送动作进入安全区",
                         self.selected_batch,
                         event="safe_zone_clear_wait_resolved",
                         tx_policy="normal_command",
@@ -6647,90 +6603,15 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state,
                 self._pause(),
-                "扫障次数已达2次且走廊仍被阻挡，保持当前阶段停车",
+                "旧清障已停用，保持载荷；走廊仍有阻挡，待新绕行/清障接管",
                 self.selected_batch,
                 tx_policy="pause",
-                reason="safe_zone_clear_limit_wait",
+                reason="legacy_safe_sweep_disabled",
                 expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
             )
 
         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
-            assert self.safe_sweep_command is not None
-            if stm.mode == STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED:
-                # F407 reports 46 only after opening and backing to the
-                # staging point. This is an abandoned delivery, never DONE.
-                self._clear_search_recovery_context(vision, clear_carried=True)
-                self._reset_safe_zone_alignment()
-                self._reset_delivery_evidence()
-                self._begin_return(stm, now)
-                return replace(
-                    self._return_center_output(pose, now, "原物资200 mm内未找回，放弃本趟并返回场地中心"),
-                    event="safe_sweep_retrieve_failed",
-                    reason="safe_sweep_retrieve_failed_return",
-                    expected_stm_modes=(STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED, STM_MODE_FACE_FIELD_CENTER, STM_MODE_SEARCH),
-                )
-            if stm.mode in {
-                STM_MODE_SAFE_SWEEP_APPROACH, STM_MODE_SAFE_SWEEP_AUDIT,
-                STM_MODE_SAFE_SWEEP_RETRIEVE, STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT,
-            }:
-                return self._safe_sweep_pickup_output(vision, stm, now)
-            if self.safe_sweep_pickup is not None:
-                # A subsequent 42/43 is a new camera/action epoch, not the
-                # preceding pickup audit. 39 itself stays diagnostic only.
-                self.safe_sweep_pickup.mode = stm.mode
-            self.safe_sweep_command_accepted = self._command_acceptance_seen(
-                stm,
-                self.safe_sweep_command,
-                self.safe_sweep_tx_baseline,
-                self.safe_sweep_initial_ack,
-                self.safe_sweep_command_accepted,
-            )
-            if stm.fresh and stm.mode == STM_MODE_SAFE_SWEEP:
-                self.safe_sweep_execution_seen = True
-            if (
-                self.safe_sweep_command_accepted and
-                stm.fresh and
-                stm.mode == STM_MODE_POST_GRAB_AUDIT and
-                stm.gripper_closed and
-                stm.claw_visible
-            ):
-                self.safe_sweep_reaudit_active = True
-                self._begin_post_grab_audit(vision, now)
-                return self._audit_output(vision, stm, now)
-            if self.safe_sweep_command_accepted:
-                return CompetitionOutput(
-                    self.state, self._hold(),
-                    "扫障机械动作已接受，保持当前上下文等待后续观察状态",
-                    self.selected_batch, tx_policy="hold", reason="safe_zone_clear_mechanics_wait",
-                    expected_stm_modes=(STM_MODE_SAFE_SWEEP, STM_MODE_SAFE_SWEEP_APPROACH,
-                                        STM_MODE_SAFE_SWEEP_RETRIEVE, STM_MODE_POST_GRAB_AUDIT),
-                )
-            return CompetitionOutput(
-                self.state,
-                self.safe_sweep_command,
-                (
-                    "F407正在mode39暂放/移障/取回原货物，等待mode42/43或mode23"
-                    if stm.mode == STM_MODE_SAFE_SWEEP else
-                    "持续发送CLEAR_SAFE_ZONE，等待本次ACK或新鲜mode23夹爪状态"
-                ),
-                self.selected_batch,
-                motion_expected=True,
-                tx_policy="normal_command",
-                reason=(
-                    "safe_zone_clear_running"
-                    if stm.mode == STM_MODE_SAFE_SWEEP else
-                    "safe_zone_clear_accept_wait"
-                ),
-                expected_stm_modes=(
-                    STM_MODE_SAFE_SWEEP,
-                    STM_MODE_SAFE_SWEEP_APPROACH,
-                    STM_MODE_SAFE_SWEEP_AUDIT,
-                    STM_MODE_SAFE_SWEEP_RETRIEVE,
-                    STM_MODE_SAFE_SWEEP_RETRIEVE_AUDIT,
-                    STM_MODE_SAFE_SWEEP_RETRIEVE_FAILED,
-                    STM_MODE_POST_GRAB_AUDIT,
-                ),
-            )
+            return self._blocked_corridor_output(vision, stm, now)
 
         if self.state == CompetitionState.INVALID_RELEASE:
             if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}:
@@ -6909,9 +6790,9 @@ class CompetitionMission:
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
             if (stm.mode in {STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_NAVIGATE} and
-                    stm.gripper_closed and self.safe_sweep_attempts < 2 and
+                    stm.gripper_closed and
                     vision.safe_corridor_obstacle_class is not None):
-                return self._start_safe_zone_clear(vision, stm, now)
+                return self._blocked_corridor_output(vision, stm, now)
             self.enter_command_accepted = self._opcode_acceptance_seen(
                 stm,
                 CMD_ENTER_SAFE_ZONE,

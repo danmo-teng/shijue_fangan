@@ -1,0 +1,90 @@
+{
+  "offline_only": true,
+  "no_device_or_motion": true,
+  "before_is_original_logged_command": true,
+  "after_uses_logged_boxes_and_logged_manual_roi": true,
+  "no_claim_of_full_internal_state_replay": true,
+  "original_logs_unchanged": true,
+  "cases": [
+    {
+      "frame": 2232,
+      "original_recorded_command": {
+        "count": 1,
+        "danger": false,
+        "sweep_pickup": true
+      },
+      "offline_whole_roi_audit": {
+        "count": 2,
+        "danger": false,
+        "classes": [
+          [
+            "green_supply",
+            2
+          ]
+        ]
+      },
+      "roi_items": [
+        [
+          205,
+          "green_supply"
+        ],
+        [
+          214,
+          "green_supply"
+        ]
+      ],
+      "excluded_roi_items": [
+        [
+          197,
+          "claw_target_truncated_outside_roi"
+        ],
+        [
+          212,
+          "outside_capture_roi"
+        ]
+      ]
+    },
+    {
+      "frame": 9328,
+      "original_recorded_command": {
+        "count": 1,
+        "danger": true,
+        "sweep_pickup": true
+      },
+      "offline_whole_roi_audit": {
+        "count": 3,
+        "danger": true,
+        "classes": [
+          [
+            "danger_cyan",
+            2
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ]
+      },
+      "roi_items": [
+        [
+          778,
+          "danger_cyan"
+        ],
+        [
+          779,
+          "danger_cyan"
+        ],
+        [
+          782,
+          "green_supply"
+        ]
+      ],
+      "excluded_roi_items": [
+        [
+          781,
+          "outside_capture_roi"
+        ]
+      ]
+    }
+  ]
+}

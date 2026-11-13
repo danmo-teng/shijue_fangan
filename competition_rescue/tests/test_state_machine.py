@@ -1470,7 +1470,7 @@ def test_loaded_empty_reobserves_once_without_stable_empty_or_fake_load() -> Non
             observed_monotonic_s=2.1, capture_audit=danger), status, 2.1) is None
 
 
-def test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps() -> None:
+def test_safe_zone_no_box_requests_one_higher_view_and_blocks_retired_sweep() -> None:
     from protocol import CMD_ALIGN_SAFE_ZONE, CMD_CLEAR_SAFE_ZONE
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
@@ -1488,8 +1488,9 @@ def test_safe_zone_no_box_requests_one_higher_view_and_early_obstacle_sweeps() -
     obstacle = replace(view, safe_corridor_obstacle_class="green_supply",
         safe_corridor_obstacle_track_id=258, safe_corridor_obstacle_bbox=(308,566,258,239))
     out = m.step(obstacle, pose(), replace(status, mode=10), 6.3)
-    assert out.state == CompetitionState.CLEAR_SAFE_ZONE
-    assert out.command.opcode == CMD_CLEAR_SAFE_ZONE
+    assert out.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR
+    assert out.command.opcode != CMD_CLEAR_SAFE_ZONE
+    assert out.reason == "legacy_safe_sweep_disabled"
 
     def acquiring():
         mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
@@ -1958,68 +1959,6 @@ def test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone() -> None:
     assert mission.safe_sweep_target((inside, outside_path), polygon, safe_bbox) is None
 
 
-def test_sweep_rebinds_obstacle_after_mechanical_turn_not_original_cargo() -> None:
-    safe_bbox = (352, 4, 926, 245)
-    polygon = ((460, 1023), (820, 1023), (815, 249), (352, 249))
-    blue = TrackedCargo(335, "danger_cyan", .85, (644, 155, 136, 155), hits=8)
-    # Adjacent actual frames4365/4368 bracket the original CLEAR target322.
-    # Neither old pixel neighbourhood admits the newly visible target335
-    # after the board's parking-and-turning mode39 movement.
-    for old_bbox in ((481, 106, 121, 138), (469, 139, 131, 151)):
-        mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
-        mission._select_batch(CargoBatch((700,), ("green_supply",), "material"))
-        clear_view = VisionSnapshot(
-            frame_sequence=4368,
-            safe_corridor_obstacle_class="danger_cyan",
-            safe_corridor_obstacle_track_id=322,
-            safe_corridor_obstacle_bbox=old_bbox,
-            carried_reference_track_ids=(700,),
-        )
-        mission._start_safe_zone_clear(clear_view, stm(mode=11), 1.)
-        assert mission.safe_sweep_target((blue,), polygon, safe_bbox) is None
-        mission.step(replace(clear_view, frame_sequence=4369), pose(), stm(mode=39), 1.1)
-        entering = VisionSnapshot(frame_sequence=4501, cargo=(blue,), safe_bbox=safe_bbox,
-                                  safe_sweep_search_polygon=polygon)
-        output = mission.step(entering, pose(), stm(mode=42), 1.2)
-        assert output.command.opcode == CMD_HOLD
-        context = mission.safe_sweep_pickup
-        assert context.target_id is None and context.target_bbox is None
-        assert context.excluded_ids == frozenset({700})
-
-        # An original-load ID or truly inside target is never eligible.
-        # A current ground obstacle of the requested class is rebound after
-        # the turn; the pre-turn pixels cannot veto it.
-        original = replace(blue, track_id=700, bbox=(600, 440, 80, 100))
-        inside = replace(blue, track_id=701, bbox=(600, 440, 80, 100), inside_safe_zone=True)
-        other = replace(blue, track_id=336, bbox=(420, 300, 80, 100))
-        assert mission.safe_sweep_target((original, inside, other, blue), polygon, safe_bbox).track_id == 336
-        view = replace(entering, frame_sequence=4502, cargo=(original, inside, blue))
-        output = mission.step(view, pose(), stm(mode=42), 1.3)
-        assert output.command.opcode == CMD_APPROACH_TARGET
-        assert (output.command.arg_a, output.command.arg_b) == blue.center_px
-        assert context.target_id == 335 and context.target_bbox == blue.bbox
-        # Multiple same-class obstacles use the existing centre preference
-        # when unbound (above). Once335 is bound, the closer336 cannot cause
-        # switching on each subsequent view.
-        output = mission.step(replace(view, frame_sequence=4503, cargo=(original, inside, other, blue)),
-                              pose(), stm(mode=42), 1.4)
-        assert output.command.opcode == CMD_APPROACH_TARGET and context.target_id == 335
-
-        # Retrieval is a different role: obstacle335 is excluded and the
-        # original-load identity is eligible again. A later mechanical phase
-        # must not erase this original-load bbox/ID and select another green.
-        green = TrackedCargo(700, "green_supply", .9, (590, 330, 80, 100), hits=5)
-        retrieve = replace(view, frame_sequence=4504, cargo=(green, blue))
-        mission.step(retrieve, pose(), stm(mode=44), 1.5)
-        output = mission.step(replace(retrieve, frame_sequence=4505), pose(), stm(mode=44), 1.6)
-        assert output.command.opcode == CMD_APPROACH_TARGET
-        assert context.recovering_original and context.target_id == 700
-        assert context.excluded_ids == frozenset({335})
-        original_bbox = context.target_bbox
-        mission.step(replace(retrieve, frame_sequence=4506), pose(), stm(mode=39), 1.7)
-        mission.step(replace(retrieve, frame_sequence=4507), pose(), stm(mode=44), 1.8)
-        assert context.target_id == 700 and context.target_bbox == original_bbox
-        assert context.recovering_original
 
 
 def test_post_first_two_materials_follow_existing_grab_and_transport() -> None:
@@ -2230,3 +2169,63 @@ def test_safe_zone_lateral_only_starts_for_large_error_and_finishes_without_zero
     assert m.safe_zone_visual_pixel_error == 32 and not m.safe_zone_lateral_active
     m._update_safe_zone_visual_target((66, 0, 936, 113), 14)
     assert not m.safe_zone_lateral_active  # Do not restart for detection jitter in the small band.
+
+
+def test_all_legacy_sweep_entries_keep_load_without_clear_or_blind_enter():
+    from protocol import CMD_PAUSE, CMD_CLEAR_SAFE_ZONE, CMD_ENTER_SAFE_ZONE
+    for side in ('red', 'blue'):
+        for state in (CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                      CompetitionState.ENTER_SAFE_ZONE, CompetitionState.CLEAR_SAFE_ZONE):
+            for obstruction in ('green_supply', 'danger_cyan'):
+                m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False))
+                m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+                m.carried_manifest = ('green_supply',)
+                m.carried_total_count = 1
+                m.state = state
+                m.safe_corridor_frame_floor = 1
+                view = VisionSnapshot(frame_sequence=2, safe_bbox=(340, 0, 900, 100),
+                    safe_corridor_polygon=((460, 1023), (820, 1023), (600, 100), (200, 100)),
+                    safe_corridor_obstacle_class=obstruction)
+                out = m.step(view, PoseSnapshot(valid=True, yaw_deg=m.settings.safe_heading_deg),
+                    StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000), 1.)
+                assert out.command.opcode == CMD_PAUSE
+                assert out.command.opcode not in (CMD_CLEAR_SAFE_ZONE, CMD_ENTER_SAFE_ZONE)
+                assert out.reason == 'legacy_safe_sweep_disabled'
+                assert m.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR
+                assert m.safe_sweep_attempts == 0 and m.safe_sweep_pickup is None
+                assert m.carried_manifest == ('green_supply',) and m.carried_total_count == 1
+
+
+def test_single_anchor_audits_actual_load_before_grab_and_separates_overload():
+    from protocol import CMD_CARGO_AUDIT, CMD_DISPERSE_PILE, CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT
+    for danger in (False, True):
+        m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+        m.locked_target_track_id = 1
+        m.state = CompetitionState.APPROACH
+        audit = (CargoAudit(left_class='danger_cyan', right_class='green_supply',
+                           left_count=1, right_count=1, right_green_count=1, total_count=2,
+                           danger_present=True) if danger else
+                 CargoAudit(left_class='green_supply', right_class='green_supply',
+                           left_count=2, right_count=1, left_green_count=2,
+                           right_green_count=1, total_count=3))
+        status = StmSnapshot(mode=21, flags=1, age_ms=0, camera_pitch_cdeg=14000)
+        for frame in range(1, 5):
+            now = 1.0 + frame * .15
+            # Anchor no longer visible: the MCU's real claw view still wins over tracking.
+            view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now,
+                                  capture_audit=audit, capture_observation_valid=True)
+            out = m.step(view, PoseSnapshot(valid=True), status, now)
+            assert out.command.opcode not in (CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT)
+        assert out.command.opcode == CMD_CARGO_AUDIT
+        assert out.command.audit.total_count == audit.total_count and out.command.audit.stable
+        ready = replace(status, flags=1|64, acknowledged_sequence=1, relay_mission_tx_frames=2,
+            relay_last_mission_command=CMD_CARGO_AUDIT,
+            relay_last_mission_payload=tuple(out.command.to_frame(0)[4:12]))
+        decided = m.step(replace(view, frame_sequence=5, observed_monotonic_s=1.8),
+                         PoseSnapshot(valid=True), ready, 1.8)
+        if danger:
+            assert decided.state == CompetitionState.INVALID_RELEASE  # Existing danger separation/release.
+        else:
+            assert decided.command.opcode == CMD_DISPERSE_PILE
+        assert decided.command.opcode not in (CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT)

@@ -1300,117 +1300,6 @@ def test_sweep_duplicate_rejection_does_not_reset_accepted_pickup():
         assert p._reconcile_sweep_rejection(VisionSnapshot(),PoseSnapshot(),replace(status,task_id=status.task_id+1),1.) is None
 
 
-def test_sweep_rejection_recovery_preserves_pickup_progress():
-    from dataclasses import replace
-    from protocol import CMD_CARGO_AUDIT, CMD_CLEAR_SAFE_ZONE, CMD_GRAB_CONFIRMED, CargoAuditPayload
-    from state_machine import CargoAudit, CargoBatch, SweepPickupContext, TrackedCargo
-    with tempfile.TemporaryDirectory() as d:
-        root = Path(d)
-        m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
-        m._select_batch(CargoBatch((353,), ('injured_orange',), 'injury'))
-        m.state = CompetitionState.CLEAR_SAFE_ZONE
-        m.safe_sweep_command = CommandRequest(CMD_CLEAR_SAFE_ZONE)
-        m.safe_sweep_command_accepted = True
-        pickup = m.safe_sweep_pickup = SweepPickupContext(target_id=478,target_class='injured_orange',
-            target_bbox=(500,300,100,150),excluded_ids=frozenset({353}),mode=42,frame_floor=100)
-        p = CompetitionPlanner(m,root/'pose',root/'stm',root/'cmd',root/'diag',JsonlLog(root/'events'),50)
-        p.protocol_task = p.protocol_task_cursor = 12491
-        p.protocol_action = p.protocol_action_cursor = 52233
-        business = CompetitionOutput(m.state,CommandRequest(CMD_CARGO_AUDIT,audit=CargoAuditPayload()),'audit')
-        p.protocol_last_output = business
-        stm = StmSnapshot(mode=42,age_ms=0,context_valid=True,task_id=12491,action_id=52233,
-            accepted_command=CMD_CARGO_AUDIT,action_status=4,rejected_action_id=52233,camera_pitch_cdeg=12000)
-        p.protocol_accepted = stm
-        target = TrackedCargo(478,'injured_orange',.9,(500,300,100,150),hits=20)
-        vision = VisionSnapshot(frame_sequence=100,observed_monotonic_s=1.,cargo=(target,),
-            safe_sweep_search_polygon=((460,0),(820,0),(820,1023),(460,1023)))
-        pose = PoseSnapshot(valid=True,age_ms=0)
-        # The genuine reject is handled once. Its temporary HOLD cannot become
-        # the business request or reset this same mode's established frame floor.
-        first = p._output_for_cycle(vision,pose,stm,False,1.)
-        assert first is not None and first.command.opcode == CMD_HOLD
-        p._publish(first)
-        assert p.protocol_last_output is business and pickup.frame_floor == 100 and pickup.mode == 42
-        next_frame = replace(vision,frame_sequence=101,observed_monotonic_s=1.1)
-        resumed = p._output_for_cycle(next_frame,pose,stm,False,1.1)
-        assert resumed.event != 'safe_sweep_request_rejected'
-        assert resumed.command.opcode == CMD_APPROACH_TARGET and pickup.target_id == 478
-        assert pickup.frame_floor == 100 and resumed.command.arg_a == 550 and resumed.command.arg_b == 375
-        p.protocol_vision = next_frame
-        p._publish(resumed)
-        assert p.protocol_action == 52234
-        # A different actually rejected action still receives one recovery;
-        # the previous rejection does not blacklist later requests or modes.
-        audit_stm = replace(stm,mode=43,flags=1,camera_pitch_cdeg=14000,
-            action_id=52234,accepted_command=CMD_CARGO_AUDIT,rejected_action_id=52234)
-        p.protocol_accepted = audit_stm
-        audit = CargoAudit(left_class='injured_orange',left_count=1,total_count=1)
-        view = replace(vision,frame_sequence=102,observed_monotonic_s=1.2,
-            safe_sweep_capture_audit=audit,safe_sweep_observation_valid=True)
-        recovered = p._output_for_cycle(view,pose,audit_stm,False,1.2)
-        assert recovered is not None and recovered.command.opcode == CMD_CARGO_AUDIT
-        p._publish(recovered)
-        floor = pickup.frame_floor
-        for frame,now in ((103,1.3),(104,1.4),(105,1.5)):
-            current = replace(view,frame_sequence=frame,observed_monotonic_s=now)
-            out = p._output_for_cycle(current,pose,audit_stm,False,now)
-            assert out.event != 'safe_sweep_request_rejected'
-            p._publish(out)
-        assert pickup.frame_floor == floor and pickup.audit_hits >= 2 and out.command.audit.stable
-        assert pickup.target_id == 478 and not pickup.grab_started
-        # A genuinely unaccepted GRAB returns to the existing audit, retaining
-        # measured evidence. A duplicate rejection of an accepted GRAB does not.
-        p.protocol_action = p.protocol_action_cursor = 52240
-        grab = CompetitionOutput(m.state,CommandRequest(CMD_GRAB_CONFIRMED),'grab')
-        p.protocol_last_output = grab
-        pickup.grab_started = True
-        hits,signature = pickup.audit_hits,pickup.audit_signature
-        grab_rejected = replace(audit_stm,action_id=52239,rejected_action_id=52240,action_status=5)
-        p.protocol_accepted = grab_rejected
-        fresh = replace(view,frame_sequence=106,observed_monotonic_s=1.6)
-        reaudit = p._output_for_cycle(fresh,pose,grab_rejected,False,1.6)
-        assert reaudit.command.opcode == CMD_CARGO_AUDIT and not pickup.grab_started
-        assert pickup.audit_hits >= hits and pickup.audit_signature == signature and pickup.frame_floor == floor
-        p._publish(reaudit)
-        assert p.protocol_action == 52241
-        p.protocol_last_output = grab
-        pickup.grab_started = True
-        accepted_grab = replace(grab_rejected,action_id=p.protocol_action,
-            rejected_action_id=p.protocol_action,accepted_command=CMD_GRAB_CONFIRMED)
-        kept = p._output_for_cycle(fresh,pose,accepted_grab,False,1.7)
-        assert kept.command.opcode == CMD_GRAB_CONFIRMED and pickup.grab_started
-        # Mode39 remains the existing mechanical wait. A visible object must
-        # not turn a persistent old audit rejection into an unrequested GRAB.
-        p.protocol_action = p.protocol_action_cursor = 52234
-        p.protocol_last_output = business
-        mechanical = replace(audit_stm,mode=39)
-        p.protocol_accepted = mechanical
-        waited = p._output_for_cycle(view,pose,mechanical,False,1.8)
-        assert waited is not None and waited.command.opcode == CMD_HOLD
-        p._publish(waited)
-        assert p.protocol_last_output is business
-        repeated = p._output_for_cycle(view,pose,mechanical,False,1.9)
-        assert repeated.event != 'safe_sweep_request_rejected' and repeated.command.opcode == CMD_HOLD
-        assert pickup.mode == 39 and pickup.target_id == 478
-        # Actual log shape: accepted|rejected status5 retains accepted audit18
-        # while the latest output is HOLD10. It must progress mode42 normally.
-        p.protocol_action = p.protocol_action_cursor = 52233
-        p.protocol_last_output = CompetitionOutput(m.state,CommandRequest(CMD_HOLD),'old overlay')
-        pickup.mode = 43
-        actual = replace(stm,action_status=5)
-        for frame,now in ((200,2.),(201,2.1)):
-            actual_view = replace(vision,frame_sequence=frame,observed_monotonic_s=now)
-            progressed = p._output_for_cycle(actual_view,pose,actual,False,now)
-            p._publish(progressed)
-        assert progressed.command.opcode == CMD_APPROACH_TARGET and p.protocol_action == 52234
-        assert pickup.frame_floor == 200 and pickup.target_id == 478
-        p.protocol_last_output = business
-        post_grab = replace(actual,mode=23,flags=3,camera_pitch_cdeg=14000,
-            action_id=52233,accepted_command=CMD_GRAB_CONFIRMED,rejected_action_id=52234)
-        post = p._output_for_cycle(replace(view,frame_sequence=202,observed_monotonic_s=2.2),
-            pose,post_grab,False,2.2)
-        assert m.safe_sweep_reaudit_active and m.post_grab_audit_active
-        assert post.command.opcode == CMD_CARGO_AUDIT
 
 
 def test_lidar_receiver_and_motion_continue_while_fit_is_blocked():
@@ -2313,58 +2202,6 @@ def test_safe_zone_membership_uses_live_contact_not_cached_bbox_area():
         assert delivery.delivery_target_inside_safe_zone is inside
         assert delivery.delivery_target_outside_safe_zone is not inside
 
-    # Joint path: real detector/Track geometry -> snapshot-derived inside and
-    # ground corridor -> full mission39/42 rebinding -> actual pixel command.
-    # The mode transitions here are offline inputs, not a physical UART run.
-    scenes = (
-        (4502, 335, "danger_cyan", (352, 4, 926, 245), 12000, False, (
-            (333, "green_supply", (476, 20, 98, 111)),
-            (334, "core_black", (758, 94, 76, 77)),
-            (335, "danger_cyan", (644, 155, 136, 155)),
-        )),
-        (14144, 1160, "injured_orange", (503, 40, 773, 162), 11700, True, (
-            (1160, "injured_orange", (728, 84, 151, 121)),
-            (1163, "danger_cyan", (897, 94, 101, 114)),
-            (1165, "danger_cyan", (563, 44, 86, 93)),
-        )),
-    )
-    for frame, target_id, target_class, safe_box, pitch, blocked, geometry in scenes:
-        for real_scene in (True, False):
-            m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
-            m._select_batch(CargoBatch((700,), ("green_supply",), "material"))
-            m._start_safe_zone_clear(VisionSnapshot(frame_sequence=frame - 3,
-                safe_corridor_obstacle_class=target_class,
-                safe_corridor_obstacle_track_id=322,
-                safe_corridor_obstacle_bbox=(481, 106, 121, 138),
-                carried_reference_track_ids=(700,)), StmSnapshot(mode=11, age_ms=0), 1.)
-            records = tuple(track(item_id, name, box if real_scene or item_id != target_id
-                else (safe_box[0] + 100, safe_box[1] + 10, 100, 80))
-                for item_id, name, box in geometry)
-            p = PoseSnapshot(valid=True, x_m=.1, y_m=-.7, yaw_deg=270, age_ms=0)
-            for mode, scene_frame, now in ((39, frame - 2, 1.1),
-                                           (42, frame - 1, 1.2), (42, frame, 1.3)):
-                status = StmSnapshot(mode=mode, flags=6, age_ms=0, camera_pitch_cdeg=pitch)
-                snapshot = runner_module.make_vision_snapshot([], records,
-                    SimpleNamespace(calibrated=False), safe_box, status, m, scene_frame,
-                    # Negative geometry has a real current colour rectangle;
-                    # cached/unknown colour is never called confirmed inside.
-                    safe_zone_filter_blocked=blocked if real_scene else False,
-                    observed_s=now)
-                output = m.step(snapshot, p, status, now)
-                if mode == 42 and scene_frame == frame - 1:
-                    assert output.command.opcode == CMD_HOLD
-                    assert m.safe_sweep_pickup.target_id is None
-            target = next(item for item in snapshot.cargo if item.track_id == target_id)
-            if real_scene:
-                assert not target.inside_safe_zone
-                assert output.state == CompetitionState.CLEAR_SAFE_ZONE
-                assert output.command.opcode == CMD_APPROACH_TARGET
-                assert (output.command.arg_a, output.command.arg_b) == target.center_px
-                assert m.safe_sweep_pickup.target_id == target_id
-            else:
-                assert target.inside_safe_zone
-                assert output.command.opcode == CMD_HOLD
-                assert m.safe_sweep_pickup.target_id is None
 
 
 def test_two_material_capture_keeps_full_count_and_existing_wire():
@@ -2526,3 +2363,51 @@ def test_pending_visual_lateral_updates_same_action_and_source_frame():
         planner._publish(recovered)
         assert (planner.protocol_task, planner.protocol_action) == (task, action)
         assert planner.protocol_vision_frame == 13
+
+
+def test_locked_single_target_keeps_whole_claw_audit_in_every_view():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo, SweepPickupContext
+
+    polygon = ((100, 100), (1200, 100), (1200, 950), (100, 950))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    greens = tuple(TrackedCargo(i, 'green_supply', .9, (x, 500, 100, 100), hits=4)
+                   for i, x in ((1, 400), (2, 520), (3, 760)))
+    for mode in (21, 38, 23, 48, 43):
+        for items in (greens, (greens[0], replace(greens[2], class_name='danger_cyan'))):
+            m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+            m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+            m.locked_target_track_id = 1
+            m.safe_sweep_pickup = SweepPickupContext(target_id=1, target_class='green_supply',
+                target_bbox=greens[0].bbox, excluded_ids=frozenset())
+            status = StmSnapshot(mode=mode, flags=1, age_ms=0, camera_pitch_cdeg=14000)
+            with patch.object(runner_module, 'tracked_cargo', return_value=items):
+                view = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False),
+                    None, status, m, 10, capture_rois=rois, observed_s=1.)
+            assert view.capture_observation_valid
+            for audit in (view.capture_audit, view.safe_sweep_capture_audit):
+                assert audit.total_count == len(items)
+                assert audit.danger_present == any(x.class_name == 'danger_cyan' for x in items)
+                assert not m._audit_valid(audit)
+            assert len(view.capture_cargo) == len(items) and m.selected_batch.track_ids == (1,)
+
+
+def test_retired_sweep_cannot_restart_through_planner_context_recovery():
+    from state_machine import CargoBatch
+    from protocol import CMD_PAUSE
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+        m.carried_manifest = ('green_supply',)
+        m.carried_total_count = 1
+        m.state = CompetitionState.CLEAR_SAFE_ZONE
+        p = CompetitionPlanner(m, root/'pose', root/'stm', root/'cmd', root/'diag', JsonlLog(root/'events'), 50)
+        out = p._output_for_cycle(VisionSnapshot(), PoseSnapshot(valid=True),
+            StmSnapshot(mode=43, age_ms=0, camera_pitch_cdeg=14000, flags=1), False, 1.)
+        assert out.command.opcode == CMD_PAUSE and out.reason == 'legacy_safe_sweep_disabled'
+        assert m.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR
+        assert m.carried_manifest == ('green_supply',) and m.safe_sweep_pickup is None

@@ -946,8 +946,7 @@ def make_vision_snapshot(
         )
         if capture_observation_valid else None
     )
-    # Separate obstacle audit from the original delivery manifest. Only the
-    # locked/reassociated sweep target actually inside the claw ROI counts.
+    # A target guides approach; every claw audit counts the entire user ROI.
     sweep_search_polygon = ()
     if mission.safe_sweep_pickup is not None:
         # Camera-relative front channel during pickup/retrieval. A live
@@ -963,27 +962,12 @@ def make_vision_snapshot(
     sweep_target = mission.safe_sweep_target(
         cargo, sweep_search_polygon, None if safe_zone_filter_blocked else safe_bbox
     )
-    sweep_capture = tuple(
-        item for item in capture
-        if sweep_target is not None and item.track_id == sweep_target.track_id
-    )
-    recovering_original = bool(mission.safe_sweep_pickup is not None and
-                               (mission.safe_sweep_pickup.recovering_original or stm.mode in {44, 45}))
+    sweep_capture = capture
     sweep_observation_valid = capture_observation_valid
     sweep_quality_reason = capture_quality_reason
-    if recovering_original:
-        # Recovering the load is formal delivery again. Count the WHOLE claw
-        # ROI, including unexpected cargo; never truncate it to the target
-        # or the two-item limit and accidentally hide overload/danger.
-        sweep_capture = capture
-    elif mission.safe_sweep_pickup is not None:
-        # Only defects involving this obstacle invalidate a mode43 view.
-        # Unrelated overlapping cargo elsewhere in the ROI is not its load.
-        sweep_quality_reason = (image_quality_reason or
-                                (target_quality.get(sweep_target.track_id, "") if sweep_target else ""))
-        sweep_observation_valid = image_observation_valid and not sweep_quality_reason
     sweep_audit = (
-        audit_from_cargo(sweep_capture, set(), capture_side_by_track)
+        audit_from_cargo(sweep_capture, set(), capture_side_by_track,
+                         remembered_items=tuple(item for item, _ in remembered_capture))
         if sweep_observation_valid and mission.safe_sweep_pickup is not None else None
     )
     target_candidates = [
@@ -2045,6 +2029,8 @@ class CompetitionPlanner:
                 self.mission.state, CommandRequest(CMD_PAUSE),
                 "人工PAUSE，冻结审核握手期限直到恢复", tx_policy="pause", reason="manual_pause",
             )
+        if self.mission.state == CompetitionState.CLEAR_SAFE_ZONE:
+            return self.mission._blocked_corridor_output(vision, stm, now)
         if self.mission.recovery_wait_active:
             matches = (stm.context_valid and stm.task_id == self.protocol_task and
                        stm.action_id == self.protocol_action)
