@@ -473,18 +473,18 @@ def test_corridor_missed_obstacle_and_same_class_floor_object_are_not_load():
                 m,2851,capture_rois=rois,recent_carried_track_ids=(229,),**kwargs)
     view=snapshot((carried,missed))
     assert view.safe_corridor_obstacle_track_id==258 and view.safe_corridor_status=='BLOCKED'
-    # Once the track leaves the original tracker, preserve the known blocker
-    # for this observation/entry only, instead of declaring it gone.
+    # A dropped tracker item must not be reinserted from an older pixel snapshot.
     view=snapshot((carried,),recent_corridor_obstacle=missed)
-    assert view.safe_corridor_obstacle_track_id==258
+    assert view.safe_corridor_obstacle_track_id is None
     floor=replace(missed,track_id=259,visible=True,misses=0)
     view=snapshot((floor,))
     assert not view.delivery_target_found
     assert view.safe_corridor_obstacle_track_id==259
     # Same height alone must never identify cargo: disjoint 2D boxes differ.
-    other=replace(floor,bbox=(510,820,90,100))
+    other=replace(floor,bbox=(510,770,90,100))
     poly,obstacle,_,_=runner_module.safe_zone_push_corridor((other,), (261,0,835,107),
-        'material',False,frozenset(),150,('green_supply',),1,((690,820,90,100),))
+        'material',False,frozenset(),150,('green_supply',),1,((690,820,90,100),),
+        claw_polygon=rois.overall)
     assert obstacle is other
 
 
@@ -544,12 +544,12 @@ def test_carried_identity_survives_verified_pitch_change_without_waiting():
     released = snapshot((replacement,), 12000, ids=(75,), boxes=(new.bbox,), anchor_pitch=12000)
     assert released.carried_reference_track_ids == (75,)
     assert released.carried_reference_bboxes == ()
-    assert released.safe_corridor_obstacle_track_id == 76
+    assert released.safe_corridor_obstacle_track_id is None  # Retired sweep has no delivery corridor.
     m.state = CompetitionState.ACQUIRE_SAFE_ZONE
     opened = snapshot((replacement,), 12000, ids=(75,), boxes=(new.bbox,),
                       anchor_pitch=12000, flags=0)
     assert opened.carried_reference_track_ids == (75,)
-    assert opened.safe_corridor_obstacle_track_id == 76
+    assert opened.safe_corridor_obstacle_track_id is None  # Still before alignment completes.
     # Unsupported views, a spatially disjoint same-angle box and an opened
     # gripper cannot turn a same-class replacement into carried cargo.
     for pitch, anchor_pitch, flags in ((11000, 14000, 2), (12000, 12000, 2), (12000, 14000, 0)):
@@ -589,7 +589,7 @@ def test_pitch_carried_reassociation_preserves_floor_obstacles_and_ambiguity():
     possible_second_load = TrackedCargo(77, 'green_supply', .7, (440, 548, 245, 248), hits=3)
     ambiguous = snapshot((held, possible_second_load))
     assert ambiguous.carried_reference_track_ids == (68,)
-    assert ambiguous.safe_corridor_obstacle_track_id in {75, 77}
+    assert ambiguous.safe_corridor_obstacle_track_id is None  # Both feet are behind this template end715.
     assert not ambiguous.delivery_target_found
     # Existing ground-object regression: same foot height inside the broad
     # platform extent is insufficient. Its box is incompatible with ID229's
@@ -598,7 +598,7 @@ def test_pitch_carried_reassociation_preserves_floor_obstacles_and_ambiguity():
     unchanged = snapshot((ground,), ids=(229,), boxes=((458, 366, 180, 199),),
                          safe_bbox=(261, 0, 835, 107))
     assert unchanged.carried_reference_track_ids == (229,)
-    assert unchanged.safe_corridor_obstacle_track_id == 259
+    assert unchanged.safe_corridor_obstacle_track_id is None  # Foot805 is outside the fixed end715.
     missing_anchor = snapshot((held,), boxes=())
     assert missing_anchor.carried_reference_track_ids == (68,)
 
@@ -648,7 +648,7 @@ def test_same_view_carried_identity_survives_initial_entry_tracker_replacement()
     possible_second_load = replace(held, track_id=836, bbox=(500, 480, 440, 320))
     ambiguous = snapshot((held, possible_second_load))
     assert ambiguous.carried_reference_track_ids == (819,)
-    assert ambiguous.safe_corridor_obstacle_track_id in {834, 836}
+    assert ambiguous.safe_corridor_obstacle_track_id is None  # Feet800 are behind template end715.
     # The old pitch-change shape-only rule would accept this similar box.
     # At the same angle its actual bidirectional overlap is below 0.60.
     disjoint = replace(held, track_id=837, bbox=(300, 470, 442, 330))
@@ -658,16 +658,16 @@ def test_same_view_carried_identity_survives_initial_entry_tracker_replacement()
     released = replace(held, bbox=(466, 531, 442, 330))
     opened = snapshot((released,), flags=0)
     assert opened.carried_reference_track_ids == (819,)
-    assert opened.safe_corridor_obstacle_track_id == 834
+    assert opened.safe_corridor_obstacle_track_id is None  # Foot861 is outside the new rectangle.
     ram = snapshot((released,), mode=15)
     assert ram.carried_reference_track_ids == (819,)
-    assert ram.safe_corridor_obstacle_track_id == 834
+    assert ram.safe_corridor_obstacle_track_id is None
     for state in (CompetitionState.CLEAR_SAFE_ZONE, CompetitionState.DELIVERY_VERIFY,
                   CompetitionState.INVALID_RELEASE, CompetitionState.INITIAL_RELEASE):
         m.state = state
         stopped_ownership = snapshot((released,))
         assert stopped_ownership.carried_reference_track_ids == (819,)
-        assert stopped_ownership.safe_corridor_obstacle_track_id == 834
+        assert stopped_ownership.safe_corridor_obstacle_track_id is None  # Not an entry-check phase.
     m.state = CompetitionState.DELIVERY_VERIFY
     known = snapshot((released,), ids=(834,), boxes=(released.bbox,))
     assert known.carried_reference_track_ids == (834,)
@@ -2324,11 +2324,11 @@ def test_injury_delivery_distinguishes_platform_mixture_floor_obstacle_and_zone_
     assert snapshot.carried_incompatible_cargo == (green,)
     floor = replace(green, bbox=(600, 400, 80, 100))
     assert runner_module.safe_zone_push_corridor((floor,), (200, 0, 800, 100),
-        "injury", True)[1] == floor
+        "injury", True, claw_polygon=((201,203),(1067,203),(1067,727),(201,727)))[1] == floor
     assert runner_module.safe_zone_push_corridor((floor,), (200, 0, 800, 100),
-        "material", True)[1] is None
+        "material", True, claw_polygon=((201,203),(1067,203),(1067,727),(201,727)))[1] is None
     assert runner_module.safe_zone_push_corridor((inside,), (200, 0, 800, 100),
-        "injury", True)[1] is None
+        "injury", True, claw_polygon=((201,203),(1067,203),(1067,727),(201,727)))[1] is None
 
 
 def test_pending_visual_lateral_updates_same_action_and_source_frame():
@@ -2411,3 +2411,140 @@ def test_retired_sweep_cannot_restart_through_planner_context_recovery():
         assert out.command.opcode == CMD_PAUSE and out.reason == 'legacy_safe_sweep_disabled'
         assert m.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR
         assert m.carried_manifest == ('green_supply',) and m.safe_sweep_pickup is None
+
+
+def test_corridor_is_built_only_after_alignment_and_does_not_reuse_pixel_memory():
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+    polygon = ((200, 200), (1080, 200), (1080, 730), (200, 730))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ('green_supply',), 'material'))
+    m.confirmed_delivery_destination = 'material'
+    obstacle = TrackedCargo(2, 'danger_cyan', .9, (550, 400, 100, 100), hits=4)
+    remembered = TrackedCargo(3, 'green_supply', .8, (500, 450, 80, 80), visible=False)
+    status = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000)
+    def snapshot(items=(), memory=remembered):
+        with patch.object(runner_module, 'tracked_cargo', return_value=items):
+            return runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False),
+                (200, 0, 1000, 100), status, m, 20, capture_rois=rois,
+                recent_corridor_obstacle=memory)
+    for state in (CompetitionState.SEARCH, CompetitionState.NAVIGATE,
+                  CompetitionState.ALIGN_SAFE_ZONE_BY_POSE, CompetitionState.ACQUIRE_SAFE_ZONE,
+                  CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX):
+        m.state = state
+        v = snapshot((obstacle,))
+        assert v.safe_corridor_polygon == () and v.safe_corridor_obstacle_track_id is None
+    for state in (CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                  CompetitionState.WAIT_SAFE_ZONE_CLEAR, CompetitionState.ENTER_SAFE_ZONE):
+        m.state = state
+        v = snapshot()
+        assert v.safe_corridor_polygon and v.safe_corridor_obstacle_track_id is None
+        assert not v.safe_corridor_obstacle_remembered
+
+
+def test_claw_template_rectangle_has_fixed_width_and_reaches_side_tangent_end():
+    from state_machine import TrackedCargo
+    template = ((637, 203), (1067, 727), (201, 715), (201, 600))
+    for destination in ('material', 'injury'):
+        for bbox in ((50, 0, 500, 120), (700, 20, 350, 100)):
+            polygon = runner_module.safe_zone_corridor_polygon(bbox, destination, template)
+            assert polygon == ((201,727),(1067,727),(1067,120),(201,120))
+    # An interior bottom point is not one of the two side tangents.
+    extended = template + ((640, 900),)
+    assert runner_module.safe_zone_corridor_polygon((50,0,500,120),'material',extended) == (
+        (201,727),(1067,727),(1067,120),(201,120))
+    # The former narrow bottom missed this real blue foot near(621,636).
+    blue = TrackedCargo(740,'danger_cyan',.97,(515,395,212,241),hits=8)
+    for destination in ('material', 'injury'):
+        polygon, obstacle, _, _ = runner_module.safe_zone_push_corridor((blue,),
+            (352,0,913,97), destination, False, claw_polygon=template)
+        assert obstacle is blue
+    outside = TrackedCargo(5,'danger_cyan',.9,(100,400,80,100),hits=4)
+    behind = TrackedCargo(6,'danger_cyan',.9,(550,700,100,100),hits=4)
+    assert runner_module.safe_zone_push_corridor((outside,behind), (352,0,913,97),
+        'material', False, claw_polygon=template)[1] is None
+    assert runner_module.safe_zone_corridor_polygon(None,'material',template)==()
+    collapsed, obstacle, _, status = runner_module.safe_zone_push_corridor((blue,),
+        (100,700,1000,100),'material',False,claw_polygon=template)
+    assert collapsed == ((201,727),(1067,727),(1067,727),(201,727))
+    assert obstacle is None and status == 'CLEAR'
+
+
+def test_rectangle_excludes_both_confirmed_green_black_loads_and_keeps_extra_blue():
+    from state_machine import TrackedCargo
+    template=((201,203),(1067,203),(1067,727),(201,727))
+    green=TrackedCargo(1,'green_supply',.9,(400,450,100,100),hits=4)
+    black=TrackedCargo(2,'core_black',.9,(600,450,100,100),hits=4)
+    blue=TrackedCargo(3,'danger_cyan',.9,(800,450,100,100),hits=4)
+    polygon,obstacle,_,status=runner_module.safe_zone_push_corridor((green,black),
+        (100,0,1000,100),'material',False,frozenset({1,2}),
+        carried_manifest=('green_supply','core_black'),carried_total_count=2,
+        claw_polygon=template)
+    assert polygon == ((201,727),(1067,727),(1067,100),(201,100))
+    assert obstacle is None and status=='CLEAR'
+    assert runner_module.safe_zone_push_corridor((green,black,blue),
+        (100,0,1000,100),'material',True,frozenset({1,2}),
+        carried_manifest=('green_supply','core_black'),carried_total_count=2,
+        claw_polygon=template)[1] is blue
+
+
+def test_rectangle_snapshot_keeps_same_template_at_both_delivery_pitches():
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+    polygon=((637,203),(1067,727),(201,715),(201,600))
+    rois=CaptureRois(polygon,*split_capture_roi(polygon))
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,2),('green_supply','core_black'),'material'))
+    m.carried_manifest=('green_supply','core_black');m.carried_total_count=2
+    m.confirmed_delivery_destination='material';m.first_common_delivered=True
+    m.state=CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+    green=TrackedCargo(1,'green_supply',.9,(400,450,100,100),hits=4)
+    black=TrackedCargo(2,'core_black',.9,(600,450,100,100),hits=4)
+    blue=TrackedCargo(3,'danger_cyan',.9,(800,450,100,100),hits=4)
+    for pitch in (11500,12000):
+        status=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=pitch)
+        with patch.object(runner_module,'tracked_cargo',return_value=(green,black,blue)):
+            view=runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),
+                (340,0,900,100),status,m,20,capture_rois=rois,recent_carried_track_ids=(1,2))
+        assert view.safe_corridor_polygon==((201,727),(1067,727),(1067,100),(201,100))
+        assert view.carried_reference_track_ids==(1,2)
+        assert view.safe_corridor_obstacle_track_id==3
+
+
+def test_rectangle_entry_checks_current_extra_objects_and_preserves_local_enter():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+    from protocol import CMD_ENTER_SAFE_ZONE, CMD_PAUSE, CMD_CLEAR_SAFE_ZONE
+    polygon=((637,203),(1067,727),(201,715),(201,600))
+    rois=CaptureRois(polygon,*split_capture_roi(polygon))
+    for name,x,blocked in (('green_supply',1100,False),('green_supply',600,True),('danger_cyan',600,True)):
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.carried_manifest=('green_supply',);m.carried_total_count=1
+        m.confirmed_delivery_destination='material';m.safe_zone_visual_locked=True
+        m.state=CompetitionState.SAFE_ZONE_CORRIDOR_CHECK;m.safe_corridor_frame_floor=19
+        held=TrackedCargo(1,'green_supply',.9,(400,450,100,100),hits=4)
+        extra=TrackedCargo(2,name,.9,(x,400,80,100),hits=4)
+        status=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=12000)
+        def snapshot(items,frame):
+            with patch.object(runner_module,'tracked_cargo',return_value=items):
+                return runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),
+                    (340,0,900,100),status,m,frame,capture_rois=rois,recent_carried_track_ids=(1,),
+                    observed_s=1.+(frame-20)*.1)
+        view=snapshot((held,extra),20)
+        out=m.step(view,PoseSnapshot(valid=True,yaw_deg=90),status,1.)
+        assert out.command.opcode!=CMD_CLEAR_SAFE_ZONE
+        if blocked:
+            assert out.command.opcode==CMD_PAUSE and m.state==CompetitionState.WAIT_SAFE_ZONE_CLEAR
+            assert m.carried_manifest==('green_supply',)
+            out=m.step(snapshot((held,),21),PoseSnapshot(valid=True,yaw_deg=90),status,1.1)
+        assert out.command.opcode==CMD_ENTER_SAFE_ZONE
+        assert out.command.arg_a==out.command.arg_b==out.command.aux==0

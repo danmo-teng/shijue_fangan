@@ -1,0 +1,60 @@
+{
+  "offline_geometry_only": true,
+  "no_device_or_motion": true,
+  "source_clip": "safe_zone_replay_0009",
+  "frame": 9031,
+  "original_upper_state": "SAFE_ZONE_CORRIDOR_CHECK",
+  "safe_bbox": [
+    352,
+    0,
+    913,
+    97
+  ],
+  "rectangle": [
+    [
+      201,
+      727
+    ],
+    [
+      1067,
+      727
+    ],
+    [
+      1067,
+      97
+    ],
+    [
+      201,
+      97
+    ]
+  ],
+  "items": [
+    {
+      "track_id": 740,
+      "class": "danger_cyan",
+      "foot": [
+        621,
+        636
+      ],
+      "in_rectangle_ground_region": true
+    },
+    {
+      "track_id": 759,
+      "class": "green_supply",
+      "foot": [
+        806,
+        762
+      ],
+      "in_rectangle_ground_region": false
+    },
+    {
+      "track_id": 761,
+      "class": "injured_orange",
+      "foot": [
+        998,
+        49
+      ],
+      "in_rectangle_ground_region": false
+    }
+  ]
+}

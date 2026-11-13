@@ -526,18 +526,18 @@ def danger_ahead(
     return True, "left" if cx < IMAGE_WIDTH * 0.5 else "right"
 
 
-def safe_zone_corridor_polygon(safe_bbox, destination):
-    if safe_bbox is None or destination not in {"material", "injury"}:
+def safe_zone_corridor_polygon(safe_bbox, destination, claw_polygon):
+    if safe_bbox is None or destination not in {"material", "injury"} or not claw_polygon:
         return ()
-    x, y, width, height = safe_bbox
-    midpoint = x + width // 2
-    left, right = (midpoint, x + width) if destination == "injury" else (x, midpoint)
-    top = max(0, min(IMAGE_HEIGHT - 1, y + height))
-    half = max(80, min(180, width // 4))
-    return ((IMAGE_WIDTH // 2 - half, IMAGE_HEIGHT - 1),
-            (IMAGE_WIDTH // 2 + half, IMAGE_HEIGHT - 1),
-            (max(0, min(IMAGE_WIDTH - 1, right)), top),
-            (max(0, min(IMAGE_WIDTH - 1, left)), top))
+    # Fixed image template, independent of the current camera pitch.
+    left = min(x for x, _ in claw_polygon)
+    right = max(x for x, _ in claw_polygon)
+    near = max(y for x, y in claw_polygon if x == left or x == right)
+    left = max(0, min(IMAGE_WIDTH - 1, left))
+    right = max(0, min(IMAGE_WIDTH - 1, right))
+    near = max(0, min(IMAGE_HEIGHT - 1, near))
+    far = min(near, max(0, min(IMAGE_HEIGHT - 1, safe_bbox[1] + safe_bbox[3])))
+    return ((left, near), (right, near), (right, far), (left, far))
 
 
 def carried_view_foot_polygon(camera_pitch_cdeg: int):
@@ -647,6 +647,8 @@ def safe_zone_push_corridor(
     carried_manifest: tuple[str, ...] = (),
     carried_total_count: int = 0,
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
+    *,
+    claw_polygon: tuple[tuple[int, int], ...],
 ) -> tuple[
     tuple[tuple[int, int], ...],
     TrackedCargo | None,
@@ -655,16 +657,19 @@ def safe_zone_push_corridor(
 ]:
     if safe_bbox is None or destination not in {"material", "injury"}:
         return (), None, None, SAFE_CORRIDOR_CLEAR
-    width = safe_bbox[2]
-    front_half_width = max(80, min(180, width // 4))
-    polygon = safe_zone_corridor_polygon(safe_bbox, destination)
+    polygon = safe_zone_corridor_polygon(safe_bbox, destination, claw_polygon)
+    if not polygon or polygon[0][1] == polygon[2][1]:
+        # No remaining image strip before the placement edge. Keep the
+        # geometry result without turning zero length into another wait.
+        return polygon, None, None, SAFE_CORRIDOR_CLEAR
+    left, right = polygon[0][0], polygon[1][0]
     claw_near_field_top = round(IMAGE_HEIGHT * 0.80)
     claw_near_field = np.asarray(
         (
-            (IMAGE_WIDTH // 2 - front_half_width, IMAGE_HEIGHT - 1),
-            (IMAGE_WIDTH // 2 + front_half_width, IMAGE_HEIGHT - 1),
-            (IMAGE_WIDTH // 2 + front_half_width, claw_near_field_top),
-            (IMAGE_WIDTH // 2 - front_half_width, claw_near_field_top),
+            (left, IMAGE_HEIGHT - 1),
+            (right, IMAGE_HEIGHT - 1),
+            (right, claw_near_field_top),
+            (left, claw_near_field_top),
         ),
         dtype=np.int32,
     )
@@ -957,7 +962,7 @@ def make_vision_snapshot(
         if (not mission.safe_sweep_pickup.recovering_original and
                 stm.camera_pitch_cdeg == 12000 and not safe_zone_filter_blocked):
             sweep_search_polygon = safe_zone_corridor_polygon(
-                safe_bbox, mission.confirmed_delivery_destination
+                safe_bbox, mission.confirmed_delivery_destination, rois.overall
             ) or sweep_search_polygon
     sweep_target = mission.safe_sweep_target(
         cargo, sweep_search_polygon, None if safe_zone_filter_blocked else safe_bbox
@@ -1045,7 +1050,12 @@ def make_vision_snapshot(
         # explicit IDs for retrieve/delivery observation, but do not identify
         # an unknown floor track from a box retained before release/ram.
         carried_bbox_reference = ()
-    corridor_bbox = None if safe_zone_filter_blocked else safe_bbox
+    corridor_active = mission.state in {
+        CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+        CompetitionState.WAIT_SAFE_ZONE_CLEAR,
+        CompetitionState.ENTER_SAFE_ZONE,
+    }
+    corridor_bbox = safe_bbox if corridor_active and not safe_zone_filter_blocked else None
     corridor_destination = (
         mission.confirmed_delivery_destination or
         (selected.destination if selected is not None else None)
@@ -1062,17 +1072,15 @@ def make_vision_snapshot(
         cargo_on_carrying_platform(item, stm.camera_pitch_cdeg)
     )
     corridor_excluded_track_ids = known_carried_ids
-    corridor_cargo = cargo
-    if (recent_corridor_obstacle is not None and
-            not any(item.track_id == recent_corridor_obstacle.track_id for item in cargo)):
-        corridor_cargo = cargo + (recent_corridor_obstacle,)
+    # The legacy offline keyword recent_corridor_obstacle is intentionally
+    # ignored: a pre-alignment pixel box is not an obstacle in the new strip.
     (
         corridor,
         corridor_obstacle,
         corridor_distance_mm,
         corridor_status,
     ) = safe_zone_push_corridor(
-        corridor_cargo,
+        cargo,
         corridor_bbox,
         corridor_destination,
         mission.first_common_delivered,
@@ -1081,6 +1089,7 @@ def make_vision_snapshot(
         mission.carried_manifest,
         mission.carried_total_count,
         carried_bbox_reference,
+        claw_polygon=rois.overall,
     )
     range_distances = []
     range_reason = ("range_calibration_missing" if range_calibration is None else
@@ -2792,7 +2801,7 @@ def draw_overlay(
     selected_ids = set(output.batch.track_ids) if output.batch is not None else set()
     for item in vision.cargo:
         x, y, box_width, box_height = item.bbox
-        if front_check and not cargo_in_front_region(item, front_polygon, vision.safe_bbox):
+        if front_check and front_polygon and not cargo_in_front_region(item, front_polygon, vision.safe_bbox):
             color = (100, 100, 100)
         elif item.class_name == "danger_cyan":
             color = (0, 0, 255)
@@ -3075,8 +3084,6 @@ def main() -> int:
     recent_carried_track_ids: tuple[int, ...] = ()
     recent_carried_pitch_cdeg = 0
     held_cargo_evidence = HeldCargoEvidence()
-    recent_corridor_obstacle: TrackedCargo | None = None
-    corridor_memory_pitch = 0
     competition_started = False
     config_sent = False
     operator_stopped = False
@@ -3105,7 +3112,6 @@ def main() -> int:
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
         nonlocal recent_carried_track_ids, recent_carried_pitch_cdeg
-        nonlocal recent_corridor_obstacle, corridor_memory_pitch
         if operator_start_ready or operator_stopped or not args.wait_for_operator:
             return
         request = operator_start_request(args.operator_control,args.pose,args.reset_session_token)
@@ -3129,8 +3135,6 @@ def main() -> int:
         recent_carried_track_ids = ()
         recent_carried_pitch_cdeg = 0
         held_cargo_evidence.clear()
-        recent_corridor_obstacle = None
-        corridor_memory_pitch = 0
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
@@ -3410,16 +3414,6 @@ def main() -> int:
                     safe_zone_missing_frames = 3
                     safe_bbox = None
                     safe_zone_filter_blocked = False
-                remember_corridor = (
-                    mission.state in {CompetitionState.ACQUIRE_SAFE_ZONE,
-                        CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
-                        CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
-                        CompetitionState.ENTER_SAFE_ZONE} and
-                    stm.camera_pitch_cdeg in {11500, 12000}
-                )
-                if not remember_corridor or stm.camera_pitch_cdeg != corridor_memory_pitch:
-                    recent_corridor_obstacle = None
-                corridor_memory_pitch = stm.camera_pitch_cdeg
                 latest_vision = make_vision_snapshot(
                     detections,
                     tracks,
@@ -3439,18 +3433,9 @@ def main() -> int:
                     observed_s=packet.published_ns / 1_000_000_000.0,
                     range_calibration=range_calibration,
                     recent_carried_track_ids=recent_carried_track_ids,
-                    recent_corridor_obstacle=recent_corridor_obstacle,
                     recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
                     held_cargo_evidence=held_cargo_evidence,
                 )
-                if (remember_corridor and latest_vision.safe_corridor_obstacle_class is not None):
-                    recent_corridor_obstacle = TrackedCargo(
-                        latest_vision.safe_corridor_obstacle_track_id,
-                        latest_vision.safe_corridor_obstacle_class, 0.0,
-                        latest_vision.safe_corridor_obstacle_bbox, visible=False,
-                    )
-                elif remember_corridor and latest_vision.safe_corridor_polygon:
-                    recent_corridor_obstacle = None
                 if latest_vision.carried_reference_track_ids:
                     recent_carried_track_ids = latest_vision.carried_reference_track_ids
                 elif not mission.carried_manifest:
