@@ -16,6 +16,7 @@ import hashlib
 import queue
 from functools import lru_cache
 import math
+import os
 import re
 import secrets
 import signal
@@ -83,6 +84,7 @@ from capture_roi import (  # noqa: E402
 )
 from state_machine import (  # noqa: E402
     CARGO_CLASSES,
+    MATERIAL_CLASSES,
     SAFE_CORRIDOR_BLOCKED,
     SAFE_CORRIDOR_CLEAR,
     CargoAudit,
@@ -165,6 +167,9 @@ def arguments() -> argparse.Namespace:
         help="debug only: skip the configured opening temporary-relocation strategy",
     )
     parser.add_argument("--yield-distance-mm", type=float, default=250.0)
+    parser.add_argument("--enable-bulldozer", action="store_true",
+        default=os.environ.get("RDK_ENABLE_BULLDOZER") == "1",
+        help="启用新分段扫障；须先部署配套F405 0x14接口，默认关闭")
     parser.add_argument(
         "--safe-sweep-capture-offset-mm",
         type=float,
@@ -651,6 +656,8 @@ def safe_zone_push_corridor(
     recent_carried_bboxes: tuple[tuple[int, int, int, int], ...] = (),
     *,
     claw_polygon: tuple[tuple[int, int], ...],
+    include_compatible_obstacles: bool = False,
+    obstacle_classes_out: list[str] | None = None,
 ) -> tuple[
     tuple[tuple[int, int], ...],
     TrackedCargo | None,
@@ -677,7 +684,7 @@ def safe_zone_push_corridor(
     )
     blocking_classes = (
         CARGO_CLASSES
-        if not first_common_delivered or destination == "injury" else
+        if include_compatible_obstacles or not first_common_delivered or destination == "injury" else
         frozenset({"danger_cyan", "injured_orange"})
     )
     corridor_items: list[tuple[TrackedCargo, tuple[float, float]]] = []
@@ -721,10 +728,15 @@ def safe_zone_push_corridor(
         ):
             continue
         candidates.append(item)
+    if obstacle_classes_out is not None:
+        obstacle_classes_out.extend(item.class_name for item in candidates)
     if not candidates:
         return polygon, None, None, SAFE_CORRIDOR_CLEAR
     # Pixel ordering chooses a target; it is not a ground-distance estimate.
+    compatible = (MATERIAL_CLASSES if destination == "material" else {"injured_orange"})
     obstacle = max(candidates, key=lambda item: (
+        include_compatible_obstacles and item.class_name not in compatible,
+        include_compatible_obstacles and item.class_name == "danger_cyan",
         item.bbox[1] + item.bbox[3], item.area_px, -item.track_id,
     ))
     return polygon, obstacle, None, SAFE_CORRIDOR_BLOCKED
@@ -1088,6 +1100,7 @@ def make_vision_snapshot(
     corridor_excluded_track_ids = known_carried_ids
     # The legacy offline keyword recent_corridor_obstacle is intentionally
     # ignored: a pre-alignment pixel box is not an obstacle in the new strip.
+    corridor_classes: list[str] = []
     (
         corridor,
         corridor_obstacle,
@@ -1104,6 +1117,8 @@ def make_vision_snapshot(
         mission.carried_total_count,
         carried_bbox_reference,
         claw_polygon=rois.overall,
+        include_compatible_obstacles=mission.settings.bulldozer_enabled,
+        obstacle_classes_out=corridor_classes,
     )
     range_distances = []
     range_reason = ("range_calibration_missing" if range_calibration is None else
@@ -1147,6 +1162,7 @@ def make_vision_snapshot(
         safe_corridor_obstacle_class=(
             None if corridor_obstacle is None else corridor_obstacle.class_name
         ),
+        safe_corridor_obstacle_classes=tuple(sorted(set(corridor_classes))),
         safe_corridor_obstacle_distance_mm=corridor_distance_mm,
         safe_corridor_obstacle_track_id=(
             None if corridor_obstacle is None else corridor_obstacle.track_id
@@ -1846,6 +1862,12 @@ class CompetitionPlanner:
                 return self.mission.cluster_execution_seen
             if state in {CompetitionState.APPROACH, CompetitionState.INITIAL_APPROACH}:
                 return self.mission.approach_f407_active_seen
+            if (state == CompetitionState.RETURN_CENTER and
+                    self.mission.obstacle_route is not None and
+                    self.mission.obstacle_route.recover_after_delivery and
+                    (not stm.context_valid or stm.task_id != self.protocol_task or
+                     stm.action_id != self.protocol_action)):
+                return False
             return (state == CompetitionState.RETURN_CENTER and stm.context_valid and
                     stm.accepted_command == CMD_RETURN_CENTER and bool(stm.action_status & 1))
         return False
@@ -2118,6 +2140,11 @@ class CompetitionPlanner:
         reconciled = self._reconcile_approach_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
+        if (self.mission.state == CompetitionState.OBSTACLE_ROUTE and not stm.fault and
+                stm.mode in {3, 10, 11, 25}):
+            # Update live remaining H/D while the first paired status is in
+            # flight. Only a matching action may advance the route step.
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (stm.fresh and stm.mode in {22, 40, 50} and
                 (not self.mission._has_committed_audit(stm.mode) or self.mission.selected_batch is None)):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
@@ -2332,6 +2359,9 @@ class CompetitionPlanner:
             "safe_sweep_execution_seen": self.mission.safe_sweep_execution_seen,
             "safe_sweep_reaudit_active": self.mission.safe_sweep_reaudit_active,
             "safe_sweep_control": "pixel_approach",
+            "bulldozer_enabled": self.mission.settings.bulldozer_enabled,
+            "bulldozer_route": (None if self.mission.obstacle_route is None
+                                else asdict(self.mission.obstacle_route)),
             "safe_sweep_observation": {
                 "key": self.sweep_observation_key,
                 "elapsed_s": (
@@ -2511,7 +2541,8 @@ class CompetitionPlanner:
         if (output.event not in {"safe_zone_acquire_no_box", "safe_zone_visual_reobserve",
                                  "load_empty_reobserve",
                                  "safe_zone_entry", "safe_zone_clear_start",
-                                 "carried_incompatible_reaudit"} or
+                                 "carried_incompatible_reaudit", "bulldozer_start",
+                                 "bulldozer_pickup_abandoned"} or
                 self.replay_event_sink is None):
             return
         try:
@@ -2990,6 +3021,7 @@ def main() -> int:
         initial_stash_enabled=not args.disable_initial_stash,
         yield_distance_m=args.yield_distance_mm / 1000.0,
         safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
+        bulldozer_enabled=args.enable_bulldozer,
     ))
     planner = CompetitionPlanner(
         mission,
@@ -3026,6 +3058,8 @@ def main() -> int:
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
             "safe_sweep_capture_offset_ignored": True,
+            "bulldozer_enabled": args.enable_bulldozer,
+            "bulldozer_contract": "F405_BULLDOZER_STEP_20261113",
             **homography_diagnostics,
             "homography_calibrated": localizer.calibrated,
             "capture_roi": str(args.capture_roi),
@@ -3142,7 +3176,8 @@ def main() -> int:
         mission = CompetitionMission(CompetitionSettings(side=side,start_zone=start_zone,
             opening_strategy=opening_strategy,initial_stash_enabled=not args.disable_initial_stash,
             yield_distance_m=args.yield_distance_mm / 1000.0,
-            safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm))
+            safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
+            bulldozer_enabled=args.enable_bulldozer))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)
         planner.localization_wheel_policy = wheel_policy

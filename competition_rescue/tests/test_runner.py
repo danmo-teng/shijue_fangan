@@ -2390,6 +2390,67 @@ def test_pending_visual_lateral_updates_same_action_and_source_frame():
         assert int.from_bytes((root/"command").read_bytes()[8:12], "big") == 17
 
 
+def test_bulldozer_corridor_keeps_compatible_targets_and_prioritizes_mixed_danger():
+    from state_machine import TrackedCargo
+    from obstacle_route import handling_kind
+    green = TrackedCargo(2,'green_supply',.9,(500,550,80,80),hits=4)
+    blue = TrackedCargo(3,'danger_cyan',.9,(700,300,80,80),hits=4)
+    orange = TrackedCargo(4,'injured_orange',.9,(850,400,80,80),hits=4)
+    polygon = ((637,203),(1067,727),(201,715),(201,600))
+    classes = []
+    old = runner_module.safe_zone_push_corridor((green,), (0,0,1280,100), 'material',True,
+        claw_polygon=polygon)
+    assert old[1] is None  # Unenabled deployment retains its previous behavior.
+    same = runner_module.safe_zone_push_corridor((green,), (0,0,1280,100), 'material',True,
+        claw_polygon=polygon,include_compatible_obstacles=True,obstacle_classes_out=classes)
+    assert same[1].track_id == 2 and classes == ['green_supply']
+    classes.clear()
+    mixed = runner_module.safe_zone_push_corridor((green,blue,orange), (0,0,1280,100), 'material',True,
+        claw_polygon=polygon,include_compatible_obstacles=True,obstacle_classes_out=classes)
+    assert mixed[1].track_id == 3 and set(classes)=={'green_supply','danger_cyan','injured_orange'}
+    assert handling_kind('material',tuple(classes),first=False)=='sweep'
+
+
+def test_bulldozer_steps_pair_actions_and_keep_live_distance_updates():
+    from dataclasses import replace
+    from obstacle_route import RouteStep
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_BULLDOZER_STEP
+    from state_machine import CargoBatch
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False,bulldozer_enabled=True))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.confirmed_delivery_destination='material'
+        p=PoseSnapshot(True,-.15,.54,90,0)
+        v=VisionSnapshot(frame_sequence=10,safe_corridor_obstacle_class='danger_cyan')
+        s=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=12000,
+                      context_valid=True,accepted_command=CMD_ALIGN_SAFE_ZONE,action_status=3)
+        initial=m._blocked_corridor_output(v,s,1.,pose=p)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        planner._publish(initial)
+        ids=(planner.protocol_task,planner.protocol_action)
+        old=replace(s,mode=25,task_id=ids[0],action_id=(ids[1]-1)&65535,
+                     accepted_command=CMD_BULLDOZER_STEP)
+        waiting=planner._output_for_cycle(v,p,old,False,1.1)
+        assert m.obstacle_route.step==RouteStep.TURN_RIGHT
+        planner._publish(waiting)
+        assert (planner.protocol_task,planner.protocol_action)==ids
+        paired=replace(old,action_id=ids[1])
+        moving=planner._output_for_cycle(v,p,paired,False,1.2)
+        assert m.obstacle_route.step==RouteStep.FORWARD_PARK
+        planner._publish(moving)
+        assert planner.protocol_action != ids[1]
+        # A live leg's remaining distance changes without allocating another action.
+        m.obstacle_route.index=m.obstacle_route.steps.index(RouteStep.BACK_TO_SWEEP)
+        live=planner._output_for_cycle(v,replace(p,x_m=0.),old,False,1.3)
+        planner._publish(live);live_ids=(planner.protocol_task,planner.protocol_action)
+        updated=planner._output_for_cycle(v,replace(p,x_m=-.2),old,False,1.4)
+        assert updated.command.arg_a==360 and live.command.arg_a==560
+        planner._publish(updated)
+        assert (planner.protocol_task,planner.protocol_action)==live_ids
+        assert (root/'command').read_bytes()[19]==CMD_BULLDOZER_STEP
+
+
 def test_locked_single_target_keeps_whole_claw_audit_in_every_view():
     from dataclasses import replace
     from types import SimpleNamespace

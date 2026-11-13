@@ -18,6 +18,31 @@ from protocol import (  # noqa: E402
 )
 
 
+def test_bulldozer_step_contract_roundtrips_without_legacy_flag_aliases():
+    from obstacle_route import ObstacleRoute
+    from protocol import CMD_BULLDOZER_STEP
+    for side in ('red', 'blue'):
+        route = ObstacleRoute(side, (1,), ('green_supply',), 'material', (-.15, .54),
+                              (-.15, .54), ('danger_cyan',), 'sweep')
+        for index in range(len(route.steps)):
+            route.index = index
+            payload = route.payload(0, .5, pose_valid=True)
+            flags = 1 | (8 if side == 'red' else 0) | (int(route.step) << 4)
+            packet = mission_frame(7, CMD_BULLDOZER_STEP, flags, *payload)
+            assert packet[4] == 0x14 and packet[5] == flags
+            assert int.from_bytes(packet[6:8], 'big', signed=True) == payload[0]
+            assert int.from_bytes(packet[8:10], 'big', signed=True) == payload[1]
+            assert int.from_bytes(packet[10:12], 'big') == payload[2]
+            assert int.from_bytes(packet[12:14], 'little') == crc16_modbus(packet[2:12])
+    for flags, args in ((0xD9, (0,0,0)), (0x0B, (0,0,0)),
+                        (0x19, (201,0,0)), (0x59, (10,0,9000))):
+        try:
+            mission_frame(1, CMD_BULLDOZER_STEP, flags, *args)
+        except ValueError:
+            continue
+        raise AssertionError('invalid new step request accepted')
+
+
 def main() -> None:
     from protocol import CMD_APPROACH_TARGET, CMD_APPROACH_RANGE, CMD_DISTANCE_VALID, CMD_RED_SIDE, CMD_CLUSTER_TARGET
     flags = CMD_VALID | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET

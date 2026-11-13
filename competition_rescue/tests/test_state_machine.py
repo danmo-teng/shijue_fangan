@@ -2274,6 +2274,108 @@ def test_all_legacy_sweep_entries_keep_load_without_clear_or_blind_enter():
                 assert m.carried_manifest == ('green_supply',) and m.carried_total_count == 1
 
 
+def test_bulldozer_route_policy_geometry_and_three_centimetre_arrival():
+    from obstacle_route import ObstacleRoute, RouteStep, handling_kind
+    for destination, same, other in (("material", "green_supply", "injured_orange"),
+                                     ("injury", "injured_orange", "green_supply")):
+        assert handling_kind(destination, (same,), first=False) == "pickup"
+        for classes in ((same,), (other,), ("danger_cyan",), (same, other)):
+            assert handling_kind(destination, classes, first=True) == "sweep"
+        assert handling_kind(destination, (same, "danger_cyan"), first=False) == "sweep"
+    for side, sign in (("red", 1), ("blue", -1)):
+        r = ObstacleRoute(side, (1,), ("green_supply",), "material", (-.15*sign, .54*sign),
+                          (-.15*sign, .54*sign), ("danger_cyan",), "sweep")
+        assert r.sweep_point == (-.56*sign, .96*sign)
+        r.index = r.steps.index(RouteStep.LEFT_TO_SWEEP)
+        x, y = r.sweep_point
+        assert r.payload(x+.031, y, pose_valid=True)[0] > 0
+        assert r.payload(x, y-.031, pose_valid=True)[0] > 0
+        assert r.payload(x+.03, y-.03, pose_valid=True)[0] == 0
+        assert r.payload(x+.08, y, pose_valid=True)[0] == 0  # D=0 stays latched for its completion.
+        assert r.payload(x, y, pose_valid=False) is None
+
+
+def _bulldozer_to_pickup(*, same=False, side="red"):
+    from obstacle_route import LIVE_STEPS, RouteStep
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_BULLDOZER_STEP
+    sign = 1 if side == "red" else -1
+    m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False,
+                                               bulldozer_enabled=True))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    m.carried_manifest = ("green_supply",); m.carried_total_count = 1
+    m.confirmed_delivery_destination = "material"
+    p = PoseSnapshot(True, -.15*sign, .54*sign, 90 if sign == 1 else 270, 0)
+    v = VisionSnapshot(frame_sequence=10, safe_corridor_obstacle_class=(
+        "core_black" if same else "danger_cyan"))
+    s = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000,
+                    context_valid=True, context_matches=True, action_status=3,
+                    accepted_command=CMD_ALIGN_SAFE_ZONE)
+    out = m._blocked_corridor_output(v, s, 1., pose=p)
+    assert out.command.opcode == CMD_BULLDOZER_STEP
+    steps = []
+    for i in range(20):
+        r = m.obstacle_route; step = r.step; steps.append(step)
+        if step in LIVE_STEPS:
+            target = r.sweep_point if step in {RouteStep.BACK_TO_SWEEP, RouteStep.LEFT_TO_SWEEP} else r.return_point
+            p = replace(p, x_m=target[0], y_m=target[1])
+        v = replace(v, frame_sequence=11+i)
+        s = replace(s, mode=25, accepted_command=CMD_BULLDOZER_STEP)
+        out = m.step(v, p, s, 1.1+i*.1)
+        if step == RouteStep.RELEASE_LOAD:
+            assert m.selected_batch is None and not m.carried_manifest and m.carried_total_count == 0
+            assert r.original_classes == ("green_supply",) and r.original_ids == (1,)
+        if m.state == CompetitionState.OBSTACLE_PICKUP:
+            break
+    assert m.state == CompetitionState.OBSTACLE_PICKUP
+    assert RouteStep.SWEEP_1000 in steps if not same else RouteStep.SWEEP_1000 not in steps
+    if same:
+        assert steps == [RouteStep.TURN_RIGHT, RouteStep.FORWARD_PARK, RouteStep.RELEASE_LOAD,
+                         RouteStep.BACK_200, RouteStep.TURN_LEFT, RouteStep.PICKUP_READY]
+    return m, out, p, replace(s, mode=3, flags=0), v
+
+
+def test_bulldozer_route_keeps_stash_and_abandons_a_missing_recovery_target():
+    for side in ("red", "blue"):
+        m, _, p, s, v = _bulldozer_to_pickup(side=side)
+        out = m.step(replace(v, frame_sequence=v.frame_sequence+1, cargo=()), p, s, 4.)
+        assert out.event == "bulldozer_pickup_abandoned"
+        assert m.state == CompetitionState.SEARCH and m.obstacle_route is None
+        assert out.command.opcode == CMD_HOLD and m.selected_batch is None
+    m, _, _, _, _ = _bulldozer_to_pickup()
+    m._set_state(CompetitionState.SEARCH, 5.)
+    assert m.obstacle_route is None  # An ordinary recovery/abandon cannot resurrect it.
+
+
+def test_bulldozer_same_zone_pickup_uses_normal_whole_claw_audit_and_returns_for_stash():
+    from protocol import CMD_BULLDOZER_STEP, CMD_APPROACH_TARGET
+    m, _, p, s, v = _bulldozer_to_pickup(same=True)
+    target = TrackedCargo(99, "core_black", .9, (600, 500, 80, 100), hits=4)
+    out = m.step(replace(v, frame_sequence=v.frame_sequence+1, cargo=(target,)), p, s, 4.)
+    assert out.state == CompetitionState.APPROACH and out.command.opcode == CMD_APPROACH_TARGET
+    assert m.obstacle_route.awaiting_obstacle_delivery
+    assert m.selected_batch.track_ids == (99,) and not m.carried_manifest
+    # The ordinary full-claw audit, including a neighbouring blue, still owns legality.
+    audit = CargoAudit(left_class="core_black", right_class="danger_cyan", left_count=1,
+                       right_count=1, total_count=2, danger_present=True)
+    for frame, now in ((30, 4.1), (31, 4.25), (32, 4.4)):
+        audited = m.step(VisionSnapshot(frame_sequence=frame, capture_audit=audit,
+            capture_observation_valid=True), p, replace(s, mode=21, flags=1,
+            camera_pitch_cdeg=14000), now)
+    assert audited.command.opcode == CMD_CARGO_AUDIT
+    assert audited.command.audit.total_count == 2 and audited.command.audit.danger_present
+    # Successful obstacle delivery schedules the one pending original load.
+    m.carried_manifest = ("core_black",); m.carried_total_count = 1
+    m._finish_delivery(s, 5., basis="fixture", message="fixture", event="fixture")
+    out = m.step(VisionSnapshot(frame_sequence=40), p, replace(s, mode=17), 5.1)
+    assert out.state == CompetitionState.RETURN_CENTER
+    at_stage = replace(p, x_m=m.obstacle_route.return_point[0], y_m=m.obstacle_route.return_point[1])
+    done = replace(s, accepted_command=CMD_RETURN_CENTER, action_status=3)
+    out = m.step(VisionSnapshot(frame_sequence=41), at_stage, done, 5.2)
+    assert out.state == CompetitionState.OBSTACLE_ROUTE and out.command.opcode == CMD_BULLDOZER_STEP
+    assert m.obstacle_route.pickup_role == "original"
+
+
 def test_single_anchor_audits_actual_load_before_grab_and_separates_overload():
     from protocol import CMD_CARGO_AUDIT, CMD_DISPERSE_PILE, CMD_GRAB_CONFIRMED, CMD_NAVIGATE_WAYPOINT
     for danger in (False, True):

@@ -13,6 +13,7 @@ from enum import Enum
 import math
 from statistics import median
 from typing import Iterable
+from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
 
 from protocol import (
     AUDIT_DESTINATION_INJURY,
@@ -23,6 +24,7 @@ from protocol import (
     CMD_APPROACH_TARGET,
     CMD_APPROACH_RANGE,
     CMD_CARGO_AUDIT,
+    CMD_BULLDOZER_STEP,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISTANCE_VALID,
@@ -357,6 +359,7 @@ class VisionSnapshot:
     range_distances: tuple[tuple[int, int], ...] = ()
     range_reason: str = "range_calibration_missing"
     safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
+    safe_corridor_obstacle_classes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -473,6 +476,8 @@ class CompetitionState(str, Enum):
     SAFE_ZONE_CORRIDOR_CHECK = "SAFE_ZONE_CORRIDOR_CHECK"
     CLEAR_SAFE_ZONE = "CLEAR_SAFE_ZONE"
     WAIT_SAFE_ZONE_CLEAR = "WAIT_SAFE_ZONE_CLEAR"
+    OBSTACLE_ROUTE = "OBSTACLE_ROUTE"
+    OBSTACLE_PICKUP = "OBSTACLE_PICKUP"
     ENTER_SAFE_ZONE = "ENTER_SAFE_ZONE"
     DELIVERY_VERIFY = "DELIVERY_VERIFY"
     TASK_COMPLETE = "TASK_COMPLETE"
@@ -542,6 +547,8 @@ class CompetitionSettings:
     delivery_max_misses: int = 2
     delivery_max_observations: int = 1
     opening_strategy: str = "attack"
+    bulldozer_enabled: bool = False  # Deploy only with the new F405 step contract.
+    bulldozer_position_tolerance_m: float = 0.030
 
     def __post_init__(self) -> None:
         if self.opening_strategy not in {"attack", "defense"}:
@@ -587,6 +594,7 @@ class CompetitionSettings:
             self.safe_zone_staging_lateral_tolerance_m <= 0 or
             self.safe_zone_staging_axial_tolerance_m <= 0 or
             self.safe_zone_staging_fine_entry_m <= 0 or
+            self.bulldozer_position_tolerance_m <= 0 or
             self.safe_zone_freeze_frames <= 0 or
             self.safe_zone_lateral_tolerance_px <= 0 or
             self.safe_zone_lateral_start_px < self.safe_zone_lateral_tolerance_px or
@@ -765,6 +773,7 @@ class CompetitionMission:
         self.safe_zone_acquire_started_s: float | None = None
         self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_view_pitch_cdeg = 12000
+        self.obstacle_route: ObstacleRoute | None = None
         self.safe_zone_reobserve_visual = False
         self.safe_zone_higher_view_ready_s: float | None = None
         self.safe_zone_freeze_frame_floor: int | None = None
@@ -909,6 +918,11 @@ class CompetitionMission:
 
     def _set_state(self, state: CompetitionState, now: float) -> None:
         if self.state != state:
+            if (state == CompetitionState.SEARCH and self.obstacle_route is not None and
+                    not self.obstacle_route.recover_after_delivery):
+                # Failed normal pickup/separation returns to ordinary search;
+                # it must not resurrect an old parked-load task later.
+                self.obstacle_route = None
             observation_states = {CompetitionState.CAPTURE_AUDIT, CompetitionState.POST_GRAB_AUDIT}
             same_audit_phase = ((state == CompetitionState.AUDIT_CONFIRM and self.state in observation_states) or
                                 (self.state == CompetitionState.AUDIT_CONFIRM and state in observation_states))
@@ -3947,8 +3961,29 @@ class CompetitionMission:
         self._set_state(CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, now)
 
     def _blocked_corridor_output(
-        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+        *, pose: PoseSnapshot | None = None,
     ) -> CompetitionOutput:
+        if (self.settings.bulldozer_enabled and self.selected_batch is not None and
+                pose is not None and pose.valid):
+            classes = vision.safe_corridor_obstacle_classes or (
+                (vision.safe_corridor_obstacle_class,) if vision.safe_corridor_obstacle_class else ())
+            if classes:
+                batch = self.selected_batch
+                destination = self.confirmed_delivery_destination or batch.destination
+                previous_stash = self.obstacle_route
+                self.obstacle_route = ObstacleRoute(
+                    self.settings.side, batch.track_ids,
+                    self.carried_manifest or batch.classes, destination,
+                    self._target_point(), (pose.x_m, pose.y_m), classes,
+                    handling_kind(destination, classes, first=not self.first_common_delivered),
+                    self.settings.bulldozer_position_tolerance_m,
+                    replaced_stash_ids=(() if previous_stash is None else previous_stash.original_ids),
+                )
+                self._reset_safe_zone_alignment()
+                self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
+                return replace(self._obstacle_route_output(vision, pose, stm, now),
+                               event="bulldozer_start", reason="bulldozer_start")
         # Retire the release/pickup/retrieve sweep; retain the existing
         # blocked-corridor state for the replacement route.
         self.safe_sweep_command = None
@@ -3962,6 +3997,80 @@ class CompetitionMission:
             reason="legacy_safe_sweep_disabled",
             expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE),
         )
+
+    def _obstacle_route_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        route = self.obstacle_route
+        assert route is not None and route.step is not None
+        step = route.step
+        payload = route.payload(pose.x_m, pose.y_m, pose_valid=pose.valid)
+        if payload is None:
+            return CompetitionOutput(self.state, self._pause(), "扫障导航等待有效位置",
+                                     reason="bulldozer_pose_unavailable")
+        # Existing paired action status, not another request/ACK exchange.
+        complete = (stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_BULLDOZER_STEP and bool(stm.action_status & 2))
+        if complete and (step not in LIVE_STEPS or payload[0] == 0):
+            if step == RouteStep.RELEASE_LOAD:
+                route.deposit_vehicle_point = (pose.x_m, pose.y_m) if pose.valid else None
+                self._clear_selected_batch()
+                self._clear_carried_manifest()
+                self._clear_cluster_context(reset_attempts=True)
+            route.advance()
+            if route.step is None:
+                route.pickup_frame_floor = vision.frame_sequence
+                self._set_state(CompetitionState.OBSTACLE_PICKUP, now)
+                return CompetitionOutput(self.state, self._hold(),
+                    "已到观察位置，沿正常识别抓取；一轮无目标则回普通搜索",
+                    event="bulldozer_pickup_observe", reason="bulldozer_pickup_observe")
+            return replace(self._obstacle_route_output(vision, pose,
+                replace(stm, context_matches=False), now), event="bulldozer_step_complete")
+        command = CommandRequest(CMD_BULLDOZER_STEP,
+            self._side_flags() | (int(step) << 4), *payload)
+        return CompetitionOutput(self.state, command,
+            f"新扫障/{route.kind}：{step.name}，H/D沿同动作更新",
+            self.selected_batch, motion_expected=step not in {
+                RouteStep.RELEASE_LOAD, RouteStep.FULL_OPEN,
+                RouteStep.RAISE_RETURN, RouteStep.PICKUP_READY},
+            reason=f"bulldozer_{step.name.lower()}")
+
+    def _obstacle_pickup_output(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        route = self.obstacle_route
+        assert route is not None
+        ready_view = stm.camera_pitch_cdeg == 12000
+        if ready_view and vision.frame_sequence <= route.pickup_frame_floor:
+            return CompetitionOutput(self.state, self._hold(), "沿用120°后的新视图观察",
+                                     reason="bulldozer_pickup_view")
+        allowed = (set(route.original_classes) if route.pickup_role == "original" else
+                   MATERIAL_CLASSES if route.original_destination == "material" else {"injured_orange"})
+        candidates = [item for item in self._visible_cargo(vision)
+                      if ready_view and item.class_name in allowed]
+        if not candidates:
+            self.obstacle_route = None
+            self._clear_selected_batch()
+            self._set_state(CompetitionState.SEARCH, now)
+            return CompetitionOutput(self.state, self._hold(),
+                "定向观察未找到目标，放弃旧找回任务并恢复正常搜索",
+                event="bulldozer_pickup_abandoned", reason="bulldozer_pickup_abandoned")
+        target = min(candidates, key=lambda item: (
+            item.track_id not in route.original_ids if route.pickup_role == "original" else False,
+            abs(item.center_px[0] - CAMERA_IMAGE_CENTER_X_PX), -item.area_px))
+        if route.pickup_role == "original":
+            self.obstacle_route = None
+        else:
+            route.awaiting_obstacle_delivery = True
+        destination = "injury" if target.class_name == "injured_orange" else "material"
+        self._select_batch(CargoBatch((target.track_id,), (target.class_name,), destination))
+        self._reset_delivery_evidence()
+        self._mark_target_seen(target, now)
+        self._set_state(CompetitionState.APPROACH, now)
+        self._arm_approach(stm)
+        return CompetitionOutput(self.state, self._approach_command(target),
+            "锁定方向锚点，沿正常接近、整爪审核和分离投送",
+            self.selected_batch, event="bulldozer_target_selected", reason="bulldozer_target_selected")
 
     def safe_sweep_target(self, cargo: tuple[TrackedCargo, ...],
                           polygon: tuple[tuple[int, int], ...] = (),
@@ -4337,6 +4446,8 @@ class CompetitionMission:
         self, stm: StmSnapshot, now: float, *, basis: str, message: str, event: str
     ) -> CompetitionOutput:
         batch = self.selected_batch
+        if self.obstacle_route is not None and self.obstacle_route.awaiting_obstacle_delivery:
+            self.obstacle_route.recover_after_delivery = True
         self.delivery_completion_basis = basis
         self._clear_cluster_context(reset_attempts=True)
         self._set_state(CompetitionState.TASK_COMPLETE, now)
@@ -4573,6 +4684,8 @@ class CompetitionMission:
             self.settings.post_delivery_return_point if self.return_after_delivery
             else (0.0, 0.0)
         )
+        if self.obstacle_route is not None and self.obstacle_route.recover_after_delivery:
+            target_x, target_y = self.obstacle_route.return_point
         tolerance = (
             self.settings.post_delivery_return_tolerance_m if self.return_after_delivery
             else self.settings.return_zero_tolerance_m
@@ -6374,6 +6487,12 @@ class CompetitionMission:
                 ),
             )
 
+        if self.state == CompetitionState.OBSTACLE_ROUTE:
+            return self._obstacle_route_output(vision, pose, stm, now)
+
+        if self.state == CompetitionState.OBSTACLE_PICKUP:
+            return self._obstacle_pickup_output(vision, stm, now)
+
         if self.state == CompetitionState.ACQUIRE_SAFE_ZONE:
             if self.safe_zone_view_pitch_cdeg == 11500:
                 # This is the MCU's reported commanded angle, not measured
@@ -6583,7 +6702,7 @@ class CompetitionMission:
                 )
             self.safe_corridor_last_frame_sequence = vision.frame_sequence
             if vision.safe_corridor_obstacle_class is not None:
-                return self._blocked_corridor_output(vision, stm, now)
+                return self._blocked_corridor_output(vision, stm, now, pose=pose)
             self.enter_initial_ack = stm.acknowledged_sequence
             self.enter_tx_baseline = stm.relay_mission_tx_frames
             self.enter_command_accepted = False
@@ -6600,6 +6719,8 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR:
+            if self.settings.bulldozer_enabled and vision.safe_corridor_obstacle_class is not None:
+                return self._blocked_corridor_output(vision, stm, now, pose=pose)
             new_corridor_frame = (
                 self._vision_fresh(vision, now) and
                 vision.frame_sequence > 0 and
@@ -6634,7 +6755,7 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
-            return self._blocked_corridor_output(vision, stm, now)
+            return self._blocked_corridor_output(vision, stm, now, pose=pose)
 
         if self.state == CompetitionState.INVALID_RELEASE:
             if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}:
@@ -6815,7 +6936,7 @@ class CompetitionMission:
             if (stm.mode in {STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_NAVIGATE} and
                     stm.gripper_closed and
                     vision.safe_corridor_obstacle_class is not None):
-                return self._blocked_corridor_output(vision, stm, now)
+                return self._blocked_corridor_output(vision, stm, now, pose=pose)
             self.enter_command_accepted = self._opcode_acceptance_seen(
                 stm,
                 CMD_ENTER_SAFE_ZONE,
@@ -6889,6 +7010,9 @@ class CompetitionMission:
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
             ):
                 self._clear_selected_batch()
+                if self.obstacle_route is not None and self.obstacle_route.recover_after_delivery:
+                    self._begin_return(stm, now, after_delivery=True)
+                    return self._return_center_output(pose, now, "返回寄存载荷的观察预备点")
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), "下位机已完成投送并进入SEARCH")
             return CompetitionOutput(self.state, CommandRequest(CMD_TASK_COMPLETE, self._side_flags()), "等待下位机张爪并退出安全区")
@@ -6902,6 +7026,11 @@ class CompetitionMission:
                 (not stm.context_valid or
                  (stm.context_matches and stm.accepted_command == CMD_RETURN_CENTER))
             ):
+                if self.obstacle_route is not None and self.obstacle_route.recover_after_delivery:
+                    self.obstacle_route.begin_original_recovery()
+                    self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
+                    return self._obstacle_route_output(vision, pose,
+                        replace(stm, context_matches=False), now)
                 self.disperse_attempts = 0
                 self.separation_keep_side = None
                 self.separation_side_attempts = 0

@@ -8,6 +8,7 @@ mission test program is not changed while F407 firmware is being updated.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from obstacle_route import ACTUATOR_STEPS, LIVE_STEPS, LOCAL_DISTANCES, TURN_STEPS, RouteStep
 
 
 FRAME_HEAD = bytes((0xA3, 0xB3))
@@ -47,6 +48,7 @@ CMD_DISPERSE_PILE = 0x10
 CMD_CHANGE_LANE = 0x11
 CMD_CARGO_AUDIT = 0x12
 CMD_CLEAR_SAFE_ZONE = 0x13
+CMD_BULLDOZER_STEP = 0x14  # New contract: requires F405 implementation; opt-in.
 
 CMD_VALID = 1 << 0
 CMD_DRIVE_STRAIGHT = 1 << 1
@@ -128,9 +130,33 @@ def mission_frame(
         raise ValueError("sequence must be in 0..255")
     if not 0 <= command <= 0xFF or not 0 <= flags <= 0xFF:
         raise ValueError("command and flags must be bytes")
+    if command == CMD_BULLDOZER_STEP:
+        # High nibble identifies the route step, not the legacy bit meanings.
+        if flags & 0x06 or not flags & CMD_VALID:
+            raise ValueError("invalid bulldozer flags")
+        try:
+            step = RouteStep(flags >> 4)
+        except ValueError as error:
+            raise ValueError("invalid bulldozer step") from error
+        if step in TURN_STEPS:
+            expected = (0 if flags & CMD_RED_SIDE else 18000)
+            if step == RouteStep.TURN_LEFT:
+                expected = (expected + 9000) % 36000
+            valid = arg_a == arg_b == 0 and aux_cdeg == expected
+        elif step in LOCAL_DISTANCES:
+            valid = (arg_a == LOCAL_DISTANCES[step] and arg_b == 0 and
+                     aux_cdeg == (0 if flags & CMD_RED_SIDE else 18000))
+        elif step in LIVE_STEPS:
+            valid = (0 <= arg_a <= 5000 and -18000 <= arg_b <= 18000 and
+                     aux_cdeg == (0 if flags & CMD_RED_SIDE else 18000))
+        else:
+            valid = step in ACTUATOR_STEPS and arg_a == arg_b == aux_cdeg == 0
+        if not valid:
+            raise ValueError("invalid bulldozer step payload")
     if flags & CMD_CLUSTER_TARGET and command not in {
         CMD_APPROACH_TARGET,
         CMD_DISPERSE_PILE,
+        CMD_BULLDOZER_STEP,
     }:
         raise ValueError("bit5 is only valid for APPROACH_TARGET or DISPERSE_PILE")
     if command == CMD_APPROACH_TARGET and flags & CMD_APPROACH_RANGE:
@@ -144,11 +170,12 @@ def mission_frame(
         CMD_ALIGN_SAFE_ZONE,
         CMD_ENTER_SAFE_ZONE,
         CMD_DISPERSE_PILE,
+        CMD_BULLDOZER_STEP,
     }:
         raise ValueError("bit6 is not valid for this command")
-    if flags & CMD_TARGET_RIGHT and command != CMD_DISPERSE_PILE:
+    if flags & CMD_TARGET_RIGHT and command not in {CMD_DISPERSE_PILE, CMD_BULLDOZER_STEP}:
         raise ValueError("TARGET_RIGHT is only valid for DISPERSE_PILE")
-    if flags & CMD_TARGET_RIGHT and not flags & CMD_SIDE_VALID:
+    if command != CMD_BULLDOZER_STEP and flags & CMD_TARGET_RIGHT and not flags & CMD_SIDE_VALID:
         raise ValueError("TARGET_RIGHT requires SIDE_VALID")
     if (
         command == CMD_DISPERSE_PILE and

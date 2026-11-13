@@ -1,0 +1,493 @@
+{
+  "id": "MATCH-BULLDOZER-20261113",
+  "version": 1,
+  "status": "upper_implemented_lower_review_and_implementation_pending",
+  "human_approved": "upper_orchestrates_lower_executes_steps",
+  "wire_type": 24,
+  "opcode": 20,
+  "flags": {
+    "low_bits": {
+      "valid": 1,
+      "red": 8
+    },
+    "high_nibble": "step number 0..12; not legacy bit flags"
+  },
+  "fields": {
+    "A": "P2/P3 signed big-endian int16",
+    "B": "P4/P5 signed big-endian int16",
+    "U": "P6/P7 unsigned big-endian uint16"
+  },
+  "pairing": {
+    "context_type": 29,
+    "status_type": 30,
+    "same_seq": true,
+    "new_action_each_step": true,
+    "same_action_live_HD_updates": true,
+    "new_handshake": false
+  },
+  "modes": {
+    "executing": 25,
+    "completed": 25,
+    "pickup_ready_completed": 3,
+    "completion": "paired accepted_command=20 and action_status bit1; keep context through DONE"
+  },
+  "sweep_target": {
+    "reference": "robot centre, behind/left outer walls after clockwise90 turn",
+    "rear_wall_m": 0.94,
+    "left_wall_m": 0.54,
+    "red_xy_m": [
+      -0.56,
+      0.96
+    ],
+    "blue_xy_m": [
+      0.56,
+      -0.96
+    ],
+    "xy_tolerance_m": [
+      0.03,
+      0.03
+    ]
+  },
+  "policy": {
+    "first": "always sweep after parking first green",
+    "otherwise": "any incompatible/danger -> sweep; only compatible -> normal pickup/delivery",
+    "pickup_return": "back200mm then left90deg",
+    "normal_max_materials": 2,
+    "injury_count": 1,
+    "missing_pickup": "one new view then normal SEARCH",
+    "nested_stash": "one slot; replaced IDs logged"
+  },
+  "steps": [
+    {
+      "step": 0,
+      "name": "TURN_RIGHT",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 1,
+      "name": "FORWARD_PARK",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 2,
+      "name": "RELEASE_LOAD",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 3,
+      "name": "BACK_200",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 4,
+      "name": "TURN_LEFT",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 5,
+      "name": "BACK_TO_SWEEP",
+      "kind": "live_HD"
+    },
+    {
+      "step": 6,
+      "name": "LEFT_TO_SWEEP",
+      "kind": "live_HD"
+    },
+    {
+      "step": 7,
+      "name": "FULL_OPEN",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 8,
+      "name": "SWEEP_1000",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 9,
+      "name": "RAISE_RETURN",
+      "kind": "local_or_actuator"
+    },
+    {
+      "step": 10,
+      "name": "BACK_TO_STAGE",
+      "kind": "live_HD"
+    },
+    {
+      "step": 11,
+      "name": "RIGHT_TO_STAGE",
+      "kind": "live_HD"
+    },
+    {
+      "step": 12,
+      "name": "PICKUP_READY",
+      "kind": "local_or_actuator"
+    }
+  ],
+  "examples": [
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 0,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 28 01 3d 02 58 00 00 00 00 13 49 c3",
+      "command_hex": "a3 b3 18 28 14 09 00 00 00 00 00 00 97 86 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 1,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 200,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 29 01 3d 02 59 00 00 00 00 23 19 c3",
+      "command_hex": "a3 b3 18 29 14 19 00 c8 00 00 00 00 6a 07 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 2,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2a 01 3d 02 5a 00 00 00 00 73 e9 c3",
+      "command_hex": "a3 b3 18 2a 14 29 00 00 00 00 00 00 af 24 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 3,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": -200,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2b 01 3d 02 5b 00 00 00 00 43 b9 c3",
+      "command_hex": "a3 b3 18 2b 14 39 ff 38 00 00 00 00 06 bf c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 4,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 9000,
+      "context_hex": "a3 b3 1d 2c 01 3d 02 5c 00 00 00 00 d0 49 c3",
+      "command_hex": "a3 b3 18 2c 14 49 00 00 00 00 23 28 fd ac c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 5,
+      "pose_estimate_xy_m": [
+        0.05,
+        0.54
+      ],
+      "A": 610,
+      "B": 18000,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2d 01 3d 02 5d 00 00 00 00 e0 19 c3",
+      "command_hex": "a3 b3 18 2d 14 59 02 62 46 50 00 00 15 a0 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 6,
+      "pose_estimate_xy_m": [
+        -0.56,
+        0.54
+      ],
+      "A": 420,
+      "B": 9000,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2e 01 3d 02 5e 00 00 00 00 b0 e9 c3",
+      "command_hex": "a3 b3 18 2e 14 69 01 a4 23 28 00 00 27 a4 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 7,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2f 01 3d 02 5f 00 00 00 00 80 b9 c3",
+      "command_hex": "a3 b3 18 2f 14 79 00 00 00 00 00 00 c0 71 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 8,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 1000,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 30 01 3d 02 60 00 00 00 00 18 8c c3",
+      "command_hex": "a3 b3 18 30 14 89 03 e8 00 00 00 00 dc 6a c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 9,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 31 01 3d 02 61 00 00 00 00 28 dc c3",
+      "command_hex": "a3 b3 18 31 14 99 00 00 00 00 00 00 a0 1f c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 10,
+      "pose_estimate_xy_m": [
+        0.44,
+        0.96
+      ],
+      "A": 590,
+      "B": 18000,
+      "U": 0,
+      "context_hex": "a3 b3 1d 32 01 3d 02 62 00 00 00 00 78 2c c3",
+      "command_hex": "a3 b3 18 32 14 a9 02 4e 46 50 00 00 f8 59 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 11,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.96
+      ],
+      "A": 420,
+      "B": -9000,
+      "U": 0,
+      "context_hex": "a3 b3 1d 33 01 3d 02 63 00 00 00 00 48 7c c3",
+      "command_hex": "a3 b3 18 33 14 b9 01 a4 dc d8 00 00 53 1e c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "red",
+      "step": 12,
+      "pose_estimate_xy_m": [
+        -0.15,
+        0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 34 01 3d 02 64 00 00 00 00 db 8c c3",
+      "command_hex": "a3 b3 18 34 14 c9 00 00 00 00 00 00 cf 4a c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 0,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 28 01 3d 02 58 00 00 00 00 13 49 c3",
+      "command_hex": "a3 b3 18 28 14 01 00 00 00 00 46 50 2c 1a c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 1,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 200,
+      "B": 0,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 29 01 3d 02 59 00 00 00 00 23 19 c3",
+      "command_hex": "a3 b3 18 29 14 11 00 c8 00 00 46 50 d1 9b c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 2,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2a 01 3d 02 5a 00 00 00 00 73 e9 c3",
+      "command_hex": "a3 b3 18 2a 14 21 00 00 00 00 00 00 26 e4 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 3,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": -200,
+      "B": 0,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 2b 01 3d 02 5b 00 00 00 00 43 b9 c3",
+      "command_hex": "a3 b3 18 2b 14 31 ff 38 00 00 46 50 bd 23 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 4,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 27000,
+      "context_hex": "a3 b3 1d 2c 01 3d 02 5c 00 00 00 00 d0 49 c3",
+      "command_hex": "a3 b3 18 2c 14 41 00 00 00 00 69 78 43 30 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 5,
+      "pose_estimate_xy_m": [
+        -0.05,
+        -0.54
+      ],
+      "A": 610,
+      "B": 0,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 2d 01 3d 02 5d 00 00 00 00 e0 19 c3",
+      "command_hex": "a3 b3 18 2d 14 51 02 62 00 00 46 50 bb 65 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 6,
+      "pose_estimate_xy_m": [
+        0.56,
+        -0.54
+      ],
+      "A": 420,
+      "B": -9000,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 2e 01 3d 02 5e 00 00 00 00 b0 e9 c3",
+      "command_hex": "a3 b3 18 2e 14 61 01 a4 dc d8 46 50 ac 1f c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 7,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 2f 01 3d 02 5f 00 00 00 00 80 b9 c3",
+      "command_hex": "a3 b3 18 2f 14 71 00 00 00 00 00 00 49 b1 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 8,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 1000,
+      "B": 0,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 30 01 3d 02 60 00 00 00 00 18 8c c3",
+      "command_hex": "a3 b3 18 30 14 81 03 e8 00 00 46 50 67 f6 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 9,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 31 01 3d 02 61 00 00 00 00 28 dc c3",
+      "command_hex": "a3 b3 18 31 14 91 00 00 00 00 00 00 29 df c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 10,
+      "pose_estimate_xy_m": [
+        -0.44,
+        -0.96
+      ],
+      "A": 590,
+      "B": 0,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 32 01 3d 02 62 00 00 00 00 78 2c c3",
+      "command_hex": "a3 b3 18 32 14 a1 02 4e 00 00 46 50 56 9c c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 11,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.96
+      ],
+      "A": 420,
+      "B": 9000,
+      "U": 18000,
+      "context_hex": "a3 b3 1d 33 01 3d 02 63 00 00 00 00 48 7c c3",
+      "command_hex": "a3 b3 18 33 14 b1 01 a4 23 28 46 50 d8 a5 c3"
+    },
+    {
+      "source": "synthetic_offline_contract_example",
+      "side": "blue",
+      "step": 12,
+      "pose_estimate_xy_m": [
+        0.15,
+        -0.54
+      ],
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "context_hex": "a3 b3 1d 34 01 3d 02 64 00 00 00 00 db 8c c3",
+      "command_hex": "a3 b3 18 34 14 c1 00 00 00 00 00 00 46 8a c3"
+    }
+  ]
+}
