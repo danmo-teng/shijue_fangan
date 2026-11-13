@@ -1,0 +1,692 @@
+{
+  "control_largest_step": [
+    2.0592213050329327,
+    {
+      "t_ns": 1914010890216,
+      "xy": [
+        -0.0968142822893199,
+        0.728178297568051
+      ],
+      "yaw": 94.4725840866099,
+      "raw_xy": [
+        -0.247422087427667,
+        2.47360918360121
+      ],
+      "raw_ns": 1914010890216,
+      "confidence": 3,
+      "source": "T265_PHASE_NO_WHEEL",
+      "axes": [],
+      "suppressed": true,
+      "rebase": [
+        0.37257292869783,
+        -1.97456011184004
+      ]
+    },
+    {
+      "t_ns": 1914015896304,
+      "xy": [
+        -0.135698585037049,
+        -1.3306758483348
+      ],
+      "yaw": 94.2244928874034,
+      "raw_xy": [
+        -0.286306390175396,
+        0.41475503769836
+      ],
+      "raw_ns": 1914015896304,
+      "confidence": 3,
+      "source": "T265_PHASE_NO_WHEEL",
+      "axes": [],
+      "suppressed": true,
+      "rebase": [
+        0.37257292869783,
+        -1.97456011184004
+      ]
+    }
+  ],
+  "raw_projection_largest_step": [
+    2.0592213050329318,
+    {
+      "t_ns": 1914010890216,
+      "xy": [
+        -0.0968142822893199,
+        0.728178297568051
+      ],
+      "yaw": 94.4725840866099,
+      "raw_xy": [
+        -0.247422087427667,
+        2.47360918360121
+      ],
+      "raw_ns": 1914010890216,
+      "confidence": 3,
+      "source": "T265_PHASE_NO_WHEEL",
+      "axes": [],
+      "suppressed": true,
+      "rebase": [
+        0.37257292869783,
+        -1.97456011184004
+      ]
+    },
+    {
+      "t_ns": 1914015896304,
+      "xy": [
+        -0.135698585037049,
+        -1.3306758483348
+      ],
+      "yaw": 94.2244928874034,
+      "raw_xy": [
+        -0.286306390175396,
+        0.41475503769836
+      ],
+      "raw_ns": 1914015896304,
+      "confidence": 3,
+      "source": "T265_PHASE_NO_WHEEL",
+      "axes": [],
+      "suppressed": true,
+      "rebase": [
+        0.37257292869783,
+        -1.97456011184004
+      ]
+    }
+  ],
+  "after_jump_wall_axes_counts": {
+    "[]": 409,
+    "['y']": 1
+  },
+  "after_jump_reasons": {
+    "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE": 47,
+    "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 362,
+    "STATIC_GEOMETRY_DIAGNOSTIC_ONLY": 1
+  },
+  "business_runtime_path": "rescue_map/runtime/history/20261113_204812_competition/competition_events.jsonl",
+  "sensor_path": "rescue_map/runtime/history/competition_wheel_input/20261113_203103_competition_wheel",
+  "runner_start_ns": 1375984081245,
+  "competition_start_ns": 1379362690599,
+  "late_business_events": [
+    {
+      "t_ns": 1908548812630,
+      "elapsed_s": 529.186,
+      "from": "GRAB",
+      "to": "POST_GRAB_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "nearby_control_xy_m": [
+        -0.0461961721421738,
+        -0.415989383190609
+      ]
+    },
+    {
+      "t_ns": 1908794253179,
+      "elapsed_s": 529.432,
+      "from": "POST_GRAB_AUDIT",
+      "to": "AUDIT_CONFIRM",
+      "message": "持续发送合爪后稳定审核，等待AUDIT_VALID和mode=22",
+      "nearby_control_xy_m": [
+        -0.0461961721421738,
+        -0.415989383190609
+      ]
+    },
+    {
+      "t_ns": 1908830195885,
+      "elapsed_s": 529.468,
+      "from": "AUDIT_CONFIRM",
+      "to": "GRAB",
+      "message": "合爪后2帧审核已确认，下一周期启动对应目的地NAV",
+      "nearby_control_xy_m": [
+        -0.0461961721421738,
+        -0.415989383190609
+      ]
+    },
+    {
+      "t_ns": 1908876885228,
+      "elapsed_s": 529.514,
+      "from": "GRAB",
+      "to": "NAVIGATE",
+      "message": "前往对应安全区半区围栏前600 mm预备点",
+      "nearby_control_xy_m": [
+        -0.0461961721421738,
+        -0.415989383190609
+      ]
+    },
+    {
+      "t_ns": 1913163978226,
+      "elapsed_s": 533.801,
+      "from": "NAVIGATE",
+      "to": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "nearby_control_xy_m": [
+        -0.104981996189279,
+        0.517699873299434
+      ]
+    },
+    {
+      "t_ns": 1913822324816,
+      "elapsed_s": 534.46,
+      "from": "TRANSPORT_AUDIT",
+      "to": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "nearby_control_xy_m": [
+        -0.105797749690289,
+        0.535856263612139
+      ]
+    },
+    {
+      "t_ns": 1914439749560,
+      "elapsed_s": 535.077,
+      "from": "ALIGN_SAFE_ZONE_BY_POSE",
+      "to": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区",
+      "nearby_control_xy_m": [
+        -0.122322830870702,
+        -1.31798358401863
+      ]
+    },
+    {
+      "t_ns": 1919851155093,
+      "elapsed_s": 540.488,
+      "from": "ACQUIRE_SAFE_ZONE",
+      "to": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准798px分区点",
+      "nearby_control_xy_m": [
+        -0.119325682049912,
+        -1.33041969009727
+      ]
+    },
+    {
+      "t_ns": 1920011783501,
+      "elapsed_s": 540.649,
+      "from": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "to": "ACQUIRE_SAFE_ZONE",
+      "message": "锁框后安全区失框或视角改变，保留载荷并请求115°复看，重新确认分区方向",
+      "nearby_control_xy_m": [
+        -0.121464150425239,
+        -1.33195720050406
+      ]
+    },
+    {
+      "t_ns": 1920310171423,
+      "elapsed_s": 540.947,
+      "from": "ACQUIRE_SAFE_ZONE",
+      "to": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准789px分区点",
+      "nearby_control_xy_m": [
+        -0.119522723848886,
+        -1.33154750497662
+      ]
+    },
+    {
+      "t_ns": 1925093665570,
+      "elapsed_s": 545.731,
+      "from": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "to": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推",
+      "nearby_control_xy_m": [
+        -0.0184615597038726,
+        -1.30849824478953
+      ]
+    },
+    {
+      "t_ns": 1925144748826,
+      "elapsed_s": 545.782,
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "入口新画面仍有横向偏差，沿同一视觉动作完成横移",
+      "nearby_control_xy_m": [
+        -0.0244054109922587,
+        -1.31577585430587
+      ]
+    },
+    {
+      "t_ns": 1925921845199,
+      "elapsed_s": 546.559,
+      "from": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "to": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推",
+      "nearby_control_xy_m": [
+        0.00457657002987144,
+        -1.31640042489903
+      ]
+    },
+    {
+      "t_ns": 1925971644512,
+      "elapsed_s": 546.609,
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区",
+      "nearby_control_xy_m": [
+        0.00461964844229512,
+        -1.31816564601833
+      ]
+    },
+    {
+      "t_ns": 1929196988915,
+      "elapsed_s": 549.834,
+      "from": "ENTER_SAFE_ZONE",
+      "to": "DELIVERY_VERIFY",
+      "message": "进入安全区并等待视觉确认",
+      "nearby_control_xy_m": [
+        -0.0436044997293996,
+        -0.710983625636296
+      ]
+    },
+    {
+      "t_ns": 1929466666403,
+      "elapsed_s": 550.104,
+      "from": "DELIVERY_VERIFY",
+      "to": "TASK_COMPLETE",
+      "message": "视觉确认物资已由区外进入安全区，通知下位机完成",
+      "nearby_control_xy_m": [
+        -0.0437932460259449,
+        -0.711460062406944
+      ]
+    },
+    {
+      "t_ns": 1930246372164,
+      "elapsed_s": 550.884,
+      "from": "TASK_COMPLETE",
+      "to": "RETURN_CENTER",
+      "message": "F405已进入本地退出/转向阶段，返回己方距中心30cm搜索点，目标(0.00,0.30) m，剩余1012 mm，等待F405进入SEARCH",
+      "nearby_control_xy_m": [
+        -0.0414252919828213,
+        -0.710844498831349
+      ]
+    },
+    {
+      "t_ns": 1939606510330,
+      "elapsed_s": 560.244,
+      "from": "RETURN_CENTER",
+      "to": "SEARCH",
+      "message": "回到己方搜索区，等待相机120°和新视觉帧；已完成8件",
+      "nearby_control_xy_m": [
+        0.11666949213547,
+        0.26251135796148
+      ]
+    },
+    {
+      "t_ns": 1939624775248,
+      "elapsed_s": 560.262,
+      "from": "SEARCH",
+      "to": "APPROACH",
+      "message": "锁定1件material批次",
+      "nearby_control_xy_m": [
+        0.116536824519611,
+        0.266979363268145
+      ]
+    },
+    {
+      "t_ns": 1939954482865,
+      "elapsed_s": 560.592,
+      "from": "APPROACH",
+      "to": "SEARCH",
+      "message": "F407已完成目标丢失恢复，等待新视觉帧后继续SEARCH",
+      "nearby_control_xy_m": [
+        0.116627303139512,
+        0.270998285039757
+      ]
+    }
+  ],
+  "sdk_raw_jump_pair": [
+    {
+      "receive_monotonic_ns": 1914016360418.0,
+      "frame_number": 107482.0,
+      "capture_timestamp_ms": 1794573604126.9343,
+      "tx_m": 0.7936479449272156,
+      "ty_m": -0.1660468578338623,
+      "tz_m": 1.3216825723648071,
+      "vx_mps": 0.9333624243736267,
+      "vy_mps": -0.12050431221723557,
+      "vz_mps": 0.29976800084114075,
+      "tracker_confidence": 3.0
+    },
+    {
+      "receive_monotonic_ns": 1914021703738.0,
+      "frame_number": 107483.0,
+      "capture_timestamp_ms": 1794573604131.9404,
+      "tx_m": -1.1838326454162598,
+      "ty_m": 0.05318121239542961,
+      "tz_m": 0.7514338493347168,
+      "vx_mps": -0.03039379231631756,
+      "vy_mps": 0.009523086249828339,
+      "vz_mps": -0.04975071921944618,
+      "tracker_confidence": 3.0
+    }
+  ],
+  "round_token": "f1b43d67074029b1e4d978ee3a20523b",
+  "sdk_session_id": "58d09c51132268d462ce707e445ac3e4",
+  "upper_commit": "f7be125671c255780dab1f6f24f0bab2d939669c",
+  "map_offset_post_minmax": [
+    [
+      -0.221787270224358,
+      -0.221787270224358
+    ],
+    [
+      0.22916277604364,
+      0.25316328049156134
+    ]
+  ],
+  "jump_after_competition_start_s": 534.653205705,
+  "jump_effective_translation_before_m": [
+    0.1506078051383471,
+    -1.745430886033159
+  ],
+  "jump_effective_translation_after_m": [
+    0.15060780513834698,
+    -1.74543088603316
+  ],
+  "radar_nearest_jump": {
+    "timestamp_monotonic_ns": 1914058925984,
+    "reference_ns": 1914047019762,
+    "motion_source": "T265_PHASE_NO_WHEEL",
+    "prior_center_xy_m": [
+      -0.13547949031509515,
+      -1.3321227418986
+    ],
+    "candidate_center_xy_m": null,
+    "position_observed_axes": [],
+    "rank_xy": 0,
+    "reason": "RESIDUAL_BOUNDS_OR_LOCAL_CORRECTION_GATE",
+    "map_translation_offset_m": [
+      -0.221787270224358,
+      0.22916277604364
+    ],
+    "motion_reference_update_m": [
+      -3.566591466608315e-15,
+      0.0
+    ],
+    "correction_m": 0.05350957390728661,
+    "residual_rms_m": 0.05259347643827684,
+    "reacquisition_status": "REACQUIRE_GEOMETRY_UNRESOLVED"
+  },
+  "last_single_axis_correction": [
+    {
+      "timestamp_monotonic_ns": 1949698079520,
+      "reference_ns": 1949685353095,
+      "motion_source": "WHEEL_FALLBACK",
+      "prior_center_xy_m": [
+        0.1286923682872318,
+        0.31815256017994764
+      ],
+      "candidate_center_xy_m": [
+        0.12869236828723185,
+        0.34215306462787254
+      ],
+      "position_observed_axes": [
+        "y"
+      ],
+      "rank_xy": 1,
+      "reason": "STATIC_GEOMETRY_DIAGNOSTIC_ONLY",
+      "map_translation_offset_m": [
+        -0.221787270224358,
+        0.25316328049156134
+      ],
+      "motion_reference_update_m": [
+        -3.83026943495679e-15,
+        3.552713678800501e-15
+      ],
+      "correction_m": 0.024000504447924786,
+      "residual_rms_m": 0.029181936335098062,
+      "reacquisition_status": "LOCAL_TRACKING"
+    }
+  ],
+  "original_policy_events": [
+    {
+      "event": "wheel_phase_suppression_changed",
+      "timestamp_monotonic_ns": 1913865031753,
+      "motion_source": "T265_PHASE_NO_WHEEL",
+      "previous_source": "WHEEL_FALLBACK",
+      "reason": "safe_zone_low_speed",
+      "sample_monotonic_ns": 1913807471843,
+      "selected_anchor_m": [
+        0.206329100386214,
+        0.189978203796228
+      ],
+      "suppressed": true,
+      "wheel_anchor_m": [
+        1.97548748548153,
+        -0.178268298101392
+      ]
+    },
+    {
+      "event": "wheel_phase_suppression_changed",
+      "timestamp_monotonic_ns": 1931926248264,
+      "motion_source": "T265_WITH_WHEEL_TAIL",
+      "previous_source": "T265_PHASE_NO_WHEEL",
+      "reason": "normal_motion",
+      "sample_monotonic_ns": 1931861397195,
+      "selected_anchor_m": [
+        0.219855852738831,
+        -1.2079144090635
+      ],
+      "suppressed": false,
+      "wheel_anchor_m": [
+        2.04434808321227,
+        0.304224354079181
+      ]
+    },
+    {
+      "event": "motion_source_changed",
+      "timestamp_monotonic_ns": 1933254832265,
+      "motion_source": "WHEEL_FALLBACK",
+      "previous_source": "T265_WITH_WHEEL_TAIL",
+      "reason": "T265_wheel_displacement_conflict",
+      "sample_monotonic_ns": 1933197933983,
+      "spatial_conflict_m": 0.0526206960821385
+    }
+  ],
+  "notes": [
+    "Analysis target pinned by SDK session and round token; later live runtime round excluded.",
+    "Raw SDK XYZ and body-centre planar displacement are distinct metrics.",
+    "Wheel and primary gyro are SDK dependencies, not independent ground truth.",
+    "Final estimated position returning to own half is not independent accuracy confirmation."
+  ],
+  "roi_todos_only": true,
+  "sdk_original_csv_rows": [
+    {
+      "receive_monotonic_ns": 1914016360418.0,
+      "frame_number": 107482.0,
+      "capture_timestamp_ms": 1794573604126.9343,
+      "timestamp_domain": 2.0,
+      "capture_age_ms": 5.661865234375,
+      "tx_m": 0.7936479449272156,
+      "ty_m": -0.1660468578338623,
+      "tz_m": 1.3216825723648071,
+      "vx_mps": 0.9333624243736267,
+      "vy_mps": -0.12050431221723557,
+      "vz_mps": 0.29976800084114075,
+      "qx": -0.9484502673149109,
+      "qy": 0.024982694536447525,
+      "qz": -0.3153885304927826,
+      "qw": -0.018654491752386093,
+      "wx_radps": -0.024311427026987076,
+      "wy_radps": -0.8916968703269958,
+      "wz_radps": -0.03620623052120209,
+      "tracker_confidence": 3.0,
+      "mapper_confidence": 0.0,
+      "processing_monotonic_ns": 1914016657415.0,
+      "callback_queue_drops": 0.0
+    },
+    {
+      "receive_monotonic_ns": 1914021703738.0,
+      "frame_number": 107483.0,
+      "capture_timestamp_ms": 1794573604131.9404,
+      "timestamp_domain": 2.0,
+      "capture_age_ms": 6.92333984375,
+      "tx_m": -1.1838326454162598,
+      "ty_m": 0.05318121239542961,
+      "tz_m": 0.7514338493347168,
+      "vx_mps": -0.03039379231631756,
+      "vy_mps": 0.009523086249828339,
+      "vz_mps": -0.04975071921944618,
+      "qx": -0.9511338472366333,
+      "qy": 0.026294704526662827,
+      "qz": -0.30696895718574524,
+      "qw": -0.02056880109012127,
+      "wx_radps": -0.001010419800877571,
+      "wy_radps": -0.9008695483207703,
+      "wz_radps": -0.016958408057689667,
+      "tracker_confidence": 3.0,
+      "mapper_confidence": 0.0,
+      "processing_monotonic_ns": 1914022934642.0,
+      "callback_queue_drops": 0.0
+    }
+  ],
+  "sdk_quaternion_step_degrees": 1.046976536971152,
+  "sdk_wheel_window_evidence": [
+    {
+      "age_from_wheel_receive_ns": 5170113,
+      "config_loaded": true,
+      "device_fusion_confirmed": false,
+      "event": "wheel_sdk_attempt",
+      "frame_num": 31895,
+      "input_source": "measured_wheel_feedback",
+      "last_sdk_call_failed": false,
+      "last_sdk_success_ns": 1913806322688,
+      "log_monotonic_ns": 1913812758622,
+      "packet": {
+        "alignment_clock": "mcu_event",
+        "alignment_end_ns": 1920759004000,
+        "alignment_gyro_end_ns": 1920763145000,
+        "alignment_gyro_start_ns": 1920743231000,
+        "alignment_start_ns": 1920749003000,
+        "capture_time_qualified": false,
+        "dependency_sources": [
+          "measured_wheel_feedback",
+          "primary_gyro_rate"
+        ],
+        "gyro_max_gap_ns": 9957000,
+        "gyro_receive_ns": 1913811999421,
+        "gyro_samples": [
+          {
+            "alignment_capture_ns": 1920743231000,
+            "mcu_epoch": "625012a1550033ad0cb111f573e6db3d",
+            "rate_source_id": 1928997,
+            "receive_monotonic_ns": 1913791992376,
+            "yaw_rate_deg_s": 0.0
+          },
+          {
+            "alignment_capture_ns": 1920753188000,
+            "mcu_epoch": "625012a1550033ad0cb111f573e6db3d",
+            "rate_source_id": 1929007,
+            "receive_monotonic_ns": 1913802506310,
+            "yaw_rate_deg_s": 0.0
+          },
+          {
+            "alignment_capture_ns": 1920763145000,
+            "mcu_epoch": "625012a1550033ad0cb111f573e6db3d",
+            "rate_source_id": 1929017,
+            "receive_monotonic_ns": 1913811999421,
+            "yaw_rate_deg_s": 0.0
+          }
+        ],
+        "interval_end_ns": null,
+        "interval_start_ns": null,
+        "lever_body_mps": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "mcu_epoch": "625012a1550033ad0cb111f573e6db3d",
+        "measurement_valid": true,
+        "motion_wire_request_at_receive": null,
+        "omega_body_rad_s": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "packet_id": 53780,
+        "processing_owner": "native_cpp_sdk_owner",
+        "receive_monotonic_ns": 1913807471843,
+        "sample_id": 192024,
+        "schema": 2,
+        "session_id": "58d09c51132268d462ce707e445ac3e4",
+        "source": "measured_wheel_feedback",
+        "time_policy": "received_feedback_no_age_gate_v1",
+        "time_uncertainty_ns": null,
+        "v_body_mps": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "v_camera_mps": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rejected_samples": 28,
+      "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+      "sdk_api_failed_samples": 0,
+      "sdk_api_success_samples": 31895,
+      "sdk_failure_policy": "continue_with_next_new_sample",
+      "sdk_input_generation": 0,
+      "sensor_id": 0,
+      "session_id": "58d09c51132268d462ce707e445ac3e4",
+      "time_policy": "received_feedback_no_age_gate_v1",
+      "timestamp_monotonic_ns": 1913812641956,
+      "wheel_dependency_present": true,
+      "wheel_dependency_suspect": false,
+      "wheel_input_paused": false,
+      "wheel_input_paused_samples": 21656,
+      "wheel_input_policy_reason": "measured_wheel_input_enabled"
+    },
+    {
+      "accuracy_verified": false,
+      "config_loaded": true,
+      "device_fusion_confirmed": false,
+      "error": "",
+      "event": "wheel_sdk_result",
+      "frame_num": 31895,
+      "input_source": "measured_wheel_feedback",
+      "last_sdk_call_failed": false,
+      "last_sdk_success_ns": 1913814690227,
+      "log_monotonic_ns": 1913814752352,
+      "packet_id": 53780,
+      "rejected_samples": 28,
+      "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+      "sdk_api_failed_samples": 0,
+      "sdk_api_success_samples": 31896,
+      "sdk_duration_ns": 1940980,
+      "sdk_failure_policy": "continue_with_next_new_sample",
+      "sdk_input_generation": 0,
+      "sdk_result": true,
+      "session_id": "58d09c51132268d462ce707e445ac3e4",
+      "timestamp_monotonic_ns": 1913812641956,
+      "wheel_dependency_present": true,
+      "wheel_dependency_suspect": false,
+      "wheel_input_paused": false,
+      "wheel_input_paused_samples": 21656,
+      "wheel_input_policy_reason": "measured_wheel_input_enabled"
+    },
+    {
+      "config_loaded": true,
+      "device_estimator_reset": false,
+      "device_fusion_confirmed": false,
+      "event": "wheel_source_policy_applied",
+      "input_source": "measured_wheel_feedback",
+      "last_sdk_call_failed": false,
+      "last_sdk_success_ns": 1913814690227,
+      "log_monotonic_ns": 1913822921810,
+      "policy_request": {
+        "dependency_persists_after_pause": true,
+        "kind": "wheel_source_policy",
+        "pause": true,
+        "reason": "safe_zone_low_speed",
+        "schema": 3,
+        "session_id": "58d09c51132268d462ce707e445ac3e4",
+        "wall_motion_evidence": null
+      },
+      "previous_wheel_dependency_cleared": false,
+      "rejected_samples": 28,
+      "result_scope": "host_SDK_call_return_only; no_device_fusion_ACK",
+      "sdk_api_failed_samples": 0,
+      "sdk_api_success_samples": 31896,
+      "sdk_failure_policy": "continue_with_next_new_sample",
+      "sdk_input_generation": 0,
+      "session_id": "58d09c51132268d462ce707e445ac3e4",
+      "wheel_dependency_present": true,
+      "wheel_dependency_suspect": false,
+      "wheel_input_paused": true,
+      "wheel_input_paused_samples": 21656,
+      "wheel_input_policy_reason": "safe_zone_low_speed"
+    }
+  ]
+}
