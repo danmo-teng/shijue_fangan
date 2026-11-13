@@ -166,12 +166,14 @@ def observed_worker(*args, directory):
             completions.append(dict(frame_id=request[2], put_begin_s=begin, put_end_s=time.monotonic()))
             return result
 
+    original_detector = yolo26.X5Yolo26
     yolo26.X5Yolo26 = ObservedDetector
     delegated = list(args)
     delegated[2], delegated[3] = requests, Results()
     try:
         FORMAL_WORKER(*delegated)
     finally:
+        yolo26.X5Yolo26 = original_detector
         Path(directory, 'profile_worker.json').write_text(json.dumps(dict(dequeues=calls, completions=completions)))
 
 
