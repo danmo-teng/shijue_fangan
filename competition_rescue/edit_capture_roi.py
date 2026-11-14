@@ -24,6 +24,7 @@ from capture_roi import (  # noqa: E402
     IMAGE_WIDTH,
     bbox_in_capture_roi,
     capture_side_for_bbox,
+    capture_overlap_for_class,
     load_capture_rois,
     save_capture_rois,
     split_capture_roi,
@@ -194,6 +195,7 @@ def main() -> int:
                         item.bbox,
                         rois,
                         require_full_overlap=item.class_name == "core_black",
+                        minimum_overlap_ratio=capture_overlap_for_class(item.class_name),
                     )
                     if all(
                         len(polygon) >= 3
@@ -205,6 +207,7 @@ def main() -> int:
                         item.bbox,
                         rois.overall,
                         require_full_overlap=item.class_name == "core_black",
+                        minimum_overlap_ratio=capture_overlap_for_class(item.class_name),
                         require_bottom_center=item.class_name != "green_supply",
                     )
                     if len(rois.overall) >= 3 else False

@@ -29,6 +29,7 @@ from protocol import (
     CMD_BULLDOZER_STEP,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
+    CMD_DISPERSE_NEAR_KEEP,
     CMD_DISTANCE_VALID,
     CMD_DRIVE_STRAIGHT,
     CMD_FIRST_GREEN_BUMP,
@@ -277,6 +278,20 @@ class CargoAudit:
     # Local image evidence only; these do not add fields to the MCU audit.
     left_isolated_green: bool = False
     right_isolated_green: bool = False
+    # Sorting evidence only: excluded from to_protocol and transport counts.
+    near_claw_keep_side: str | None = None
+    near_claw_green_id: int | None = None
+    near_claw_frame: int = 0
+
+    @property
+    def near_keep_side(self) -> str | None:
+        if not self.danger_present or self.near_claw_green_id is None:
+            return None
+        if self.near_claw_keep_side == "left" and self.left_count == 0 and self.right_count > 0:
+            return "left"
+        if self.near_claw_keep_side == "right" and self.right_count == 0 and self.left_count > 0:
+            return "right"
+        return None
 
     @property
     def signature(self) -> tuple:
@@ -1598,7 +1613,8 @@ class CompetitionMission:
                 return ("MATERIAL_LEGAL", tuple(sorted(manifest)), audit.total_count)
         # MIXED and overflow must compare as encoded, not reconstructed from
         # local class_counts/green counts that the MCU never receives.
-        return ("INVALID", (payload or self._audit_payload(audit)).semantic_signature)
+        signature = ("INVALID", (payload or self._audit_payload(audit)).semantic_signature)
+        return signature + (("near_keep", audit.near_keep_side),) if audit.near_keep_side is not None else signature
 
     def _latch_carried_manifest(self, audit: CargoAudit) -> None:
         self.carried_manifest = self._manifest_for_audit(audit)
@@ -1797,16 +1813,19 @@ class CompetitionMission:
             return CompetitionOutput(self.state, self._hold(),
                 "mode52等待对准后新图及对应角度分区距离表：" + vision.range_reason,
                 self.selected_batch, reason="approach_range_wait", expected_stm_modes=(52, 24, 3))
-        if (self.state != CompetitionState.CLUSTER_APPROACH and
-                abs(target.center_px[0] - CAMERA_IMAGE_CENTER_X_PX) >
+        if (abs(target.center_px[0] - CAMERA_IMAGE_CENTER_X_PX) >
                 self.settings.approach_center_tolerance_px):
             # Reuse the frame already requested by mode52. A small residual
             # error is acceptable; do not drive along an overshot heading.
             # Pixel updates keep the action identity, but must advance the
             # real visual frame exactly as ordinary target tracking does.
             self._mark_target_seen(target, now)
+            if self.state == CompetitionState.CLUSTER_APPROACH:
+                self.cluster_command_observed_s = now
+            command = (self._cluster_approach_command(vision)
+                       if self.state == CompetitionState.CLUSTER_APPROACH else self._approach_command(target))
             return CompetitionOutput(
-                self.state, self._approach_command(target),
+                self.state, command,
                 "目标明显偏出中心容许范围，原地重新对准；小偏差直接定距前进",
                 self.selected_batch, reason="approach_range_realign",
                 expected_stm_modes=(20, 52, 24, 3),
@@ -1979,7 +1998,8 @@ class CompetitionMission:
     ) -> None:
         self.separation_request_epoch += 1
         self.separation_request_counted = False
-        self.separation_start_audit = audit if keep_count > 0 else None
+        near_keep = audit is not None and audit.near_keep_side == keep_side and keep_side is not None
+        self.separation_start_audit = audit if keep_count > 0 or near_keep else None
         if first_green_bump:
             self.disperse_context = "first_green_bump"
             self.disperse_command = CommandRequest(
@@ -1993,7 +2013,7 @@ class CompetitionMission:
             self.disperse_command_accepted = False
             self.disperse_expected_done_mode = STM_MODE_SEARCH
             return
-        if keep_count <= 0:
+        if keep_count <= 0 and not near_keep:
             keep_side = None
         self.cluster_keep_side = keep_side
         self.cluster_keep_side_count = keep_count if keep_side is not None else 0
@@ -2002,10 +2022,13 @@ class CompetitionMission:
             flags |= CMD_SIDE_VALID
         if keep_side == "right":
             flags |= CMD_TARGET_RIGHT
+        if near_keep:
+            flags |= CMD_DISPERSE_NEAR_KEEP
         self.disperse_context = (
             "selective" if keep_side is not None else "observe"
         )
-        self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags)
+        self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags,
+            source_vision_frame=audit.near_claw_frame if near_keep else None)
         self.disperse_initial_ack = stm.acknowledged_sequence if stm.fresh else None
         self.disperse_relay_tx_baseline = stm.relay_mission_tx_frames
         self.disperse_command_accepted = False
@@ -3342,6 +3365,8 @@ class CompetitionMission:
         green = self._side_green_count(audit, side)
         invalid = audit.left_invalid if side == "left" else audit.right_invalid
         composition = dict(audit.left_class_counts if side == "left" else audit.right_class_counts)
+        if audit.near_keep_side == side:
+            return True
         if audit.danger_present:
             # A dangerous side may be physically separated; it is still NEVER
             # legal transport. Known histogram guides a mixed-side attempt.
@@ -3516,7 +3541,7 @@ class CompetitionMission:
             "left": audit.left_count,
             "right": audit.right_count,
         }.get(keep_side, 0)
-        if keep_count <= 0:
+        if keep_count <= 0 and audit.near_keep_side != keep_side:
             keep_side = None
             keep_count = 0
         if self.disperse_side_votes and (
@@ -3541,7 +3566,7 @@ class CompetitionMission:
         if len(self.disperse_side_votes) < 2:
             return None, 0, False
         _, side, keep_count = self.disperse_side_votes[-1]
-        if side is not None and keep_count > 0:
+        if side is not None:
             return side, keep_count, True
         return None, 0, True
 

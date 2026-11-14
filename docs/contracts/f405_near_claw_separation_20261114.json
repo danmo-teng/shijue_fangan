@@ -1,0 +1,93 @@
+{
+  "id": "MATCH-CAPTURE-HANDOFF-20261114",
+  "version": 1,
+  "status": "upper_implemented_lower_review_pending",
+  "human_decision": "A near-claw keep-side flag; real audit counts unchanged; green qualification45percent",
+  "actual_last_run": {
+    "upper": "8db11ec29b297d8c00173f42ecc6b371c01958dd",
+    "lower": "6ee665b64dceddc36ef9936adfd78f115cdd1ff1",
+    "lower_source_dirty": 1,
+    "identity_source": "20261114_145911_competition_wheel/chassis_identity.json",
+    "requeried_this_turn": false
+  },
+  "wire": {
+    "type": 24,
+    "opcode": 16,
+    "flag_name": "DISPERSE_NEAR_KEEP",
+    "flag_mask": 16,
+    "required_flags": [
+      "VALID",
+      "SIDE_VALID"
+    ],
+    "optional_flags": [
+      "RED_SIDE",
+      "TARGET_RIGHT"
+    ],
+    "forbidden_flag": "FIRST_GREEN_BUMP",
+    "A": 0,
+    "B": 0,
+    "U": 0,
+    "context": {
+      "type": 29,
+      "same_seq": true,
+      "same_task": true,
+      "source_frame": "existing vision_frame, real near-claw evidence frame; provenance only",
+      "new_handshake": false
+    }
+  },
+  "audit": {
+    "opcode": 18,
+    "layout_changed": false,
+    "counts_changed": false,
+    "danger_remains": true,
+    "transport_permission": false
+  },
+  "receiver": {
+    "eligibility": "existing stable invalid danger audit; selected real count0, opposite count>0; explicit near-side flag",
+    "grip": "existing soft grip; never fabricate counts or confirmed-singleton mask",
+    "decision": "original READY goes to host separation/release; no autonomous capture_escape before host choice, no new minimum wait",
+    "range_realign": "remove only !cluster exception in RANGE_WAIT; preserve cluster/action",
+    "range_finish": "mode53 RUNNING with encoder remaining<=10mm -> existing stop/camera140/audit; global3mm unchanged"
+  },
+  "roi": {
+    "green_overlap_min": 0.45,
+    "green_bottom_center_required": false,
+    "other_default_min": 0.6,
+    "near_only": "formal audit all cyan; partial green0<overlap<.45 and foot in original ROI, visible/unclipped/outside safe zone, opposite side from blue",
+    "near_counts_as_real_cargo": false
+  },
+  "scope_exclusions": [
+    "no new opcode/packet",
+    "no fresh/age/handshake/ISR rules",
+    "no new FAULT",
+    "no speed/PID or global navigation tolerance change",
+    "no lower test program",
+    "no model/ROI shape/T265/lidar change"
+  ],
+  "examples": [
+    {
+      "keep_side": "left",
+      "real_green_count": 0,
+      "real_blue_count": 1,
+      "source_frame": 14113,
+      "audit_context_hex": "a3 b3 1d 0a 00 0a 00 64 00 00 37 21 93 28 c3",
+      "audit_command_hex": "a3 b3 18 0a 12 01 00 04 04 12 07 01 8d c8 c3",
+      "disperse_context_hex": "a3 b3 1d 0b 00 0a 00 65 00 00 37 21 a3 78 c3",
+      "disperse_command_hex": "a3 b3 18 0b 10 59 00 00 00 00 00 00 4b 41 c3",
+      "example_kind": "offline_from_logged_geometry",
+      "actual_capture_frame": 14113
+    },
+    {
+      "keep_side": "right",
+      "real_green_count": 0,
+      "real_blue_count": 1,
+      "source_frame": 24113,
+      "audit_context_hex": "a3 b3 1d 0a 00 0a 00 64 00 00 5e 31 bc b4 c3",
+      "audit_command_hex": "a3 b3 18 0a 12 01 04 00 01 12 07 01 7d 40 c3",
+      "disperse_context_hex": "a3 b3 1d 0b 00 0a 00 65 00 00 5e 31 8c e4 c3",
+      "disperse_command_hex": "a3 b3 18 0b 10 d9 00 00 00 00 00 00 ca 89 c3",
+      "example_kind": "mirrored_synthetic_protocol_example",
+      "actual_capture_frame": null
+    }
+  ]
+}

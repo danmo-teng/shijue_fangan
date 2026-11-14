@@ -20,6 +20,11 @@ DEFAULT_CAPTURE_POLYGON = (
     (0, IMAGE_HEIGHT - 1),
 )
 CLAW_SPLIT_X = IMAGE_WIDTH // 2
+GREEN_CAPTURE_OVERLAP_RATIO = .45
+
+
+def capture_overlap_for_class(class_name: str) -> float:
+    return GREEN_CAPTURE_OVERLAP_RATIO if class_name == "green_supply" else .60
 
 
 @dataclass(frozen=True)

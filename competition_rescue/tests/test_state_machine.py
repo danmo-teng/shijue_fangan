@@ -2717,3 +2717,56 @@ def test_failed_target_context_survives_recovery_without_hiding_claw_audit():
     m.search_site_turn_deg=720.;m.search_yaw_accum_deg=0.
     out=m.step(VisionSnapshot(frame_sequence=12),p,replace(s,mode=3),2.)
     assert out.state==CompetitionState.SEARCH_TRANSFER
+
+
+def test_cluster_range_rechecks_real_anchor_without_dropping_cluster_identity():
+    from protocol import CMD_CLUSTER_TARGET, CMD_APPROACH_RANGE
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((98,),('green_supply',),'material'));m.state=CompetitionState.CLUSTER_APPROACH
+    m.cluster_target_track_id=98;m.cluster_target_class='green_supply';m.cluster_target_bbox=(653,142,122,75)
+    m.range_started_s=31.415;m.range_frame_floor=1980;m.range_pitch_cdeg=12000
+    s=StmSnapshot(mode=52,age_ms=0,camera_pitch_cdeg=12000)
+    item=TrackedCargo(98,'green_supply',.8,(653,142,122,75),hits=10)
+    view=VisionSnapshot(frame_sequence=1989,observed_monotonic_s=31.55,cargo=(item,),
+                        range_pitch_cdeg=12000,range_distances=((98,380),))
+    out=m._range_approach_output(view,s,31.55)
+    assert out.reason=='approach_range_realign' and out.command.flags&CMD_CLUSTER_TARGET
+    assert not out.command.flags&CMD_APPROACH_RANGE and out.command.arg_a==714
+    assert m.cluster_target_track_id==98 and m.range_command is None
+    for x in (576,640,704):
+        item=replace(item,bbox=(x-61,142,122,75))
+        out=m._range_approach_output(replace(view,frame_sequence=1990,cargo=(item,),observed_monotonic_s=31.6),s,31.6)
+        assert out.command.flags&CMD_APPROACH_RANGE and out.command.flags&CMD_CLUSTER_TARGET
+        assert out.command.arg_a==380
+        m.range_command=None
+
+
+def test_near_claw_keep_audits_real_blue_only_before_requesting_soft_separation():
+    from protocol import CMD_DISPERSE_NEAR_KEEP,CMD_SIDE_VALID
+    for cluster,mode in ((False,21),(True,38)):
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+        m._select_batch(CargoBatch((836,),('green_supply',),'material'))
+        m.cluster_audit_active=cluster;m.state=CompetitionState.CAPTURE_AUDIT
+        status=StmSnapshot(mode=mode,flags=1,age_ms=0,camera_pitch_cdeg=14000)
+        audit=CargoAudit(right_class='danger_cyan',right_count=1,total_count=1,danger_present=True,
+                         near_claw_keep_side='left',near_claw_green_id=836,near_claw_frame=14113)
+        for frame in (1,2,3,4):
+            now=1.+frame*.15
+            view=VisionSnapshot(frame_sequence=frame,observed_monotonic_s=now,capture_audit=audit)
+            out=m.step(view,pose(),status,now)
+        assert out.command.opcode==CMD_CARGO_AUDIT and out.command.audit.total_count==1
+        assert out.command.audit.right_class=='danger_cyan' and out.command.audit.left_count==0
+        assert not m._audit_valid(audit)
+        paired=replace(relay_stm(out,mode=37 if cluster else 21,flags=65),camera_pitch_cdeg=14000,
+                       context_valid=True,context_matches=True,accepted_command=CMD_CARGO_AUDIT,action_status=3)
+        out=m.step(replace(view,frame_sequence=5,observed_monotonic_s=1.8),pose(),paired,1.8)
+        assert out.command.opcode==CMD_DISPERSE_PILE
+        assert out.command.flags&CMD_DISPERSE_NEAR_KEEP and out.command.flags&CMD_SIDE_VALID
+        assert not out.command.flags&CMD_TARGET_RIGHT and m.cluster_keep_side_count==0
+        assert out.command.source_vision_frame==14113
+        epoch=m.separation_request_epoch
+        again=m._disperse_output(view,status,1.9)
+        assert again.command==out.command and m.separation_request_epoch==epoch
+        # Side evidence cannot survive a changed audit as transport permission.
+        assert m._audit_signature_for_state(audit,False)!=m._audit_signature_for_state(
+            replace(audit,near_claw_keep_side=None),False)

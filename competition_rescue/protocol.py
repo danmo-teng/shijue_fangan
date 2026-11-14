@@ -62,6 +62,7 @@ CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
 CMD_TARGET_RIGHT = 1 << 7
+CMD_DISPERSE_NEAR_KEEP = 1 << 4  # DISPERSE only: side evidence, never cargo validity.
 
 AUDIT_INITIAL_STASH = 1 << 0
 AUDIT_DANGER_PRESENT = 1 << 1
@@ -185,6 +186,10 @@ def mission_frame(
         flags & (CMD_SIDE_VALID | CMD_TARGET_RIGHT)
     ):
         raise ValueError("FIRST_GREEN_BUMP cannot use side-selection flags")
+    if command == CMD_DISPERSE_PILE and flags & CMD_DISPERSE_NEAR_KEEP:
+        if (not flags & CMD_SIDE_VALID or flags & CMD_FIRST_GREEN_BUMP or
+                arg_a != 0 or arg_b != 0 or aux_cdeg != 0):
+            raise ValueError("near-claw keep requires an explicit side and zero motion payload")
     if command == CMD_ENTER_SAFE_ZONE:
         visual = bool(flags & CMD_VISUAL_CORRECTION_VALID)
         fallback_heading = 9000 if flags & CMD_RED_SIDE else 27000

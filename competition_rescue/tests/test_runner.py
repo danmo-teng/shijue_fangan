@@ -2883,7 +2883,7 @@ def test_opponent_exclusion_does_not_confirm_delivery_or_hide_claw_load():
     assert v.capture_audit.total_count==2 and v.capture_audit.danger_present
 
 
-def test_only_green_capture_ignores_bottom_point_at_sixty_percent_overlap():
+def test_only_green_capture_ignores_bottom_point_at_fortyfive_percent_overlap():
     from dataclasses import replace
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -2891,8 +2891,8 @@ def test_only_green_capture_ignores_bottom_point_at_sixty_percent_overlap():
     from state_machine import CargoBatch, TrackedCargo
     polygon = ((100,100),(400,100),(400,300),(100,300))
     rois = CaptureRois(polygon, *split_capture_roi(polygon))
-    green = TrackedCargo(1,"green_supply",.9,(150,241,100,100),hits=5)
-    assert bbox_capture_roi_overlap_ratio(green.bbox, polygon) == .60
+    green = TrackedCargo(1,"green_supply",.9,(150,256,100,100),hits=5)
+    assert bbox_capture_roi_overlap_ratio(green.bbox, polygon) == .45
     assert not bbox_bottom_center_in_roi(green.bbox, polygon)
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
@@ -2903,7 +2903,7 @@ def test_only_green_capture_ignores_bottom_point_at_sixty_percent_overlap():
             return runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,
                 status,m,10,capture_rois=rois)
     assert snapshot(green).capture_audit.total_count == 1
-    assert snapshot(replace(green,bbox=(150,242,100,100))).capture_audit.total_count == 0
+    assert snapshot(replace(green,bbox=(150,257,100,100))).capture_audit.total_count == 0
     for name in ("core_black", "danger_cyan", "injured_orange"):
         assert snapshot(replace(green,class_name=name)).capture_audit.total_count == 0
     orange = replace(green,class_name="injured_orange",bbox=(150,220,100,100))
@@ -2970,3 +2970,45 @@ def test_search_transfer_updates_and_target_interrupt_keep_action_until_ready():
         ready=planner._output_for_cycle(v,p,replace(previous,action_id=ids[1]),False,1.3)
         planner._publish(ready)
         assert ready.command.flags>>4==12 and planner.protocol_action!=ids[1]
+
+
+def test_recorded_partial_green_guides_separation_without_inflating_cargo():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois,split_capture_roi
+    from state_machine import TrackedCargo,CargoBatch
+    poly=((637,203),(733,213),(813,232),(901,281),(960,321),(1016,393),(1047,515),
+          (1053,608),(1067,727),(201,715),(201,600),(223,516),(243,447),(268,361),
+          (329,296),(417,251),(493,219),(564,204))
+    rois=CaptureRois(poly,*split_capture_roi(poly))
+    green=TrackedCargo(836,'green_supply',.9,(332,5,254,279),hits=5)
+    blue=TrackedCargo(831,'danger_cyan',.9,(667,148,250,282),hits=5)
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((836,),('green_supply',),'material'));m.state=CompetitionState.CAPTURE_AUDIT
+    status=StmSnapshot(mode=38,flags=1,age_ms=0,camera_pitch_cdeg=14000)
+    def observe(items):
+        with patch.object(runner_module,'tracked_cargo',return_value=items):
+            return runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,status,m,14113,capture_rois=rois)
+    view=observe((green,blue));a=view.capture_audit
+    assert a.total_count==1 and a.right_class=='danger_cyan' and a.near_keep_side=='left'
+    assert a.left_count==a.left_green_count==a.right_green_count==0
+    assert tuple(i.track_id for i in view.capture_cargo)==(831,)
+    assert a.to_protocol(initial_stash=False,destination='material',audit_id=3).total_count==1
+    assert not m._audit_valid(a)
+    decision=next(d for d in view.roi_decisions if d['track_id']==836)
+    assert not decision['included'] and decision['reason']=='near_claw_green_separation_only'
+    assert observe((replace(green,inside_safe_zone=True),blue)).capture_audit.near_keep_side is None
+    assert observe((replace(green,bbox=(332,0,254,279)),blue)).capture_audit.near_keep_side is None
+    assert observe((replace(green,bbox=(732,5,254,279)),blue)).capture_audit.near_keep_side is None
+    assert observe((blue,)).capture_audit.near_keep_side is None
+    # Current frame and paired action are traceable without extra handshakes.
+    from protocol import CMD_DISPERSE_PILE,CMD_SIDE_VALID,CMD_DISPERSE_NEAR_KEEP
+    with tempfile.TemporaryDirectory() as directory:
+        root=Path(directory)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'cmd',root/'diag',JsonlLog(root/'events'),50)
+        output=CompetitionOutput(CompetitionState.DISPERSE,CommandRequest(CMD_DISPERSE_PILE,
+            CMD_SIDE_VALID|CMD_DISPERSE_NEAR_KEEP|1,source_vision_frame=14113),'fixture')
+        planner._publish(output)
+        data=(root/'cmd').read_bytes()
+        assert int.from_bytes(data[8:12],'big')==14113

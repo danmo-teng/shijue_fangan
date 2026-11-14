@@ -61,6 +61,7 @@ from protocol import (  # noqa: E402
     CMD_ALIGN_SAFE_ZONE,
     CMD_ENTER_SAFE_ZONE,
     CMD_BULLDOZER_STEP,
+    CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
     CMD_NAVIGATE_WAYPOINT,
@@ -82,6 +83,8 @@ from capture_roi import (  # noqa: E402
     CaptureRois,
     bbox_in_capture_roi,
     capture_side_for_bbox,
+    capture_overlap_for_class,
+    bbox_bottom_center_in_roi,
     load_capture_rois,
 )
 from state_machine import (  # noqa: E402
@@ -815,7 +818,7 @@ class HeldCargoEvidence:
             if (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
                     y + height >= IMAGE_HEIGHT - 1):
                 continue
-            if bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60,
+            if bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=capture_overlap_for_class(item.class_name),
                                    require_bottom_center=item.class_name != "green_supply"):
                 self.items[item.class_name] = (item, frame_sequence)
 
@@ -849,6 +852,32 @@ def partial_orange_mixed_evidence(cargo, capture, polygon):
                y <= a.bbox[1]+a.bbox[3] and y+h >= a.bbox[1] for a in materials):
             result.append(item)
     return tuple(result)
+
+
+def near_claw_green_keep_hint(cargo, capture, rois, overlaps=None):
+    """A partial green foot at the claw can guide sorting, never transport."""
+    if not capture or any(item.class_name != "danger_cyan" for item in capture):
+        return None
+    blue_sides = {capture_side_for_bbox(item.bbox, rois, overall_included=True) for item in capture}
+    choices = []
+    for item in cargo:
+        if item.class_name != "green_supply" or not item.visible or item.inside_safe_zone:
+            continue
+        x,y,w,h = item.bbox
+        if x <= 0 or y <= 0 or x+w >= IMAGE_WIDTH-1 or y+h >= IMAGE_HEIGHT-1:
+            continue
+        overlap = overlaps.get(item.track_id) if overlaps is not None else None
+        if overlap is None:
+            overlap = bbox_capture_roi_overlap_ratio(item.bbox, rois.overall)
+        if not 0 < overlap < capture_overlap_for_class(item.class_name):
+            continue
+        if not bbox_bottom_center_in_roi(item.bbox, rois.overall):
+            continue
+        side = capture_side_for_bbox(item.bbox, rois, overall_included=True)
+        opposite = "right" if side == "left" else "left"
+        if side is not None and side not in blue_sides and opposite in blue_sides:
+            choices.append((overlap, item.area_px, -item.track_id, side, item.track_id))
+    return max(choices) if choices else None
 
 
 def make_vision_snapshot(
@@ -910,7 +939,7 @@ def make_vision_snapshot(
                 continue
             x, y, width, height = item.bbox
             overlap = bbox_capture_roi_overlap_ratio(item.bbox, rois.overall)
-            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60,
+            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=capture_overlap_for_class(item.class_name),
                 overlap_ratio=overlap, require_bottom_center=item.class_name != "green_supply")
             if (not included and item.class_name == "injured_orange" and overlap >= 0.80):
                 # A held pyramid can project its foot outside the polygon.
@@ -934,7 +963,7 @@ def make_vision_snapshot(
                 capture_quality_reason = "claw_target_truncated"
                 target_quality[item.track_id] = capture_quality_reason
                 roi_decisions[-1]["reason"] = capture_quality_reason
-            capture_overlap = 0.60
+            capture_overlap = capture_overlap_for_class(item.class_name)
             capture_items.append(item)
             capture_side = capture_side_for_bbox(
                 item.bbox,
@@ -1014,6 +1043,16 @@ def make_vision_snapshot(
         )
         if capture_observation_valid else None
     )
+    near_hint = (near_claw_green_keep_hint(cargo, capture, rois,
+                 {item["track_id"]: item["overlap"] for item in roi_decisions if "overlap" in item})
+                 if audit is not None and not (selected is not None and selected.initial_stash) else None)
+    if near_hint is not None:
+        audit = replace(audit, near_claw_keep_side=near_hint[3],
+                        near_claw_green_id=near_hint[4], near_claw_frame=frame_sequence)
+        for decision in roi_decisions:
+            if decision["track_id"] == near_hint[4]:
+                decision.update(reason="near_claw_green_separation_only", transport_eligible=False,
+                                separation_keep_side=near_hint[3])
     # A target guides approach; every claw audit counts the entire user ROI.
     sweep_search_polygon = ()
     if mission.safe_sweep_pickup is not None:
@@ -1038,6 +1077,9 @@ def make_vision_snapshot(
                          remembered_items=tuple(item for item, _ in remembered_capture))
         if sweep_observation_valid and mission.safe_sweep_pickup is not None else None
     )
+    if sweep_audit is not None and near_hint is not None:
+        sweep_audit = replace(sweep_audit, near_claw_keep_side=near_hint[3],
+                              near_claw_green_id=near_hint[4], near_claw_frame=frame_sequence)
     target_candidates = [
         item for item in cargo
         if item.visible and (
@@ -1801,14 +1843,17 @@ class CompetitionPlanner:
             if command.audit_vision_frame is not None:
                 frame = command.audit_vision_frame
             self.protocol_vision_frame = frame & 0xFFFFFFFF
+        elif command.opcode == CMD_DISPERSE_PILE and command.flags & CMD_DISPERSE_NEAR_KEEP:
+            self.protocol_vision_frame = command.source_vision_frame or 0
         owner = self.protocol_accepted if overlay else None
         context = command_context_frame(
             self.sequence,
             owner.task_id if owner is not None else self.protocol_task,
             owner.action_id if owner is not None else self.protocol_action,
-            self.protocol_vision_frame if command.opcode in {
+            self.protocol_vision_frame if (command.opcode in {
                 CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE,
-            } else 0,
+            } or (command.opcode == CMD_DISPERSE_PILE and
+                  command.flags & CMD_DISPERSE_NEAR_KEEP)) else 0,
         )
         write_command_frame(self.command_path, context + command.to_frame(self.sequence))
         if command.opcode in {CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE}:

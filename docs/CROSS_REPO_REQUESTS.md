@@ -16,32 +16,34 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 当前请求MATCH-SEARCH-ROTATION-20261114：step13增加空爪SEARCH入口
+## 当前请求MATCH-CAPTURE-HANDOFF-20261114：聚堆接近与近爪绿蓝分离
 
-用户已批准两侧搜索点轮换、绕侧面、发现目标让位和保留失败上下文；接收方仍先看自己的实际代码，可接受/调整/拒绝并说明影响。此请求不代表已审核、已实施或已烧录。
+用户已批准三处修复、绿色门槛45%，并选择A“分离命令增加近爪保留侧标志，真实审核数量不变”。接收方先看当前代码，可接受/缩小/调整/拒绝并说明影响；发布不等于审核/实现/烧录，本端不写固件。
 
-**目标与现状：** RDK已把无目标返中心改为(0,+.30)/(0,-.30)m轮换，经较近X=±.50m通道。途中目标出现，原step13同action D=0结束移动，匹配DONE后用原step12回SEARCH，再正常接近/整爪审核。没有直接跨动作发GRAB，也不把中途停车当到站。
+**为何改：** 最新实跑上位8db11ec、实际F4056ee665b/dirty1。聚堆mode52新图x714偏74px仍发固定距离；mode53末端轮程约374.9mm后停住，等满12s恢复。569.6s蓝69.2%计入、绿16.5%未计，审核成纯蓝，下位在上位分离前自退。不是要求删除首绿规则或伪造绿数量。
 
-**只需最小入口配套：** 上一请求step13已实现，勿重复新增枚举/报文/执行器。当前Task.c的empty_move只允许release_done/next_empty_leg，新搜索轮换从mode3会被拒。
+**最小配套：**
 
-1. task_accept_bulldozer：按现有step0的空爪SEARCH入口允许step13启动；保留当前任务/action与编号回绕规则，不强求虚构的放货回执。只在首次进入按现有clear_load清旧放弃批次预算/复审，不重开爪、不记首绿或送达。
-2. task_accept_mission：原cancelled-context例外仅放行空爪SEARCH中的step0；同一场景扩到step13。不能只改上一函数而仍在前置判断拒绝。
-3. 原step13执行、D0完成/mode25、固定U、同action H/D更新、step12回SEARCH均保持；无需新增opcode、字段、握手、时限、ISR、FAULT、PID/速度变化或测试程序。本任务不包含mode52取消。
+1. Task的APPROACH_RANGE_WAIT接新像素回TRACK判断去掉!cluster例外；保留原新帧/64px、CLUSTER、task/action及预算，不重启整个任务。上位已对聚堆也做新图复核。
+2. 仅mode53：Motor_MoveDistanceLinear结果RUNNING且按本次真实轮程剩余≤10mm时，复用原DONE后的Stop/抬140/审核交接。全局3mm及其他有限运动/导航/扫障保持，原12s仅兜底；不加停滞计时/FAULT、不改PID/速度，不以超时冒充成功。
+3. 原0x18/opcode0x10的P1 bit4=0x10命名DISPERSE_NEAR_KEEP，须SIDE_VALID、禁FIRST_GREEN_BUMP、A/B/U=0；TARGET_RIGHT照旧。不是0x14的step编码，也不是0x12的STABLE。vision通用allowed_flags已允许该位，不要新增TYPE/opcode；只补该语义组合的解析。
+4. task_capture_observe：已完成原稳定审核、非法且含蓝时，不按“无合格载荷”抢先capture_escape；聚堆沿原流程到mode37，普通保留mode21和真实READY，交给上位接着发分离/原释放。不能把非法改VALID，不新增最低等待/握手；真正纯蓝上位仍会选原放弃出口，原任务兜底不扩张。
+5. task_disperse_keep_side_valid：该新增位只允许原审核含蓝/危险、保留侧真实计数0且另一侧非空时以近爪参考选侧。不要改真实数量、audit_valid、首绿计分或单件确认掩码；此时既有counts_known=false，直接复用软握/原曲线，不当强握单件。其他DISPERSE保持。
 
-必要编译/原接口核对后commit/push，回传SHA、审核结论和实际烧录身份。当前上位新轮换依赖该入口，上一轮step13固件也不能直接当新入口已支持。
+本轮ROI45%全部由上位处理，下位无需接收像素面积/加遥测。原串口/ISR、时间/新鲜度政策、人工STOP/PAUSE/mode51、其他比赛流程和已实现step13/SEARCH入口保持；不增加测试代码/独立程序，也不夹带此前仅讨论的mode52取消。
 
-只读依据：F405固定回执blob438b29e5d51ebc75a9792cb32c00ad1305e00d9f，Task.c d9ca91acd7485b102a2c80f6e971f5e2fc24878f；当前未读板端actual、未写/烧录对端。说明/字段及原配对帧例：
+请按原手段做必要编译/接口核对，commit/push后回传SHA、审核结论及未完成项。烧录由用户安排，实际身份单独回报；本窗口未新读UART身份。源审依据Task.c blob291dc981b6ce4525f96fd9f44ec7c9293b576bac；dirty1不能证明该Git源码与板内字节全等。
 
 ```text
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_SEARCH_ROTATION_20261114.md
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_search_station_20261114.json
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_CAPTURE_HANDOFF_20261114.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_near_claw_separation_20261114.json
 ```
 
-## 回执MATCH-ATTACK-RETURN-20261114：下位step13已实现，烧录未确认
+## 回执MATCH-SEARCH-ROTATION / MATCH-ATTACK-RETURN：源码已实现，本场入口已实际接受
 
-已读取F405新固定入口及Task/vision实际源码，回执接受a8d1242的step13/H-D-U/成对动作方案，NormalRun/MotionDebug编译及其原夹具检查通过；回执明确未烧录、actual未读。Task/vision.c/vision.h blob分别为d9ca91acd7485b102a2c80f6e971f5e2fc24878f、136acff94ee0f52ec0d40784e1374c39a42bcb7a、ffed3ae83974331b54950e378717d3ffc9721f84。
+已读F405新固定回执blob52b60b87a13fbe6483ac1bfee0de9d05b066abb4及Task/vision，13保向移动、空爪SEARCH入口、原step12收尾已实现，接收方未自行烧录、约定用户安排。最新14:59日志实际UART身份6ee665b/dirty1，且有13/12及搜索轮换接受；不再重复原枚举/报文/SEARCH入口任务，也不继续写“当前尚缺SEARCH入口”。
 
-原放货后四段入口/同段ID及搜索收尾已实现，不重复下发原枚举/解析/保向任务；新增空爪SEARCH入口单列上节。源代码和书面回执不代表板端已烧或地面5cm精度通过。本窗口只读，未改/烧录固件。
+这证明本场入口/动作通路，不冒充5cm地面精度或本轮新near-keep标志已支持。源代码、actual与dirty差异分开；本端未改/烧录对端。
 
 ## 当前回执MATCH-SAFE-ENTER-20261113：正式启用及ENTER续接已修，无新下位任务
 

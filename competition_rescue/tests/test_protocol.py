@@ -101,3 +101,15 @@ def test_empty_body_move_extension_keeps_field_translation_and_chassis_heading_s
         assert int.from_bytes(packet[10:12],'big')==u
         assert packet[12:14]==crc16_modbus(packet[2:12]).to_bytes(2,'little')
         assert command_context_frame(9,11,12,0)[3]==packet[3]
+
+
+def test_near_claw_separation_flag_has_no_transport_or_motion_payload():
+    from protocol import CMD_DISPERSE_PILE,CMD_DISPERSE_NEAR_KEEP,CMD_SIDE_VALID,CMD_TARGET_RIGHT
+    for side in (0,CMD_TARGET_RIGHT):
+        frame=mission_frame(4,CMD_DISPERSE_PILE,1|CMD_DISPERSE_NEAR_KEEP|CMD_SIDE_VALID|side)
+        assert frame[4]==0x10 and frame[5]&0x10 and frame[6:12]==bytes(6)
+    for flags,args in ((1|CMD_DISPERSE_NEAR_KEEP,(0,0,0)),
+                       (1|CMD_DISPERSE_NEAR_KEEP|CMD_SIDE_VALID,(1,0,0))):
+        try:mission_frame(4,CMD_DISPERSE_PILE,flags,*args)
+        except ValueError:pass
+        else:raise AssertionError('invalid near-claw separation payload')
