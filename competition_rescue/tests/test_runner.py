@@ -2911,3 +2911,36 @@ def test_only_green_capture_ignores_bottom_point_at_sixty_percent_overlap():
     held = runner_module.HeldCargoEvidence()
     held.observe((green,),status,rois,10,"")
     assert "green_supply" in held.items  # No obsolete foot rule in the closed-claw cache.
+
+
+def test_attack_return_live_updates_keep_action_and_each_leg_changes_action():
+    from dataclasses import replace
+    from protocol import CMD_BULLDOZER_STEP, CMD_RELEASE_BOTH
+    from attack_return import AttackReturnRoute
+    m=CompetitionMission(CompetitionSettings(side='red'))
+    m._set_state(CompetitionState.INITIAL_ATTACK_RETURN,1.)
+    m.attack_return_route=AttackReturnRoute('red',1,(.15,-.69),270,(0,.3))
+    v=VisionSnapshot(frame_sequence=10)
+    p=PoseSnapshot(True,.15,-.69,270,0)
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        old=StmSnapshot(mode=34,age_ms=0,context_valid=True,accepted_command=CMD_RELEASE_BOTH,action_status=3)
+        out=planner._output_for_cycle(v,p,old,False,1.)
+        planner._publish(out);ids=(planner.protocol_task,planner.protocol_action)
+        stale=replace(old,mode=25,task_id=ids[0],action_id=(ids[1]-1)&65535,accepted_command=CMD_BULLDOZER_STEP)
+        updated=planner._output_for_cycle(v,replace(p,y_m=-.66),stale,False,1.1)
+        assert updated.command.arg_a==70
+        planner._publish(updated);assert (planner.protocol_task,planner.protocol_action)==ids
+        target=m.attack_return_route.waypoints[0];at=replace(p,x_m=target[0],y_m=target[1])
+        waiting=planner._output_for_cycle(v,at,stale,False,1.2)
+        planner._publish(waiting);assert m.attack_return_route.index==0
+        second=planner._output_for_cycle(v,at,replace(stale,action_id=ids[1]),False,1.3)
+        assert m.attack_return_route.index==1 and second.command.arg_a==500
+        planner._publish(second)
+        assert planner.protocol_task==ids[0] and planner.protocol_action!=ids[1]
+        # A heartbeat and a pose refresh in the second leg cannot allocate again.
+        second_ids=planner.protocol_action
+        same=planner._output_for_cycle(v,replace(at,x_m=at.x_m+.1),stale,False,1.4)
+        planner._publish(same)
+        assert planner.protocol_action==second_ids and same.command.arg_a==400

@@ -48,7 +48,7 @@ CMD_DISPERSE_PILE = 0x10
 CMD_CHANGE_LANE = 0x11
 CMD_CARGO_AUDIT = 0x12
 CMD_CLEAR_SAFE_ZONE = 0x13
-CMD_BULLDOZER_STEP = 0x14  # New contract: requires F405 implementation; opt-in.
+CMD_BULLDOZER_STEP = 0x14  # Segmented motion; each extension requires matching F405 support.
 
 CMD_VALID = 1 << 0
 CMD_DRIVE_STRAIGHT = 1 << 1
@@ -146,6 +146,8 @@ def mission_frame(
         elif step in LOCAL_DISTANCES:
             valid = (arg_a == LOCAL_DISTANCES[step] and arg_b == 0 and
                      aux_cdeg == (0 if flags & CMD_RED_SIDE else 18000))
+        elif step == RouteStep.EMPTY_BODY_MOVE:
+            valid = 0 <= arg_a <= 5000 and -18000 <= arg_b <= 18000 and 0 <= aux_cdeg < 36000
         elif step in LIVE_STEPS:
             valid = (0 <= arg_a <= 5000 and -18000 <= arg_b <= 18000 and
                      aux_cdeg == (0 if flags & CMD_RED_SIDE else 18000))

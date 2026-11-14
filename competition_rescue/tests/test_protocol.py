@@ -34,7 +34,7 @@ def test_bulldozer_step_contract_roundtrips_without_legacy_flag_aliases():
             assert int.from_bytes(packet[8:10], 'big', signed=True) == payload[1]
             assert int.from_bytes(packet[10:12], 'big') == payload[2]
             assert int.from_bytes(packet[12:14], 'little') == crc16_modbus(packet[2:12])
-    for flags, args in ((0xD9, (0,0,0)), (0x0B, (0,0,0)),
+    for flags, args in ((0xE9, (0,0,0)), (0x0B, (0,0,0)),
                         (0x19, (201,0,0)), (0x59, (10,0,9000))):
         try:
             mission_frame(1, CMD_BULLDOZER_STEP, flags, *args)
@@ -89,3 +89,15 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_empty_body_move_extension_keeps_field_translation_and_chassis_heading_separate():
+    from protocol import CMD_BULLDOZER_STEP, command_context_frame
+    for flags,u in ((0xD9,27000),(0xD1,9000),(0xD9,28200)):
+        packet=mission_frame(9,CMD_BULLDOZER_STEP,flags,100,-9000,u)
+        assert packet[4:6]==bytes((0x14,flags))
+        assert int.from_bytes(packet[6:8],'big',signed=True)==100
+        assert int.from_bytes(packet[8:10],'big',signed=True)==-9000
+        assert int.from_bytes(packet[10:12],'big')==u
+        assert packet[12:14]==crc16_modbus(packet[2:12]).to_bytes(2,'little')
+        assert command_context_frame(9,11,12,0)[3]==packet[3]

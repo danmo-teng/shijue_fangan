@@ -1756,6 +1756,12 @@ class CompetitionPlanner:
             else None
         )
         range_epoch = self.mission.range_epoch if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE else None
+        if (command.opcode == CMD_BULLDOZER_STEP and
+                self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and
+                self.mission.attack_return_route is not None):
+            # All four moves use step13. A leg change, not every D/H refresh,
+            # owns the next action ID in the existing task/context protocol.
+            range_epoch = ("attack_return", self.mission.attack_return_route.index)
         key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
         if not overlay or (self.protocol_accepted is None and self.protocol_action_key is None):
             if key != self.protocol_action_key:
@@ -2261,6 +2267,9 @@ class CompetitionPlanner:
             # Update live remaining H/D while the first paired status is in
             # flight. Only a matching action may advance the route step.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and not stm.fault and
+                stm.mode in {3, 25, 34}):
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (stm.fresh and stm.mode in {22, 40, 50} and
                 (not self.mission._has_committed_audit(stm.mode) or self.mission.selected_batch is None)):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
@@ -2478,6 +2487,9 @@ class CompetitionPlanner:
             "bulldozer_enabled": self.mission.settings.bulldozer_enabled,
             "bulldozer_route": (None if self.mission.obstacle_route is None
                                 else asdict(self.mission.obstacle_route)),
+            "attack_return_route": (None if self.mission.attack_return_route is None else dict(
+                asdict(self.mission.attack_return_route),
+                start_same_side=self.mission.attack_return_route.start_same_side)),
             "safe_sweep_observation": {
                 "key": self.sweep_observation_key,
                 "elapsed_s": (
@@ -2762,6 +2774,9 @@ class CompetitionPlanner:
                             "state": output.state.value,
                             "message": output.message,
                         }
+                        if output.event.startswith("attack_return_") and self.mission.attack_return_route is not None:
+                            event_data["attack_return_route"] = dict(asdict(self.mission.attack_return_route),
+                                start_same_side=self.mission.attack_return_route.start_same_side)
                         if output.event == "initial_stash_state_anomaly":
                             event_data.update({
                                 "invalid_state": "SEARCH",

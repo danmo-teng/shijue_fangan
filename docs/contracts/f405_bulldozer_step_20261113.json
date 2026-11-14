@@ -34,14 +34,14 @@
   "sweep_target": {
     "reference": "robot centre, behind/left outer walls after clockwise90 turn",
     "rear_wall_m": 0.94,
-    "left_wall_m": 0.54,
+    "left_wall_m": 0.59,
     "red_xy_m": [
       -0.56,
-      0.96
+      0.91
     ],
     "blue_xy_m": [
       0.56,
-      -0.96
+      -0.91
     ],
     "xy_tolerance_m": [
       0.03,
@@ -489,5 +489,12 @@
       "context_hex": "a3 b3 1d 34 01 3d 02 64 00 00 00 00 db 8c c3",
       "command_hex": "a3 b3 18 34 14 c1 00 00 00 00 00 00 46 8a c3"
     }
-  ]
+  ],
+  "extensions": {
+    "step13": {
+      "id": "MATCH-ATTACK-RETURN-20261114",
+      "status": "lower_review_pending",
+      "contract": "f405_empty_body_move_20261114.json"
+    }
+  }
 }

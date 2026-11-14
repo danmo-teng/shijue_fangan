@@ -20,6 +20,7 @@ class RouteStep(IntEnum):
     BACK_TO_STAGE = 10
     RIGHT_TO_STAGE = 11
     PICKUP_READY = 12
+    EMPTY_BODY_MOVE = 13  # Extension: requires MATCH-ATTACK-RETURN-20261114 firmware.
 
 
 LIVE_STEPS = frozenset({RouteStep.BACK_TO_SWEEP, RouteStep.LEFT_TO_SWEEP,
@@ -76,8 +77,8 @@ class ObstacleRoute:
 
     @property
     def sweep_point(self) -> tuple[float, float]:
-        # Right-turn frame: behind wall 94cm, left wall 56cm, robot CENTRE.
-        return -.56 * self.side_sign, .94 * self.side_sign
+        # Right-turn frame: behind wall 94cm, left wall 59cm, robot CENTRE.
+        return -.56 * self.side_sign, .91 * self.side_sign
 
     @property
     def sweep_heading_cdeg(self) -> int:

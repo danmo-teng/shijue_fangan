@@ -13,6 +13,7 @@ from enum import Enum
 import math
 from statistics import median
 from typing import Iterable
+from attack_return import AttackReturnRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
 
 from protocol import (
@@ -464,6 +465,7 @@ class CompetitionState(str, Enum):
     POST_GRAB_AUDIT = "POST_GRAB_AUDIT"
     INITIAL_STASH_NAV = "INITIAL_STASH_NAV"
     INITIAL_RELEASE = "INITIAL_RELEASE"
+    INITIAL_ATTACK_RETURN = "INITIAL_ATTACK_RETURN"
     SEARCH = "SEARCH"
     CLUSTER_APPROACH = "CLUSTER_APPROACH"
     DISPERSE = "DISPERSE"
@@ -774,6 +776,7 @@ class CompetitionMission:
         self.safe_zone_acquire_timeout_reported = False
         self.safe_zone_view_pitch_cdeg = 12000
         self.obstacle_route: ObstacleRoute | None = None
+        self.attack_return_route: AttackReturnRoute | None = None
         self.safe_zone_reobserve_visual = False
         self.safe_zone_higher_view_ready_s: float | None = None
         self.safe_zone_freeze_frame_floor: int | None = None
@@ -919,6 +922,8 @@ class CompetitionMission:
 
     def _set_state(self, state: CompetitionState, now: float) -> None:
         if self.state != state:
+            if state == CompetitionState.SEARCH:
+                self.attack_return_route = None
             if (state == CompetitionState.SEARCH and self.obstacle_route is not None and
                     not self.obstacle_route.recover_after_delivery):
                 # Failed normal pickup/separation returns to ordinary search;
@@ -1125,6 +1130,8 @@ class CompetitionMission:
         return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.INITIAL_ATTACK_RETURN:
+            return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH)
         if self.state == CompetitionState.RECOVERY_WAIT:
             return (STM_MODE_RECOVERY_WAIT,)
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
@@ -4751,6 +4758,55 @@ class CompetitionMission:
             expected_stm_modes=(STM_MODE_SEARCH,),
         )
 
+    def _complete_return_search(self, vision: VisionSnapshot, now: float, message: str) -> CompetitionOutput:
+        self.disperse_attempts = 0
+        self.separation_keep_side = None
+        self.separation_side_attempts = 0
+        self.separation_request_counted = False
+        self.recovery_task_locked = False
+        self._clear_cluster_context(reset_attempts=True)
+        self._set_state(CompetitionState.SEARCH, now)
+        self.return_search_mode_seen = True
+        self.return_search_frame_floor = max(0, vision.frame_sequence)
+        return CompetitionOutput(self.state, self._hold(), message,
+            event="return_search_gate_start", tx_policy="hold",
+            reason="return_search_frame_gate", expected_stm_modes=(STM_MODE_SEARCH,))
+
+    def _attack_return_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        if not pose.valid:
+            return CompetitionOutput(self.state, self._pause(), "开局绕行返程等待有效位置",
+                reason="attack_return_pose_unavailable")
+        if self.attack_return_route is None:
+            self.attack_return_route = AttackReturnRoute(self.settings.side, self.settings.start_zone,
+                (pose.x_m, pose.y_m), pose.yaw_deg, self.settings.post_delivery_return_point)
+        route = self.attack_return_route
+        complete = (stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_BULLDOZER_STEP and bool(stm.action_status & 2))
+        if route.finished_motion:
+            if complete and stm.mode == STM_MODE_SEARCH:
+                result = self._complete_return_search(vision, now,
+                    "开局绕行已回己方30cm搜索点，沿原相机/新帧交接寻找首绿")
+                self.attack_return_route = None
+                return result
+            return CompetitionOutput(self.state,
+                CommandRequest(CMD_BULLDOZER_STEP, self._side_flags() | (int(RouteStep.PICKUP_READY) << 4)),
+                "开局绕行到点，复用原搜索姿态恢复", reason="attack_return_search_ready",
+                expected_stm_modes=(STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH))
+        payload = route.payload(pose.x_m, pose.y_m)
+        if complete and payload[0] == 0:
+            route.advance()
+            return replace(self._attack_return_output(vision, pose,
+                replace(stm, context_matches=False), now), event="attack_return_step_complete")
+        name = ("BACK_100", "LEFT_500", "BACK_TO_HOME_ROW", "RIGHT_TO_HOME")[route.index]
+        return CompetitionOutput(self.state,
+            CommandRequest(CMD_BULLDOZER_STEP,
+                self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
+            f"开局绕行/{name}：目标{route.waypoints[route.index]}，保向{route.release_yaw_deg:.1f}°",
+            motion_expected=True, reason=f"attack_return_{name.lower()}",
+            expected_stm_modes=(STM_MODE_REMOTE_ACTION,))
+
     def _return_center_output(self, pose: PoseSnapshot, now: float, message: str) -> CompetitionOutput:
         if not pose.valid:
             return CompetitionOutput(
@@ -7007,6 +7063,11 @@ class CompetitionMission:
                 self.initial_stash_done = True
                 self.stash_has_cargo = True
                 self._clear_selected_batch()
+                if self.settings.opening_strategy == "attack":
+                    self.attack_return_route = None
+                    self._set_state(CompetitionState.INITIAL_ATTACK_RETURN, now)
+                    return replace(self._attack_return_output(vision, pose, stm, now),
+                                   event="attack_return_start")
                 self._begin_return(stm, now)
                 return self._return_center_output(pose, now, "临时物资已放下，返回中心寻找首件绿色")
             return CompetitionOutput(
@@ -7018,6 +7079,9 @@ class CompetitionMission:
                 reason="initial_stash_release_pending",
                 expected_stm_modes=(STM_MODE_RELEASE_BOTH_DONE,),
             )
+
+        if self.state == CompetitionState.INITIAL_ATTACK_RETURN:
+            return self._attack_return_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
             self.enter_command_accepted = self._opcode_acceptance_seen(
@@ -7122,27 +7186,9 @@ class CompetitionMission:
                     self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
                     return self._obstacle_route_output(vision, pose,
                         replace(stm, context_matches=False), now)
-                self.disperse_attempts = 0
-                self.separation_keep_side = None
-                self.separation_side_attempts = 0
-                self.separation_request_counted = False
-                self.recovery_task_locked = False
-                self._clear_cluster_context(reset_attempts=True)
-                self._set_state(CompetitionState.SEARCH, now)
-                self.return_search_mode_seen = True
-                self.return_search_frame_floor = (
-                    vision.frame_sequence if vision.frame_sequence > 0 else 0
-                )
-                return CompetitionOutput(
-                    self.state,
-                    self._hold(),
+                return self._complete_return_search(vision, now,
                     f"回到{'己方' if self.return_after_delivery else '中心'}搜索区，"
-                    f"等待相机120°和新视觉帧；已完成{self.delivery_count}件",
-                    event="return_search_gate_start",
-                    tx_policy="hold",
-                    reason="return_search_frame_gate",
-                    expected_stm_modes=(STM_MODE_SEARCH,),
-                )
+                    f"等待相机120°和新视觉帧；已完成{self.delivery_count}件")
             return self._return_center_output(
                 pose, now,
                 "持续返回己方搜索点" if self.return_after_delivery else "持续返回中心",

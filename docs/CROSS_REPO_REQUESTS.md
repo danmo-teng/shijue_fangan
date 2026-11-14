@@ -1,6 +1,6 @@
 # 两端最新修改要求
 
-更新：2026-11-13。只维护当前相关请求与回执，历史按Git取证，不自动恢复。
+更新：2026-11-14。只维护当前相关请求与回执，历史按Git取证，不自动恢复。
 发布或读取不等于接收方已审核/实施；先核对实际代码，向人说明接受、调整或拒绝的理由。
 重要范围变化由人决定，已批准范围不重复审批。规则见AGENTS.md和CHANGE_WORKFLOW.md。
 
@@ -15,6 +15,30 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
+
+## 当前请求MATCH-ATTACK-RETURN-20261114：step13空载保向移动，待F405审核/实现
+
+用户已批准路线，并选择“复用0x14、增加一个空载保向移动子步骤”；接收方仍须按自己的代码审核、可缩小/调整/拒绝。发布不代表对端已审核、实现或烧录。
+
+**为什么改：** 开局放货后当前RETURN会转车头、直接回中心，不能按要求保持放货朝向先退10cm/左50cm，再退/右移到己方30cm点。RDK已编排四段，只缺F405开放现有保向Fine执行入口；不是再造底盘控制框架。
+
+**最小配套：** 保留原0x18/opcode0x14与0x1D/0x1E布局、旧step0..12；新增step13 EMPTY_BODY_MOVE。A=实时报来的剩余D 0..5000mm，B=场地平移H −18000..18000厘度，U=固定车头yaw 0..35999厘度。flags高四位13，低位仍VALID/RED，不能套旧左右/聚堆位。
+
+- vision.h枚举追加13；vision.c只为13放开U为任意有效场地航向，原0..12校验保持。
+- Task.c把13接入现有task_bulldozer_live_step和Motor_MoveAngleFineHeading：body_angle=wrap(H−当前主yaw)，U独立保向。D>0运行、D=0按现有刹车并COMPLETED/mode25；同action刷新H/D不重启、不改变U。不因转向平移H就把车头转过去，不套旧粗导航缓存。
+- 首个13允许从**本任务已完成的双爪释放mode34、空载状态**进入；之后沿原已完成分段入口接受下一action。只在首次进入清本次放货残留载荷复审/退让上下文，不能误记首绿送达。四段均使用13，同task、每段新action；同段保持action。最后RDK发原step12回SEARCH，不需增加最终状态或专门握手。
+- 现有D/H刷新、动作归属、人工STOP/PAUSE及mode51保持。复用当前速度/保向/斜坡/刹车，不调PID；不新增UART中断、时间/新鲜度资格、反复握手、永久FAULT或测试程序。本请求不包含此前仅讨论的mode52取消方案。
+
+扫障S仅上位参数改为左59cm/后94cm（红−.56,+.91；蓝+.56,−.91m，各轴±3cm），下位不得硬编码旧54/56cm坐标。
+
+只读依据：F405 main Task.c blob d6fc57e32dbeda1d7ba53c3a49dfd28665f4ff35、vision.c 9b775e6e1c18587b2ca04c35debe44c7d3166e4e、vision.h 46ff22e20947f861bd97d008c3abccf0e7328255；此版本无step13。未重新读取板端实际版本、未写固件/烧录。
+
+请先回传接受/调整/拒绝及原因；实施后commit/push并回传SHA、必要检查及实际烧录身份。上位新进攻路径依赖该配套，旧固件不能直接跑。完整说明、字段及成对帧例：
+
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_ATTACK_RETURN_20261114.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_empty_body_move_20261114.json
+```
 
 ## 当前回执MATCH-SAFE-ENTER-20261113：正式启用及ENTER续接已修，无新下位任务
 

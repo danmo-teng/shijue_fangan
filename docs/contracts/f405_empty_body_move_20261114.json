@@ -1,0 +1,223 @@
+{
+  "id": "MATCH-ATTACK-RETURN-20261114",
+  "version": 1,
+  "status": "upper_implemented_lower_review_pending",
+  "human_approved_scope": "reuse_0x14_add_one_empty_fixed_yaw_body_move_substep",
+  "actual_lower_version": "not_read_this_turn",
+  "base_steps_0_through_12": "unchanged",
+  "wire": {
+    "type": 24,
+    "opcode": 20,
+    "step": 13,
+    "low_flags": {
+      "valid": 1,
+      "red": 8,
+      "reserved_zero": 6
+    },
+    "fields": {
+      "A": "unsigned semantic D 0..5000 mm in signed big-endian int16",
+      "B": "field-frame translation H -18000..18000 centidegrees in signed big-endian int16",
+      "U": "frozen release-time chassis yaw 0..35999 centidegrees in big-endian uint16"
+    }
+  },
+  "pairing": {
+    "context_type": 29,
+    "status_type": 30,
+    "same_seq": true,
+    "new_action_each_segment": true,
+    "same_task_across_segments": true,
+    "same_action_HD_refresh": true,
+    "immutable_U_within_action": true,
+    "same_step13_repeated_with_new_action": true,
+    "no_new_handshake": true
+  },
+  "execution": {
+    "reuse": "task_bulldozer_live_step / Motor_MoveAngleFineHeading",
+    "transform": "body_angle=wrap(H-current_primary_yaw); hold U, never turn chassis toward H",
+    "D_positive": "RUNNING; do not report whole leg done from encoder initial D alone",
+    "D_zero": "existing brake then COMPLETED mode25; do not reset to SEARCH or start another action",
+    "first_entry": "owned completed RELEASE_BOTH/mode34 and open claw, without replaying release",
+    "next_entry": "owned completed prior step13; existing action IDs distinguish legs",
+    "final_search": "after fourth step13 DONE, upper sends existing step12/PICKUP_READY; retain paired DONE through mode3"
+  },
+  "route": {
+    "reference": "actual release centre and primary-yaw field heading, frozen once",
+    "moves": [
+      "back 0.10m",
+      "left 0.50m",
+      "back to return longitudinal level",
+      "right to return point"
+    ],
+    "own_return_red_m": [
+      0,
+      0.3
+    ],
+    "own_return_blue_m": [
+      0,
+      -0.3
+    ],
+    "waypoint_tolerance_m": 0.05,
+    "side_relation": "red same-side start1/2; blue same-side start3/4; target always follows own side",
+    "diagram_only_nominal_release": {
+      "red": [
+        0.15,
+        -0.69,
+        270
+      ],
+      "blue": [
+        -0.15,
+        0.69,
+        90
+      ]
+    }
+  },
+  "non_changes": [
+    "no new handshake/freshness gate/ISR or timer",
+    "no new FAULT or permanent STOP",
+    "keep STOP/PAUSE and mode51",
+    "keep old steps0..12 and ordinary RETURN",
+    "reuse current speeds, braking, yaw controller and UART ownership"
+  ],
+  "examples": [
+    {
+      "side": "red",
+      "segment": 0,
+      "name": "BACK_100",
+      "D_mm": 100,
+      "H_cdeg": 9000,
+      "U_cdeg": 27000,
+      "task_id": 10,
+      "action_id": 100,
+      "seq": 40,
+      "context_hex": "a3 b3 1d 28 00 0a 00 64 00 00 00 00 c5 a1 c3",
+      "command_hex": "a3 b3 18 28 14 d9 00 64 23 28 69 78 92 7d c3"
+    },
+    {
+      "side": "red",
+      "segment": 1,
+      "name": "LEFT_500",
+      "D_mm": 500,
+      "H_cdeg": 0,
+      "U_cdeg": 27000,
+      "task_id": 10,
+      "action_id": 101,
+      "seq": 41,
+      "context_hex": "a3 b3 1d 29 00 0a 00 65 00 00 00 00 f5 f1 c3",
+      "command_hex": "a3 b3 18 29 14 d9 01 f4 00 00 69 78 d5 ad c3"
+    },
+    {
+      "side": "red",
+      "segment": 2,
+      "name": "BACK_TO_HOME_ROW",
+      "D_mm": 890,
+      "H_cdeg": 9000,
+      "U_cdeg": 27000,
+      "task_id": 10,
+      "action_id": 102,
+      "seq": 42,
+      "context_hex": "a3 b3 1d 2a 00 0a 00 66 00 00 00 00 a5 01 c3",
+      "command_hex": "a3 b3 18 2a 14 d9 03 7a 23 28 69 78 23 2c c3"
+    },
+    {
+      "side": "red",
+      "segment": 3,
+      "name": "RIGHT_TO_HOME",
+      "D_mm": 650,
+      "H_cdeg": 18000,
+      "U_cdeg": 27000,
+      "task_id": 10,
+      "action_id": 103,
+      "seq": 43,
+      "context_hex": "a3 b3 1d 2b 00 0a 00 67 00 00 00 00 95 51 c3",
+      "command_hex": "a3 b3 18 2b 14 d9 02 8a 46 50 69 78 f1 ad c3"
+    },
+    {
+      "side": "blue",
+      "segment": 0,
+      "name": "BACK_100",
+      "D_mm": 100,
+      "H_cdeg": -9000,
+      "U_cdeg": 9000,
+      "task_id": 10,
+      "action_id": 100,
+      "seq": 40,
+      "context_hex": "a3 b3 1d 28 00 0a 00 64 00 00 00 00 c5 a1 c3",
+      "command_hex": "a3 b3 18 28 14 d1 00 64 dc d8 23 28 1c c6 c3"
+    },
+    {
+      "side": "blue",
+      "segment": 1,
+      "name": "LEFT_500",
+      "D_mm": 500,
+      "H_cdeg": 18000,
+      "U_cdeg": 9000,
+      "task_id": 10,
+      "action_id": 101,
+      "seq": 41,
+      "context_hex": "a3 b3 1d 29 00 0a 00 65 00 00 00 00 f5 f1 c3",
+      "command_hex": "a3 b3 18 29 14 d1 01 f4 46 50 23 28 7e 68 c3"
+    },
+    {
+      "side": "blue",
+      "segment": 2,
+      "name": "BACK_TO_HOME_ROW",
+      "D_mm": 890,
+      "H_cdeg": -9000,
+      "U_cdeg": 9000,
+      "task_id": 10,
+      "action_id": 102,
+      "seq": 42,
+      "context_hex": "a3 b3 1d 2a 00 0a 00 66 00 00 00 00 a5 01 c3",
+      "command_hex": "a3 b3 18 2a 14 d1 03 7a dc d8 23 28 ad 97 c3"
+    },
+    {
+      "side": "blue",
+      "segment": 3,
+      "name": "RIGHT_TO_HOME",
+      "D_mm": 650,
+      "H_cdeg": 0,
+      "U_cdeg": 9000,
+      "task_id": 10,
+      "action_id": 103,
+      "seq": 43,
+      "context_hex": "a3 b3 1d 2b 00 0a 00 67 00 00 00 00 95 51 c3",
+      "command_hex": "a3 b3 18 2b 14 d1 02 8a 00 00 23 28 5a 68 c3"
+    },
+    {
+      "side": "red",
+      "name": "FINISH_D0",
+      "seq": 44,
+      "task_id": 10,
+      "action_id": 103,
+      "context_hex": "a3 b3 1d 2c 00 0a 00 67 00 00 00 00 b3 61 c3",
+      "command_hex": "a3 b3 18 2c 14 d9 00 00 00 00 69 78 5a f9 c3"
+    },
+    {
+      "side": "red",
+      "name": "SEARCH_READY",
+      "seq": 45,
+      "task_id": 10,
+      "action_id": 104,
+      "context_hex": "a3 b3 1d 2d 00 0a 00 68 00 00 00 00 ea f0 c3",
+      "command_hex": "a3 b3 18 2d 14 c9 00 00 00 00 00 00 68 da c3"
+    },
+    {
+      "side": "blue",
+      "name": "FINISH_D0",
+      "seq": 44,
+      "task_id": 10,
+      "action_id": 103,
+      "context_hex": "a3 b3 1d 2c 00 0a 00 67 00 00 00 00 b3 61 c3",
+      "command_hex": "a3 b3 18 2c 14 d1 00 00 00 00 23 28 e4 65 c3"
+    },
+    {
+      "side": "blue",
+      "name": "SEARCH_READY",
+      "seq": 45,
+      "task_id": 10,
+      "action_id": 104,
+      "context_hex": "a3 b3 1d 2d 00 0a 00 68 00 00 00 00 ea f0 c3",
+      "command_hex": "a3 b3 18 2d 14 c1 00 00 00 00 00 00 e1 1a c3"
+    }
+  ]
+}

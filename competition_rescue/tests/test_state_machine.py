@@ -2286,8 +2286,8 @@ def test_bulldozer_route_policy_geometry_and_three_centimetre_arrival():
     for side, sign in (("red", 1), ("blue", -1)):
         r = ObstacleRoute(side, (1,), ("green_supply",), "material", (-.15*sign, .54*sign),
                           (-.15*sign, .54*sign), ("danger_cyan",), "sweep")
-        assert r.sweep_point == (-.56*sign, .94*sign)
-        assert abs(1.5 - abs(r.sweep_point[1]) - .56) < 1e-9
+        assert r.sweep_point == (-.56*sign, .91*sign)
+        assert abs(1.5 - abs(r.sweep_point[1]) - .59) < 1e-9
         r.index = r.steps.index(RouteStep.LEFT_TO_SWEEP)
         x, y = r.sweep_point
         assert r.payload(x+.031, y, pose_valid=True)[0] > 0
@@ -2543,3 +2543,71 @@ def test_cluster_green_loss_and_range_wait_do_not_borrow_a_far_anchor():
                m._cluster_approach_output(missing, status, now, pose=pose()))
         assert out.event == "green_anchor_lost_reselect" and out.command.opcode == CMD_HOLD
         assert m.cluster_target_track_id is None and m.selected_batch is None
+
+
+def test_attack_return_release_frame_geometry_for_all_start_sides():
+    import math
+    from attack_return import AttackReturnRoute
+    for side, sign in (("red",1),("blue",-1)):
+        for zone in (1,2,3,4):
+            for offset in (0.,17.,-17.):
+                yaw = (270 if side=="red" else 90)+offset
+                cfg=CompetitionSettings(side=side,start_zone=zone)
+                origin=cfg.stash_point
+                r=AttackReturnRoute(side,zone,origin,yaw,cfg.post_delivery_return_point)
+                angle=math.radians(yaw);f=(math.cos(angle),math.sin(angle));left=(-f[1],f[0])
+                assert r.start_same_side == ((zone<=2)==(side=="red"))
+                assert r.waypoints[-1] == (0.,.30*sign)
+                assert math.dist(origin,r.waypoints[0]) == .1 or math.isclose(math.dist(origin,r.waypoints[0]),.1)
+                assert math.isclose(math.dist(r.waypoints[0],r.waypoints[1]),.5)
+                for i in (0,1):
+                    delta=tuple(a-b for a,b in zip(r.waypoints[i],origin if i==0 else r.waypoints[0]))
+                    axis=tuple(-v for v in f) if i==0 else left
+                    assert math.isclose(sum(a*b for a,b in zip(delta,axis)),(.1,.5)[i])
+                back=tuple(a-b for a,b in zip(r.waypoints[2],r.waypoints[1]))
+                right=tuple(a-b for a,b in zip(r.waypoints[3],r.waypoints[2]))
+                assert sum(a*b for a,b in zip(back,f)) < 0
+                assert sum(a*b for a,b in zip(right,left)) < 0
+                assert abs(sum(a*b for a,b in zip(back,left))) < 1e-10
+                assert abs(sum(a*b for a,b in zip(right,f))) < 1e-10
+                # D=0 remains latched after the permitted 5cm arrival.
+                target=r.waypoints[0]
+                assert r.payload(target[0]+.05,target[1])[0]==0
+                assert r.payload(target[0]+.20,target[1])[0]==0
+
+
+def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_ready():
+    from protocol import CMD_BULLDOZER_STEP
+    from obstacle_route import RouteStep
+    for side, sign in (("red",1),("blue",-1)):
+        m=CompetitionMission(CompetitionSettings(side=side))
+        m._select_batch(CargoBatch((1,),('green_supply',),'stash',initial_stash=True))
+        m._set_state(CompetitionState.INITIAL_RELEASE,1.)
+        p=PoseSnapshot(True,.15*sign,-.69*sign,270 if sign==1 else 90,0)
+        release=StmSnapshot(mode=34,flags=0,age_ms=0,context_valid=True,context_matches=True,
+                            accepted_command=CMD_RELEASE_BOTH,action_status=3)
+        out=m.step(VisionSnapshot(frame_sequence=10),p,release,1.)
+        assert out.state==CompetitionState.INITIAL_ATTACK_RETURN and out.command.opcode==CMD_BULLDOZER_STEP
+        assert out.command.flags>>4==RouteStep.EMPTY_BODY_MOVE and out.command.arg_a==100
+        assert out.command.arg_b==(9000 if sign==1 else -9000)
+        assert m.initial_stash_done and m.stash_has_cargo and not m.first_common_delivered
+        old=replace(release,mode=25,accepted_command=CMD_BULLDOZER_STEP,context_matches=False)
+        for index in range(4):
+            target=m.attack_return_route.waypoints[index]
+            at=replace(p,x_m=target[0],y_m=target[1])
+            out=m.step(VisionSnapshot(frame_sequence=11+index),at,old,2.+index)
+            assert m.attack_return_route.index==index and out.command.arg_a==0
+            out=m.step(VisionSnapshot(frame_sequence=11+index),at,replace(old,context_matches=True),2.1+index)
+            assert m.attack_return_route.index==index+1
+        assert out.command.flags>>4==RouteStep.PICKUP_READY
+        # A completed movement is not completion of the new SEARCH-ready action.
+        out=m.step(VisionSnapshot(frame_sequence=20),at,replace(old,context_matches=True),7.)
+        assert m.state==CompetitionState.INITIAL_ATTACK_RETURN
+        out=m.step(VisionSnapshot(frame_sequence=21),at,replace(old,context_matches=True,mode=3),7.1)
+        assert m.state==CompetitionState.SEARCH and out.command.opcode==CMD_HOLD
+        assert m.return_search_frame_floor==21 and m.attack_return_route is None
+    defense=CompetitionMission(CompetitionSettings(side='red',opening_strategy='defense'))
+    defense._select_batch(CargoBatch((1,),('green_supply',),'stash',initial_stash=True))
+    defense._set_state(CompetitionState.INITIAL_RELEASE,1.)
+    out=defense.step(VisionSnapshot(),pose(),release,1.)
+    assert out.state==CompetitionState.RETURN_CENTER and out.command.opcode==CMD_RETURN_CENTER
