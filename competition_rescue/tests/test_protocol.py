@@ -103,6 +103,24 @@ def test_empty_body_move_extension_keeps_field_translation_and_chassis_heading_s
         assert command_context_frame(9,11,12,0)[3]==packet[3]
 
 
+def test_attack_face_opponent_extension_keeps_old_sweep_turns_fixed():
+    from protocol import CMD_BULLDOZER_STEP
+    for flags, heading in ((0xE9, 27000), (0xE1, 9000)):
+        packet = mission_frame(9, CMD_BULLDOZER_STEP, flags, 0, 0, heading)
+        assert int.from_bytes(packet[10:12], "big") == heading
+        assert packet[12:14] == crc16_modbus(packet[2:12]).to_bytes(2, "little")
+        for wrong in (0, 18000, (heading + 18000) % 36000):
+            try:
+                mission_frame(9, CMD_BULLDOZER_STEP, flags, 0, 0, wrong)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("wrong attack-facing heading accepted")
+    # Existing step0/4 retain their original red/blue sweep headings.
+    for flags, heading in ((0x09, 0), (0x01, 18000), (0x49, 9000), (0x41, 27000)):
+        mission_frame(1, CMD_BULLDOZER_STEP, flags, 0, 0, heading)
+
+
 def test_near_claw_separation_flag_has_no_transport_or_motion_payload():
     from protocol import CMD_DISPERSE_PILE,CMD_DISPERSE_NEAR_KEEP,CMD_SIDE_VALID,CMD_TARGET_RIGHT
     for side in (0,CMD_TARGET_RIGHT):

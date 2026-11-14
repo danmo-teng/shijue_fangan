@@ -143,6 +143,8 @@ def mission_frame(
             expected = (0 if flags & CMD_RED_SIDE else 18000)
             if step == RouteStep.TURN_LEFT:
                 expected = (expected + 9000) % 36000
+            elif step == RouteStep.ATTACK_FACE_OPPONENT:
+                expected = 27000 if flags & CMD_RED_SIDE else 9000
             valid = arg_a == arg_b == 0 and aux_cdeg == expected
         elif step in LOCAL_DISTANCES:
             valid = (arg_a == LOCAL_DISTANCES[step] and arg_b == 0 and

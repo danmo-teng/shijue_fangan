@@ -1,19 +1,19 @@
-# 开局进攻放货后的绕行返程
+# 开局进攻先正对对面安全区，再放货绕行返程
 
-基于84a2bf1，用户批准路线及“复用0x14、只新增一个空载保向移动子步骤”。本轮不实施mode52取消接口或其他历史待办。
+本轮基于f4e74dd，用户审核路线图后批准修正进攻朝向。16:40正式实跑为蓝方/1区/进攻，上位f4e74dd，UART actual63d75a8/dirty1；业务日志为rescue_map/runtime/history/20000101_080054_competition/，传感器为competition_wheel_input/20261114_164011_competition_wheel/。原第38行记录松爪yaw315.709°，旧左移目标Y=1.117523m，证明不能把该朝向当正确返程基准；坐标是日志估计/命令目标，不是地面独立测量。
 
-原INITIAL_RELEASE在放货完成后调用普通_begin_return，默认目标仍是中心。现只有进攻开局改走INITIAL_ATTACK_RETURN：收到本次释放完成后，冻结实际车中心P和主yaw对应的场地航向θ，目标R红(0,+0.30)/蓝(0,-0.30)m。出发区1/2在上边、3/4在下边：红1/2同边、蓝3/4同边，其余异边；R始终由己方颜色决定，不沿用出发朝向计算左右。
+进攻抵达藏点先锁本次NAV D0，以原成对DONE结束移动，再进入INITIAL_ATTACK_ALIGN，保持本次已审核载荷和闭爪，转正朝对面安全区：红270°、蓝90°。本次成对转向DONE/mode25才发原RELEASE_BOTH，原释放完成才进入INITIAL_ATTACK_RETURN；旧NAV/转向/释放回包不能跨动作推进。防守开局及普通投送返程保持。
 
-以f=(cosθ,sinθ)、l=(-sinθ,cosθ)计：A=P−0.10f；B=A+0.50l；C=B+((R−B)·f)f；最后R。冻结后不因每帧位置变化重算路线，实时位置仅用于当前段剩余D/H。正常进攻朝向下，第三段沿后方、第四段沿车右；图上的正上下方向不能直接代替松爪实测θ。四段均按5cm到点锁D=0，等待原成对DONE才推进；10/50cm是标称路线，不把指令/回执当卷尺精度。
+释放完成后冻结实际车中心P，θ固定为上述己方对应的对面朝向，实际release_yaw_deg单独保留为证据，不再用它定义左右。以f=(cosθ,sinθ)、l=(-sinθ,cosθ)计：A=P−0.10f；B=A+0.50l；C=B+((R−B)·f)f；最后R红(0,+.30)/蓝(0,-.30)m。四段仍按5cm到点锁D0/原成对DONE推进，同边/异边都按己方决定R。原返程点、标称10/50cm及普通RETURN不变，不以DONE宣称地面精度。
 
-复用0x18/opcode0x14，增加step13 EMPTY_BODY_MOVE：A=剩余D(mm)、B=场地平移H(有符号厘度)、U=本次释放的固定车头yaw(无符号厘度)。同段心跳/H-D更新保持actionID；换段分配新actionID，同taskID，不额外握手。四段完成后复用原step12恢复搜索姿态并以原相机/新帧规则开始首绿搜索。普通投送后返己方点、防守开局返程、mode51、雷达/SDK轮速和原扫障0..12语义不变。
+同一0x18/opcode0x14增加step14 ATTACK_FACE_OPPONENT：A=B=0，U红27000/蓝9000，P1红0xE9/蓝0xE1。原step0/4方向固定，不能借改它们的语义实现。下位内部复用现有连续转向控制及原到角窗口，完成后mode25/COMPLETED；入口仅本任务已完成initial-stash NAV、闭爪及原合法initial-stash审核，保留审核以接受接下来的原释放。无新TYPE/opcode、握手、计时或ISR任务。
+
+原step13 EMPTY_BODY_MOVE的A/B/U布局及执行保持，U现由上位固定为红27000/蓝9000；同段H/D刷新不换action，换段新action，四段后原step12恢复搜索。不把D0重解释成转向，避免改变搜索轮换的结束语义。机器合同见contracts/f405_empty_body_move_20261114.json；新请求MATCH-ATTACK-FACING-20261114。
 
 扫障左边距本轮56→59cm；红S(-0.56,+0.91)/蓝(+0.56,-0.91)m，后边距94cm、各轴±3cm及扫障路线保持。机器合同中的目标值同步更新。
 
 修改文件：attack_return.py、state_machine.py、run_competition_rescue.py、obstacle_route.py、protocol.py及原有三份检查文件；当前摘要/TODO/固定请求和机器合同同步。没有写人工ROI、模型、原始日志或归档定位工作，没有开启设备/电机。
 
-**初次交付时的部署依赖：当时F405 main只接受step0..12，不能用该旧固件运行新进攻返程。**本轮RDK只读核对Task.c(blob d6fc57e32dbeda1d7ba53c3a49dfd28665f4ff35)、vision.c(9b775e6e1c18587b2ca04c35debe44c7d3166e4e)、vision.h(46ff22e20947f861bd97d008c3abccf0e7328255)；没有读取本轮板端实际版本、改固件或烧录。下位负责人先核对接受/调整最小配套，再提交推送并烧录回传；不把上位发布当下位已审核。固定请求MATCH-ATTACK-RETURN-20261114，详细字段/成对十六进制例子见contracts/f405_empty_body_move_20261114.json。
+**当前部署依赖：** F405 main及16:40实跑actual为63d75a8/dirty1，已有step13/SEARCH入口和前轮近爪配套；新step14尚待接收方审核、实现及用户安排烧录。审查Task.c blob a9f65ebf0427ae0e19da1d9803def4af0d299f2b，dirty差异未知，不等同板内完整字节。本窗口只读下位、不烧录、不重启入口或发车；不能用旧固件声称新转正流程已验证。
 
-12项必要离线检查、8文件语法/diff通过，覆盖8种起点/己方组合及斜车头、四段坐标/5cm锁D0、旧/错动作回执不推进、同段不换ID/换段换ID、末尾step12→SEARCH、原防守/普通投送返程及旧扫障协议。实际执行速度、轮滑和地面5cm精度未验收；配套固件就绪后需重开整个正式待机入口加载，不自动发车或执行USB恢复。
-
-后续11-14复核：F405已回传并在main实现step13，未确认烧录。两侧搜索点轮换又需要空爪SEARCH入口，单列MATCH-SEARCH-ROTATION-20261114；原始审查blob保留作当时证据，不覆盖新回执。
+7项必要上位检查通过：8种起点/己方及任意原yaw的固定对面坐标系、转正后才松爪、错/旧DONE不推进、四段/SEARCH交接、原step0..13协议及成对CRC/同段action保持。无实车动作；转正带载效果、转向后地面点位及机械放货仍待联合验证。

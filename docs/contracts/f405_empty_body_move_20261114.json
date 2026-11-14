@@ -1,9 +1,9 @@
 {
   "id": "MATCH-ATTACK-RETURN-20261114",
-  "version": 1,
-  "status": "lower_step13_implemented_flashing_unconfirmed_search_entry_extension_pending",
-  "human_approved_scope": "reuse_0x14_add_one_empty_fixed_yaw_body_move_substep",
-  "actual_lower_version": "not_read_this_turn",
+  "version": 2,
+  "status": "upper_face_opponent_implemented_lower_step14_pending_review",
+  "human_approved_scope": "face_opponent_before_release_then_fixed_opponent_frame_return",
+  "actual_lower_version": "16:40 raw UART 63d75a88c4e13cce11fb8731aca14383269e8ce5 dirty1; step14 not yet implemented",
   "base_steps_0_through_12": "unchanged",
   "wire": {
     "type": 24,
@@ -17,7 +17,7 @@
     "fields": {
       "A": "unsigned semantic D 0..5000 mm in signed big-endian int16",
       "B": "field-frame translation H -18000..18000 centidegrees in signed big-endian int16",
-      "U": "frozen release-time chassis yaw 0..35999 centidegrees in big-endian uint16"
+      "U": "fixed opponent-facing chassis yaw: red27000 / blue9000 centidegrees; release actual yaw logged separately"
     }
   },
   "pairing": {
@@ -41,7 +41,7 @@
     "final_search": "after fourth step13 DONE, upper sends existing step12/PICKUP_READY; retain paired DONE through mode3"
   },
   "route": {
-    "reference": "actual release centre and primary-yaw field heading, frozen once",
+    "reference": "actual release centre, fixed red270deg / blue90deg opponent-facing frame; never arbitrary release yaw",
     "moves": [
       "back 0.10m",
       "left 0.50m",
@@ -226,5 +226,39 @@
       "contract": "f405_search_station_20261114.json",
       "status": "lower_search_entry_review_pending"
     }
-  }
+  },
+  "face_before_release": {
+    "opcode": 20,
+    "step": 14,
+    "name": "ATTACK_FACE_OPPONENT",
+    "A": 0,
+    "B": 0,
+    "U_red_cdeg": 27000,
+    "U_blue_cdeg": 9000,
+    "entry": "owned completed initial-stash NAV, closed claws, actual legal initial-stash audit; before RELEASE_BOTH",
+    "implementation": "reuse existing continuous turning controller and arrival window; no servo/release or audit reset",
+    "completion": "same task/action/opcode, original COMPLETED mode25; then existing RELEASE_BOTH action",
+    "preserve": "audit, cargo, route_to_stash and original release acceptance; old step0/4 heading validation unchanged",
+    "not_authorized": "no fresh handshake, time qualification, PID/speed/ISR/telemetry or firmware deployment"
+  },
+  "facing_examples": [
+    {
+      "side": "red",
+      "task_id": 10,
+      "action_id": 99,
+      "sequence": 39,
+      "context_hex": "a3 b3 1d 27 00 0a 00 63 00 00 00 00 31 91 c3",
+      "command_hex": "a3 b3 18 27 14 e9 00 00 00 00 69 78 19 ca c3",
+      "source": "synthetic_offline_not_transmitted"
+    },
+    {
+      "side": "blue",
+      "task_id": 10,
+      "action_id": 99,
+      "sequence": 39,
+      "context_hex": "a3 b3 1d 27 00 0a 00 63 00 00 00 00 31 91 c3",
+      "command_hex": "a3 b3 18 27 14 e1 00 00 00 00 23 28 a7 56 c3",
+      "source": "synthetic_offline_not_transmitted"
+    }
+  ]
 }

@@ -1,8 +1,12 @@
-"""Opening-attack return waypoints in the release-time chassis frame."""
+"""Opening-attack return waypoints after facing the opponent's safe zone."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+
+
+def opponent_heading_deg(side: str) -> float:
+    return 270.0 if side == "red" else 90.0
 
 
 @dataclass
@@ -18,7 +22,8 @@ class AttackReturnRoute:
     waypoints: tuple[tuple[float, float], ...] = field(init=False)
 
     def __post_init__(self) -> None:
-        angle = math.radians(self.release_yaw_deg)
+        # Actual release yaw remains evidence, never the definition of left/back.
+        angle = math.radians(self.return_yaw_deg)
         forward = math.cos(angle), math.sin(angle)
         left = -forward[1], forward[0]
         back10 = tuple(p - .10*f for p, f in zip(self.release_xy_m, forward))
@@ -27,6 +32,10 @@ class AttackReturnRoute:
         along = sum((r-p)*f for r, p, f in zip(self.return_point, left50, forward))
         back_to_row = tuple(p + along*f for p, f in zip(left50, forward))
         self.waypoints = back10, left50, back_to_row, self.return_point
+
+    @property
+    def return_yaw_deg(self) -> float:
+        return opponent_heading_deg(self.side)
 
     @property
     def start_same_side(self) -> bool:
@@ -47,4 +56,4 @@ class AttackReturnRoute:
         self.arrival_latched = self.arrival_latched or distance <= self.tolerance_m + 1e-9
         heading = math.degrees(math.atan2(dy, dx))
         return (0 if self.arrival_latched else min(5000, round(distance*1000)),
-                round(heading*100), round(self.release_yaw_deg*100) % 36000)
+                round(heading*100), round(self.return_yaw_deg*100))

@@ -2545,17 +2545,20 @@ def test_cluster_green_loss_and_range_wait_do_not_borrow_a_far_anchor():
         assert m.cluster_target_track_id is None and m.selected_batch is None
 
 
-def test_attack_return_release_frame_geometry_for_all_start_sides():
+def test_attack_return_opponent_frame_geometry_for_all_start_sides():
     import math
     from attack_return import AttackReturnRoute
     for side, sign in (("red",1),("blue",-1)):
         for zone in (1,2,3,4):
-            for offset in (0.,17.,-17.):
-                yaw = (270 if side=="red" else 90)+offset
+            for yaw in (0., 135., 315.709, 90., 270.):
                 cfg=CompetitionSettings(side=side,start_zone=zone)
                 origin=cfg.stash_point
                 r=AttackReturnRoute(side,zone,origin,yaw,cfg.post_delivery_return_point)
-                angle=math.radians(yaw);f=(math.cos(angle),math.sin(angle));left=(-f[1],f[0])
+                angle=math.radians(270 if side=="red" else 90)
+                f=(math.cos(angle),math.sin(angle));left=(-f[1],f[0])
+                assert r.release_yaw_deg == yaw
+                assert r.return_yaw_deg == (270 if side == "red" else 90)
+                assert r.payload(*origin)[2] == round(r.return_yaw_deg * 100)
                 assert r.start_same_side == ((zone<=2)==(side=="red"))
                 assert r.waypoints[-1] == (0.,.30*sign)
                 assert math.dist(origin,r.waypoints[0]) == .1 or math.isclose(math.dist(origin,r.waypoints[0]),.1)
@@ -2574,6 +2577,47 @@ def test_attack_return_release_frame_geometry_for_all_start_sides():
                 target=r.waypoints[0]
                 assert r.payload(target[0]+.05,target[1])[0]==0
                 assert r.payload(target[0]+.20,target[1])[0]==0
+
+
+def test_attack_faces_opponent_before_release_and_does_not_adopt_old_done():
+    from protocol import CMD_BULLDOZER_STEP
+    from obstacle_route import RouteStep
+    for side in ("red", "blue"):
+        for zone in (1, 2, 3, 4):
+            cfg = CompetitionSettings(side=side, start_zone=zone)
+            m = CompetitionMission(cfg)
+            m._select_batch(CargoBatch((1,), ("green_supply",), "stash", initial_stash=True))
+            m._set_state(CompetitionState.INITIAL_STASH_NAV, 1.)
+            m.navigation_initial_ack = 1
+            p = PoseSnapshot(True, *cfg.stash_point, 315.709, 0.)
+            nav_done = StmSnapshot(mode=10, age_ms=0, flags=114, acknowledged_sequence=2,
+                context_valid=True, context_matches=True,
+                accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=3)
+            running = replace(nav_done, flags=82, action_status=1)
+            finish = m.step(VisionSnapshot(), p, running, 1.8)
+            assert finish.state == CompetitionState.INITIAL_STASH_NAV
+            assert finish.command.opcode == CMD_NAVIGATE_WAYPOINT and finish.command.arg_a == 0
+            jitter = replace(p, x_m=p.x_m + .08)
+            assert m.step(VisionSnapshot(), jitter, running, 1.9).command.arg_a == 0
+            out = m.step(VisionSnapshot(), p, nav_done, 2.)
+            assert out.state == CompetitionState.INITIAL_ATTACK_ALIGN
+            assert out.command.opcode == CMD_BULLDOZER_STEP
+            assert out.command.flags >> 4 == RouteStep.ATTACK_FACE_OPPONENT
+            assert out.command.aux == (27000 if side == "red" else 9000)
+            out.command.to_frame(3)
+            assert m.step(VisionSnapshot(), p, nav_done, 2.1).state == CompetitionState.INITIAL_ATTACK_ALIGN
+            turn = replace(nav_done, mode=25, accepted_command=CMD_BULLDOZER_STEP)
+            assert m.step(VisionSnapshot(), p, replace(turn, context_matches=False), 2.2).state == CompetitionState.INITIAL_ATTACK_ALIGN
+            assert m.step(VisionSnapshot(), p, replace(turn, action_status=1), 2.3).state == CompetitionState.INITIAL_ATTACK_ALIGN
+            out = m.step(VisionSnapshot(), p, turn, 2.4)
+            assert out.state == CompetitionState.INITIAL_RELEASE and out.command.opcode == CMD_RELEASE_BOTH
+            assert m.selected_batch.initial_stash and not m.initial_stash_done
+            # Turning DONE cannot complete the newly allocated release action.
+            assert m.step(VisionSnapshot(), p, turn, 2.5).state == CompetitionState.INITIAL_RELEASE
+            release = replace(turn, mode=34, accepted_command=CMD_RELEASE_BOTH, flags=0)
+            out = m.step(VisionSnapshot(), p, release, 2.6)
+            assert out.state == CompetitionState.INITIAL_ATTACK_RETURN
+            assert out.command.aux == (27000 if side == "red" else 9000)
 
 
 def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_ready():

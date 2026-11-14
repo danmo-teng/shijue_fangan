@@ -2544,6 +2544,7 @@ class CompetitionPlanner:
                                 else asdict(self.mission.obstacle_route)),
             "attack_return_route": (None if self.mission.attack_return_route is None else dict(
                 asdict(self.mission.attack_return_route),
+                return_yaw_deg=self.mission.attack_return_route.return_yaw_deg,
                 start_same_side=self.mission.attack_return_route.start_same_side)),
             "search_transfer_route": (None if self.mission.search_transfer_route is None
                                       else asdict(self.mission.search_transfer_route)),
@@ -2837,6 +2838,7 @@ class CompetitionPlanner:
                         }
                         if output.event.startswith("attack_return_") and self.mission.attack_return_route is not None:
                             event_data["attack_return_route"] = dict(asdict(self.mission.attack_return_route),
+                                return_yaw_deg=self.mission.attack_return_route.return_yaw_deg,
                                 start_same_side=self.mission.attack_return_route.start_same_side)
                         if output.event.startswith("search_transfer_") and self.mission.search_transfer_route is not None:
                             event_data["search_transfer_route"] = asdict(self.mission.search_transfer_route)

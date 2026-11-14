@@ -13,7 +13,7 @@ from enum import Enum
 import math
 from statistics import median
 from typing import Iterable
-from attack_return import AttackReturnRoute
+from attack_return import AttackReturnRoute, opponent_heading_deg
 from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
 
@@ -480,6 +480,7 @@ class CompetitionState(str, Enum):
     GRAB = "GRAB"
     POST_GRAB_AUDIT = "POST_GRAB_AUDIT"
     INITIAL_STASH_NAV = "INITIAL_STASH_NAV"
+    INITIAL_ATTACK_ALIGN = "INITIAL_ATTACK_ALIGN"
     INITIAL_RELEASE = "INITIAL_RELEASE"
     INITIAL_ATTACK_RETURN = "INITIAL_ATTACK_RETURN"
     SEARCH = "SEARCH"
@@ -794,6 +795,7 @@ class CompetitionMission:
         self.safe_zone_view_pitch_cdeg = 12000
         self.obstacle_route: ObstacleRoute | None = None
         self.attack_return_route: AttackReturnRoute | None = None
+        self.initial_attack_arrival_latched = False
         self.search_transfer_route: SearchTransferRoute | None = None
         self.search_transfer_epoch = 0
         self.search_point_sign = int(settings.side_sign)
@@ -1163,6 +1165,8 @@ class CompetitionMission:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_ATTACK_RETURN:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH)
+        if self.state == CompetitionState.INITIAL_ATTACK_ALIGN:
+            return (STM_MODE_NAVIGATE, STM_MODE_REMOTE_ACTION)
         if self.state == CompetitionState.RECOVERY_WAIT:
             return (STM_MODE_RECOVERY_WAIT,)
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
@@ -1363,6 +1367,7 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.initial_attack_arrival_latched = False
         self.post_grab_half_close_active = False
         self.post_grab_regrip_seen = False
         self.post_grab_last_wire_mode = None
@@ -4917,6 +4922,23 @@ class CompetitionMission:
             event="search_transfer_target_seen" if newly_interrupted else "",
             motion_expected=payload[0] != 0, reason="search_transfer_yield" if route.interrupted else "search_transfer_move")
 
+    def _attack_align_output(self, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        complete = (stm.context_valid and stm.context_matches and
+                    stm.mode == STM_MODE_REMOTE_ACTION and
+                    stm.accepted_command == CMD_BULLDOZER_STEP and bool(stm.action_status & 2))
+        if complete:
+            self._set_state(CompetitionState.INITIAL_RELEASE, now)
+            self._arm_initial_release(stm, now)
+            return CompetitionOutput(self.state, CommandRequest(CMD_RELEASE_BOTH, self._side_flags()),
+                "进攻点已正对对面安全区，释放后按该朝向绕行返程",
+                self.selected_batch, event="attack_heading_aligned", reason="attack_heading_aligned")
+        return CompetitionOutput(self.state,
+            CommandRequest(CMD_BULLDOZER_STEP,
+                self._side_flags() | (int(RouteStep.ATTACK_FACE_OPPONENT) << 4),
+                aux=round(opponent_heading_deg(self.settings.side) * 100)),
+            "到进攻点先保持夹持，转正朝对面安全区，再松爪返程",
+            self.selected_batch, motion_expected=True, reason="attack_face_opponent")
+
     def _attack_return_output(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
     ) -> CompetitionOutput:
@@ -4948,7 +4970,7 @@ class CompetitionMission:
         return CompetitionOutput(self.state,
             CommandRequest(CMD_BULLDOZER_STEP,
                 self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
-            f"开局绕行/{name}：目标{route.waypoints[route.index]}，保向{route.release_yaw_deg:.1f}°",
+            f"开局绕行/{name}：目标{route.waypoints[route.index]}，保向{route.return_yaw_deg:.1f}°",
             motion_expected=True, reason=f"attack_return_{name.lower()}",
             expected_stm_modes=(STM_MODE_REMOTE_ACTION,))
 
@@ -5981,7 +6003,18 @@ class CompetitionMission:
                     stm.distance_done
                 )
             )
-            if reached:
+            if reached or (self.settings.opening_strategy == "attack" and
+                           self.initial_attack_arrival_latched):
+                if self.settings.opening_strategy == "attack":
+                    self.initial_attack_arrival_latched = True
+                    if not (stm.distance_done and stm.context_valid and stm.context_matches and
+                            stm.accepted_command == CMD_NAVIGATE_WAYPOINT and bool(stm.action_status & 2)):
+                        return CompetitionOutput(self.state,
+                            replace(self._stash_navigation_command(pose, target), arg_a=0),
+                            "已到进攻点，沿本次NAV D0结束移动后转正",
+                            self.selected_batch, reason="attack_stash_navigation_finish")
+                    self._set_state(CompetitionState.INITIAL_ATTACK_ALIGN, now)
+                    return self._attack_align_output(stm, now)
                 self._set_state(CompetitionState.INITIAL_RELEASE, now)
                 self._arm_initial_release(stm, now)
                 return CompetitionOutput(self.state, CommandRequest(CMD_RELEASE_BOTH, self._side_flags()), "到达临时藏物资点，释放整批物资", self.selected_batch, event="stash_arrived")
@@ -7180,6 +7213,9 @@ class CompetitionMission:
 
         if self.state in {CompetitionState.INITIAL_STASH_NAV, CompetitionState.NAVIGATE}:
             return self._navigate(vision, pose, stm, now)
+
+        if self.state == CompetitionState.INITIAL_ATTACK_ALIGN:
+            return self._attack_align_output(stm, now)
 
         if self.state == CompetitionState.INITIAL_RELEASE:
             initial_release_command = CommandRequest(

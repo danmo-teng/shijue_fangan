@@ -21,13 +21,15 @@ class RouteStep(IntEnum):
     RIGHT_TO_STAGE = 11
     PICKUP_READY = 12
     EMPTY_BODY_MOVE = 13  # Extension: requires MATCH-ATTACK-RETURN-20261114 firmware.
+    ATTACK_FACE_OPPONENT = 14  # Before opening release; retains the held stash audit.
 
 
 LIVE_STEPS = frozenset({RouteStep.BACK_TO_SWEEP, RouteStep.LEFT_TO_SWEEP,
                         RouteStep.BACK_TO_STAGE, RouteStep.RIGHT_TO_STAGE})
 LOCAL_DISTANCES = {RouteStep.FORWARD_PARK: 200, RouteStep.BACK_200: -200,
                    RouteStep.SWEEP_1000: 1000}
-TURN_STEPS = frozenset({RouteStep.TURN_RIGHT, RouteStep.TURN_LEFT})
+TURN_STEPS = frozenset({RouteStep.TURN_RIGHT, RouteStep.TURN_LEFT,
+                        RouteStep.ATTACK_FACE_OPPONENT})
 ACTUATOR_STEPS = frozenset({RouteStep.RELEASE_LOAD, RouteStep.FULL_OPEN,
                             RouteStep.RAISE_RETURN, RouteStep.PICKUP_READY})
 
@@ -107,6 +109,8 @@ class ObstacleRoute:
             return None
         heading = self.sweep_heading_cdeg
         if step in TURN_STEPS:
+            if step == RouteStep.ATTACK_FACE_OPPONENT:
+                return 0, 0, (heading + 27000) % 36000
             return 0, 0, (heading if step == RouteStep.TURN_RIGHT
                            else (heading + 9000) % 36000)
         if step in LOCAL_DISTANCES:
