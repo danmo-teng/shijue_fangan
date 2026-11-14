@@ -6920,6 +6920,19 @@ class CompetitionMission:
                     CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
                     CompetitionState.WAIT_SAFE_ZONE_CLEAR,
                 })):
+            if (vision.safe_zone_filter_blocked and vision.safe_bbox is not None and
+                    self.safe_zone_visual_frame > 0 and
+                    stm.camera_pitch_cdeg == self.safe_zone_view_pitch_cdeg):
+                # The runner retains a box for its existing two missed frames.
+                # Continue the last real ALIGN, with its original frame ID;
+                # a cached box never updates pixels or authorizes ENTER/sweep.
+                return CompetitionOutput(
+                    self.state, self._safe_zone_visual_align_command(),
+                    "短暂漏框，保留原对准动作；下一真实框直接更新横差",
+                    self.selected_batch, tx_policy="normal_command",
+                    reason="safe_zone_visual_short_gap",
+                    expected_stm_modes=(STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE),
+                )
             if (vision.safe_bbox is None or vision.safe_zone_filter_blocked or
                     stm.camera_pitch_cdeg != self.safe_zone_view_pitch_cdeg):
                 self._begin_safe_zone_acquire(vision, now)

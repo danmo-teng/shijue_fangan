@@ -2123,7 +2123,7 @@ def test_visual_lateral_uses_live_target_not_ack_and_keeps_local_straight_enter(
 def test_locked_safe_zone_loss_reacquires_higher_view_without_losing_cargo():
     from protocol import CMD_ALIGN_SAFE_ZONE, CMD_VISUAL_CORRECTION_VALID
     for side in ("red", "blue"):
-        for pitch, lost_kind in ((12000, "missing"), (12000, "filtered"),
+        for pitch, lost_kind in ((12000, "missing"),
                                  (12000, "pitch"), (11500, "missing")):
             m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False))
             batch = CargoBatch((1,), ("green_supply",), "material")
@@ -2172,6 +2172,41 @@ def test_locked_safe_zone_loss_reacquires_higher_view_without_losing_cargo():
                 reported, 1.05).state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
             m._reset_safe_zone_alignment()
             assert not m.safe_zone_reobserve_visual and m.safe_zone_higher_view_ready_s is None
+
+
+def test_locked_safe_zone_short_gap_preserves_real_action_without_authorizing_entry():
+    from protocol import CMD_ALIGN_SAFE_ZONE
+    for state in (CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+                  CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
+                  CompetitionState.WAIT_SAFE_ZONE_CLEAR):
+        m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False,
+                                                   bulldozer_enabled=True))
+        m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+        m.state = state
+        m.safe_zone_view_pitch_cdeg = 11500
+        m._update_safe_zone_visual_target((28, 9, 717, 140), 10)
+        m.safe_zone_visual_locked = state != CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        command = m._safe_zone_visual_align_command()
+        status = StmSnapshot(mode=11, flags=2, camera_pitch_cdeg=11500, age_ms=0,
+            context_valid=True, context_matches=True, accepted_command=CMD_ALIGN_SAFE_ZONE, action_status=3)
+        for frame in (11, 12):
+            cached = VisionSnapshot(frame_sequence=frame, safe_bbox=(28, 9, 717, 140),
+                safe_zone_filter_blocked=True,
+                safe_corridor_polygon=((1,1),(2,1),(2,2)),
+                safe_corridor_obstacle_class="danger_cyan")
+            out = m.step(cached, pose(), status, frame * .1)
+            assert out.state == state and out.reason == "safe_zone_visual_short_gap"
+            assert out.command == command and out.command.source_vision_frame == 10
+            assert m.safe_zone_visual_frame == 10 and m.obstacle_route is None
+        if state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX:
+            live = m.step(VisionSnapshot(frame_sequence=13, safe_bbox=(42,15,775,134)),
+                          pose(), status, 1.3)
+            assert live.state == state and live.command.source_vision_frame == 13
+            assert live.command.arg_a == -81 and live.reason == "safe_zone_visual_align_wait"
+        # Once the runner's original two-frame cache is gone, reuse full reobserve.
+        lost = m.step(VisionSnapshot(frame_sequence=14, safe_bbox=None), pose(), status, 1.4)
+        assert lost.state == CompetitionState.ACQUIRE_SAFE_ZONE
+        assert lost.event == "safe_zone_visual_reobserve" and lost.command.source_vision_frame == 0
 
 
 def test_platform_mixture_returns_to_existing_load_audit_before_enter():

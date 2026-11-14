@@ -2913,6 +2913,42 @@ def test_only_green_capture_ignores_bottom_point_at_fortyfive_percent_overlap():
     assert "green_supply" in held.items  # No obsolete foot rule in the closed-claw cache.
 
 
+def test_safe_zone_two_frame_cache_keeps_align_ids_and_real_source_frame():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from protocol import CMD_ALIGN_SAFE_ZONE
+    from state_machine import CargoBatch
+    m = CompetitionMission(CompetitionSettings(side='blue', initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ('injured_orange',), 'injury'))
+    m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+    m.safe_zone_view_pitch_cdeg = 11500
+    box = (28, 9, 717, 140)
+    m._update_safe_zone_visual_target(box, 10)
+    p = PoseSnapshot(True, -.29, -.51, 270., 0.)
+    status = StmSnapshot(mode=10, flags=2, camera_pitch_cdeg=11500, age_ms=0,
+        context_valid=True, context_matches=True, accepted_command=CMD_ALIGN_SAFE_ZONE, action_status=1)
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        planner = CompetitionPlanner(m, root/'pose', root/'stm', root/'command', root/'diag', JsonlLog(root/'events'), 50)
+        planner._publish(m.step(VisionSnapshot(frame_sequence=10, safe_bbox=box), p, status, 1.))
+        ids = planner.protocol_task, planner.protocol_action
+        status = replace(status, task_id=ids[0], action_id=ids[1])
+        for frame in (11, 12):
+            cached = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False), box,
+                status, m, frame, safe_zone_filter_blocked=True)
+            out = planner._output_for_cycle(cached, p, status, False, 1.+frame*.01)
+            planner._publish(out)
+            assert out.reason == 'safe_zone_visual_short_gap' and out.command.arg_a == -134
+            assert out.command.source_vision_frame == 10
+            assert (planner.protocol_task, planner.protocol_action) == ids
+        live = VisionSnapshot(frame_sequence=13, safe_bbox=(42,15,775,134))
+        out = planner._output_for_cycle(live, p, status, False, 1.2)
+        planner._publish(out)
+        assert out.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
+        assert out.command.source_vision_frame == 13 and out.command.arg_a == -81
+        assert (planner.protocol_task, planner.protocol_action) == ids
+
+
 def test_attack_return_live_updates_keep_action_and_each_leg_changes_action():
     from dataclasses import replace
     from protocol import CMD_BULLDOZER_STEP, CMD_RELEASE_BOTH
