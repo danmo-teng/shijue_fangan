@@ -1,0 +1,125 @@
+{
+  "id": "MATCH-RECOVERED-INJURY-AUDIT-20261114",
+  "version": 1,
+  "status": "upper_implemented_lower_review_implementation_deployment_pending",
+  "scope": "recovered original single injury after real post-grab audit, same continuously closed batch through existing STAGE NAV",
+  "actual_lower_observed": "16:40 raw UART 63d75a88c4e13cce11fb8731aca14383269e8ce5 dirty1; not evidence of this new feature",
+  "wire": {
+    "type": 24,
+    "opcode": 3,
+    "reuse_flag": 32,
+    "flag_name": "REUSE_POST_GRAB_AUDIT",
+    "required_existing_flags": [
+      "VALID",
+      "DISTANCE_VALID",
+      "STAGE_ONLY"
+    ],
+    "compact_flags_blue": 113,
+    "compact_flags_red": 121,
+    "fields": "unchanged A=D(mm), B=0, U=field translation H(cdeg)",
+    "context_type": 29,
+    "status_type": 30,
+    "no_new_handshake": true
+  },
+  "upper": {
+    "origin": "original-load recovery tracked for injury and material; audit reuse only for single injury destination",
+    "authorization": "actual mode22 paired post-grab CARGO_AUDIT confirmation; one injury / closed claws / original READY and VALID",
+    "completion": "current paired NAV DONE with original READY/VALID then existing pose ALIGN, no additional audit frame/count",
+    "revoke": [
+      "observed open claw",
+      "release/separation/recovery",
+      "new batch/clear carried load",
+      "positive carried class/count conflict",
+      "normal mode48 entered or lower audit absent"
+    ],
+    "negative_detection": "does not invent empty load or new positive evidence"
+  },
+  "lower_requested": {
+    "accept": "NAV bit5 only with original STAGE payload; retain real legal single-injury audit from post-grab mode22",
+    "motion": "preserve original H/D, D0 braking, heading and DONE",
+    "handoff": "marked completed current NAV may accept existing pose ALIGN without mode48; reuse original safe-align controller",
+    "fallback": "ordinary STAGE/mode48 for unmarked or no matching real local audit",
+    "revoke": "honor NAV clearing bit or original CARGO_AUDIT, release/separation/original failure recovery/empty SEARCH/new task/ABORT; never leave one-end-only permission"
+  },
+  "tradeoff": "one independent end-of-short-return load recheck removed; original physical close audit and observed-conflict recheck retained",
+  "unchanged": [
+    "original ordinary mode48",
+    "15s audit recovery",
+    "class/count/first-green/transport legality",
+    "PID/speeds/servo/ISR/telemetry",
+    "STOP/PAUSE/mode51"
+  ],
+  "no_additions": [
+    "age/time qualification",
+    "freshness gate",
+    "extra handshake or wait",
+    "FAULT/permanent stop",
+    "independent lower test code/program"
+  ],
+  "examples": [
+    {
+      "side": "blue",
+      "D_mm": 245,
+      "H_cdeg": 33993,
+      "task_id": 10,
+      "action_id": 100,
+      "sequence": 40,
+      "context_hex": "a3 b3 1d 28 00 0a 00 64 00 00 00 00 c5 a1 c3",
+      "command_hex": "a3 b3 18 28 03 71 00 f5 00 00 84 c9 00 28 c3",
+      "source": "synthetic_offline_not_transmitted"
+    },
+    {
+      "side": "blue",
+      "D_mm": 0,
+      "H_cdeg": 33993,
+      "task_id": 10,
+      "action_id": 100,
+      "sequence": 41,
+      "context_hex": "a3 b3 1d 29 00 0a 00 64 00 00 00 00 c8 31 c3",
+      "command_hex": "a3 b3 18 29 03 71 00 00 00 00 84 c9 81 ad c3",
+      "source": "synthetic_offline_not_transmitted"
+    },
+    {
+      "side": "red",
+      "D_mm": 245,
+      "H_cdeg": 15993,
+      "task_id": 10,
+      "action_id": 100,
+      "sequence": 40,
+      "context_hex": "a3 b3 1d 28 00 0a 00 64 00 00 00 00 c5 a1 c3",
+      "command_hex": "a3 b3 18 28 03 79 00 f5 00 00 3e 79 fb 3c c3",
+      "source": "synthetic_offline_not_transmitted"
+    },
+    {
+      "side": "red",
+      "D_mm": 0,
+      "H_cdeg": 15993,
+      "task_id": 10,
+      "action_id": 100,
+      "sequence": 41,
+      "context_hex": "a3 b3 1d 29 00 0a 00 64 00 00 00 00 c8 31 c3",
+      "command_hex": "a3 b3 18 29 03 79 00 00 00 00 3e 79 7a b9 c3",
+      "source": "synthetic_offline_not_transmitted"
+    }
+  ],
+  "lost_original_load": {
+    "scope": [
+      "injured_orange",
+      "green_supply",
+      "core_black"
+    ],
+    "evidence": [
+      "existing bounded original-pickup observation has no candidate",
+      "MCU mode24 abandonment/recovery",
+      "MCU mode47 abandonment-return handoff",
+      "open-claw mode3 after actual approach/close execution or confirmed carried manifest"
+    ],
+    "action": "drop original route/target/carried manifest/audit reuse/delivery evidence; original recovery/return then ordinary SEARCH for other targets; never increment delivery count",
+    "protocol_pending": "handle the actual recovery observation before waiting for old NAV/ALIGN ACK",
+    "not_loss": [
+      "initial PICKUP_READY mode3 before new approach executes",
+      "detector gap alone while claws stay closed"
+    ],
+    "lower_change": "no new recovery protocol/action/timer; clear any audit-reuse latch on the existing failure/search exits"
+  }
+}

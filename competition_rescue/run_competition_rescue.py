@@ -1917,6 +1917,8 @@ class CompetitionPlanner:
     def _is_recovery_observation(self, stm: StmSnapshot) -> bool:
         if not stm.fresh:
             return False
+        if self.mission._original_recovery_lost(stm):
+            return True
         state = self.mission.state
         if stm.mode in {24, 3} and self.mission.committed_audit_handoff_mode is not None:
             return True

@@ -56,6 +56,7 @@ CMD_USE_FINAL_HEADING = 1 << 2
 CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
 CMD_CLUSTER_TARGET = 1 << 5
+CMD_REUSE_POST_GRAB_AUDIT = 1 << 5  # STAGE NAV only; recovered single injury, no new count.
 CMD_FIRST_GREEN_BUMP = 1 << 5
 CMD_APPROACH_RANGE = 1 << 6
 CMD_STAGE_ONLY = 1 << 6
@@ -162,8 +163,14 @@ def mission_frame(
         CMD_APPROACH_TARGET,
         CMD_DISPERSE_PILE,
         CMD_BULLDOZER_STEP,
+        CMD_NAVIGATE_WAYPOINT,
     }:
-        raise ValueError("bit5 is only valid for APPROACH_TARGET or DISPERSE_PILE")
+        raise ValueError("bit5 requires an approach, disperse, bulldozer or STAGE NAV command")
+    if command == CMD_NAVIGATE_WAYPOINT and flags & CMD_REUSE_POST_GRAB_AUDIT:
+        required = CMD_VALID | CMD_DISTANCE_VALID | CMD_STAGE_ONLY
+        if (flags & required != required or arg_a < 0 or arg_b != 0 or
+                not 0 <= aux_cdeg < 36000):
+            raise ValueError("audit reuse requires the existing STAGE NAV distance/heading payload")
     if command == CMD_APPROACH_TARGET and flags & CMD_APPROACH_RANGE:
         allowed = CMD_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if (flags & ~allowed or flags & (CMD_VALID | CMD_DISTANCE_VALID) != (CMD_VALID | CMD_DISTANCE_VALID) or

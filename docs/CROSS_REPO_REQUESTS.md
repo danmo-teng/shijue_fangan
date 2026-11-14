@@ -16,6 +16,28 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
+## 当前请求MATCH-RECOVERED-INJURY-AUDIT-20261114：回抓单伤员短送复用真实合爪审核
+
+本轮按用户“按分析修改完善”推进，采用仅回抓单伤员的有限复用：原新扫障/取障返回`pickup_role=original`、目的地injury，完成真实合爪审核后连续闭爪短送；普通运输独立mode48保持。代价是本类短送少一次途中掉货/混入异常的末端复核，真实合爪审核及已观察冲突仍保留，不用时间窗口定义资格。
+
+用户随后明确：确认丢失的伤员和物资都结束本次原载荷找回，恢复找其他物资，不无限追旧物。RDK已统一补原观察无候选、24/47恢复/返程、已实际接近/合爪后的空爪SEARCH退出，并在Planner旧ACK等待前接管，清旧路线/目标/载荷/复用且不加送达计数；初始尚未执行接近的SEARCH及闭爪偶发漏框不误判。此退出复用已有下位状态，无新固件动作或协议；物资不因此跳过普通mode48。
+
+证据为16:40实跑f4e74dd/actual63d75a8 dirty1：498.868单调秒合爪审核到mode22，499.887 NAV原STAGE交接，499.948 mode48，此后98条检测94条无原始框。用户确认窗口仍在、车停并抬舵机收爪；末尾截断，不能声称15s出口已实际触发，也不按上位崩溃修改。Task.c blob a9f65ebf0427ae0e19da1d9803def4af0d299f2b及vision.c已只读核对，现有解析/ALIGN入口不支持新语义。
+
+接收方先按实际代码审查，可接受、缩小、调整或拒绝；最小配套建议：
+
+1. 仅原0x18/opcode0x03 STAGE NAV新增P1 bit5=0x20，命名REUSE_POST_GRAB_AUDIT。结合原VALID/DISTANCE_VALID/STAGE_ONLY，红蓝compact flags0x79/0x71；A/B/U仍原D/0/场地平移H，原完整方向对形式可保持。不得改变APPROACH的CLUSTER、DISPERSE的FIRST_GREEN_BUMP或0x14 step含义。
+2. 只在已有本次真实合法单伤员合爪审核、闭爪、非initial-stash的mode22→NAV记录复用请求；不伪造数量、READY/VALID、新帧，不新增握手。未保留该真实业务状态则沿原STAGE复审处理，不添加全局FAULT/永久停机。
+3. 原H/D、速度/转向、STAGE容差和D0制动/DONE不变。当前标记NAV完成后保留原合法审核，允许下一条现有pose ALIGN从该完成NAV进入，复用task_begin_safe_align；不再为这一次强制切140°/mode48。
+4. 上位撤销NAV标志或发原0x12复审，以及放爪/分离/原失败恢复/空爪SEARCH/换任务/ABORT时撤销复用；沿原NAV更新处理，不重开动作。普通无标志STAGE仍原mode48；不能把撤销只落一端。RDK遇到下位已进mode48或原READY/VALID未保留也回原复审。
+
+上位已实现，14项相关检查通过，包含上述复用/撤销、普通运输、CRC/动作配对和伤员/物资确认找回失败后退出。F405仍待审核/实现/部署，旧63d75a8的actual不证明新标志已支持。无新年龄门/时间资格、ISR/遥测、PID/速度、额外等待或普通异常停机；原15s兜底/人工STOP/mode51不改。不要求新增下位测试代码或独立程序，只做必要构建与原检查，commit/push回传SHA和实际边界。
+
+```text
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_RECOVERED_INJURY_20261114.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_recovered_injury_audit_20261114.json
+```
+
 ## 上位交付MATCH-VISUAL-GAP-20261114：原两帧缺框缓存保留对准，无新下位任务
 
 16:40伤员/危险障碍前卡在安全区视觉对准，约21s内27次复看，NAV已交接而扫障尚未开始。原runner两帧缓存不变，现同视角/原真实ALIGN存在时沿上一真实横差与原帧号续接；真实框回来直接更新，缓存耗尽或视角改变才走原115°复看。缓存不能放行ENTER或触发扫障，不伪造新测量/合格数量；原人工STOP和已提交ENTER优先级保持。

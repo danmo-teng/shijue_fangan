@@ -30,6 +30,7 @@ from protocol import (
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
+    CMD_REUSE_POST_GRAB_AUDIT,
     CMD_DISTANCE_VALID,
     CMD_DRIVE_STRAIGHT,
     CMD_FIRST_GREEN_BUMP,
@@ -796,6 +797,8 @@ class CompetitionMission:
         self.obstacle_route: ObstacleRoute | None = None
         self.attack_return_route: AttackReturnRoute | None = None
         self.initial_attack_arrival_latched = False
+        self.recovering_original_load = False
+        self.recovered_injury_audit_reuse = False
         self.search_transfer_route: SearchTransferRoute | None = None
         self.search_transfer_epoch = 0
         self.search_point_sign = int(settings.side_sign)
@@ -952,6 +955,11 @@ class CompetitionMission:
 
     def _set_state(self, state: CompetitionState, now: float) -> None:
         if self.state != state:
+            if state in {CompetitionState.INVALID_RELEASE, CompetitionState.INVALID_BACKOFF,
+                         CompetitionState.DISPERSE, CompetitionState.RECOVERY_WAIT,
+                         CompetitionState.WAIT_SEARCH_RECOVERY, CompetitionState.SEARCH,
+                         CompetitionState.OBSTACLE_ROUTE}:
+                self.recovered_injury_audit_reuse = False
             if state == CompetitionState.SEARCH:
                 self.attack_return_route = None
                 self.search_transfer_route = None
@@ -1368,6 +1376,8 @@ class CompetitionMission:
 
     def _select_batch(self, batch: CargoBatch) -> None:
         self.initial_attack_arrival_latched = False
+        self.recovering_original_load = False
+        self.recovered_injury_audit_reuse = False
         self.post_grab_half_close_active = False
         self.post_grab_regrip_seen = False
         self.post_grab_last_wire_mode = None
@@ -1407,6 +1417,8 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
+        self.recovering_original_load = False
+        self.recovered_injury_audit_reuse = False
         self.post_grab_half_close_active = False
         self.post_grab_regrip_seen = False
         self.post_grab_last_wire_mode = None
@@ -1428,6 +1440,7 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_carried_manifest(self) -> None:
+        self.recovered_injury_audit_reuse = False
         self.carried_manifest = ()
         self.carried_total_count = 0
         self.carried_has_green = False
@@ -2808,6 +2821,11 @@ class CompetitionMission:
                 # observed, including the cycle following the handoff.
                 self.committed_audit_handoff_mode = stm.mode
                 self._latch_carried_manifest(audit)
+                self.recovered_injury_audit_reuse = (
+                    self.recovering_original_load and audit.total_count == 1 and
+                    self.carried_manifest == ("injured_orange",) and
+                    self.confirmed_delivery_destination == "injury"
+                )
                 self.post_grab_audit_active = False
                 self.post_grab_camera_ready = None
                 if self.safe_sweep_reaudit_active:
@@ -4224,7 +4242,7 @@ class CompetitionMission:
                       if ready_view and item.class_name in allowed]
         if not candidates:
             self.obstacle_route = None
-            self._clear_selected_batch()
+            self._clear_search_recovery_context(vision, clear_carried=True)
             self._set_state(CompetitionState.SEARCH, now)
             return CompetitionOutput(self.state, self._hold(),
                 "定向观察未找到目标，放弃旧找回任务并恢复正常搜索",
@@ -4232,12 +4250,14 @@ class CompetitionMission:
         target = min(candidates, key=lambda item: (
             item.track_id not in route.original_ids if route.pickup_role == "original" else False,
             abs(item.center_px[0] - CAMERA_IMAGE_CENTER_X_PX), -item.area_px))
+        recovering_original = route.pickup_role == "original"
         if route.pickup_role == "original":
             self.obstacle_route = None
         else:
             route.awaiting_obstacle_delivery = True
         destination = "injury" if target.class_name == "injured_orange" else "material"
         self._select_batch(CargoBatch((target.track_id,), (target.class_name,), destination))
+        self.recovering_original_load = recovering_original
         self._reset_delivery_evidence()
         self._mark_target_seen(target, now)
         self._set_state(CompetitionState.APPROACH, now)
@@ -4699,6 +4719,41 @@ class CompetitionMission:
         target_x, _ = self._target_point()
         return abs(pose.x_m - target_x) <= self.settings.fence_lateral_tolerance_m
 
+    def _original_recovery_lost(self, stm: StmSnapshot) -> bool:
+        if (not self.recovering_original_load or not stm.fresh or stm.fault or
+                self.state in {CompetitionState.FAULT, CompetitionState.FINISHED}):
+            return False
+        if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT}:
+            return True  # Existing MCU abandonment/recovery, not a detector miss.
+        return (stm.mode == STM_MODE_SEARCH and not stm.gripper_closed and
+                (self.approach_f407_active_seen or self.post_grab_audit_active or
+                 self.carried_total_count > 0))
+
+    def _abandon_original_recovery(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        self.obstacle_route = None
+        self._reset_safe_zone_alignment()
+        self._reset_delivery_evidence()
+        if stm.mode == STM_MODE_CAPTURE_RETURN_WAIT:
+            self._clear_search_recovery_context(vision, clear_carried=True)
+            self._begin_return(stm, now)
+            output = self._return_center_output(pose, now,
+                "原载荷找回失败，沿原放弃返程结束后寻找其他目标")
+        else:
+            output = self._audit_reacquire_output(vision, stm, now)
+        return replace(output, event="original_recovery_abandoned",
+            reason="original_recovery_lost",
+            message="结束本次原伤员/物资找回，清除旧任务，沿原恢复流程寻找其他目标")
+
+    def _can_reuse_recovered_injury_audit(self) -> bool:
+        return (
+            self.recovered_injury_audit_reuse and self.recovering_original_load and
+            self.selected_batch is not None and not self.selected_batch.initial_stash and
+            self.selected_batch.destination == self.confirmed_delivery_destination == "injury" and
+            self.carried_manifest == ("injured_orange",) and self.carried_total_count == 1
+        )
+
     def _navigation_command(
         self,
         pose: PoseSnapshot,
@@ -4731,6 +4786,8 @@ class CompetitionMission:
         )
         if staging_only and (self.stage_redirect_active or self.transport_separation_active):
             flags |= CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING
+        if staging_only and self._can_reuse_recovered_injury_audit():
+            flags |= CMD_REUSE_POST_GRAB_AUDIT
         return CommandRequest(
             CMD_NAVIGATE_WAYPOINT,
             flags,
@@ -5748,6 +5805,7 @@ class CompetitionMission:
     def _begin_transport_audit(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        self.recovered_injury_audit_reuse = False
         self.stage_redirect_active = False
         self.empty_load_recheck_pending = False
         self.empty_load_view_moved = False
@@ -5984,6 +6042,19 @@ class CompetitionMission:
                         reason="safe_zone_staging_zero_pending",
                         expected_stm_modes=(STM_MODE_NAVIGATE,),
                     )
+                if self._can_reuse_recovered_injury_audit():
+                    paired_nav_done = (stm.context_valid and stm.context_matches and
+                        stm.accepted_command == CMD_NAVIGATE_WAYPOINT and bool(stm.action_status & 2))
+                    if not paired_nav_done:
+                        return CompetitionOutput(self.state, zero_command,
+                            "回抓伤员已到预备点，沿本次NAV D0完成交接",
+                            self.selected_batch, reason="recovered_injury_navigation_finish")
+                    if stm.audit_ready and stm.audit_valid:
+                        self._begin_safe_zone_pose_align(stm, now)
+                        return CompetitionOutput(self.state, self._safe_zone_pose_align_command(),
+                            "回抓单伤员保持闭爪，复用已完成的真实合爪审核，直接开始对准",
+                            self.selected_batch, event="recovered_injury_audit_reused",
+                            reason="recovered_injury_audit_reused")
                 return self._begin_transport_audit(vision, pose, stm, now)
             return CompetitionOutput(
                 self.state,
@@ -6384,6 +6455,15 @@ class CompetitionMission:
     ) -> CompetitionOutput:
         self.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
                                 if pose.valid else None)
+        if self.recovered_injury_audit_reuse:
+            audit = vision.capture_audit if vision.capture_observation_valid else None
+            positive_conflict = (audit is not None and
+                (audit.danger_present or audit.unknown_present or audit.injury_mixed or
+                 (audit.total_count > 0 and
+                  (audit.total_count != 1 or self._manifest_for_audit(audit) != ("injured_orange",)))))
+            if ((stm.fresh and not stm.gripper_closed) or vision.carried_incompatible_cargo or
+                    positive_conflict):
+                self.recovered_injury_audit_reuse = False
         if (stm.fresh and stm.mode == STM_MODE_RECOVERY_WAIT and not stm.fault and
                 self.state not in {CompetitionState.FAULT, CompetitionState.FINISHED}):
             return self._recovery_wait_output(vision, pose, stm, now)
@@ -6464,6 +6544,8 @@ class CompetitionMission:
                 reason="stm_status_stale_pause",
                 expected_stm_modes=self.expected_stm_modes(),
             )
+        if self._original_recovery_lost(stm):
+            return self._abandon_original_recovery(vision, pose, stm, now)
         timeout_output = self._audit_wire_timeout_output(stm, now)
         if timeout_output is not None:
             return timeout_output

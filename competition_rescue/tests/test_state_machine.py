@@ -1608,6 +1608,113 @@ def test_range_cumulative_and_transport_sort() -> None:
     assert nav.command.flags & (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING) == (CMD_STAGE_ONLY | CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING)
 
 
+def _confirmed_recovered_single_injury():
+    from obstacle_route import ObstacleRoute
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False,
+                                               bulldozer_enabled=True))
+    m.first_common_delivered = True
+    m.obstacle_route = ObstacleRoute("blue", (301,), ("injured_orange",), "injury",
+        (-.15,-.54), (-.29,-.51), ("danger_cyan",), "sweep")
+    m.state = CompetitionState.OBSTACLE_PICKUP
+    target = TrackedCargo(7, "injured_orange", .95, (400,200,460,320), hits=6)
+    view = VisionSnapshot(frame_sequence=10, cargo=(target,))
+    m._obstacle_pickup_output(view, replace(stm(), camera_pitch_cdeg=12000), 1.)
+    assert m.recovering_original_load and not m._can_reuse_recovered_injury_audit()
+    audit = CargoAudit(left_class="injured_orange", left_count=1, total_count=1)
+    m._begin_post_grab_audit(view, 2.)
+    for frame, now in ((11,2.), (12,2.12), (13,2.24)):
+        view = VisionSnapshot(frame_sequence=frame, observed_monotonic_s=now, capture_audit=audit)
+        out = m._audit_output(view, replace(stm(mode=23, flags=3), camera_pitch_cdeg=14000), now)
+    accepted = replace(relay_stm(out, mode=22, flags=83, acknowledged_sequence=3,
+        relay_mission_tx_frames=3), camera_pitch_cdeg=14000, context_valid=True,
+        context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    out = m._audit_confirmation_output(view, accepted, 2.25)
+    assert out.reason == "post_grab_audit_confirmed" and m._can_reuse_recovered_injury_audit()
+    return m, view, accepted
+
+
+def test_recovered_injury_keeps_real_post_grab_audit_across_short_stage_navigation():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_REUSE_POST_GRAB_AUDIT
+    m, view, accepted = _confirmed_recovered_single_injury()
+    p = PoseSnapshot(True, -.38, -.456, 155., 0.)
+    nav = m.step(view, p, accepted, 2.26)
+    assert nav.state == CompetitionState.NAVIGATE and nav.command.flags & CMD_REUSE_POST_GRAB_AUDIT
+    assert nav.command.to_frame(5)[5] == 0x71
+    # Reproduce the recorded empty detector output after the real close audit.
+    empty = VisionSnapshot(frame_sequence=20, observed_monotonic_s=3., capture_audit=CargoAudit())
+    p = replace(p, x_m=-.228, y_m=-.508)
+    done = StmSnapshot(mode=10, flags=114, age_ms=0, context_valid=True, context_matches=True,
+        accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=3)
+    align = m.step(empty, p, done, 3.)
+    assert align.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+    assert align.command.opcode == CMD_ALIGN_SAFE_ZONE and align.event == "recovered_injury_audit_reused"
+    assert m.carried_manifest == ("injured_orange",) and m.carried_total_count == 1
+
+
+def test_recovered_injury_reuse_requires_own_nav_done_and_retained_lower_audit():
+    from protocol import CMD_ALIGN_SAFE_ZONE
+    for matches, command, action_status in ((False,CMD_NAVIGATE_WAYPOINT,3),
+                                            (True,CMD_CARGO_AUDIT,3),
+                                            (True,CMD_NAVIGATE_WAYPOINT,1)):
+        m, view, accepted = _confirmed_recovered_single_injury()
+        p = PoseSnapshot(True, -.15, -.54, 155., 0.)
+        m.step(view, p, accepted, 2.26)
+        status = StmSnapshot(mode=10, flags=114, age_ms=0, context_valid=True,
+            context_matches=matches, accepted_command=command, action_status=action_status)
+        waiting = m.step(VisionSnapshot(frame_sequence=20), p, status, 3.)
+        assert waiting.state == CompetitionState.NAVIGATE and waiting.command.arg_a == 0
+        assert waiting.command.opcode == CMD_NAVIGATE_WAYPOINT
+        confirmed = m.step(VisionSnapshot(frame_sequence=21), p,
+            replace(status, context_matches=True, accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=3), 3.1)
+        assert confirmed.command.opcode == CMD_ALIGN_SAFE_ZONE
+    m, view, accepted = _confirmed_recovered_single_injury()
+    p = PoseSnapshot(True, -.15, -.54, 155., 0.)
+    m.step(view, p, accepted, 2.26)
+    unconfirmed = StmSnapshot(mode=10, flags=34, age_ms=0, context_valid=True,
+        context_matches=True, accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=3)
+    fallback = m.step(VisionSnapshot(frame_sequence=20), p, unconfirmed, 3.)
+    assert fallback.state == CompetitionState.TRANSPORT_AUDIT and fallback.command.opcode == CMD_CARGO_AUDIT
+    assert not m.recovered_injury_audit_reuse
+
+
+def test_recovered_injury_reuse_ends_on_open_separation_new_batch_or_positive_conflict():
+    from protocol import CMD_REUSE_POST_GRAB_AUDIT
+    for reason in ("open", "mixed", "carried", "separate", "new_batch", "clear"):
+        m, view, accepted = _confirmed_recovered_single_injury()
+        p = PoseSnapshot(True, -.38, -.456, 155., 0.)
+        if reason == "open":
+            accepted = replace(accepted, flags=81)
+        elif reason == "mixed":
+            view = replace(view, capture_audit=CargoAudit(left_class="injured_orange", left_count=1,
+                right_class="danger_cyan", right_count=1, total_count=2, danger_present=True))
+        elif reason == "carried":
+            view = replace(view, carried_incompatible_cargo=(cargo(99,"core_black",400,400),))
+        elif reason == "separate":
+            m._set_state(CompetitionState.DISPERSE, 2.26)
+        elif reason == "new_batch":
+            m._select_batch(CargoBatch((9,), ("injured_orange",), "injury"))
+        else:
+            m._clear_carried_manifest()
+        if reason in {"open", "mixed", "carried"}:
+            m.step(view, p, accepted, 2.27)
+        assert not m._can_reuse_recovered_injury_audit()
+        assert not m._navigation_command(p, (-.15,-.54), staging_only=True).flags & CMD_REUSE_POST_GRAB_AUDIT
+
+
+def test_ordinary_single_injury_keeps_independent_transport_audit():
+    from protocol import CMD_REUSE_POST_GRAB_AUDIT
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("injured_orange",), "injury"))
+    m._latch_carried_manifest(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
+    m._set_state(CompetitionState.NAVIGATE, 1.)
+    p = PoseSnapshot(True, -.15, -.54, 270., 0.)
+    assert not m._navigation_command(p, (-.15,-.54), staging_only=True).flags & CMD_REUSE_POST_GRAB_AUDIT
+    status = StmSnapshot(mode=10, flags=114, age_ms=0, context_valid=True,
+        context_matches=True, accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=3)
+    out = m.step(VisionSnapshot(frame_sequence=1), p, status, 2.)
+    assert out.state == CompetitionState.TRANSPORT_AUDIT and out.command.opcode == CMD_CARGO_AUDIT
+
+
 def test_transport_audit_continuing_frames_allow_delayed_relay_handoff() -> None:
     from protocol import CMD_ALIGN_SAFE_ZONE
 
@@ -2374,14 +2481,79 @@ def _bulldozer_to_pickup(*, same=False, side="red"):
 
 def test_bulldozer_route_keeps_stash_and_abandons_a_missing_recovery_target():
     for side in ("red", "blue"):
-        m, _, p, s, v = _bulldozer_to_pickup(side=side)
-        out = m.step(replace(v, frame_sequence=v.frame_sequence+1, cargo=()), p, s, 4.)
-        assert out.event == "bulldozer_pickup_abandoned"
-        assert m.state == CompetitionState.SEARCH and m.obstacle_route is None
-        assert out.command.opcode == CMD_HOLD and m.selected_batch is None
+        for destination, name in (("material", "green_supply"), ("injury", "injured_orange")):
+            m, _, p, s, v = _bulldozer_to_pickup(side=side)
+            m.obstacle_route.original_destination = destination
+            m.obstacle_route.original_classes = (name,)
+            out = m.step(replace(v, frame_sequence=v.frame_sequence+1, cargo=()), p, s, 4.)
+            assert out.event == "bulldozer_pickup_abandoned"
+            assert m.state == CompetitionState.SEARCH and m.obstacle_route is None
+            assert out.command.opcode == CMD_HOLD and m.selected_batch is None
+            assert not m.carried_manifest and not m.recovering_original_load
     m, _, _, _, _ = _bulldozer_to_pickup()
     m._set_state(CompetitionState.SEARCH, 5.)
     assert m.obstacle_route is None  # An ordinary recovery/abandon cannot resurrect it.
+
+
+def test_original_injury_and_material_loss_leave_navigation_or_alignment_for_search():
+    from obstacle_route import ObstacleRoute
+    for name, destination in (("injured_orange", "injury"), ("green_supply", "material")):
+        for state in (CompetitionState.NAVIGATE, CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+                      CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX, CompetitionState.SAFE_ZONE_CORRIDOR_CHECK):
+            m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+            m.first_common_delivered = True
+            m._select_batch(CargoBatch((7,), (name,), destination))
+            m.recovering_original_load = True
+            m.recovered_injury_audit_reuse = name == "injured_orange"
+            m._latch_carried_manifest(CargoAudit(left_class=name, left_count=1, total_count=1))
+            m.obstacle_route = ObstacleRoute("blue", (7,), (name,), destination,
+                (-.15,-.54), (-.29,-.51), ("danger_cyan",), "sweep", recover_after_delivery=True)
+            m.state = state
+            m.delivery_count = 4
+            out = m.step(VisionSnapshot(frame_sequence=100), pose(), stm(mode=3, flags=0), 5.)
+            assert out.state == CompetitionState.SEARCH and out.command.opcode == CMD_HOLD
+            assert out.event == "original_recovery_abandoned"
+            assert m.selected_batch is None and m.obstacle_route is None and not m.carried_manifest
+            assert not m.recovering_original_load and not m.recovered_injury_audit_reuse
+            assert m.delivery_count == 4 and m.search_epoch_frame_floor == 100
+
+
+def test_original_load_recovery_or_abandon_return_does_not_resume_old_pickup():
+    for name, destination in (("injured_orange", "injury"), ("core_black", "material")):
+        for mode, expected in ((24,CompetitionState.WAIT_SEARCH_RECOVERY), (47,CompetitionState.RETURN_CENTER)):
+            m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+            m._select_batch(CargoBatch((7,), (name,), destination))
+            m.recovering_original_load = True
+            m._latch_carried_manifest(CargoAudit(left_class=name, left_count=1, total_count=1))
+            m.state = CompetitionState.NAVIGATE
+            out = m.step(VisionSnapshot(frame_sequence=100), pose(), stm(mode=mode), 5.)
+            assert out.state == expected and out.event == "original_recovery_abandoned"
+            assert m.selected_batch is None and m.obstacle_route is None and not m.carried_manifest
+            search = StmSnapshot(mode=3, flags=0, age_ms=0, context_valid=True, context_matches=True,
+                accepted_command=CMD_RETURN_CENTER, action_status=3)
+            out = m.step(VisionSnapshot(frame_sequence=101), pose(), search, 5.1)
+            assert out.state == CompetitionState.SEARCH and out.command.opcode == CMD_HOLD
+            assert m.obstacle_route is None and not m.recovering_original_load
+
+
+def test_original_pickup_initial_search_and_closed_detector_gap_are_not_confirmed_loss():
+    from obstacle_route import ObstacleRoute
+    for name, destination in (("injured_orange", "injury"), ("green_supply", "material")):
+        m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+        m.obstacle_route = ObstacleRoute("blue", (7,), (name,), destination,
+            (-.15,-.54), (-.29,-.51), ("danger_cyan",), "sweep")
+        m.state = CompetitionState.OBSTACLE_PICKUP
+        target = TrackedCargo(7, name, .95, (400,200,460,320), hits=6)
+        search = replace(stm(mode=3), camera_pitch_cdeg=12000)
+        m._obstacle_pickup_output(VisionSnapshot(frame_sequence=10, cargo=(target,)), search, 1.)
+        assert m.recovering_original_load and not m._original_recovery_lost(search)
+        m._latch_carried_manifest(CargoAudit(left_class=name, left_count=1, total_count=1))
+        closed = replace(stm(mode=10, flags=86), context_valid=True, context_matches=True,
+            accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=1)
+        m.state = CompetitionState.NAVIGATE
+        out = m.step(VisionSnapshot(frame_sequence=20, capture_audit=CargoAudit()),
+            PoseSnapshot(True, -.38,-.456,155.,0.), closed, 2.)
+        assert out.state == CompetitionState.NAVIGATE and m.recovering_original_load
 
 
 def test_bulldozer_same_zone_pickup_uses_normal_whole_claw_audit_and_returns_for_stash():

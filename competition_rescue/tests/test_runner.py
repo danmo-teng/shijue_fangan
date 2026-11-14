@@ -2913,6 +2913,74 @@ def test_only_green_capture_ignores_bottom_point_at_fortyfive_percent_overlap():
     assert "green_supply" in held.items  # No obsolete foot rule in the closed-claw cache.
 
 
+def test_original_injury_or_material_loss_preempts_pending_nav_ack():
+    from dataclasses import replace
+    from state_machine import CargoBatch, CargoAudit, TrackedCargo
+    for name, destination in (('injured_orange','injury'),('core_black','material')):
+        m = CompetitionMission(CompetitionSettings(side='blue', initial_stash_enabled=False))
+        m._select_batch(CargoBatch((7,), (name,), destination))
+        m.recovering_original_load = True
+        m._latch_carried_manifest(CargoAudit(left_class=name,left_count=1,total_count=1))
+        m.state = CompetitionState.NAVIGATE
+        p = PoseSnapshot(True,-.38,-.456,155.,0.)
+        v = VisionSnapshot(frame_sequence=10)
+        status = StmSnapshot(mode=10,flags=86,age_ms=0)
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            planner = CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+            planner._publish(m._navigate(v,p,status,1.))
+            empty_search = replace(status,mode=3,flags=0,context_valid=True,
+                task_id=planner.protocol_task,action_id=(planner.protocol_action-1)&65535,
+                accepted_command=CMD_APPROACH_TARGET,action_status=3)
+            out = planner._output_for_cycle(v,p,empty_search,False,1.1)
+            assert out.state == CompetitionState.SEARCH and out.command.opcode == CMD_HOLD
+            assert out.event == 'original_recovery_abandoned'
+            assert m.selected_batch is None and m.obstacle_route is None and not m.carried_manifest
+            planner._publish(out)
+            assert planner.protocol_last_output.command.opcode == CMD_HOLD
+            other = TrackedCargo(99,'green_supply',.95,(600,400,80,100),hits=6)
+            for frame in (11,12,13,14):
+                view = VisionSnapshot(frame_sequence=frame,cargo=(other,),range_pitch_cdeg=12000)
+                out = planner._output_for_cycle(view,p,replace(empty_search,camera_pitch_cdeg=12000),False,1.2+frame*.01)
+                planner._publish(out)
+                if m.selected_batch is not None:
+                    break
+            assert m.selected_batch.track_ids == (99,) and out.command.opcode == CMD_APPROACH_TARGET
+
+
+def test_recovered_injury_nav_reuse_pairs_completion_before_new_align_action():
+    from dataclasses import replace
+    from protocol import CMD_NAVIGATE_WAYPOINT, CMD_ALIGN_SAFE_ZONE, CMD_REUSE_POST_GRAB_AUDIT
+    from state_machine import CargoBatch, CargoAudit
+    m = CompetitionMission(CompetitionSettings(side='blue', initial_stash_enabled=False))
+    m._select_batch(CargoBatch((7,), ('injured_orange',), 'injury'))
+    m._latch_carried_manifest(CargoAudit(left_class='injured_orange', left_count=1, total_count=1))
+    m.recovering_original_load = m.recovered_injury_audit_reuse = True  # Real close-audit handoff covered in mission checks.
+    m._set_state(CompetitionState.NAVIGATE, 1.)
+    p = PoseSnapshot(True, -.38, -.456, 155., 0.)
+    v = VisionSnapshot(frame_sequence=10)
+    status = StmSnapshot(mode=10, flags=86, age_ms=0, context_valid=True,
+        context_matches=True, accepted_command=CMD_NAVIGATE_WAYPOINT, action_status=1)
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        planner = CompetitionPlanner(m, root/'pose', root/'stm', root/'command', root/'diag', JsonlLog(root/'events'), 50)
+        planner._publish(m._navigate(v, p, status, 1.))
+        ids = planner.protocol_task, planner.protocol_action
+        updated = m._navigate(v, replace(p, x_m=-.30, y_m=-.50), status, 1.1)
+        planner._publish(updated)
+        assert updated.command.flags & CMD_REUSE_POST_GRAB_AUDIT
+        assert (planner.protocol_task, planner.protocol_action) == ids
+        at = replace(p, x_m=-.228, y_m=-.508)
+        old = replace(status, flags=114, task_id=ids[0], action_id=(ids[1]-1)&65535, action_status=3)
+        waiting = planner._output_for_cycle(v, at, old, False, 1.2)
+        assert waiting.state == CompetitionState.NAVIGATE
+        current = replace(old, action_id=ids[1])
+        align = planner._output_for_cycle(v, at, current, False, 1.3)
+        assert align.command.opcode == CMD_ALIGN_SAFE_ZONE and align.event == 'recovered_injury_audit_reused'
+        planner._publish(align)
+        assert planner.protocol_task == ids[0] and planner.protocol_action != ids[1]
+
+
 def test_safe_zone_two_frame_cache_keeps_align_ids_and_real_source_frame():
     from dataclasses import replace
     from types import SimpleNamespace

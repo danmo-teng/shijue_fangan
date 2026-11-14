@@ -121,6 +121,22 @@ def test_attack_face_opponent_extension_keeps_old_sweep_turns_fixed():
         mission_frame(1, CMD_BULLDOZER_STEP, flags, 0, 0, heading)
 
 
+def test_reused_post_grab_audit_flag_only_extends_stage_nav():
+    from protocol import CMD_NAVIGATE_WAYPOINT, CMD_REUSE_POST_GRAB_AUDIT, CMD_STAGE_ONLY, CMD_DISTANCE_VALID
+    for red in (0,8):
+        flags = CMD_VALID | CMD_STAGE_ONLY | CMD_DISTANCE_VALID | CMD_REUSE_POST_GRAB_AUDIT | red
+        for distance in (0,245):
+            packet = mission_frame(9, CMD_NAVIGATE_WAYPOINT, flags, distance, 0, 27000)
+            assert packet[5] == flags and packet[12:14] == crc16_modbus(packet[2:12]).to_bytes(2,'little')
+        for bad_flags in (flags & ~CMD_STAGE_ONLY, flags & ~CMD_DISTANCE_VALID):
+            try:
+                mission_frame(9, CMD_NAVIGATE_WAYPOINT, bad_flags, 245, 0, 27000)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("audit reuse outside STAGE NAV accepted")
+
+
 def test_near_claw_separation_flag_has_no_transport_or_motion_payload():
     from protocol import CMD_DISPERSE_PILE,CMD_DISPERSE_NEAR_KEEP,CMD_SIDE_VALID,CMD_TARGET_RIGHT
     for side in (0,CMD_TARGET_RIGHT):
