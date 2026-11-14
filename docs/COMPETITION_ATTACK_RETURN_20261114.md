@@ -12,6 +12,8 @@
 
 修改文件：attack_return.py、state_machine.py、run_competition_rescue.py、obstacle_route.py、protocol.py及原有三份检查文件；当前摘要/TODO/固定请求和机器合同同步。没有写人工ROI、模型、原始日志或归档定位工作，没有开启设备/电机。
 
-**部署依赖：F405当前main仍只接受step0..12，不能用旧固件直接运行新进攻返程。**本轮RDK只读核对Task.c(blob d6fc57e32dbeda1d7ba53c3a49dfd28665f4ff35)、vision.c(9b775e6e1c18587b2ca04c35debe44c7d3166e4e)、vision.h(46ff22e20947f861bd97d008c3abccf0e7328255)；没有读取本轮板端实际版本、改固件或烧录。下位负责人先核对接受/调整最小配套，再提交推送并烧录回传；不把上位发布当下位已审核。固定请求MATCH-ATTACK-RETURN-20261114，详细字段/成对十六进制例子见contracts/f405_empty_body_move_20261114.json。
+**初次交付时的部署依赖：当时F405 main只接受step0..12，不能用该旧固件运行新进攻返程。**本轮RDK只读核对Task.c(blob d6fc57e32dbeda1d7ba53c3a49dfd28665f4ff35)、vision.c(9b775e6e1c18587b2ca04c35debe44c7d3166e4e)、vision.h(46ff22e20947f861bd97d008c3abccf0e7328255)；没有读取本轮板端实际版本、改固件或烧录。下位负责人先核对接受/调整最小配套，再提交推送并烧录回传；不把上位发布当下位已审核。固定请求MATCH-ATTACK-RETURN-20261114，详细字段/成对十六进制例子见contracts/f405_empty_body_move_20261114.json。
 
 12项必要离线检查、8文件语法/diff通过，覆盖8种起点/己方组合及斜车头、四段坐标/5cm锁D0、旧/错动作回执不推进、同段不换ID/换段换ID、末尾step12→SEARCH、原防守/普通投送返程及旧扫障协议。实际执行速度、轮滑和地面5cm精度未验收；配套固件就绪后需重开整个正式待机入口加载，不自动发车或执行USB恢复。
+
+后续11-14复核：F405已回传并在main实现step13，未确认烧录。两侧搜索点轮换又需要空爪SEARCH入口，单列MATCH-SEARCH-ROTATION-20261114；原始审查blob保留作当时证据，不覆盖新回执。

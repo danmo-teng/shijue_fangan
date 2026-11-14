@@ -16,29 +16,32 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 当前请求MATCH-ATTACK-RETURN-20261114：step13空载保向移动，待F405审核/实现
+## 当前请求MATCH-SEARCH-ROTATION-20261114：step13增加空爪SEARCH入口
 
-用户已批准路线，并选择“复用0x14、增加一个空载保向移动子步骤”；接收方仍须按自己的代码审核、可缩小/调整/拒绝。发布不代表对端已审核、实现或烧录。
+用户已批准两侧搜索点轮换、绕侧面、发现目标让位和保留失败上下文；接收方仍先看自己的实际代码，可接受/调整/拒绝并说明影响。此请求不代表已审核、已实施或已烧录。
 
-**为什么改：** 开局放货后当前RETURN会转车头、直接回中心，不能按要求保持放货朝向先退10cm/左50cm，再退/右移到己方30cm点。RDK已编排四段，只缺F405开放现有保向Fine执行入口；不是再造底盘控制框架。
+**目标与现状：** RDK已把无目标返中心改为(0,+.30)/(0,-.30)m轮换，经较近X=±.50m通道。途中目标出现，原step13同action D=0结束移动，匹配DONE后用原step12回SEARCH，再正常接近/整爪审核。没有直接跨动作发GRAB，也不把中途停车当到站。
 
-**最小配套：** 保留原0x18/opcode0x14与0x1D/0x1E布局、旧step0..12；新增step13 EMPTY_BODY_MOVE。A=实时报来的剩余D 0..5000mm，B=场地平移H −18000..18000厘度，U=固定车头yaw 0..35999厘度。flags高四位13，低位仍VALID/RED，不能套旧左右/聚堆位。
+**只需最小入口配套：** 上一请求step13已实现，勿重复新增枚举/报文/执行器。当前Task.c的empty_move只允许release_done/next_empty_leg，新搜索轮换从mode3会被拒。
 
-- vision.h枚举追加13；vision.c只为13放开U为任意有效场地航向，原0..12校验保持。
-- Task.c把13接入现有task_bulldozer_live_step和Motor_MoveAngleFineHeading：body_angle=wrap(H−当前主yaw)，U独立保向。D>0运行、D=0按现有刹车并COMPLETED/mode25；同action刷新H/D不重启、不改变U。不因转向平移H就把车头转过去，不套旧粗导航缓存。
-- 首个13允许从**本任务已完成的双爪释放mode34、空载状态**进入；之后沿原已完成分段入口接受下一action。只在首次进入清本次放货残留载荷复审/退让上下文，不能误记首绿送达。四段均使用13，同task、每段新action；同段保持action。最后RDK发原step12回SEARCH，不需增加最终状态或专门握手。
-- 现有D/H刷新、动作归属、人工STOP/PAUSE及mode51保持。复用当前速度/保向/斜坡/刹车，不调PID；不新增UART中断、时间/新鲜度资格、反复握手、永久FAULT或测试程序。本请求不包含此前仅讨论的mode52取消方案。
+1. task_accept_bulldozer：按现有step0的空爪SEARCH入口允许step13启动；保留当前任务/action与编号回绕规则，不强求虚构的放货回执。只在首次进入按现有clear_load清旧放弃批次预算/复审，不重开爪、不记首绿或送达。
+2. task_accept_mission：原cancelled-context例外仅放行空爪SEARCH中的step0；同一场景扩到step13。不能只改上一函数而仍在前置判断拒绝。
+3. 原step13执行、D0完成/mode25、固定U、同action H/D更新、step12回SEARCH均保持；无需新增opcode、字段、握手、时限、ISR、FAULT、PID/速度变化或测试程序。本任务不包含mode52取消。
 
-扫障S仅上位参数改为左59cm/后94cm（红−.56,+.91；蓝+.56,−.91m，各轴±3cm），下位不得硬编码旧54/56cm坐标。
+必要编译/原接口核对后commit/push，回传SHA、审核结论和实际烧录身份。当前上位新轮换依赖该入口，上一轮step13固件也不能直接当新入口已支持。
 
-只读依据：F405 main Task.c blob d6fc57e32dbeda1d7ba53c3a49dfd28665f4ff35、vision.c 9b775e6e1c18587b2ca04c35debe44c7d3166e4e、vision.h 46ff22e20947f861bd97d008c3abccf0e7328255；此版本无step13。未重新读取板端实际版本、未写固件/烧录。
-
-请先回传接受/调整/拒绝及原因；实施后commit/push并回传SHA、必要检查及实际烧录身份。上位新进攻路径依赖该配套，旧固件不能直接跑。完整说明、字段及成对帧例：
+只读依据：F405固定回执blob438b29e5d51ebc75a9792cb32c00ad1305e00d9f，Task.c d9ca91acd7485b102a2c80f6e971f5e2fc24878f；当前未读板端actual、未写/烧录对端。说明/字段及原配对帧例：
 
 ```text
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_ATTACK_RETURN_20261114.md
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_empty_body_move_20261114.json
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_SEARCH_ROTATION_20261114.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_search_station_20261114.json
 ```
+
+## 回执MATCH-ATTACK-RETURN-20261114：下位step13已实现，烧录未确认
+
+已读取F405新固定入口及Task/vision实际源码，回执接受a8d1242的step13/H-D-U/成对动作方案，NormalRun/MotionDebug编译及其原夹具检查通过；回执明确未烧录、actual未读。Task/vision.c/vision.h blob分别为d9ca91acd7485b102a2c80f6e971f5e2fc24878f、136acff94ee0f52ec0d40784e1374c39a42bcb7a、ffed3ae83974331b54950e378717d3ffc9721f84。
+
+原放货后四段入口/同段ID及搜索收尾已实现，不重复下发原枚举/解析/保向任务；新增空爪SEARCH入口单列上节。源代码和书面回执不代表板端已烧或地面5cm精度通过。本窗口只读，未改/烧录固件。
 
 ## 当前回执MATCH-SAFE-ENTER-20261113：正式启用及ENTER续接已修，无新下位任务
 

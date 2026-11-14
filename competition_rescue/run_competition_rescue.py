@@ -1762,6 +1762,11 @@ class CompetitionPlanner:
             # All four moves use step13. A leg change, not every D/H refresh,
             # owns the next action ID in the existing task/context protocol.
             range_epoch = ("attack_return", self.mission.attack_return_route.index)
+        if (command.opcode == CMD_BULLDOZER_STEP and
+                self.mission.state == CompetitionState.SEARCH_TRANSFER and
+                self.mission.search_transfer_route is not None):
+            range_epoch = ("search_transfer", self.mission.search_transfer_epoch,
+                           self.mission.search_transfer_route.index)
         key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
         if not overlay or (self.protocol_accepted is None and self.protocol_action_key is None):
             if key != self.protocol_action_key:
@@ -2211,6 +2216,8 @@ class CompetitionPlanner:
                 self._adopt_recovery_context()
                 self.mission._clear_range_approach()
             ranged_vision = replace(vision, range_distances=()) if paused else vision
+            self.mission.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
+                                            if pose.valid else None)
             return self.mission._range_approach_output(ranged_vision, stm, now)
         handoff = self.mission._range_handoff_output(stm)
         if handoff is not None:
@@ -2269,6 +2276,9 @@ class CompetitionPlanner:
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and not stm.fault and
                 stm.mode in {3, 25, 34}):
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (self.mission.state == CompetitionState.SEARCH_TRANSFER and not stm.fault and
+                stm.mode in {3, 25}):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (stm.fresh and stm.mode in {22, 40, 50} and
                 (not self.mission._has_committed_audit(stm.mode) or self.mission.selected_batch is None)):
@@ -2490,6 +2500,12 @@ class CompetitionPlanner:
             "attack_return_route": (None if self.mission.attack_return_route is None else dict(
                 asdict(self.mission.attack_return_route),
                 start_same_side=self.mission.attack_return_route.start_same_side)),
+            "search_transfer_route": (None if self.mission.search_transfer_route is None
+                                      else asdict(self.mission.search_transfer_route)),
+            "search_point_sign": self.mission.search_point_sign,
+            "search_visit": self.mission.search_visit,
+            "search_site_turn_deg": self.mission.search_site_turn_deg,
+            "failed_search_targets": [asdict(r) for r in self.mission.failed_search_targets],
             "safe_sweep_observation": {
                 "key": self.sweep_observation_key,
                 "elapsed_s": (
@@ -2777,6 +2793,10 @@ class CompetitionPlanner:
                         if output.event.startswith("attack_return_") and self.mission.attack_return_route is not None:
                             event_data["attack_return_route"] = dict(asdict(self.mission.attack_return_route),
                                 start_same_side=self.mission.attack_return_route.start_same_side)
+                        if output.event.startswith("search_transfer_") and self.mission.search_transfer_route is not None:
+                            event_data["search_transfer_route"] = asdict(self.mission.search_transfer_route)
+                        if self.mission.failed_search_targets:
+                            event_data["failed_search_targets"] = [asdict(r) for r in self.mission.failed_search_targets]
                         if output.event == "initial_stash_state_anomaly":
                             event_data.update({
                                 "invalid_state": "SEARCH",

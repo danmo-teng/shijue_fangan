@@ -1,7 +1,7 @@
 {
   "id": "MATCH-ATTACK-RETURN-20261114",
   "version": 1,
-  "status": "upper_implemented_lower_review_pending",
+  "status": "lower_step13_implemented_flashing_unconfirmed_search_entry_extension_pending",
   "human_approved_scope": "reuse_0x14_add_one_empty_fixed_yaw_body_move_substep",
   "actual_lower_version": "not_read_this_turn",
   "base_steps_0_through_12": "unchanged",
@@ -219,5 +219,12 @@
       "context_hex": "a3 b3 1d 2d 00 0a 00 68 00 00 00 00 ea f0 c3",
       "command_hex": "a3 b3 18 2d 14 c1 00 00 00 00 00 00 e1 1a c3"
     }
-  ]
+  ],
+  "extensions": {
+    "search_rotation": {
+      "id": "MATCH-SEARCH-ROTATION-20261114",
+      "contract": "f405_search_station_20261114.json",
+      "status": "lower_search_entry_review_pending"
+    }
+  }
 }

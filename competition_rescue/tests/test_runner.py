@@ -2944,3 +2944,29 @@ def test_attack_return_live_updates_keep_action_and_each_leg_changes_action():
         same=planner._output_for_cycle(v,replace(at,x_m=at.x_m+.1),stale,False,1.4)
         planner._publish(same)
         assert planner.protocol_action==second_ids and same.command.arg_a==400
+
+
+def test_search_transfer_updates_and_target_interrupt_keep_action_until_ready():
+    from dataclasses import replace
+    from protocol import CMD_BULLDOZER_STEP
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.initial_stash_done=True;m._set_state(CompetitionState.SEARCH,1.);m.search_yaw_accum_deg=720.
+    p=PoseSnapshot(True,0.,.3,270.,0);v=VisionSnapshot(frame_sequence=1)
+    s=StmSnapshot(mode=3,age_ms=0,context_valid=True,task_id=2,action_id=1)
+    with tempfile.TemporaryDirectory() as directory:
+        root=Path(directory)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        initial=planner._output_for_cycle(v,p,s,False,1.)
+        planner._publish(initial);ids=(planner.protocol_task,planner.protocol_action)
+        previous=replace(s,mode=25,task_id=ids[0],action_id=(ids[1]-1)&65535,
+                         accepted_command=CMD_BULLDOZER_STEP,action_status=3)
+        update=planner._output_for_cycle(v,replace(p,x_m=.1),previous,False,1.1)
+        assert update.command.arg_a==400
+        planner._publish(update);assert (planner.protocol_task,planner.protocol_action)==ids
+        target=runner_module.TrackedCargo(7,'green_supply',.9,(600,500,60,60),hits=4)
+        seen=planner._output_for_cycle(replace(v,frame_sequence=2,cargo=(target,)),p,previous,False,1.2)
+        planner._publish(seen)
+        assert seen.command.arg_a==0 and (planner.protocol_task,planner.protocol_action)==ids
+        ready=planner._output_for_cycle(v,p,replace(previous,action_id=ids[1]),False,1.3)
+        planner._publish(ready)
+        assert ready.command.flags>>4==12 and planner.protocol_action!=ids[1]

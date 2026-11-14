@@ -2611,3 +2611,109 @@ def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_read
     defense._set_state(CompetitionState.INITIAL_RELEASE,1.)
     out=defense.step(VisionSnapshot(),pose(),release,1.)
     assert out.state==CompetitionState.RETURN_CENTER and out.command.opcode==CMD_RETURN_CENTER
+
+
+def test_two_search_stations_alternate_via_side_lane_without_returning_center():
+    from protocol import CMD_BULLDOZER_STEP
+    from obstacle_route import RouteStep
+    for side, own in [('red',1),('blue',-1)]:
+        m=CompetitionMission(CompetitionSettings(side=side,initial_stash_enabled=False))
+        m.initial_stash_done=True
+        m._set_state(CompetitionState.SEARCH,1.)
+        p=PoseSnapshot(True,0.,.30*own,135.,0)
+        v=VisionSnapshot(frame_sequence=10)
+        idle=StmSnapshot(mode=3,flags=0,age_ms=0,context_valid=True,context_matches=False)
+        for cycle in range(2):
+            m.return_search_mode_seen=False;m.search_yaw_accum_deg=720.
+            out=m.step(v,p,idle,2.+cycle*5)
+            assert out.state==CompetitionState.SEARCH_TRANSFER and out.command.opcode==CMD_BULLDOZER_STEP
+            r=m.search_transfer_route
+            expected=-own if cycle==0 else own
+            assert r.target_sign==expected and r.waypoints[-1]==(0.,.30*expected)
+            assert abs(r.lane_x_m)==.5 and r.waypoints[0][1]==p.y_m
+            assert r.waypoints[1][0]==r.waypoints[0][0]
+            original_yaw=out.command.aux
+            done=replace(idle,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=3)
+            for index in range(3):
+                p=replace(p,x_m=r.waypoints[index][0],y_m=r.waypoints[index][1])
+                out=m.step(v,p,done,2.1+cycle*5+index)
+                assert r.index==index and out.command.arg_a==0
+                out=m.step(v,p,replace(done,context_matches=True),2.2+cycle*5+index)
+                assert r.index==index+1
+                if index<2:assert out.command.aux==original_yaw
+            assert out.command.flags>>4==RouteStep.PICKUP_READY
+            out=m.step(v,p,replace(done,mode=3,context_matches=True),6.+cycle*5)
+            assert m.state==CompetitionState.SEARCH and m.search_point_sign==expected
+            assert m.search_visit==cycle+1 and m.search_site_turn_deg==0
+        # A legacy/disabled opening can start at centre: establish the own
+        # point before claiming that the own station has been searched.
+        initial=CompetitionMission(CompetitionSettings(side=side,initial_stash_enabled=False))
+        initial._set_state(CompetitionState.SEARCH,1.);initial.search_yaw_accum_deg=720.
+        initial.step(v,replace(p,y_m=0.),idle,2.)
+        assert initial.search_transfer_route.target_sign==own
+
+
+def test_search_transfer_target_seen_stops_owned_move_then_uses_normal_capture():
+    from protocol import CMD_BULLDOZER_STEP
+    from obstacle_route import RouteStep
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.initial_stash_done=True;m._set_state(CompetitionState.SEARCH,1.)
+    p=PoseSnapshot(True,0.,.3,270.,0)
+    status=StmSnapshot(mode=3,age_ms=0,context_valid=True,context_matches=False)
+    m.search_yaw_accum_deg=720.
+    m.step(VisionSnapshot(frame_sequence=1),p,status,1.)
+    blue=cargo(7,'danger_cyan',600,500)
+    moving=replace(status,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=1)
+    out=m.step(VisionSnapshot(frame_sequence=2,cargo=(blue,)),p,moving,1.1)
+    assert not m.search_transfer_route.interrupted and out.command.arg_a>0
+    green=cargo(8,'green_supply',620,550)
+    out=m.step(VisionSnapshot(frame_sequence=3,cargo=(green,)),p,moving,1.2)
+    assert out.event=='search_transfer_target_seen' and out.command.arg_a==0
+    assert m.search_transfer_route.index==0
+    out=m.step(VisionSnapshot(frame_sequence=4,cargo=(green,)),p,
+        replace(moving,context_matches=True,action_status=3),1.3)
+    assert m.search_transfer_route.search_ready and out.command.flags>>4==RouteStep.PICKUP_READY
+    m.step(VisionSnapshot(frame_sequence=5,cargo=(green,)),p,
+        replace(moving,context_matches=True,action_status=3,mode=3),1.4)
+    assert m.state==CompetitionState.SEARCH and m.search_point_sign==1 and m.search_visit==0
+    out=m.step(VisionSnapshot(frame_sequence=6,cargo=(green,)),p,
+        replace(status,camera_pitch_cdeg=12000),1.5)
+    assert m.state==CompetitionState.APPROACH and out.command.opcode==CMD_APPROACH_TARGET
+    assert m.selected_batch.track_ids==(8,)
+
+
+def test_failed_target_context_survives_recovery_without_hiding_claw_audit():
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.initial_stash_done=True
+    target=cargo(9,'green_supply',600,500)
+    p=PoseSnapshot(True,0.,.3,270.,0)
+    s=StmSnapshot(mode=20,age_ms=0,camera_pitch_cdeg=12000)
+    m.search_observer=(0.,.3,270.,12000)
+    m._select_batch(CargoBatch((9,),('green_supply',),'material'))
+    m._mark_target_seen(target,1.);m.state=CompetitionState.APPROACH
+    m.target_last_observer=(0.,.3,270.,13000)  # Retain the original SEARCH120 view too.
+    m.search_site_turn_deg=400.
+    m._begin_search_recovery(VisionSnapshot(frame_sequence=10),1.5)
+    assert len(m.failed_search_targets)==1
+    m.step(VisionSnapshot(frame_sequence=11),p,replace(s,mode=3),1.6)
+    assert m.search_site_turn_deg==400. and m.search_yaw_accum_deg==0.
+    audit=CargoAudit(left_class='green_supply',right_class='danger_cyan',left_count=1,right_count=1,total_count=2,danger_present=True)
+    replacement=replace(target,track_id=90,bbox=(608,500,40,40))
+    v=VisionSnapshot(cargo=(target,replacement),capture_cargo=(target,),capture_audit=audit)
+    filtered=m._search_vision_without_failures(v)
+    assert filtered.cargo==() and filtered.capture_cargo==v.capture_cargo and filtered.capture_audit is audit
+    m.search_observer=(0.,.3,290.,12000)
+    assert m._search_vision_without_failures(v).cargo==(replacement,)
+    m.search_observer=(0.,.3,270.,10500)
+    assert m._search_vision_without_failures(v).cargo==(replacement,)
+    # A new target selection does not erase the old failure.
+    m._select_batch(CargoBatch((30,),('green_supply',),'material'))
+    assert len(m.failed_search_targets)==1
+    # At a newly reached station, previous failures are retained as history
+    # but permitted a new view rather than becoming a permanent blacklist.
+    m.search_visit+=1
+    assert m._search_vision_without_failures(v).cargo==v.cargo
+    # Cumulative SEARCH motion, rather than repeated recovery resets, ends a visit.
+    m.search_site_turn_deg=720.;m.search_yaw_accum_deg=0.
+    out=m.step(VisionSnapshot(frame_sequence=12),p,replace(s,mode=3),2.)
+    assert out.state==CompetitionState.SEARCH_TRANSFER

@@ -1,0 +1,128 @@
+{
+  "id": "MATCH-SEARCH-ROTATION-20261114",
+  "version": 1,
+  "status": "upper_implemented_lower_search_entry_review_pending",
+  "base_contract": "f405_empty_body_move_20261114.json",
+  "wire_changed": false,
+  "scope": "allow existing step13 from empty SEARCH; reuse same paired action and U/D/H execution",
+  "stations_m": [
+    [
+      0,
+      0.3
+    ],
+    [
+      0,
+      -0.3
+    ]
+  ],
+  "lane_x_m": [
+    -0.5,
+    0.5
+  ],
+  "waypoint_tolerance_m": 0.05,
+  "lower_changes": [
+    "Task task_accept_bulldozer: allow empty SEARCH start13 like existing start0; clear abandoned-load bookkeeping once on entry without scoring a delivery",
+    "Task task_accept_mission: extend the existing cancelled SEARCH/new-action exception for step0 to step13 in the same empty SEARCH case",
+    "Keep repeated same-action U immutable and H/D dynamic; step12 still ends in SEARCH; no receiver/header changes if existing step13 implementation retained"
+  ],
+  "handoff": {
+    "start": "empty mode3, existing task/action rules including rollover",
+    "moving": "mode25, step13 same action H/D refresh",
+    "target_seen": "D=0 ends current owned move; not a claim that destination was reached",
+    "stopped": "matching step13 COMPLETED then step12 new action; matching mode3 COMPLETED precedes normal grab search"
+  },
+  "non_changes": [
+    "no new opcode, packet, acknowledgement or handshake",
+    "no new freshness/age rule, timer or ISR",
+    "no new FAULT/STOP",
+    "no motor/PID/speed changes",
+    "no lower test program requested"
+  ],
+  "hardware": {
+    "actual_version": "not_read",
+    "previous_step13_lower_reply": "implemented_not_flashed",
+    "new_search_entry": "not_implemented_at_read_snapshot"
+  },
+  "examples": [
+    {
+      "side": "red",
+      "phase": 0,
+      "D_mm": 500,
+      "H_cdeg": 0,
+      "U_cdeg": 27000,
+      "context_hex": "a3 b3 1d 14 00 0a 00 64 00 00 00 00 c4 a0 c3",
+      "command_hex": "a3 b3 18 14 14 d9 01 f4 00 00 69 78 d9 3c c3"
+    },
+    {
+      "side": "red",
+      "phase": 1,
+      "D_mm": 600,
+      "H_cdeg": -9000,
+      "U_cdeg": 27000,
+      "context_hex": "a3 b3 1d 15 00 0a 00 65 00 00 00 00 f4 f0 c3",
+      "command_hex": "a3 b3 18 15 14 d9 02 58 dc d8 69 78 ff 2c c3"
+    },
+    {
+      "side": "red",
+      "phase": 2,
+      "D_mm": 500,
+      "H_cdeg": 18000,
+      "U_cdeg": 27000,
+      "context_hex": "a3 b3 1d 16 00 0a 00 66 00 00 00 00 a4 00 c3",
+      "command_hex": "a3 b3 18 16 14 d9 01 f4 46 50 69 78 d5 05 c3"
+    },
+    {
+      "side": "red",
+      "phase": "target_seen_interrupt_first_leg",
+      "not_arrived": true,
+      "context_hex": "a3 b3 1d 1e 00 0a 00 64 00 00 00 00 ba 00 c3",
+      "command_hex": "a3 b3 18 1e 14 d9 00 00 00 00 69 78 17 98 c3"
+    },
+    {
+      "side": "red",
+      "phase": "search_ready_after_first_leg_interrupt",
+      "context_hex": "a3 b3 1d 1f 00 0a 00 65 00 00 00 00 8a 50 c3",
+      "command_hex": "a3 b3 18 1f 14 c9 00 00 00 00 00 00 25 bb c3"
+    },
+    {
+      "side": "blue",
+      "phase": 0,
+      "D_mm": 500,
+      "H_cdeg": 18000,
+      "U_cdeg": 9000,
+      "context_hex": "a3 b3 1d 14 00 0a 00 64 00 00 00 00 c4 a0 c3",
+      "command_hex": "a3 b3 18 14 14 d1 01 f4 46 50 23 28 72 f9 c3"
+    },
+    {
+      "side": "blue",
+      "phase": 1,
+      "D_mm": 600,
+      "H_cdeg": 9000,
+      "U_cdeg": 9000,
+      "context_hex": "a3 b3 1d 15 00 0a 00 65 00 00 00 00 f4 f0 c3",
+      "command_hex": "a3 b3 18 15 14 d1 02 58 23 28 23 28 71 97 c3"
+    },
+    {
+      "side": "blue",
+      "phase": 2,
+      "D_mm": 500,
+      "H_cdeg": 0,
+      "U_cdeg": 9000,
+      "context_hex": "a3 b3 1d 16 00 0a 00 66 00 00 00 00 a4 00 c3",
+      "command_hex": "a3 b3 18 16 14 d1 01 f4 00 00 23 28 7e c0 c3"
+    },
+    {
+      "side": "blue",
+      "phase": "target_seen_interrupt_first_leg",
+      "not_arrived": true,
+      "context_hex": "a3 b3 1d 1e 00 0a 00 64 00 00 00 00 ba 00 c3",
+      "command_hex": "a3 b3 18 1e 14 d1 00 00 00 00 23 28 a9 04 c3"
+    },
+    {
+      "side": "blue",
+      "phase": "search_ready_after_first_leg_interrupt",
+      "context_hex": "a3 b3 1d 1f 00 0a 00 65 00 00 00 00 8a 50 c3",
+      "command_hex": "a3 b3 18 1f 14 c1 00 00 00 00 00 00 ac 7b c3"
+    }
+  ]
+}

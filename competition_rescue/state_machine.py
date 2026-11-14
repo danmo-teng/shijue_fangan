@@ -14,6 +14,7 @@ import math
 from statistics import median
 from typing import Iterable
 from attack_return import AttackReturnRoute
+from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
 
 from protocol import (
@@ -467,6 +468,7 @@ class CompetitionState(str, Enum):
     INITIAL_RELEASE = "INITIAL_RELEASE"
     INITIAL_ATTACK_RETURN = "INITIAL_ATTACK_RETURN"
     SEARCH = "SEARCH"
+    SEARCH_TRANSFER = "SEARCH_TRANSFER"
     CLUSTER_APPROACH = "CLUSTER_APPROACH"
     DISPERSE = "DISPERSE"
     APPROACH = "APPROACH"
@@ -777,6 +779,17 @@ class CompetitionMission:
         self.safe_zone_view_pitch_cdeg = 12000
         self.obstacle_route: ObstacleRoute | None = None
         self.attack_return_route: AttackReturnRoute | None = None
+        self.search_transfer_route: SearchTransferRoute | None = None
+        self.search_transfer_epoch = 0
+        self.search_point_sign = int(settings.side_sign)
+        self.search_visit = 0
+        self.search_site_turn_deg = 0.0
+        self.failed_search_targets: deque[FailedSearchTarget] = deque(maxlen=16)
+        self.search_observer: tuple[float, float, float, int] | None = None
+        self.target_last_observer: tuple[float, float, float, int] | None = None
+        self.target_last_bbox: tuple[int, int, int, int] | None = None
+        self.target_search_bbox: tuple[int, int, int, int] | None = None
+        self.target_search_observer: tuple[float, float, float, int] | None = None
         self.safe_zone_reobserve_visual = False
         self.safe_zone_higher_view_ready_s: float | None = None
         self.safe_zone_freeze_frame_floor: int | None = None
@@ -924,6 +937,7 @@ class CompetitionMission:
         if self.state != state:
             if state == CompetitionState.SEARCH:
                 self.attack_return_route = None
+                self.search_transfer_route = None
             if (state == CompetitionState.SEARCH and self.obstacle_route is not None and
                     not self.obstacle_route.recover_after_delivery):
                 # Failed normal pickup/separation returns to ordinary search;
@@ -1130,6 +1144,8 @@ class CompetitionMission:
         return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.SEARCH_TRANSFER:
+            return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_ATTACK_RETURN:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH)
         if self.state == CompetitionState.RECOVERY_WAIT:
@@ -1308,6 +1324,11 @@ class CompetitionMission:
         self.target_last_center_px = candidate.center_px
         self.target_last_area_px = candidate.area_px
         self.target_last_class = candidate.class_name
+        self.target_last_bbox = candidate.bbox
+        self.target_last_observer = self.search_observer
+        if self.target_search_bbox is None:
+            self.target_search_bbox = candidate.bbox
+            self.target_search_observer = self.search_observer
         self.target_missing_frames = 0
         self.target_missing_frame_sequence = None
         previous_track_id = self.locked_target_track_id
@@ -1354,6 +1375,10 @@ class CompetitionMission:
         self.target_last_center_px = None
         self.target_last_area_px = None
         self.target_last_class = None
+        self.target_last_bbox = None
+        self.target_last_observer = None
+        self.target_search_bbox = None
+        self.target_search_observer = None
         self.target_missing_frames = 0
         self.target_missing_frame_sequence = None
         self.approach_f407_active_seen = False
@@ -1444,10 +1469,41 @@ class CompetitionMission:
         if not self._pose_fresh(pose):
             return
         if self.search_last_yaw_deg is not None:
-            self.search_yaw_accum_deg += abs(
-                angle_error_deg(pose.yaw_deg, self.search_last_yaw_deg)
-            )
+            increment = abs(angle_error_deg(pose.yaw_deg, self.search_last_yaw_deg))
+            self.search_yaw_accum_deg += increment
+            self.search_site_turn_deg += increment
         self.search_last_yaw_deg = pose.yaw_deg
+
+    def _remember_failed_search_target(self) -> None:
+        batch = self.selected_batch
+        if batch is None or batch.initial_stash:
+            return
+        ids = tuple(sorted(set(batch.track_ids) | (
+            {self.locked_target_track_id} if self.locked_target_track_id is not None else set())))
+        category = self.target_last_class or (batch.classes[0] if len(batch.classes) == 1 else "unknown")
+        if not ids or any(r.visit == self.search_visit and r.track_ids == ids and
+                          r.class_name == category for r in self.failed_search_targets):
+            return
+        self.failed_search_targets.append(FailedSearchTarget(self.search_visit, ids, category,
+            self.target_last_bbox or self.cluster_target_bbox, self.target_last_observer,
+            self.target_search_bbox, self.target_search_observer))
+
+    def _search_vision_without_failures(self, vision: VisionSnapshot) -> VisionSnapshot:
+        records = [r for r in self.failed_search_targets if r.visit == self.search_visit]
+        if not records:
+            return vision
+        # Candidate selection only. Never filter the whole-claw cargo/audit.
+        return replace(vision, cargo=tuple(item for item in vision.cargo if not any(
+            record.matches(item, self.search_observer) for record in records)))
+
+    def _search_target_available(self, vision: VisionSnapshot, now: float) -> bool:
+        if not self._vision_fresh(vision, now):
+            return False
+        vision = self._search_vision_without_failures(vision)
+        if not self.first_common_delivered:
+            return any(item.class_name == "green_supply" for item in self._visible_cargo(vision))
+        return (self._choose_next_batch(vision) is not None or
+                self._choose_cluster_target(vision) is not None)
 
     def _observe_search_candidate(
         self, key: tuple | None, vision: VisionSnapshot
@@ -1594,6 +1650,7 @@ class CompetitionMission:
         *,
         clear_carried: bool,
     ) -> None:
+        self._remember_failed_search_target()
         self._clear_range_approach()
         self._clear_pending_audit()
         self._clear_selected_batch()
@@ -4758,7 +4815,14 @@ class CompetitionMission:
             expected_stm_modes=(STM_MODE_SEARCH,),
         )
 
-    def _complete_return_search(self, vision: VisionSnapshot, now: float, message: str) -> CompetitionOutput:
+    def _complete_return_search(
+        self, vision: VisionSnapshot, now: float, message: str, *,
+        point_sign: int | None = None, new_visit: bool = True,
+    ) -> CompetitionOutput:
+        if new_visit:
+            self.search_visit += 1
+            self.search_site_turn_deg = 0.0
+            self.search_point_sign = int(self.settings.side_sign) if point_sign is None else point_sign
         self.disperse_attempts = 0
         self.separation_keep_side = None
         self.separation_side_attempts = 0
@@ -4771,6 +4835,62 @@ class CompetitionMission:
         return CompetitionOutput(self.state, self._hold(), message,
             event="return_search_gate_start", tx_policy="hold",
             reason="return_search_frame_gate", expected_stm_modes=(STM_MODE_SEARCH,))
+
+    def _begin_search_transfer(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        if not pose.valid:
+            return CompetitionOutput(self.state, self._pause(), "换搜索点等待有效位置",
+                reason="search_transfer_pose_unavailable")
+        self._remember_failed_search_target()
+        self._clear_selected_batch()
+        self.search_transfer_epoch += 1
+        target_sign = -self.search_point_sign
+        home = self.settings.post_delivery_return_point
+        if (self.search_visit == 0 and math.dist((pose.x_m, pose.y_m), home) >
+                self.settings.post_delivery_return_tolerance_m):
+            target_sign = int(self.settings.side_sign)  # Establish the own station first.
+        self.search_transfer_route = SearchTransferRoute(self.search_point_sign, target_sign,
+            (pose.x_m, pose.y_m), pose.yaw_deg, int(self.settings.side_sign),
+            self.settings.post_delivery_return_offset_m)
+        self._set_state(CompetitionState.SEARCH_TRANSFER, now)
+        return replace(self._search_transfer_output(vision, pose,
+            replace(stm, context_matches=False), now), event="search_transfer_start")
+
+    def _search_transfer_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        route = self.search_transfer_route
+        assert route is not None
+        complete = (stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_BULLDOZER_STEP and bool(stm.action_status & 2))
+        if route.search_ready:
+            if complete and stm.mode == STM_MODE_SEARCH:
+                interrupted, destination = route.interrupted, route.target_sign
+                return self._complete_return_search(vision, now,
+                    "途中发现可抓目标，结束换点转正常抓取" if interrupted else
+                    f"已到搜索点(0,{destination*self.settings.post_delivery_return_offset_m:+.2f})，开始新一轮观察",
+                    point_sign=destination, new_visit=not interrupted)
+            return CompetitionOutput(self.state,
+                CommandRequest(CMD_BULLDOZER_STEP, self._side_flags() | (int(RouteStep.PICKUP_READY) << 4)),
+                "结束当前换点移动，复用原搜索姿态", reason="search_transfer_ready")
+        if not pose.valid:
+            return CompetitionOutput(self.state, self._pause(), "换搜索点等待有效位置",
+                reason="search_transfer_pose_unavailable")
+        newly_interrupted = not route.interrupted and self._search_target_available(vision, now)
+        route.interrupted = route.interrupted or newly_interrupted
+        payload = route.payload(pose.x_m, pose.y_m)
+        if complete and payload[0] == 0:
+            route.finish_leg()
+            return replace(self._search_transfer_output(vision, pose,
+                replace(stm, context_matches=False), now), event="search_transfer_leg_complete")
+        return CompetitionOutput(self.state,
+            CommandRequest(CMD_BULLDOZER_STEP,
+                self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
+            "途中发现目标：结束当前移动，随后正常审核抓取" if route.interrupted else
+            f"搜索点轮换/{route.index}：绕X={route.lane_x_m:+.2f}m侧通道，目标侧{route.target_sign:+d}",
+            event="search_transfer_target_seen" if newly_interrupted else "",
+            motion_expected=payload[0] != 0, reason="search_transfer_yield" if route.interrupted else "search_transfer_move")
 
     def _attack_return_output(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
@@ -5070,6 +5190,8 @@ class CompetitionMission:
         target = self._cluster_target_for_vision(vision)
         if target is None:
             return None
+        self.target_last_bbox = target.bbox
+        self.target_last_observer = self.search_observer
         items = self._cluster_members_for_target(vision, target)
         # Keep pile context for separation/reassociation, not steering.
         self.cluster_bbox = self._items_bbox(items) or target.bbox
@@ -5201,6 +5323,7 @@ class CompetitionMission:
         )
 
     def _defer_failed_cluster(self, vision: VisionSnapshot) -> None:
+        self._remember_failed_search_target()
         self.deferred_cluster_class = self.cluster_target_class
         self.deferred_cluster_bbox = self.cluster_bbox or self.cluster_target_bbox
         self.deferred_cluster_ids = frozenset(
@@ -5326,6 +5449,7 @@ class CompetitionMission:
     def _start_capture_abandon(
         self, audit: CargoAudit, stm: StmSnapshot, now: float, *, limit_reached: bool = False
     ) -> CompetitionOutput:
+        self._remember_failed_search_target()
         self.invalid_release_side = "both"
         self.invalid_release_final = True
         self.invalid_release_context = "separation_limit_failed" if limit_reached else "final_release"
@@ -5881,23 +6005,9 @@ class CompetitionMission:
                 tx_policy="hold",
                 reason="STALE",
             )
-        if self.deferred_cluster_class is not None:
-            if self.search_yaw_accum_deg >= 360.0:
-                # One search pass gives other targets priority, not a
-                # permanent blacklist when the scene contains only one pile.
-                self.deferred_cluster_ids = frozenset()
-                self.deferred_cluster_bbox = None
-                self.deferred_cluster_class = None
-            else:
-                vision = replace(vision, cargo=tuple(
-                    item for item in vision.cargo
-                    if not (
-                        item.class_name == self.deferred_cluster_class and
-                        (item.track_id in self.deferred_cluster_ids or
-                         (self.deferred_cluster_bbox is not None and
-                          self._boxes_overlap(item.bbox, self.deferred_cluster_bbox)))
-                    )
-                ))
+        original_count = len(vision.cargo)
+        vision = self._search_vision_without_failures(vision)
+        deferred_failure = len(vision.cargo) < original_count
         if not self.first_common_delivered:
             visible = self._visible_cargo(vision)
             visible_green = [
@@ -6010,7 +6120,7 @@ class CompetitionMission:
                     self._mark_target_seen(candidate, now)
                 return CompetitionOutput(self.state, self._approach_command(candidate), f"锁定{batch.total_count}件{batch.destination}批次", batch, event="batch_locked")
             self._observe_search_candidate(None, vision)
-        if self.search_yaw_accum_deg >= self.settings.search_min_turn_deg:
+        if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= self.settings.search_min_turn_deg:
             if not (
                 stm.fresh and
                 stm.mode == STM_MODE_SEARCH and
@@ -6019,18 +6129,15 @@ class CompetitionMission:
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
-                    "两层搜索已完成，等待新鲜mode3和空爪后返场地中心",
+                    "本站搜索达到原扫描额度，等待原SEARCH空爪交接后换搜索点",
                     tx_policy="hold",
-                    reason="search_return_center_gate",
+                    reason="search_transfer_handoff",
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
-            self._begin_return(stm, now)
-            return self._return_center_output(
-                pose,
-                now,
-                "120°和105°两圈未找到合法目标，返回场地中心重启搜索",
-            )
+            return self._begin_search_transfer(vision, pose, stm, now)
         reject_reasons: list[str] = []
+        if deferred_failure:
+            reject_reasons.append("FAILED_TARGET_THIS_VISIT")
         if vision.low_conf_green_seen:
             reject_reasons.append("LOW_CONF")
         if any(item.visible and item.inside_safe_zone for item in vision.cargo):
@@ -6217,6 +6324,8 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
+        self.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
+                                if pose.valid else None)
         if (stm.fresh and stm.mode == STM_MODE_RECOVERY_WAIT and not stm.fault and
                 self.state not in {CompetitionState.FAULT, CompetitionState.FINISHED}):
             return self._recovery_wait_output(vision, pose, stm, now)
@@ -6489,8 +6598,10 @@ class CompetitionMission:
 
         if self.state == CompetitionState.SEARCH:
             if self._separation_limit_reached() or self.recovery_task_locked:
-                self._begin_return(stm, now)
-                return self._return_center_output(pose, now, "旧任务预算待清理，先返中心再寻找")
+                if stm.mode != STM_MODE_SEARCH or stm.gripper_closed:
+                    return CompetitionOutput(self.state, self._hold(),
+                        "沿原SEARCH空爪交接后换搜索点清理旧任务", reason="search_transfer_handoff")
+                return self._begin_search_transfer(vision, pose, stm, now)
             if self.settings.initial_stash_enabled and not self.initial_stash_done:
                 self._clear_search_recovery_context(vision, clear_carried=True)
                 self._set_state(CompetitionState.INITIAL_OBSERVE, now)
@@ -6502,6 +6613,9 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
             return self._handle_search(vision, pose, stm, now)
+
+        if self.state == CompetitionState.SEARCH_TRANSFER:
+            return self._search_transfer_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
             return self._search_recovery_output(vision, stm, now)
@@ -7188,7 +7302,8 @@ class CompetitionMission:
                         replace(stm, context_matches=False), now)
                 return self._complete_return_search(vision, now,
                     f"回到{'己方' if self.return_after_delivery else '中心'}搜索区，"
-                    f"等待相机120°和新视觉帧；已完成{self.delivery_count}件")
+                    f"等待相机120°和新视觉帧；已完成{self.delivery_count}件",
+                    new_visit=self.return_after_delivery)
             return self._return_center_output(
                 pose, now,
                 "持续返回己方搜索点" if self.return_after_delivery else "持续返回中心",
