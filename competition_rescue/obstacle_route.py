@@ -76,8 +76,8 @@ class ObstacleRoute:
 
     @property
     def sweep_point(self) -> tuple[float, float]:
-        # Right-turn frame: behind wall 94cm, left wall 54cm, robot CENTRE.
-        return -.56 * self.side_sign, .96 * self.side_sign
+        # Right-turn frame: behind wall 94cm, left wall 56cm, robot CENTRE.
+        return -.56 * self.side_sign, .94 * self.side_sign
 
     @property
     def sweep_heading_cdeg(self) -> int:

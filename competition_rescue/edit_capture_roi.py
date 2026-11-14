@@ -205,9 +205,12 @@ def main() -> int:
                         item.bbox,
                         rois.overall,
                         require_full_overlap=item.class_name == "core_black",
+                        require_bottom_center=item.class_name != "green_supply",
                     )
                     if len(rois.overall) >= 3 else False
                 )
+                if inside_overall and capture_side is None and item.class_name == "green_supply":
+                    capture_side = "left" if x + width * .5 <= IMAGE_WIDTH // 2 else "right"
                 color = (
                     (0, 255, 255)
                     if capture_side is not None else

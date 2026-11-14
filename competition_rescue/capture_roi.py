@@ -211,9 +211,10 @@ def bbox_in_capture_roi(
     require_full_overlap: bool = False,
     minimum_overlap_ratio: float = 0.60,
     overlap_ratio: float | None = None,
+    require_bottom_center: bool = True,
 ) -> bool:
     required_ratio = 1.0 if require_full_overlap else minimum_overlap_ratio
     return (
-        bbox_bottom_center_in_roi(bbox, polygon) and
+        (not require_bottom_center or bbox_bottom_center_in_roi(bbox, polygon)) and
         (bbox_capture_roi_overlap_ratio(bbox, polygon) if overlap_ratio is None else overlap_ratio) >= required_ratio
     )

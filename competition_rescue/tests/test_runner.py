@@ -2881,3 +2881,33 @@ def test_opponent_exclusion_does_not_confirm_delivery_or_hide_claw_load():
         boxes['safe_blue'],StmSnapshot(mode=23,flags=3,age_ms=0,camera_pitch_cdeg=14000),m,21,
         capture_rois=rois)
     assert v.capture_audit.total_count==2 and v.capture_audit.danger_present
+
+
+def test_only_green_capture_ignores_bottom_point_at_sixty_percent_overlap():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi, bbox_capture_roi_overlap_ratio, bbox_bottom_center_in_roi
+    from state_machine import CargoBatch, TrackedCargo
+    polygon = ((100,100),(400,100),(400,300),(100,300))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    green = TrackedCargo(1,"green_supply",.9,(150,241,100,100),hits=5)
+    assert bbox_capture_roi_overlap_ratio(green.bbox, polygon) == .60
+    assert not bbox_bottom_center_in_roi(green.bbox, polygon)
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    m.state = CompetitionState.POST_GRAB_AUDIT
+    status = StmSnapshot(mode=23, flags=3, age_ms=0, camera_pitch_cdeg=14000)
+    def snapshot(item):
+        with patch.object(runner_module,"tracked_cargo", return_value=(item,)):
+            return runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,
+                status,m,10,capture_rois=rois)
+    assert snapshot(green).capture_audit.total_count == 1
+    assert snapshot(replace(green,bbox=(150,242,100,100))).capture_audit.total_count == 0
+    for name in ("core_black", "danger_cyan", "injured_orange"):
+        assert snapshot(replace(green,class_name=name)).capture_audit.total_count == 0
+    orange = replace(green,class_name="injured_orange",bbox=(150,220,100,100))
+    assert snapshot(orange).capture_audit.total_count == 1  # Existing >=80%/centre exception.
+    held = runner_module.HeldCargoEvidence()
+    held.observe((green,),status,rois,10,"")
+    assert "green_supply" in held.items  # No obsolete foot rule in the closed-claw cache.

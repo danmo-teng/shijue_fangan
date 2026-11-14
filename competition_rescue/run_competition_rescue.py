@@ -815,7 +815,8 @@ class HeldCargoEvidence:
             if (x <= 0 or y <= 0 or x + width >= IMAGE_WIDTH - 1 or
                     y + height >= IMAGE_HEIGHT - 1):
                 continue
-            if bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60):
+            if bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60,
+                                   require_bottom_center=item.class_name != "green_supply"):
                 self.items[item.class_name] = (item, frame_sequence)
 
     def missing_incompatible(self, current):
@@ -909,7 +910,8 @@ def make_vision_snapshot(
                 continue
             x, y, width, height = item.bbox
             overlap = bbox_capture_roi_overlap_ratio(item.bbox, rois.overall)
-            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60, overlap_ratio=overlap)
+            included = bbox_in_capture_roi(item.bbox, rois.overall, minimum_overlap_ratio=0.60,
+                overlap_ratio=overlap, require_bottom_center=item.class_name != "green_supply")
             if (not included and item.class_name == "injured_orange" and overlap >= 0.80):
                 # A held pyramid can project its foot outside the polygon.
                 # Keep the user's ROI: require its centre and >=80% box area.

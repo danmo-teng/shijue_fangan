@@ -1683,6 +1683,20 @@ class CompetitionMission:
             expected_stm_modes=expected,
         )
 
+    def _lost_green_reselection(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        if (self.selected_batch is None or self.selected_batch.initial_stash or
+                self.target_last_class != "green_supply" or
+                self.target_last_seen_s is None or
+                now - self.target_last_seen_s <= self._approach_missing_hold_window_s()):
+            return None
+        # Reuse the existing missing-frame window and MCU recovery. Do not
+        # turn a different visible green into the missing anchor's identity.
+        self._begin_search_recovery(vision, now)
+        return replace(self._search_recovery_output(vision, stm, now),
+            event="green_anchor_lost_reselect", reason="green_anchor_lost_reselect")
+
     def _range_approach_output(self, vision: VisionSnapshot, stm: StmSnapshot, now: float) -> CompetitionOutput:
         self.approach_f407_active_seen = True
         if self.state == CompetitionState.CLUSTER_APPROACH:
@@ -1700,6 +1714,14 @@ class CompetitionMission:
             return CompetitionOutput(self.state, self._hold(), "mode53缺少本地请求记录，保持接受上下文等待下位机",
                                      reason="approach_range_missing_request")
         target = self._target_for_batch(vision) if self._vision_fresh(vision, now) else None
+        if target is not None and target.class_name == "green_supply":
+            self._mark_target_seen(target, now)
+        if (target is None and self._vision_fresh(vision, now) and
+                vision.frame_sequence > self.range_frame_floor and
+                stm.camera_pitch_cdeg == vision.range_pitch_cdeg == self.range_pitch_cdeg):
+            lost = self._lost_green_reselection(vision, stm, now)
+            if lost is not None:
+                return lost
         distance = dict(vision.range_distances).get(target.track_id) if target is not None else None
         usable = (vision.frame_sequence > self.range_frame_floor and
                   vision.observed_monotonic_s is not None and
@@ -1837,6 +1859,9 @@ class CompetitionMission:
                 )
         elif vision_fresh:
             self._note_target_missing_frame(vision)
+            lost = self._lost_green_reselection(vision, stm, now)
+            if lost is not None:
+                return lost
 
         missing_hold_window_s = self._approach_missing_hold_window_s()
         if (
@@ -2962,7 +2987,9 @@ class CompetitionMission:
                 target_class is None and item.class_name in self.selected_batch.classes
             )
         ]
-        if len(fallback) == 1:
+        green_anchor = not self.selected_batch.initial_stash and (
+            target_class == "green_supply" or self.selected_batch.classes == ("green_supply",))
+        if len(fallback) == 1 and not green_anchor:
             return fallback[0]
         if not fallback or self.target_last_center_px is None:
             return None
@@ -2979,6 +3006,15 @@ class CompetitionMission:
 
         last_area = max(1, self.target_last_area_px or 1)
         last_x, last_y = self.target_last_center_px
+        if green_anchor:
+            # Reuse the cluster continuity envelope for an ID change, including
+            # the single-candidate case. A sole distant green is a new target.
+            fallback = [item for item in fallback if
+                .25 <= max(1, item.area_px) / last_area <= 4. and
+                math.dist(item.center_px, (last_x, last_y)) <=
+                max(40., math.sqrt(last_area), math.sqrt(max(1, item.area_px)))]
+            if not fallback:
+                return None
 
         def continuity_score(item: TrackedCargo) -> float:
             cx, cy = item.center_px
@@ -2988,7 +3024,7 @@ class CompetitionMission:
             return centre_distance / size_scale + abs(math.log(area_ratio))
 
         ranked = sorted(fallback, key=lambda item: (continuity_score(item), -item.area_px))
-        if continuity_score(ranked[1]) - continuity_score(ranked[0]) < 0.35:
+        if len(ranked) > 1 and continuity_score(ranked[1]) - continuity_score(ranked[0]) < 0.35:
             return None
         return ranked[0]
 
@@ -3018,17 +3054,38 @@ class CompetitionMission:
                 return False
         return True
 
+    def _choose_near_green(
+        self, vision: VisionSnapshot, candidates: Iterable[TrackedCargo]
+    ) -> TrackedCargo | None:
+        items = tuple(candidates)
+        if not items:
+            return None
+        ranges = dict(vision.range_distances)
+        ground_available = all(math.isfinite(item.distance_m) for item in items)
+        bands_available = (vision.range_pitch_cdeg in {10500, 12000} and
+                           all(item.track_id in ranges for item in items))
+        visible = self._visible_cargo(vision)
+
+        def rank(item: TrackedCargo) -> tuple:
+            foot_y = item.bbox[1] + item.bbox[3]
+            proximity = (item.distance_m if ground_available else
+                         ranges[item.track_id] if bands_available else -foot_y)
+            # All candidates use one comparable source within this image.
+            # Pixel ordering is a near/far proxy, never a measured metre value.
+            return (proximity, -foot_y, not self._is_isolated(item, visible),
+                    -item.area_px, item.track_id)
+
+        return min(items, key=rank)
+
     def _choose_initial_green(self, vision: VisionSnapshot) -> TrackedCargo | None:
         candidates = [
             item for item in self._visible_cargo(vision)
             if item.class_name == "green_supply"
         ]
-        isolated = [item for item in candidates if self._is_isolated(item, self._visible_cargo(vision))]
-        return min(
-            isolated,
-            key=lambda item: (item.distance_m, -item.area_px, item.track_id),
-            default=None,
-        )
+        target = self._choose_near_green(vision, candidates)
+        # Preserve the existing whole-claw pile path when the nearest green
+        # needs separation, rather than skipping it for a distant singleton.
+        return target if target is not None and self._is_isolated(target, self._visible_cargo(vision)) else None
 
     def _choose_material_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
         candidates = [
@@ -3038,8 +3095,8 @@ class CompetitionMission:
         if not candidates:
             return None
         green = [item for item in candidates if item.class_name == "green_supply"]
-        isolated_green = [item for item in green if self._is_isolated(item, self._visible_cargo(vision))]
-        target = min(isolated_green or green or candidates, key=lambda item: (item.distance_m, -item.area_px, item.track_id))
+        target = (self._choose_near_green(vision, green) if green else
+                  min(candidates, key=lambda item: (item.distance_m, -item.area_px, item.track_id)))
         return CargoBatch(
             (target.track_id,),
             (target.class_name,),
@@ -4831,7 +4888,7 @@ class CompetitionMission:
         else:
             green = [item for item in candidates if item.class_name == "green_supply"]
             if green:
-                return min(green, key=lambda item: (item.distance_m, -item.area_px, item.track_id))
+                return self._choose_near_green(vision, green)
             material = [
                 item for item in candidates if item.class_name in MATERIAL_CLASSES
             ]
@@ -4859,11 +4916,7 @@ class CompetitionMission:
             ):
                 return nearest_material
             return nearest_casualty
-        return min(
-            candidates,
-            key=lambda item: (item.distance_m, -item.area_px, item.track_id),
-            default=None,
-        )
+        return self._choose_near_green(vision, candidates)
 
     def _cluster_target_for_vision(
         self, vision: VisionSnapshot
@@ -4907,9 +4960,14 @@ class CompetitionMission:
         visible = [item for item in visible if
                    item.bbox[0] <= rx + rw and item.bbox[0] + item.bbox[2] >= rx and
                    item.bbox[1] <= ry + rh and item.bbox[1] + item.bbox[3] >= ry]
+        if self.cluster_target_class == "green_supply":
+            visible = [item for item in visible if self._same_cluster_target(item)]
         if not visible:
             return None
         ranked = sorted(visible, key=lambda item: (score(item), -item.area_px, item.track_id))
+        if (self.cluster_target_class == "green_supply" and len(ranked) > 1 and
+                score(ranked[1]) - score(ranked[0]) < .35):
+            return None
         target = ranked[0]
         self.cluster_target_track_id = target.track_id
         self.cluster_target_bbox = target.bbox
@@ -5181,6 +5239,10 @@ class CompetitionMission:
                 self.cluster_command = command
                 self.cluster_command_observed_s = now
                 self.target_last_seen_s = now
+            else:
+                lost = self._lost_green_reselection(vision, stm, now)
+                if lost is not None:
+                    return lost
         if (self.cluster_command_observed_s is None or
                 now - self.cluster_command_observed_s > self._approach_missing_hold_window_s()):
             return CompetitionOutput(

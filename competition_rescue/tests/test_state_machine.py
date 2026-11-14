@@ -1364,7 +1364,7 @@ def test_cluster_range_uses_same_anchor_resolver_and_keeps_finite_request() -> N
             # Existing spatial reassociation may resolve a changed tracker ID.
             # Ranging must use that same decision instead of a second selector.
             anchor = replace(anchor, track_id=104, bbox=(530, 360, 200, 200))
-            neighbour = replace(anchor, track_id=105, bbox=(550, 360, 200, 200))
+            neighbour = replace(anchor, track_id=105, bbox=(650, 360, 200, 200))
         else:
             neighbour = left
         view = VisionSnapshot(frame_sequence=11, observed_monotonic_s=1.1,
@@ -1380,7 +1380,7 @@ def test_cluster_range_uses_same_anchor_resolver_and_keeps_finite_request() -> N
         direction = m._cluster_approach_command(view)
         assert (direction.arg_a, direction.arg_b) == anchor.center_px
         repeated = m.step(replace(view, frame_sequence=12, observed_monotonic_s=1.2,
-            range_distances=((anchor.track_id, 900),)), pose(), replace(status, mode=53), 1.2)
+            cargo=(), range_distances=((anchor.track_id, 900),)), pose(), replace(status, mode=53), 1.2)
         assert repeated.command == out.command  # Do not restart a finite move on a new image.
 
 
@@ -2286,7 +2286,8 @@ def test_bulldozer_route_policy_geometry_and_three_centimetre_arrival():
     for side, sign in (("red", 1), ("blue", -1)):
         r = ObstacleRoute(side, (1,), ("green_supply",), "material", (-.15*sign, .54*sign),
                           (-.15*sign, .54*sign), ("danger_cyan",), "sweep")
-        assert r.sweep_point == (-.56*sign, .96*sign)
+        assert r.sweep_point == (-.56*sign, .94*sign)
+        assert abs(1.5 - abs(r.sweep_point[1]) - .56) < 1e-9
         r.index = r.steps.index(RouteStep.LEFT_TO_SWEEP)
         x, y = r.sweep_point
         assert r.payload(x+.031, y, pose_valid=True)[0] > 0
@@ -2464,3 +2465,81 @@ def test_blue_separation_after_closed_and_transport_audit_keeps_original_handoff
         if mode == 48:
             assert m.transport_separation_active and not m.transport_audit_handoff_active
             assert m.transport_audit_command is None and m.transport_audit_value is None
+
+
+def test_green_search_prefers_near_pile_and_preserves_class_priority():
+    near = TrackedCargo(1, "green_supply", .9, (600, 650, 100, 100), hits=5)
+    neighbour = TrackedCargo(2, "core_black", .9, (710, 650, 100, 100), hits=5)
+    far = TrackedCargo(3, "green_supply", .9, (100, 100, 180, 180), hits=5)
+    view = VisionSnapshot(cargo=(far, near, neighbour), range_pitch_cdeg=12000,
+                          range_distances=((near.track_id, 100), (far.track_id, 460)))
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    assert m._is_isolated(far, view.cargo) and not m._is_isolated(near, view.cargo)
+    assert m._choose_initial_green(view) is None  # Nearest green uses the existing pile path.
+    assert m._choose_cluster_target(view).track_id == near.track_id
+    for first in (False, True):
+        m.first_common_delivered = first
+        assert m._choose_material_batch(view).track_ids == (near.track_id,)
+    assert m._choose_near_green(replace(view, range_distances=()), (far, near)) == near
+    # A measured/finite ground distance wins over pixel order when all have it.
+    measured_near = replace(far, relative_xy_m=(.2, 0))
+    measured_far = replace(near, relative_xy_m=(1., 0))
+    assert m._choose_near_green(view, (measured_far, measured_near)) == measured_near
+    # The existing band estimate wins even if an unusually large box has a lower foot.
+    assert m._choose_near_green(replace(view, range_distances=((1, 460), (3, 100))),
+                                (far, near)) == far
+    # Do not change the post-first green-vs-black/casualty policy.
+    casualty = TrackedCargo(4, "injured_orange", .9, (800, 850, 100, 100), (.05, 0), hits=5)
+    assert m._choose_next_batch(replace(view, cargo=(far, neighbour, casualty))).classes == ("green_supply",)
+
+
+def test_green_anchor_keeps_identity_then_reselects_after_existing_recovery():
+    near = TrackedCargo(1, "green_supply", .9, (600, 650, 100, 100), hits=5)
+    far = TrackedCargo(3, "green_supply", .9, (100, 100, 60, 60), hits=5)
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((far.track_id,), (far.class_name,), "material"))
+    m.state = CompetitionState.APPROACH
+    m._mark_target_seen(far, 1.)
+    m.last_approach_command = m._approach_command(far)
+    assert m._target_for_batch(VisionSnapshot(cargo=(near, far))) == far
+    changed_id = replace(far, track_id=30, bbox=(105, 102, 60, 60))
+    assert m._target_for_batch(VisionSnapshot(cargo=(near, changed_id))) == changed_id
+    assert m._target_for_batch(VisionSnapshot(cargo=(near,))) is None
+    window = m._approach_missing_hold_window_s()
+    brief = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1.+window*.5, cargo=(near,))
+    out = m._approach_output(brief, stm(mode=20), 1.+window*.5, message="fixture")
+    assert out.command == m.last_approach_command and m.locked_target_track_id == far.track_id
+    now = 1.+window+.01
+    lost = replace(brief, frame_sequence=11, observed_monotonic_s=now)
+    out = m._approach_output(lost, stm(mode=20), now, message="fixture")
+    assert out.event == "green_anchor_lost_reselect" and out.command.opcode == CMD_HOLD
+    assert m.state == CompetitionState.WAIT_SEARCH_RECOVERY and m.selected_batch is None
+    m.step(lost, pose(), stm(mode=24), now+.1)
+    m.step(lost, pose(), stm(mode=3), now+.2)
+    out = m.step(replace(lost, frame_sequence=12, observed_monotonic_s=now+.3), pose(), stm(mode=3), now+.3)
+    assert out.state == CompetitionState.APPROACH and m.locked_target_track_id == near.track_id
+
+
+def test_cluster_green_loss_and_range_wait_do_not_borrow_a_far_anchor():
+    for in_range_wait in (False, True):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        anchor = TrackedCargo(1, "green_supply", .9, (580, 400, 120, 120), hits=5)
+        neighbour = replace(anchor, track_id=2, bbox=(690, 400, 120, 120), class_name="core_black")
+        first = VisionSnapshot(frame_sequence=1, observed_monotonic_s=1., cargo=(anchor, neighbour))
+        m._start_cluster_approach(first, stm(), 1.)
+        far = replace(anchor, track_id=3, bbox=(100, 100, 60, 60))
+        assert m._cluster_target_for_vision(replace(first, cargo=(far,))) is None
+        # An ambiguous pair near the old box is not a proven continuation either.
+        ambiguous = (replace(anchor, track_id=4, bbox=(570,400,120,120)),
+                     replace(anchor, track_id=5, bbox=(590,400,120,120)))
+        assert m._cluster_target_for_vision(replace(first, cargo=ambiguous)) is None
+        status = replace(stm(mode=52 if in_range_wait else 20), camera_pitch_cdeg=12000)
+        if in_range_wait:
+            m._range_approach_output(replace(first, range_pitch_cdeg=12000), status, 1.)
+        now = 1.+m._approach_missing_hold_window_s()+.01
+        missing = replace(first, frame_sequence=2, observed_monotonic_s=now,
+                          cargo=(far,), range_pitch_cdeg=12000)
+        out = (m._range_approach_output(missing, status, now) if in_range_wait else
+               m._cluster_approach_output(missing, status, now, pose=pose()))
+        assert out.event == "green_anchor_lost_reselect" and out.command.opcode == CMD_HOLD
+        assert m.cluster_target_track_id is None and m.selected_batch is None
