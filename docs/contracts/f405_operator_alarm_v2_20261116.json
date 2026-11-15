@@ -1,0 +1,91 @@
+{
+  "name": "f405_operator_alarm_v2",
+  "date": "2026-11-16",
+  "status": {
+    "scope": "current_user_requested_handoff",
+    "upper": "not_implemented",
+    "lower": "pending_review_and_implementation",
+    "hardware_playback": "not_tested"
+  },
+  "transport": {
+    "uart": "existing_single_owner",
+    "baud": 921600,
+    "serial_format": "8N1",
+    "frame_size_bytes": 15,
+    "head_hex": "a3 b3",
+    "type_hex": "20",
+    "tail_hex": "c3",
+    "crc": {
+      "name": "CRC16_MODBUS",
+      "initial_hex": "ffff",
+      "input_offset": 2,
+      "input_length": 10,
+      "output_offset": 12,
+      "byte_order": "little"
+    }
+  },
+  "fields": [
+    {
+      "offset": 3,
+      "name": "sequence",
+      "size": 1,
+      "meaning": "transport_only"
+    },
+    {
+      "offset": 4,
+      "name": "version",
+      "size": 1,
+      "value": 2
+    },
+    {
+      "offset": 5,
+      "name": "operation",
+      "size": 1,
+      "values": {
+        "0": "silence_all_operator_sounds",
+        "1": "start_continuous_prewarm_failure_alarm"
+      }
+    },
+    {
+      "offset": 6,
+      "name": "reserved",
+      "size": 6,
+      "value_hex": "00 00 00 00 00 00"
+    }
+  ],
+  "semantics": {
+    "v1": "preserve_existing_1_to_4_short_or_long_beeps",
+    "alarm": "persistent_until_explicit_silence_or_accepted_new_match_config_or_board_reset",
+    "repeat_alarm_on": "idempotent_keep_playback_phase",
+    "v1_during_alarm": "ignore_sound_only_do_not_cancel_alarm",
+    "invalid_message": "ignore_sound_message_only",
+    "ready_heartbeat": "upper_sends_finite_v1_two_short_beeps_every_3_seconds_while_ready_and_not_starting",
+    "waveform": "lower_selects_effective_urgent_pattern_for_actual_hardware_no_required_pitch_or_fixed_100ms"
+  },
+  "performance": {
+    "blocking_delay": false,
+    "sound_ack": false,
+    "new_start_handshake": false,
+    "sound_failure_blocks_start": false,
+    "new_age_check": false,
+    "high_frequency_serial_refresh": false,
+    "task_context_mutation": false,
+    "new_test_program_required": false,
+    "scheduler": "existing_nonblocking_board_beeper_service",
+    "start_priority": "CONFIG_and_manual_ABORT_precede_operator_audio; never wait for playback or silence_ack"
+  },
+  "examples": [
+    {
+      "name": "silence",
+      "sequence": 0,
+      "operation": 0,
+      "hex": "a3 b3 20 00 02 00 00 00 00 00 00 00 f0 b4 c3"
+    },
+    {
+      "name": "alarm_on",
+      "sequence": 0,
+      "operation": 1,
+      "hex": "a3 b3 20 00 02 01 00 00 00 00 00 00 e0 74 c3"
+    }
+  ]
+}
