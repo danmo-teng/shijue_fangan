@@ -1163,7 +1163,6 @@ def make_vision_snapshot(
         # an unknown floor track from a box retained before release/ram.
         carried_bbox_reference = ()
     corridor_active = mission.state in {
-        CompetitionState.CLOSED_DEFLECT,
         CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
         CompetitionState.WAIT_SAFE_ZONE_CLEAR,
         CompetitionState.ENTER_SAFE_ZONE,
@@ -2370,7 +2369,7 @@ class CompetitionPlanner:
                 stm.mode in {3, 25, 34}):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.CLOSED_DEFLECT and not stm.fault and
-                stm.mode in {3, 11, 25, 52}):
+                stm.mode in {3, 10, 11, 25, 52}):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.SEARCH_TRANSFER and not stm.fault and
                 stm.mode in {3, 25}):

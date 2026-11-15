@@ -66,5 +66,17 @@
       "aux_cdeg": 9000,
       "paired_frame_hex": "a3b31d35006400350000000022fbc3a3b318351515012cf2542328e48ac3"
     }
-  ]
+  ],
+  "scope": "Only field side of own staging arrival window; current pose AND calibrated travel endpoint outside. At staging use original 0x14 safety sweep.",
+  "entries": {
+    "VIEW": "loaded formal NAV mode10 before staging completion only",
+    "PULL": "empty APP mode52; loaded NAV mode10 or completed same-task VIEW mode25; never ALIGN or completed phase2",
+    "STAGE": "loaded ALIGN mode11 or completed phase2; position correction only"
+  },
+  "successors": {
+    "VIEW": "same task new PULL or original STAGE NAV 0x03",
+    "PULL": "loaded: original STAGE NAV 0x03; empty: SEARCH mode3 after open/mechanical completion",
+    "STAGE": "original ALIGN then original 0x14 safety sweep; never PULL"
+  },
+  "revision": "20261116-staging-boundary-correction"
 }

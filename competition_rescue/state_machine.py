@@ -1887,11 +1887,11 @@ class CompetitionMission:
                 expected_stm_modes=(20, 52, 24, 3),
             )
         if (self.settings.closed_deflect_enabled and pose is not None and pose.valid and
-                self.state != CompetitionState.INITIAL_APPROACH):
+                self.state != CompetitionState.INITIAL_APPROACH and self._outside_deflect_zone(pose)):
             blocker = nearest_blocker(vision.cargo, dict(vision.range_distances),
                 target_id=target.track_id, target_distance_mm=distance,
                 centre_px=CAMERA_IMAGE_CENTER_X_PX, half_width_px=self.settings.approach_center_tolerance_px)
-            if blocker is not None:
+            if blocker is not None and self._outside_deflect_zone(pose, dict(vision.range_distances)[blocker.track_id]):
                 return self._begin_closed_pull(pose, dict(vision.range_distances)[blocker.track_id],
                                                carrying=False, now=now)
         flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
@@ -4180,6 +4180,70 @@ class CompetitionMission:
         self.safe_corridor_last_frame_sequence = None
         self._set_state(CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, now)
 
+    def _outside_deflect_zone(self, pose: PoseSnapshot, distance_mm: int = 0) -> bool:
+        # The whole staging arrival window belongs to the original sweep.
+        # The finite approach must also end on the field side of that window.
+        limit = abs(self.settings.safe_staging_y_m)-self.settings.safe_zone_staging_axial_tolerance_m
+        end_y = pose.y_m + math.sin(math.radians(pose.yaw_deg))*distance_mm/1000
+        return (pose.valid and max(pose.y_m*self.settings.side_sign,
+            end_y*self.settings.side_sign) < limit-1e-9)
+
+    def _nav_deflect_candidate(self, vision: VisionSnapshot):
+        assert self.selected_batch is not None
+        excluded = set(self.selected_batch.track_ids) | set(vision.carried_reference_track_ids)
+        excluded.update(item.track_id for item in vision.capture_cargo)
+        return next((item for item in sorted(vision.cargo, key=lambda item: -item.center_px[1])
+            if item.visible and not item.inside_safe_zone and item.track_id not in excluded
+            and item.class_name in CARGO_CLASSES
+            and item.bbox[0] <= CAMERA_IMAGE_CENTER_X_PX+self.settings.approach_center_tolerance_px
+            and item.bbox[0]+item.bbox[2] >= CAMERA_IMAGE_CENTER_X_PX-self.settings.approach_center_tolerance_px), None)
+
+    def _navigation_deflect_output(self, vision: VisionSnapshot, pose: PoseSnapshot,
+                                   stm: StmSnapshot, now: float) -> CompetitionOutput | None:
+        if (not self.settings.closed_deflect_enabled or not self._outside_deflect_zone(pose) or
+                not stm.gripper_closed or stm.mode != STM_MODE_NAVIGATE or
+                self.staging_zero_tx_baseline is not None or not self._vision_fresh(vision, now)):
+            return None
+        target = self._target_point()
+        dx, dy = target[0]-pose.x_m, target[1]-pose.y_m
+        angle = math.radians(pose.yaw_deg)
+        forward = dx*math.cos(angle)+dy*math.sin(angle)
+        across = -dx*math.sin(angle)+dy*math.cos(angle)
+        # A frontal image strip describes the travel path only when the
+        # current heading faces that path. Do not infer side/rear obstacles
+        # from that strip while the omni chassis travels sideways.
+        if forward <= 0 or abs(across) > self.settings.capture_clearance_m:
+            return None
+        obstacle = self._nav_deflect_candidate(vision)
+        if obstacle is None:
+            return None
+        distance = dict(vision.range_distances).get(obstacle.track_id)
+        if vision.range_pitch_cdeg == stm.camera_pitch_cdeg and vision.range_pitch_cdeg in {10500,12000}:
+            travel_pose = replace(pose,yaw_deg=math.degrees(math.atan2(dy,dx)))
+            if distance is not None and distance < forward*1000 and self._outside_deflect_zone(travel_pose,distance):
+                return self._begin_closed_pull(travel_pose,distance,carrying=True,now=now)
+            return None
+        key = ("nav_view",self.delivery_count,obstacle.track_id)
+        if key in self.deflect_attempts:
+            return None
+        self.deflect_attempts.append(key)
+        self.deflect_carrying = True
+        self.deflect_phase = VIEW
+        self.deflect_view_frame_floor = vision.frame_sequence
+        self.deflect_epoch += 1
+        self.deflect_command = CommandRequest(CMD_CLOSED_DEFLECT,
+            self._side_flags() | CARRYING,0,12000,round(pose.yaw_deg*100)%36000)
+        self._set_state(CompetitionState.CLOSED_DEFLECT,now)
+        return self._closed_deflect_output()
+
+    def _resume_navigation_after_deflect(self, pose: PoseSnapshot, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        self._reset_safe_zone_alignment()
+        self.navigation_initial_ack = stm.acknowledged_sequence
+        self._set_state(CompetitionState.NAVIGATE,now)
+        return CompetitionOutput(self.state,self._navigation_command(pose,self._target_point(),staging_only=True),
+            "预备点外抽障结束，保留载荷继续原返航，到点后仍走原安全扫障",
+            self.selected_batch,reason="closed_deflect_resume_navigation")
+
     def _closed_deflect_output(self) -> CompetitionOutput:
         assert self.deflect_command is not None
         return CompetitionOutput(self.state, self.deflect_command,
@@ -4250,22 +4314,19 @@ class CompetitionMission:
                 # This is the existing capture calibration, not a 115° table.
                 if (vision.frame_sequence > self.deflect_view_frame_floor and
                         vision.range_pitch_cdeg == 12000 and self._vision_fresh(vision, now)):
-                    obstacle = next((item for item in vision.cargo if item.visible and
-                        item.track_id == vision.safe_corridor_obstacle_track_id), None)
-                    distance = dict(vision.range_distances).get(obstacle.track_id) if obstacle else None
-                    if obstacle is not None and distance is not None and pose.valid:
-                        return self._begin_closed_pull(pose, distance, carrying=True, now=now)
-                    # Nothing measurable in this view: keep cargo and rejoin
-                    # the original observation/clearing route, never fake D.
-                    return self._resume_delivery_after_deflect(stm, now)
+                    # Re-evaluate the actual path and boundary after the view
+                    # change; do not reuse a staging-corridor detection here.
+                    result = self._navigation_deflect_output(vision,pose,
+                        replace(stm,mode=STM_MODE_NAVIGATE),now)
+                    if result is not None:
+                        return result
+                    return self._resume_navigation_after_deflect(pose,stm,now)
         elif done:
             if self.deflect_carrying and stm.mode == STM_MODE_REMOTE_ACTION and stm.gripper_closed:
                 if not pose.valid:
                     return CompetitionOutput(self.state, self._pause(), "抽障完成，沿原流程等待有效位置",
                                              reason="closed_deflect_pose_unavailable")
-                if abs(pose.y_m-self.settings.safe_staging_y_m) > self.settings.safe_zone_staging_axial_tolerance_m:
-                    return self._begin_deflect_stage(pose, now)
-                return self._resume_delivery_after_deflect(stm, now)
+                return self._resume_navigation_after_deflect(pose,stm,now)
             if not self.deflect_carrying and stm.mode == STM_MODE_SEARCH and not stm.gripper_closed:
                 self._clear_selected_batch()
                 self._clear_range_approach()
@@ -4283,25 +4344,7 @@ class CompetitionMission:
             # now, not an old NAV DONE, without undoing the aligned X.
             if abs(pose.y_m-self.settings.safe_staging_y_m) > self.settings.safe_zone_staging_axial_tolerance_m:
                 return self._begin_deflect_stage(pose, now)
-            obstacle = next((item for item in vision.cargo if item.visible and
-                item.track_id == vision.safe_corridor_obstacle_track_id and
-                not item.inside_safe_zone and item.track_id not in self.selected_batch.track_ids), None)
-            key = ("delivery", self.delivery_count, obstacle.track_id) if obstacle else None
-            if obstacle is not None and key not in self.deflect_attempts:
-                self.deflect_attempts.append(key)
-                distance = dict(vision.range_distances).get(obstacle.track_id)
-                if (vision.range_pitch_cdeg == stm.camera_pitch_cdeg and
-                        vision.range_pitch_cdeg in {10500, 12000} and distance is not None):
-                    return self._begin_closed_pull(pose, distance, carrying=True, now=now)
-                self.deflect_carrying = True
-                self.deflect_phase = VIEW
-                self.deflect_view_frame_floor = vision.frame_sequence
-                self.deflect_epoch += 1
-                self.deflect_command = CommandRequest(CMD_CLOSED_DEFLECT,
-                    self._side_flags() | CARRYING, 0, 12000,
-                    round(self.settings.safe_heading_deg*100)%36000)
-                self._set_state(CompetitionState.CLOSED_DEFLECT, now)
-                return self._closed_deflect_output()
+            # At the staging row, only the original safety sweep applies.
         if (self.settings.bulldozer_enabled and self.selected_batch is not None and
                 pose is not None and pose.valid):
             classes = vision.safe_corridor_obstacle_classes or (
@@ -6226,6 +6269,9 @@ class CompetitionMission:
             stm, STM_MODE_NAVIGATE, self.navigation_initial_ack
         )
         if self.selected_batch.destination != "stash":
+            deflection = self._navigation_deflect_output(vision,pose,stm,now)
+            if deflection is not None:
+                return deflection
             staging_command = self._navigation_command(
                 pose, target, staging_only=True
             )

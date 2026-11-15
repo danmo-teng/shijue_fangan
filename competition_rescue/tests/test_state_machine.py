@@ -3414,7 +3414,7 @@ def test_closed_deflect_rechecks_recorded_seven_cm_gap_and_preserves_aligned_x()
         assert m.selected_batch.track_ids==(1,) and m.obstacle_route is None
 
 
-def test_closed_deflect_safe_view_and_completion_keep_real_load():
+def test_closed_deflect_navigation_view_and_completion_keep_real_load():
     from protocol import CMD_CLOSED_DEFLECT, CMD_ALIGN_SAFE_ZONE
     from closed_deflect import VIEW, PULL, STAGE
     m=CompetitionMission(CompetitionSettings(side='red',closed_deflect_enabled=True,bulldozer_enabled=True))
@@ -3424,19 +3424,20 @@ def test_closed_deflect_safe_view_and_completion_keep_real_load():
     v=VisionSnapshot(frame_sequence=10,observed_monotonic_s=1.,cargo=(obstacle,),
         safe_corridor_obstacle_class='danger_cyan',safe_corridor_obstacle_track_id=2,
         range_pitch_cdeg=11500)
-    st=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=11500)
-    p=replace(pose(.15,.54),yaw_deg=90.)
-    out=m._blocked_corridor_output(v,st,1.,pose=p)
+    st=StmSnapshot(mode=10,flags=2,age_ms=0,camera_pitch_cdeg=11500)
+    p=replace(pose(.15,0.),yaw_deg=90.)
+    out=m._navigate(v,p,st,1.)
     assert out.command.flags>>4==VIEW
     done=replace(st,mode=25,camera_pitch_cdeg=12000,context_valid=True,context_matches=True,
         accepted_command=CMD_CLOSED_DEFLECT,action_status=3)
     new=replace(v,frame_sequence=11,observed_monotonic_s=1.1,range_pitch_cdeg=12000,range_distances=((2,200),))
     out=m._closed_deflect_step(new,p,done,1.1)
     assert out.command.flags>>4==PULL and out.command.arg_a==200
-    out=m._closed_deflect_step(new,replace(p,y_m=.74),replace(done,context_matches=False),1.2)
+    out=m._closed_deflect_step(new,replace(p,y_m=.20),replace(done,context_matches=False),1.2)
     assert out.command.flags>>4==PULL
-    out=m._closed_deflect_step(new,replace(p,y_m=.74),done,1.3)
-    assert out.command.flags>>4==STAGE and out.command.arg_a==200
+    out=m._closed_deflect_step(new,replace(p,y_m=.20),done,1.3)
+    assert out.state==CompetitionState.NAVIGATE and out.command.opcode==3
+    assert out.command.arg_a==340
     assert m.carried_manifest==('injured_orange',) and m.selected_batch.track_ids==(1,)
     assert m.delivery_count==0
 
@@ -3454,3 +3455,46 @@ def test_closed_deflect_search_requires_actual_open_search_completion():
     out=m._closed_deflect_step(v,pose(),replace(st,mode=3,flags=0),1.2)
     assert out.state==CompetitionState.SEARCH and m.selected_batch is None
     assert m.search_site_turn_deg==360 and m.search_visit==0
+
+
+def test_closed_deflect_staging_boundary_uses_original_safety_sweep_both_sides():
+    from protocol import CMD_BULLDOZER_STEP
+    for side,sign in [('red',1),('blue',-1)]:
+        m=CompetitionMission(CompetitionSettings(side=side,closed_deflect_enabled=True))
+        m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
+        m.confirmed_delivery_destination='injury'
+        danger=cargo(2,'danger_cyan',620,500)
+        v=VisionSnapshot(frame_sequence=11,observed_monotonic_s=1.,cargo=(danger,),
+            safe_corridor_obstacle_class='danger_cyan',safe_corridor_obstacle_track_id=2,
+            range_pitch_cdeg=12000,range_distances=((2,100),))
+        st=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=12000)
+        p=replace(pose(.15,.54*sign),yaw_deg=90. if sign==1 else 270.)
+        out=m._blocked_corridor_output(v,st,1.,pose=p)
+        assert out.command.opcode==CMD_BULLDOZER_STEP
+        assert out.state==CompetitionState.OBSTACLE_ROUTE
+        assert not m._outside_deflect_zone(p)
+        assert not m._outside_deflect_zone(replace(p,y_m=.49*sign))
+        assert m._outside_deflect_zone(replace(p,y_m=.30*sign),100)
+        assert not m._outside_deflect_zone(replace(p,y_m=.30*sign),200)
+
+
+def test_closed_deflect_navigation_does_not_cross_staging_row_or_sweep_sideways():
+    from protocol import CMD_CLOSED_DEFLECT
+    for side,sign in [('red',1),('blue',-1)]:
+        for y,distance,yaw,expected in [(0.,200,90.*sign,True),(.3,200,90.*sign,False),
+                                       (.49,0,90.*sign,False),(0.,200,0.,False)]:
+            m=CompetitionMission(CompetitionSettings(side=side,closed_deflect_enabled=True))
+            m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
+            m.confirmed_delivery_destination='injury'
+            x=m.settings.injury_target_x_m
+            danger=cargo(2,'danger_cyan',620,500)
+            v=VisionSnapshot(frame_sequence=11,observed_monotonic_s=1.,cargo=(danger,),
+                             range_pitch_cdeg=12000,range_distances=((2,distance),))
+            st=StmSnapshot(mode=10,flags=2,age_ms=0,camera_pitch_cdeg=12000)
+            p=replace(pose(x,y*sign),yaw_deg=yaw)
+            out=m._navigate(v,p,st,1.)
+            assert (out.command.opcode==CMD_CLOSED_DEFLECT)==expected
+        # Even after a small outward drift, an already-started staging
+        # handoff does not become a new on-route pull.
+        m.staging_zero_tx_baseline=1
+        assert m._navigation_deflect_output(v,replace(p,yaw_deg=90.*sign),st,1.) is None
