@@ -4,7 +4,7 @@
   "status": {
     "scope": "current_user_requested_handoff",
     "upper": "not_implemented",
-    "lower": "pending_review_and_implementation",
+    "lower": "implemented_source_reviewed_not_flashed",
     "hardware_playback": "not_tested"
   },
   "transport": {
@@ -87,5 +87,6 @@
       "operation": 1,
       "hex": "a3 b3 20 00 02 01 00 00 00 00 00 00 e0 74 c3"
     }
-  ]
+  ],
+  "lower_reviewed_commit": "666d8d0c053fa6db869fcf634fda7203e98b766f"
 }
