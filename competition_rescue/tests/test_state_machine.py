@@ -2765,6 +2765,7 @@ def test_attack_return_opponent_frame_geometry_for_all_start_sides():
                 f=(math.cos(angle),math.sin(angle));left=(-f[1],f[0])
                 assert r.release_yaw_deg == yaw
                 assert r.return_yaw_deg == (270 if side == "red" else 90)
+                assert r.payload(*origin)[0:2] == (-100, 0)
                 assert r.payload(*origin)[2] == round(r.return_yaw_deg * 100)
                 assert r.start_same_side == ((zone<=2)==(side=="red"))
                 assert r.waypoints[-1] == (0.,.30*sign)
@@ -2780,8 +2781,11 @@ def test_attack_return_opponent_frame_geometry_for_all_start_sides():
                 assert sum(a*b for a,b in zip(right,left)) < 0
                 assert abs(sum(a*b for a,b in zip(back,left))) < 1e-10
                 assert abs(sum(a*b for a,b in zip(right,f))) < 1e-10
-                # D=0 remains latched after the permitted 5cm arrival.
-                target=r.waypoints[0]
+                # Even a map jump to/past the first target cannot end the wheel move.
+                assert r.payload(*r.waypoints[0])[0] == -100 and not r.arrival_latched
+                r.index = 1
+                # The remaining map legs retain the original 5cm D=0 latch.
+                target=r.waypoints[1]
                 assert r.payload(target[0]+.05,target[1])[0]==0
                 assert r.payload(target[0]+.20,target[1])[0]==0
 
@@ -2839,16 +2843,29 @@ def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_read
                             accepted_command=CMD_RELEASE_BOTH,action_status=3)
         out=m.step(VisionSnapshot(frame_sequence=10),p,release,1.)
         assert out.state==CompetitionState.INITIAL_ATTACK_RETURN and out.command.opcode==CMD_BULLDOZER_STEP
-        assert out.command.flags>>4==RouteStep.EMPTY_BODY_MOVE and out.command.arg_a==100
-        assert out.command.arg_b==(9000 if sign==1 else -9000)
+        assert out.command.flags>>4==RouteStep.ATTACK_BACK_100 and out.command.arg_a==-100
+        assert out.command.arg_b == 0
         assert m.initial_stash_done and m.stash_has_cargo and not m.first_common_delivered
         old=replace(release,mode=25,accepted_command=CMD_BULLDOZER_STEP,context_matches=False)
         for index in range(4):
             target=m.attack_return_route.waypoints[index]
             at=replace(p,x_m=target[0],y_m=target[1])
             out=m.step(VisionSnapshot(frame_sequence=11+index),at,old,2.+index)
-            assert m.attack_return_route.index==index and out.command.arg_a==0
-            out=m.step(VisionSnapshot(frame_sequence=11+index),at,replace(old,context_matches=True),2.1+index)
+            assert m.attack_return_route.index==index
+            assert out.command.arg_a == (-100 if index == 0 else 0)
+            if index == 0:
+                running = replace(old, context_matches=True, action_status=1)
+                # Recorded map shifts / apparent arrival do not turn -100 into D0.
+                waiting = m.step(VisionSnapshot(frame_sequence=11), at, running, 2.01)
+                assert waiting.command.arg_a == -100 and m.attack_return_route.index == 0
+                waiting = m.step(VisionSnapshot(frame_sequence=11), replace(at,valid=False), running, 2.02)
+                assert waiting.command.arg_a == -100 and waiting.command.opcode == CMD_BULLDOZER_STEP
+                wrong_mode = m.step(VisionSnapshot(frame_sequence=11), at,
+                    replace(old,context_matches=True,mode=3), 2.03)
+                assert wrong_mode.command.arg_a == -100 and m.attack_return_route.index == 0
+            # Finite wheel DONE may finish even when the map still shows the start.
+            done_pose = p if index == 0 else at
+            out=m.step(VisionSnapshot(frame_sequence=11+index),done_pose,replace(old,context_matches=True),2.1+index)
             assert m.attack_return_route.index==index+1
         assert out.command.flags>>4==RouteStep.PICKUP_READY
         # A completed movement is not completion of the new SEARCH-ready action.

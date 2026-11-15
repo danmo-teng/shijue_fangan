@@ -1,9 +1,9 @@
 {
-  "id": "MATCH-ATTACK-RETURN-20261114",
-  "version": 2,
-  "status": "upper_face_opponent_implemented_lower_step14_pending_review",
-  "human_approved_scope": "face_opponent_before_release_then_fixed_opponent_frame_return",
-  "actual_lower_version": "16:40 raw UART 63d75a88c4e13cce11fb8731aca14383269e8ce5 dirty1; step14 not yet implemented",
+  "id": "MATCH-ATTACK-BACK100-WHEEL-20261115",
+  "version": 3,
+  "status": "upper_finite_first_leg_implemented_lower_step15_pending_review_implementation_deployment",
+  "human_approved_scope": "only first return segment becomes measured-wheel finite -100mm; last three map segments unchanged",
+  "actual_lower_version": "2026-11-14 18:43 raw UART f14d2a4f85d9fc986709818e272aebb6e5210d14 dirty1; not proof of new step15",
   "base_steps_0_through_12": "unchanged",
   "wire": {
     "type": 24,
@@ -18,7 +18,8 @@
       "A": "unsigned semantic D 0..5000 mm in signed big-endian int16",
       "B": "field-frame translation H -18000..18000 centidegrees in signed big-endian int16",
       "U": "fixed opponent-facing chassis yaw: red27000 / blue9000 centidegrees; release actual yaw logged separately"
-    }
+    },
+    "scope": "last three map legs only; first leg uses first_finite_back below"
   },
   "pairing": {
     "context_type": 29,
@@ -36,17 +37,17 @@
     "transform": "body_angle=wrap(H-current_primary_yaw); hold U, never turn chassis toward H",
     "D_positive": "RUNNING; do not report whole leg done from encoder initial D alone",
     "D_zero": "existing brake then COMPLETED mode25; do not reset to SEARCH or start another action",
-    "first_entry": "owned completed RELEASE_BOTH/mode34 and open claw, without replaying release",
-    "next_entry": "owned completed prior step13; existing action IDs distinguish legs",
-    "final_search": "after fourth step13 DONE, upper sends existing step12/PICKUP_READY; retain paired DONE through mode3"
+    "first_entry": "legacy step13 release entry preserved; new flow uses step15 after release then owned step13 after step15 DONE",
+    "next_entry": "owned completed previous step15 or step13; existing action IDs distinguish subsequent map legs",
+    "final_search": "after finite step15 and three map step13 DONEs, existing step12/PICKUP_READY; retain paired DONE through mode3"
   },
   "route": {
     "reference": "actual release centre, fixed red270deg / blue90deg opponent-facing frame; never arbitrary release yaw",
     "moves": [
-      "back 0.10m",
-      "left 0.50m",
-      "back to return longitudinal level",
-      "right to return point"
+      "finite measured-wheel back100mm",
+      "map left0.50m",
+      "map back to return longitudinal level",
+      "map right to return point"
     ],
     "own_return_red_m": [
       0,
@@ -69,7 +70,8 @@
         0.69,
         90
       ]
-    }
+    },
+    "waypoint_tolerance_scope": "last three map legs only; first nominal waypoint remains a construction reference"
   },
   "non_changes": [
     "no new handshake/freshness gate/ISR or timer",
@@ -82,15 +84,17 @@
     {
       "side": "red",
       "segment": 0,
-      "name": "BACK_100",
-      "D_mm": 100,
-      "H_cdeg": 9000,
+      "name": "BACK_100_WHEEL",
       "U_cdeg": 27000,
       "task_id": 10,
       "action_id": 100,
       "seq": 40,
       "context_hex": "a3 b3 1d 28 00 0a 00 64 00 00 00 00 c5 a1 c3",
-      "command_hex": "a3 b3 18 28 14 d9 00 64 23 28 69 78 92 7d c3"
+      "command_hex": "a3 b3 18 28 14 f9 ff 9c 00 00 69 78 8d e8 c3",
+      "step": 15,
+      "A_mm": -100,
+      "B": 0,
+      "source": "synthetic_offline_not_transmitted"
     },
     {
       "side": "red",
@@ -134,15 +138,17 @@
     {
       "side": "blue",
       "segment": 0,
-      "name": "BACK_100",
-      "D_mm": 100,
-      "H_cdeg": -9000,
+      "name": "BACK_100_WHEEL",
       "U_cdeg": 9000,
       "task_id": 10,
       "action_id": 100,
       "seq": 40,
       "context_hex": "a3 b3 1d 28 00 0a 00 64 00 00 00 00 c5 a1 c3",
-      "command_hex": "a3 b3 18 28 14 d1 00 64 dc d8 23 28 1c c6 c3"
+      "command_hex": "a3 b3 18 28 14 f1 ff 9c 00 00 23 28 33 74 c3",
+      "step": 15,
+      "A_mm": -100,
+      "B": 0,
+      "source": "synthetic_offline_not_transmitted"
     },
     {
       "side": "blue",
@@ -260,5 +266,40 @@
       "command_hex": "a3 b3 18 27 14 e1 00 00 00 00 23 28 a7 56 c3",
       "source": "synthetic_offline_not_transmitted"
     }
-  ]
+  ],
+  "reviewed_lower_source": {
+    "main": "cd0d3297673613468ecacab42ef17512ed6fabbe",
+    "Task.c_blob": "a5550cd85c3e469b35d4561333f3f94b1baa6f9b",
+    "motor.c_blob": "66bfe506beeae195018799aabe414f2f72dfe579",
+    "Task_matches_f14d2a4": true
+  },
+  "existing_steps_0_through_14": "unchanged wire/control semantics",
+  "first_finite_back": {
+    "opcode": 20,
+    "step": 15,
+    "name": "ATTACK_BACK_100",
+    "P1_red": 249,
+    "P1_blue": 241,
+    "A_mm": -100,
+    "B": 0,
+    "U_red_cdeg": 27000,
+    "U_blue_cdeg": 9000,
+    "entry": "same owned completed RELEASE_BOTH/mode34 and open claw; no SEARCH entry for step15",
+    "reuse": "existing BACK_200 finite Motor_MoveDistanceHeading(-0.100f, APP_SAFE_SWEEP_RETURN_SPEED_MM_S, U*0.01f)",
+    "progress": "existing action-local signed encoder forward difference; no map displacement, pose.path_mm or pure rotation progress",
+    "completion": "existing finite controller DONE/tolerance, then same task/action/opcode COMPLETED mode25; upper never map-latches D0 in first leg",
+    "retransmit": "constant -100/0/U same action and new transport SEQ; no origin reset or repeat movement after DONE",
+    "handoff": "owned completed step15 -> new action step13 for LEFT_500; last three targets/5cm/map H-D unchanged",
+    "pause_stop": "reuse original finite PAUSE/resume preserving progress; original STOP unchanged",
+    "map_reference": "release P freezes original last-three targets once; map correction or temporarily missing map pose after start cannot finish/reset the first finite leg",
+    "not_authorized": [
+      "new time/freshness qualification",
+      "new handshake/wait/FAULT/ISR/telemetry",
+      "global distance tolerance/PID/speed changes",
+      "turning overshoot fix",
+      "localization/fusion changes",
+      "firmware deployment"
+    ]
+  },
+  "examples_source": "all examples synthetic offline, never transmitted; facing and return groups independent, actual face/release/return phases use distinct action IDs"
 }

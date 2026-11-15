@@ -38,6 +38,10 @@ class AttackReturnRoute:
         return opponent_heading_deg(self.side)
 
     @property
+    def finite_back(self) -> bool:
+        return self.index == 0
+
+    @property
     def start_same_side(self) -> bool:
         return (self.start_zone <= 2) == (self.side == "red")
 
@@ -50,6 +54,9 @@ class AttackReturnRoute:
         self.arrival_latched = False
 
     def payload(self, x_m: float, y_m: float) -> tuple[int, int, int]:
+        if self.finite_back:
+            # This is one finite wheel-distance action, not map remaining D.
+            return -100, 0, round(self.return_yaw_deg * 100)
         target = self.waypoints[self.index]
         dx, dy = target[0]-x_m, target[1]-y_m
         distance = math.hypot(dx, dy)

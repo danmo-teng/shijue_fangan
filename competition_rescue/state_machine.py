@@ -4999,7 +4999,8 @@ class CompetitionMission:
     def _attack_return_output(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
     ) -> CompetitionOutput:
-        if not pose.valid:
+        if (not pose.valid and (self.attack_return_route is None or
+                                not self.attack_return_route.finite_back)):
             return CompetitionOutput(self.state, self._pause(), "开局绕行返程等待有效位置",
                 reason="attack_return_pose_unavailable")
         if self.attack_return_route is None:
@@ -5019,15 +5020,19 @@ class CompetitionMission:
                 "开局绕行到点，复用原搜索姿态恢复", reason="attack_return_search_ready",
                 expected_stm_modes=(STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH))
         payload = route.payload(pose.x_m, pose.y_m)
-        if complete and payload[0] == 0:
+        segment_done = (stm.mode == STM_MODE_REMOTE_ACTION if route.finite_back else payload[0] == 0)
+        if complete and segment_done:
             route.advance()
             return replace(self._attack_return_output(vision, pose,
                 replace(stm, context_matches=False), now), event="attack_return_step_complete")
         name = ("BACK_100", "LEFT_500", "BACK_TO_HOME_ROW", "RIGHT_TO_HOME")[route.index]
         return CompetitionOutput(self.state,
             CommandRequest(CMD_BULLDOZER_STEP,
-                self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
-            f"开局绕行/{name}：目标{route.waypoints[route.index]}，保向{route.return_yaw_deg:.1f}°",
+                self._side_flags() | (int(RouteStep.ATTACK_BACK_100 if route.finite_back
+                                         else RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
+            (f"开局绕行/{name}：本段轮程有限后退100mm，保向{route.return_yaw_deg:.1f}°"
+             if route.finite_back else
+             f"开局绕行/{name}：目标{route.waypoints[route.index]}，保向{route.return_yaw_deg:.1f}°"),
             motion_expected=True, reason=f"attack_return_{name.lower()}",
             expected_stm_modes=(STM_MODE_REMOTE_ACTION,))
 

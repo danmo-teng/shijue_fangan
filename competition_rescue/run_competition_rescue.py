@@ -1801,7 +1801,8 @@ class CompetitionPlanner:
         if (command.opcode == CMD_BULLDOZER_STEP and
                 self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and
                 self.mission.attack_return_route is not None):
-            # All four moves use step13. A leg change, not every D/H refresh,
+            # First move is finite step15; remaining moves use live step13.
+            # A leg change, not every D/H refresh,
             # owns the next action ID in the existing task/context protocol.
             range_epoch = ("attack_return", self.mission.attack_return_route.index)
         if (command.opcode == CMD_BULLDOZER_STEP and

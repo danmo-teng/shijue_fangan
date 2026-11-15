@@ -1,6 +1,6 @@
 # 两端最新修改要求
 
-更新：2026-11-14。只维护当前相关请求与回执，历史按Git取证，不自动恢复。
+更新：2026-11-15。只维护当前相关请求与回执，历史按Git取证，不自动恢复。
 发布或读取不等于接收方已审核/实施；先核对实际代码，向人说明接受、调整或拒绝的理由。
 重要范围变化由人决定，已批准范围不重复审批。规则见AGENTS.md和CHANGE_WORKFLOW.md。
 
@@ -16,54 +16,39 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 当前请求MATCH-RECOVERED-INJURY-AUDIT-20261114：回抓单伤员短送复用真实合爪审核
+## 当前请求MATCH-ATTACK-BACK100-WHEEL-20261115：仅首段100mm有限后退
 
-本轮按用户“按分析修改完善”推进，采用仅回抓单伤员的有限复用：原新扫障/取障返回`pickup_role=original`、目的地injury，完成真实合爪审核后连续闭爪短送；普通运输独立mode48保持。代价是本类短送少一次途中掉货/混入异常的末端复核，真实合爪审核及已观察冲突仍保留，不用时间窗口定义资格。
+用户本轮明确：只把进攻返回第一段改为基于本段轮程的100mm有限后退，复用已有有限直行控制；左移、长距离后退、右移保持原定位导航。接收方先核对实际代码，可接受、缩小、调整或拒绝；发布不是审核通过/烧录证明，已批准范围不重复审批。
 
-用户随后明确：确认丢失的伤员和物资都结束本次原载荷找回，恢复找其他物资，不无限追旧物。RDK已统一补原观察无候选、24/47恢复/返程、已实际接近/合爪后的空爪SEARCH退出，并在Planner旧ACK等待前接管，清旧路线/目标/载荷/复用且不加送达计数；初始尚未执行接近的SEARCH及闭爪偶发漏框不误判。此退出复用已有下位状态，无新固件动作或协议；物资不因此跳过普通mode48。
+证据为11-14最后18:43正式比赛（蓝方2区、上位b1b3531、actual f14d2a4/dirty1，SDK bfaf2610697d1ce6e45afa198eb562f7、round80dbfa326b0c9230e80fbebc993b70d0）：296.638单调秒中继D100，296.672接受25165，296.879已D0，296.915本动作DONE，296.943切左移。轮反馈积分仅约2.7～2.8cm，不是地面独立测量；地图坐标修正叠加5cm到点使首段早结束。原始业务20000101_080055_competition/及传感器20261114_184349_competition_wheel/保留。
 
-证据为16:40实跑f4e74dd/actual63d75a8 dirty1：498.868单调秒合爪审核到mode22，499.887 NAV原STAGE交接，499.948 mode48，此后98条检测94条无原始框。用户确认窗口仍在、车停并抬舵机收爪；末尾截断，不能声称15s出口已实际触发，也不按上位崩溃修改。Task.c blob a9f65ebf0427ae0e19da1d9803def4af0d299f2b及vision.c已只读核对，现有解析/ALIGN入口不支持新语义。
+已只读核对main cd0d3297673613468ecacab42ef17512ed6fabbe：Task.c blob a5550cd85c3e469b35d4561333f3f94b1baa6f9b、motor.c blob66bfe506beeae195018799aabe414f2f72dfe579。前轮14/审核复用已实现，本轮不重做。最小配套：
 
-接收方先按实际代码审查，可接受、缩小、调整或拒绝；最小配套建议：
+1. 原0x18/opcode0x14追加step15 ATTACK_BACK_100，P1红0xF9/蓝0xF1；A固定有符号-100mm、B=0、U红27000/蓝9000。保持原step0..14校验/执行，不放宽原step3的-200mm或改其他有限动作。
+2. 首个15仅接本任务已完成RELEASE_BOTH/mode34、逻辑空爪，沿原首次空载移动清放货审核/预算一次；不重放松爪/记送达，不新增SEARCH随意入口。
+3. 复用原BACK_200的Motor_MoveDistanceHeading分支，参数-0.100f/原后退速度/固定U。进度沿本段编码器差（现有M1/M2前向轮程），不用地图XY、pose.path_mm或纯转动当行程。原起步制动/起点、减速、数值到位公差、完成、错误处理、PAUSE恢复均复用；不得另加计时/归零资格等待或新FAULT。
+4. 同action重发不重置起点，DONE后不再走第二遍。完成仍本次mode25/COMPLETED；允许同任务下一新action的原step13 LEFT_500接在step15 DONE后，原13→13/搜索轮换及最后step12保持。上位首段恒发-100/0/U，不因地图到点发D0；后三段目标、5cm、实时H/D和原DONE不变。
 
-1. 仅原0x18/opcode0x03 STAGE NAV新增P1 bit5=0x20，命名REUSE_POST_GRAB_AUDIT。结合原VALID/DISTANCE_VALID/STAGE_ONLY，红蓝compact flags0x79/0x71；A/B/U仍原D/0/场地平移H，原完整方向对形式可保持。不得改变APPROACH的CLUSTER、DISPERSE的FIRST_GREEN_BUMP或0x14 step含义。
-2. 只在已有本次真实合法单伤员合爪审核、闭爪、非initial-stash的mode22→NAV记录复用请求；不伪造数量、READY/VALID、新帧，不新增握手。未保留该真实业务状态则沿原STAGE复审处理，不添加全局FAULT/永久停机。
-3. 原H/D、速度/转向、STAGE容差和D0制动/DONE不变。当前标记NAV完成后保留原合法审核，允许下一条现有pose ALIGN从该完成NAV进入，复用task_begin_safe_align；不再为这一次强制切140°/mode48。
-4. 上位撤销NAV标志或发原0x12复审，以及放爪/分离/原失败恢复/空爪SEARCH/换任务/ABORT时撤销复用；沿原NAV更新处理，不重开动作。普通无标志STAGE仍原mode48；不能把撤销只落一端。RDK遇到下位已进mode48或原READY/VALID未保留也回原复审。
+上位已实现，5项必要直接检查通过；新15尚待接收方审核/实现/部署，不用旧f14d2a4或cd0d329声称可执行新请求。本窗口不改/烧录下位，不开SDK/UART/重启入口/发车。没有新增时间/新鲜度门、握手、ISR/遥测、全局公差/PID/速度或普通异常停机；不扩改转向过冲、大融合及其他TODO。只做必要编译/原检查，不附加下位测试代码或独立程序，提交推送回传SHA、构建与实际部署边界。
 
-上位已实现，14项相关检查通过，包含上述复用/撤销、普通运输、CRC/动作配对和伤员/物资确认找回失败后退出。F405仍待审核/实现/部署，旧63d75a8的actual不证明新标志已支持。无新年龄门/时间资格、ISR/遥测、PID/速度、额外等待或普通异常停机；原15s兜底/人工STOP/mode51不改。不要求新增下位测试代码或独立程序，只做必要构建与原检查，commit/push回传SHA和实际边界。
+说明及机器合同（成对示例离线合成、未发送）：
 
-```text
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_RECOVERED_INJURY_20261114.md
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_recovered_injury_audit_20261114.json
-```
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_ATTACK_RETURN_20261114.md
+https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_empty_body_move_20261114.json
+
+## 回执MATCH-RECOVERED-INJURY-AUDIT-20261114：对端源码已实现，本轮不重做
+
+已读取F405固定回执blob e3a4b027fe899eee4f396143c64c4c8d439e4fb8，对端接受并实现前轮b1b3531的回抓单伤员NAV bit5复用、撤销与原mode48兼容。main cd0d329的Task.c blob a5550cd85c3e469b35d4561333f3f94b1baa6f9b与18:43实际身份f14d2a4所对应Task源码一致；dirty差异未知，不能把身份当具体复用分支或地面效果通过。
+伤员/物资确认找回失败退出、两帧ALIGN缓存上位保持，不再向下位重发旧任务；本轮仅改进攻首段轮程。原合同和说明保留在COMPETITION_RECOVERED_INJURY_20261114.md及contracts/f405_recovered_injury_audit_20261114.json。
 
 ## 上位交付MATCH-VISUAL-GAP-20261114：原两帧缺框缓存保留对准，无新下位任务
 
 16:40伤员/危险障碍前卡在安全区视觉对准，约21s内27次复看，NAV已交接而扫障尚未开始。原runner两帧缓存不变，现同视角/原真实ALIGN存在时沿上一真实横差与原帧号续接；真实框回来直接更新，缓存耗尽或视角改变才走原115°复看。缓存不能放行ENTER或触发扫障，不伪造新测量/合格数量；原人工STOP和已提交ENTER优先级保持。
 复用原0x04/0x1D同动作接口，现63d75a8允许相同帧重发；F405无需改代码/计时/握手/遥测或新增测试程序。7项相关软件检查通过，未实车。说明COMPETITION_SAFE_ZONE_REOBSERVE_20261113.md。
 
-## 当前请求MATCH-ATTACK-FACING-20261114：进攻点先转正，再放货返程
+## 回执MATCH-ATTACK-FACING-20261114：step14已实现及实跑接受，本轮不改转向
 
-用户已审核蓝方1区路线图，批准先朝对面红区90°（红方朝对面蓝区270°），再退10cm/车体左50cm/后退/右移到己方R。上位按“到进攻点、带载转正、松爪、四段返程”实现，防止松爪后原地转动扫动已放物资；不是增加一段任意等待。
-
-**证据：** 最新16:40实跑上位f4e74dd、蓝方/1区，actual63d75a8/dirty1；原日志第38行release yaw315.709°，旧左移目标Y=1.117523m逼近对面围栏。不是SEARCH/step13未实现，也没有上位进程退出证据：用户确认窗口还在、车辆停下并抬舵机收爪。原日志保留。
-
-已只读核对F405 main63d75a88c4e13cce11fb8731aca14383269e8ce5，Task.c blob a9f65ebf0427ae0e19da1d9803def4af0d299f2b；现有step0/4有固定扫障方向，不能直接改变其语义。接收方先按自己代码接受、调整或拒绝，下列为用户已批准目标的最小配套建议：
-
-1. 原0x18/opcode0x14增加step14 ATTACK_FACE_OPPONENT。A=B=0、U红27000/蓝9000；P1红0xE9/蓝0xE1，原低位VALID/RED及0x1D/0x1E配对保持，不新增TYPE/opcode。
-2. 入口仅本任务已完成initial-stash NAV、原合法initial-stash审核、闭爪；上位到点锁D0结束原NAV，原成对DONE后才换转向action。复用已有连续转向和原到角窗口，完成仍mode25/COMPLETED。重复同动作只沿原执行，不重开；不能用旧NAV DONE完成新转向。
-3. 保留真实审核、闭爪及route_to_stash，不在转正时清载荷/计数。转正DONE后原RELEASE_BOTH应可接受，原mode34完成再接已有step13，不能重复放货或把转正计入送达。
-4. step13仍沿原场地H/D和固定U执行；上位U明确红27000/蓝9000，四段action及最后step12保持。不要把step13 D0改成转向，搜索轮换的结束语义保持。
-
-原step0..13、速度/PID/舵机/串口/ISR、STOP/PAUSE/mode51保持，无新握手、新鲜度/时间资格、冗余等待、FAULT或遥测。只做必要编译与原检查，不附加下位测试代码/程序任务。RDK已实现并完成7项必要软件检查，未实车；本窗口不改/烧录下位。源码完成、构建、actual和烧录分别回传。
-
-当前状态：**上位实现；F405新step14待审核/实现/部署，不能以旧63d75a8实报声称新转正已上板。** 说明与机器合同：
-
-```text
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/COMPETITION_ATTACK_RETURN_20261114.md
-https://github.com/danmo-teng/shijue_fangan/blob/codex/gamepad-teleop/docs/contracts/f405_empty_body_move_20261114.json
-```
+对端上述固定回执已接受并实现step14红270°/蓝90°、带载转正后原放货→13→12。18:43原始实跑b1b3531/actual f14d2a4 dirty1已见25163转向接受及DONE，不能再写旧“step14待实现”。转正完成附近约88～90°、返回开始64.9°的偏移仍在；本轮用户只批准首段100mm轮程，不扩改转向/制动、速度或等待。新step15另按当前请求，旧step0..14保持。
 
 ## 回执MATCH-CAPTURE-HANDOFF-20261114：前轮配套已实现，本场实际身份已核对
 
@@ -71,7 +56,7 @@ F405固定回执接受并实现前轮聚堆新图回正、仅mode53剩余≤10mm
 
 ## 回执MATCH-SEARCH-ROTATION / MATCH-ATTACK-RETURN：源码已实现，本场入口已实际接受
 
-已读F405固定回执及Task/vision，13保向移动、空爪SEARCH入口、原step12收尾已实现。14:59实跑6ee665b/dirty1及最新16:40实跑63d75a8/dirty1均有对应入口，不重复原枚举/报文/SEARCH入口任务。新转正step14另按上方请求，不把旧入口接受当新配套已部署。
+已读F405固定回执及Task/vision，13保向移动、空爪SEARCH入口、原step12收尾已实现。14:59实跑6ee665b/dirty1及最新16:40实跑63d75a8/dirty1均有对应入口，不重复原枚举/报文/SEARCH入口任务。step14也已见18:43实跑接受；本轮新首段step15另按上方请求，不把旧入口接受当新15已部署。
 
 这证明本场入口/动作通路，不冒充5cm地面精度或本轮新near-keep标志已支持。源代码、actual与dirty差异分开；本端未改/烧录对端。
 

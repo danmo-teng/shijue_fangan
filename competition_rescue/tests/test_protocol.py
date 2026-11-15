@@ -103,6 +103,23 @@ def test_empty_body_move_extension_keeps_field_translation_and_chassis_heading_s
         assert command_context_frame(9,11,12,0)[3]==packet[3]
 
 
+def test_attack_back_100_has_fixed_wheel_distance_and_opponent_heading():
+    from protocol import CMD_BULLDOZER_STEP, command_context_frame
+    for flags, heading in ((0xF9, 27000), (0xF1, 9000)):
+        packet = mission_frame(7, CMD_BULLDOZER_STEP, flags, -100, 0, heading)
+        assert int.from_bytes(packet[6:8], 'big', signed=True) == -100
+        for frame in (packet, command_context_frame(7, 10, 100, 0)):
+            assert frame[12:14] == crc16_modbus(frame[2:12]).to_bytes(2,'little')
+        for a,b,u in ((0,0,heading),(100,0,heading),(-200,0,heading),
+                      (-100,1,heading),(-100,0,(heading+18000)%36000)):
+            try:
+                mission_frame(7, CMD_BULLDOZER_STEP, flags, a, b, u)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('variable distance or wrong finite-back payload accepted')
+
+
 def test_attack_face_opponent_extension_keeps_old_sweep_turns_fixed():
     from protocol import CMD_BULLDOZER_STEP
     for flags, heading in ((0xE9, 27000), (0xE1, 9000)):

@@ -3034,11 +3034,12 @@ def test_attack_return_live_updates_keep_action_and_each_leg_changes_action():
         planner._publish(out);ids=(planner.protocol_task,planner.protocol_action)
         stale=replace(old,mode=25,task_id=ids[0],action_id=(ids[1]-1)&65535,accepted_command=CMD_BULLDOZER_STEP)
         updated=planner._output_for_cycle(v,replace(p,y_m=-.66),stale,False,1.1)
-        assert updated.command.arg_a==70
+        assert updated.command.arg_a == -100 and updated.command.arg_b == 0
         planner._publish(updated);assert (planner.protocol_task,planner.protocol_action)==ids
         target=m.attack_return_route.waypoints[0];at=replace(p,x_m=target[0],y_m=target[1])
         waiting=planner._output_for_cycle(v,at,stale,False,1.2)
         planner._publish(waiting);assert m.attack_return_route.index==0
+        assert waiting.command.arg_a == -100 and waiting.command.flags >> 4 == 15
         second=planner._output_for_cycle(v,at,replace(stale,action_id=ids[1]),False,1.3)
         assert m.attack_return_route.index==1 and second.command.arg_a==500
         planner._publish(second)

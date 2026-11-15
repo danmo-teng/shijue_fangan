@@ -148,8 +148,11 @@ def mission_frame(
                 expected = 27000 if flags & CMD_RED_SIDE else 9000
             valid = arg_a == arg_b == 0 and aux_cdeg == expected
         elif step in LOCAL_DISTANCES:
+            expected = ((27000 if flags & CMD_RED_SIDE else 9000)
+                        if step == RouteStep.ATTACK_BACK_100 else
+                        (0 if flags & CMD_RED_SIDE else 18000))
             valid = (arg_a == LOCAL_DISTANCES[step] and arg_b == 0 and
-                     aux_cdeg == (0 if flags & CMD_RED_SIDE else 18000))
+                     aux_cdeg == expected)
         elif step == RouteStep.EMPTY_BODY_MOVE:
             valid = 0 <= arg_a <= 5000 and -18000 <= arg_b <= 18000 and 0 <= aux_cdeg < 36000
         elif step in LIVE_STEPS:
