@@ -283,6 +283,7 @@ class CargoAudit:
     near_claw_keep_side: str | None = None
     near_claw_green_id: int | None = None
     near_claw_frame: int = 0
+    first_green_core_conflict: bool = False
 
     @property
     def near_keep_side(self) -> str | None:
@@ -335,6 +336,7 @@ class CargoAudit:
             initial_stash=initial_stash,
             destination_injury=destination == "injury",
             audit_id=audit_id,
+            first_green_core_conflict=self.first_green_core_conflict,
         )
 
 
@@ -704,6 +706,7 @@ class CompetitionMission:
         self.stash_zero_tx_baseline: int | None = None
         self.stash_handoff_hold_tx_baseline: int | None = None
         self.first_common_delivered = False
+        self.first_green_core_evidence: tuple[int, int, int, tuple[int, int, int, int]] | None = None
         self.first_green_bump_used = False
         self.delivery_count = 0
         self.selected_batch: CargoBatch | None = None
@@ -1596,6 +1599,8 @@ class CompetitionMission:
 
     def _audit_payload(self, audit: CargoAudit) -> CargoAuditPayload:
         assert self.selected_batch is not None
+        if self._first_green_core_conflict_active():
+            audit = replace(audit, first_green_core_conflict=True)
         recovering_sweep = (self.safe_sweep_reaudit_active or
                             (self.state == CompetitionState.CLEAR_SAFE_ZONE and
                              self.safe_sweep_pickup is not None and
@@ -1730,6 +1735,7 @@ class CompetitionMission:
 
     def _finish_abandoned_batch_budget(self) -> None:
         """An actual empty SEARCH exit ends this batch, not its next target."""
+        self.first_green_core_evidence = None
         self.disperse_attempts = 0
         self.separation_progress_attempt = 0
         self.separation_reviewed_attempt = 0
@@ -2141,6 +2147,7 @@ class CompetitionMission:
             destination_injury=(not sweep_pickup and
                                (self._sweep_original_destination() == "injury" if original
                                 else bool(batch and batch.destination == "injury"))),
+            first_green_core_conflict=self._first_green_core_conflict_active(),
         )
 
     def _audit_placeholder(self, reason: str, *, wire_mode: int | None = None) -> CompetitionOutput:
@@ -3303,6 +3310,9 @@ class CompetitionMission:
         # before grabbing and in the mode23 post-grab audit.
         if self.selected_batch is not None and self.selected_batch.initial_stash:
             return audit.total_count > 0
+        if self._first_green_core_conflict_active() or (
+                not self.first_common_delivered and audit.first_green_core_conflict):
+            return False
         if (audit.left_count < 0 or audit.right_count < 0 or
                 audit.left_count > 3 or audit.right_count > 3 or
                 audit.left_count + audit.right_count != audit.total_count or
@@ -4763,6 +4773,57 @@ class CompetitionMission:
             reason="original_recovery_lost",
             message="结束本次原伤员/物资找回，清除旧任务，沿原恢复流程寻找其他目标")
 
+    def _first_green_core_conflict_active(self) -> bool:
+        batch = self.selected_batch
+        return (self.first_green_core_evidence is not None and not self.first_common_delivered and
+                not (batch is not None and batch.initial_stash))
+
+    def _first_green_reaudit_needed(self, stm: StmSnapshot) -> bool:
+        return (self._first_green_core_conflict_active() and
+            (self.state in {
+                CompetitionState.GRAB, CompetitionState.NAVIGATE,
+                CompetitionState.ALIGN_SAFE_ZONE_BY_POSE, CompetitionState.ACQUIRE_SAFE_ZONE,
+                CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
+                CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, CompetitionState.WAIT_SAFE_ZONE_CLEAR,
+             } or (self.state == CompetitionState.ENTER_SAFE_ZONE and
+                   not self.enter_command_published and not self.enter_command_accepted)) and
+            stm.mode in {STM_MODE_CAPTURE_DONE, STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE} and
+            stm.gripper_closed)
+
+    def _first_green_reaudit_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        self._reset_safe_zone_alignment()
+        self._reset_delivery_evidence()
+        if stm.mode == STM_MODE_CAPTURE_DONE:
+            self._begin_post_grab_audit(vision, now)
+            output = self._audit_output(vision, stm, now)
+        else:
+            output = self._begin_transport_audit(vision, pose, stm, now)
+        return replace(output, event="carried_incompatible_reaudit", reason="first_green_core_reaudit",
+            message="首绿持物曾见平台黑核心，撤销单绿资格，保持真实数量回140°复审与分离")
+
+    def _observe_first_green_core(self, vision: VisionSnapshot, stm: StmSnapshot) -> None:
+        if self.first_common_delivered or (stm.fresh and stm.mode == STM_MODE_SEARCH and not stm.gripper_closed):
+            self.first_green_core_evidence = None
+            return
+        batch = self.selected_batch
+        if (self.first_green_core_evidence is not None or batch is None or batch.initial_stash or
+                (self.confirmed_delivery_destination or batch.destination) != "material" or
+                not stm.gripper_closed or vision.frame_sequence <= 0 or
+                (self.audit_recheck_frame_floor is not None and
+                 vision.frame_sequence <= self.audit_recheck_frame_floor) or
+                self.enter_command_published or self.enter_command_accepted):
+            return
+        core = next((item for item in vision.carried_incompatible_cargo
+                     if item.visible and item.class_name == "core_black"), None)
+        if core is not None:
+            source_pitch = (vision.range_pitch_cdeg if vision.range_pitch_cdeg in {11500,12000}
+                            else stm.camera_pitch_cdeg)
+            self.first_green_core_evidence = (core.track_id, vision.frame_sequence, source_pitch, core.bbox)
+            self._invalidate_audit_evidence()
+            self.grab_complete_confirmed = False
+
     def _can_reuse_recovered_injury_audit(self) -> bool:
         return (
             self.recovered_injury_audit_reuse and self.recovering_original_load and
@@ -5773,10 +5834,17 @@ class CompetitionMission:
             stm.mode == STM_MODE_DISPERSE_DONE and
             stm.claw_visible and
             stm.camera_pitch_cdeg == 14000 and
-            self.disperse_command_accepted
+            self.disperse_command_accepted and
+            (not self._first_green_core_conflict_active() or
+             (stm.context_valid and stm.context_matches and
+              stm.accepted_command == CMD_DISPERSE_PILE and bool(stm.action_status & 2)))
         ):
             if self.disperse_context == "observe":
                 self.disperse_observe_attempts += 1
+            elif self.disperse_context == "selective":
+                # A real completed separation changes the held batch. A view
+                # change, missing detection or rejected command never does.
+                self.first_green_core_evidence = None
             self._begin_capture_audit(
                 vision,
                 now,
@@ -6477,6 +6545,7 @@ class CompetitionMission:
     ) -> CompetitionOutput:
         self.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
                                 if pose.valid else None)
+        self._observe_first_green_core(vision, stm)
         if self.recovered_injury_audit_reuse:
             audit = vision.capture_audit if vision.capture_observation_valid else None
             positive_conflict = (audit is not None and
@@ -6568,6 +6637,8 @@ class CompetitionMission:
             )
         if self._original_recovery_lost(stm):
             return self._abandon_original_recovery(vision, pose, stm, now)
+        if self._first_green_reaudit_needed(stm):
+            return self._first_green_reaudit_output(vision, pose, stm, now)
         timeout_output = self._audit_wire_timeout_output(stm, now)
         if timeout_output is not None:
             return timeout_output

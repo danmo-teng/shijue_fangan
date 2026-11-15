@@ -2913,6 +2913,67 @@ def test_only_green_capture_ignores_bottom_point_at_fortyfive_percent_overlap():
     assert "green_supply" in held.items  # No obsolete foot rule in the closed-claw cache.
 
 
+def test_real_platform_core_is_incompatible_only_before_first_green_delivery():
+    from types import SimpleNamespace
+    from rescue_vision.tracker import TrackState
+    from state_machine import CargoBatch, CargoAudit, TrackedCargo
+    from capture_roi import CaptureRois, split_capture_roi
+    polygon=((168,91),(1095,91),(1095,667),(168,667))
+    rois=CaptureRois(polygon,*split_capture_roi(polygon))
+    def track(i,name,box):
+        return SimpleNamespace(track_id=i,class_name=name,confidence=.9,hits=30,misses=0,
+            state=TrackState.CONFIRMED,last_detection=SimpleNamespace(bbox=box,ground_xy_mm=None))
+    tracks=(track(154,'green_supply',(590,525,260,230)),track(195,'core_black',(460,608,152,127)))
+    for completed in (False,True):
+        m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+        m._select_batch(CargoBatch((154,),('green_supply',),'material'))
+        m._latch_carried_manifest(CargoAudit(right_class='green_supply',right_count=1,total_count=1))
+        m.first_common_delivered=completed
+        m.state=CompetitionState.ACQUIRE_SAFE_ZONE
+        status=StmSnapshot(mode=11,flags=82,age_ms=0,camera_pitch_cdeg=12000)
+        view=runner_module.make_vision_snapshot([],tracks,SimpleNamespace(calibrated=False),None,status,m,2077,capture_rois=rois)
+        assert {x.track_id for x in view.carried_incompatible_cargo} == (set() if completed else {195})
+        m._observe_first_green_core(view,status)
+        assert m._first_green_core_conflict_active() == (not completed)
+    m=CompetitionMission(CompetitionSettings(side='blue'))
+    m._select_batch(CargoBatch((154,),('green_supply',),'stash',initial_stash=True))
+    m._observe_first_green_core(VisionSnapshot(frame_sequence=2077,carried_incompatible_cargo=(
+        TrackedCargo(195,'core_black',.72,(460,608,152,127),hits=30),)),status)
+    assert not m._first_green_core_conflict_active()
+
+
+def test_platform_core_veto_prevents_restoring_old_legal_audit_handoff():
+    from state_machine import CargoBatch, CargoAudit, TrackedCargo
+    from protocol import CMD_CARGO_AUDIT, CMD_NAVIGATE_WAYPOINT
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((154,),('green_supply',),'material'))
+    m.first_green_core_evidence=(195,2077,12000,(460,608,152,127))
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        p=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        p.published_audit_handoff=(p.protocol_task,p.protocol_action,m.audit_epoch,
+            {'pending_audit_valid':True,'pending_audit':CargoAudit(right_class='green_supply',right_count=1,total_count=1)})
+        status=StmSnapshot(mode=22,flags=83,age_ms=0,context_valid=True,task_id=p.protocol_task,
+            action_id=p.protocol_action,accepted_command=CMD_CARGO_AUDIT,action_status=3)
+        p._restore_audit_handoff(status)
+        assert not m.pending_audit_valid and m.committed_audit_handoff_mode is None
+        m.first_green_core_evidence=None  # Actual physical epoch change is covered in mission checks.
+        p._restore_audit_handoff(status)
+        assert m.pending_audit_valid
+        # Reproduce a new platform-core frame while the next ALIGN ACK is pending.
+        m._latch_carried_manifest(CargoAudit(right_class='green_supply',right_count=1,total_count=1))
+        m.state=CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+        p._publish(CompetitionOutput(m.state,m._safe_zone_pose_align_command(),'pending ALIGN'))
+        old=StmSnapshot(mode=10,flags=82,age_ms=0,camera_pitch_cdeg=12000,context_valid=True,
+            task_id=p.protocol_task,action_id=(p.protocol_action-1)&65535,
+            accepted_command=CMD_NAVIGATE_WAYPOINT,action_status=3)
+        core=TrackedCargo(195,'core_black',.72,(460,608,152,127),hits=30)
+        out=p._output_for_cycle(VisionSnapshot(frame_sequence=2077,carried_incompatible_cargo=(core,)),
+            PoseSnapshot(True,.05,-.51,270.,0.),old,False,1.)
+        assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.first_green_core_conflict
+        assert out.reason == 'first_green_core_reaudit' and not m.pending_audit_valid
+
+
 def test_empty_abandoned_batch_next_visible_target_gets_new_task_without_return():
     from dataclasses import replace
     from state_machine import CargoBatch, CargoAudit

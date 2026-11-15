@@ -1,0 +1,74 @@
+{
+  "id": "MATCH-FIRST-GREEN-CORE-20261115",
+  "version": 1,
+  "status": "upper_implemented_lower_review_implementation_deployment_pending",
+  "scope": "first formal single-green delivery, actual carrying-platform core seen during closed holding before ENTER publication",
+  "wire": {
+    "type": 24,
+    "opcode": 18,
+    "command_flags": "unchanged CMD_VALID=1",
+    "audit_flag_name": "FIRST_GREEN_CORE_CONFLICT",
+    "audit_flag": 128,
+    "location": "P5 bit7 / frame byte index9; not command P1 or TARGET_RIGHT",
+    "class_counts_total_ids": "unchanged real current image values",
+    "no_new_frame": "frame0 placeholder is metadata withdrawal, never observed empty"
+  },
+  "positive_evidence": {
+    "run": "20261115_155235_competition_wheel",
+    "business": "20000101_080038_competition",
+    "upper_actual": "8709e43",
+    "lower_actual": "a0a1c5d635eca77431129dd4bd38998f2385fd28 dirty1",
+    "session": "c3a809d0700bbf4228b9bbd2cbff3a27",
+    "round": "9472342b17f1774daf3f3b5cf05fe292",
+    "core_track_id": 195,
+    "image_frame": 2077,
+    "pitch_command_cdeg": 12000,
+    "bbox": [
+      460,
+      608,
+      152,
+      127
+    ],
+    "image_note": "real observed platform core, not a current 140-degree count or measured servo angle"
+  },
+  "upper": {
+    "revoke": "record before old ACK/cached legal audit handoff; redirect current close/NAV/ALIGN/pre-entry to original audit/separation",
+    "persist": "140 miss, new target ID, audit cache reset or recovery does not erase positive conflict",
+    "clear": "matched actual selective DISPERSE completion or actual empty SEARCH end of held batch; then original fresh post-action audit",
+    "old_picture": "reuse original action image floor; pre-separation image cannot relatch next physical epoch",
+    "counts": "actual 1 green remains 1 green; no invented core count, danger/unknown or single-item confirmation",
+    "committed_enter": "existing committed local ENTER remains unchanged; veto applies before its publication",
+    "ordinary": "opening temporary stash and material transport after first green keep original policy"
+  },
+  "lower_requested": {
+    "placeholder": "allow audit bit7 in original metadata placeholder; immediately revoke stale single-green transport qualification without READY/VALID/sample/count fabrication",
+    "latch": "negative held-batch state survives camera/re-audit/cache reset, not stored only in transient last-audit flags",
+    "reaudit": "negative CARGO_AUDIT may stop current held NAV/ALIGN for original mode48; mode22 may reuse original post-grab audit; no global FAULT/permanent stop",
+    "semantic": "first-green stage conflict is formally INVALID even if current real count is one green; stable real audit may become READY but never VALID while conflict remains",
+    "separate": "existing SIDE_VALID DISPERSE may retain actual green side with real count1 and opposite count0; never require invented second/core cargo; original grip/curve",
+    "clear": "same actual selective separation completion or actual empty-batch exit as upper; rejected/old DONE or observe-only turn does not clear",
+    "no_new_controls": "no new TYPE/handshake/timer/freshness/ISR/telemetry/test code or standalone lower test program"
+  },
+  "examples": [
+    {
+      "name": "withdrawal_placeholder",
+      "task_id": 10,
+      "action_id": 101,
+      "sequence": 20,
+      "vision_frame": 0,
+      "context_hex": "a3 b3 1d 14 00 0a 00 65 00 00 00 00 f9 60 c3",
+      "command_hex": "a3 b3 18 14 12 01 00 00 00 80 00 00 9e 85 c3",
+      "source": "synthetic_offline_not_transmitted_not_full_audit_sequence"
+    },
+    {
+      "name": "real_one_green_with_negative_qualification",
+      "task_id": 10,
+      "action_id": 101,
+      "sequence": 21,
+      "vision_frame": 2100,
+      "context_hex": "a3 b3 1d 15 00 0a 00 65 00 00 08 34 f2 e7 c3",
+      "command_hex": "a3 b3 18 15 12 01 00 01 04 90 02 01 6e 80 c3",
+      "source": "synthetic_offline_not_transmitted_not_full_audit_sequence"
+    }
+  ]
+}

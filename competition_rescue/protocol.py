@@ -72,6 +72,7 @@ AUDIT_INJURY_MIXED = 1 << 3
 AUDIT_STABLE = 1 << 4
 AUDIT_DESTINATION_INJURY = 1 << 5
 AUDIT_SWEEP_PICKUP = 1 << 6
+AUDIT_FIRST_GREEN_CORE_CONFLICT = 1 << 7  # Negative transport qualification, never a count.
 
 CARGO_NONE = 0
 CARGO_GREEN = 1
@@ -259,6 +260,7 @@ class CargoAuditPayload:
     destination_injury: bool = False
     audit_id: int = 0
     sweep_pickup: bool = False
+    first_green_core_conflict: bool = False
 
     @property
     def semantic_signature(self) -> tuple:
@@ -289,6 +291,7 @@ class CargoAuditPayload:
         flags |= AUDIT_STABLE if self.stable else 0
         flags |= AUDIT_DESTINATION_INJURY if self.destination_injury else 0
         flags |= AUDIT_SWEEP_PICKUP if self.sweep_pickup else 0
+        flags |= AUDIT_FIRST_GREEN_CORE_CONFLICT if self.first_green_core_conflict else 0
         packed_counts = self.left_count | (self.right_count << 2)
         payload = bytes((
             CMD_CARGO_AUDIT,

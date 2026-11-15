@@ -154,6 +154,22 @@ def test_reused_post_grab_audit_flag_only_extends_stage_nav():
                 raise AssertionError("audit reuse outside STAGE NAV accepted")
 
 
+def test_first_green_core_conflict_is_negative_metadata_with_unchanged_real_counts():
+    from dataclasses import replace
+    from protocol import AUDIT_FIRST_GREEN_CORE_CONFLICT, AUDIT_STABLE
+    plain=CargoAuditPayload(right_class="green_supply",right_count=1,total_count=1,stable=True,audit_id=9)
+    conflict=replace(plain,first_green_core_conflict=True)
+    old,new=plain.frame(7),conflict.frame(7)
+    for i in (6,7,8,10,11):
+        assert old[i] == new[i]
+    assert new[9] == old[9] | AUDIT_FIRST_GREEN_CORE_CONFLICT
+    assert new[12:14] == crc16_modbus(new[2:12]).to_bytes(2,'little')
+    assert plain.semantic_signature != conflict.semantic_signature
+    placeholder=CargoAuditPayload(first_green_core_conflict=True).frame(8)
+    assert placeholder[6:9] == bytes(3) and placeholder[11] == 0
+    assert placeholder[9] & AUDIT_FIRST_GREEN_CORE_CONFLICT and not placeholder[9] & AUDIT_STABLE
+
+
 def test_near_claw_separation_flag_has_no_transport_or_motion_payload():
     from protocol import CMD_DISPERSE_PILE,CMD_DISPERSE_NEAR_KEEP,CMD_SIDE_VALID,CMD_TARGET_RIGHT
     for side in (0,CMD_TARGET_RIGHT):

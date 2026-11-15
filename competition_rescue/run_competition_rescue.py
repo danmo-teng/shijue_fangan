@@ -1171,6 +1171,8 @@ def make_vision_snapshot(
         {"injured_orange", "danger_cyan"}
         if corridor_destination == "material" else set()
     )
+    if corridor_destination == "material" and not mission.first_common_delivered:
+        incompatible_classes.add("core_black")
     incompatible_cargo = tuple(
         item for item in cargo if stm.gripper_closed and item.visible and item.hits >= 2 and
         not item.inside_safe_zone and item.class_name in incompatible_classes and
@@ -1897,6 +1899,8 @@ class CompetitionPlanner:
         self.published_audit_handoff = None
 
     def _restore_audit_handoff(self, stm: StmSnapshot) -> None:
+        if self.mission._first_green_core_conflict_active():
+            return
         saved = self.published_audit_handoff
         if (saved is None or stm.mode not in {22, 40, 50} or not stm.context_valid or
                 stm.fault or not stm.action_status & 1 or stm.accepted_command != CMD_CARGO_AUDIT):
@@ -2201,6 +2205,7 @@ class CompetitionPlanner:
         now: float,
     ) -> CompetitionOutput:
         self.protocol_vision = vision
+        self.mission._observe_first_green_core(vision, stm)
         self._restore_audit_handoff(stm)
         if (stm.fresh and stm.mode == STM_MODE_RECOVERY_WAIT and not stm.fault and
                 self.mission.state not in {CompetitionState.FAULT, CompetitionState.FINISHED}):
@@ -2302,6 +2307,10 @@ class CompetitionPlanner:
             )
         matches = (stm.context_valid and stm.task_id == self.protocol_task and
                    stm.action_id == self.protocol_action)
+        if self.mission._first_green_reaudit_needed(stm):
+            # A new positive cargo conflict withdraws transport qualification;
+            # waiting for the old NAV/ALIGN ACK must not hide it.
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         reconciled = self._reconcile_safe_zone_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
@@ -2532,6 +2541,7 @@ class CompetitionPlanner:
             "safe_zone_fallback": self.mission.safe_zone_fallback,
             "safe_corridor_obstacle_remembered": vision.safe_corridor_obstacle_remembered,
             "carried_incompatible_track_ids": [item.track_id for item in vision.carried_incompatible_cargo],
+            "first_green_core_evidence": self.mission.first_green_core_evidence,
             "safe_zone_view_pitch_cdeg": self.mission.safe_zone_view_pitch_cdeg,
             "empty_load_recheck_pending": self.mission.empty_load_recheck_pending,
             "empty_load_view_moved": self.mission.empty_load_view_moved,

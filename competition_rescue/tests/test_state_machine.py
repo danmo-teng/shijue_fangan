@@ -2355,6 +2355,95 @@ def test_locked_safe_zone_short_gap_preserves_real_action_without_authorizing_en
         assert lost.event == "safe_zone_visual_reobserve" and lost.command.source_vision_frame == 0
 
 
+def _first_green_with_seen_platform_core():
+    from protocol import CMD_ALIGN_SAFE_ZONE
+    m=CompetitionMission(CompetitionSettings(side="blue",initial_stash_enabled=False))
+    m._select_batch(CargoBatch((154,), ("green_supply",), "material"))
+    green=CargoAudit(right_class="green_supply",right_count=1,right_green_count=1,total_count=1)
+    m._latch_carried_manifest(green)
+    m.state=CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+    status=StmSnapshot(mode=11,flags=82,age_ms=0,camera_pitch_cdeg=12000,
+        context_valid=True,context_matches=True,accepted_command=CMD_ALIGN_SAFE_ZONE,action_status=3)
+    core=TrackedCargo(195,"core_black",.72,(460,608,152,127),hits=30)
+    view=VisionSnapshot(frame_sequence=2077,carried_incompatible_cargo=(core,))
+    out=m.step(view,pose(),status,1.)
+    return m,green,status,out
+
+
+def test_first_green_platform_core_survives_140_gap_and_separates_without_fake_count():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_SIDE_VALID
+    m,green,status,out=_first_green_with_seen_platform_core()
+    assert out.state == CompetitionState.TRANSPORT_AUDIT and out.reason == "first_green_core_reaudit"
+    assert out.command.audit.first_green_core_conflict and not out.command.audit.stable
+    assert out.command.audit.total_count == 0 and out.command.audit_vision_frame == 0
+    ready=replace(status,mode=48,flags=3,camera_pitch_cdeg=14000,
+                  accepted_command=CMD_CARGO_AUDIT,action_status=1)
+    for frame,now in ((2078,2.),(2079,2.12),(2080,2.24)):
+        view=VisionSnapshot(frame_sequence=frame,observed_monotonic_s=now,capture_audit=green)
+        out=m.step(view,pose(),ready,now)
+    payload=out.command.audit
+    assert payload.first_green_core_conflict and payload.stable
+    assert (payload.left_count,payload.right_count,payload.total_count)==(0,1,1)
+    assert payload.right_class == "green_supply" and not payload.danger_present
+    assert not m._audit_valid(green)
+    invalid_ack=replace(relay_stm(out,mode=48,flags=67,relay_mission_tx_frames=3),
+        camera_pitch_cdeg=14000,context_valid=True,context_matches=True,
+        accepted_command=CMD_CARGO_AUDIT,action_status=3)
+    out=m.step(view,pose(),invalid_ack,2.25)
+    assert out.state == CompetitionState.DISPERSE and out.command.opcode == CMD_DISPERSE_PILE
+    assert out.command.flags & CMD_SIDE_VALID and m.first_green_core_evidence
+    running=replace(invalid_ack,mode=25,flags=0,accepted_command=CMD_DISPERSE_PILE,action_status=1)
+    m.step(view,pose(),running,2.4)
+    old_done=replace(running,mode=35,flags=1,action_status=3,context_matches=False)
+    out=m.step(view,pose(),old_done,2.5)
+    assert out.state == CompetitionState.DISPERSE and m.first_green_core_evidence
+    out=m.step(view,pose(),replace(old_done,context_matches=True),2.6)
+    assert m.first_green_core_evidence is None and m._audit_valid(green)
+    assert out.command.opcode == CMD_CARGO_AUDIT and not out.command.audit.first_green_core_conflict
+    # Reuse the original post-action frame floor: the pre-separation picture
+    # cannot re-establish a conflict in the next physical holding epoch.
+    core=TrackedCargo(195,"core_black",.72,(460,608,152,127),hits=30)
+    stale=replace(view,range_pitch_cdeg=12000,carried_incompatible_cargo=(core,))
+    m._observe_first_green_core(stale,replace(old_done,flags=2,camera_pitch_cdeg=12000))
+    assert m.first_green_core_evidence is None
+    m._observe_first_green_core(replace(stale,frame_sequence=2081),
+                               replace(old_done,flags=2,camera_pitch_cdeg=14000))
+    assert m._first_green_core_conflict_active() and m.first_green_core_evidence[2] == 12000
+
+
+def test_first_green_core_evidence_cannot_be_cleared_by_reaudit_or_target_change():
+    m,green,status,out=_first_green_with_seen_platform_core()
+    m._clear_pending_audit()
+    m._select_batch(CargoBatch((999,), ("green_supply",), "material"))
+    assert m._first_green_core_conflict_active() and not m._audit_valid(green)
+    assert m._audit_payload(green).total_count == 1 and m._audit_payload(green).first_green_core_conflict
+    m._clear_selected_batch()
+    assert not m._audit_valid(green,recovery=True)
+    m._select_batch(CargoBatch((1000,), ("green_supply",), "material"))
+    m.state=CompetitionState.TRANSPORT_AUDIT
+    out=m.step(VisionSnapshot(frame_sequence=2100),pose(),replace(status,mode=3,flags=0),3.)
+    assert out.state == CompetitionState.SEARCH and m.first_green_core_evidence is None
+    assert not m.first_common_delivered and m._audit_valid(green,recovery=True)
+
+
+def test_first_green_core_veto_covers_unpublished_entry_and_preserves_committed_enter():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE
+    for published in (False,True):
+        m=CompetitionMission(CompetitionSettings(side="blue",initial_stash_enabled=False))
+        m._select_batch(CargoBatch((154,), ("green_supply",), "material"))
+        m._latch_carried_manifest(CargoAudit(right_class="green_supply",right_count=1,right_green_count=1,total_count=1))
+        m.state=CompetitionState.ENTER_SAFE_ZONE
+        m.enter_command_published=published
+        status=StmSnapshot(mode=11,flags=82,age_ms=0,camera_pitch_cdeg=12000,
+            context_valid=True,context_matches=True,accepted_command=CMD_ALIGN_SAFE_ZONE,action_status=3)
+        core=TrackedCargo(195,"core_black",.72,(460,608,152,127),hits=30)
+        out=m.step(VisionSnapshot(frame_sequence=2077,carried_incompatible_cargo=(core,)),pose(),status,1.)
+        if published:
+            assert out.command.opcode == CMD_ENTER_SAFE_ZONE and m.first_green_core_evidence is None
+        else:
+            assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.first_green_core_conflict
+
+
 def test_platform_mixture_returns_to_existing_load_audit_before_enter():
     from protocol import CMD_ALIGN_SAFE_ZONE, CMD_CLEAR_SAFE_ZONE
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
