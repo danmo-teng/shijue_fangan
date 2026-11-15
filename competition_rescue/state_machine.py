@@ -4604,11 +4604,12 @@ class CompetitionMission:
     ) -> None:
         self.locked_safe_bbox = bbox
         x, _, width, _ = bbox
+        # Mirrored delivery points: 7/24 from each outer edge of the safe box.
         fraction = (
-            2.0 / 3.0
+            17.0 / 24.0
             if self.selected_batch is not None and
             self.selected_batch.destination == "injury"
-            else 1.0 / 3.0
+            else 7.0 / 24.0
         )
         self.locked_safe_target_x_px = round(x + width * fraction)
         self.safe_zone_visual_pixel_error = (

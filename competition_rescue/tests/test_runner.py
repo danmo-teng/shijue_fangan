@@ -3242,14 +3242,14 @@ def test_safe_zone_two_frame_cache_keeps_align_ids_and_real_source_frame():
                 status, m, frame, safe_zone_filter_blocked=True)
             out = planner._output_for_cycle(cached, p, status, False, 1.+frame*.01)
             planner._publish(out)
-            assert out.reason == 'safe_zone_visual_short_gap' and out.command.arg_a == -134
+            assert out.reason == 'safe_zone_visual_short_gap' and out.command.arg_a == -104
             assert out.command.source_vision_frame == 10
             assert (planner.protocol_task, planner.protocol_action) == ids
         live = VisionSnapshot(frame_sequence=13, safe_bbox=(42,15,775,134))
         out = planner._output_for_cycle(live, p, status, False, 1.2)
         planner._publish(out)
         assert out.state == CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
-        assert out.command.source_vision_frame == 13 and out.command.arg_a == -81
+        assert out.command.source_vision_frame == 13 and out.command.arg_a == -49
         assert (planner.protocol_task, planner.protocol_action) == ids
 
 

@@ -2504,19 +2504,19 @@ def test_safe_zone_lateral_only_starts_for_large_error_and_finishes_without_zero
     m.state = CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX
     status = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=12000,
         context_valid=True, context_matches=True, accepted_command=CMD_ALIGN_SAFE_ZONE, action_status=3)
-    # Injury point = x + 936*2/3; x=80 gives +64 px. Small errors skip lateral movement.
-    m._update_safe_zone_visual_target((80, 0, 936, 113), 10)
+    # Injury point = x + 936*17/24; x=41 gives +64 px. Small errors skip lateral movement.
+    m._update_safe_zone_visual_target((41, 0, 936, 113), 10)
     assert m.safe_zone_visual_pixel_error == 64 and not m.safe_zone_lateral_active
-    out = m.step(VisionSnapshot(frame_sequence=10, safe_bbox=(80,0,936,113)), pose(), status, 1.)
+    out = m.step(VisionSnapshot(frame_sequence=10, safe_bbox=(41,0,936,113)), pose(), status, 1.)
     assert out.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
     # Beyond 64 px activates one correction; it finishes inside 32 px, not at zero.
-    m._update_safe_zone_visual_target((81, 0, 936, 113), 11)
+    m._update_safe_zone_visual_target((42, 0, 936, 113), 11)
     assert m.safe_zone_visual_pixel_error == 65 and m.safe_zone_lateral_active
-    m._update_safe_zone_visual_target((66, 0, 936, 113), 12)
+    m._update_safe_zone_visual_target((27, 0, 936, 113), 12)
     assert m.safe_zone_visual_pixel_error == 50 and m.safe_zone_lateral_active
-    m._update_safe_zone_visual_target((48, 0, 936, 113), 13)
+    m._update_safe_zone_visual_target((9, 0, 936, 113), 13)
     assert m.safe_zone_visual_pixel_error == 32 and not m.safe_zone_lateral_active
-    m._update_safe_zone_visual_target((66, 0, 936, 113), 14)
+    m._update_safe_zone_visual_target((27, 0, 936, 113), 14)
     assert not m.safe_zone_lateral_active  # Do not restart for detection jitter in the small band.
 
 
