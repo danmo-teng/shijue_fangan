@@ -39,6 +39,110 @@ from state_machine import (  # noqa: E402
 )
 
 
+def test_camera_reopen_failure_keeps_session_and_waits_for_first_result():
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    from rescue_vision import camera as capture
+
+    for fault, recovery_decoder in ((RuntimeError("v4l2src poll error"), "jpu"),
+                                    (capture.CameraDecoderError("JPU decode error"), "software")):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            node, stable, replugged = (root / name for name in ("video0", "camera-index0", "video7"))
+            node.touch()
+            replugged.touch()
+            stable.symlink_to(node)
+            (root / "session").write_text('{"side":"blue","start_zone":2}')
+            (root / "model").write_bytes(b"fixture model; not loaded")
+            argv = ["runner", "--no-display", "--duration", "3.5"]
+            for flag, filename in (("session", "session"), ("model", "model"), ("device", "video0"),
+                                   ("pose", "pose"), ("stm-status", "stm"), ("command-file", "command"),
+                                   ("diagnostics", "diag"), ("detections-log", "detections"),
+                                   ("events-log", "events")):
+                argv.extend(("--" + flag, str(root / filename)))
+            clock = SimpleNamespace(now=1.)
+            fake_time = SimpleNamespace(monotonic=lambda: clock.now,
+                monotonic_ns=lambda: int(clock.now * 1e9),
+                sleep=lambda seconds: setattr(clock, "now", clock.now + seconds))
+            planner = Mock(error=None, termination_result={}, localization_wheel_policy=None)
+            detector = Mock(input_width=640, input_height=640, shapes={}, preprocess="vse")
+            packet = capture.CameraFrame(1, np.zeros((1024, 1280, 3), np.uint8), 1_000_000_000)
+            packets = []
+            detector.submit.side_effect = packets.append
+            detector.receive.side_effect = lambda: (packets.pop(), [], {}) if packets else None
+            # These opens stand in for successful prewarm, a failed immediate
+            # reopen, a failed retry, and the same UVC camera on a new node.
+            first, unavailable, retry, restored = [Mock() for _ in range(4)]
+            errors = iter((None, fault))
+            first.poll_error.side_effect = lambda: next(errors)
+            first.latest.return_value = packet
+            unavailable.start.side_effect = RuntimeError("GStreamer: device unavailable")
+            restored.poll_error.return_value = None
+
+            def reconnect():
+                stable.unlink()
+                stable.symlink_to(replugged)
+                raise RuntimeError("GStreamer: still enumerating")
+
+            retry.start.side_effect = reconnect
+
+            def first_restored_frame():
+                assert stable.resolve() == replugged
+                assert planner.set_paused.call_args.args == (True,)
+                assert planner.set_vision.call_args.args[0].capture_observation_valid is False
+                assert planner.set_vision.call_args.args[0].frame_sequence == 0
+                restored.latest.side_effect = None
+                restored.latest.return_value = capture.CameraFrame(1, packet.image, fake_time.monotonic_ns())
+                return restored.latest.return_value
+
+            restored.latest.side_effect = first_restored_frame
+            with patch.object(sys, "argv", argv), patch.object(runner_module, "time", fake_time), \
+                 patch.object(runner_module.signal, "signal"), \
+                 patch.object(capture, "glob", return_value=[str(stable)]), \
+                 patch.object(runner_module, "LatestFrameCamera", side_effect=(first, unavailable, retry, restored)) as cameras, \
+                 patch.object(runner_module, "Yolo26Pipeline", return_value=detector), \
+                 patch.object(runner_module, "CompetitionPlanner", return_value=planner), \
+                 patch.object(runner_module, "load_pose", return_value=PoseSnapshot(valid=True)), \
+                 patch.object(runner_module, "publish_start_config", wraps=runner_module.publish_start_config) as start:
+                assert runner_module.main() == 0
+            start.assert_called_once()
+            planner.start.assert_called_once()
+            first.stop.assert_called_once()
+            detector.reset.assert_called_once()
+            assert [call.args[0] for call in cameras.call_args_list] == [str(stable)] * 4
+            assert [call.kwargs["decoder"] for call in cameras.call_args_list] == ["jpu"] + [recovery_decoder] * 3
+            views = [call.args[0].frame_sequence for call in planner.set_vision.call_args_list]
+            assert views == [1, 0, 2]  # New camera-local frame 1, same running round.
+            rows = [json.loads(line) for line in (root / "events").read_text().splitlines()]
+            by_event = {row["event"]: row for row in rows}
+            assert "fatal_exception" not in by_event and not by_event["competition_stopped"]["camera_recovery_pending"]
+            assert by_event["camera_restart_failed"]["error"] == "GStreamer: device unavailable"
+            assert by_event["camera_recovery_retry_failed"]["error"] == "GStreamer: still enumerating"
+            assert by_event["camera_recovery_restored"]["vision_frame_sequence"] == 2
+
+
+def test_camera_start_preserves_pipeline_error_before_releasing_bus():
+    from unittest.mock import Mock
+    from rescue_vision.camera import Gst, LatestFrameCamera
+
+    camera = LatestFrameCamera.__new__(LatestFrameCamera)
+    camera.decoder = "software"
+    camera.pipeline = Mock()
+    camera.pipeline.set_state.return_value = Gst.StateChangeReturn.FAILURE
+    message = Mock(type=Gst.MessageType.ERROR)
+    message.parse_error.return_value = ("Device unavailable", "v4l2src: /dev/video0 not found")
+    camera.bus = Mock()
+    camera.bus.pop_filtered.return_value = message
+    camera.stop = Mock(side_effect=lambda: setattr(camera.bus.pop_filtered, "return_value", None))
+    try:
+        camera.start()
+    except RuntimeError as error:
+        assert "Device unavailable" in str(error) and "/dev/video0 not found" in str(error)
+    else:
+        raise AssertionError("failed stream start was treated as open")
+    camera.stop.assert_called_once()
+
+
 def test_async_diagnostics_keeps_producer_running_and_marks_overflow() -> None:
     from unittest.mock import patch
     from async_diagnostics import AsyncDiagnosticWriter

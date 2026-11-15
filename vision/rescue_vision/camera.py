@@ -29,13 +29,26 @@ class CameraFrame:
     pixel_format: str = "bgr"
 
 
-def resolve_camera_device(requested: str) -> str:
+class CameraDecoderError(RuntimeError):
+    """JPU initialization or decoding failed, independently of capture."""
+
+
+def resolve_camera_device(requested: str, *, prefer_stable: bool = False) -> str:
     """Use a stable UVC video-index0 link if /dev/videoN was renumbered."""
     if requested == "auto":
         requested = ""
-    if requested and Path(requested).exists():
-        return requested
-    candidates = sorted(glob("/dev/v4l/by-id/*-video-index0"))
+    if requested:
+        path = Path(requested)
+        if path.exists():
+            if prefer_stable and not path.is_symlink():
+                for directory in ("by-id", "by-path"):
+                    for link in sorted(glob(f"/dev/v4l/{directory}/*-video-index0")):
+                        if Path(link).resolve() == path.resolve():
+                            return link
+            return requested
+        if prefer_stable and requested.startswith(("/dev/v4l/by-id/", "/dev/v4l/by-path/")):
+            raise FileNotFoundError(f"摄像头节点不存在：{requested}")
+    candidates = sorted(link for link in glob("/dev/v4l/by-id/*-video-index0") if Path(link).exists())
     if len(candidates) == 1:
         print(f"摄像头节点 {requested or 'auto'} 不存在，自动使用 {candidates[0]}", file=sys.stderr)
         return candidates[0]
@@ -162,21 +175,26 @@ class LatestFrameCamera:
             self._running = False
 
     def start(self) -> None:
-        if self.decoder == "jpu":
-            from .jpu import JpuDecoder
-            self._jpu = JpuDecoder(self.width, self.height)
-            self._running = True
-            self._decode_thread = threading.Thread(
-                target=self._jpu_decode_loop, name="jpu-latest-frame", daemon=True)
-            self._decode_thread.start()
-        result = self.pipeline.set_state(Gst.State.PLAYING)
-        if result == Gst.StateChangeReturn.FAILURE:
+        try:
+            if self.decoder == "jpu":
+                try:
+                    from .jpu import JpuDecoder
+                    self._jpu = JpuDecoder(self.width, self.height)
+                except Exception as error:
+                    raise CameraDecoderError(f"JPU初始化失败：{error}") from error
+                self._running = True
+                self._decode_thread = threading.Thread(
+                    target=self._jpu_decode_loop, name="jpu-latest-frame", daemon=True)
+                self._decode_thread.start()
+            result = self.pipeline.set_state(Gst.State.PLAYING)
+            if result != Gst.StateChangeReturn.FAILURE:
+                result, _, _ = self.pipeline.get_state(5 * Gst.SECOND)
+            if result == Gst.StateChangeReturn.FAILURE:
+                # READY -> NULL flushes the bus; retain the original message first.
+                raise RuntimeError(self._stream_error() or "GStreamer未能启动摄像头管线")
+        except Exception:
             self.stop()
-            raise RuntimeError("摄像头启动失败，设备可能被占用")
-        result, _, _ = self.pipeline.get_state(5 * Gst.SECOND)
-        if result == Gst.StateChangeReturn.FAILURE:
-            self.stop()
-            raise RuntimeError("摄像头未能在5秒内进入PLAYING状态")
+            raise
 
     def latest(self) -> Optional[CameraFrame]:
         with self._lock:
@@ -190,10 +208,7 @@ class LatestFrameCamera:
         with self._lock:
             return self._captured if self.decoder == "jpu" else self._decoded
 
-    def check_error(self) -> Optional[str]:
-        with self._lock:
-            if self._worker_error:
-                return f"JPU错误：{self._worker_error}"
+    def _stream_error(self) -> Optional[str]:
         message = self.bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
         if message is None:
             return None
@@ -202,12 +217,26 @@ class LatestFrameCamera:
             return f"GStreamer错误：{error}; {debug}"
         return "摄像头流结束"
 
+    def poll_error(self) -> Optional[RuntimeError]:
+        stream_error = self._stream_error()
+        if stream_error is not None:
+            return RuntimeError(stream_error)
+        with self._lock:
+            if self._worker_error:
+                return CameraDecoderError(f"JPU错误：{self._worker_error}")
+        return None
+
+    def check_error(self) -> Optional[str]:
+        error = self.poll_error()
+        return str(error) if error is not None else None
+
     def stop(self) -> None:
         self._running = False
         self.pipeline.set_state(Gst.State.NULL)
         self.pipeline.get_state(2 * Gst.SECOND)
         if self._decode_thread is not None:
-            self._decode_thread.join(timeout=2.0)
+            if self._decode_thread.ident is not None:
+                self._decode_thread.join(timeout=2.0)
             self._decode_thread = None
         if self._jpu is not None:
             self._jpu.close()

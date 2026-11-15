@@ -40,7 +40,7 @@ VISION_ROOT = PROJECT_ROOT / "vision"
 sys.path.insert(0, str(VISION_ROOT))
 sys.path.insert(0, str(ROOT))
 
-from rescue_vision.camera import LatestFrameCamera, resolve_camera_device  # noqa: E402
+from rescue_vision.camera import CameraDecoderError, LatestFrameCamera, resolve_camera_device  # noqa: E402
 from rescue_vision.config import load_config, require_native_resolution  # noqa: E402
 from rescue_vision.localizer import GroundLocalizer, ApproachRangeCalibration  # noqa: E402
 from rescue_vision.models import Detection, TrackState  # noqa: E402
@@ -3224,8 +3224,6 @@ def main() -> int:
         events.write("fatal_exception", {"error_type":type(error).__name__, "error":str(error),
                                           "traceback":traceback.format_exc()})
         raise
-    scaler = None  # VSE is owned by the inference worker, never shared between processes.
-
     mission = CompetitionMission(CompetitionSettings(
         side=side,
         start_zone=start_zone,
@@ -3283,7 +3281,6 @@ def main() -> int:
             "vision_fps": args.vision_fps,
             "startup_pose": pose_dict(startup_pose),
         }
-        camera_device = resolve_camera_device(args.device)
     except Exception as error:
         events.write("fatal_exception", {
             "error_type": type(error).__name__,
@@ -3298,6 +3295,7 @@ def main() -> int:
         raise
     camera_decoder = args.decoder
     camera_output_format = "nv12" if args.decoder == "jpu" else "bgr"
+    camera_device: str | None = None
     camera: LatestFrameCamera | None = None
     running = True
     exit_reason = "setup_complete"
@@ -3329,7 +3327,6 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
     tracker = MultiFrameTracker(config)
-    last_packet_id = 0
     last_inference_id = 0
     vision_sequence = 0  # Session-wide: camera restarts must not rewind this ID.
     latest_image: np.ndarray | None = None
@@ -3448,46 +3445,46 @@ def main() -> int:
         warm_ready_written = write_warm_status()
         events.write("competition_started", {
             **startup_details,
+            "camera_device": camera_device,
             "first_vision_sequence": vision_sequence,
             "start_basis": "warm_operator_start_and_reference_bound" if args.wait_for_operator else "explicit_session_start_and_first_inference",
         })
         planner.set_paused(False, reason="camera_recovery")
         planner.start()
 
-    def create_camera() -> LatestFrameCamera:
-        return LatestFrameCamera(
-            camera_device,
-            IMAGE_WIDTH,
-            IMAGE_HEIGHT,
-            args.camera_fps,
-            decoder=camera_decoder,
-            decode_fps=args.decode_fps,
-            output_format=camera_output_format,
-        )
+    def fallback_for_decoder_error(error: Exception) -> None:
+        nonlocal camera_decoder, camera_output_format
+        if isinstance(error, CameraDecoderError):
+            camera_decoder, camera_output_format = "software", "bgr"
+
+    def open_camera(failure_event: str) -> bool:
+        nonlocal camera, camera_device, last_inference_id
+        attempted_decoder = camera_decoder
+        try:
+            if camera_device is None:
+                camera_device = resolve_camera_device(args.device, prefer_stable=True)
+            if not Path(camera_device).exists():
+                raise FileNotFoundError(f"摄像头节点尚未出现：{camera_device}")
+            opened = LatestFrameCamera(camera_device, IMAGE_WIDTH, IMAGE_HEIGHT, args.camera_fps,
+                decoder=attempted_decoder, decode_fps=args.decode_fps, output_format=camera_output_format)
+            opened.start()
+        except Exception as error:
+            # LatestFrameCamera.start cleans up its failed open. Do not leave a
+            # dead pipeline installed or let an unplug unwind the session.
+            fallback_for_decoder_error(error)
+            events.write(failure_event, {
+                "error": str(error), "device": camera_device or args.device,
+                "decoder": attempted_decoder, "next_decoder": camera_decoder,
+            })
+            return False
+        camera = opened
+        last_inference_id = 0
+        return True
 
     try:
         # No planner or CONFIG until actual camera inference is ready. Existing
         # in-session camera recovery retains its original pause/resume behavior.
-        try:
-            camera = create_camera()
-            camera.start()
-        except Exception as error:
-            if camera is not None:
-                camera.stop()
-            camera = None
-            camera_recovery_pending = True
-            next_camera_retry = started + 1.0
-            if camera_decoder == "jpu":
-                if scaler is not None:
-                    scaler.close()
-                    scaler = None
-                camera_decoder = "software"
-                camera_output_format = "bgr"
-            events.write("camera_start_error", {
-                "error": str(error),
-                "decoder": camera_decoder,
-                "recovery": "hold_and_retry",
-            })
+        camera_recovery_pending = not open_camera("camera_start_error")
         if display_enabled:
             import multiprocessing as mp
             context = mp.get_context("spawn")
@@ -3550,91 +3547,49 @@ def main() -> int:
                     events.write("camera_recovery_retry", {
                         "decoder": camera_decoder,
                     })
-                    try:
-                        camera = create_camera()
-                        camera.start()
-                    except Exception as retry_error:
-                        if camera is not None:
-                            camera.stop()
-                        camera = None
-                        next_camera_retry = now + 2.0
-                        events.write("camera_recovery_retry_failed", {
-                            "error": str(retry_error),
-                            "decoder": camera_decoder,
-                        })
-                    else:
-                        camera_recovery_pending = False
+                    if open_camera("camera_recovery_retry_failed"):
                         camera_restarts = 0
-                        planner.set_paused(False, reason="camera_recovery")
-                        last_packet_id = 0
-                        last_inference_id = 0
-                        detector.reset()
                         next_vision = now
-                        events.write("camera_recovery_restored", {
+                        events.write("camera_reopened", {
                             "decoder": camera_decoder,
                             "output_format": camera_output_format,
                         })
+                    else:
+                        next_camera_retry = now + 2.0
                 time.sleep(0.01)
                 continue
             assert camera is not None
-            error = camera.check_error()
+            error = camera.poll_error()
             if error:
                 events.write("camera_error", {
-                    "error": error,
+                    "error": str(error),
+                    "device": camera_device,
                     "decoder": camera_decoder,
                     "retry": camera_restarts,
                 })
-                if camera_restarts < args.camera_retries:
-                    planner.set_paused(True, reason="camera_recovery")
-                    camera.stop()
-                    camera_restarts += 1
-                    if camera_decoder == "jpu":
-                        # The default recovery path drops the optional VSE
-                        # object and switches to software JPEG decoding so a
-                        # transient JPU timeout does not terminate the task.
-                        if scaler is not None:
-                            scaler.close()
-                            scaler = None
-                        camera_decoder = "software"
-                        camera_output_format = "bgr"
-                    try:
-                        camera = LatestFrameCamera(
-                            camera_device,
-                            IMAGE_WIDTH,
-                            IMAGE_HEIGHT,
-                            args.camera_fps,
-                            decoder=camera_decoder,
-                            decode_fps=args.decode_fps,
-                            output_format=camera_output_format,
-                        )
-                        camera.start()
-                    except Exception as restart_error:
-                        events.write("camera_restart_failed", {
-                            "error": str(restart_error),
-                            "decoder": camera_decoder,
-                        })
-                        raise
-                    last_packet_id = 0
-                    last_inference_id = 0
-                    detector.reset()
-                    next_vision = now
-                    events.write("camera_restarted", {
-                        "decoder": camera_decoder,
-                        "output_format": camera_output_format,
-                        "retry": camera_restarts,
-                    })
-                    planner.set_paused(False, reason="camera_recovery")
-                    continue
                 planner.set_paused(True, reason="camera_recovery")
+                planner.set_vision(VisionSnapshot(capture_observation_valid=False,
+                    capture_observation_reason="camera_recovery"))
+                camera_recovery_pending = True
+                detector.reset()  # Outstanding results belong to the disconnected stream.
+                recent_safe_bbox, safe_zone_missing_frames = None, 0
                 camera.stop()
                 camera = None
-                camera_recovery_pending = True
-                next_camera_retry = now + 1.0
-                events.write("camera_recovery_wait", {
-                    "error": error,
-                    "decoder": camera_decoder,
-                    "action": "keep_task_alive_and_hold",
-                })
+                fallback_for_decoder_error(error)
+                if camera_restarts < args.camera_retries:
+                    camera_restarts += 1
+                    if open_camera("camera_restart_failed"):
+                        next_vision = now
+                        events.write("camera_restarted", {
+                            "decoder": camera_decoder, "output_format": camera_output_format,
+                            "retry": camera_restarts,
+                        })
+                if camera is None:
+                    next_camera_retry = now + 1.0
+                    events.write("camera_recovery_wait", {
+                        "error": str(error), "decoder": camera_decoder,
+                        "action": "keep_task_alive_and_hold",
+                    })
                 continue
             fetch_started = time.monotonic()
             packet = camera.latest()
@@ -3719,6 +3674,13 @@ def main() -> int:
                     # geometry matches, so the old 140-degree anchor survives.
                     recent_carried_pitch_cdeg = stm.camera_pitch_cdeg
                 planner.set_vision(latest_vision)
+                if camera_recovery_pending:
+                    camera_recovery_pending = False
+                    planner.set_paused(False, reason="camera_recovery")
+                    events.write("camera_recovery_restored", {
+                        "decoder": camera_decoder, "output_format": camera_output_format,
+                        "vision_frame_sequence": vision_sequence,
+                    })
                 if not warm_ready_written:
                     warm_ready_written = write_warm_status()
                     events.write('vision_prewarm_ready', dict(session_token=args.reset_session_token,
@@ -3815,8 +3777,6 @@ def main() -> int:
         detector.close()
         if camera is not None:
             camera.stop()
-        if scaler is not None:
-            scaler.close()
         if display_process is not None:
             display_stop.set()
             display_process.join(3)
