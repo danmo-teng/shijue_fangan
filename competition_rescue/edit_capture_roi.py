@@ -6,10 +6,12 @@ import argparse
 import signal
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parent
@@ -18,6 +20,7 @@ VISION_ROOT = PROJECT_ROOT / "vision"
 sys.path.insert(0, str(VISION_ROOT))
 sys.path.insert(0, str(ROOT))
 
+from capture_roi_trails import CaptureTrail  # noqa: E402
 from capture_roi import (  # noqa: E402
     CaptureRois,
     IMAGE_HEIGHT,
@@ -43,6 +46,7 @@ from run_yolo_x5 import (  # noqa: E402
 WINDOW_NAME = "capture_roi_editor"
 DISPLAY_WIDTH = 960
 DISPLAY_HEIGHT = 768
+PANEL_HEIGHT = 76
 GREEN_SUPPLY_SCORE_THRESHOLD = DEFAULT_YOLO_SCORE_THRESHOLD
 
 
@@ -116,10 +120,58 @@ def main() -> int:
         "right": list(loaded_rois.right),
     }
     active_roi = "overall"
-    status = "Left:add  Right:undo  C:clear  R:reload  S:save  sides:auto x=640"
+    status = "Left:add  Right:undo  C:clear ROI  R:reload ROI  S:save ROI"
+    trail: CaptureTrail | None = None
+    recording = False
+    show_trails = True
+    buttons = []
+    font = ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 18)
+
+    def trail_canvas():
+        if trail is None:
+            return latest_image.copy()
+        canvas = trail.background.copy()
+        trail.paint(canvas, (255, 210, 0))
+        return canvas
+
+    def trail_action(action):
+        nonlocal trail, recording, show_trails, status
+        if action == "record":
+            if last_frame_id == 0:
+                status = "wait for camera image before recording"
+                return
+            if not recording and trail is None:
+                trail = CaptureTrail(latest_image)
+            recording = not recording
+            show_trails = True
+        elif action == "clear":
+            recording = False
+            trail = None
+        elif action == "view":
+            show_trails = not show_trails
+        elif action == "export":
+            if trail is None:
+                status = "no trail to export"
+                return
+            folder = args.output.parent / "capture_roi_trails"
+            folder.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            path = folder / f"{stamp}_trail.png"
+            if not cv2.imwrite(str(path), trail_canvas()):
+                raise OSError(f"cannot save trail image: {path}")
+            status = f"trail saved: {path.name} (ROI unchanged)"
+            return
+        status = "recording trail" if recording else "trail paused"
 
     def mouse(event: int, x: int, y: int, _flags: int, _data) -> None:
         nonlocal status
+        if y >= DISPLAY_HEIGHT:
+            if event == cv2.EVENT_LBUTTONDOWN:
+                for x0, y0, x1, y1, action in buttons:
+                    if x0 <= x < x1 and y0 <= y < y1:
+                        trail_action(action)
+                        break
+            return
         points = roi_points["overall"]
         image_x = max(0, min(IMAGE_WIDTH - 1, round(x * IMAGE_WIDTH / DISPLAY_WIDTH)))
         image_y = max(0, min(IMAGE_HEIGHT - 1, round(y * IMAGE_HEIGHT / DISPLAY_HEIGHT)))
@@ -139,7 +191,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-    cv2.resizeWindow(WINDOW_NAME, DISPLAY_WIDTH, DISPLAY_HEIGHT)
+    cv2.resizeWindow(WINDOW_NAME, DISPLAY_WIDTH, DISPLAY_HEIGHT + PANEL_HEIGHT)
     cv2.setMouseCallback(WINDOW_NAME, mouse)
     camera.start()
     last_frame_id = 0
@@ -176,8 +228,11 @@ def main() -> int:
                     float(item.confidence) >= GREEN_SUPPLY_SCORE_THRESHOLD
                 ]
 
+                if recording:
+                    trail.add(latest_image)
+
             shown = cv2.resize(
-                latest_image,
+                trail_canvas() if show_trails else latest_image,
                 (DISPLAY_WIDTH, DISPLAY_HEIGHT),
                 interpolation=cv2.INTER_AREA,
             )
@@ -188,7 +243,9 @@ def main() -> int:
             roi_points["left"][:] = left
             roi_points["right"][:] = right
             rois = CaptureRois(overall, left, right)
-            for item in latest_detections:
+            # Historical image pixels are only a drawing aid, never detections.
+            preview_items = latest_detections if not show_trails or trail is None else ()
+            for item in preview_items:
                 x, y, width, height = item.bbox
                 capture_side = (
                     capture_side_for_bbox(
@@ -294,6 +351,24 @@ def main() -> int:
                 1,
                 cv2.LINE_AA,
             )
+            panel = Image.new("RGB", (DISPLAY_WIDTH, PANEL_HEIGHT), (28, 28, 28))
+            draw = ImageDraw.Draw(panel)
+            buttons.clear()
+            entries = (("record", "暂停延时摄影" if recording else "开始／继续延时摄影"),
+                       ("clear", "清除叠影"), ("view", "看实时" if show_trails else "看叠影"),
+                       ("export", "保存叠影图片"))
+            button_width = DISPLAY_WIDTH // len(entries)
+            for column, (action, label) in enumerate(entries):
+                x0, y0 = column * button_width + 3, 2
+                x1, y1 = (column + 1) * button_width - 3, 34
+                active = action == "record" and recording
+                draw.rectangle((x0, y0, x1, y1), fill=(42, 108, 73) if active else (65, 65, 65))
+                draw.text((x0 + 8, y0 + 3), label, font=font, fill="white")
+                buttons.append((x0, y0 + DISPLAY_HEIGHT, x1, y1 + DISPLAY_HEIGHT, action))
+            count = trail.samples if trail is not None else 0
+            draw.text((8, 40), f"{'记录中' if recording else '已暂停'} · 已留影 {count} 次 · 开始前移开物块和手；固定相机和爪子。",
+                      font=font, fill=(255, 220, 120))
+            shown = np.vstack((shown, cv2.cvtColor(np.asarray(panel), cv2.COLOR_RGB2BGR)))
             cv2.imshow(WINDOW_NAME, shown)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), ord("Q"), 27):
