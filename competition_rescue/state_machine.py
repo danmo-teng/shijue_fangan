@@ -806,6 +806,7 @@ class CompetitionMission:
         self.search_transfer_route: SearchTransferRoute | None = None
         self.search_transfer_epoch = 0
         self.search_point_sign = int(settings.side_sign)
+        self.opponent_search_preferred = False
         self.search_visit = 0
         self.search_site_turn_deg = 0.0
         self.failed_search_targets: deque[FailedSearchTarget] = deque(maxlen=16)
@@ -5001,6 +5002,7 @@ class CompetitionMission:
 
     def _begin_search_transfer(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+        *, target_sign: int | None = None,
     ) -> CompetitionOutput:
         if not pose.valid:
             return CompetitionOutput(self.state, self._pause(), "换搜索点等待有效位置",
@@ -5008,11 +5010,19 @@ class CompetitionMission:
         self._remember_failed_search_target()
         self._clear_selected_batch()
         self.search_transfer_epoch += 1
-        target_sign = -self.search_point_sign
-        home = self.settings.post_delivery_return_point
-        if (self.search_visit == 0 and math.dist((pose.x_m, pose.y_m), home) >
-                self.settings.post_delivery_return_tolerance_m):
-            target_sign = int(self.settings.side_sign)  # Establish the own station first.
+        if target_sign is None:
+            own_sign = int(self.settings.side_sign)
+            home = self.settings.post_delivery_return_point
+            if (not self.opponent_search_preferred and self.search_visit == 0 and
+                    math.dist((pose.x_m, pose.y_m), home) >
+                    self.settings.post_delivery_return_tolerance_m):
+                target_sign = own_sign  # Establish the own station first.
+            else:
+                # This entry follows an exhausted search, not a delivery or
+                # an interrupted transfer. Remember the choice for this game.
+                if self.search_point_sign == own_sign:
+                    self.opponent_search_preferred = True
+                target_sign = -own_sign if self.opponent_search_preferred else -self.search_point_sign
         self.search_transfer_route = SearchTransferRoute(self.search_point_sign, target_sign,
             (pose.x_m, pose.y_m), pose.yaw_deg, int(self.settings.side_sign),
             self.settings.post_delivery_return_offset_m)
@@ -5051,7 +5061,7 @@ class CompetitionMission:
             CommandRequest(CMD_BULLDOZER_STEP,
                 self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
             "途中发现目标：结束当前移动，随后正常审核抓取" if route.interrupted else
-            f"搜索点轮换/{route.index}：绕X={route.lane_x_m:+.2f}m侧通道，目标侧{route.target_sign:+d}",
+            f"前往搜索点/{route.index}：绕X={route.lane_x_m:+.2f}m侧通道，目标侧{route.target_sign:+d}",
             event="search_transfer_target_seen" if newly_interrupted else "",
             motion_expected=payload[0] != 0, reason="search_transfer_yield" if route.interrupted else "search_transfer_move")
 
@@ -7526,9 +7536,10 @@ class CompetitionMission:
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
             ):
                 self._clear_selected_batch()
-                if self.obstacle_route is not None and self.obstacle_route.recover_after_delivery:
+                if ((self.obstacle_route is not None and self.obstacle_route.recover_after_delivery)
+                        or self.opponent_search_preferred):
                     self._begin_return(stm, now, after_delivery=True)
-                    return self._return_center_output(pose, now, "返回寄存载荷的观察预备点")
+                    return self._return_center_output(pose, now, "投送后接回原返程路线")
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), "下位机已完成投送并进入SEARCH")
             return CompetitionOutput(self.state, CommandRequest(CMD_TASK_COMPLETE, self._side_flags()), "等待下位机张爪并退出安全区")
@@ -7547,6 +7558,15 @@ class CompetitionMission:
                     self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
                     return self._obstacle_route_output(vision, pose,
                         replace(stm, context_matches=False), now)
+                # Preserve RETURN's mechanical exit and own-side waypoint.
+                # Only its real SEARCH completion permits the existing empty
+                # side-lane move; do not send step13 while still in mode16/17.
+                if self.return_after_delivery and self.opponent_search_preferred:
+                    if not pose.valid:
+                        return self._return_center_output(pose, now, "投送退出完成，等待位置接续侧通道")
+                    self._complete_return_search(vision, now, "投送退出完成，经过己方等候点去对面搜索")
+                    return self._begin_search_transfer(vision, pose, stm, now,
+                        target_sign=-int(self.settings.side_sign))
                 return self._complete_return_search(vision, now,
                     f"回到{'己方' if self.return_after_delivery else '中心'}搜索区，"
                     f"等待相机120°和新视觉帧；已完成{self.delivery_count}件",

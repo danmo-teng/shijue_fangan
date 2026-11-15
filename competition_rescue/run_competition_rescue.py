@@ -2587,6 +2587,7 @@ class CompetitionPlanner:
             "search_transfer_route": (None if self.mission.search_transfer_route is None
                                       else asdict(self.mission.search_transfer_route)),
             "search_point_sign": self.mission.search_point_sign,
+            "opponent_search_preferred": self.mission.opponent_search_preferred,
             "search_visit": self.mission.search_visit,
             "search_site_turn_deg": self.mission.search_site_turn_deg,
             "failed_search_targets": [asdict(r) for r in self.mission.failed_search_targets],

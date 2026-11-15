@@ -3077,7 +3077,7 @@ def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_read
     assert out.state==CompetitionState.RETURN_CENTER and out.command.opcode==CMD_RETURN_CENTER
 
 
-def test_two_search_stations_alternate_via_side_lane_without_returning_center():
+def test_own_search_exhaustion_keeps_later_searches_on_opponent_side():
     from protocol import CMD_BULLDOZER_STEP
     from obstacle_route import RouteStep
     for side, own in [('red',1),('blue',-1)]:
@@ -3092,19 +3092,23 @@ def test_two_search_stations_alternate_via_side_lane_without_returning_center():
             out=m.step(v,p,idle,2.+cycle*5)
             assert out.state==CompetitionState.SEARCH_TRANSFER and out.command.opcode==CMD_BULLDOZER_STEP
             r=m.search_transfer_route
-            expected=-own if cycle==0 else own
+            expected=-own
             assert r.target_sign==expected and r.waypoints[-1]==(0.,.30*expected)
-            assert abs(r.lane_x_m)==.5 and r.waypoints[0][1]==p.y_m
-            assert r.waypoints[1][0]==r.waypoints[0][0]
+            assert m.opponent_search_preferred
+            if cycle == 0:
+                assert abs(r.lane_x_m)==.5 and r.waypoints[0][1]==p.y_m
+                assert r.waypoints[1][0]==r.waypoints[0][0]
+            else:
+                assert r.waypoints == ((0., -.30*own),)
             original_yaw=out.command.aux
             done=replace(idle,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=3)
-            for index in range(3):
+            for index in range(len(r.waypoints)):
                 p=replace(p,x_m=r.waypoints[index][0],y_m=r.waypoints[index][1])
                 out=m.step(v,p,done,2.1+cycle*5+index)
                 assert r.index==index and out.command.arg_a==0
                 out=m.step(v,p,replace(done,context_matches=True),2.2+cycle*5+index)
                 assert r.index==index+1
-                if index<2:assert out.command.aux==original_yaw
+                if index<len(r.waypoints)-1:assert out.command.aux==original_yaw
             assert out.command.flags>>4==RouteStep.PICKUP_READY
             out=m.step(v,p,replace(done,mode=3,context_matches=True),6.+cycle*5)
             assert m.state==CompetitionState.SEARCH and m.search_point_sign==expected
@@ -3115,6 +3119,61 @@ def test_two_search_stations_alternate_via_side_lane_without_returning_center():
         initial._set_state(CompetitionState.SEARCH,1.);initial.search_yaw_accum_deg=720.
         initial.step(v,replace(p,y_m=0.),idle,2.)
         assert initial.search_transfer_route.target_sign==own
+        assert not initial.opponent_search_preferred
+
+
+def test_preferred_opponent_delivery_waits_for_return_then_takes_side_lane():
+    from protocol import CMD_BULLDOZER_STEP
+    from obstacle_route import RouteStep
+    for side, own in [('red', 1), ('blue', -1)]:
+        for exit_mode in (16, 17, 3):
+            m = CompetitionMission(CompetitionSettings(side=side))
+            m.opponent_search_preferred = True
+            m.search_point_sign = -own
+            m.search_visit = 2
+            m.state = CompetitionState.TASK_COMPLETE
+            m.selected_batch = CargoBatch((1,), ('green_supply',), 'material')
+            status = StmSnapshot(mode=exit_mode, flags=0, age_ms=0, acknowledged_sequence=2,
+                context_valid=True, context_matches=True,
+                accepted_command=CMD_RETURN_CENTER, action_status=1)
+            m.task_complete_initial_ack = 1
+            v = VisionSnapshot(frame_sequence=10)
+            p = pose(0., .8*own)
+            out = m.step(v, p, status, 1.)
+            assert out.state == CompetitionState.RETURN_CENTER
+            assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a == 500
+            at_home = replace(p, y_m=.3*own)
+            out = m.step(v, at_home, replace(status, mode=17), 1.1)
+            assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a == 0
+            # Neither an unrelated SEARCH receipt nor missing position can
+            # start the side-lane action or fall back to own-side scanning.
+            out = m.step(v, at_home, replace(status, mode=3, context_matches=False), 1.2)
+            assert out.state == CompetitionState.RETURN_CENTER
+            out = m.step(v, replace(at_home, valid=False), replace(status, mode=3), 1.3)
+            assert out.state == CompetitionState.RETURN_CENTER
+            out = m.step(v, at_home, replace(status, mode=3), 1.4)
+            assert out.state == CompetitionState.SEARCH_TRANSFER
+            assert out.command.opcode == CMD_BULLDOZER_STEP
+            assert out.command.flags >> 4 == RouteStep.EMPTY_BODY_MOVE
+            assert m.search_transfer_route.target_sign == -own
+            assert m.search_transfer_route.waypoints[-1] == (0., -.3*own)
+            assert m.opponent_search_preferred
+
+
+def test_opponent_preference_does_not_skip_retrieval_after_obstacle_delivery():
+    from obstacle_route import ObstacleRoute
+    m = CompetitionMission(CompetitionSettings(side='blue'))
+    m.opponent_search_preferred = True
+    m.obstacle_route = ObstacleRoute('blue', (7,), ('injured_orange',), 'injury',
+        (-.15, -.54), (-.29, -.51), ('injured_orange',), 'pickup', recover_after_delivery=True)
+    status = StmSnapshot(mode=17, age_ms=0, context_valid=True, context_matches=True,
+        accepted_command=CMD_RETURN_CENTER, action_status=1)
+    m._begin_return(status, 1., after_delivery=True)
+    m.step(VisionSnapshot(), pose(), status, 1.1)
+    out = m.step(VisionSnapshot(), pose(), replace(status, mode=3), 1.2)
+    assert out.state == CompetitionState.OBSTACLE_ROUTE
+    assert m.obstacle_route.pickup_role == 'original'
+    assert m.search_transfer_route is None and m.opponent_search_preferred
 
 
 def test_search_transfer_target_seen_stops_owned_move_then_uses_normal_capture():
