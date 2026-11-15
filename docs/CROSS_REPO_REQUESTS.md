@@ -16,7 +16,7 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 双方固定入口已建立，RDK连接仍只读F405；两端更新自己仓库并读取对方最新要求，不要求用户常规手动转交。
 这不是后台执行服务，不能把本端发布说成对端已收到/实施，更不在此窗口修改或烧录下位机。
 
-## 已核对源码MATCH-DELIVERY-EARLY-EXIT-20261116：两端实现已核对，下位未烧录，待联合实测
+## 已核对源码MATCH-DELIVERY-EARLY-EXIT-20261116：本局已见新下位，上位提前开关关闭，待联合实测
 
 **用户已批准按方案修改，明确前40厘米超时为4000ms，并要求两端一起核对。** 这不是原3秒建议，也不是整段4秒。此任务只作用于正式投送ENTER；原后270mm/1500ms保留，抓取、扫障、进攻返程不扩用。RDK窗口只读F405，不修改/烧录对端；下位实现已回传并核对，现待部署及实测，重要范围变化仍由人决定。
 
@@ -25,6 +25,8 @@ https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/main/docs/CROSS
 对端指出、本端核实并修正的明确差异是合同第三组RETURN合成示例：原flags=0x09缺少距离/航向标志，改为红方实际0x1F并重算CRC；蓝方真实输出为0x17。实际`_return_center_output()`原本正确，不改运行逻辑。三组示例按原报文编码函数重建及真实红蓝RETURN输出核对，报文未发送。
 
 [背景、统计和批准方案](COMPETITION_DELIVERY_EXIT_PLAN_20261116.md) · [原实跑证据](COMPETITION_OVERSHOOT_DELIVERY_20261115_2338.md) · [接口语义与合成帧示例](contracts/f405_delivery_early_exit_20261116.json)
+
+**后续实跑更新：** 11月16日01:10原UART实际efe3f1b/dirty1、NormalRun/TASK，已不再是仅未烧录回执；上位ad4415f启动delivery_early_exit_enabled=false。本局未出现本地4秒退出或提前完成事件，继续保留实测待办。用户反馈超调/摆头已解决；本局22个进入mode52的动作均只进入一次。具体原证据见[本轮报告](COMPETITION_SEARCH_AUDIT_20261116_0110.md)，新的搜索/观察方案还在分析讨论，非下位新实施指令。
 
 ### RDK已实现的衔接
 
