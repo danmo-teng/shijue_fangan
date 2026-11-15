@@ -3353,3 +3353,45 @@ def test_recorded_partial_green_guides_separation_without_inflating_cargo():
         planner._publish(output)
         data=(root/'cmd').read_bytes()
         assert int.from_bytes(data[8:12],'big')==14113
+
+
+def test_delivery_local_timeout_exit_wins_pending_completion_without_reusing_action_ids():
+    from dataclasses import replace
+    from protocol import CMD_ENTER_SAFE_ZONE, CMD_TASK_COMPLETE, CMD_RETURN_CENTER
+    from state_machine import CargoBatch
+    for pending_complete in (False, True):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False,
+                                                       delivery_early_exit_enabled=True))
+            m._select_batch(CargoBatch((11,), ('injured_orange',), 'injury'))
+            m.carried_manifest = ('injured_orange',)
+            m.state = CompetitionState.ENTER_SAFE_ZONE
+            planner = CompetitionPlanner(m, root/'pose', root/'stm', root/'command',
+                                         root/'diag', JsonlLog(root/'events'), 50)
+            planner._publish(CompetitionOutput(m.state, m._enter_safe_zone_command(), 'fixture'))
+            task, enter_action = planner.protocol_task, planner.protocol_action
+            status = StmSnapshot(mode=16, flags=0, age_ms=0, context_valid=True,
+                task_id=task, action_id=enter_action, accepted_command=CMD_ENTER_SAFE_ZONE, action_status=3)
+            if pending_complete:
+                out = m._finish_delivery(status, 1., basis='delivery_visual_early', message='fixture', event='')
+                planner._publish(out)
+                assert planner.protocol_action != enter_action
+            high_water = planner.protocol_action_cursor
+            for wrong in (replace(status, task_id=(task+1)&65535),
+                          replace(status, action_id=(enter_action-1)&65535),
+                          replace(status, mode=12), replace(status, flags=2),
+                          replace(status, action_status=1), replace(status, fault_code=1),
+                          replace(status, accepted_command=CMD_TASK_COMPLETE)):
+                assert planner._reconcile_delivery_local_exit(PoseSnapshot(valid=True), wrong, 2.) is None
+            paused = planner._output_for_cycle(VisionSnapshot(), PoseSnapshot(valid=True), status, True, 2.)
+            assert paused.command.opcode == runner_module.CMD_PAUSE
+            result = planner._output_for_cycle(VisionSnapshot(), PoseSnapshot(valid=True), status, False, 2.1)
+            assert result.state == CompetitionState.RETURN_CENTER
+            assert result.event == 'delivery_push_timeout_exit'
+            assert m.delivery_completion_basis == 'delivery_push_timeout'
+            assert m.delivery_count == 1
+            planner._publish(result)
+            assert result.command.opcode == CMD_RETURN_CENTER
+            assert planner.protocol_action == (high_water + 1) & 65535
+            assert planner._reconcile_delivery_local_exit(PoseSnapshot(valid=True), status, 2.2) is None

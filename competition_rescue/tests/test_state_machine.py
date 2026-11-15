@@ -3234,3 +3234,74 @@ def test_near_claw_keep_audits_real_blue_only_before_requesting_soft_separation(
         # Side evidence cannot survive a changed audit as transport permission.
         assert m._audit_signature_for_state(audit,False)!=m._audit_signature_for_state(
             replace(audit,near_claw_keep_side=None),False)
+
+
+def _early_delivery_fixture(enabled=True):
+    from protocol import CMD_ENTER_SAFE_ZONE
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False,
+                                              delivery_early_exit_enabled=enabled))
+    m._select_batch(CargoBatch((11,), ("injured_orange",), "injury"))
+    m.carried_manifest = ("injured_orange",)
+    m.first_common_delivered = True
+    m._set_state(CompetitionState.ENTER_SAFE_ZONE, 1.)
+    status = StmSnapshot(mode=10, flags=2, age_ms=0, context_valid=True, context_matches=True,
+                         task_id=100, action_id=200, accepted_command=CMD_ENTER_SAFE_ZONE,
+                         action_status=1, camera_pitch_cdeg=12000)
+    m.step(_delivery_vision(1, outside=True, outside_ids=(11,)), pose(), status, 1.)
+    return m, status
+
+
+def test_delivery_early_confirmation_releases_before_range_done_and_waits_for_paired_exit():
+    from protocol import CMD_TASK_COMPLETE
+    m, status = _early_delivery_fixture()
+    for frame in range(2, 7):
+        out = m.step(_delivery_vision(frame, inside=True, inside_ids=(11,)),
+                     pose(), status, 1. + frame * .04)
+    assert out.command.opcode == CMD_TASK_COMPLETE
+    assert out.event == "delivery_early_complete_requested"
+    assert m.delivery_completion_basis == "delivery_visual_early" and m.delivery_inside_hits == 5
+    assert m.delivery_count == 1
+    for feedback in (replace(status, mode=12, flags=0, accepted_command=CMD_TASK_COMPLETE),
+                     replace(status, mode=16, flags=0, accepted_command=CMD_TASK_COMPLETE,
+                             context_matches=False, action_status=3)):
+        pending = m.step(VisionSnapshot(), pose(), feedback, 1.4)
+        assert pending.state == CompetitionState.TASK_COMPLETE
+        assert pending.command.opcode == CMD_TASK_COMPLETE
+    done = replace(status, mode=16, flags=0, action_id=201,
+                   accepted_command=CMD_TASK_COMPLETE, action_status=3)
+    out = m.step(VisionSnapshot(), pose(), done, 1.5)
+    assert out.state == CompetitionState.RETURN_CENTER and out.command.opcode == CMD_RETURN_CENTER
+    assert m.delivery_count == 1
+
+
+def test_delivery_early_exit_keeps_existing_evidence_rules_and_deployment_default():
+    from protocol import CMD_ENTER_SAFE_ZONE
+    for case in ("disabled", "not_accepted", "no_outside", "missing_load", "conflicting"):
+        m, status = _early_delivery_fixture(enabled=case != "disabled")
+        if case == "not_accepted":
+            m.enter_command_accepted = False
+            status = replace(status, context_matches=False)
+        if case == "no_outside":
+            m.delivery_outside_seen = False
+        for frame in range(2, 9):
+            view = _delivery_vision(frame, inside=True, inside_ids=(11,))
+            if case == "missing_load":
+                view = VisionSnapshot(frame_sequence=frame)
+            if case == "conflicting":
+                view = _delivery_vision(frame, inside=True, outside=True,
+                                        inside_ids=(11,), outside_ids=(12,))
+            out = m.step(view, pose(), status, 1. + frame * .04)
+        assert out.state == CompetitionState.ENTER_SAFE_ZONE, case
+        assert out.command.opcode == CMD_ENTER_SAFE_ZONE and not m.delivery_visual_confirmed
+
+
+def test_delivery_early_partial_observation_survives_normal_mode15_handoff():
+    m, status = _early_delivery_fixture()
+    for frame in (2, 3, 4):
+        m.step(_delivery_vision(frame, inside=True, inside_ids=(11,)), pose(), status, 1.+frame*.04)
+    assert m.delivery_inside_hits == 3
+    done = replace(status, mode=15, flags=0, action_status=3)
+    out = m.step(_delivery_vision(5, inside=True, inside_ids=(11,)), pose(), done, 1.2)
+    assert out.state == CompetitionState.DELIVERY_VERIFY and m.delivery_inside_hits == 4
+    out = m.step(_delivery_vision(6, inside=True, inside_ids=(11,)), pose(), done, 1.24)
+    assert out.state == CompetitionState.TASK_COMPLETE and m.delivery_inside_hits == 5

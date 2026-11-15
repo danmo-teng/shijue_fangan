@@ -563,6 +563,7 @@ class CompetitionSettings:
     audit_handoff_timeout_s: float = 17.0
     push_plate_offset_m: float = 0.105
     fence_stop_margin_m: float = 0.0075
+    delivery_early_exit_enabled: bool = False  # Enable with the paired F405 implementation.
     delivery_observation_timeout_s: float = 1.0
     delivery_window_s: float = 1.0
     delivery_window_frames: int = 7
@@ -4015,7 +4016,10 @@ class CompetitionMission:
         self.delivery_last_frame_sequence = vision.frame_sequence
         if vision.delivery_target_outside_safe_zone:
             self.delivery_outside_seen = True
-        if self.state != CompetitionState.DELIVERY_VERIFY:
+        observe_during_push = (self.settings.delivery_early_exit_enabled and
+                               self.state == CompetitionState.ENTER_SAFE_ZONE and
+                               self.enter_command_accepted)
+        if self.state != CompetitionState.DELIVERY_VERIFY and not observe_during_push:
             return
         if self.delivery_window_started_s is None:
             self.delivery_window_started_s = now
@@ -4044,10 +4048,14 @@ class CompetitionMission:
         ):
             self.delivery_visual_confirmed = True
 
-    def _start_delivery_observation(self, now: float, attempt: int) -> None:
+    def _start_delivery_observation(
+        self, now: float, attempt: int, *, keep_window: bool = False,
+    ) -> None:
         self.delivery_observation_attempt = attempt
         self.delivery_observation_started_s = now
         self.delivery_timeout_reason = ""
+        if keep_window:
+            return
         self.delivery_window.clear()
         self.delivery_window_started_s = None
         self.delivery_last_new_frame_s = None
@@ -4658,6 +4666,28 @@ class CompetitionMission:
             tx_policy="normal_command",
             reason=basis,
         )
+
+    def _delivery_local_exit_output(
+        self, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        # The MCU's new front-segment timeout keeps the accepted ENTER context
+        # until open claws/EXIT. It is not a visual-success observation.
+        if (self.state not in {CompetitionState.ENTER_SAFE_ZONE,
+                               CompetitionState.DELIVERY_VERIFY, CompetitionState.TASK_COMPLETE} or
+                self.selected_batch is None or self.selected_batch.initial_stash or
+                not stm.fresh or stm.fault or stm.gripper_closed or
+                not stm.context_valid or not stm.context_matches or
+                stm.accepted_command != CMD_ENTER_SAFE_ZONE or stm.action_status & 3 != 3 or
+                stm.mode not in {STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER}):
+            return None
+        self._finish_delivery(stm, now, basis="delivery_push_timeout",
+                              message="下位推进超时，已开爪并进入退出", event="")
+        self.delivery_timeout_reason = "delivery_push_timeout"
+        self._clear_selected_batch()
+        self._begin_return(stm, now, after_delivery=True)
+        return replace(self._return_center_output(
+            pose, now, "下位已结束本次超时推送并放下，沿原退出流程返回搜索点"),
+            event="delivery_push_timeout_exit", reason="delivery_push_timeout")
 
     def _delivery_timeout_output(
         self,
@@ -6520,6 +6550,14 @@ class CompetitionMission:
         if self.state_started_s == 0.0:
             self.state_started_s = now
         self._update_vision_frame_period(vision)
+        if self.state == CompetitionState.ENTER_SAFE_ZONE:
+            self.enter_command_accepted = self._opcode_acceptance_seen(
+                stm,
+                CMD_ENTER_SAFE_ZONE,
+                self.enter_tx_baseline,
+                self.enter_initial_ack,
+                self.enter_command_accepted,
+            )
         self._update_delivery_observation(vision, now)
         self._update_danger_event(vision, now)
         if self.state == CompetitionState.FAULT:
@@ -7388,13 +7426,17 @@ class CompetitionMission:
             return self._attack_return_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
-            self.enter_command_accepted = self._opcode_acceptance_seen(
-                stm,
-                CMD_ENTER_SAFE_ZONE,
-                self.enter_tx_baseline,
-                self.enter_initial_ack,
-                self.enter_command_accepted,
-            )
+            local_exit = self._delivery_local_exit_output(pose, stm, now)
+            if local_exit is not None:
+                return local_exit
+            if (self.settings.delivery_early_exit_enabled and self.enter_command_accepted and
+                    self.delivery_visual_confirmed and stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.action_status & 1 and
+                    stm.mode in {STM_MODE_NAVIGATE, 12, STM_MODE_RAM_VERIFY}):
+                return self._finish_delivery(
+                    stm, now, basis="delivery_visual_early",
+                    message="已确认本次载荷入区，请下位结束推进、开爪并退出",
+                    event="delivery_early_complete_requested")
             # A queued ENTER may already be executing while status still says
             # mode10/11 and closed claws. Never replace that committed action
             # with sweep/ALIGN on a later image; the corridor was checked before
@@ -7409,7 +7451,8 @@ class CompetitionMission:
                 self.enter_command_accepted
             ):
                 if self.delivery_observation_attempt == 0:
-                    self._start_delivery_observation(now, 1)
+                    self._start_delivery_observation(
+                        now, 1, keep_window=self.settings.delivery_early_exit_enabled)
                 self._set_state(CompetitionState.DELIVERY_VERIFY, now)
             return CompetitionOutput(
                 self.state,
@@ -7421,6 +7464,9 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.DELIVERY_VERIFY:
+            local_exit = self._delivery_local_exit_output(pose, stm, now)
+            if local_exit is not None:
+                return local_exit
             if self.delivery_visual_confirmed and stm.fresh and stm.mode == STM_MODE_RAM_VERIFY:
                 return self._finish_delivery(
                     stm,
@@ -7451,6 +7497,16 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.TASK_COMPLETE:
+            local_exit = self._delivery_local_exit_output(pose, stm, now)
+            if local_exit is not None:
+                return local_exit
+            if (self.delivery_completion_basis == "delivery_visual_early" and not (
+                    stm.fresh and not stm.gripper_closed and stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_TASK_COMPLETE and stm.action_status & 3 == 3 and
+                    stm.mode in {STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER})):
+                return CompetitionOutput(self.state, CommandRequest(CMD_TASK_COMPLETE, self._side_flags()),
+                    "提前完成请求已发出，等待本次开爪/退出回包", self.selected_batch,
+                    reason="delivery_early_release_pending")
             if (
                 stm.fresh and
                 stm.mode in {

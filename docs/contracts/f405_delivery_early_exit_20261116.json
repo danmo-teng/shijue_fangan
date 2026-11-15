@@ -1,0 +1,107 @@
+{
+  "request_id": "MATCH-DELIVERY-EARLY-EXIT-20261116",
+  "schema_version": 1,
+  "status": "upper_implemented_lower_review_implementation_deployment_pending",
+  "scope": "formal_delivery_ENTER_only",
+  "lower_budget": {
+    "front_distance_mm": 400,
+    "front_timeout_ms": 4000,
+    "total_existing_distance_mm": 670,
+    "final_existing_distance_mm": 270,
+    "final_existing_timeout_ms": 1500,
+    "origin": "once_when_ENTER_accepted_and_started",
+    "repeat_restarts": false,
+    "manual_pause": "exclude_pause_without_reset",
+    "stop": "existing_manual_STOP_priority"
+  },
+  "upper": {
+    "setting": "delivery_early_exit_enabled",
+    "default": false,
+    "cli": "--enable-delivery-early-exit",
+    "environment": "RDK_ENABLE_DELIVERY_EARLY_EXIT=1",
+    "source": "current_audited_load_in_own_destination_zone",
+    "window_frames": 7,
+    "inside_required": 5,
+    "max_misses": 2,
+    "whole_batch_required": true,
+    "early_command": 6,
+    "same_task": true,
+    "new_action": true,
+    "vision_frame": 0,
+    "local_timeout_observer_enabled": true
+  },
+  "handoffs": {
+    "visual_first": {
+      "accepted_opcode": 6,
+      "context": "new_completion_action",
+      "open_mode": 12,
+      "open_action_status": 1,
+      "exit_modes": [
+        16,
+        17
+      ],
+      "exit_action_status": 3,
+      "gripper_closed": false,
+      "extra_visual_wait": false
+    },
+    "timeout_first": {
+      "accepted_opcode": 5,
+      "context": "original_ENTER_action",
+      "open_mode": 12,
+      "open_action_status": 1,
+      "exit_modes": [
+        16,
+        17
+      ],
+      "exit_action_status": 3,
+      "gripper_closed": false,
+      "late_completion": "retain_ENTER_context; do_not_restart; original_reject_bit_allowed",
+      "upper_basis": "delivery_push_timeout",
+      "requires_upper_permission": false
+    },
+    "priority": "first_finish_reason_latched",
+    "upper_next": "original_RETURN_new_action_above_all_allocated_ids",
+    "repeat_restarts": false,
+    "wire_layout_changed": false,
+    "new_handshake": false
+  },
+  "compatibility": "deploy_and_verify_lower_support_before_enabling_upper_early_completion; local_timeout_observer_already_active",
+  "examples": [
+    {
+      "name": "enter",
+      "synthetic": true,
+      "not_transmitted": true,
+      "task": 100,
+      "action": 200,
+      "sequence": 40,
+      "vision_frame": 0,
+      "opcode": 5,
+      "flags": 75,
+      "frame_hex": "a3b31d28006400c800000000da7fc3a3b31828054b0000000000003542c3"
+    },
+    {
+      "name": "early_complete",
+      "synthetic": true,
+      "not_transmitted": true,
+      "task": 100,
+      "action": 201,
+      "sequence": 41,
+      "vision_frame": 0,
+      "opcode": 6,
+      "flags": 9,
+      "frame_hex": "a3b31d29006400c900000000ea2fc3a3b3182906090000000000001ac3c3"
+    },
+    {
+      "name": "return_after_timeout_race",
+      "synthetic": true,
+      "not_transmitted": true,
+      "task": 100,
+      "action": 202,
+      "sequence": 42,
+      "vision_frame": 0,
+      "opcode": 8,
+      "flags": 9,
+      "frame_hex": "a3b31d2a006400ca00000000badfc3a3b3182a080902bc00002328c6a8c3"
+    }
+  ]
+}

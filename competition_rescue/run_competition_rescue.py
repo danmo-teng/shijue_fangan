@@ -172,6 +172,9 @@ def arguments() -> argparse.Namespace:
         help="debug only: skip the configured opening temporary-relocation strategy",
     )
     parser.add_argument("--yield-distance-mm", type=float, default=250.0)
+    parser.add_argument("--enable-delivery-early-exit", action="store_true",
+        default=os.environ.get("RDK_ENABLE_DELIVERY_EARLY_EXIT") == "1",
+        help="推进中确认本次载荷入区即放下退出；须先核对并部署配套F405，默认关闭")
     parser.add_argument("--enable-bulldozer", action="store_true",
         default=os.environ.get("RDK_ENABLE_BULLDOZER") == "1",
         help="启用新分段扫障；须先部署配套F405 0x14接口，默认关闭")
@@ -1981,6 +1984,24 @@ class CompetitionPlanner:
                     stm.accepted_command == CMD_RETURN_CENTER and bool(stm.action_status & 1))
         return False
 
+    def _reconcile_delivery_local_exit(
+        self, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        # A local timeout can win the race with a new TASK_COMPLETE request.
+        # Match the actually published ENTER, before the pending-ACK branch;
+        # never adopt an arbitrary old task's mode16/17.
+        saved = self.published_safe_commands.get(CMD_ENTER_SAFE_ZONE)
+        if (saved is None or saved[:2] != (stm.task_id, stm.action_id) or
+                stm.task_id != self.protocol_task):
+            return None
+        output = self.mission._delivery_local_exit_output(
+            pose, replace(stm, context_matches=True), now)
+        if output is None:
+            return None
+        self.protocol_accepted = stm
+        self._adopt_recovery_context()
+        return output
+
     def _reconcile_safe_zone_rejection(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
     ) -> CompetitionOutput | None:
@@ -2311,6 +2332,9 @@ class CompetitionPlanner:
             # A new positive cargo conflict withdraws transport qualification;
             # waiting for the old NAV/ALIGN ACK must not hide it.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        local_exit = self._reconcile_delivery_local_exit(pose, stm, now)
+        if local_exit is not None:
+            return local_exit
         reconciled = self._reconcile_safe_zone_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
@@ -2552,6 +2576,7 @@ class CompetitionPlanner:
             "safe_sweep_execution_seen": self.mission.safe_sweep_execution_seen,
             "safe_sweep_reaudit_active": self.mission.safe_sweep_reaudit_active,
             "safe_sweep_control": "pixel_approach",
+            "delivery_early_exit_enabled": self.mission.settings.delivery_early_exit_enabled,
             "bulldozer_enabled": self.mission.settings.bulldozer_enabled,
             "bulldozer_route": (None if self.mission.obstacle_route is None
                                 else asdict(self.mission.obstacle_route)),
@@ -3232,6 +3257,7 @@ def main() -> int:
         yield_distance_m=args.yield_distance_mm / 1000.0,
         safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
         bulldozer_enabled=args.enable_bulldozer,
+        delivery_early_exit_enabled=args.enable_delivery_early_exit,
     ))
     planner = CompetitionPlanner(
         mission,
@@ -3268,6 +3294,7 @@ def main() -> int:
             "green_supply_score_threshold": GREEN_SUPPLY_SCORE_THRESHOLD,
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
             "safe_sweep_capture_offset_ignored": True,
+            "delivery_early_exit_enabled": args.enable_delivery_early_exit,
             "bulldozer_enabled": args.enable_bulldozer,
             "bulldozer_contract": "F405_BULLDOZER_STEP_20261113",
             **homography_diagnostics,
@@ -3386,7 +3413,8 @@ def main() -> int:
             opening_strategy=opening_strategy,initial_stash_enabled=not args.disable_initial_stash,
             yield_distance_m=args.yield_distance_mm / 1000.0,
             safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
-            bulldozer_enabled=args.enable_bulldozer))
+            bulldozer_enabled=args.enable_bulldozer,
+            delivery_early_exit_enabled=args.enable_delivery_early_exit))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)
         planner.localization_wheel_policy = wheel_policy
