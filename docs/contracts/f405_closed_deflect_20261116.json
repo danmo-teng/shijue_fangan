@@ -1,6 +1,6 @@
 {
   "id": "MATCH-CLOSED-DEFLECT-20261116",
-  "status": "upper_implemented_lower_pending_not_deployed",
+  "status": "candidate_only_reassessment_pending_do_not_deploy",
   "type": 24,
   "opcode": 21,
   "flags": {
@@ -78,5 +78,6 @@
     "PULL": "loaded: original STAGE NAV 0x03; empty: SEARCH mode3 after open/mechanical completion",
     "STAGE": "original ALIGN then original 0x14 safety sweep; never PULL"
   },
-  "revision": "20261116-staging-boundary-correction"
+  "revision": "20261116-staging-boundary-correction",
+  "current_user_decision": "Closed-claw pull is an alternative, not a settled deployment. Compare actual contact with opposite-side translation, advance, then lateral push. Prior implementation request deferred."
 }
