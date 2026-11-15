@@ -16,6 +16,7 @@ from typing import Iterable
 from attack_return import AttackReturnRoute, opponent_heading_deg
 from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
+from closed_deflect import VIEW, PULL, STAGE, CARRYING, END_AT_ORIGINAL, choose_plan, nearest_blocker
 
 from protocol import (
     AUDIT_DESTINATION_INJURY,
@@ -27,6 +28,7 @@ from protocol import (
     CMD_APPROACH_RANGE,
     CMD_CARGO_AUDIT,
     CMD_BULLDOZER_STEP,
+    CMD_CLOSED_DEFLECT,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
@@ -501,6 +503,7 @@ class CompetitionState(str, Enum):
     WAIT_SAFE_ZONE_CLEAR = "WAIT_SAFE_ZONE_CLEAR"
     OBSTACLE_ROUTE = "OBSTACLE_ROUTE"
     OBSTACLE_PICKUP = "OBSTACLE_PICKUP"
+    CLOSED_DEFLECT = "CLOSED_DEFLECT"
     ENTER_SAFE_ZONE = "ENTER_SAFE_ZONE"
     DELIVERY_VERIFY = "DELIVERY_VERIFY"
     TASK_COMPLETE = "TASK_COMPLETE"
@@ -572,9 +575,12 @@ class CompetitionSettings:
     delivery_max_observations: int = 1
     opening_strategy: str = "attack"
     bulldozer_enabled: bool = False  # Deploy only with the new F405 step contract.
+    closed_deflect_enabled: bool = False  # Requires the paired F405 opcode 0x15.
     bulldozer_position_tolerance_m: float = 0.030
 
     def __post_init__(self) -> None:
+        if self.closed_deflect_enabled:
+            self.bulldozer_enabled = True  # Existing clearing is the fallback after a failed pull.
         if self.opening_strategy not in {"attack", "defense"}:
             raise ValueError("opening strategy must be attack or defense")
         if self.side not in {"red", "blue"}:
@@ -794,6 +800,14 @@ class CompetitionMission:
         self.staging_zero_initial_ack: int | None = None
         self.staging_zero_tx_baseline: int | None = None
         self.staging_zero_accepted = False
+        self.deflect_command: CommandRequest | None = None
+        self.deflect_phase = PULL
+        self.deflect_epoch = 0
+        self.deflect_carrying = False
+        self.deflect_stage_target: tuple[float, float] | None = None
+        self.deflect_stage_arrived = False
+        self.deflect_view_frame_floor = 0
+        self.deflect_attempts: deque[tuple[str, int, int]] = deque(maxlen=16)
         self.staging_camera_mismatch_reported = False
         self.safe_zone_acquire_started_s: float | None = None
         self.safe_zone_acquire_timeout_reported = False
@@ -1174,6 +1188,8 @@ class CompetitionMission:
         return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.CLOSED_DEFLECT:
+            return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH, STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_APPROACH_RANGE_WAIT)
         if self.state == CompetitionState.SEARCH_TRANSFER:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH)
         if self.state == CompetitionState.INITIAL_ATTACK_RETURN:
@@ -1816,7 +1832,8 @@ class CompetitionMission:
         return replace(self._search_recovery_output(vision, stm, now),
             event="green_anchor_lost_reselect", reason="green_anchor_lost_reselect")
 
-    def _range_approach_output(self, vision: VisionSnapshot, stm: StmSnapshot, now: float) -> CompetitionOutput:
+    def _range_approach_output(self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+                               pose: PoseSnapshot | None = None) -> CompetitionOutput:
         self.approach_f407_active_seen = True
         if self.state == CompetitionState.CLUSTER_APPROACH:
             self.cluster_execution_seen = True
@@ -1869,6 +1886,14 @@ class CompetitionMission:
                 self.selected_batch, reason="approach_range_realign",
                 expected_stm_modes=(20, 52, 24, 3),
             )
+        if (self.settings.closed_deflect_enabled and pose is not None and pose.valid and
+                self.state != CompetitionState.INITIAL_APPROACH):
+            blocker = nearest_blocker(vision.cargo, dict(vision.range_distances),
+                target_id=target.track_id, target_distance_mm=distance,
+                centre_px=CAMERA_IMAGE_CENTER_X_PX, half_width_px=self.settings.approach_center_tolerance_px)
+            if blocker is not None:
+                return self._begin_closed_pull(pose, dict(vision.range_distances)[blocker.track_id],
+                                               carrying=False, now=now)
         flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if self.state == CompetitionState.CLUSTER_APPROACH:
             flags |= CMD_CLUSTER_TARGET
@@ -4155,10 +4180,128 @@ class CompetitionMission:
         self.safe_corridor_last_frame_sequence = None
         self._set_state(CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, now)
 
+    def _closed_deflect_output(self) -> CompetitionOutput:
+        assert self.deflect_command is not None
+        return CompetitionOutput(self.state, self.deflect_command,
+            {VIEW: "保持载荷，回到120°使用原抓取距离表看障碍",
+             PULL: "闭爪反向偏头，沿原直线平移，转车身抽开障碍后回正",
+             STAGE: "保持已对好的横向位置，只补前后距离到预备排"}[self.deflect_phase],
+            self.selected_batch, motion_expected=self.deflect_phase != VIEW,
+            reason=f"closed_deflect_{self.deflect_phase}")
+
+    def _begin_closed_pull(self, pose: PoseSnapshot, distance: int, *,
+                           carrying: bool, now: float) -> CompetitionOutput:
+        plan = choose_plan(self.settings.side, (pose.x_m, pose.y_m), pose.yaw_deg, distance)
+        self.deflect_carrying = carrying
+        self.deflect_phase = PULL
+        self.deflect_epoch += 1
+        self.deflect_command = CommandRequest(CMD_CLOSED_DEFLECT,
+            self._side_flags() | (PULL << 4) | (CARRYING if carrying else 0) |
+            (END_AT_ORIGINAL if plan.end_at_original else 0),
+            plan.distance_mm, plan.pre_yaw_cdeg, plan.heading_cdeg)
+        self._set_state(CompetitionState.CLOSED_DEFLECT, now)
+        return replace(self._closed_deflect_output(), event="closed_deflect_start")
+
+    def _begin_deflect_stage(self, pose: PoseSnapshot, now: float) -> CompetitionOutput:
+        self.deflect_carrying = True
+        self.deflect_phase = STAGE
+        self.deflect_epoch += 1
+        self.deflect_stage_target = (pose.x_m, self.settings.safe_staging_y_m)
+        self.deflect_stage_arrived = False
+        self._set_state(CompetitionState.CLOSED_DEFLECT, now)
+        self._update_deflect_stage(pose)
+        return replace(self._closed_deflect_output(), event="safe_stage_axial_correction")
+
+    def _update_deflect_stage(self, pose: PoseSnapshot) -> None:
+        assert self.deflect_stage_target is not None
+        dx = self.deflect_stage_target[0]-pose.x_m
+        dy = self.deflect_stage_target[1]-pose.y_m
+        arrived = (abs(dx) <= self.settings.safe_zone_staging_lateral_tolerance_m and
+                   abs(dy) <= self.settings.safe_zone_staging_axial_tolerance_m+1e-9)
+        self.deflect_stage_arrived = self.deflect_stage_arrived or arrived
+        self.deflect_command = CommandRequest(CMD_CLOSED_DEFLECT,
+            self._side_flags() | CARRYING | (STAGE << 4),
+            0 if self.deflect_stage_arrived else min(5000, round(math.hypot(dx, dy)*1000)),
+            round(math.degrees(math.atan2(dy, dx))*100),
+            round(self.settings.safe_heading_deg*100)%36000)
+
+    def _resume_delivery_after_deflect(self, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        self._reset_safe_zone_alignment()
+        self.safe_zone_align_initial_ack = stm.acknowledged_sequence
+        self.safe_zone_align_tx_baseline = stm.relay_mission_tx_frames
+        self._set_state(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE, now)
+        return CompetitionOutput(self.state, self._safe_zone_pose_align_command(),
+            "保留原载荷，重新对准并看实际走廊；抽动完成不代表障碍已清除",
+            self.selected_batch, reason="closed_deflect_resume_delivery")
+
+    def _closed_deflect_step(self, vision: VisionSnapshot, pose: PoseSnapshot,
+                            stm: StmSnapshot, now: float) -> CompetitionOutput:
+        done = (stm.context_valid and stm.context_matches and
+                stm.accepted_command == CMD_CLOSED_DEFLECT and stm.action_status & 3 == 3)
+        if self.deflect_phase == STAGE:
+            if not pose.valid:
+                return CompetitionOutput(self.state, self._pause(), "补到预备排沿原流程等待有效位置",
+                                         reason="closed_deflect_pose_unavailable")
+            self._update_deflect_stage(pose)
+            if done and stm.mode == STM_MODE_REMOTE_ACTION and stm.gripper_closed and self.deflect_stage_arrived:
+                return self._resume_delivery_after_deflect(stm, now)
+        elif self.deflect_phase == VIEW:
+            if done and stm.mode == STM_MODE_REMOTE_ACTION and stm.gripper_closed and stm.camera_pitch_cdeg == 12000:
+                # This is the existing capture calibration, not a 115° table.
+                if (vision.frame_sequence > self.deflect_view_frame_floor and
+                        vision.range_pitch_cdeg == 12000 and self._vision_fresh(vision, now)):
+                    obstacle = next((item for item in vision.cargo if item.visible and
+                        item.track_id == vision.safe_corridor_obstacle_track_id), None)
+                    distance = dict(vision.range_distances).get(obstacle.track_id) if obstacle else None
+                    if obstacle is not None and distance is not None and pose.valid:
+                        return self._begin_closed_pull(pose, distance, carrying=True, now=now)
+                    # Nothing measurable in this view: keep cargo and rejoin
+                    # the original observation/clearing route, never fake D.
+                    return self._resume_delivery_after_deflect(stm, now)
+        elif done:
+            if self.deflect_carrying and stm.mode == STM_MODE_REMOTE_ACTION and stm.gripper_closed:
+                if not pose.valid:
+                    return CompetitionOutput(self.state, self._pause(), "抽障完成，沿原流程等待有效位置",
+                                             reason="closed_deflect_pose_unavailable")
+                if abs(pose.y_m-self.settings.safe_staging_y_m) > self.settings.safe_zone_staging_axial_tolerance_m:
+                    return self._begin_deflect_stage(pose, now)
+                return self._resume_delivery_after_deflect(stm, now)
+            if not self.deflect_carrying and stm.mode == STM_MODE_SEARCH and not stm.gripper_closed:
+                self._clear_selected_batch()
+                self._clear_range_approach()
+                return self._complete_return_search(vision, now,
+                    "抽障后已回原朝向，按实际画面继续找后面的合法物块", new_visit=False)
+        return self._closed_deflect_output()
+
     def _blocked_corridor_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
         *, pose: PoseSnapshot | None = None,
     ) -> CompetitionOutput:
+        if (self.settings.closed_deflect_enabled and self.selected_batch is not None and
+                pose is not None and pose.valid and stm.gripper_closed):
+            # Visual lateral alignment may change X legitimately. Recheck Y
+            # now, not an old NAV DONE, without undoing the aligned X.
+            if abs(pose.y_m-self.settings.safe_staging_y_m) > self.settings.safe_zone_staging_axial_tolerance_m:
+                return self._begin_deflect_stage(pose, now)
+            obstacle = next((item for item in vision.cargo if item.visible and
+                item.track_id == vision.safe_corridor_obstacle_track_id and
+                not item.inside_safe_zone and item.track_id not in self.selected_batch.track_ids), None)
+            key = ("delivery", self.delivery_count, obstacle.track_id) if obstacle else None
+            if obstacle is not None and key not in self.deflect_attempts:
+                self.deflect_attempts.append(key)
+                distance = dict(vision.range_distances).get(obstacle.track_id)
+                if (vision.range_pitch_cdeg == stm.camera_pitch_cdeg and
+                        vision.range_pitch_cdeg in {10500, 12000} and distance is not None):
+                    return self._begin_closed_pull(pose, distance, carrying=True, now=now)
+                self.deflect_carrying = True
+                self.deflect_phase = VIEW
+                self.deflect_view_frame_floor = vision.frame_sequence
+                self.deflect_epoch += 1
+                self.deflect_command = CommandRequest(CMD_CLOSED_DEFLECT,
+                    self._side_flags() | CARRYING, 0, 12000,
+                    round(self.settings.safe_heading_deg*100)%36000)
+                self._set_state(CompetitionState.CLOSED_DEFLECT, now)
+                return self._closed_deflect_output()
         if (self.settings.bulldozer_enabled and self.selected_batch is not None and
                 pose is not None and pose.valid):
             classes = vision.safe_corridor_obstacle_classes or (
@@ -6558,7 +6701,7 @@ class CompetitionMission:
         if (stm.fresh and not stm.fault and stm.mode in {52, 53} and
                 self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
                                CompetitionState.CLUSTER_APPROACH}):
-            return self._range_approach_output(vision, stm, now)
+            return self._range_approach_output(vision, stm, now, pose)
         handoff = self._range_handoff_output(stm)
         if handoff is not None:
             return handoff
@@ -6842,6 +6985,9 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
             return self._handle_search(vision, pose, stm, now)
+
+        if self.state == CompetitionState.CLOSED_DEFLECT:
+            return self._closed_deflect_step(vision, pose, stm, now)
 
         if self.state == CompetitionState.SEARCH_TRANSFER:
             return self._search_transfer_output(vision, pose, stm, now)

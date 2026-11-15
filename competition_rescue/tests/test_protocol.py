@@ -180,3 +180,33 @@ def test_near_claw_separation_flag_has_no_transport_or_motion_payload():
         try:mission_frame(4,CMD_DISPERSE_PILE,flags,*args)
         except ValueError:pass
         else:raise AssertionError('invalid near-claw separation payload')
+
+
+def test_closed_deflect_wire_phases_and_invalid_aliases():
+    import pytest
+    from protocol import CMD_CLOSED_DEFLECT
+    for side in (0,8):
+        for flags,args in ((3,(0,12000,9000)),(0x11,(300,3500,9000)),
+                           (0x17,(300,-3500,27000)),(0x23,(70,9000,9000))):
+            packet=mission_frame(7,CMD_CLOSED_DEFLECT,flags|side,*args)
+            assert packet[4]==0x15 and packet[2]==0x18
+            assert int.from_bytes(packet[12:14],'little')==crc16_modbus(packet[2:12])
+    for flags,args in ((1,(0,12000,9000)),(0x21,(70,9000,9000)),(0x31,(0,0,0)),
+                       (0x11,(300,0,9000)),(0x11,(2501,3500,9000)),(0x91,(300,3500,9000))):
+        with pytest.raises(ValueError):
+            mission_frame(7,CMD_CLOSED_DEFLECT,flags,*args)
+
+
+def test_closed_deflect_direction_uses_rectangle_and_reverse_pre_yaw():
+    from closed_deflect import choose_plan
+    # Facing +X: own zone above is left -> pull right -> pre-turn left.
+    assert choose_plan('red',(0.,0.),0.,100).pre_yaw_cdeg==3500
+    assert choose_plan('blue',(0.,0.),0.,100).pre_yaw_cdeg==-3500
+    # In front/behind, prefer nearer outer X edge, not fixed side colour.
+    for side,yaw in [('red',90.),('blue',270.)]:
+        left=choose_plan(side,(-.2,0.),yaw,100)
+        right=choose_plan(side,(.2,0.),yaw,100)
+        assert left.pre_yaw_cdeg==-right.pre_yaw_cdeg
+        assert not left.end_at_original
+        behind=choose_plan(side,(0.,0.),yaw+180.,100)
+        assert behind.end_at_original

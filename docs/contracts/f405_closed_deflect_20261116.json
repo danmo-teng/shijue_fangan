@@ -1,0 +1,70 @@
+{
+  "id": "MATCH-CLOSED-DEFLECT-20261116",
+  "status": "upper_implemented_lower_pending_not_deployed",
+  "type": 24,
+  "opcode": 21,
+  "flags": {
+    "valid": 1,
+    "carrying": 2,
+    "end_at_original": 4,
+    "red_side": 8,
+    "phase_shift": 4
+  },
+  "phases": {
+    "0": "VIEW: held load, a=0 b=12000 aux=original yaw; done=mode25 closed",
+    "1": "PULL: a=finite travel mm, b=signed pre-yaw cdeg, aux=original field travel heading; end yaw=aux if bit2 else aux-b, then return aux; empty done=mode3 open, loaded done=mode25 closed",
+    "2": "STAGE: held load, live a=remaining mm b=field travel heading aux=body yaw; a=0 then mode25 done closed"
+  },
+  "ownership": "Original 0x1D/0x1E pairing; new phase/new pull new action; live stage updates same action; DONE only matching accepted action and actual completion",
+  "feature_flag": "--enable-closed-deflect / RDK_ENABLE_CLOSED_DEFLECT=1; default off until lower deployed",
+  "examples": [
+    {
+      "name": "red_view",
+      "task_id": 100,
+      "action_id": 50,
+      "vision_frame": 0,
+      "sequence": 50,
+      "flags": 11,
+      "arg_a": 0,
+      "arg_b": 12000,
+      "aux_cdeg": 9000,
+      "paired_frame_hex": "a3b31d320064003200000000b10bc3a3b31832150b00002ee02328d71ac3"
+    },
+    {
+      "name": "red_pull_right",
+      "task_id": 100,
+      "action_id": 51,
+      "vision_frame": 0,
+      "sequence": 51,
+      "flags": 27,
+      "arg_a": 300,
+      "arg_b": 3500,
+      "aux_cdeg": 9000,
+      "paired_frame_hex": "a3b31d330064003300000000815bc3a3b31833151b012c0dac2328910fc3"
+    },
+    {
+      "name": "red_stage",
+      "task_id": 100,
+      "action_id": 52,
+      "vision_frame": 0,
+      "sequence": 52,
+      "flags": 43,
+      "arg_a": 70,
+      "arg_b": 9000,
+      "aux_cdeg": 9000,
+      "paired_frame_hex": "a3b31d34006400340000000012abc3a3b31834152b004623282328d7e5c3"
+    },
+    {
+      "name": "blue_empty_pull_zone_behind",
+      "task_id": 100,
+      "action_id": 53,
+      "vision_frame": 0,
+      "sequence": 53,
+      "flags": 21,
+      "arg_a": 300,
+      "arg_b": -3500,
+      "aux_cdeg": 9000,
+      "paired_frame_hex": "a3b31d35006400350000000022fbc3a3b318351515012cf2542328e48ac3"
+    }
+  ]
+}

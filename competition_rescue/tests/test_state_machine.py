@@ -3365,3 +3365,92 @@ def test_delivery_early_partial_observation_survives_normal_mode15_handoff():
     assert out.state == CompetitionState.DELIVERY_VERIFY and m.delivery_inside_hits == 4
     out = m.step(_delivery_vision(6, inside=True, inside_ids=(11,)), pose(), done, 1.24)
     assert out.state == CompetitionState.TASK_COMPLETE and m.delivery_inside_hits == 5
+
+
+def test_closed_deflect_search_uses_nearer_danger_only_before_finite_motion():
+    from protocol import CMD_CLOSED_DEFLECT, CMD_ALIGN_SAFE_ZONE
+    target = cargo(1, 'green_supply', 620, 300)
+    danger = cargo(2, 'danger_cyan', 620, 500)
+    v = VisionSnapshot(frame_sequence=11, observed_monotonic_s=1.1,
+        cargo=(target, danger), range_pitch_cdeg=12000, range_distances=((1, 800), (2, 300)))
+    st = StmSnapshot(mode=52, age_ms=0, camera_pitch_cdeg=12000)
+    for blocker, distance, enabled, expected in ((danger, 300, True, True),
+            (replace(danger,bbox=(900,500,40,40)),300,True,False),
+            (danger,900,True,False),(replace(danger,inside_safe_zone=True),300,True,False),
+            (danger,300,False,False)):
+        m = CompetitionMission(CompetitionSettings(side='red',closed_deflect_enabled=enabled))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.state=CompetitionState.APPROACH
+        m.range_started_s=1.;m.range_frame_floor=10;m.range_pitch_cdeg=12000
+        view=replace(v,cargo=(target,blocker),range_distances=((1,800),(2,distance)))
+        out=m._range_approach_output(view,st,1.1,replace(pose(0.,0.),yaw_deg=90.))
+        assert (out.command.opcode == CMD_CLOSED_DEFLECT) == expected
+        if expected:
+            assert out.command.arg_a == 300 and out.command.arg_b == 3500
+            assert m.range_command is None and m.selected_batch.track_ids == (1,)
+            assert out.command.to_frame(1)[4] == CMD_CLOSED_DEFLECT
+
+
+def test_closed_deflect_rechecks_recorded_seven_cm_gap_and_preserves_aligned_x():
+    from protocol import CMD_CLOSED_DEFLECT, CMD_ALIGN_SAFE_ZONE
+    for side, sign in [('red',1),('blue',-1)]:
+        m=CompetitionMission(CompetitionSettings(side=side,closed_deflect_enabled=True,bulldozer_enabled=True))
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.confirmed_delivery_destination='material';m.staging_zero_accepted=True
+        st=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=12000,
+            context_valid=True,context_matches=True,accepted_command=CMD_ALIGN_SAFE_ZONE,action_status=3)
+        p=replace(pose(-.057,.470*sign),yaw_deg=90. if sign==1 else 270.)
+        v=VisionSnapshot(safe_corridor_obstacle_class='danger_cyan')
+        out=m._blocked_corridor_output(v,st,1.,pose=p)
+        assert out.command.opcode==CMD_CLOSED_DEFLECT and out.command.flags>>4==2
+        assert out.command.arg_a==70 and m.deflect_stage_target==(-.057,m.settings.safe_staging_y_m)
+        # Old ALIGN DONE never completes the new correction.
+        at=replace(p,y_m=.54*sign)
+        out=m._closed_deflect_step(v,at,st,1.1)
+        assert out.state==CompetitionState.CLOSED_DEFLECT and out.command.arg_a==0
+        done=replace(st,mode=25,accepted_command=CMD_CLOSED_DEFLECT)
+        out=m._closed_deflect_step(v,at,done,1.2)
+        assert out.state==CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+        assert m.selected_batch.track_ids==(1,) and m.obstacle_route is None
+
+
+def test_closed_deflect_safe_view_and_completion_keep_real_load():
+    from protocol import CMD_CLOSED_DEFLECT, CMD_ALIGN_SAFE_ZONE
+    from closed_deflect import VIEW, PULL, STAGE
+    m=CompetitionMission(CompetitionSettings(side='red',closed_deflect_enabled=True,bulldozer_enabled=True))
+    m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
+    m.confirmed_delivery_destination='injury';m.carried_manifest=('injured_orange',)
+    obstacle=cargo(2,'danger_cyan',620,500)
+    v=VisionSnapshot(frame_sequence=10,observed_monotonic_s=1.,cargo=(obstacle,),
+        safe_corridor_obstacle_class='danger_cyan',safe_corridor_obstacle_track_id=2,
+        range_pitch_cdeg=11500)
+    st=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=11500)
+    p=replace(pose(.15,.54),yaw_deg=90.)
+    out=m._blocked_corridor_output(v,st,1.,pose=p)
+    assert out.command.flags>>4==VIEW
+    done=replace(st,mode=25,camera_pitch_cdeg=12000,context_valid=True,context_matches=True,
+        accepted_command=CMD_CLOSED_DEFLECT,action_status=3)
+    new=replace(v,frame_sequence=11,observed_monotonic_s=1.1,range_pitch_cdeg=12000,range_distances=((2,200),))
+    out=m._closed_deflect_step(new,p,done,1.1)
+    assert out.command.flags>>4==PULL and out.command.arg_a==200
+    out=m._closed_deflect_step(new,replace(p,y_m=.74),replace(done,context_matches=False),1.2)
+    assert out.command.flags>>4==PULL
+    out=m._closed_deflect_step(new,replace(p,y_m=.74),done,1.3)
+    assert out.command.flags>>4==STAGE and out.command.arg_a==200
+    assert m.carried_manifest==('injured_orange',) and m.selected_batch.track_ids==(1,)
+    assert m.delivery_count==0
+
+
+def test_closed_deflect_search_requires_actual_open_search_completion():
+    from protocol import CMD_CLOSED_DEFLECT, CMD_ALIGN_SAFE_ZONE
+    m=CompetitionMission(CompetitionSettings(side='blue',closed_deflect_enabled=True))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    m.search_site_turn_deg=360
+    m._begin_closed_pull(replace(pose(0.,0.),yaw_deg=90.),100,carrying=False,now=1.)
+    v=VisionSnapshot(frame_sequence=20)
+    st=StmSnapshot(mode=25,flags=2,age_ms=0,context_valid=True,context_matches=True,
+        accepted_command=CMD_CLOSED_DEFLECT,action_status=3)
+    assert m._closed_deflect_step(v,pose(),st,1.1).state==CompetitionState.CLOSED_DEFLECT
+    out=m._closed_deflect_step(v,pose(),replace(st,mode=3,flags=0),1.2)
+    assert out.state==CompetitionState.SEARCH and m.selected_batch is None
+    assert m.search_site_turn_deg==360 and m.search_visit==0

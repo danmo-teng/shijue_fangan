@@ -61,6 +61,7 @@ from protocol import (  # noqa: E402
     CMD_ALIGN_SAFE_ZONE,
     CMD_ENTER_SAFE_ZONE,
     CMD_BULLDOZER_STEP,
+    CMD_CLOSED_DEFLECT,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
@@ -175,6 +176,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--enable-delivery-early-exit", action="store_true",
         default=os.environ.get("RDK_ENABLE_DELIVERY_EARLY_EXIT") == "1",
         help="推进中确认本次载荷入区即放下退出；须先核对并部署配套F405，默认关闭")
+    parser.add_argument("--enable-closed-deflect", action="store_true",
+        default=os.environ.get("RDK_ENABLE_CLOSED_DEFLECT", "0") == "1",
+        help="启用闭爪转车身抽障及预备排复核；须先部署配套F405 opcode0x15，默认关闭")
     parser.add_argument("--enable-bulldozer", action="store_true",
         default=os.environ.get("RDK_ENABLE_BULLDOZER") == "1",
         help="启用新分段扫障；须先部署配套F405 0x14接口，默认关闭")
@@ -1159,6 +1163,7 @@ def make_vision_snapshot(
         # an unknown floor track from a box retained before release/ram.
         carried_bbox_reference = ()
     corridor_active = mission.state in {
+        CompetitionState.CLOSED_DEFLECT,
         CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
         CompetitionState.WAIT_SAFE_ZONE_CLEAR,
         CompetitionState.ENTER_SAFE_ZONE,
@@ -1445,7 +1450,11 @@ class LocalizationWheelPolicy:
             and stm.context_valid and stm.context_matches
             and stm.accepted_command in {CMD_RETURN_CENTER, CMD_NAVIGATE_WAYPOINT}
             and (belongs or stm.task_id == task_id))
-        if self.suppressed and not overlay and (face_center or later_navigation):
+        deflect_motion = (output.state == CompetitionState.CLOSED_DEFLECT and command is not None and
+            command.opcode == CMD_CLOSED_DEFLECT and command.flags >> 4 in {1, 2} and
+            stm.context_valid and stm.context_matches and stm.accepted_command == CMD_CLOSED_DEFLECT and
+            bool(stm.action_status & 1))
+        if self.suppressed and not overlay and (face_center or later_navigation or deflect_motion):
             self.suppressed = False
             self.safe_cycle_departed = True
             self.contact_task_ids.clear()
@@ -1815,6 +1824,8 @@ class CompetitionPlanner:
                 self.mission.search_transfer_route is not None):
             range_epoch = ("search_transfer", self.mission.search_transfer_epoch,
                            self.mission.search_transfer_route.index)
+        if command.opcode == CMD_CLOSED_DEFLECT:
+            range_epoch = ("closed_deflect", self.mission.deflect_epoch)
         key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
         if not overlay or (self.protocol_accepted is None and self.protocol_action_key is None):
             if key != self.protocol_action_key:
@@ -2292,7 +2303,7 @@ class CompetitionPlanner:
             ranged_vision = replace(vision, range_distances=()) if paused else vision
             self.mission.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
                                             if pose.valid else None)
-            return self.mission._range_approach_output(ranged_vision, stm, now)
+            return self.mission._range_approach_output(ranged_vision, stm, now, pose)
         handoff = self.mission._range_handoff_output(stm)
         if handoff is not None:
             return handoff
@@ -2357,6 +2368,9 @@ class CompetitionPlanner:
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and not stm.fault and
                 stm.mode in {3, 25, 34}):
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (self.mission.state == CompetitionState.CLOSED_DEFLECT and not stm.fault and
+                stm.mode in {3, 11, 25, 52}):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.SEARCH_TRANSFER and not stm.fault and
                 stm.mode in {3, 25}):
@@ -2578,6 +2592,8 @@ class CompetitionPlanner:
             "safe_sweep_control": "pixel_approach",
             "delivery_early_exit_enabled": self.mission.settings.delivery_early_exit_enabled,
             "bulldozer_enabled": self.mission.settings.bulldozer_enabled,
+            "closed_deflect_enabled": self.mission.settings.closed_deflect_enabled,
+            "closed_deflect_phase": self.mission.deflect_phase if self.mission.state == CompetitionState.CLOSED_DEFLECT else None,
             "bulldozer_route": (None if self.mission.obstacle_route is None
                                 else asdict(self.mission.obstacle_route)),
             "attack_return_route": (None if self.mission.attack_return_route is None else dict(
@@ -3258,6 +3274,7 @@ def main() -> int:
         yield_distance_m=args.yield_distance_mm / 1000.0,
         safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
         bulldozer_enabled=args.enable_bulldozer,
+        closed_deflect_enabled=args.enable_closed_deflect,
         delivery_early_exit_enabled=args.enable_delivery_early_exit,
     ))
     planner = CompetitionPlanner(
@@ -3296,7 +3313,8 @@ def main() -> int:
             "safe_sweep_capture_offset_mm": args.safe_sweep_capture_offset_mm,
             "safe_sweep_capture_offset_ignored": True,
             "delivery_early_exit_enabled": args.enable_delivery_early_exit,
-            "bulldozer_enabled": args.enable_bulldozer,
+            "bulldozer_enabled": mission.settings.bulldozer_enabled,
+            "closed_deflect_enabled": args.enable_closed_deflect,
             "bulldozer_contract": "F405_BULLDOZER_STEP_20261113",
             **homography_diagnostics,
             "homography_calibrated": localizer.calibrated,
@@ -3415,6 +3433,7 @@ def main() -> int:
             yield_distance_m=args.yield_distance_mm / 1000.0,
             safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
             bulldozer_enabled=args.enable_bulldozer,
+            closed_deflect_enabled=args.enable_closed_deflect,
             delivery_early_exit_enabled=args.enable_delivery_early_exit))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)

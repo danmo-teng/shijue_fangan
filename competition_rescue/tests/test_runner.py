@@ -3395,3 +3395,56 @@ def test_delivery_local_timeout_exit_wins_pending_completion_without_reusing_act
             assert result.command.opcode == CMD_RETURN_CENTER
             assert planner.protocol_action == (high_water + 1) & 65535
             assert planner._reconcile_delivery_local_exit(PoseSnapshot(valid=True), status, 2.2) is None
+
+
+def test_closed_deflect_runner_carries_pose_and_preserves_motion_action():
+    from dataclasses import replace
+    from state_machine import CargoBatch, TrackedCargo
+    from protocol import CMD_CLOSED_DEFLECT
+    from run_competition_rescue import LocalizationWheelPolicy
+    from unittest.mock import Mock
+    m=CompetitionMission(CompetitionSettings(side='red',closed_deflect_enabled=True))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    m.state=CompetitionState.APPROACH
+    m.range_started_s=1.;m.range_frame_floor=10;m.range_pitch_cdeg=12000
+    p=PoseSnapshot(True,0.,0.,90.,0)
+    v=VisionSnapshot(frame_sequence=11,observed_monotonic_s=1.1,range_pitch_cdeg=12000,
+        range_distances=((1,800),(2,300)),cargo=(
+            TrackedCargo(1,'green_supply',.9,(620,300,40,40),hits=4),
+            TrackedCargo(2,'danger_cyan',.9,(620,500,40,40),hits=4)))
+    st=StmSnapshot(mode=52,age_ms=0,camera_pitch_cdeg=12000,context_valid=True)
+    with tempfile.TemporaryDirectory() as directory:
+        root=Path(directory)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        out=planner._output_for_cycle(v,p,st,False,1.1)
+        assert out.command.opcode==CMD_CLOSED_DEFLECT
+        planner._publish(out)
+        first=(planner.protocol_task,planner.protocol_action)
+        stale=replace(st,mode=25,task_id=first[0],action_id=(first[1]-1)&65535,
+                      accepted_command=CMD_CLOSED_DEFLECT,action_status=3)
+        out=planner._output_for_cycle(v,p,stale,False,1.2)
+        planner._publish(out)
+        assert (planner.protocol_task,planner.protocol_action)==first and out.command.arg_a==300
+        # Delivery correction H/D refresh remains one action, its next phase
+        # gets a distinct action. No stale PULL DONE may skip STAGE.
+        m._select_batch(CargoBatch((3,),('injured_orange',),'injury'))
+        m.confirmed_delivery_destination='injury'
+        out=m._begin_deflect_stage(replace(p,y_m=.47),1.3)
+        planner._publish(out);stage=(planner.protocol_task,planner.protocol_action)
+        assert stage!=first
+        out=planner._output_for_cycle(v,replace(p,y_m=.48),stale,False,1.4)
+        planner._publish(out)
+        assert out.command.arg_a==60 and (planner.protocol_task,planner.protocol_action)==stage
+        assert len((root/'command').read_bytes())==30
+    # Moving outside the zone uses the existing normal wheel policy. A view
+    # request or unrelated receipt must not switch it; ALIGN restores it.
+    policy=LocalizationWheelPolicy('@deflect-offline-fixture','fixture')
+    policy.socket=Mock();policy.suppressed=True;policy.last_sent=True
+    policy.update(out,replace(stale,context_matches=False),*stage)
+    assert policy.suppressed
+    policy.update(out,replace(stale,context_matches=True,action_status=1),*stage)
+    assert not policy.suppressed
+    align=CompetitionOutput(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,CommandRequest(4),'fixture')
+    policy.update(align,st,*stage)
+    assert policy.suppressed
+    policy.close()

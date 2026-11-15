@@ -49,6 +49,7 @@ CMD_CHANGE_LANE = 0x11
 CMD_CARGO_AUDIT = 0x12
 CMD_CLEAR_SAFE_ZONE = 0x13
 CMD_BULLDOZER_STEP = 0x14  # Segmented motion; each extension requires matching F405 support.
+CMD_CLOSED_DEFLECT = 0x15  # TYPE=0x18 opcode, unrelated to TYPE=0x15 odometry.
 
 CMD_VALID = 1 << 0
 CMD_DRIVE_STRAIGHT = 1 << 1
@@ -133,6 +134,20 @@ def mission_frame(
         raise ValueError("sequence must be in 0..255")
     if not 0 <= command <= 0xFF or not 0 <= flags <= 0xFF:
         raise ValueError("command and flags must be bytes")
+    if command == CMD_CLOSED_DEFLECT:
+        from closed_deflect import VIEW, PULL, STAGE, CARRYING, END_AT_ORIGINAL
+        phase = flags >> 4
+        valid = bool(flags & CMD_VALID) and flags & 0xC0 == 0 and 0 <= aux_cdeg < 36000
+        if phase == VIEW:
+            valid = valid and bool(flags & CARRYING) and not flags & END_AT_ORIGINAL and arg_a == 0 and arg_b == 12000
+        elif phase == PULL:
+            valid = valid and 0 <= arg_a <= 2500 and 100 <= abs(arg_b) <= 6000
+        elif phase == STAGE:
+            valid = valid and bool(flags & CARRYING) and not flags & END_AT_ORIGINAL and 0 <= arg_a <= 5000 and -18000 <= arg_b <= 18000
+        else:
+            valid = False
+        if not valid:
+            raise ValueError("invalid closed deflection payload")
     if command == CMD_BULLDOZER_STEP:
         # High nibble identifies the route step, not the legacy bit meanings.
         if flags & 0x06 or not flags & CMD_VALID:
@@ -167,6 +182,7 @@ def mission_frame(
         CMD_APPROACH_TARGET,
         CMD_DISPERSE_PILE,
         CMD_BULLDOZER_STEP,
+        CMD_CLOSED_DEFLECT,
         CMD_NAVIGATE_WAYPOINT,
     }:
         raise ValueError("bit5 requires an approach, disperse, bulldozer or STAGE NAV command")
