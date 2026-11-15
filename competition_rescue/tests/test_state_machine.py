@@ -172,6 +172,45 @@ def test_first_green_flow_and_navigation_does_not_use_t265_stuck_actions() -> No
     assert output.command and output.command.opcode == CMD_CARGO_AUDIT
 
 
+def test_abandoned_batch_budget_ends_only_after_actual_empty_search_exit():
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((7,), ("core_black",), "material"))
+    m.state = CompetitionState.CAPTURE_AUDIT
+    m.disperse_attempts = m.separation_reviewed_attempt = 2
+    m.recovery_task_locked = True
+    m.return_search_mode_seen = True
+    m.search_site_turn_deg = 500.
+    m._audit_reacquire_output(VisionSnapshot(frame_sequence=10), stm(mode=24), 1.)
+    assert m.state == CompetitionState.WAIT_SEARCH_RECOVERY
+    assert m.disperse_attempts == 2 and m.recovery_task_locked
+    m._search_recovery_output(VisionSnapshot(frame_sequence=11), stm(mode=3,flags=2), 1.1)
+    assert m.disperse_attempts == 2  # A closed-claw report cannot end the batch.
+    m._audit_reacquire_output(VisionSnapshot(frame_sequence=12), stm(mode=3,flags=0), 1.2)
+    assert m.disperse_attempts == m.separation_reviewed_attempt == m.separation_progress_attempt == 0
+    assert not m.recovery_task_locked and not m.return_search_mode_seen
+    assert m.search_site_turn_deg == 500. and m.failed_search_targets
+    other = cargo(99, "injured_orange", 500, 150, hits=6)
+    out = m.step(VisionSnapshot(frame_sequence=13,cargo=(other,),range_pitch_cdeg=12000),
+                 pose(), replace(stm(mode=3),camera_pitch_cdeg=12000), 1.3)
+    assert out.state == CompetitionState.APPROACH and out.command.opcode == CMD_APPROACH_TARGET
+    assert m.selected_batch.track_ids == (99,)
+
+
+def test_abandoned_empty_search_without_candidate_scans_without_forced_return():
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((7,), ("core_black",), "material"))
+    m.state = CompetitionState.AUDIT_CONFIRM
+    m.disperse_attempts = m.separation_reviewed_attempt = 1
+    m.return_search_mode_seen = True
+    m._audit_reacquire_output(VisionSnapshot(frame_sequence=10), stm(mode=3), 1.)
+    out = m.step(VisionSnapshot(frame_sequence=11,range_pitch_cdeg=10500), pose(),
+        replace(stm(mode=3),camera_pitch_cdeg=10500), 1.1)
+    assert out.state == CompetitionState.SEARCH and out.command.opcode == CMD_HOLD
+    assert out.reason == "NO_CANDIDATE" and m.disperse_attempts == 0
+
+
 def test_search_recovery_follows_f407_modes_without_local_timeout() -> None:
     mission = CompetitionMission(
         CompetitionSettings(side="red", start_zone=1, initial_stash_enabled=False)

@@ -1728,6 +1728,17 @@ class CompetitionMission:
         self._set_state(CompetitionState.WAIT_SEARCH_RECOVERY, now)
         self.search_recovery_resume_state = resume_state
 
+    def _finish_abandoned_batch_budget(self) -> None:
+        """An actual empty SEARCH exit ends this batch, not its next target."""
+        self.disperse_attempts = 0
+        self.separation_progress_attempt = 0
+        self.separation_reviewed_attempt = 0
+        self.separation_request_counted = False
+        self.recovery_task_locked = False
+        self._clear_cluster_context(reset_attempts=True)
+        self.return_search_mode_seen = False
+        self.return_search_frame_floor = None
+
     def _search_recovery_output(
         self,
         vision: VisionSnapshot,
@@ -1746,6 +1757,8 @@ class CompetitionMission:
             resume_state = self.search_recovery_resume_state or CompetitionState.SEARCH
             if self.settings.initial_stash_enabled and not self.initial_stash_done:
                 resume_state = CompetitionState.INITIAL_OBSERVE
+            if resume_state == CompetitionState.SEARCH and not stm.gripper_closed:
+                self._finish_abandoned_batch_budget()
             self._set_state(resume_state, now)
             self.search_epoch_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
@@ -2476,6 +2489,8 @@ class CompetitionMission:
         )
         self.grab_initial_ack = None
         if stm.mode == STM_MODE_SEARCH:
+            if resume_state == CompetitionState.SEARCH and not stm.gripper_closed:
+                self._finish_abandoned_batch_budget()
             self._set_state(resume_state, now)
             self.search_epoch_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
@@ -2767,6 +2782,8 @@ class CompetitionMission:
                 self.audit_recheck_started_s = None
                 self.last_selected_track_ids = ()
                 self._clear_pending_audit()
+                if not stm.gripper_closed:
+                    self._finish_abandoned_batch_budget()
                 self._set_state(CompetitionState.SEARCH, now)
                 return CompetitionOutput(
                     self.state,
@@ -3929,7 +3946,7 @@ class CompetitionMission:
         if self.invalid_release_context == "separate_then_search":
             message = "首次无法判断左右归属，发送无侧DISPERSE执行20°观察转向"
         elif self.invalid_release_context == "separation_limit_failed":
-            message = "连续分离无进展，双开并沿原mode24后退、mode47返中交接"
+            message = "连续分离无进展，结束本批；原释放/脱离完成后重新选择目标"
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",

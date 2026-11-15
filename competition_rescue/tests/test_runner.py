@@ -2913,6 +2913,35 @@ def test_only_green_capture_ignores_bottom_point_at_fortyfive_percent_overlap():
     assert "green_supply" in held.items  # No obsolete foot rule in the closed-claw cache.
 
 
+def test_empty_abandoned_batch_next_visible_target_gets_new_task_without_return():
+    from dataclasses import replace
+    from state_machine import CargoBatch, CargoAudit
+    from protocol import CMD_CARGO_AUDIT
+    m = CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((7,),('core_black',),'material'))
+    m.state = CompetitionState.CAPTURE_AUDIT
+    m.disperse_attempts = m.separation_reviewed_attempt = 1
+    p = PoseSnapshot(True,-.013,-.403,227.,0.)
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        planner._publish(CompetitionOutput(m.state,CommandRequest(CMD_CARGO_AUDIT,1,
+            audit=CargoAudit().to_protocol(initial_stash=False,destination='material',audit_id=1),
+            audit_vision_frame=10),'old batch'))
+        old_task=planner.protocol_task
+        status=StmSnapshot(mode=3,flags=0,age_ms=0,camera_pitch_cdeg=12000,context_valid=True,
+            task_id=old_task,action_id=planner.protocol_action,accepted_command=CMD_CARGO_AUDIT,action_status=3)
+        out=planner._output_for_cycle(VisionSnapshot(frame_sequence=11),p,status,False,1.)
+        planner._publish(out)
+        assert out.state == CompetitionState.SEARCH and m.disperse_attempts == 0
+        other=runner_module.TrackedCargo(99,'injured_orange',.95,(500,150,230,190),hits=6)
+        out=planner._output_for_cycle(VisionSnapshot(frame_sequence=12,cargo=(other,),range_pitch_cdeg=12000),p,status,False,1.1)
+        planner._publish(out)
+        assert out.command.opcode == CMD_APPROACH_TARGET and m.selected_batch.track_ids == (99,)
+        assert planner.protocol_task == (old_task+1)&65535
+
+
 def test_original_injury_or_material_loss_preempts_pending_nav_ack():
     from dataclasses import replace
     from state_machine import CargoBatch, CargoAudit, TrackedCargo
