@@ -17,6 +17,7 @@ class SearchTransferRoute:
     index: int = 0
     arrival_latched: bool = False
     interrupted: bool = False
+    direct_from_exit: bool = False
     lane_x_m: float = field(init=False)
     waypoints: tuple[tuple[float, float], ...] = field(init=False)
 
@@ -24,7 +25,8 @@ class SearchTransferRoute:
         x, y = self.origin_xy_m
         self.lane_x_m = min((-.50, .50), key=lambda lane: (abs(lane-x), lane*self.own_sign < 0))
         target = (0., self.target_sign*self.offset_m)
-        points = ((self.lane_x_m, y), (self.lane_x_m, target[1]), target)
+        points = (((x, target[1]), target) if self.direct_from_exit else
+                  ((self.lane_x_m, y), (self.lane_x_m, target[1]), target))
         if math.dist(self.origin_xy_m, target) <= self.tolerance_m:
             self.waypoints = (target,)
         else:

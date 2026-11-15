@@ -5002,7 +5002,7 @@ class CompetitionMission:
 
     def _begin_search_transfer(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
-        *, target_sign: int | None = None,
+        *, target_sign: int | None = None, direct_from_exit: bool = False,
     ) -> CompetitionOutput:
         if not pose.valid:
             return CompetitionOutput(self.state, self._pause(), "换搜索点等待有效位置",
@@ -5025,7 +5025,7 @@ class CompetitionMission:
                 target_sign = -own_sign if self.opponent_search_preferred else -self.search_point_sign
         self.search_transfer_route = SearchTransferRoute(self.search_point_sign, target_sign,
             (pose.x_m, pose.y_m), pose.yaw_deg, int(self.settings.side_sign),
-            self.settings.post_delivery_return_offset_m)
+            self.settings.post_delivery_return_offset_m, direct_from_exit=direct_from_exit)
         self._set_state(CompetitionState.SEARCH_TRANSFER, now)
         return replace(self._search_transfer_output(vision, pose,
             replace(stm, context_matches=False), now), event="search_transfer_start")
@@ -5061,7 +5061,8 @@ class CompetitionMission:
             CommandRequest(CMD_BULLDOZER_STEP,
                 self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
             "途中发现目标：结束当前移动，随后正常审核抓取" if route.interrupted else
-            f"前往搜索点/{route.index}：绕X={route.lane_x_m:+.2f}m侧通道，目标侧{route.target_sign:+d}",
+            f"前往搜索点/{route.index}：目标{route.waypoints[route.index]}，"
+            + ("退出后直接②③" if route.direct_from_exit else f"绕X={route.lane_x_m:+.2f}m侧通道"),
             event="search_transfer_target_seen" if newly_interrupted else "",
             motion_expected=payload[0] != 0, reason="search_transfer_yield" if route.interrupted else "search_transfer_move")
 
@@ -5138,6 +5139,11 @@ class CompetitionMission:
         )
         if self.obstacle_route is not None and self.obstacle_route.recover_after_delivery:
             target_x, target_y = self.obstacle_route.return_point
+        elif self.return_after_delivery and self.opponent_search_preferred:
+            # RETURN D=0 still completes the MCU's local exit (16 -> 17 -> 3).
+            # It does not navigate to the old own-side search point. Capture
+            # the actual exit position only after that matching completion.
+            target_x, target_y = pose.x_m, pose.y_m
         tolerance = (
             self.settings.post_delivery_return_tolerance_m if self.return_after_delivery
             else self.settings.return_zero_tolerance_m
@@ -7530,7 +7536,7 @@ class CompetitionMission:
                 return self._return_center_output(
                     pose,
                     now,
-                    "F405已进入本地退出/转向阶段，返回己方距中心30cm搜索点",
+                    "F405完成本地退出后接续搜索路线",
                 )
             if self._fresh_mode_after(
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
@@ -7558,15 +7564,13 @@ class CompetitionMission:
                     self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
                     return self._obstacle_route_output(vision, pose,
                         replace(stm, context_matches=False), now)
-                # Preserve RETURN's mechanical exit and own-side waypoint.
-                # Only its real SEARCH completion permits the existing empty
-                # side-lane move; do not send step13 while still in mode16/17.
+                # The matching RETURN completes the local mechanical exit;
+                # its D=0 skips the old own-side waypoint entirely.
                 if self.return_after_delivery and self.opponent_search_preferred:
                     if not pose.valid:
-                        return self._return_center_output(pose, now, "投送退出完成，等待位置接续侧通道")
-                    self._complete_return_search(vision, now, "投送退出完成，经过己方等候点去对面搜索")
+                        return self._return_center_output(pose, now, "投送退出完成，等待位置接续②③")
                     return self._begin_search_transfer(vision, pose, stm, now,
-                        target_sign=-int(self.settings.side_sign))
+                        target_sign=-int(self.settings.side_sign), direct_from_exit=True)
                 return self._complete_return_search(vision, now,
                     f"回到{'己方' if self.return_after_delivery else '中心'}搜索区，"
                     f"等待相机120°和新视觉帧；已完成{self.delivery_count}件",

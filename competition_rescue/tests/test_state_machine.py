@@ -3122,7 +3122,7 @@ def test_own_search_exhaustion_keeps_later_searches_on_opponent_side():
         assert not initial.opponent_search_preferred
 
 
-def test_preferred_opponent_delivery_waits_for_return_then_takes_side_lane():
+def test_preferred_opponent_delivery_finishes_local_exit_then_direct_two_legs():
     from protocol import CMD_BULLDOZER_STEP
     from obstacle_route import RouteStep
     for side, own in [('red', 1), ('blue', -1)]:
@@ -3138,11 +3138,11 @@ def test_preferred_opponent_delivery_waits_for_return_then_takes_side_lane():
                 accepted_command=CMD_RETURN_CENTER, action_status=1)
             m.task_complete_initial_ack = 1
             v = VisionSnapshot(frame_sequence=10)
-            p = pose(0., .8*own)
+            p = pose(.18, .8*own)
             out = m.step(v, p, status, 1.)
             assert out.state == CompetitionState.RETURN_CENTER
-            assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a == 500
-            at_home = replace(p, y_m=.3*own)
+            assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a == 0
+            at_home = replace(p, x_m=.1818, y_m=.7786*own)
             out = m.step(v, at_home, replace(status, mode=17), 1.1)
             assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a == 0
             # Neither an unrelated SEARCH receipt nor missing position can
@@ -3156,7 +3156,8 @@ def test_preferred_opponent_delivery_waits_for_return_then_takes_side_lane():
             assert out.command.opcode == CMD_BULLDOZER_STEP
             assert out.command.flags >> 4 == RouteStep.EMPTY_BODY_MOVE
             assert m.search_transfer_route.target_sign == -own
-            assert m.search_transfer_route.waypoints[-1] == (0., -.3*own)
+            assert m.search_transfer_route.waypoints == ((.1818, -.3*own), (0., -.3*own))
+            assert m.search_transfer_route.direct_from_exit
             assert m.opponent_search_preferred
 
 
