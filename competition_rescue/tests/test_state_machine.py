@@ -2802,7 +2802,7 @@ def test_blue_separation_after_closed_and_transport_audit_keeps_original_handoff
             assert m.transport_audit_command is None and m.transport_audit_value is None
 
 
-def test_green_search_prefers_near_pile_and_preserves_class_priority():
+def test_first_green_prefers_near_pile_and_post_first_has_no_class_priority():
     near = TrackedCargo(1, "green_supply", .9, (600, 650, 100, 100), hits=5)
     neighbour = TrackedCargo(2, "core_black", .9, (710, 650, 100, 100), hits=5)
     far = TrackedCargo(3, "green_supply", .9, (100, 100, 180, 180), hits=5)
@@ -2812,20 +2812,88 @@ def test_green_search_prefers_near_pile_and_preserves_class_priority():
     assert m._is_isolated(far, view.cargo) and not m._is_isolated(near, view.cargo)
     assert m._choose_initial_green(view) is None  # Nearest green uses the existing pile path.
     assert m._choose_cluster_target(view).track_id == near.track_id
-    for first in (False, True):
-        m.first_common_delivered = first
-        assert m._choose_material_batch(view).track_ids == (near.track_id,)
-    assert m._choose_near_green(replace(view, range_distances=()), (far, near)) == near
+    assert m._choose_nearest_cargo(replace(view, range_distances=()), (far, near)) == near
     # A measured/finite ground distance wins over pixel order when all have it.
     measured_near = replace(far, relative_xy_m=(.2, 0))
     measured_far = replace(near, relative_xy_m=(1., 0))
-    assert m._choose_near_green(view, (measured_far, measured_near)) == measured_near
+    assert m._choose_nearest_cargo(view, (measured_far, measured_near)) == measured_near
     # The existing band estimate wins even if an unusually large box has a lower foot.
-    assert m._choose_near_green(replace(view, range_distances=((1, 460), (3, 100))),
+    assert m._choose_nearest_cargo(replace(view, range_distances=((1, 460), (3, 100))),
                                 (far, near)) == far
-    # Do not change the post-first green-vs-black/casualty policy.
+    # After the first delivery, a nearer casualty outranks a farther green.
+    m.first_common_delivered = True
     casualty = TrackedCargo(4, "injured_orange", .9, (800, 850, 100, 100), (.05, 0), hits=5)
-    assert m._choose_next_batch(replace(view, cargo=(far, neighbour, casualty))).classes == ("green_supply",)
+    assert m._choose_next_batch(replace(view, cargo=(far, neighbour, casualty))).classes == ("injured_orange",)
+
+
+def test_post_first_nearest_selection_across_classes_and_distance_sources():
+    from itertools import permutations
+
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    for names in permutations(("green_supply", "core_black", "injured_orange")):
+        near, middle, far = (
+            cargo(i, name, 150 * i, 800 - i * 200)
+            for i, name in enumerate(names, 1)
+        )
+        # No ground coordinates: use one common pixel source, not box size/color.
+        view = VisionSnapshot(cargo=(far, middle, near))
+        assert m._choose_next_batch(view).track_ids == (near.track_id,)
+        # Existing calibrated bands override pixel order for all classes.
+        bands = replace(view, range_pitch_cdeg=12000,
+                        range_distances=((1, 460), (2, 230), (3, 100)))
+        assert m._choose_next_batch(bands).track_ids == (far.track_id,)
+        # Ground coordinates, when available for every candidate, come first.
+        ground = replace(bands, cargo=tuple(
+            replace(item, relative_xy_m=(distance, 0))
+            for item, distance in ((near, .6), (middle, .2), (far, 1.))
+        ))
+        assert m._choose_next_batch(ground).track_ids == (middle.track_id,)
+    # Exactly tied appearance stays deterministic; class and input order do not win.
+    tied = tuple(cargo(i, name, 500, 500) for i, name in enumerate(names, 1))
+    for order in permutations(tied):
+        assert m._choose_next_batch(VisionSnapshot(cargo=order)).track_ids == (1,)
+
+
+def test_search_selects_nearest_before_choosing_single_or_pile_path():
+    for nearest_class in ("green_supply", "core_black", "injured_orange"):
+        for in_pile in (False, True):
+            m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+            start_search(m)
+            m.first_common_delivered = True
+            near = cargo(1, nearest_class, 400, 650)
+            far_green = cargo(2, "green_supply", 700, 150)
+            far_core = cargo(3, "core_black", 730, 150)
+            items = [far_green, far_core, near]
+            if in_pile:
+                items.append(cargo(4, "danger_cyan", 430, 650))
+            view = VisionSnapshot(frame_sequence=1, cargo=tuple(items))
+            out = m.step(view, pose(), stm(), .1)
+            assert m.selected_batch.track_ids == (near.track_id,)
+            expected = CompetitionState.CLUSTER_APPROACH if in_pile else CompetitionState.APPROACH
+            assert out.state == expected
+            # A new nearer object cannot replace this visible, already locked target.
+            new_near = cargo(5, "injured_orange", 900, 850)
+            changed = replace(view, cargo=(*items, new_near))
+            resolver = m._cluster_target_for_vision if in_pile else m._target_for_batch
+            assert resolver(changed).track_id == near.track_id
+
+
+def test_search_nearest_keeps_existing_eligibility_and_first_green_rule():
+    near_orange = cargo(1, "injured_orange", 200, 750)
+    green = cargo(2, "green_supply", 500, 300)
+    excluded = (
+        cargo(3, "danger_cyan", 900, 900),
+        replace(cargo(4, "core_black", 1000, 900), inside_safe_zone=True),
+        replace(cargo(5, "green_supply", 1100, 900), visible=False),
+        cargo(6, "core_black", 100, 900, hits=1),
+    )
+    for first_done, selected in ((False, green), (True, near_orange)):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        start_search(m)
+        m.first_common_delivered = first_done
+        m.step(VisionSnapshot(frame_sequence=1, cargo=(near_orange, green, *excluded)), pose(), stm(), .1)
+        assert m.selected_batch.track_ids == (selected.track_id,)
 
 
 def test_green_anchor_keeps_identity_then_reselects_after_existing_recovery():

@@ -3188,7 +3188,7 @@ class CompetitionMission:
                 return False
         return True
 
-    def _choose_near_green(
+    def _choose_nearest_cargo(
         self, vision: VisionSnapshot, candidates: Iterable[TrackedCargo]
     ) -> TrackedCargo | None:
         items = tuple(candidates)
@@ -3198,7 +3198,6 @@ class CompetitionMission:
         ground_available = all(math.isfinite(item.distance_m) for item in items)
         bands_available = (vision.range_pitch_cdeg in {10500, 12000} and
                            all(item.track_id in ranges for item in items))
-        visible = self._visible_cargo(vision)
 
         def rank(item: TrackedCargo) -> tuple:
             foot_y = item.bbox[1] + item.bbox[3]
@@ -3206,8 +3205,7 @@ class CompetitionMission:
                          ranges[item.track_id] if bands_available else -foot_y)
             # All candidates use one comparable source within this image.
             # Pixel ordering is a near/far proxy, never a measured metre value.
-            return (proximity, -foot_y, not self._is_isolated(item, visible),
-                    -item.area_px, item.track_id)
+            return (proximity, -foot_y, -item.area_px, item.track_id)
 
         return min(items, key=rank)
 
@@ -3216,53 +3214,25 @@ class CompetitionMission:
             item for item in self._visible_cargo(vision)
             if item.class_name == "green_supply"
         ]
-        target = self._choose_near_green(vision, candidates)
+        target = self._choose_nearest_cargo(vision, candidates)
         # Preserve the existing whole-claw pile path when the nearest green
         # needs separation, rather than skipping it for a distant singleton.
         return target if target is not None and self._is_isolated(target, self._visible_cargo(vision)) else None
 
-    def _choose_material_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
-        candidates = [
+    def _choose_search_target(self, vision: VisionSnapshot) -> TrackedCargo | None:
+        # Post-first selection: compare every legal destination together before
+        # deciding whether the selected target needs the existing pile path.
+        return self._choose_nearest_cargo(vision, (
             item for item in self._visible_cargo(vision)
-            if item.class_name in MATERIAL_CLASSES and item.hits >= 2
-        ]
-        if not candidates:
-            return None
-        green = [item for item in candidates if item.class_name == "green_supply"]
-        target = (self._choose_near_green(vision, green) if green else
-                  min(candidates, key=lambda item: (item.distance_m, -item.area_px, item.track_id)))
-        return CargoBatch(
-            (target.track_id,),
-            (target.class_name,),
-            "material",
-        )
+            if item.class_name in MATERIAL_CLASSES | {"injured_orange"} and item.hits >= 2
+        ))
 
     def _choose_next_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
-        material = self._choose_material_batch(vision)
-        if material is not None and material.classes == ("green_supply",):
-            return material
-        casualty = min(
-            [
-                item for item in self._visible_cargo(vision)
-                if item.class_name == "injured_orange" and item.hits >= 2
-            ],
-            key=lambda item: (item.distance_m, -item.area_px, item.track_id),
-            default=None,
-        )
-        if material is not None:
-            material_items = [
-                item for item in self._visible_cargo(vision)
-                if item.track_id in material.track_ids
-            ]
-            material_distance = min(
-                (item.distance_m for item in material_items),
-                default=math.inf,
-            )
-            if casualty is None or material_distance <= self.settings.near_material_max_distance_m:
-                return material
-        if casualty is not None:
-            return CargoBatch((casualty.track_id,), (casualty.class_name,), "injury")
-        return material
+        target = self._choose_search_target(vision)
+        if target is None:
+            return None
+        destination = "injury" if target.class_name == "injured_orange" else "material"
+        return CargoBatch((target.track_id,), (target.class_name,), destination)
 
     def _pile_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
         cargo = [
@@ -3280,26 +3250,23 @@ class CompetitionMission:
         )
 
     def _mixed_pile_requires_disperse(self, vision: VisionSnapshot) -> bool:
-        cargo = [item for item in self._visible_cargo(vision) if item.hits >= 2]
-        greens = [item for item in cargo if item.class_name == "green_supply"]
-        if greens:
-            return not any(self._is_isolated(item, cargo) for item in greens)
-        for item in cargo:
-            neighbours = [
-                other for other in cargo
-                if other.track_id != item.track_id and
-                not self._is_isolated(item, (item, other))
-            ]
-            if not neighbours:
-                continue
-            classes = {item.class_name, *(other.class_name for other in neighbours)}
-            if "danger_cyan" in classes:
-                return True
-            if "injured_orange" in classes and classes & MATERIAL_CLASSES:
-                return True
-            if item.class_name in MATERIAL_CLASSES and any(other.class_name in MATERIAL_CLASSES for other in neighbours):
-                return True
-        return False
+        target = self._choose_search_target(vision)
+        if target is None:
+            return False
+        neighbours = [
+            item for item in self._visible_cargo(vision)
+            if item.hits >= 2 and item.track_id != target.track_id and
+            not self._is_isolated(target, (target, item))
+        ]
+        if not neighbours:
+            return False
+        classes = {target.class_name, *(item.class_name for item in neighbours)}
+        return (
+            "danger_cyan" in classes or
+            ("injured_orange" in classes and bool(classes & MATERIAL_CLASSES)) or
+            (target.class_name in MATERIAL_CLASSES and
+             any(item.class_name in MATERIAL_CLASSES for item in neighbours))
+        )
 
     def _audit_valid(self, audit: CargoAudit, *, recovery: bool = False) -> bool:
         counts = Counter(self._manifest_for_audit(audit))
@@ -5249,37 +5216,11 @@ class CompetitionMission:
                 item for item in candidates if item.class_name == "green_supply"
             ]
         else:
-            green = [item for item in candidates if item.class_name == "green_supply"]
-            if green:
-                return self._choose_near_green(vision, green)
-            material = [
-                item for item in candidates if item.class_name in MATERIAL_CLASSES
-            ]
-            casualty = [
-                item for item in candidates
-                if item.class_name == "injured_orange"
-            ]
-            nearest_material = min(
-                material,
-                key=lambda item: (item.distance_m, -item.area_px, item.track_id),
-                default=None,
-            )
-            nearest_casualty = min(
-                casualty,
-                key=lambda item: (item.distance_m, -item.area_px, item.track_id),
-                default=None,
-            )
-            if (
-                nearest_material is not None and
-                (
-                    nearest_casualty is None or
-                    nearest_material.distance_m <=
-                    self.settings.near_material_max_distance_m
-                )
-            ):
-                return nearest_material
-            return nearest_casualty
-        return self._choose_near_green(vision, candidates)
+            # Keep the same all-class choice as SEARCH; a farther pile must
+            # never displace a nearer isolated target.
+            target = self._choose_search_target(vision)
+            return target if target in candidates else None
+        return self._choose_nearest_cargo(vision, candidates)
 
     def _cluster_target_for_vision(
         self, vision: VisionSnapshot
