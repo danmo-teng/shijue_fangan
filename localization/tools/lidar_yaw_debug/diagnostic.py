@@ -1,8 +1,9 @@
-"""Fixed field-yaw wall geometry, for display/logging only.
+"""Fixed field-yaw wall geometry shared by diagnostics and dynamic correction.
 
 Reference: fusion/fence_adapter.py _assign / fixed_yaw least-squares / enclosure
 checks. No invented covariance, geometry qualification, control pose or yaw fit.
-The legacy source clock is unqualified: rotation scans are never position fixes.
+The legacy diagnostic caller does not publish control poses; dynamic callers
+provide their existing compensated scan and fixed field yaw.
 """
 from collections import deque
 import math
@@ -43,7 +44,8 @@ def load_config(path):
 
 
 def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
-                       max_correction_m=.10, max_residual_m=.035, _lines=None):
+                       max_correction_m=.10, max_residual_m=.035, _lines=None,
+                       independent_axes=False):
     """Nearby, operator-resolved square branch only. Unobserved XY stays a prior.
 
     Extract/envelope/associate as in the reviewed patch. Solve ONLY XY, never
@@ -63,7 +65,9 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
         wid = int(np.argmin(costs))
         tangent = 1 if wid < 2 else 0
         support = np.mean((wp[:,tangent]>=-.05)&(wp[:,tangent]<=3.05))
-        if costs[wid] < .20 and support > .85:
+        # Dynamic XY is corrected independently: a wrong Y prediction must
+        # not reject an X wall on its tangential extent (and vice versa).
+        if costs[wid] < .20 and (independent_axes or support > .85):
             assigned.append((wid,line["points"]))
     result = dict(position_observed_axes=[], rank_xy=0, candidate_center_xy_m=None,
                   inherited_axes=["x","y"], covariance=None, qualified_pose=False,
@@ -94,6 +98,30 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
     result.update(residual_rms_m=rms,wall_ids=sorted(set(ids.tolist())),
                   correction_m=float(np.linalg.norm(pose[:2]-prior[:2])),
                   unconstrained_center_xy_m=(pose[:2]-1.5).tolist())
+    if independent_axes:
+        observed=[];axis_rejections={}
+        candidate=prior[:2].copy()
+        for i,name in enumerate(('x','y')):
+            selected=axes==i
+            if not selected.any():continue
+            failures=[]
+            if float(np.sqrt(np.mean(residual[selected]**2)))>max_residual_m:
+                failures.append('wall_residual')
+            if abs(pose[i]-prior[i])>max_correction_m:
+                failures.append('local_correction_distance')
+            if not 0<=pose[i]<=3:failures.append('outside_arena')
+            for line in lines:
+                coordinate=transform(line['points'],pose)[:,i]
+                outside=(coordinate<-.06)|(coordinate>3.06)
+                if outside.sum()>=6 and outside.mean()>.25:
+                    failures.append('enclosing_arena_contradiction');break
+            if failures:axis_rejections[name]=failures
+            else:observed.append(name);candidate[i]=pose[i]
+        return dict(result,position_observed_axes=observed,rank_xy=len(observed),
+            inherited_axes=[a for a in ('x','y') if a not in observed],
+            candidate_center_xy_m=(candidate-1.5).tolist() if observed else None,
+            axis_rejections=axis_rejections,
+            reason='AXIS_GEOMETRY_ACCEPTED' if observed else 'AXIS_GEOMETRY_REJECTED')
     rejection=[]
     if rms>max_residual_m:rejection.append('wall_residual')
     if result['correction_m']>max_correction_m:rejection.append('local_correction_distance')
@@ -111,6 +139,40 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
         candidate_center_xy_m=(pose[:2]-1.5).tolist(),
         reason="STATIC_GEOMETRY_DIAGNOSTIC_ONLY")
     return result
+
+
+def opposing_wall_position(points_body, prior_center_xy, yaw_rad, *, _lines):
+    """Recover a missing axis from BOTH opposite enclosing walls, without
+    borrowing an accurate prediction or inventing its unobserved other axis.
+    A distant single interior face cannot establish absolute position here.
+    """
+    values=[[[],[]],[[],[]]]
+    for line in _lines:
+        normal=transform([line['normal']],[0,0,yaw_rad])[0]
+        axis=int(abs(normal[1])>abs(normal[0]))
+        if abs(normal[axis])<=math.cos(math.radians(12)):continue
+        coordinate=float(np.median(transform(line['points'],[0,0,yaw_rad])[:,axis]))
+        side=int(coordinate>=0)
+        values[axis][side].append((-1.5 if not side else 1.5)-coordinate)
+    seed=np.array(prior_center_xy,float).copy();supported=[]
+    for i,name in enumerate(('x','y')):
+        negative,positive=values[i]
+        if not negative or not positive:continue
+        # The original 3.5cm wall-fit tolerance on each side also bounds
+        # disagreement of the two independent centre estimates to 7cm.
+        if max(negative+positive)-min(negative+positive)>.07:continue
+        seed[i]=float(np.median(negative+positive));supported.append(name)
+    if not supported:return None
+    fit=fixed_yaw_position(points_body,seed,yaw_rad,[0.,0.,0.],_lines=_lines,
+                           max_correction_m=float('inf'),independent_axes=True)
+    observed=[a for a in fit['position_observed_axes'] if a in supported]
+    if not observed:return None
+    candidate=np.array(prior_center_xy,float).copy()
+    for a in observed:
+        i=('x','y').index(a);candidate[i]=fit['candidate_center_xy_m'][i]
+    return dict(fit,position_observed_axes=observed,rank_xy=len(observed),
+        inherited_axes=[a for a in ('x','y') if a not in observed],
+        candidate_center_xy_m=candidate.tolist(),position_prior_used=False)
 
 
 def reacquire_fixed_yaw_position(points_body, yaw_rad, *, _lines=None):

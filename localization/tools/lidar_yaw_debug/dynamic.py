@@ -12,7 +12,7 @@ import math
 import threading
 import time
 import numpy as np
-from .diagnostic import fixed_yaw_position, reacquire_fixed_yaw_position
+from .diagnostic import fixed_yaw_position, reacquire_fixed_yaw_position, opposing_wall_position
 from .static import extract_lines, outer_supported_lines
 from .global_init import initialize, initial_heading_branch
 from .motion_source import MotionSource, sample
@@ -66,8 +66,23 @@ def accepted_points(scan,mount):
 def solve_lines_position(points,ref,offset,lines):
     """Original stateless local/reacquisition solves over frozen scan support."""
     prior=ref[:2]+offset
-    local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines)
+    local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines,
+                            max_correction_m=float('inf'),independent_axes=True)
     local.update(position_reacquired=False,reacquisition_status='LOCAL_TRACKING')
+    if local['rank_xy']<2:
+        opposite=opposing_wall_position(points,prior,ref[2],_lines=lines)
+        if opposite is not None:
+            recovered=[a for a in opposite['position_observed_axes'] if a not in local['position_observed_axes']]
+            if recovered:
+                candidate=np.array(local['candidate_center_xy_m'] if local['rank_xy'] else prior).copy()
+                for a in recovered:
+                    i=('x','y').index(a);candidate[i]=opposite['candidate_center_xy_m'][i]
+                observed=[a for a in ('x','y') if a in local['position_observed_axes'] or a in recovered]
+                local.update(position_observed_axes=observed,rank_xy=len(observed),
+                    inherited_axes=[a for a in ('x','y') if a not in observed],
+                    candidate_center_xy_m=candidate.tolist(),position_reacquired=True,
+                    correction_m=float(np.linalg.norm(candidate-prior)),
+                    reacquisition_status='OPPOSING_WALL_AXIS_REACQUIRED',reacquired_axes=recovered)
     found=(None if local['rank_xy']>0 else
         reacquire_fixed_yaw_position(points,ref[2],_lines=lines))
     return local,found
