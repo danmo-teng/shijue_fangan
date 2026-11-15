@@ -28,13 +28,20 @@ std::array<double, 3> vector3(const DebugWheelInput::Json &value)
     }
     return out;
 }
+
+bool full_wheel_diagnostics_requested()
+{
+    const char *profile = std::getenv("RDK_WHEEL_SDK_LOG_PROFILE");
+    return !profile || std::strcmp(profile, "summary") != 0;
+}
 }
 
 DebugWheelInput::DebugWheelInput(const LocalizationConfig &config, const std::string &session,
                                const std::string &address, const std::string &log_path, bool synthetic_input,
                                bool experiment_enabled)
     : config_(config), session_(session), log_(log_path, std::ios::app),synthetic_input_(synthetic_input),
-      experiment_enabled_(experiment_enabled)
+      experiment_enabled_(experiment_enabled),
+      full_diagnostics_(synthetic_input || experiment_enabled || full_wheel_diagnostics_requested())
 {
     if (!log_) logging_failed_=true; // Diagnostic failure does not disable SDK input.
     status_path_ = log_path.substr(0, log_path.find_last_of('/')+1)+"wheel_sdk_status.json";
@@ -57,6 +64,7 @@ DebugWheelInput::DebugWheelInput(const LocalizationConfig &config, const std::st
     record({{"event", "wheel_input_session"}, {"input_frame", "C_at_tracking_origin"},
             {"dependencies", synthetic_input_ ? Json{"synthetic_test_fixture"} : Json{"measured_wheel_feedback", "primary_gyro_rate"}},
             {"experiment_enabled",experiment_enabled_},
+            {"diagnostic_profile",full_diagnostics_ ? "full" : "summary"},
             {"accuracy_verified", false}});
 }
 
@@ -132,7 +140,8 @@ void DebugWheelInput::prepare_sdk_restart() {
 
 void DebugWheelInput::use_native_feedback() {
     if(started_||synthetic_input_)throw std::logic_error("native feedback must be selected before SDK input starts");
-    native_.reset(new F405WheelMeasurements(config_,session_,[this](Json j){record(std::move(j));}));
+    native_.reset(new F405WheelMeasurements(config_,session_,[this](Json j){record(std::move(j));},
+                                           full_diagnostics_));
 }
 
 void DebugWheelInput::wire_packet(const std::uint8_t *p,std::size_t n,std::uint64_t ns,bool request) {
@@ -355,9 +364,12 @@ void DebugWheelInput::write_logs()
             ending=batch.empty()&&logging_stopping_;
         }
         for(const auto &event:batch) {
-            log_<<event.dump()<<'\n';latest=event;
-            if(event.value("event",std::string())=="wheel_sdk_session_prepared")success_times.clear();
-            if(event.value("event",std::string())=="wheel_sdk_result" && event.value("sdk_result",false))
+            const auto kind=event.value("event",std::string());
+            const bool sdk_success=kind=="wheel_sdk_result" && event.value("sdk_result",false);
+            if(full_diagnostics_ || !sdk_success)log_<<event.dump()<<'\n';
+            latest=event;
+            if(kind=="wheel_sdk_session_prepared")success_times.clear();
+            if(sdk_success)
                 success_times.push_back(event["last_sdk_success_ns"].get<std::uint64_t>());
         }
         const auto now=std::chrono::steady_clock::now();
@@ -369,6 +381,7 @@ void DebugWheelInput::write_logs()
             latest["status_monotonic_ns"]=ns;
             latest["logging_healthy"]=!logging_failed_;
             latest["dropped_log_records"]=dropped_logs_.load();
+            latest["diagnostic_profile"]=full_diagnostics_ ? "full" : "summary";
             const auto temp=status_path_+".tmp";
             std::ofstream status(temp);status<<latest.dump()<<'\n';status.close();
             if(!status||std::rename(temp.c_str(),status_path_.c_str())!=0)logging_failed_=true;
@@ -501,17 +514,19 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
         }
     }
     const auto frame = std::uint32_t(next_frame_++); // SDK sequence, never a timestamp.
-    Json attempt{{"event", "wheel_sdk_attempt"}, {"frame_num", frame}, {"sensor_id", 0},
+    if(full_diagnostics_) {
+        Json attempt{{"event", "wheel_sdk_attempt"}, {"frame_num", frame}, {"sensor_id", 0},
             {"timestamp_monotonic_ns", now},
             {"age_from_wheel_receive_ns",static_cast<std::int64_t>(now)-p.at("receive_monotonic_ns").get<std::int64_t>()},
             {"time_policy","received_feedback_no_age_gate_v1"},{"packet", p}};
-    if(experiment_enabled_) {
-        attempt["experiment"]=experiment_context();
-        attempt["sdk_velocity_camera_mps"]={v.x,v.y,v.z};
-        attempt["measured_velocity_camera_mps"]={measured_velocity.x,measured_velocity.y,measured_velocity.z};
-        attempt["sdk_velocity_source"]=experiment_active_&&experiment_mode_!="normal"?"explicit_test_transform":"measured_wheel_feedback";
+        if(experiment_enabled_) {
+            attempt["experiment"]=experiment_context();
+            attempt["sdk_velocity_camera_mps"]={v.x,v.y,v.z};
+            attempt["measured_velocity_camera_mps"]={measured_velocity.x,measured_velocity.y,measured_velocity.z};
+            attempt["sdk_velocity_source"]=experiment_active_&&experiment_mode_!="normal"?"explicit_test_transform":"measured_wheel_feedback";
+        }
+        record(std::move(attempt));
     }
-    record(std::move(attempt));
     // record() may drop under disk pressure. Preserve the real SDK call;
     // logging_healthy/dropped_log_records remain visible in the status output.
     bool ok = false;
@@ -532,9 +547,11 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     else { ++rejected_; ++sdk_failed_samples_; }
     Json result{{"event", "wheel_sdk_result"}, {"frame_num", frame}, {"sdk_result", ok},
             {"packet_id", packet_id}, {"error", error},
-            {"sdk_duration_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(
-                (experiment_enabled_?call_end:std::chrono::steady_clock::now())-call_start).count()},
             {"timestamp_monotonic_ns", now}, {"accuracy_verified", false}};
+    if(full_diagnostics_ || !ok)
+        result["sdk_duration_ns"]=std::chrono::duration_cast<std::chrono::nanoseconds>(
+            (experiment_enabled_?call_end:std::chrono::steady_clock::now())-call_start).count();
+    if(!full_diagnostics_ && !ok)result["packet"]=std::move(p); // No separate attempt row in summary mode.
     if(experiment_enabled_) {
         result["experiment"]=experiment_context();
         result["sdk_velocity_camera_mps"]={v.x,v.y,v.z};

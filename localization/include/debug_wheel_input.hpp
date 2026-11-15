@@ -64,6 +64,7 @@ private:
     std::uint64_t paused_samples_=0;
     std::uint64_t last_success_ns_=0;
     bool experiment_enabled_=false, experiment_pending_=false, experiment_active_=false;
+    const bool full_diagnostics_;
     std::string experiment_mode_="normal", experiment_phase_id_;
     std::array<double,3> experiment_bias_{{0.,0.,0.}};
     std::uint64_t experiment_start_ns_=0, experiment_end_ns_=0, experiment_applied_ns_=0;

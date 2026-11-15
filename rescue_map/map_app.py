@@ -99,6 +99,8 @@ def parse_args() -> argparse.Namespace:
                         help="competition adapter: reuse tested official SDK wheel input")
     parser.add_argument("--dynamic-localization", action=argparse.BooleanOptionalAction, default=False,
                         help="competition: reuse desktop lidar/T265/wheel fallback chain")
+    parser.add_argument("--full-diagnostics", action="store_true",
+                        help="正式比赛：额外保存雷达原包、全点和逐笔轮速 SDK 记录")
     parser.add_argument("--dynamic-config", type=Path, default=PROJECT_ROOT / "localization/config/lidar_yaw_debug.json")
     parser.add_argument("--lidar", default="/dev/ttyS6")
     parser.add_argument("--lidar-baud", type=int, default=230400)

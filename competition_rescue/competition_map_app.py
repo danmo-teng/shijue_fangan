@@ -265,6 +265,8 @@ class CompetitionMapApp(RescueMapApp):
             command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:
             return command
+        full_diagnostics = getattr(self.options, "full_diagnostics", False)
+        sdk_log_profile = "full" if full_diagnostics else "summary"
         root = RUNTIME / "history" / WHEEL_OWNER
         root.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d_%H%M%S") + "_competition_wheel"
@@ -294,6 +296,8 @@ class CompetitionMapApp(RescueMapApp):
                         pose_source="t265_direct_with_camera_offset", encoder_fusion_weight=0.0,
                         pose_dependencies=["T265 SDK", "measured wheel feedback", "main gyro angular rate"],
                         wheel_processing_owner="native_cpp_sdk_owner",
+                        full_diagnostics_requested=full_diagnostics,
+                        wheel_sdk_log_profile_requested=sdk_log_profile,
                         wheel_observer_transport="bounded_SEQPACKET_with_native_receive_timestamp",
                         wheel_reference_note="SDK input dependency, not independent position truth",
                         fresh_session_note="map preservation disabled; not proof of device estimator reset")
@@ -306,6 +310,7 @@ class CompetitionMapApp(RescueMapApp):
         session_tmp.replace(RUNTIME / "session.json")
         if self.dynamic_localization:
             dynamic_config = load_config(self.options.dynamic_config)
+            dynamic_config["full_lidar_diagnostics"] = full_diagnostics
             dynamic_config['lidar'].update(port=self.options.lidar, baud=self.options.lidar_baud)
             if self.options.lidar == self.options.uart:
                 raise ValueError("雷达与底盘不能共用同一UART")
@@ -353,6 +358,9 @@ class CompetitionMapApp(RescueMapApp):
                         '--debug-pose-socket', '@' + self.dynamic.pose_address[1:],
                         '--dynamic-pose-socket', '@' + self.dynamic.control_address[1:],
                         '--dynamic-pose-output', str(self.localization_json)]
+        # Existing localizer builds ignore this environment option and can
+        # still run. New builds report the actual profile in wheel_sdk_status.
+        command[:0] = ["env", f"RDK_WHEEL_SDK_LOG_PROFILE={sdk_log_profile}"]
         self.wheel_command = list(command)
         return command
 

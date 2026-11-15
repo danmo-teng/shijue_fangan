@@ -14,7 +14,7 @@ class F405WheelMeasurements {
 public:
     using Json = nlohmann::json;
     using Record = std::function<void(Json)>;
-    F405WheelMeasurements(const LocalizationConfig &, std::string session, Record);
+    F405WheelMeasurements(const LocalizationConfig &, std::string session, Record, bool full_diagnostics=true);
     void request(const std::uint8_t *, std::size_t, std::uint64_t written_before_ns);
     void feedback(const std::uint8_t *, std::size_t, std::uint64_t received_ns);
     Json latest(); // consume ready intervals once; coalesce, never replay a backlog
@@ -27,6 +27,7 @@ private:
     LocalizationConfig config_;
     std::string session_;
     Record record_;
+    const bool full_diagnostics_;
     Json identity_, sync_,motion_request_;
     std::map<std::uint64_t, Json> requests_;
     std::deque<Json> rates_, pending_;

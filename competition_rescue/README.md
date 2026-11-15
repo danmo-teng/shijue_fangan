@@ -58,6 +58,8 @@ cd /home/sunrise/RDK_X5/shijue_fangan/competition_rescue
 ./run_competition_map.sh
 ```
 
+正式比赛默认保留异常、状态、下位机反馈和定位轨迹。需要保存雷达原包、全点和逐笔轮速 SDK 明细时，用 `./run_competition_map.sh --full-diagnostics`。精简档不改变传感器采样或控制频率；逐笔 SDK 明细的精简需要配套的新版定位构建。
+
 启动页仍可选择：
 
 - 1～4号出发区、红方/蓝方；

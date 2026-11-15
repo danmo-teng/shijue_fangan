@@ -30,8 +30,8 @@ void merge(Json &target,const Json &extra) {for(auto it=extra.begin();it!=extra.
 bool after_id(std::uint32_t a,std::uint32_t b) {const std::uint32_t d=a-b;return d>0&&d<0x80000000u;}
 }
 
-F405WheelMeasurements::F405WheelMeasurements(const LocalizationConfig &c,std::string s,Record r)
-    :config_(c),session_(std::move(s)),record_(std::move(r)) {}
+F405WheelMeasurements::F405WheelMeasurements(const LocalizationConfig &c,std::string s,Record r,bool full_diagnostics)
+    :config_(c),session_(std::move(s)),record_(std::move(r)),full_diagnostics_(full_diagnostics) {}
 
 void F405WheelMeasurements::discard_motion_support() {
     rates_.clear();pending_.clear();have_end_=false;last_end_=0;
@@ -138,7 +138,7 @@ void F405WheelMeasurements::feedback(const std::uint8_t *p,std::size_t n,std::ui
         s["wire_valid"]=v13 ? bool((flags&1)&&!(flags&32)) : ((flags&3)==3 && !(flags&(4|8|32|128|1024)));
         s["alignment_capture_ns"]=s["rate_receive_us"].get<std::uint64_t>()*1000;
         s["yaw_rate_deg_s"]=s["rate_mdps"].get<double>()/1000.;
-        record_({{"event","wheel_native_measurement"},{"sample",s}});
+        if(full_diagnostics_)record_({{"event","wheel_native_measurement"},{"sample",s}});
         if(source_identity&&s["wire_valid"]==true) {
             if(rates_.size()>=128)rates_.pop_front();rates_.push_back(std::move(s));
         } else rates_.clear();
@@ -172,7 +172,7 @@ void F405WheelMeasurements::feedback(const std::uint8_t *p,std::size_t n,std::ui
         if(lo<=hi) {s["interval_start_ns"]=static_cast<std::int64_t>(t0*1000)-(lo+hi)/2;
                     s["interval_end_ns"]=static_cast<std::int64_t>(t1*1000)-(lo+hi)/2;}
     }
-    record_({{"event","wheel_native_measurement"},{"sample",s}});
+    if(full_diagnostics_)record_({{"event","wheel_native_measurement"},{"sample",s}});
     if(pending_.size()>=64) {
         record_({{"event","wheel_native_rejected"},{"reason","wheel_queue_overflow"},{"sample",pending_.front()}});pending_.pop_front();
     }

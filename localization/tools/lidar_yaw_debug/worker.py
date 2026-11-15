@@ -64,12 +64,13 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
     """Sole lidar serial owner; fitting/motion/GUI cannot delay the next read."""
     scans.cancel_join_thread()
     log = AsyncDebugLog(root)
+    full_diagnostics = config.get("full_lidar_diagnostics", True)
     lidar = reader = None
     native_reader = True
     totals = {}
     state = dict(lidar_connected=False, lidar_error=None, lidar_open_attempts=0,
                  scans_received=0, scan_queue_drops=0, reader_stats={}, receiver_pid=os.getpid(),
-                 reader_backend=None, reader_backend_error=None)
+                 reader_backend=None, reader_backend_error=None, full_lidar_diagnostics=full_diagnostics)
     next_open = last_publish = 0.
 
     def event(name, **data):
@@ -88,9 +89,10 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
 
     def publish_scan(scan):
         state['scans_received'] += 1
-        log.submit('dynamic_scans.jsonl', dict(scan_id=scan.scan_id,
-            reference_ns=scan.reference_ns, time_qualified=False,
-            points=[vars(p).copy() for p in scan.points]))
+        if full_diagnostics:
+            log.submit('dynamic_scans.jsonl', dict(scan_id=scan.scan_id,
+                reference_ns=scan.reference_ns, time_qualified=False,
+                points=[vars(p).copy() for p in scan.points]))
         state['scan_queue_drops'] += offer_latest(scans, scan)
 
     def release_reader():
@@ -141,7 +143,8 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
                 continue
             received = time.monotonic_ns()
             if data:
-                log.submit('lidar_rx.jsonl', dict(timestamp_monotonic_ns=received, data_hex=data.hex()))
+                if full_diagnostics:
+                    log.submit('lidar_rx.jsonl', dict(timestamp_monotonic_ns=received, data_hex=data.hex()))
                 try:
                     reader.feed(data, received, on_scan=publish_scan)
                 except NativeReaderError as exc:

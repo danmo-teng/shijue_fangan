@@ -1735,7 +1735,7 @@ def test_safe_zone_wheel_policy_retry_does_not_block_existing_task_publish():
             receiver.close()
 
 
-def test_formal_dynamic_start_wiring():
+def test_formal_dynamic_start_wiring(full_diagnostics=False):
     """Launcher wiring only; mock worker start, no UART/SDK and no runtime files."""
     from unittest.mock import patch
     from types import SimpleNamespace
@@ -1752,13 +1752,16 @@ def test_formal_dynamic_start_wiring():
             uart='/dev/ttyS1', baud=921600, tx_rate=20., fullscreen=False, demo=False,
             screenshot=None, official_wheel_input=False, dynamic_localization=True,
             dynamic_config=PROJECT_ROOT/'localization/config/lidar_yaw_debug.json',
-            lidar='/dev/ttyS6', lidar_baud=230400)
+            lidar='/dev/ttyS6', lidar_baud=230400, full_diagnostics=full_diagnostics)
         with patch.object(map_app, 'RUNTIME', runtime), patch.object(formal, 'RUNTIME', runtime), \
                 patch.object(CompetitionDynamicLocalization, 'start') as start:
             app = formal.CompetitionMapApp(options)
             try:
                 app.start_session(); cmd = app.localization_command()
                 assert start.call_count == 1 and app.official_wheel_input
+                profile = "full" if full_diagnostics else "summary"
+                assert cmd[:2] == ["env", f"RDK_WHEEL_SDK_LOG_PROFILE={profile}"]
+                assert app.dynamic.config["full_lidar_diagnostics"] is full_diagnostics
                 assert app.dynamic.field_start == dict(x_m=1.35,y_m=1.35,yaw_deg=45.)
                 assert cmd.count('--uart') == 1 and cmd[cmd.index('--uart')+1] == '/dev/ttyS1'
                 assert cmd[cmd.index('--baud')+1] == '921600'
@@ -1794,6 +1797,7 @@ def test_formal_dynamic_start_wiring():
                 assert app.wheel_input.telemetry_sink == app.dynamic.telemetry
                 assert app.localization_command() == cmd and start.call_count == 1
                 metadata = json.loads((runtime/'session.json').read_text())
+                assert metadata["wheel_sdk_log_profile_requested"] == profile
                 assert metadata['pose_source'] == 'lidar_t265_measured_wheel_fallback'
                 assert metadata['qualification']['translation_compensated'] is False
                 assert metadata['accuracy_verified'] is False
@@ -1861,6 +1865,44 @@ def test_formal_dynamic_start_wiring():
             finally:
                 app.stop_localization()
             assert app.dynamic is None and app.wheel_input is None
+
+
+def test_lidar_diagnostic_profile_preserves_scan_delivery():
+    import queue
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    from lidar_yaw_debug import worker
+
+    for config, full in (({}, True), ({"full_lidar_diagnostics": False}, False)):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stop = threading.Event()
+            scans = queue.Queue()
+            scans.cancel_join_thread = lambda: None
+            raw = b"fixture serial bytes"
+            scan = SimpleNamespace(scan_id=4, reference_ns=1234, points=[SimpleNamespace(angle_deg=12., distance_mm=500)])
+            port = Mock(in_waiting=len(raw))
+            port.write.side_effect = len
+
+            def read(size):
+                assert size == len(raw)
+                stop.set()
+                return raw
+
+            port.read.side_effect = read
+            reader = Mock(stats={"scans_emitted": 1}, backend="fixture", backend_error=None)
+            reader.feed.side_effect = lambda data, received, on_scan: on_scan(scan)
+            with patch.object(worker.serial, "Serial", return_value=port), \
+                 patch.object(worker, "make_reader", return_value=reader):
+                worker.run_lidar_receiver(config, "fixture", 230400, root, scans, queue.Queue(), stop)
+            assert scans.get_nowait() is scan and scans.empty()
+            assert reader.feed.call_args.args[0] == raw
+            summary = json.loads((root / "lidar_reader_summary.json").read_text())
+            assert summary["scans_received"] == 1 and summary["scan_queue_drops"] == 0
+            assert summary["full_lidar_diagnostics"] is full and summary["reader_logging_healthy"]
+            assert (root / "lidar_reader_events.jsonl").is_file()
+            assert (root / "lidar_rx.jsonl").is_file() is full
+            assert (root / "dynamic_scans.jsonl").is_file() is full
 
 
 def test_incident_video_replay_and_log_only_timeout():
