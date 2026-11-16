@@ -1,0 +1,81 @@
+{
+  "session": "93c57952c02faa592f0049fdd592409b",
+  "start_ns": 227812178704,
+  "stop_ns": 806419043338,
+  "paired_wheel_records": 57881,
+  "models_use_experimental_robust_localization": false,
+  "wall_counts": {
+    "recorded_walls": 749,
+    "no_walls": 0
+  },
+  "trajectory_difference_m": {
+    "median": 0.6465309636418867,
+    "p95": 0.9203604886364528,
+    "max": 0.9203604886364587,
+    "last": 0.8464809797299503
+  },
+  "maximum_difference_at_s": 551.338695355,
+  "recorded_wall_replay_vs_actual_control_m": {
+    "median": 3.1297088716882983e-05,
+    "p95": 0.04314678593124591,
+    "max": 0.24710629625749597,
+    "last": 9.992007221626409e-16
+  },
+  "source_changes_without_walls": {
+    "T265_WITH_WHEEL_TAIL": 346,
+    "WHEEL_FALLBACK": 40919,
+    "T265_PHASE_NO_WHEEL": 16652
+  },
+  "sources_unchanged": true,
+  "native_library_sha256": "835cadb09727edcc8f13fe6370def403bb19d7a284cb67d5502c37ecd3ecb8c4",
+  "replay_source_sha256": "afc9fea276cff899a79cbaa7be2578e85dd706d99a0cdc52789a3211360aeb81",
+  "source_files": {
+    "metadata.json": {
+      "bytes": 4956,
+      "sha256": "2041af6e4e5d101bf7fa32cddb967efb5c3c8e348e66c7ad30ed00a0f08caaf3"
+    },
+    "localization.conf": {
+      "bytes": 4494,
+      "sha256": "71918759382e0bf4279dae6534a860fdd81be9c9492c4990c615b955ad5f1a36"
+    },
+    "localization_debug.csv": {
+      "bytes": 160537006,
+      "sha256": "67d35f17f051241703b71c21c4eebbb5cf73efe9877674edac998733f8ed3c0b"
+    },
+    "t265_raw_pose.csv": {
+      "bytes": 45972199,
+      "sha256": "0515265d15d3e5f5419247a58660d0f83209df31d7ea41446e1dd3c73aafd317"
+    },
+    "pose_motion.jsonl": {
+      "bytes": 88990462,
+      "sha256": "575c82795edff6dcc87448ffde8bc64088bec346c4d8f2563d0d0346f054e125"
+    },
+    "chassis_identity.json": {
+      "bytes": 904,
+      "sha256": "dea9affb58b1c83e3b8263a2431c1b80629840b39a8c4fe95cd14a85f8973867"
+    },
+    "motion_feedback.jsonl": {
+      "bytes": 62034813,
+      "sha256": "8c2e8fe9841ad4d652d018baa71bd254f846518e790523d0bc79bdf6d6b33a04"
+    },
+    "control_pose.jsonl": {
+      "bytes": 312970628,
+      "sha256": "93da38caa795c742fd695f6bdcb37d41539e82dd3aa37329c1abb204d51233b6"
+    },
+    "native_motion_events.jsonl": {
+      "bytes": 20029,
+      "sha256": "d1c05ca91634828212348954cfb45e0db625e6bf9d6b20339a95fa75dfe17643"
+    },
+    "dynamic_localization.jsonl": {
+      "bytes": 19959855,
+      "sha256": "baf3e90ff49b73f0a7f302f058fc815da170accc5ff5302112adb1678071a333"
+    }
+  },
+  "limitations": [
+    "No physical ground truth: model difference is NOT absolute localization error.",
+    "Same original SDK fused Pose kept in both models; removing outer lidar updates cannot rerun firmware wheel injection or simulate new physical driving.",
+    "SDK local velocities recomputed from raw quaternion and lever arm by existing offline helper, and arrival times use SDK processing / wall computation completion proxies. Baseline differs from live scheduling.",
+    "Recorded accepted wall candidates kept frozen; no retained raw point cloud for full geometry replay. New per-axis radar fix is not replayed here.",
+    "Only pre-operator-stop events counted. Offline snapshot age fields are not real historical latency measurements."
+  ]
+}
