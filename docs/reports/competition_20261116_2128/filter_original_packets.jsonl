@@ -1,0 +1,394 @@
+{"ns": 317475224618, "line": 24236, "hex": "a3b31e0a4be248da12010000eba9c3", "type": 30, "seq": 10}
+{"ns": 317475332369, "line": 24237, "hex": "a3b3170a031736b009000000de2cc3", "type": 23, "seq": 10, "mode": 23, "flags": 3, "camera": 14000, "ack": 9, "fault": 0, "context": {"seq": 10, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317535139228, "line": 24290, "hex": "a3b31e0b4be248da12010000e639c3", "type": 30, "seq": 11}
+{"ns": 317535296521, "line": 24291, "hex": "a3b3170b031736b00f000000d334c3", "type": 23, "seq": 11, "mode": 23, "flags": 3, "camera": 14000, "ack": 15, "fault": 0, "context": {"seq": 11, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317595630217, "line": 24345, "hex": "a3b31e0c4be248da12010000c009c3", "type": 30, "seq": 12}
+{"ns": 317595630217, "line": 24345, "hex": "a3b3170c031736b016000000f258c3", "type": 23, "seq": 12, "mode": 23, "flags": 3, "camera": 14000, "ack": 22, "fault": 0, "context": {"seq": 12, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317655505576, "line": 24402, "hex": "a3b31e0d4be248da12010000cd99c3", "type": 30, "seq": 13}
+{"ns": 317655505576, "line": 24402, "hex": "a3b3170d031736b01c000000fc10c3", "type": 23, "seq": 13, "mode": 23, "flags": 3, "camera": 14000, "ack": 28, "fault": 0, "context": {"seq": 13, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317716299776, "line": 24459, "hex": "a3b31e0e4be248da12010000d969c3", "type": 30, "seq": 14}
+{"ns": 317716406402, "line": 24460, "hex": "a3b3170e563236b02200000054c9c3", "type": 23, "seq": 14, "mode": 50, "flags": 86, "camera": 14000, "ack": 34, "fault": 0, "context": {"seq": 14, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317775413463, "line": 24513, "hex": "a3b31e0f4be248da12010000d4f9c3", "type": 30, "seq": 15}
+{"ns": 317775413463, "line": 24513, "hex": "a3b3170f563236b0290000005b7dc3", "type": 23, "seq": 15, "mode": 50, "flags": 86, "camera": 14000, "ack": 41, "fault": 0, "context": {"seq": 15, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317836368956, "line": 24571, "hex": "a3b31e104be248da1201000058c9c3", "type": 30, "seq": 16}
+{"ns": 317836368956, "line": 24571, "hex": "a3b31710563236b02f000000d7c5c3", "type": 23, "seq": 16, "mode": 50, "flags": 86, "camera": 14000, "ack": 47, "fault": 0, "context": {"seq": 16, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317896029981, "line": 24603, "hex": "a3b31e114be248da120100005559c3", "type": 30, "seq": 17}
+{"ns": 317896029981, "line": 24603, "hex": "a3b31711563236b035000000dd4dc3", "type": 23, "seq": 17, "mode": 50, "flags": 86, "camera": 14000, "ack": 53, "fault": 0, "context": {"seq": 17, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 317955523129, "line": 24646, "hex": "a3b31e124be248da1201000041a9c3", "type": 30, "seq": 18}
+{"ns": 317955712339, "line": 24647, "hex": "a3b31712563236b03b000000cb55c3", "type": 23, "seq": 18, "mode": 50, "flags": 86, "camera": 14000, "ack": 59, "fault": 0, "context": {"seq": 18, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318015948659, "line": 24708, "hex": "a3b31e134be248da120100004c39c3", "type": 30, "seq": 19}
+{"ns": 318016057035, "line": 24709, "hex": "a3b31713563236b041000000dfddc3", "type": 23, "seq": 19, "mode": 50, "flags": 86, "camera": 14000, "ack": 65, "fault": 0, "context": {"seq": 19, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318076751234, "line": 24761, "hex": "a3b31e144be248da120100006a09c3", "type": 30, "seq": 20}
+{"ns": 318076751234, "line": 24761, "hex": "a3b31714563236b047000000f965c3", "type": 23, "seq": 20, "mode": 50, "flags": 86, "camera": 14000, "ack": 71, "fault": 0, "context": {"seq": 20, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318135164250, "line": 24816, "hex": "a3b31e154be248da120100006799c3", "type": 30, "seq": 21}
+{"ns": 318135325043, "line": 24817, "hex": "a3b31715563236b04e000000f769c3", "type": 23, "seq": 21, "mode": 50, "flags": 86, "camera": 14000, "ack": 78, "fault": 0, "context": {"seq": 21, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318195210819, "line": 24862, "hex": "a3b31e164be248da120100007369c3", "type": 30, "seq": 22}
+{"ns": 318195380028, "line": 24863, "hex": "a3b31716563236b054000000e481c3", "type": 23, "seq": 22, "mode": 50, "flags": 86, "camera": 14000, "ack": 84, "fault": 0, "context": {"seq": 22, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318255372014, "line": 24921, "hex": "a3b31e174be248da120100007ef9c3", "type": 30, "seq": 23}
+{"ns": 318255611599, "line": 24922, "hex": "a3b31717563236b05a000000ebf9c3", "type": 23, "seq": 23, "mode": 50, "flags": 86, "camera": 14000, "ack": 90, "fault": 0, "context": {"seq": 23, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318315244748, "line": 24984, "hex": "a3b31e184be248da120100003f09c3", "type": 30, "seq": 24}
+{"ns": 318315505334, "line": 24985, "hex": "a3b31718563236b061000000a72dc3", "type": 23, "seq": 24, "mode": 50, "flags": 86, "camera": 14000, "ack": 97, "fault": 0, "context": {"seq": 24, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318375268318, "line": 25041, "hex": "a3b31e194be248da120100003299c3", "type": 30, "seq": 25}
+{"ns": 318376325492, "line": 25042, "hex": "a3b31719563236b067000000aa35c3", "type": 23, "seq": 25, "mode": 50, "flags": 86, "camera": 14000, "ack": 103, "fault": 0, "context": {"seq": 25, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318436732231, "line": 25094, "hex": "a3b31e1a4be248da120100002669c3", "type": 30, "seq": 26}
+{"ns": 318436732231, "line": 25094, "hex": "a3b3171a563236b06d000000bd1dc3", "type": 23, "seq": 26, "mode": 50, "flags": 86, "camera": 14000, "ack": 109, "fault": 0, "context": {"seq": 26, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318495218955, "line": 25149, "hex": "a3b31e1b4be248da120100002bf9c3", "type": 30, "seq": 27}
+{"ns": 318495377081, "line": 25150, "hex": "a3b3171b563236b073000000b6a5c3", "type": 23, "seq": 27, "mode": 50, "flags": 86, "camera": 14000, "ack": 115, "fault": 0, "context": {"seq": 27, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318555251774, "line": 25220, "hex": "a3b31e1c4be248da120100000dc9c3", "type": 30, "seq": 28}
+{"ns": 318556247240, "line": 25221, "hex": "a3b3171c563236b079000000934dc3", "type": 23, "seq": 28, "mode": 50, "flags": 86, "camera": 14000, "ack": 121, "fault": 0, "context": {"seq": 28, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318615218259, "line": 25261, "hex": "a3b31e1d4be248da120100000059c3", "type": 30, "seq": 29}
+{"ns": 318615379719, "line": 25262, "hex": "a3b3171d563236b07f0000009e55c3", "type": 23, "seq": 29, "mode": 50, "flags": 86, "camera": 14000, "ack": 127, "fault": 0, "context": {"seq": 29, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318676342170, "line": 25329, "hex": "a3b31e1e4be248da1201000014a9c3", "type": 30, "seq": 30}
+{"ns": 318676342170, "line": 25329, "hex": "a3b3171e563236b084000000bb81c3", "type": 23, "seq": 30, "mode": 50, "flags": 86, "camera": 14000, "ack": 132, "fault": 0, "context": {"seq": 30, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318735447524, "line": 25386, "hex": "a3b31e1f4be248da120100001939c3", "type": 30, "seq": 31}
+{"ns": 318735447524, "line": 25386, "hex": "a3b3171f563236b089000000b4bdc3", "type": 23, "seq": 31, "mode": 50, "flags": 86, "camera": 14000, "ack": 137, "fault": 0, "context": {"seq": 31, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318795330925, "line": 25453, "hex": "a3b31e204be248da120100000cc8c3", "type": 30, "seq": 32}
+{"ns": 318795369425, "line": 25454, "hex": "a3b31720563236b090000000a610c3", "type": 23, "seq": 32, "mode": 50, "flags": 86, "camera": 14000, "ack": 144, "fault": 0, "context": {"seq": 32, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318855899581, "line": 25506, "hex": "a3b31e214be248da120100000158c3", "type": 30, "seq": 33}
+{"ns": 318855899581, "line": 25506, "hex": "a3b31721563236b095000000ab4cc3", "type": 23, "seq": 33, "mode": 50, "flags": 86, "camera": 14000, "ack": 149, "fault": 0, "context": {"seq": 33, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318915349813, "line": 25570, "hex": "a3b31e224be248da1201000015a8c3", "type": 30, "seq": 34}
+{"ns": 318915577398, "line": 25571, "hex": "a3b31722523236b09b000000bca7c3", "type": 23, "seq": 34, "mode": 50, "flags": 82, "camera": 14000, "ack": 155, "fault": 0, "context": {"seq": 34, "task": 19426, "action": 18650, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 318975371257, "line": 25640, "hex": "a3b31e234be248da12030000b9f8c3", "type": 30, "seq": 35}
+{"ns": 318975371257, "line": 25640, "hex": "a3b31723521636b0a1000000d9edc3", "type": 23, "seq": 35, "mode": 22, "flags": 82, "camera": 14000, "ack": 161, "fault": 0, "context": {"seq": 35, "task": 19426, "action": 18650, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 319036323416, "line": 25699, "hex": "a3b31e244be248db0301000006f4c3", "type": 30, "seq": 36}
+{"ns": 319036583335, "line": 25700, "hex": "a3b31724520a36b0a70000002294c3", "type": 23, "seq": 36, "mode": 10, "flags": 82, "camera": 14000, "ack": 167, "fault": 0, "context": {"seq": 36, "task": 19426, "action": 18651, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 319095462812, "line": 25753, "hex": "a3b31e254be248db030100000b64c3", "type": 30, "seq": 37}
+{"ns": 319095497770, "line": 25754, "hex": "a3b31725560a36b0ac0000002cd3c3", "type": 23, "seq": 37, "mode": 10, "flags": 86, "camera": 14000, "ack": 172, "fault": 0, "context": {"seq": 37, "task": 19426, "action": 18651, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 340516061273, "line": 45361, "hex": "a3b31e8a4be348e812010000a36bc3", "type": 30, "seq": 138}
+{"ns": 340516061273, "line": 45361, "hex": "a3b3178a031736b0fd0000008ddac3", "type": 23, "seq": 138, "mode": 23, "flags": 3, "camera": 14000, "ack": 253, "fault": 0, "context": {"seq": 138, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340575286082, "line": 45410, "hex": "a3b31e8b4be348e812010000aefbc3", "type": 30, "seq": 139}
+{"ns": 340575373665, "line": 45411, "hex": "a3b3178b031736b005000000b12ac3", "type": 23, "seq": 139, "mode": 23, "flags": 3, "camera": 14000, "ack": 5, "fault": 0, "context": {"seq": 139, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340635446101, "line": 45459, "hex": "a3b31e8c4be348e81201000088cbc3", "type": 30, "seq": 140}
+{"ns": 340635446101, "line": 45459, "hex": "a3b3178c031736b00b00000095f2c3", "type": 23, "seq": 140, "mode": 23, "flags": 3, "camera": 14000, "ack": 11, "fault": 0, "context": {"seq": 140, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340696134663, "line": 45527, "hex": "a3b31e8d4be348e812010000855bc3", "type": 30, "seq": 141}
+{"ns": 340696507205, "line": 45528, "hex": "a3b3178d031736b0110000009f7ac3", "type": 23, "seq": 141, "mode": 23, "flags": 3, "camera": 14000, "ack": 17, "fault": 0, "context": {"seq": 141, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340756127973, "line": 45586, "hex": "a3b31e8e4be348e81201000091abc3", "type": 30, "seq": 142}
+{"ns": 340756127973, "line": 45586, "hex": "a3b3178e563236b0170000003ac3c3", "type": 23, "seq": 142, "mode": 50, "flags": 86, "camera": 14000, "ack": 23, "fault": 0, "context": {"seq": 142, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340815540949, "line": 45623, "hex": "a3b31e8f4be348e8120100009c3bc3", "type": 30, "seq": 143}
+{"ns": 340817240703, "line": 45624, "hex": "a3b3178f563236b01d000000348bc3", "type": 23, "seq": 143, "mode": 50, "flags": 86, "camera": 14000, "ack": 29, "fault": 0, "context": {"seq": 143, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340875144425, "line": 45685, "hex": "a3b31e904be348e812010000100bc3", "type": 30, "seq": 144}
+{"ns": 340875263051, "line": 45686, "hex": "a3b31790563236b023000000b553c3", "type": 23, "seq": 144, "mode": 50, "flags": 86, "camera": 14000, "ack": 35, "fault": 0, "context": {"seq": 144, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340935202444, "line": 45734, "hex": "a3b31e914be348e8120100001d9bc3", "type": 30, "seq": 145}
+{"ns": 340935315403, "line": 45735, "hex": "a3b31791563236b028000000bae7c3", "type": 23, "seq": 145, "mode": 50, "flags": 86, "camera": 14000, "ack": 40, "fault": 0, "context": {"seq": 145, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 340995114005, "line": 45797, "hex": "a3b31e924be348e812010000096bc3", "type": 30, "seq": 146}
+{"ns": 340995611964, "line": 45798, "hex": "a3b31792563236b02e000000ae9fc3", "type": 23, "seq": 146, "mode": 50, "flags": 86, "camera": 14000, "ack": 46, "fault": 0, "context": {"seq": 146, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341055493566, "line": 45837, "hex": "a3b31e934be348e81201000004fbc3", "type": 30, "seq": 147}
+{"ns": 341055493566, "line": 45837, "hex": "a3b31793563236b033000000a563c3", "type": 23, "seq": 147, "mode": 50, "flags": 86, "camera": 14000, "ack": 51, "fault": 0, "context": {"seq": 147, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341115638794, "line": 45879, "hex": "a3b31e944be348e81201000022cbc3", "type": 30, "seq": 148}
+{"ns": 341115638794, "line": 45879, "hex": "a3b31794563236b039000000808bc3", "type": 23, "seq": 148, "mode": 50, "flags": 86, "camera": 14000, "ack": 57, "fault": 0, "context": {"seq": 148, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341175476645, "line": 45936, "hex": "a3b31e954be348e8120100002f5bc3", "type": 30, "seq": 149}
+{"ns": 341175476645, "line": 45936, "hex": "a3b31795563236b03f0000008d93c3", "type": 23, "seq": 149, "mode": 50, "flags": 86, "camera": 14000, "ack": 63, "fault": 0, "context": {"seq": 149, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341235183997, "line": 45972, "hex": "a3b31e964be348e8120100003babc3", "type": 30, "seq": 150}
+{"ns": 341235374247, "line": 45973, "hex": "a3b31796563236b046000000803fc3", "type": 23, "seq": 150, "mode": 50, "flags": 86, "camera": 14000, "ack": 70, "fault": 0, "context": {"seq": 150, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341295724267, "line": 46032, "hex": "a3b31e974be348e812010000363bc3", "type": 30, "seq": 151}
+{"ns": 341295724267, "line": 46032, "hex": "a3b31797563236b04b0000008f03c3", "type": 23, "seq": 151, "mode": 50, "flags": 86, "camera": 14000, "ack": 75, "fault": 0, "context": {"seq": 151, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341355127529, "line": 46085, "hex": "a3b31e984be348e81201000077cbc3", "type": 30, "seq": 152}
+{"ns": 341355785864, "line": 46087, "hex": "a3b31798563236b051000000c9ebc3", "type": 23, "seq": 152, "mode": 50, "flags": 86, "camera": 14000, "ack": 81, "fault": 0, "context": {"seq": 152, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341415113822, "line": 46137, "hex": "a3b31e994be348e8120100007a5bc3", "type": 30, "seq": 153}
+{"ns": 341415866614, "line": 46138, "hex": "a3b31799563236b056000000c50fc3", "type": 23, "seq": 153, "mode": 50, "flags": 86, "camera": 14000, "ack": 86, "fault": 0, "context": {"seq": 153, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341475352614, "line": 46197, "hex": "a3b31e9a4be348e8120100006eabc3", "type": 30, "seq": 154}
+{"ns": 341475417864, "line": 46198, "hex": "a3b3179a563236b05d000000d3dbc3", "type": 23, "seq": 154, "mode": 50, "flags": 86, "camera": 14000, "ack": 93, "fault": 0, "context": {"seq": 154, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341535087906, "line": 46252, "hex": "a3b31e9b4be348e812010000633bc3", "type": 30, "seq": 155}
+{"ns": 341535305365, "line": 46253, "hex": "a3b3179b563236b064000000d2d7c3", "type": 23, "seq": 155, "mode": 50, "flags": 86, "camera": 14000, "ack": 100, "fault": 0, "context": {"seq": 155, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341595081823, "line": 46310, "hex": "a3b31e9c4be348e812010000450bc3", "type": 30, "seq": 156}
+{"ns": 341595251907, "line": 46311, "hex": "a3b3179c563236b06a000000f60fc3", "type": 23, "seq": 156, "mode": 50, "flags": 86, "camera": 14000, "ack": 106, "fault": 0, "context": {"seq": 156, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341655078365, "line": 46365, "hex": "a3b31e9d4be348e812010000489bc3", "type": 30, "seq": 157}
+{"ns": 341655274907, "line": 46366, "hex": "a3b3179d563236b06f000000fb53c3", "type": 23, "seq": 157, "mode": 50, "flags": 86, "camera": 14000, "ack": 111, "fault": 0, "context": {"seq": 157, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341720943999, "line": 46415, "hex": "a3b31e9e4be348e8120100005c6bc3", "type": 30, "seq": 158}
+{"ns": 341720943999, "line": 46415, "hex": "a3b3179e563236b076000000e8ffc3", "type": 23, "seq": 158, "mode": 50, "flags": 86, "camera": 14000, "ack": 118, "fault": 0, "context": {"seq": 158, "task": 19427, "action": 18664, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 341777020202, "line": 46452, "hex": "a3b31e9f4be348e812030000f03bc3", "type": 30, "seq": 159}
+{"ns": 341777020202, "line": 46452, "hex": "a3b3179f521636b07b0000008232c3", "type": 23, "seq": 159, "mode": 22, "flags": 82, "camera": 14000, "ack": 123, "fault": 0, "context": {"seq": 159, "task": 19427, "action": 18664, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 341835588242, "line": 46493, "hex": "a3b31ea04be348e812030000e5cac3", "type": 30, "seq": 160}
+{"ns": 341835640576, "line": 46494, "hex": "a3b317a0521636b081000000a71bc3", "type": 23, "seq": 160, "mode": 22, "flags": 82, "camera": 14000, "ack": 129, "fault": 0, "context": {"seq": 160, "task": 19427, "action": 18664, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 341897764079, "line": 46554, "hex": "a3b31ea14be348e9030100007166c3", "type": 30, "seq": 161}
+{"ns": 341897764079, "line": 46554, "hex": "a3b317a1560a36b08600000077cdc3", "type": 23, "seq": 161, "mode": 10, "flags": 86, "camera": 14000, "ack": 134, "fault": 0, "context": {"seq": 161, "task": 19427, "action": 18665, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 341956119953, "line": 46595, "hex": "a3b31ea24be348e9030100006596c3", "type": 30, "seq": 162}
+{"ns": 341956119953, "line": 46595, "hex": "a3b317a2560a36b08c00000060e5c3", "type": 23, "seq": 162, "mode": 10, "flags": 86, "camera": 14000, "ack": 140, "fault": 0, "context": {"seq": 162, "task": 19427, "action": 18665, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 342015593619, "line": 46626, "hex": "a3b31ea34be348e9030100006806c3", "type": 30, "seq": 163}
+{"ns": 342015593619, "line": 46626, "hex": "a3b317a3560a36b0920000006b5dc3", "type": 23, "seq": 163, "mode": 10, "flags": 86, "camera": 14000, "ack": 146, "fault": 0, "context": {"seq": 163, "task": 19427, "action": 18665, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 358514788045, "line": 61330, "hex": "a3b31eb64be548f6090100006a8cc3", "type": 30, "seq": 182}
+{"ns": 358514788045, "line": 61330, "hex": "a3b317b608142fa814000000e83fc3", "type": 23, "seq": 182, "mode": 20, "flags": 8, "camera": 12200, "ack": 20, "fault": 0, "context": {"seq": 182, "task": 19429, "action": 18678, "cmd": 9, "status": 1, "rejected": 0}}
+{"ns": 359173464696, "line": 61915, "hex": "a3b31ec14be548f60903000088bec3", "type": 30, "seq": 193}
+{"ns": 359173626963, "line": 61916, "hex": "a3b317c1011536b0560000004d14c3", "type": 23, "seq": 193, "mode": 21, "flags": 1, "camera": 14000, "ack": 86, "fault": 0, "context": {"seq": 193, "task": 19429, "action": 18678, "cmd": 9, "status": 3, "rejected": 0}}
+{"ns": 359233572985, "line": 61977, "hex": "a3b31ec24be548f71201000006aac3", "type": 30, "seq": 194}
+{"ns": 359234251172, "line": 61978, "hex": "a3b317c2051536b05b0000005abbc3", "type": 23, "seq": 194, "mode": 21, "flags": 5, "camera": 14000, "ack": 91, "fault": 0, "context": {"seq": 194, "task": 19429, "action": 18679, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 359596536970, "line": 62315, "hex": "a3b31ec84be548f80201000028cbc3", "type": 30, "seq": 200}
+{"ns": 359596536970, "line": 62315, "hex": "a3b317c8550836b07e000000e72ac3", "type": 23, "seq": 200, "mode": 8, "flags": 85, "camera": 14000, "ack": 126, "fault": 0, "context": {"seq": 200, "task": 19429, "action": 18680, "cmd": 2, "status": 1, "rejected": 0}}
+{"ns": 361153463104, "line": 63590, "hex": "a3b31ee24be548f8020300006e6ac3", "type": 30, "seq": 226}
+{"ns": 361153463104, "line": 63590, "hex": "a3b317e2031736b01900000074e8c3", "type": 23, "seq": 226, "mode": 23, "flags": 3, "camera": 14000, "ack": 25, "fault": 0, "context": {"seq": 226, "task": 19429, "action": 18680, "cmd": 2, "status": 3, "rejected": 0}}
+{"ns": 361213927174, "line": 63655, "hex": "a3b31ee34be548f912010000fb3ac3", "type": 30, "seq": 227}
+{"ns": 361213927174, "line": 63655, "hex": "a3b317e3031736b0210000007418c3", "type": 23, "seq": 227, "mode": 23, "flags": 3, "camera": 14000, "ack": 33, "fault": 0, "context": {"seq": 227, "task": 19429, "action": 18681, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 361513069469, "line": 63926, "hex": "a3b31ee84be548f91203000029cac3", "type": 30, "seq": 232}
+{"ns": 361513227655, "line": 63927, "hex": "a3b317e8521636b03f000000d530c3", "type": 23, "seq": 232, "mode": 22, "flags": 82, "camera": 14000, "ack": 63, "fault": 0, "context": {"seq": 232, "task": 19429, "action": 18681, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 361634144110, "line": 64042, "hex": "a3b31eea4be548fa03010000d056c3", "type": 30, "seq": 234}
+{"ns": 361634144110, "line": 64042, "hex": "a3b317ea520a36b04b0000000a61c3", "type": 23, "seq": 234, "mode": 10, "flags": 82, "camera": 14000, "ack": 75, "fault": 0, "context": {"seq": 234, "task": 19429, "action": 18682, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 362474515392, "line": 64742, "hex": "a3b31ef84be548fb120100003c0ac3", "type": 30, "seq": 248}
+{"ns": 362474515392, "line": 64742, "hex": "a3b317f8023036b09a00000078c2c3", "type": 23, "seq": 248, "mode": 48, "flags": 2, "camera": 14000, "ack": 154, "fault": 0, "context": {"seq": 248, "task": 19429, "action": 18683, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 363133307720, "line": 65255, "hex": "a3b31e034be548fc04010000fab6c3", "type": 30, "seq": 3}
+{"ns": 363133307720, "line": 65255, "hex": "a3b31703560a2ee0da000000472ec3", "type": 23, "seq": 3, "mode": 10, "flags": 86, "camera": 12000, "ack": 218, "fault": 0, "context": {"seq": 3, "task": 19429, "action": 18684, "cmd": 4, "status": 1, "rejected": 0}}
+{"ns": 365292924452, "line": 67292, "hex": "a3b31e274be548fc04030000f077c3", "type": 30, "seq": 39}
+{"ns": 365292924452, "line": 67292, "hex": "a3b31727520b2ee0b3000000e080c3", "type": 23, "seq": 39, "mode": 11, "flags": 82, "camera": 12000, "ack": 179, "fault": 0, "context": {"seq": 39, "task": 19429, "action": 18684, "cmd": 4, "status": 3, "rejected": 0}}
+{"ns": 365472708460, "line": 67397, "hex": "a3b31e2a4be548fd040300009527c3", "type": 30, "seq": 42}
+{"ns": 365473953971, "line": 67398, "hex": "a3b3172a520b2ee0c5000000a258c3", "type": 23, "seq": 42, "mode": 11, "flags": 82, "camera": 12000, "ack": 197, "fault": 0, "context": {"seq": 42, "task": 19429, "action": 18685, "cmd": 4, "status": 3, "rejected": 0}}
+{"ns": 365593812410, "line": 67468, "hex": "a3b31e2c4be548fe050100005abbc3", "type": 30, "seq": 44}
+{"ns": 365594880027, "line": 67469, "hex": "a3b3172c560a2ee0d00000009cc7c3", "type": 23, "seq": 44, "mode": 10, "flags": 86, "camera": 12000, "ack": 208, "fault": 0, "context": {"seq": 44, "task": 19429, "action": 18686, "cmd": 5, "status": 1, "rejected": 0}}
+{"ns": 367992351673, "line": 69570, "hex": "a3b31e544be548fe0501000058b9c3", "type": 30, "seq": 84}
+{"ns": 367992438538, "line": 69571, "hex": "a3b31754520c2ee0ba000000e4eec3", "type": 23, "seq": 84, "mode": 12, "flags": 82, "camera": 12000, "ack": 186, "fault": 0, "context": {"seq": 84, "task": 19429, "action": 18686, "cmd": 5, "status": 1, "rejected": 0}}
+{"ns": 368652233311, "line": 70093, "hex": "a3b31e5f4be548fe050300008a49c3", "type": 30, "seq": 95}
+{"ns": 368652233311, "line": 70093, "hex": "a3b3175f500f2ee0fb000000313bc3", "type": 23, "seq": 95, "mode": 15, "flags": 80, "camera": 12000, "ack": 251, "fault": 0, "context": {"seq": 95, "task": 19429, "action": 18686, "cmd": 5, "status": 3, "rejected": 0}}
+{"ns": 368952094576, "line": 70381, "hex": "a3b31e644be548ff0603000090fcc3", "type": 30, "seq": 100}
+{"ns": 368952272681, "line": 70382, "hex": "a3b3176400102ee017000000c967c3", "type": 23, "seq": 100, "mode": 16, "flags": 0, "camera": 12000, "ack": 23, "fault": 0, "context": {"seq": 100, "task": 19429, "action": 18687, "cmd": 6, "status": 3, "rejected": 0}}
+{"ns": 369012341398, "line": 70430, "hex": "a3b31e654be54900080100002b81c3", "type": 30, "seq": 101}
+{"ns": 369012341398, "line": 70430, "hex": "a3b3176504102ee01d000000c6dcc3", "type": 23, "seq": 101, "mode": 16, "flags": 4, "camera": 12000, "ack": 29, "fault": 0, "context": {"seq": 101, "task": 19429, "action": 18688, "cmd": 8, "status": 1, "rejected": 0}}
+{"ns": 370392107597, "line": 71763, "hex": "a3b31e7c4be54900080300002dd1c3", "type": 30, "seq": 124}
+{"ns": 370392107597, "line": 71763, "hex": "a3b3177c00032ee0a40000006722c3", "type": 23, "seq": 124, "mode": 3, "flags": 0, "camera": 12000, "ack": 164, "fault": 0, "context": {"seq": 124, "task": 19429, "action": 18688, "cmd": 8, "status": 3, "rejected": 0}}
+{"ns": 370453238371, "line": 71838, "hex": "a3b31e7d4be5490114010000bbd1c3", "type": 30, "seq": 125}
+{"ns": 370453238371, "line": 71838, "hex": "a3b3177d04192ee0aa000000d268c3", "type": 23, "seq": 125, "mode": 25, "flags": 4, "camera": 12000, "ack": 170, "fault": 0, "context": {"seq": 125, "task": 19429, "action": 18689, "cmd": 20, "status": 1, "rejected": 0}}
+{"ns": 373271558680, "line": 74289, "hex": "a3b31eac4be5490214030000ce44c3", "type": 30, "seq": 172}
+{"ns": 373273040073, "line": 74290, "hex": "a3b317ac00032ee0be000000fdffc3", "type": 23, "seq": 172, "mode": 3, "flags": 0, "camera": 12000, "ack": 190, "fault": 0, "context": {"seq": 172, "task": 19429, "action": 18690, "cmd": 20, "status": 3, "rejected": 0}}
+{"ns": 376031212033, "line": 76571, "hex": "a3b31eda4be6490309010000294ac3", "type": 30, "seq": 218}
+{"ns": 376031650785, "line": 76572, "hex": "a3b317da08142ee0ca000000cecac3", "type": 23, "seq": 218, "mode": 20, "flags": 8, "camera": 12000, "ack": 202, "fault": 0, "context": {"seq": 218, "task": 19430, "action": 18691, "cmd": 9, "status": 1, "rejected": 0}}
+{"ns": 377472534770, "line": 77814, "hex": "a3b31ef24be6490309010000d74bc3", "type": 30, "seq": 242}
+{"ns": 377472534770, "line": 77814, "hex": "a3b317f208342ee05e0000003d39c3", "type": 23, "seq": 242, "mode": 52, "flags": 8, "camera": 12000, "ack": 94, "fault": 0, "context": {"seq": 242, "task": 19430, "action": 18691, "cmd": 9, "status": 1, "rejected": 0}}
+{"ns": 377711255708, "line": 78033, "hex": "a3b31ef64be6490409010000504bc3", "type": 30, "seq": 246}
+{"ns": 377711431609, "line": 78034, "hex": "a3b317f60c352ee0770000001696c3", "type": 23, "seq": 246, "mode": 53, "flags": 12, "camera": 12000, "ack": 119, "fault": 0, "context": {"seq": 246, "task": 19430, "action": 18692, "cmd": 9, "status": 1, "rejected": 0}}
+{"ns": 379033058915, "line": 79164, "hex": "a3b31e0c4be64904090100002aefc3", "type": 30, "seq": 12}
+{"ns": 379033058915, "line": 79164, "hex": "a3b3170c08142ee0fb0000007653c3", "type": 23, "seq": 12, "mode": 20, "flags": 8, "camera": 12000, "ack": 251, "fault": 0, "context": {"seq": 12, "task": 19430, "action": 18692, "cmd": 9, "status": 1, "rejected": 0}}
+{"ns": 379693289900, "line": 79667, "hex": "a3b31e174be649040903000035dfc3", "type": 30, "seq": 23}
+{"ns": 379693289900, "line": 79667, "hex": "a3b31717011536b03d000000e755c3", "type": 23, "seq": 23, "mode": 21, "flags": 1, "camera": 14000, "ack": 61, "fault": 0, "context": {"seq": 23, "task": 19430, "action": 18692, "cmd": 9, "status": 3, "rejected": 0}}
+{"ns": 379751346287, "line": 79740, "hex": "a3b31e184be6490512010000eecbc3", "type": 30, "seq": 24}
+{"ns": 379751346287, "line": 79740, "hex": "a3b31718051536b043000000bf7ec3", "type": 23, "seq": 24, "mode": 21, "flags": 5, "camera": 14000, "ack": 67, "fault": 0, "context": {"seq": 24, "task": 19430, "action": 18693, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 380050998457, "line": 79985, "hex": "a3b31e1d4be6490602010000915bc3", "type": 30, "seq": 29}
+{"ns": 380051147362, "line": 79986, "hex": "a3b3171d550836b05f0000004f83c3", "type": 23, "seq": 29, "mode": 8, "flags": 85, "camera": 14000, "ack": 95, "fault": 0, "context": {"seq": 29, "task": 19430, "action": 18694, "cmd": 2, "status": 1, "rejected": 0}}
+{"ns": 381610842131, "line": 81475, "hex": "a3b31e374be6490602030000d7fac3", "type": 30, "seq": 55}
+{"ns": 381615671845, "line": 81476, "hex": "a3b31737031736b0f9000000e1bdc3", "type": 23, "seq": 55, "mode": 23, "flags": 3, "camera": 14000, "ack": 249, "fault": 0, "context": {"seq": 55, "task": 19430, "action": 18694, "cmd": 2, "status": 3, "rejected": 0}}
+{"ns": 381670953276, "line": 81494, "hex": "a3b31e384be64907120100000ecac3", "type": 30, "seq": 56}
+{"ns": 381670953276, "line": 81494, "hex": "a3b31738031736b00000000090d1c3", "type": 23, "seq": 56, "mode": 23, "flags": 3, "camera": 14000, "ack": 0, "fault": 0, "context": {"seq": 56, "task": 19430, "action": 18695, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 382272310457, "line": 82042, "hex": "a3b31e424be6490712030000b468c3", "type": 30, "seq": 66}
+{"ns": 382272310457, "line": 82042, "hex": "a3b31742521636b039000000531fc3", "type": 23, "seq": 66, "mode": 22, "flags": 82, "camera": 14000, "ack": 57, "fault": 0, "context": {"seq": 66, "task": 19430, "action": 18695, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 382390715967, "line": 82183, "hex": "a3b31e444be64908030100006f35c3", "type": 30, "seq": 68}
+{"ns": 382391493993, "line": 82184, "hex": "a3b31744560a36b045000000bd1dc3", "type": 23, "seq": 68, "mode": 10, "flags": 86, "camera": 14000, "ack": 69, "fault": 0, "context": {"seq": 68, "task": 19430, "action": 18696, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 385871609418, "line": 85615, "hex": "a3b31e7e4be64909120100007d68c3", "type": 30, "seq": 126}
+{"ns": 385871704703, "line": 85616, "hex": "a3b3177e023036b0a80000003c1cc3", "type": 23, "seq": 126, "mode": 48, "flags": 2, "camera": 14000, "ack": 168, "fault": 0, "context": {"seq": 126, "task": 19430, "action": 18697, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 386651512877, "line": 86398, "hex": "a3b31e8b4be6490a100100000384c3", "type": 30, "seq": 139}
+{"ns": 386652424276, "line": 86399, "hex": "a3b3178b401936b0f6000000298bc3", "type": 23, "seq": 139, "mode": 25, "flags": 64, "camera": 14000, "ack": 246, "fault": 0, "context": {"seq": 139, "task": 19430, "action": 18698, "cmd": 16, "status": 1, "rejected": 0}}
+{"ns": 389050580827, "line": 88744, "hex": "a3b31eb34be6490a100300009185c3", "type": 30, "seq": 179}
+{"ns": 389050580827, "line": 88744, "hex": "a3b317b3012336b0ea0000004225c3", "type": 23, "seq": 179, "mode": 35, "flags": 1, "camera": 14000, "ack": 234, "fault": 0, "context": {"seq": 179, "task": 19430, "action": 18698, "cmd": 16, "status": 3, "rejected": 0}}
+{"ns": 389110305147, "line": 88810, "hex": "a3b31eb44be6490b120100002a0dc3", "type": 30, "seq": 180}
+{"ns": 389110371852, "line": 88811, "hex": "a3b317b4012336b0f0000000630dc3", "type": 23, "seq": 180, "mode": 35, "flags": 1, "camera": 14000, "ack": 240, "fault": 0, "context": {"seq": 180, "task": 19430, "action": 18699, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 389170290452, "line": 88874, "hex": "a3b31eb54be6490b12010000279dc3", "type": 30, "seq": 181}
+{"ns": 389171487920, "line": 88875, "hex": "a3b317b5011536b0f50000003852c3", "type": 23, "seq": 181, "mode": 21, "flags": 1, "camera": 14000, "ack": 245, "fault": 0, "context": {"seq": 181, "task": 19430, "action": 18699, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 389350256615, "line": 89052, "hex": "a3b31eb84be6490c02010000ce0dc3", "type": 30, "seq": 184}
+{"ns": 389350399940, "line": 89053, "hex": "a3b317b8550836b0070000009bb4c3", "type": 23, "seq": 184, "mode": 8, "flags": 85, "camera": 14000, "ack": 7, "fault": 0, "context": {"seq": 184, "task": 19430, "action": 18700, "cmd": 2, "status": 1, "rejected": 0}}
+{"ns": 390730551936, "line": 90415, "hex": "a3b31ecf4be6490c020300002c3fc3", "type": 30, "seq": 207}
+{"ns": 390730551936, "line": 90415, "hex": "a3b317cf031736b0900000009fe5c3", "type": 23, "seq": 207, "mode": 23, "flags": 3, "camera": 14000, "ack": 144, "fault": 0, "context": {"seq": 207, "task": 19430, "action": 18700, "cmd": 2, "status": 3, "rejected": 0}}
+{"ns": 390790946790, "line": 90475, "hex": "a3b31ed04be6490d1201000038cfc3", "type": 30, "seq": 208}
+{"ns": 390790946790, "line": 90475, "hex": "a3b317d0031736b096000000135dc3", "type": 23, "seq": 208, "mode": 23, "flags": 3, "camera": 14000, "ack": 150, "fault": 0, "context": {"seq": 208, "task": 19430, "action": 18701, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 391090881012, "line": 90763, "hex": "a3b31ed54be6490d12030000a65fc3", "type": 30, "seq": 213}
+{"ns": 391091134247, "line": 90764, "hex": "a3b317d5521636b0b6000000f3fdc3", "type": 23, "seq": 213, "mode": 22, "flags": 82, "camera": 14000, "ack": 182, "fault": 0, "context": {"seq": 213, "task": 19430, "action": 18701, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 391210226762, "line": 90893, "hex": "a3b31ed74be6490e030100005fc3c3", "type": 30, "seq": 215}
+{"ns": 391210416793, "line": 90894, "hex": "a3b317d7560a36b0c30000002ca3c3", "type": 23, "seq": 215, "mode": 10, "flags": 86, "camera": 14000, "ack": 195, "fault": 0, "context": {"seq": 215, "task": 19430, "action": 18702, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 392229956358, "line": 91814, "hex": "a3b31ee84be6490f1201000072cec3", "type": 30, "seq": 232}
+{"ns": 392230114891, "line": 91815, "hex": "a3b317e8023036b028000000927ac3", "type": 23, "seq": 232, "mode": 48, "flags": 2, "camera": 14000, "ack": 40, "fault": 0, "context": {"seq": 232, "task": 19430, "action": 18703, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 392890979147, "line": 92470, "hex": "a3b31ef34be64910040100005db4c3", "type": 30, "seq": 243}
+{"ns": 392891162512, "line": 92471, "hex": "a3b317f3560a2ee06c0000006562c3", "type": 23, "seq": 243, "mode": 10, "flags": 86, "camera": 12000, "ack": 108, "fault": 0, "context": {"seq": 243, "task": 19430, "action": 18704, "cmd": 4, "status": 1, "rejected": 0}}
+{"ns": 393549919737, "line": 93078, "hex": "a3b31efe4be6491004030000a4e4c3", "type": 30, "seq": 254}
+{"ns": 393550055611, "line": 93080, "hex": "a3b317fe520b2ee0ae0000001179c3", "type": 23, "seq": 254, "mode": 11, "flags": 82, "camera": 12000, "ack": 174, "fault": 0, "context": {"seq": 254, "task": 19430, "action": 18704, "cmd": 4, "status": 3, "rejected": 0}}
+{"ns": 393790318996, "line": 93311, "hex": "a3b31e024be6491104030000c820c3", "type": 30, "seq": 2}
+{"ns": 393790318996, "line": 93311, "hex": "a3b31702520b2ee0c50000005c59c3", "type": 23, "seq": 2, "mode": 11, "flags": 82, "camera": 12000, "ack": 197, "fault": 0, "context": {"seq": 2, "task": 19430, "action": 18705, "cmd": 4, "status": 3, "rejected": 0}}
+{"ns": 393910259105, "line": 93438, "hex": "a3b31e044be649120501000007bcc3", "type": 30, "seq": 4}
+{"ns": 393911403184, "line": 93439, "hex": "a3b31704560a2ee0d000000062c6c3", "type": 23, "seq": 4, "mode": 10, "flags": 86, "camera": 12000, "ack": 208, "fault": 0, "context": {"seq": 4, "task": 19430, "action": 18706, "cmd": 5, "status": 1, "rejected": 0}}
+{"ns": 396910087340, "line": 95892, "hex": "a3b31e364be64912050100004addc3", "type": 30, "seq": 54}
+{"ns": 396910087340, "line": 95892, "hex": "a3b31736520c2ee0fb00000041b0c3", "type": 23, "seq": 54, "mode": 12, "flags": 82, "camera": 12000, "ack": 251, "fault": 0, "context": {"seq": 54, "task": 19430, "action": 18706, "cmd": 5, "status": 1, "rejected": 0}}
+{"ns": 397569803255, "line": 96456, "hex": "a3b31e414be6491205030000a8efc3", "type": 30, "seq": 65}
+{"ns": 397569956879, "line": 96457, "hex": "a3b31741500f2ee03d0000008c13c3", "type": 23, "seq": 65, "mode": 15, "flags": 80, "camera": 12000, "ack": 61, "fault": 0, "context": {"seq": 65, "task": 19430, "action": 18706, "cmd": 5, "status": 3, "rejected": 0}}
+{"ns": 398651788232, "line": 97444, "hex": "a3b31e534be649130603000041cbc3", "type": 30, "seq": 83}
+{"ns": 398651788232, "line": 97444, "hex": "a3b3175300102ee0ab0000009ec6c3", "type": 23, "seq": 83, "mode": 16, "flags": 0, "camera": 12000, "ack": 171, "fault": 0, "context": {"seq": 83, "task": 19430, "action": 18707, "cmd": 6, "status": 3, "rejected": 0}}
+{"ns": 398709859773, "line": 97482, "hex": "a3b31e544be64914080100007113c3", "type": 30, "seq": 84}
+{"ns": 398710078897, "line": 97483, "hex": "a3b3175400102ee0b0000000be12c3", "type": 23, "seq": 84, "mode": 16, "flags": 0, "camera": 12000, "ack": 176, "fault": 0, "context": {"seq": 84, "task": 19430, "action": 18708, "cmd": 8, "status": 1, "rejected": 0}}
+{"ns": 400090872548, "line": 98640, "hex": "a3b31e6b4be649140801000064e2c3", "type": 30, "seq": 107}
+{"ns": 400091006797, "line": 98641, "hex": "a3b3176b00112ee0370000009397c3", "type": 23, "seq": 107, "mode": 17, "flags": 0, "camera": 12000, "ack": 55, "fault": 0, "context": {"seq": 107, "task": 19430, "action": 18708, "cmd": 8, "status": 1, "rejected": 0}}
+{"ns": 400149881043, "line": 98685, "hex": "a3b31e6c4be6491408030000e312c3", "type": 30, "seq": 108}
+{"ns": 400149922543, "line": 98686, "hex": "a3b3176c00032ee03d000000847ec3", "type": 23, "seq": 108, "mode": 3, "flags": 0, "camera": 12000, "ack": 61, "fault": 0, "context": {"seq": 108, "task": 19430, "action": 18708, "cmd": 8, "status": 3, "rejected": 0}}
+{"ns": 400211727446, "line": 98731, "hex": "a3b31e6d4be6491514030000d4d2c3", "type": 30, "seq": 109}
+{"ns": 400211727446, "line": 98731, "hex": "a3b3176d00192ee0430000002a07c3", "type": 23, "seq": 109, "mode": 25, "flags": 0, "camera": 12000, "ack": 67, "fault": 0, "context": {"seq": 109, "task": 19430, "action": 18709, "cmd": 20, "status": 3, "rejected": 0}}
+{"ns": 400269828361, "line": 98776, "hex": "a3b31e6e4be64916140300008422c3", "type": 30, "seq": 110}
+{"ns": 400270073944, "line": 98777, "hex": "a3b3176e00032ee0480000008712c3", "type": 23, "seq": 110, "mode": 3, "flags": 0, "camera": 12000, "ack": 72, "fault": 0, "context": {"seq": 110, "task": 19430, "action": 18710, "cmd": 20, "status": 3, "rejected": 0}}
+{"ns": 400391035966, "line": 98900, "hex": "a3b31e704be74917090100008f2ec3", "type": 30, "seq": 112}
+{"ns": 400391035966, "line": 98900, "hex": "a3b3177008142ee05300000066f1c3", "type": 23, "seq": 112, "mode": 20, "flags": 8, "camera": 12000, "ack": 83, "fault": 0, "context": {"seq": 112, "task": 19431, "action": 18711, "cmd": 9, "status": 1, "rejected": 0}}
+{"ns": 535508544243, "line": 218259, "hex": "a3b31e3c4bed496f12010000e703c3", "type": 30, "seq": 60}
+{"ns": 535508544243, "line": 218259, "hex": "a3b3173c031736b0a30000008055c3", "type": 23, "seq": 60, "mode": 23, "flags": 3, "camera": 14000, "ack": 163, "fault": 0, "context": {"seq": 60, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535568640776, "line": 218318, "hex": "a3b31e3d4bed496f12010000ea93c3", "type": 30, "seq": 61}
+{"ns": 535568640776, "line": 218318, "hex": "a3b3173d031736b0aa0000008e59c3", "type": 23, "seq": 61, "mode": 23, "flags": 3, "camera": 14000, "ack": 170, "fault": 0, "context": {"seq": 61, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535628065729, "line": 218369, "hex": "a3b31e3e4bed496f12010000fe63c3", "type": 30, "seq": 62}
+{"ns": 535628220520, "line": 218370, "hex": "a3b3173e031736b0b00000009db1c3", "type": 23, "seq": 62, "mode": 23, "flags": 3, "camera": 14000, "ack": 176, "fault": 0, "context": {"seq": 62, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535688168137, "line": 218433, "hex": "a3b31e3f4bed496f12010000f3f3c3", "type": 30, "seq": 63}
+{"ns": 535688324720, "line": 218434, "hex": "a3b3173f563236b0b60000002168c3", "type": 23, "seq": 63, "mode": 50, "flags": 86, "camera": 14000, "ack": 182, "fault": 0, "context": {"seq": 63, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535748422837, "line": 218488, "hex": "a3b31e404bed496f12010000d7c1c3", "type": 30, "seq": 64}
+{"ns": 535748422837, "line": 218488, "hex": "a3b31740563236b0bb00000007f6c3", "type": 23, "seq": 64, "mode": 50, "flags": 86, "camera": 14000, "ack": 187, "fault": 0, "context": {"seq": 64, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535808145872, "line": 218519, "hex": "a3b31e414bed496f12010000da51c3", "type": 30, "seq": 65}
+{"ns": 535808243663, "line": 218520, "hex": "a3b31741563236b0c00000001282c3", "type": 23, "seq": 65, "mode": 50, "flags": 86, "camera": 14000, "ack": 192, "fault": 0, "context": {"seq": 65, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535868099406, "line": 218568, "hex": "a3b31e424bed496f12010000cea1c3", "type": 30, "seq": 66}
+{"ns": 535868242739, "line": 218569, "hex": "a3b31742563236b0c600000006fac3", "type": 23, "seq": 66, "mode": 50, "flags": 86, "camera": 14000, "ack": 198, "fault": 0, "context": {"seq": 66, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535928130440, "line": 218621, "hex": "a3b31e434bed496f12010000c331c3", "type": 30, "seq": 67}
+{"ns": 535928207731, "line": 218622, "hex": "a3b31743563236b0cb00000009c6c3", "type": 23, "seq": 67, "mode": 50, "flags": 86, "camera": 14000, "ack": 203, "fault": 0, "context": {"seq": 67, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 535988577513, "line": 218687, "hex": "a3b31e444bed496f12010000e501c3", "type": 30, "seq": 68}
+{"ns": 535988577513, "line": 218687, "hex": "a3b31744563236b0d200000028aac3", "type": 23, "seq": 68, "mode": 50, "flags": 86, "camera": 14000, "ack": 210, "fault": 0, "context": {"seq": 68, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536049928834, "line": 218742, "hex": "a3b31e454bed496f12010000e891c3", "type": 30, "seq": 69}
+{"ns": 536049928834, "line": 218742, "hex": "a3b31745563236b0d800000026e2c3", "type": 23, "seq": 69, "mode": 50, "flags": 86, "camera": 14000, "ack": 216, "fault": 0, "context": {"seq": 69, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536108433915, "line": 218796, "hex": "a3b31e464bed496f12010000fc61c3", "type": 30, "seq": 70}
+{"ns": 536108433915, "line": 218796, "hex": "a3b31746563236b0de000000329ac3", "type": 23, "seq": 70, "mode": 50, "flags": 86, "camera": 14000, "ack": 222, "fault": 0, "context": {"seq": 70, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536169056530, "line": 218849, "hex": "a3b31e474bed496f12010000f1f1c3", "type": 30, "seq": 71}
+{"ns": 536169056530, "line": 218849, "hex": "a3b31747563236b0e300000032a6c3", "type": 23, "seq": 71, "mode": 50, "flags": 86, "camera": 14000, "ack": 227, "fault": 0, "context": {"seq": 71, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536228128192, "line": 218907, "hex": "a3b31e484bed496f12010000b001c3", "type": 30, "seq": 72}
+{"ns": 536228193484, "line": 218908, "hex": "a3b31748563236b0ea00000070cac3", "type": 23, "seq": 72, "mode": 50, "flags": 86, "camera": 14000, "ack": 234, "fault": 0, "context": {"seq": 72, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536288089018, "line": 218969, "hex": "a3b31e494bed496f12010000bd91c3", "type": 30, "seq": 73}
+{"ns": 536290987049, "line": 218970, "hex": "a3b31749563236b0f00000007a42c3", "type": 23, "seq": 73, "mode": 50, "flags": 86, "camera": 14000, "ack": 240, "fault": 0, "context": {"seq": 73, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536348121135, "line": 219030, "hex": "a3b31e4a4bed496f12010000a961c3", "type": 30, "seq": 74}
+{"ns": 536348808674, "line": 219031, "hex": "a3b3174a563236b0f50000006e7ec3", "type": 23, "seq": 74, "mode": 50, "flags": 86, "camera": 14000, "ack": 245, "fault": 0, "context": {"seq": 74, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536408326418, "line": 219097, "hex": "a3b31e4b4bed496f12010000a4f1c3", "type": 30, "seq": 75}
+{"ns": 536408326418, "line": 219097, "hex": "a3b3174b563236b0fc0000006072c3", "type": 23, "seq": 75, "mode": 50, "flags": 86, "camera": 14000, "ack": 252, "fault": 0, "context": {"seq": 75, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536468609784, "line": 219167, "hex": "a3b31e4c4bed496f1201000082c1c3", "type": 30, "seq": 76}
+{"ns": 536468609784, "line": 219167, "hex": "a3b3174c563236b00100000077eec3", "type": 23, "seq": 76, "mode": 50, "flags": 86, "camera": 14000, "ack": 1, "fault": 0, "context": {"seq": 76, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536528045903, "line": 219219, "hex": "a3b31e4d4bed496f120100008f51c3", "type": 30, "seq": 77}
+{"ns": 536528174486, "line": 219221, "hex": "a3b3174d563236b0070000007af6c3", "type": 23, "seq": 77, "mode": 50, "flags": 86, "camera": 14000, "ack": 7, "fault": 0, "context": {"seq": 77, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536588027687, "line": 219282, "hex": "a3b31e4e4bed496f120100009ba1c3", "type": 30, "seq": 78}
+{"ns": 536588218062, "line": 219283, "hex": "a3b3174e563236b00d0000006ddec3", "type": 23, "seq": 78, "mode": 50, "flags": 86, "camera": 14000, "ack": 13, "fault": 0, "context": {"seq": 78, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536648951134, "line": 219333, "hex": "a3b31e4f4bed496f120100009631c3", "type": 30, "seq": 79}
+{"ns": 536649185259, "line": 219334, "hex": "a3b3174f563236b012000000679ac3", "type": 23, "seq": 79, "mode": 50, "flags": 86, "camera": 14000, "ack": 18, "fault": 0, "context": {"seq": 79, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536708166463, "line": 219385, "hex": "a3b31e504bed496f120100001a01c3", "type": 30, "seq": 80}
+{"ns": 536709197292, "line": 219386, "hex": "a3b31750563236b018000000e872c3", "type": 23, "seq": 80, "mode": 50, "flags": 86, "camera": 14000, "ack": 24, "fault": 0, "context": {"seq": 80, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536768533120, "line": 219447, "hex": "a3b31e514bed496f120100001791c3", "type": 30, "seq": 81}
+{"ns": 536768533120, "line": 219447, "hex": "a3b31751563236b01e000000e56ac3", "type": 23, "seq": 81, "mode": 50, "flags": 86, "camera": 14000, "ack": 30, "fault": 0, "context": {"seq": 81, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536829374276, "line": 219510, "hex": "a3b31e524bed496f120100000361c3", "type": 30, "seq": 82}
+{"ns": 536829374276, "line": 219510, "hex": "a3b31752563236b024000000fd42c3", "type": 23, "seq": 82, "mode": 50, "flags": 86, "camera": 14000, "ack": 36, "fault": 0, "context": {"seq": 82, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536888500771, "line": 219565, "hex": "a3b31e534bed496f120100000ef1c3", "type": 30, "seq": 83}
+{"ns": 536888500771, "line": 219565, "hex": "a3b31753563236b029000000f27ec3", "type": 23, "seq": 83, "mode": 50, "flags": 86, "camera": 14000, "ack": 41, "fault": 0, "context": {"seq": 83, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 536948071974, "line": 219639, "hex": "a3b31e544bed496f1201000028c1c3", "type": 30, "seq": 84}
+{"ns": 536948204348, "line": 219640, "hex": "a3b31754563236b02f000000d4c6c3", "type": 23, "seq": 84, "mode": 50, "flags": 86, "camera": 14000, "ack": 47, "fault": 0, "context": {"seq": 84, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537008062299, "line": 219694, "hex": "a3b31e554bed496f120100002551c3", "type": 30, "seq": 85}
+{"ns": 537008242632, "line": 219695, "hex": "a3b31755563236b035000000de4ec3", "type": 23, "seq": 85, "mode": 50, "flags": 86, "camera": 14000, "ack": 53, "fault": 0, "context": {"seq": 85, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537074323810, "line": 219755, "hex": "a3b31e564bed496f1201000031a1c3", "type": 30, "seq": 86}
+{"ns": 537074323810, "line": 219755, "hex": "a3b31756563236b03c000000c922c3", "type": 23, "seq": 86, "mode": 50, "flags": 86, "camera": 14000, "ack": 60, "fault": 0, "context": {"seq": 86, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537128671448, "line": 219787, "hex": "a3b31e574bed496f120100003c31c3", "type": 30, "seq": 87}
+{"ns": 537128880322, "line": 219788, "hex": "a3b31757563236b042000000dc9ac3", "type": 23, "seq": 87, "mode": 50, "flags": 86, "camera": 14000, "ack": 66, "fault": 0, "context": {"seq": 87, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537190147476, "line": 219829, "hex": "a3b31e584bed496f120100007dc1c3", "type": 30, "seq": 88}
+{"ns": 537190147476, "line": 219829, "hex": "a3b31758563236b0470000009da6c3", "type": 23, "seq": 88, "mode": 50, "flags": 86, "camera": 14000, "ack": 71, "fault": 0, "context": {"seq": 88, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537248253475, "line": 219857, "hex": "a3b31e594bed496f120100007051c3", "type": 30, "seq": 89}
+{"ns": 537249029764, "line": 219858, "hex": "a3b31759563236b04d00000093eec3", "type": 23, "seq": 89, "mode": 50, "flags": 86, "camera": 14000, "ack": 77, "fault": 0, "context": {"seq": 89, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537308717799, "line": 219891, "hex": "a3b31e5a4bed496f1201000064a1c3", "type": 30, "seq": 90}
+{"ns": 537308717799, "line": 219891, "hex": "a3b3175a563236b0530000008136c3", "type": 23, "seq": 90, "mode": 50, "flags": 86, "camera": 14000, "ack": 83, "fault": 0, "context": {"seq": 90, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537371467198, "line": 219938, "hex": "a3b31e5b4bed496f120100006931c3", "type": 30, "seq": 91}
+{"ns": 537371467198, "line": 219938, "hex": "a3b3175b563236b0590000008f7ec3", "type": 23, "seq": 91, "mode": 50, "flags": 86, "camera": 14000, "ack": 89, "fault": 0, "context": {"seq": 91, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537429481573, "line": 219967, "hex": "a3b31e5c4bed496f120100004f01c3", "type": 30, "seq": 92}
+{"ns": 537429481573, "line": 219967, "hex": "a3b3175c563236b05e000000a83ac3", "type": 23, "seq": 92, "mode": 50, "flags": 86, "camera": 14000, "ack": 94, "fault": 0, "context": {"seq": 92, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537490716644, "line": 220009, "hex": "a3b31e5d4bed496f120100004291c3", "type": 30, "seq": 93}
+{"ns": 537490716644, "line": 220009, "hex": "a3b3175d563236b064000000a972c3", "type": 23, "seq": 93, "mode": 50, "flags": 86, "camera": 14000, "ack": 100, "fault": 0, "context": {"seq": 93, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537548553727, "line": 220050, "hex": "a3b31e5e4bed496f120100005661c3", "type": 30, "seq": 94}
+{"ns": 537548553727, "line": 220050, "hex": "a3b3175e563236b06a000000bf6ac3", "type": 23, "seq": 94, "mode": 50, "flags": 86, "camera": 14000, "ack": 106, "fault": 0, "context": {"seq": 94, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537608183012, "line": 220112, "hex": "a3b31e5f4bed496f120100005bf1c3", "type": 30, "seq": 95}
+{"ns": 537608183012, "line": 220112, "hex": "a3b3175f563236b070000000b5e2c3", "type": 23, "seq": 95, "mode": 50, "flags": 86, "camera": 14000, "ack": 112, "fault": 0, "context": {"seq": 95, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537668022547, "line": 220172, "hex": "a3b31e604bed496f120100004e00c3", "type": 30, "seq": 96}
+{"ns": 537668722294, "line": 220174, "hex": "a3b31760563236b076000000a09bc3", "type": 23, "seq": 96, "mode": 50, "flags": 86, "camera": 14000, "ack": 118, "fault": 0, "context": {"seq": 96, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537728129580, "line": 220228, "hex": "a3b31e614bed496f120100004390c3", "type": 30, "seq": 97}
+{"ns": 537728290746, "line": 220229, "hex": "a3b31761563236b07d000000af2fc3", "type": 23, "seq": 97, "mode": 50, "flags": 86, "camera": 14000, "ack": 125, "fault": 0, "context": {"seq": 97, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537788035406, "line": 220289, "hex": "a3b31e624bed496f120100005760c3", "type": 30, "seq": 98}
+{"ns": 537788188280, "line": 220290, "hex": "a3b31762563236b0830000008a37c3", "type": 23, "seq": 98, "mode": 50, "flags": 86, "camera": 14000, "ack": 131, "fault": 0, "context": {"seq": 98, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537848030356, "line": 220361, "hex": "a3b31e634bed496f120100005af0c3", "type": 30, "seq": 99}
+{"ns": 537848179689, "line": 220362, "hex": "a3b31763563236b08a000000843bc3", "type": 23, "seq": 99, "mode": 50, "flags": 86, "camera": 14000, "ack": 138, "fault": 0, "context": {"seq": 99, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537909279927, "line": 220419, "hex": "a3b31e644bed496f120100007cc0c3", "type": 30, "seq": 100}
+{"ns": 537909279927, "line": 220419, "hex": "a3b31764563236b08f000000a2c7c3", "type": 23, "seq": 100, "mode": 50, "flags": 86, "camera": 14000, "ack": 143, "fault": 0, "context": {"seq": 100, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 537968165965, "line": 220472, "hex": "a3b31e654bed496f120100007150c3", "type": 30, "seq": 101}
+{"ns": 537968296715, "line": 220473, "hex": "a3b31765563236b094000000a9b3c3", "type": 23, "seq": 101, "mode": 50, "flags": 86, "camera": 14000, "ack": 148, "fault": 0, "context": {"seq": 101, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538028125749, "line": 220541, "hex": "a3b31e664bed496f1201000065a0c3", "type": 30, "seq": 102}
+{"ns": 538028323499, "line": 220542, "hex": "a3b31766563236b09a000000bfabc3", "type": 23, "seq": 102, "mode": 50, "flags": 86, "camera": 14000, "ack": 154, "fault": 0, "context": {"seq": 102, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538088748323, "line": 220611, "hex": "a3b31e674bed496f120100006830c3", "type": 30, "seq": 103}
+{"ns": 538088748323, "line": 220611, "hex": "a3b31767563236b0a0000000bee3c3", "type": 23, "seq": 103, "mode": 50, "flags": 86, "camera": 14000, "ack": 160, "fault": 0, "context": {"seq": 103, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538148033901, "line": 220654, "hex": "a3b31e684bed496f1201000029c0c3", "type": 30, "seq": 104}
+{"ns": 538154929709, "line": 220655, "hex": "a3b31768563236b0a6000000ff9bc3", "type": 23, "seq": 104, "mode": 50, "flags": 86, "camera": 14000, "ack": 166, "fault": 0, "context": {"seq": 104, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538208026518, "line": 220701, "hex": "a3b31e694bed496f120100002450c3", "type": 30, "seq": 105}
+{"ns": 538208825140, "line": 220702, "hex": "a3b31769563236b0ad000000f02fc3", "type": 23, "seq": 105, "mode": 50, "flags": 86, "camera": 14000, "ack": 173, "fault": 0, "context": {"seq": 105, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538268115176, "line": 220768, "hex": "a3b31e6a4bed496f1201000030a0c3", "type": 30, "seq": 106}
+{"ns": 538268377675, "line": 220769, "hex": "a3b3176a563236b0b3000000e2f7c3", "type": 23, "seq": 106, "mode": 50, "flags": 86, "camera": 14000, "ack": 179, "fault": 0, "context": {"seq": 106, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538330516243, "line": 220829, "hex": "a3b31e6b4bed496f120100003d30c3", "type": 30, "seq": 107}
+{"ns": 538330516243, "line": 220829, "hex": "a3b3176b563236b0b9000000ecbfc3", "type": 23, "seq": 107, "mode": 50, "flags": 86, "camera": 14000, "ack": 185, "fault": 0, "context": {"seq": 107, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538388698200, "line": 220884, "hex": "a3b31e6c4bed496f120100001b00c3", "type": 30, "seq": 108}
+{"ns": 538388698200, "line": 220884, "hex": "a3b3176c563236b0bf000000ca07c3", "type": 23, "seq": 108, "mode": 50, "flags": 86, "camera": 14000, "ack": 191, "fault": 0, "context": {"seq": 108, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538448489277, "line": 220923, "hex": "a3b31e6d4bed496f120100001690c3", "type": 30, "seq": 109}
+{"ns": 538448489277, "line": 220923, "hex": "a3b3176d563236b0c4000000df73c3", "type": 23, "seq": 109, "mode": 50, "flags": 86, "camera": 14000, "ack": 196, "fault": 0, "context": {"seq": 109, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538508176770, "line": 220978, "hex": "a3b31e6e4bed496f120100000260c3", "type": 30, "seq": 110}
+{"ns": 538508277228, "line": 220979, "hex": "a3b3176e563236b0cb000000c897c3", "type": 23, "seq": 110, "mode": 50, "flags": 86, "camera": 14000, "ack": 203, "fault": 0, "context": {"seq": 110, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538569407049, "line": 221043, "hex": "a3b31e6f4bed496f120100000ff0c3", "type": 30, "seq": 111}
+{"ns": 538569407049, "line": 221043, "hex": "a3b3176f523236b0d2000000c3a8c3", "type": 23, "seq": 111, "mode": 50, "flags": 82, "camera": 14000, "ack": 210, "fault": 0, "context": {"seq": 111, "task": 19437, "action": 18799, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 538628094630, "line": 221102, "hex": "a3b31e704bed496f120300002200c3", "type": 30, "seq": 112}
+{"ns": 538628203879, "line": 221103, "hex": "a3b31770521636b0d80000002842c3", "type": 23, "seq": 112, "mode": 22, "flags": 82, "camera": 14000, "ack": 216, "fault": 0, "context": {"seq": 112, "task": 19437, "action": 18799, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 538688010872, "line": 221160, "hex": "a3b31e714bed496f120300002f90c3", "type": 30, "seq": 113}
+{"ns": 538688206496, "line": 221161, "hex": "a3b31771521636b0dd000000251ec3", "type": 23, "seq": 113, "mode": 22, "flags": 82, "camera": 14000, "ack": 221, "fault": 0, "context": {"seq": 113, "task": 19437, "action": 18799, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 538748184614, "line": 221220, "hex": "a3b31e724bed4970030100000a5ec3", "type": 30, "seq": 114}
+{"ns": 538748314238, "line": 221221, "hex": "a3b31772560a36b0e3000000e034c3", "type": 23, "seq": 114, "mode": 10, "flags": 86, "camera": 14000, "ack": 227, "fault": 0, "context": {"seq": 114, "task": 19437, "action": 18800, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 538808604646, "line": 221285, "hex": "a3b31e734bed49700301000007cec3", "type": 30, "seq": 115}
+{"ns": 538808604646, "line": 221285, "hex": "a3b31773560a36b0e8000000ef80c3", "type": 23, "seq": 115, "mode": 10, "flags": 86, "camera": 14000, "ack": 232, "fault": 0, "context": {"seq": 115, "task": 19437, "action": 18800, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 538868311597, "line": 221330, "hex": "a3b31e744bed49700301000021fec3", "type": 30, "seq": 116}
+{"ns": 538868311597, "line": 221330, "hex": "a3b31774560a36b0ef000000c8c4c3", "type": 23, "seq": 116, "mode": 10, "flags": 86, "camera": 14000, "ack": 239, "fault": 0, "context": {"seq": 116, "task": 19437, "action": 18800, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 581288556860, "line": 258695, "hex": "a3b31e374bf449881201000028e4c3", "type": 30, "seq": 55}
+{"ns": 581288556860, "line": 258695, "hex": "a3b31737031736b076000000cb69c3", "type": 23, "seq": 55, "mode": 23, "flags": 3, "camera": 14000, "ack": 118, "fault": 0, "context": {"seq": 55, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581347562815, "line": 258760, "hex": "a3b31e384bf44988120100006914c3", "type": 30, "seq": 56}
+{"ns": 581347714314, "line": 258761, "hex": "a3b31738031736b07c0000008941c3", "type": 23, "seq": 56, "mode": 23, "flags": 3, "camera": 14000, "ack": 124, "fault": 0, "context": {"seq": 56, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581410121298, "line": 258820, "hex": "a3b31e394bf44988120100006484c3", "type": 30, "seq": 57}
+{"ns": 581410121298, "line": 258820, "hex": "a3b31739031736b081000000b57dc3", "type": 23, "seq": 57, "mode": 23, "flags": 3, "camera": 14000, "ack": 129, "fault": 0, "context": {"seq": 57, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581471122911, "line": 258871, "hex": "a3b31e3a4bf44988120100007074c3", "type": 30, "seq": 58}
+{"ns": 581471122911, "line": 258871, "hex": "a3b3173a523236b0880000001223c3", "type": 23, "seq": 58, "mode": 50, "flags": 82, "camera": 14000, "ack": 136, "fault": 0, "context": {"seq": 58, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581535168472, "line": 258927, "hex": "a3b31e3b4bf44988120100007de4c3", "type": 30, "seq": 59}
+{"ns": 581535168472, "line": 258927, "hex": "a3b3173b563236b08e0000001ec8c3", "type": 23, "seq": 59, "mode": 50, "flags": 86, "camera": 14000, "ack": 142, "fault": 0, "context": {"seq": 59, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581590196565, "line": 258974, "hex": "a3b31e3c4bf44988120100005bd4c3", "type": 30, "seq": 60}
+{"ns": 581590196565, "line": 258974, "hex": "a3b3173c563236b0940000003fe0c3", "type": 23, "seq": 60, "mode": 50, "flags": 86, "camera": 14000, "ack": 148, "fault": 0, "context": {"seq": 60, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581648057982, "line": 259015, "hex": "a3b31e3d4bf44988120100005644c3", "type": 30, "seq": 61}
+{"ns": 581649778059, "line": 259016, "hex": "a3b3173d563236b09a0000003098c3", "type": 23, "seq": 61, "mode": 50, "flags": 86, "camera": 14000, "ack": 154, "fault": 0, "context": {"seq": 61, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581709183512, "line": 259080, "hex": "a3b31e3e4bf449881201000042b4c3", "type": 30, "seq": 62}
+{"ns": 581709183512, "line": 259080, "hex": "a3b3173e563236b0a000000028b0c3", "type": 23, "seq": 62, "mode": 50, "flags": 86, "camera": 14000, "ack": 160, "fault": 0, "context": {"seq": 62, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581768233091, "line": 259138, "hex": "a3b31e3f4bf44988120100004f24c3", "type": 30, "seq": 63}
+{"ns": 581768233091, "line": 259138, "hex": "a3b3173f563236b0a500000025ecc3", "type": 23, "seq": 63, "mode": 50, "flags": 86, "camera": 14000, "ack": 165, "fault": 0, "context": {"seq": 63, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581828528332, "line": 259188, "hex": "a3b31e404bf44988120100006b16c3", "type": 30, "seq": 64}
+{"ns": 581828528332, "line": 259188, "hex": "a3b31740563236b0ab0000000336c3", "type": 23, "seq": 64, "mode": 50, "flags": 86, "camera": 14000, "ack": 171, "fault": 0, "context": {"seq": 64, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581888054076, "line": 259240, "hex": "a3b31e414bf44988120100006686c3", "type": 30, "seq": 65}
+{"ns": 581888054076, "line": 259240, "hex": "a3b31741563236b0b100000009bec3", "type": 23, "seq": 65, "mode": 50, "flags": 86, "camera": 14000, "ack": 177, "fault": 0, "context": {"seq": 65, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 581947745694, "line": 259315, "hex": "a3b31e424bf44988120100007276c3", "type": 30, "seq": 66}
+{"ns": 581948456233, "line": 259316, "hex": "a3b31742563236b0b60000001c3ac3", "type": 23, "seq": 66, "mode": 50, "flags": 86, "camera": 14000, "ack": 182, "fault": 0, "context": {"seq": 66, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582007563354, "line": 259369, "hex": "a3b31e434bf44988120100007fe6c3", "type": 30, "seq": 67}
+{"ns": 582007750895, "line": 259370, "hex": "a3b31743563236b0bd000000138ec3", "type": 23, "seq": 67, "mode": 50, "flags": 86, "camera": 14000, "ack": 189, "fault": 0, "context": {"seq": 67, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582068052052, "line": 259440, "hex": "a3b31e444bf449881201000059d6c3", "type": 30, "seq": 68}
+{"ns": 582068052052, "line": 259440, "hex": "a3b31744563236b0c30000002d96c3", "type": 23, "seq": 68, "mode": 50, "flags": 86, "camera": 14000, "ack": 195, "fault": 0, "context": {"seq": 68, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582127581005, "line": 259507, "hex": "a3b31e454bf44988120100005446c3", "type": 30, "seq": 69}
+{"ns": 582127675087, "line": 259508, "hex": "a3b31745563236b0c80000002222c3", "type": 23, "seq": 69, "mode": 50, "flags": 86, "camera": 14000, "ack": 200, "fault": 0, "context": {"seq": 69, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582187708330, "line": 259553, "hex": "a3b31e464bf449881201000040b6c3", "type": 30, "seq": 70}
+{"ns": 582188249578, "line": 259554, "hex": "a3b31746563236b0ce000000365ac3", "type": 23, "seq": 70, "mode": 50, "flags": 86, "camera": 14000, "ack": 206, "fault": 0, "context": {"seq": 70, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582247655155, "line": 259579, "hex": "a3b31e474bf44988120100004d26c3", "type": 30, "seq": 71}
+{"ns": 582248364486, "line": 259580, "hex": "a3b31747563236b0d40000003cd2c3", "type": 23, "seq": 71, "mode": 50, "flags": 86, "camera": 14000, "ack": 212, "fault": 0, "context": {"seq": 71, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582308309020, "line": 259625, "hex": "a3b31e484bf44988120100000cd6c3", "type": 30, "seq": 72}
+{"ns": 582308309020, "line": 259625, "hex": "a3b31748563236b0da0000007fcac3", "type": 23, "seq": 72, "mode": 50, "flags": 86, "camera": 14000, "ack": 218, "fault": 0, "context": {"seq": 72, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582367928639, "line": 259671, "hex": "a3b31e494bf44988120100000146c3", "type": 30, "seq": 73}
+{"ns": 582367928639, "line": 259671, "hex": "a3b31749563236b0df0000007296c3", "type": 23, "seq": 73, "mode": 50, "flags": 86, "camera": 14000, "ack": 223, "fault": 0, "context": {"seq": 73, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582429174126, "line": 259706, "hex": "a3b31e4a4bf449881201000015b6c3", "type": 30, "seq": 74}
+{"ns": 582429174126, "line": 259706, "hex": "a3b3174a563236b0e50000006abec3", "type": 23, "seq": 74, "mode": 50, "flags": 86, "camera": 14000, "ack": 229, "fault": 0, "context": {"seq": 74, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582487972790, "line": 259766, "hex": "a3b31e4b4bf44988120100001826c3", "type": 30, "seq": 75}
+{"ns": 582487972790, "line": 259766, "hex": "a3b3174b563236b0ea000000643ac3", "type": 23, "seq": 75, "mode": 50, "flags": 86, "camera": 14000, "ack": 234, "fault": 0, "context": {"seq": 75, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582548419322, "line": 259815, "hex": "a3b31e4c4bf44988120100003e16c3", "type": 30, "seq": 76}
+{"ns": 582548419322, "line": 259815, "hex": "a3b3174c563236b0f00000004512c3", "type": 23, "seq": 76, "mode": 50, "flags": 86, "camera": 14000, "ack": 240, "fault": 0, "context": {"seq": 76, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582609184145, "line": 259866, "hex": "a3b31e4d4bf44988120100003386c3", "type": 30, "seq": 77}
+{"ns": 582609184145, "line": 259866, "hex": "a3b3174d563236b0f6000000480ac3", "type": 23, "seq": 77, "mode": 50, "flags": 86, "camera": 14000, "ack": 246, "fault": 0, "context": {"seq": 77, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582667948683, "line": 259923, "hex": "a3b31e4e4bf44988120100002776c3", "type": 30, "seq": 78}
+{"ns": 582667948683, "line": 259923, "hex": "a3b3174e563236b0fd0000005edec3", "type": 23, "seq": 78, "mode": 50, "flags": 86, "camera": 14000, "ack": 253, "fault": 0, "context": {"seq": 78, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582727899217, "line": 259976, "hex": "a3b31e4f4bf44988120100002ae6c3", "type": 30, "seq": 79}
+{"ns": 582727899217, "line": 259976, "hex": "a3b3174f523236b0030000006355c3", "type": 23, "seq": 79, "mode": 50, "flags": 82, "camera": 14000, "ack": 3, "fault": 0, "context": {"seq": 79, "task": 19444, "action": 18824, "cmd": 18, "status": 1, "rejected": 0}}
+{"ns": 582788191916, "line": 260024, "hex": "a3b31e504bf44988120300000716c3", "type": 30, "seq": 80}
+{"ns": 582788191916, "line": 260024, "hex": "a3b31750521636b00900000088bfc3", "type": 23, "seq": 80, "mode": 22, "flags": 82, "camera": 14000, "ack": 9, "fault": 0, "context": {"seq": 80, "task": 19444, "action": 18824, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 582847943118, "line": 260076, "hex": "a3b31e514bf44988120300000a86c3", "type": 30, "seq": 81}
+{"ns": 582847943118, "line": 260076, "hex": "a3b31751521636b00e000000845bc3", "type": 23, "seq": 81, "mode": 22, "flags": 82, "camera": 14000, "ack": 14, "fault": 0, "context": {"seq": 81, "task": 19444, "action": 18824, "cmd": 18, "status": 3, "rejected": 0}}
+{"ns": 582909283813, "line": 260146, "hex": "a3b31e524bf4498903010000874ac3", "type": 30, "seq": 82}
+{"ns": 582909283813, "line": 260146, "hex": "a3b31752520a36b0140000004a72c3", "type": 23, "seq": 82, "mode": 10, "flags": 82, "camera": 14000, "ack": 20, "fault": 0, "context": {"seq": 82, "task": 19444, "action": 18825, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 582967588687, "line": 260192, "hex": "a3b31e534bf44989030100008adac3", "type": 30, "seq": 83}
+{"ns": 582967717145, "line": 260193, "hex": "a3b31753560a36b01900000044bdc3", "type": 23, "seq": 83, "mode": 10, "flags": 86, "camera": 14000, "ack": 25, "fault": 0, "context": {"seq": 83, "task": 19444, "action": 18825, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 583027476304, "line": 260247, "hex": "a3b31e544bf4498903010000aceac3", "type": 30, "seq": 84}
+{"ns": 583027740928, "line": 260248, "hex": "a3b31754560a36b0200000006e11c3", "type": 23, "seq": 84, "mode": 10, "flags": 86, "camera": 14000, "ack": 32, "fault": 0, "context": {"seq": 84, "task": 19444, "action": 18825, "cmd": 3, "status": 1, "rejected": 0}}
+{"ns": 583091115492, "line": 260314, "hex": "a3b31e554bf4498903010000a17ac3", "type": 30, "seq": 85}
+{"ns": 583091115492, "line": 260314, "hex": "a3b31755560a36b0260000006309c3", "type": 23, "seq": 85, "mode": 10, "flags": 86, "camera": 14000, "ack": 38, "fault": 0, "context": {"seq": 85, "task": 19444, "action": 18825, "cmd": 3, "status": 1, "rejected": 0}}
