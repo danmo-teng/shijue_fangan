@@ -32,6 +32,7 @@ import cv2
 import numpy as np
 
 from vision_replay import VisionReplay
+from safe_zone_memory import SafeZoneCargoMemory
 from async_diagnostics import AsyncDiagnosticWriter
 
 ROOT = Path(__file__).resolve().parent
@@ -913,6 +914,7 @@ def make_vision_snapshot(
     recent_carried_pitch_cdeg: int = 0,
     held_cargo_evidence: HeldCargoEvidence | None = None,
     grip_bands: GripBands | None = None,
+    safe_zone_memory: SafeZoneCargoMemory | None = None,
 ) -> VisionSnapshot:
     # A cached rectangle from another camera angle cannot prove membership
     # in the current view. Retain the existing per-class area requirement.
@@ -929,6 +931,8 @@ def make_vision_snapshot(
         ) else item
         for item in own_zone_cargo
     )
+    if safe_zone_memory is not None:
+        cargo = safe_zone_memory.apply(cargo, stm.camera_pitch_cdeg)
     rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )
@@ -2308,6 +2312,14 @@ class CompetitionPlanner:
                 self.mission.state, CommandRequest(CMD_PAUSE),
                 "人工PAUSE，冻结审核握手期限直到恢复", tx_policy="pause", reason="manual_pause",
             )
+        reuse_conflict = self.mission._observe_confirmed_load(vision, stm)
+        if (reuse_conflict and stm.fresh and stm.gripper_closed and
+                self.mission.selected_batch is not None and stm.mode in {10, 11, 48}):
+            return self.mission._begin_transport_audit(vision, pose, stm, now)
+        if stm.fresh and not stm.fault:
+            zone_exit = self.mission._safe_zone_target_exit(vision, stm, now)
+            if zone_exit is not None:
+                return zone_exit
         if self.mission.state == CompetitionState.CLEAR_SAFE_ZONE:
             return self.mission._blocked_corridor_output(vision, stm, now)
         if self.mission.recovery_wait_active:
@@ -3426,6 +3438,7 @@ def main() -> int:
     recent_carried_track_ids: tuple[int, ...] = ()
     recent_carried_pitch_cdeg = 0
     held_cargo_evidence = HeldCargoEvidence()
+    safe_zone_memory = SafeZoneCargoMemory()
     competition_started = False
     config_sent = False
     operator_stopped = False
@@ -3482,6 +3495,7 @@ def main() -> int:
         recent_carried_track_ids = ()
         recent_carried_pitch_cdeg = 0
         held_cargo_evidence.clear()
+        safe_zone_memory.clear()
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
@@ -3741,6 +3755,7 @@ def main() -> int:
                     recent_carried_track_ids=recent_carried_track_ids,
                     recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
                     held_cargo_evidence=held_cargo_evidence,
+                    safe_zone_memory=safe_zone_memory,
                 )
                 if latest_vision.carried_reference_track_ids:
                     recent_carried_track_ids = latest_vision.carried_reference_track_ids

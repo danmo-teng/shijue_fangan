@@ -3071,7 +3071,7 @@ def test_search_stations_one_and_three_alternate_directly_for_all_starts():
     for side in ('red','blue'):
         for zone in (1,2,3,4):
             m=CompetitionMission(CompetitionSettings(side=side,start_zone=zone,initial_stash_enabled=False))
-            x=.3 if zone in (2,4) else -.3
+            x=.4 if zone in (2,4) else -.4
             assert m.settings.search_point(1)==(x,0.) and m.settings.search_point(3)==(-x,0.)
             m.initial_stash_done=True;m._set_state(CompetitionState.SEARCH,1.)
             p=PoseSnapshot(True,x,0.,135.,0)
@@ -3083,7 +3083,7 @@ def test_search_stations_one_and_three_alternate_directly_for_all_starts():
                 r=m.search_transfer_route;expected=3 if cycle%2==0 else 1
                 assert out.state==CompetitionState.SEARCH_TRANSFER
                 assert r.target_point==expected and r.waypoints==(m.settings.search_point(expected),)
-                assert out.command.arg_a==600 and out.command.aux==13500
+                assert out.command.arg_a==800 and out.command.aux==13500
                 p=replace(p,x_m=r.target_xy_m[0],y_m=r.target_xy_m[1])
                 done=replace(idle,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=3)
                 assert m.step(v,p,done,2.1+cycle*5).command.arg_a==0 and r.index==0
@@ -3574,3 +3574,158 @@ def test_transport_real_contradiction_or_opening_revokes_retained_result():
         assert m.state == CompetitionState.TRANSPORT_AUDIT
         assert result.command.opcode == CMD_CARGO_AUDIT
         if change != "wrong_context": assert not result.command.audit.stable
+
+
+def _closed_gap_fixture(mode=48, confirmed=True):
+    m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((7,), ('green_supply',), 'material'))
+    if confirmed:
+        m._latch_carried_manifest(CargoAudit(left_class='green_supply', left_count=1, total_count=1))
+    m._set_state(CompetitionState.TRANSPORT_AUDIT if mode == 48 else CompetitionState.POST_GRAB_AUDIT, 1.)
+    status = replace(stm(mode, flags=3), camera_pitch_cdeg=14000,
+                     context_valid=True, context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    v = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1., capture_audit=CargoAudit())
+    return m, v, pose(m.settings.material_target_x_m, m.settings.safe_staging_y_m), status
+
+
+def test_closed_gap_two_seconds_reuses_confirmed_load_without_faking_audit():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_REUSE_CONFIRMED_LOAD
+    m, v, p, status = _closed_gap_fixture()
+    m.step(v, p, status, 1.)
+    waiting = m.step(replace(v, frame_sequence=11, observed_monotonic_s=2.99), p, status, 2.99)
+    assert waiting.command.opcode == CMD_CARGO_AUDIT and not waiting.command.audit.stable
+    # Camera movement does not restart the already-started budget.
+    result = m.step(replace(v, frame_sequence=12, observed_monotonic_s=3.01), p,
+                    replace(status, camera_pitch_cdeg=13800, flags=2), 3.01)
+    assert result.reason == 'confirmed_load_gap_resume'
+    assert result.command.opcode == CMD_ALIGN_SAFE_ZONE
+    assert result.command.flags & CMD_REUSE_CONFIRMED_LOAD
+    assert result.audit is None and result.command.audit is None
+    assert result.command.audit_vision_frame is None and result.command.source_vision_frame is None
+    assert m.carried_manifest == ('green_supply',)
+    result.command.to_frame(1)
+
+
+def test_closed_gap_without_post_grab_confirmation_releases_then_searches():
+    for mode in (23, 48):
+        m, v, p, status = _closed_gap_fixture(mode, confirmed=False)
+        m.step(v, p, status, 1.)
+        result = m.step(replace(v, frame_sequence=12, observed_monotonic_s=3.01), p, status, 3.01)
+        assert result.command.opcode == CMD_RELEASE_BOTH and result.audit is None
+        assert result.reason == 'unconfirmed_load_gap_release'
+        m.step(v, p, stm(24), 3.1)
+        m.step(v, p, stm(3), 3.7)
+        assert m.state == CompetitionState.SEARCH and m.selected_batch is None
+
+
+def test_closed_gap_true_conflict_opening_and_new_batch_revoke_reuse():
+    for change in ('black', 'danger', 'opening', 'new_batch', 'unassigned_danger'):
+        m, v, p, status = _closed_gap_fixture()
+        m.step(v, p, status, 1.)
+        if change == 'new_batch':
+            m._select_batch(CargoBatch((8,), ('green_supply',), 'material'))
+        elif change == 'opening':
+            m._observe_confirmed_load(v, replace(status, flags=1))
+        elif change == 'unassigned_danger':
+            m._observe_confirmed_load(replace(v, capture_observation_valid=False, capture_audit=None,
+                capture_cargo=(TrackedCargo(9,'danger_cyan',.9,(300,300,100,100),hits=2),)), status)
+        else:
+            audit = (CargoAudit(left_class='core_black', left_count=1, total_count=1)
+                     if change == 'black' else CargoAudit(danger_present=True))
+            m._observe_confirmed_load(replace(v, capture_audit=audit), status)
+        assert m.confirmed_load_audit is None
+        assert not m.transport_load_reuse_active
+
+
+def test_closed_gap_reappearance_and_pause_do_not_discard_real_evidence():
+    m, v, p, status = _closed_gap_fixture()
+    m.step(v, p, status, 1.)
+    real = replace(v, frame_sequence=11, observed_monotonic_s=2.8,
+                   capture_audit=m.confirmed_load_audit)
+    m.step(real, p, status, 2.8)
+    assert m.audit_hits == 1
+    assert m.closed_load_gap_started_s == 1.
+    # Use the existing pause accounting; no extra clock or heartbeat.
+    m._audit_wire_timeout_output(status, 2.9, manual_paused=True)
+    m._audit_wire_timeout_output(status, 12.9)
+    assert abs(m.closed_load_gap_started_s - 11.) < 1e-6
+    assert m._closed_load_gap_output(v, p, status, 12.99) is None
+    result = m._closed_load_gap_output(v, p, status, 13.01)
+    assert result.reason == 'confirmed_load_gap_resume'
+
+
+def test_safe_zone_target_cancels_before_finite_range_resend_and_waits_for_recovery():
+    from state_machine import CommandRequest
+    from protocol import CMD_APPROACH_RANGE, CMD_DISTANCE_VALID, CMD_VALID
+    for state in (CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH):
+        m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((471,), ('injured_orange',), 'injury'))
+        m.locked_target_track_id = m.cluster_target_track_id = 471
+        m._set_state(state, 1.)
+        m.range_command = CommandRequest(CMD_APPROACH_TARGET, CMD_VALID | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID, 450, 12000)
+        item = TrackedCargo(471, 'injured_orange', .9, (491,163,92,56), hits=8, inside_safe_zone=True)
+        v = VisionSnapshot(cargo=(item,), frame_sequence=10, observed_monotonic_s=1.)
+        result = m.step(v, pose(), stm(53), 1.)
+        assert result.reason == 'safe_zone_target_cancel' and result.command.opcode == CMD_RELEASE_BOTH
+        assert m.range_command is None
+        again = m.step(replace(v, cargo=(), frame_sequence=11), pose(), stm(53), 1.1)
+        assert again.command.opcode == CMD_RELEASE_BOTH
+        m.step(v, pose(), stm(24), 1.2)
+        m.step(v, pose(), stm(3), 1.8)
+        assert m.state == CompetitionState.SEARCH and m.selected_batch is None
+
+
+def test_safe_zone_membership_survives_only_continuous_same_view_track():
+    from safe_zone_memory import SafeZoneCargoMemory
+    memory = SafeZoneCargoMemory()
+    item = TrackedCargo(471, 'injured_orange', .9, (491,163,92,56), hits=8, inside_safe_zone=True)
+    memory.apply((item,), 12000)
+    missing_zone = replace(item, hits=9, bbox=(521,164,85,55), inside_safe_zone=False)
+    assert memory.apply((missing_zone,),12000)[0].inside_safe_zone
+    # Same number attached to a distant object must not inherit the label.
+    assert not memory.apply((replace(missing_zone,hits=10,bbox=(10,700,90,60)),),12000)[0].inside_safe_zone
+    memory.apply((item,),12000)
+    assert not memory.apply((missing_zone,),14000)[0].inside_safe_zone
+    memory.apply((item,),12000)
+    memory.apply((replace(item,visible=False),),12000)
+    assert memory.apply((missing_zone,),12000)[0].inside_safe_zone
+    memory.apply((),12000)
+    assert not memory.apply((replace(missing_zone,hits=10),),12000)[0].inside_safe_zone
+
+
+def test_closed_gap_resume_step_accounts_pause_before_deciding_and_revokes_inflight_reuse():
+    m,v,p,status=_closed_gap_fixture()
+    m.step(v,p,status,1.)
+    m._audit_wire_timeout_output(status,1.5,manual_paused=True)
+    result=m.step(replace(v,frame_sequence=11,observed_monotonic_s=11.5),p,status,11.5)
+    assert result.command.opcode==CMD_CARGO_AUDIT
+    assert m.closed_load_gap_started_s==11.
+    result=m.step(replace(v,frame_sequence=12,observed_monotonic_s=13.01),p,status,13.01)
+    assert result.reason=='confirmed_load_gap_resume'
+    conflict=replace(v,frame_sequence=13,observed_monotonic_s=13.1,
+        capture_audit=CargoAudit(left_class='core_black',left_count=1,total_count=1))
+    result=m.step(conflict,p,status,13.1)  # ALIGN has not yet been accepted; MCU still mode48.
+    assert m.state==CompetitionState.TRANSPORT_AUDIT and result.command.opcode==CMD_CARGO_AUDIT
+    assert m.confirmed_load_audit is None and not m.transport_load_reuse_active
+
+
+def test_closed_gap_green_core_orange_redirect_keeps_permission_through_navigation():
+    from protocol import CMD_REUSE_CONFIRMED_LOAD, CMD_ALIGN_SAFE_ZONE
+    for name in ('green_supply','core_black','injured_orange'):
+        m,v,p,status=_closed_gap_fixture()
+        m._latch_carried_manifest(CargoAudit(left_class=name,left_count=1,total_count=1))
+        target=m._target_point()
+        wrong=pose(-target[0],target[1])
+        m.step(v,wrong,status,1.)
+        result=m.step(replace(v,frame_sequence=11,observed_monotonic_s=3.01),wrong,status,3.01)
+        assert result.command.opcode==CMD_NAVIGATE_WAYPOINT
+        assert result.command.flags & CMD_REUSE_CONFIRMED_LOAD
+        result.command.to_frame(1)
+        arrived=replace(status,mode=10,flags=34,accepted_command=CMD_NAVIGATE_WAYPOINT,action_status=3)
+        result=m.step(replace(v,frame_sequence=12,observed_monotonic_s=3.5),pose(*target),arrived,3.5)
+        assert result.command.opcode==CMD_ALIGN_SAFE_ZONE
+        assert result.command.flags & CMD_REUSE_CONFIRMED_LOAD
+        assert not arrived.audit_valid and not arrived.audit_ready  # No fabricated fresh audit needed.
+        assert m.carried_manifest==(name,)

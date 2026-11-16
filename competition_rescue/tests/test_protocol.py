@@ -210,3 +210,19 @@ def test_closed_deflect_direction_uses_rectangle_and_reverse_pre_yaw():
         assert not left.end_at_original
         behind=choose_plan(side,(0.,0.),yaw+180.,100)
         assert behind.end_at_original
+
+
+def test_confirmed_load_reuse_align_has_explicit_flag_and_no_audit_payload():
+    from protocol import CMD_ALIGN_SAFE_ZONE, CMD_REUSE_CONFIRMED_LOAD, CMD_USE_FINAL_HEADING
+    for side, heading in ((8,9000),(0,27000)):
+        flags = CMD_VALID | side | CMD_USE_FINAL_HEADING | CMD_REUSE_CONFIRMED_LOAD
+        packet = mission_frame(7,CMD_ALIGN_SAFE_ZONE,flags,0,0,heading)
+        assert packet[5] == flags and packet[6:10] == bytes(4)
+        for bad_flags,a,b,u in ((flags|64,0,0,heading),(flags,1,0,heading),
+                                (flags,0,14000,heading),(flags,0,0,(heading+18000)%36000)):
+            try:
+                mission_frame(7,CMD_ALIGN_SAFE_ZONE,bad_flags,a,b,u)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('invalid reuse ALIGN accepted')

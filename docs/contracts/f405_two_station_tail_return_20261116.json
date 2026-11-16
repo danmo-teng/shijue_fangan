@@ -1,7 +1,7 @@
 {
   "request_id": "MATCH-TWO-STATION-TAIL-RETURN-20261116",
-  "status": "upper implemented; lower step15/14/13 transition updates pending; no deployment",
-  "lower_review_commit": "c14b0a77246da5c71a9897fefaca8528177305a4",
+  "status": "upper stations extended to 0.40m; lower route support reviewed at 49a4c75; ground accuracy pending",
+  "lower_review_commit": "49a4c7525453d738f8cdcfd0f8139a1986fa45f1",
   "semantics": {
     "step15": "A=-150 B=0 U=red27000/blue9000; retain -100 parse compatibility",
     "step14": "A=B=0 U=0..35999; loaded NAV entry still opponent-only, empty entry only after owned step15 DONE",
@@ -9,7 +9,7 @@
     "step12": "existing restore-search completion",
     "yaw_source": "actual available pose after owned step15 DONE; latch atan2(goal-current)+180 once",
     "no_move_if_already_at_station": "reuse original 50mm navigation arrival tolerance; skip undefined turn",
-    "stations": "only 1/3, x=+/-0.30 y=0; station1 nearest start-zone X side",
+    "stations": "only 1/3, x=+/-0.40 y=0; station1 nearest start-zone X side",
     "delivery": "finish original local exit, then direct to saved source station, no via point",
     "interrupted_transfer": "until actual destination completion keep last visited station as source",
     "unchanged": "original wheel/turn/navigation controllers, speed, tolerance, PAUSE/STOP, recovery"
@@ -28,11 +28,11 @@
         -0.5399999999999999
       ],
       "station_1": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "station_3": [
-        0.3,
+        0.4,
         0.0
       ],
       "messages": [
@@ -54,20 +54,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 30981,
+          "U": 31553,
           "context_hex": "a3 b3 1d 0b 02 58 00 65 00 00 00 00 87 4c c3",
-          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 79 05 18 ea c3"
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 7b 41 19 b9 c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 600,
           "action_id": 102,
           "step": 13,
-          "A": 703,
-          "B": 12981,
-          "U": 30981,
+          "A": 771,
+          "B": 13553,
+          "U": 31553,
           "context_hex": "a3 b3 1d 0c 02 58 00 66 00 00 00 00 e5 7c c3",
-          "command_hex": "a3 b3 18 0c 14 d9 02 bf 32 b5 79 05 05 be c3"
+          "command_hex": "a3 b3 18 0c 14 d9 03 03 34 f1 7b 41 14 7a c3"
         },
         {
           "name": "navigation_arrival",
@@ -76,9 +76,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 30981,
+          "U": 31553,
           "context_hex": "a3 b3 1d 0d 02 58 00 66 00 00 00 00 e8 ec c3",
-          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 79 05 03 49 c3"
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 7b 41 02 1a c3"
         },
         {
           "name": "restore_search",
@@ -106,11 +106,11 @@
         -0.5399999999999999
       ],
       "station_1": [
-        0.3,
+        0.4,
         0.0
       ],
       "station_3": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "messages": [
@@ -132,20 +132,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 25448,
+          "U": 24516,
           "context_hex": "a3 b3 1d 0b 02 59 00 65 00 00 00 00 97 8c c3",
-          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 63 68 d2 67 c3"
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 5f c4 c3 1a c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 601,
           "action_id": 102,
           "step": 13,
-          "A": 560,
-          "B": 7448,
-          "U": 25448,
+          "A": 595,
+          "B": 6516,
+          "U": 24516,
           "context_hex": "a3 b3 1d 0c 02 59 00 66 00 00 00 00 f5 bc c3",
-          "command_hex": "a3 b3 18 0c 14 d9 02 30 1d 18 63 68 03 d9 c3"
+          "command_hex": "a3 b3 18 0c 14 d9 02 53 19 74 5f c4 17 81 c3"
         },
         {
           "name": "navigation_arrival",
@@ -154,9 +154,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 25448,
+          "U": 24516,
           "context_hex": "a3 b3 1d 0d 02 59 00 66 00 00 00 00 f8 2c c3",
-          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 63 68 c9 c4 c3"
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 5f c4 d8 b9 c3"
         },
         {
           "name": "restore_search",
@@ -184,11 +184,11 @@
         -0.5399999999999999
       ],
       "station_1": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "station_3": [
-        0.3,
+        0.4,
         0.0
       ],
       "messages": [
@@ -210,20 +210,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 30981,
+          "U": 31553,
           "context_hex": "a3 b3 1d 0b 02 5a 00 65 00 00 00 00 a4 8c c3",
-          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 79 05 18 ea c3"
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 7b 41 19 b9 c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 602,
           "action_id": 102,
           "step": 13,
-          "A": 703,
-          "B": 12981,
-          "U": 30981,
+          "A": 771,
+          "B": 13553,
+          "U": 31553,
           "context_hex": "a3 b3 1d 0c 02 5a 00 66 00 00 00 00 c6 bc c3",
-          "command_hex": "a3 b3 18 0c 14 d9 02 bf 32 b5 79 05 05 be c3"
+          "command_hex": "a3 b3 18 0c 14 d9 03 03 34 f1 7b 41 14 7a c3"
         },
         {
           "name": "navigation_arrival",
@@ -232,9 +232,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 30981,
+          "U": 31553,
           "context_hex": "a3 b3 1d 0d 02 5a 00 66 00 00 00 00 cb 2c c3",
-          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 79 05 03 49 c3"
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 7b 41 02 1a c3"
         },
         {
           "name": "restore_search",
@@ -262,11 +262,11 @@
         -0.5399999999999999
       ],
       "station_1": [
-        0.3,
+        0.4,
         0.0
       ],
       "station_3": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "messages": [
@@ -288,20 +288,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 25448,
+          "U": 24516,
           "context_hex": "a3 b3 1d 0b 02 5b 00 65 00 00 00 00 b4 4c c3",
-          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 63 68 d2 67 c3"
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 5f c4 c3 1a c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 603,
           "action_id": 102,
           "step": 13,
-          "A": 560,
-          "B": 7448,
-          "U": 25448,
+          "A": 595,
+          "B": 6516,
+          "U": 24516,
           "context_hex": "a3 b3 1d 0c 02 5b 00 66 00 00 00 00 d6 7c c3",
-          "command_hex": "a3 b3 18 0c 14 d9 02 30 1d 18 63 68 03 d9 c3"
+          "command_hex": "a3 b3 18 0c 14 d9 02 53 19 74 5f c4 17 81 c3"
         },
         {
           "name": "navigation_arrival",
@@ -310,9 +310,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 25448,
+          "U": 24516,
           "context_hex": "a3 b3 1d 0d 02 5b 00 66 00 00 00 00 db ec c3",
-          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 63 68 c9 c4 c3"
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 5f c4 d8 b9 c3"
         },
         {
           "name": "restore_search",
@@ -340,11 +340,11 @@
         0.5399999999999999
       ],
       "station_1": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "station_3": [
-        0.3,
+        0.4,
         0.0
       ],
       "messages": [
@@ -366,20 +366,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 7448,
+          "U": 6516,
           "context_hex": "a3 b3 1d 0b 02 5c 00 65 00 00 00 00 c2 8c c3",
-          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 1d 18 7b e3 c3"
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 19 74 79 0e c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 604,
           "action_id": 102,
           "step": 13,
-          "A": 560,
-          "B": -10552,
-          "U": 7448,
+          "A": 595,
+          "B": -11484,
+          "U": 6516,
           "context_hex": "a3 b3 1d 0c 02 5c 00 66 00 00 00 00 a0 bc c3",
-          "command_hex": "a3 b3 18 0c 14 d1 02 30 d6 c8 1d 18 95 80 c3"
+          "command_hex": "a3 b3 18 0c 14 d1 02 53 d3 24 19 74 92 5c c3"
         },
         {
           "name": "navigation_arrival",
@@ -388,9 +388,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 7448,
+          "U": 6516,
           "context_hex": "a3 b3 1d 0d 02 5c 00 66 00 00 00 00 ad 2c c3",
-          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 1d 18 60 40 c3"
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 19 74 62 ad c3"
         },
         {
           "name": "restore_search",
@@ -418,11 +418,11 @@
         0.5399999999999999
       ],
       "station_1": [
-        0.3,
+        0.4,
         0.0
       ],
       "station_3": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "messages": [
@@ -444,20 +444,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 12981,
+          "U": 13553,
           "context_hex": "a3 b3 1d 0b 02 5d 00 65 00 00 00 00 d2 4c c3",
-          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 32 b5 a6 6e c3"
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 34 f1 a5 fd c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 605,
           "action_id": 102,
           "step": 13,
-          "A": 703,
-          "B": -5019,
-          "U": 12981,
+          "A": 771,
+          "B": -4447,
+          "U": 13553,
           "context_hex": "a3 b3 1d 0c 02 5d 00 66 00 00 00 00 b0 7c c3",
-          "command_hex": "a3 b3 18 0c 14 d1 02 bf ec 65 32 b5 80 eb c3"
+          "command_hex": "a3 b3 18 0c 14 d1 03 03 ee a1 34 f1 93 37 c3"
         },
         {
           "name": "navigation_arrival",
@@ -466,9 +466,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 12981,
+          "U": 13553,
           "context_hex": "a3 b3 1d 0d 02 5d 00 66 00 00 00 00 bd ec c3",
-          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 32 b5 bd cd c3"
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 34 f1 be 5e c3"
         },
         {
           "name": "restore_search",
@@ -496,11 +496,11 @@
         0.5399999999999999
       ],
       "station_1": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "station_3": [
-        0.3,
+        0.4,
         0.0
       ],
       "messages": [
@@ -522,20 +522,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 7448,
+          "U": 6516,
           "context_hex": "a3 b3 1d 0b 02 5e 00 65 00 00 00 00 e1 4c c3",
-          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 1d 18 7b e3 c3"
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 19 74 79 0e c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 606,
           "action_id": 102,
           "step": 13,
-          "A": 560,
-          "B": -10552,
-          "U": 7448,
+          "A": 595,
+          "B": -11484,
+          "U": 6516,
           "context_hex": "a3 b3 1d 0c 02 5e 00 66 00 00 00 00 83 7c c3",
-          "command_hex": "a3 b3 18 0c 14 d1 02 30 d6 c8 1d 18 95 80 c3"
+          "command_hex": "a3 b3 18 0c 14 d1 02 53 d3 24 19 74 92 5c c3"
         },
         {
           "name": "navigation_arrival",
@@ -544,9 +544,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 7448,
+          "U": 6516,
           "context_hex": "a3 b3 1d 0d 02 5e 00 66 00 00 00 00 8e ec c3",
-          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 1d 18 60 40 c3"
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 19 74 62 ad c3"
         },
         {
           "name": "restore_search",
@@ -574,11 +574,11 @@
         0.5399999999999999
       ],
       "station_1": [
-        0.3,
+        0.4,
         0.0
       ],
       "station_3": [
-        -0.3,
+        -0.4,
         0.0
       ],
       "messages": [
@@ -600,20 +600,20 @@
           "step": 14,
           "A": 0,
           "B": 0,
-          "U": 12981,
+          "U": 13553,
           "context_hex": "a3 b3 1d 0b 02 5f 00 65 00 00 00 00 f1 8c c3",
-          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 32 b5 a6 6e c3"
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 34 f1 a5 fd c3"
         },
         {
           "name": "direct_reverse",
           "task_id": 607,
           "action_id": 102,
           "step": 13,
-          "A": 703,
-          "B": -5019,
-          "U": 12981,
+          "A": 771,
+          "B": -4447,
+          "U": 13553,
           "context_hex": "a3 b3 1d 0c 02 5f 00 66 00 00 00 00 93 bc c3",
-          "command_hex": "a3 b3 18 0c 14 d1 02 bf ec 65 32 b5 80 eb c3"
+          "command_hex": "a3 b3 18 0c 14 d1 03 03 ee a1 34 f1 93 37 c3"
         },
         {
           "name": "navigation_arrival",
@@ -622,9 +622,9 @@
           "step": 13,
           "A": 0,
           "B": 0,
-          "U": 12981,
+          "U": 13553,
           "context_hex": "a3 b3 1d 0d 02 5f 00 66 00 00 00 00 9e 2c c3",
-          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 32 b5 bd cd c3"
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 34 f1 be 5e c3"
         },
         {
           "name": "restore_search",

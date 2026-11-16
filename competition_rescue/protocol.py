@@ -58,6 +58,7 @@ CMD_RED_SIDE = 1 << 3
 CMD_DISTANCE_VALID = 1 << 4
 CMD_CLUSTER_TARGET = 1 << 5
 CMD_REUSE_POST_GRAB_AUDIT = 1 << 5  # STAGE NAV only; recovered single injury, no new count.
+CMD_REUSE_CONFIRMED_LOAD = 1 << 5  # Pose ALIGN / STAGE NAV: prior closed-load permission, not a new audit.
 CMD_FIRST_GREEN_BUMP = 1 << 5
 CMD_APPROACH_RANGE = 1 << 6
 # APPROACH_RANGE aux only: finish this segment at the same measuring pitch.
@@ -188,8 +189,16 @@ def mission_frame(
         CMD_BULLDOZER_STEP,
         CMD_CLOSED_DEFLECT,
         CMD_NAVIGATE_WAYPOINT,
+        CMD_ALIGN_SAFE_ZONE,
     }:
-        raise ValueError("bit5 requires an approach, disperse, bulldozer or STAGE NAV command")
+        raise ValueError("bit5 requires an approach, disperse, bulldozer, STAGE NAV or pose ALIGN command")
+    if command == CMD_ALIGN_SAFE_ZONE and flags & CMD_REUSE_CONFIRMED_LOAD:
+        allowed = CMD_VALID | CMD_RED_SIDE | CMD_USE_FINAL_HEADING | CMD_REUSE_CONFIRMED_LOAD
+        if (flags & ~allowed or flags & (CMD_VALID | CMD_USE_FINAL_HEADING) !=
+                CMD_VALID | CMD_USE_FINAL_HEADING or arg_a != 0 or
+                arg_b not in {0, 11500} or
+                aux_cdeg != (9000 if flags & CMD_RED_SIDE else 27000)):
+            raise ValueError("confirmed load reuse requires pose ALIGN with the side heading")
     if command == CMD_NAVIGATE_WAYPOINT and flags & CMD_REUSE_POST_GRAB_AUDIT:
         required = CMD_VALID | CMD_DISTANCE_VALID | CMD_STAGE_ONLY
         if (flags & required != required or arg_a < 0 or arg_b != 0 or

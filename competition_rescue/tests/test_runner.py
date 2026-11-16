@@ -3450,3 +3450,93 @@ def test_closed_deflect_runner_carries_pose_and_preserves_motion_action():
     policy.update(align,st,*stage)
     assert policy.suppressed
     policy.close()
+
+
+def test_zone_memory_in_real_snapshot_excludes_both_colours_after_zone_box_gap():
+    from types import SimpleNamespace
+    from rescue_vision.models import TrackState
+    from safe_zone_memory import SafeZoneCargoMemory
+    for zone in ('safe_red','safe_blue'):
+        memory=SafeZoneCargoMemory()
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+        track=SimpleNamespace(track_id=471,class_name='injured_orange',confidence=.9,hits=8,misses=0,
+            state=TrackState.CONFIRMED,last_detection=SimpleNamespace(bbox=(491,163,92,56),ground_xy_mm=None))
+        def frame(detections,n):
+            return runner_module.make_vision_snapshot(detections,(track,),SimpleNamespace(calibrated=False),None,
+                StmSnapshot(mode=3,age_ms=0,camera_pitch_cdeg=12000),m,n,safe_zone_memory=memory)
+        assert frame([SimpleNamespace(class_name=zone,bbox=(18,131,607,112))],1).cargo[0].inside_safe_zone
+        track.hits+=1
+        track.last_detection.bbox=(521,164,85,55)
+        snapshot=frame([],2)
+        assert snapshot.cargo[0].inside_safe_zone
+        assert not m._visible_cargo(snapshot)
+        assert not snapshot.delivery_target_inside_safe_zone
+
+
+def test_reuse_align_publish_keeps_frame_zero_and_new_action_without_audit():
+    from state_machine import CargoAudit, CargoBatch
+    from protocol import CMD_CARGO_AUDIT, CMD_REUSE_CONFIRMED_LOAD
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    m._select_batch(CargoBatch((7,),('green_supply',),'material'))
+    m._latch_carried_manifest(CargoAudit(left_class='green_supply',left_count=1,total_count=1))
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        old=planner.protocol_action
+        m.transport_load_reuse_active=True
+        m.state=CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+        output=CompetitionOutput(m.state,m._safe_zone_pose_align_command(),'reuse closed load')
+        planner._publish(output)
+        assert planner.protocol_action!=old and planner.protocol_vision_frame==0
+        assert output.command.flags & CMD_REUSE_CONFIRMED_LOAD
+        assert output.command.opcode!=CMD_CARGO_AUDIT and output.command.audit is None
+        action=planner.protocol_action
+        planner._publish(output)
+        assert planner.protocol_action==action
+
+
+def test_runner_cancels_zone_target_before_its_direct_finite_motion_fast_path():
+    from state_machine import CargoBatch,TrackedCargo,CommandRequest
+    from protocol import CMD_APPROACH_TARGET,CMD_APPROACH_RANGE,CMD_DISTANCE_VALID,CMD_VALID,CMD_RELEASE_BOTH
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    m._select_batch(CargoBatch((471,),('injured_orange',),'injury'))
+    m.locked_target_track_id=471
+    m.state=CompetitionState.APPROACH
+    m.range_command=CommandRequest(CMD_APPROACH_TARGET,CMD_VALID|CMD_APPROACH_RANGE|CMD_DISTANCE_VALID,450,12000)
+    item=TrackedCargo(471,'injured_orange',.9,(491,163,92,56),hits=8,inside_safe_zone=True)
+    view=VisionSnapshot(cargo=(item,),frame_sequence=12030,observed_monotonic_s=1.)
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        p=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        status=StmSnapshot(mode=53,age_ms=0,context_valid=True,task_id=p.protocol_task,
+            action_id=p.protocol_action,accepted_command=CMD_APPROACH_TARGET,action_status=1)
+        out=p._output_for_cycle(view,PoseSnapshot(True,.3,.1,90.,0.),status,False,1.)
+        assert out.reason=='safe_zone_target_cancel' and out.command.opcode==CMD_RELEASE_BOTH
+        p._publish(out)
+        again=p._output_for_cycle(VisionSnapshot(frame_sequence=12031),PoseSnapshot(True),status,False,1.1)
+        assert again.command.opcode==CMD_RELEASE_BOTH
+        assert m.range_command is None
+
+
+def test_runner_real_conflict_revokes_reuse_even_while_align_ack_is_pending():
+    from state_machine import CargoAudit,CargoBatch
+    from protocol import CMD_CARGO_AUDIT
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    m._select_batch(CargoBatch((7,),('green_supply',),'material'))
+    m._latch_carried_manifest(CargoAudit(left_class='green_supply',left_count=1,total_count=1))
+    m.transport_load_reuse_active=True
+    m.state=CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+    with tempfile.TemporaryDirectory() as d:
+        root=Path(d)
+        p=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
+        p._publish(CompetitionOutput(m.state,m._safe_zone_pose_align_command(),'reuse'))
+        old=StmSnapshot(mode=48,flags=3,age_ms=0,camera_pitch_cdeg=14000,context_valid=True,
+            task_id=p.protocol_task,action_id=(p.protocol_action-1)&65535,
+            accepted_command=CMD_CARGO_AUDIT,action_status=1)
+        v=VisionSnapshot(frame_sequence=90,capture_audit=CargoAudit(left_class='core_black',left_count=1,total_count=1))
+        out=p._output_for_cycle(v,PoseSnapshot(True,-.15,.54,90.,0.),old,False,1.)
+        assert out.command.opcode==CMD_CARGO_AUDIT and m.state==CompetitionState.TRANSPORT_AUDIT
+        assert not m.transport_load_reuse_active and m.confirmed_load_audit is None

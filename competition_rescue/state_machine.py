@@ -35,6 +35,7 @@ from protocol import (
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_REUSE_POST_GRAB_AUDIT,
+    CMD_REUSE_CONFIRMED_LOAD,
     CMD_DISTANCE_VALID,
     CMD_DRIVE_STRAIGHT,
     CMD_FIRST_GREEN_BUMP,
@@ -541,7 +542,7 @@ class CompetitionSettings:
     center_stop_radius_m: float = 0.0
     return_zero_tolerance_m: float = 0.080
     pre_grab_advance_enabled: bool = False
-    post_delivery_return_offset_m: float = 0.30
+    post_delivery_return_offset_m: float = 0.40
     post_delivery_return_tolerance_m: float = 0.15
     vision_stale_s: float = 0.30
     search_min_turn_deg: float = 720.0
@@ -572,6 +573,7 @@ class CompetitionSettings:
     audit_min_span_s: float = 0.100
     audit_evidence_timeout_s: float = 0.500
     audit_handoff_timeout_s: float = 17.0
+    closed_load_gap_timeout_s: float = 2.0
     push_plate_offset_m: float = 0.105
     fence_stop_margin_m: float = 0.0075
     delivery_early_exit_enabled: bool = False  # Enable with the paired F405 implementation.
@@ -614,7 +616,8 @@ class CompetitionSettings:
         if self.vision_stale_s <= 0:
             raise ValueError("vision stale threshold must be positive")
         if (self.audit_min_interframe_s <= 0 or self.audit_min_span_s <= 0 or
-                self.audit_evidence_timeout_s <= 0 or self.audit_handoff_timeout_s <= 0):
+                self.audit_evidence_timeout_s <= 0 or self.audit_handoff_timeout_s <= 0 or
+                self.closed_load_gap_timeout_s <= 0):
             raise ValueError("audit timing thresholds must be positive")
         if self.search_min_turn_deg <= 0 or self.search_target_confirm_frames <= 0:
             raise ValueError("search scan thresholds must be positive")
@@ -791,6 +794,10 @@ class CompetitionMission:
         self.empty_load_recheck_pending = False
         self.empty_load_view_moved = False
         self.empty_load_recheck_done = False
+        self.closed_load_gap_started_s: float | None = None
+        self.closed_load_gap_key = None
+        self.confirmed_load_audit: CargoAudit | None = None
+        self.transport_load_reuse_active = False
         self.navigation_initial_ack: int | None = None
         self.enter_initial_ack: int | None = None
         self.task_complete_initial_ack: int | None = None
@@ -1462,6 +1469,8 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
+        self.confirmed_load_audit = None
+        self.transport_load_reuse_active = False
         self.recovering_original_load = False
         self.recovered_injury_audit_reuse = False
         self.post_grab_half_close_active = False
@@ -1485,6 +1494,10 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_carried_manifest(self) -> None:
+        self.confirmed_load_audit = None
+        self.transport_load_reuse_active = False
+        self.closed_load_gap_started_s = None
+        self.closed_load_gap_key = None
         self.recovered_injury_audit_reuse = False
         self.carried_manifest = ()
         self.carried_total_count = 0
@@ -1682,6 +1695,9 @@ class CompetitionMission:
         return signature + (("near_keep", audit.near_keep_side),) if audit.near_keep_side is not None else signature
 
     def _latch_carried_manifest(self, audit: CargoAudit) -> None:
+        # Called only at a real, acknowledged closed-claw audit handoff.
+        self.confirmed_load_audit = audit
+        self.transport_load_reuse_active = False
         self.carried_manifest = self._manifest_for_audit(audit)
         self.carried_total_count = audit.total_count
         self.carried_has_green = (
@@ -2103,6 +2119,8 @@ class CompetitionMission:
         keep_count: int = 0,
         audit: CargoAudit | None = None,
     ) -> None:
+        self.confirmed_load_audit = None
+        self.transport_load_reuse_active = False
         self.separation_request_epoch += 1
         self.separation_request_counted = False
         near_keep = audit is not None and audit.near_keep_side == keep_side and keep_side is not None
@@ -2328,6 +2346,109 @@ class CompetitionMission:
             )
         return None
 
+    def _observe_confirmed_load(self, vision: VisionSnapshot, stm: StmSnapshot) -> bool:
+        """Revoke reuse on real change, never manufacture a current-frame count."""
+        prior = self.confirmed_load_audit
+        if prior is None:
+            return False
+        audit = vision.capture_audit if vision.capture_observation_valid else None
+        expected = Counter(self._manifest_for_audit(prior))
+        visible = Counter(item.class_name for item in vision.capture_cargo if item.visible)
+        observed_extra = any(count > expected[name] for name, count in visible.items())
+        positive_change = (audit is not None and (
+            audit.danger_present or audit.unknown_present or audit.injury_mixed or
+            (audit.total_count > 0 and (
+                audit.total_count != prior.total_count or
+                Counter(self._manifest_for_audit(audit)) != Counter(self._manifest_for_audit(prior))))))
+        if ((stm.fresh and not stm.gripper_closed) or vision.carried_incompatible_cargo or
+                observed_extra or positive_change or
+                self._first_green_core_conflict_active()):
+            was_reusing = self.transport_load_reuse_active
+            self.confirmed_load_audit = None
+            self.transport_load_reuse_active = False
+            return was_reusing
+        return False
+
+    def _closed_load_gap_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        reviewing = (self.selected_batch is not None and stm.gripper_closed and (
+            (stm.mode == STM_MODE_TRANSPORT_AUDIT and self.state == CompetitionState.TRANSPORT_AUDIT) or
+            (stm.mode == STM_MODE_POST_GRAB_AUDIT and self.state in {
+                CompetitionState.POST_GRAB_AUDIT, CompetitionState.AUDIT_CONFIRM})))
+        key = (self.task_generation, self.audit_epoch, stm.mode)
+        if not reviewing or key != self.closed_load_gap_key:
+            self.closed_load_gap_started_s = None
+            self.closed_load_gap_key = key if reviewing else None
+        if not reviewing:
+            return None
+        audit = vision.capture_audit
+        has_result = (vision.capture_observation_valid and audit is not None and (
+            audit.total_count > 0 or audit.danger_present or audit.unknown_present or audit.injury_mixed))
+        if vision.carried_incompatible_cargo or self._first_green_core_conflict_active():
+            self.closed_load_gap_started_s = None
+            return None
+        if has_result or any(item.visible for item in vision.capture_cargo):
+            return None  # Process real evidence now; don't renew the missing-load budget.
+        # Let an already published true stable result consume its matching ACK.
+        if ((self.pending_audit_payload is not None and self.pending_audit_payload.stable) or
+                (self._retains_transport_audit(stm) and self.transport_audit_command.audit.stable)):
+            return None
+        if self.closed_load_gap_started_s is None:
+            if (vision.capture_observation_valid and audit is not None and
+                    stm.claw_visible and stm.camera_pitch_cdeg == 14000):
+                self.closed_load_gap_started_s = now
+            return None
+        if now - self.closed_load_gap_started_s < self.settings.closed_load_gap_timeout_s:
+            return None
+        if (stm.mode == STM_MODE_TRANSPORT_AUDIT and self.confirmed_load_audit is not None and
+                not self.selected_batch.initial_stash):
+            if not self._pose_fresh(pose):
+                return CompetitionOutput(self.state, self._pause(),
+                    "缺框复看结束，沿原运输出口等待定位核对目的地半区",
+                    self.selected_batch, reason="transport_audit_redirect_pose_wait")
+            self.transport_load_reuse_active = True
+            self._clear_pending_audit()
+            self._reset_safe_zone_alignment()
+            target_x, target_y = self._target_point()
+            if pose.x_m * target_x <= 0 or pose.y_m * target_y <= 0:
+                self.stage_redirect_active = True
+                self._set_state(CompetitionState.NAVIGATE, now)
+                self.navigation_initial_ack = stm.acknowledged_sequence
+                command = self._navigation_command(pose, self._target_point(), staging_only=True)
+            else:
+                self._begin_safe_zone_pose_align(stm, now)
+                command = self._safe_zone_pose_align_command()
+            return CompetitionOutput(self.state, command,
+                "闭爪缺框复看结束，继续运送上次真实确认的载荷；不是新审核通过",
+                self.selected_batch, event="confirmed_load_gap_resume",
+                reason="confirmed_load_gap_resume")
+        result = self._start_capture_abandon(CargoAudit(), stm, now)
+        self.invalid_release_context = "unconfirmed_load_gap"
+        return replace(result, audit=None, event="unconfirmed_load_gap_release",
+            reason="unconfirmed_load_gap_release",
+            message="闭爪缺框复看结束，尚无抓后确认载荷，放下后重新搜索")
+
+    def _safe_zone_target_exit(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float
+    ) -> CompetitionOutput | None:
+        if (self.state not in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
+                               CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT} or
+                self.selected_batch is None or stm.gripper_closed):
+            return None
+        ids = {self.locked_target_track_id, self.cluster_target_track_id}
+        ids.update(self.selected_batch.track_ids)
+        if not any(item.visible and item.inside_safe_zone and item.track_id in ids
+                   for item in vision.cargo):
+            return None
+        # Must precede finite-range resend and the ordinary missing-target grace.
+        self._clear_range_approach()
+        result = self._start_capture_abandon(CargoAudit(), stm, now)
+        self.invalid_release_context = "safe_zone_target"
+        return replace(result, audit=None, event="safe_zone_target_cancel",
+            reason="safe_zone_target_cancel",
+            message="目标已确认在红/蓝安全区内，结束本次靠近后重新搜索")
+
     def _audit_vision_fresh(self, vision: VisionSnapshot, now: float) -> bool:
         return (vision.observed_monotonic_s is None or
                 -0.05 <= now - vision.observed_monotonic_s <= self.settings.audit_evidence_timeout_s)
@@ -2393,6 +2514,8 @@ class CompetitionMission:
                 self.audit_wire_pause_started_s = now
             return None
         if self.audit_wire_pause_started_s is not None:
+            if self.closed_load_gap_started_s is not None:
+                self.closed_load_gap_started_s += max(0.0, now - self.audit_wire_pause_started_s)
             if self.audit_wire_mode_started_s is not None:
                 self.audit_wire_mode_started_s += max(0.0, now - self.audit_wire_pause_started_s)
             self.audit_wire_pause_started_s = None
@@ -4067,6 +4190,8 @@ class CompetitionMission:
     def _invalid_release_output(
         self, audit: CargoAudit, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        self.confirmed_load_audit = None
+        self.transport_load_reuse_active = False
         self._arm_invalid_release(stm, now, audit)
         side = self.invalid_release_side
         release_command = self._invalid_release_command()
@@ -4088,6 +4213,10 @@ class CompetitionMission:
             message = f"危险物明确位于{side}侧，强制释放后YIELD复审"
         else:
             message = f"夹内组合非法，释放{side}侧后退复审"
+        exit_reason = {
+            "safe_zone_target": ("safe_zone_target_cancel", "目标在安全区内，等待下位结束靠近并恢复搜索"),
+            "unconfirmed_load_gap": ("unconfirmed_load_gap_release", "缺框复看结束，等待放下未确认载荷并恢复搜索"),
+        }.get(self.invalid_release_context)
         expected_mode = (
             STM_MODE_DISPERSE_DONE
             if (
@@ -4103,12 +4232,12 @@ class CompetitionMission:
         return CompetitionOutput(
             self.state,
             release_command,
-            message,
+            exit_reason[1] if exit_reason else message,
             self.selected_batch,
-            audit,
+            None if exit_reason else audit,
             "invalid_cargo_release",
             tx_policy="normal_command",
-            reason="invalid_audit_release",
+            reason=exit_reason[0] if exit_reason else "invalid_audit_release",
             expected_stm_modes=(
                 (STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
                 if self.invalid_release_context == "separation_limit_failed" else
@@ -4273,7 +4402,8 @@ class CompetitionMission:
     def _safe_zone_pose_align_command(self) -> CommandRequest:
         return CommandRequest(
             CMD_ALIGN_SAFE_ZONE,
-            self._side_flags() | CMD_USE_FINAL_HEADING,
+            self._side_flags() | CMD_USE_FINAL_HEADING |
+            (CMD_REUSE_CONFIRMED_LOAD if self.transport_load_reuse_active else 0),
             arg_b=11500 if self.safe_zone_view_pitch_cdeg == 11500 else 0,
             aux=round(self.settings.safe_heading_deg * 100.0) % 36000,
         )
@@ -5172,7 +5302,7 @@ class CompetitionMission:
         )
         if staging_only and (self.stage_redirect_active or self.transport_separation_active):
             flags |= CMD_DRIVE_STRAIGHT | CMD_USE_FINAL_HEADING
-        if staging_only and self._can_reuse_recovered_injury_audit():
+        if staging_only and (self._can_reuse_recovered_injury_audit() or self.transport_load_reuse_active):
             flags |= CMD_REUSE_POST_GRAB_AUDIT
         return CommandRequest(
             CMD_NAVIGATE_WAYPOINT,
@@ -6463,17 +6593,17 @@ class CompetitionMission:
                         reason="safe_zone_staging_zero_pending",
                         expected_stm_modes=(STM_MODE_NAVIGATE,),
                     )
-                if self._can_reuse_recovered_injury_audit():
+                if self._can_reuse_recovered_injury_audit() or self.transport_load_reuse_active:
                     paired_nav_done = (stm.context_valid and stm.context_matches and
                         stm.accepted_command == CMD_NAVIGATE_WAYPOINT and bool(stm.action_status & 2))
                     if not paired_nav_done:
                         return CompetitionOutput(self.state, zero_command,
                             "回抓伤员已到预备点，沿本次NAV D0完成交接",
                             self.selected_batch, reason="recovered_injury_navigation_finish")
-                    if stm.audit_ready and stm.audit_valid:
+                    if self.transport_load_reuse_active or (stm.audit_ready and stm.audit_valid):
                         self._begin_safe_zone_pose_align(stm, now)
                         return CompetitionOutput(self.state, self._safe_zone_pose_align_command(),
-                            "回抓单伤员保持闭爪，复用已完成的真实合爪审核，直接开始对准",
+                            "保持闭爪，沿已确认载荷的运输许可开始对准，不记为本帧审核通过",
                             self.selected_batch, event="recovered_injury_audit_reused",
                             reason="recovered_injury_audit_reused")
                 return self._begin_transport_audit(vision, pose, stm, now)
@@ -6877,6 +7007,7 @@ class CompetitionMission:
         self.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
                                 if pose.valid else None)
         self._observe_first_green_core(vision, stm)
+        reuse_conflict = self._observe_confirmed_load(vision, stm)
         if self.recovered_injury_audit_reuse:
             audit = vision.capture_audit if vision.capture_observation_valid else None
             positive_conflict = (audit is not None and
@@ -6898,6 +7029,10 @@ class CompetitionMission:
                                          self.selected_batch, reason="recovery_handoff_wait")
             self.recovery_wait_active = False
             self.recovery_command = None
+        if stm.fresh and not stm.fault:
+            zone_exit = self._safe_zone_target_exit(vision, stm, now)
+            if zone_exit is not None:
+                return zone_exit
         if (stm.fresh and not stm.fault and stm.mode in {52, 53} and
                 self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
                                CompetitionState.CLUSTER_APPROACH}):
@@ -6978,9 +7113,15 @@ class CompetitionMission:
             return self._abandon_original_recovery(vision, pose, stm, now)
         if self._first_green_reaudit_needed(stm):
             return self._first_green_reaudit_output(vision, pose, stm, now)
+        if (reuse_conflict and stm.gripper_closed and self.selected_batch is not None and
+                stm.mode in {STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_NAVIGATE, STM_MODE_TRANSPORT_AUDIT}):
+            return self._begin_transport_audit(vision, pose, stm, now)
         timeout_output = self._audit_wire_timeout_output(stm, now)
         if timeout_output is not None:
             return timeout_output
+        gap_output = self._closed_load_gap_output(vision, pose, stm, now)
+        if gap_output is not None:
+            return gap_output
         if (self.committed_audit_handoff_mode is not None and
                 stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}):
             return self._audit_reacquire_output(vision, stm, now)
@@ -7656,6 +7797,8 @@ class CompetitionMission:
                     "disperse_final_release",
                     "final_release",
                     "danger_final_release",
+                    "safe_zone_target",
+                    "unconfirmed_load_gap",
                 }:
                     danger_final_release = (
                         self.invalid_release_context == "danger_final_release"
