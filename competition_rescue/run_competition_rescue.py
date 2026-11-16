@@ -176,6 +176,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--enable-delivery-early-exit", action="store_true",
         default=os.environ.get("RDK_ENABLE_DELIVERY_EARLY_EXIT") == "1",
         help="推进中确认本次载荷入区即放下退出；须先核对并部署配套F405，默认关闭")
+    parser.add_argument("--enable-top-edge-range-reobserve", action="store_true",
+        help="顶端截断目标分段接近后原角度重测；须配套F405 RANGE aux=1，默认关闭")
     parser.add_argument("--enable-closed-deflect", action="store_true",
         default=False,
         help="归档抽障候选，尚未定案，本轮不测；默认关闭且不再读取旧环境开关")
@@ -1209,6 +1211,7 @@ def make_vision_snapshot(
         obstacle_classes_out=corridor_classes,
     )
     range_distances = []
+    range_top_band_ids = []
     range_reason = ("range_calibration_missing" if range_calibration is None else
                     "range_status_unavailable" if not stm.fresh else
                     "range_pitch_not_applicable" if stm.camera_pitch_cdeg not in {10500, 12000} else
@@ -1221,8 +1224,15 @@ def make_vision_snapshot(
                 range_reason = reason
                 if distance is not None:
                     range_distances.append((item.track_id, distance))
+                    # Reuse the validated distance-table boundary. A nearby tall
+                    # object can also touch the top; that alone must not keep driving.
+                    bands = range_calibration.data["angles"][str(stm.camera_pitch_cdeg)]["bands"]
+                    first_band = min(bands, key=lambda band: band["y_min"])
+                    if first_band["y_min"] <= item.center_px[1] < first_band["y_max"]:
+                        range_top_band_ids.append(item.track_id)
     return VisionSnapshot(
         range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
+        range_top_band_ids=tuple(range_top_band_ids),
         range_reason=range_reason,
         roi_decisions=tuple(roi_decisions),
         roi_elapsed_ms=roi_elapsed_ms,
@@ -2592,6 +2602,7 @@ class CompetitionPlanner:
             "delivery_early_exit_enabled": self.mission.settings.delivery_early_exit_enabled,
             "bulldozer_enabled": self.mission.settings.bulldozer_enabled,
             "closed_deflect_enabled": self.mission.settings.closed_deflect_enabled,
+            "top_edge_range_reobserve_enabled": self.mission.settings.top_edge_range_reobserve_enabled,
             "closed_deflect_phase": self.mission.deflect_phase if self.mission.state == CompetitionState.CLOSED_DEFLECT else None,
             "bulldozer_route": (None if self.mission.obstacle_route is None
                                 else asdict(self.mission.obstacle_route)),
@@ -3274,6 +3285,7 @@ def main() -> int:
         safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
         bulldozer_enabled=args.enable_bulldozer,
         closed_deflect_enabled=args.enable_closed_deflect,
+        top_edge_range_reobserve_enabled=args.enable_top_edge_range_reobserve,
         delivery_early_exit_enabled=args.enable_delivery_early_exit,
     ))
     planner = CompetitionPlanner(
@@ -3314,6 +3326,7 @@ def main() -> int:
             "delivery_early_exit_enabled": args.enable_delivery_early_exit,
             "bulldozer_enabled": mission.settings.bulldozer_enabled,
             "closed_deflect_enabled": args.enable_closed_deflect,
+            "top_edge_range_reobserve_enabled": args.enable_top_edge_range_reobserve,
             "bulldozer_contract": "F405_BULLDOZER_STEP_20261113",
             **homography_diagnostics,
             "homography_calibrated": localizer.calibrated,
@@ -3433,6 +3446,7 @@ def main() -> int:
             safe_sweep_capture_offset_mm=args.safe_sweep_capture_offset_mm,
             bulldozer_enabled=args.enable_bulldozer,
             closed_deflect_enabled=args.enable_closed_deflect,
+            top_edge_range_reobserve_enabled=args.enable_top_edge_range_reobserve,
             delivery_early_exit_enabled=args.enable_delivery_early_exit))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)

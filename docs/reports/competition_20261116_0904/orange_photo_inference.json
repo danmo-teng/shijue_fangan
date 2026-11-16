@@ -1,0 +1,38 @@
+{
+  "source_image": "vision/captures/training/session_20261116_092307_183748/A1.jpg",
+  "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+  "image_sha256": "6bdb8e45ed0db36fb693c009ae3cb2d4d697c69d67f7c5f04b9a91240da0a83d",
+  "model_sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065",
+  "threshold": 0.2,
+  "preprocess": "saved JPEG -> BGR CPU letterbox -> NV12; not a live NV12 camera replay",
+  "detections": [
+    {
+      "class_id": 3,
+      "raw_class_name": "wound",
+      "class_name": "injured_orange",
+      "confidence": 0.3849986493587494,
+      "bbox": [
+        551,
+        8,
+        240,
+        145
+      ],
+      "current_roi_overlap": 0.3785057471264368,
+      "current_roi_60pct_and_foot": false
+    },
+    {
+      "class_id": 3,
+      "raw_class_name": "wound",
+      "class_name": "injured_orange",
+      "confidence": 0.34024128317832947,
+      "bbox": [
+        393,
+        123,
+        491,
+        283
+      ],
+      "current_roi_overlap": 0.9907594654307572,
+      "current_roi_60pct_and_foot": true
+    }
+  ]
+}

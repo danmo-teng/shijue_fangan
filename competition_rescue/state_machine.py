@@ -26,6 +26,7 @@ from protocol import (
     CMD_ALIGN_SAFE_ZONE,
     CMD_APPROACH_TARGET,
     CMD_APPROACH_RANGE,
+    APPROACH_RANGE_REOBSERVE,
     CMD_CARGO_AUDIT,
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
@@ -379,6 +380,7 @@ class VisionSnapshot:
     roi_elapsed_ms: float = 0.0
     range_pitch_cdeg: int = 0
     range_distances: tuple[tuple[int, int], ...] = ()
+    range_top_band_ids: tuple[int, ...] = ()
     range_reason: str = "range_calibration_missing"
     safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
     safe_corridor_obstacle_classes: tuple[str, ...] = ()
@@ -559,6 +561,7 @@ class CompetitionSettings:
     safe_zone_lateral_start_px: int = 64
     safe_zone_lateral_tolerance_px: int = 32
     safe_zone_acquire_timeout_s: float = 0.5
+    top_edge_range_reobserve_enabled: bool = False  # Enable after paired F405 deployment.
     safe_sweep_capture_offset_mm: float = 150.0  # Legacy config; visual sweep ignores it.
     audit_min_interframe_s: float = 0.100
     audit_min_span_s: float = 0.100
@@ -1843,9 +1846,24 @@ class CompetitionMission:
             self.range_pitch_cdeg = stm.camera_pitch_cdeg
             self.range_epoch += 1
         if self.range_command is not None:
-            return CompetitionOutput(self.state, self.range_command,
-                "定距接近等待完成，保持原距离/角度/动作和采集帧", self.selected_batch,
-                reason="approach_range_move", expected_stm_modes=(52, 53, 21, 38, 24, 3))
+            reobserve_done = (
+                self.range_command.aux == APPROACH_RANGE_REOBSERVE and
+                stm.mode == STM_MODE_APPROACH_RANGE_WAIT and
+                stm.context_valid and stm.context_matches and
+                stm.accepted_command == CMD_APPROACH_TARGET and
+                bool(stm.action_status & 2)
+            )
+            if not reobserve_done:
+                return CompetitionOutput(self.state, self.range_command,
+                    "定距接近等待完成，保持原距离/角度/动作和采集帧", self.selected_batch,
+                    reason="approach_range_move", expected_stm_modes=(52, 53, 21, 38, 24, 3))
+            # The matched finite segment is over. Reuse mode52's existing
+            # new-image measurement and action epoch; never replay its distance.
+            self._clear_range_approach()
+            self.range_started_s = now
+            self.range_frame_floor = vision.frame_sequence
+            self.range_pitch_cdeg = stm.camera_pitch_cdeg
+            self.range_epoch += 1
         if stm.mode == STM_MODE_APPROACH_RANGE_MOVE:
             return CompetitionOutput(self.state, self._hold(), "mode53缺少本地请求记录，保持接受上下文等待下位机",
                                      reason="approach_range_missing_request")
@@ -1897,8 +1915,12 @@ class CompetitionMission:
         flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if self.state == CompetitionState.CLUSTER_APPROACH:
             flags |= CMD_CLUSTER_TARGET
+        finish_mode = (APPROACH_RANGE_REOBSERVE
+                       if (self.settings.top_edge_range_reobserve_enabled and target.bbox[1] <= 0 and
+                           target.track_id in vision.range_top_band_ids)
+                       else 0)
         self.range_command = CommandRequest(CMD_APPROACH_TARGET, flags, distance,
-                                            self.range_pitch_cdeg, 0,
+                                            self.range_pitch_cdeg, finish_mode,
                                             source_vision_frame=vision.frame_sequence)
         return CompetitionOutput(self.state, self.range_command, "按分区距离表发起一次定距接近",
                                  self.selected_batch, reason="approach_range_request",

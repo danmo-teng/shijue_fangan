@@ -1,0 +1,45 @@
+{
+  "request_id": "MATCH-TOP-EDGE-RANGE-20261116",
+  "status": "RDK_IMPLEMENTED_DISABLED_PENDING_F405",
+  "opcode": 9,
+  "range_flag": 64,
+  "aux": {
+    "0": "segment completes into original 140-degree capture approach",
+    "1": "segment completes at current measuring pitch, reports mode52 and ACCEPT|DONE for this action"
+  },
+  "activation": "--enable-top-edge-range-reobserve after paired F405 deployment; default false",
+  "examples": [
+    {
+      "side": "red",
+      "distance_mm": 460,
+      "pitch_cdeg": 12000,
+      "finish_mode": 0,
+      "command_hex": "a3b3182a095901cc2ee000000769c3",
+      "context_hex": "a3b31d2a006400c9000029c7a0ddc3"
+    },
+    {
+      "side": "red",
+      "distance_mm": 460,
+      "pitch_cdeg": 12000,
+      "finish_mode": 1,
+      "command_hex": "a3b3182a095901cc2ee00001c6a9c3",
+      "context_hex": "a3b31d2a006400c9000029c7a0ddc3"
+    },
+    {
+      "side": "blue",
+      "distance_mm": 460,
+      "pitch_cdeg": 12000,
+      "finish_mode": 0,
+      "command_hex": "a3b3182a095101cc2ee000008ea9c3",
+      "context_hex": "a3b31d2a006400c9000029c7a0ddc3"
+    },
+    {
+      "side": "blue",
+      "distance_mm": 460,
+      "pitch_cdeg": 12000,
+      "finish_mode": 1,
+      "command_hex": "a3b3182a095101cc2ee000014f69c3",
+      "context_hex": "a3b31d2a006400c9000029c7a0ddc3"
+    }
+  ]
+}

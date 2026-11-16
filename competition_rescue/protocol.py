@@ -60,6 +60,8 @@ CMD_CLUSTER_TARGET = 1 << 5
 CMD_REUSE_POST_GRAB_AUDIT = 1 << 5  # STAGE NAV only; recovered single injury, no new count.
 CMD_FIRST_GREEN_BUMP = 1 << 5
 CMD_APPROACH_RANGE = 1 << 6
+# APPROACH_RANGE aux only: finish this segment at the same measuring pitch.
+APPROACH_RANGE_REOBSERVE = 1
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
@@ -194,7 +196,8 @@ def mission_frame(
     if command == CMD_APPROACH_TARGET and flags & CMD_APPROACH_RANGE:
         allowed = CMD_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if (flags & ~allowed or flags & (CMD_VALID | CMD_DISTANCE_VALID) != (CMD_VALID | CMD_DISTANCE_VALID) or
-                not 0 <= arg_a <= 2500 or arg_b not in {10500, 12000} or aux_cdeg != 0):
+                not 0 <= arg_a <= 2500 or arg_b not in {10500, 12000} or
+                aux_cdeg not in {0, APPROACH_RANGE_REOBSERVE}):
             raise ValueError("invalid fixed-pitch approach range request")
     if flags & CMD_STAGE_ONLY and command not in {
         CMD_APPROACH_TARGET,

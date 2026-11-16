@@ -3502,3 +3502,57 @@ def test_closed_deflect_navigation_does_not_cross_staging_row_or_sweep_sideways(
         # handoff does not become a new on-route pull.
         m.staging_zero_tx_baseline=1
         assert m._navigation_deflect_output(v,replace(p,yaw_deg=90.*sign),st,1.) is None
+
+
+def test_top_edge_range_reobserves_only_after_matching_segment_done():
+    from protocol import APPROACH_RANGE_REOBSERVE
+    for pitch in (10500, 12000):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False,
+            top_edge_range_reobserve_enabled=True))
+        m.first_common_delivered = True
+        target = TrackedCargo(648, "green_supply", .9, (603, 0, 74, 55), hits=5)
+        m._select_batch(CargoBatch((648,), ("green_supply",), "material"))
+        m.state = CompetitionState.APPROACH
+        status = replace(stm(mode=52), camera_pitch_cdeg=pitch,
+            context_valid=True, context_matches=True, accepted_command=CMD_APPROACH_TARGET)
+        view = VisionSnapshot(frame_sequence=1, observed_monotonic_s=1., cargo=(target,),
+            range_pitch_cdeg=pitch, range_distances=((648, 460),), range_top_band_ids=(648,))
+        m._range_approach_output(view, status, 1.)
+        first = m._range_approach_output(replace(view, frame_sequence=2, observed_monotonic_s=1.1), status, 1.1)
+        assert first.command.aux == APPROACH_RANGE_REOBSERVE
+        first.command.to_frame(1)  # Real wire encoder accepts only the paired extension.
+        epoch = m.range_epoch
+        for status2 in (replace(status, mode=53, action_status=3),
+                        replace(status, action_status=1),
+                        replace(status, action_status=3, context_matches=False)):
+            assert m._range_approach_output(view, status2, 1.2).command == first.command
+            assert m.range_epoch == epoch
+        done = replace(status, action_status=3)
+        now = replace(view, frame_sequence=3, observed_monotonic_s=1.3)
+        assert m._range_approach_output(now, done, 1.3).command.opcode == CMD_HOLD
+        assert m.range_epoch == epoch + 1
+        # Do not reuse the old 460 mm; the same target now has a full near box.
+        near = replace(target, bbox=(555, 190, 198, 233))
+        next_view = replace(now, frame_sequence=4, observed_monotonic_s=1.4,
+            cargo=(near,), range_distances=((648, 230),))
+        second = m._range_approach_output(next_view, done, 1.4)
+        assert (second.command.arg_a, second.command.arg_b, second.command.aux) == (230, pitch, 0)
+        assert second.command.source_vision_frame == 4
+        assert m._range_approach_output(next_view, done, 1.5).command == second.command
+        assert m.range_epoch == epoch + 1
+
+    # Existing firmware and complete boxes keep their original finish behavior.
+    for enabled, y, top_band in ((False, 0, True), (True, 1, True), (True, 0, False)):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False,
+            top_edge_range_reobserve_enabled=enabled))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((648,), ("green_supply",), "material"))
+        m.state = CompetitionState.APPROACH
+        target = replace(target, bbox=(603, y, 74, 55))
+        view = VisionSnapshot(frame_sequence=1, observed_monotonic_s=1., cargo=(target,),
+            range_pitch_cdeg=12000, range_distances=((648, 460),),
+            range_top_band_ids=(648,) if top_band else ())
+        status = replace(stm(mode=52), camera_pitch_cdeg=12000)
+        m._range_approach_output(view, status, 1.)
+        out = m._range_approach_output(replace(view, frame_sequence=2, observed_monotonic_s=1.1), status, 1.1)
+        assert out.command.aux == 0
