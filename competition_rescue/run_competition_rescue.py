@@ -2312,14 +2312,6 @@ class CompetitionPlanner:
                 self.mission.state, CommandRequest(CMD_PAUSE),
                 "人工PAUSE，冻结审核握手期限直到恢复", tx_policy="pause", reason="manual_pause",
             )
-        if (stm.fresh and stm.pickup_boundary_side is not None and stm.action_status & 1 and
-                stm.context_valid and stm.task_id == self.protocol_task and stm.mode in {24, 3}):
-            boundary_recovery = self.mission._local_boundary_recovery_output(vision, stm, now)
-            if boundary_recovery is not None:
-                # The lower explicitly ended the old action; adopt that actual
-                # context, rather than waiting for a host cancel still in flight.
-                self._adopt_recovery_context()
-                return boundary_recovery
         reuse_conflict = self.mission._observe_confirmed_load(vision, stm)
         if (reuse_conflict and stm.fresh and stm.gripper_closed and
                 self.mission.selected_batch is not None and stm.mode in {10, 11, 48}):
@@ -2328,9 +2320,6 @@ class CompetitionPlanner:
             zone_exit = self.mission._safe_zone_target_exit(vision, stm, now)
             if zone_exit is not None:
                 return zone_exit
-            motion_exit = self.mission._safe_zone_motion_exit(vision, pose, stm, now)
-            if motion_exit is not None:
-                return motion_exit
         if self.mission.state == CompetitionState.CLEAR_SAFE_ZONE:
             return self.mission._blocked_corridor_output(vision, stm, now)
         if self.mission.recovery_wait_active:
@@ -2355,14 +2344,6 @@ class CompetitionPlanner:
             return handoff
         # Recovery is an observation from the MCU, not an ACK of the last
         # requested action. Handle it before context_pending/camera pause.
-        if (self.mission.boundary_sweep_point is not None and
-                self.mission.state == CompetitionState.INVALID_RELEASE and stm.mode in {3, 24} and
-                not (stm.context_valid and stm.task_id == self.protocol_task and
-                     stm.action_id == self.protocol_action and
-                     stm.accepted_command == CMD_RELEASE_BOTH and stm.action_status & 1)):
-            # Do not adopt an old SEARCH receipt as completion of this cancel
-            # and start a new empty route while the pickup may still be active.
-            return self.mission._invalid_release_output(CargoAudit(), stm, now)
         if self._is_recovery_observation(stm):
             self._adopt_recovery_context()
             result = self.mission.step(vision, pose, replace(stm, context_matches=True), now)
