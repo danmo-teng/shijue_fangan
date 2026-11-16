@@ -36,8 +36,7 @@ from rescue_vision.tracker import MultiFrameTracker
 from rescue_vision.yolo26_pipeline import Yolo26Pipeline
 from run_yolo_x5 import LABEL_ALIASES, load_labels
 
-NEW_MODEL_DIR = PROJECT_ROOT.parent / 'x5_output_640_yolo26n'
-DEFAULT_MODEL = NEW_MODEL_DIR / 'yolo26n_6cls_640_1109_bpu_bayese_640x640_nv12.bin'
+DEFAULT_MODEL = formal.DEFAULT_MODEL
 # The supplied class order is unchanged; the new training uses different names.
 BENCHMARK_LABEL_ALIASES = {'blueteam': 'safe_blue', 'redteam': 'safe_red'}
 WINDOW = 'YOLO26-640 | competition vision | Q quit'

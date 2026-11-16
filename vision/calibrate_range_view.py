@@ -66,22 +66,23 @@ class RangeBands:
 
 def main() -> int:
     root = Path(__file__).resolve().parent
+    from rescue_vision.yolo26 import DEFAULT_MODEL, X5Yolo26
     parser = argparse.ArgumentParser(description="测距标定画面：物资中心坐标、横向分区；不发送串口或运动命令")
     parser.add_argument("--pitch", type=int, choices=(105, 120), default=105,
                         help="当前手动设置的相机角度标签；本程序不控制舵机")
     parser.add_argument("--bands", type=int, default=5)
     parser.add_argument("--device", default="/dev/video0")
-    parser.add_argument("--model", type=Path, default=root / "models/best_bayese_320x320_nv12.bin")
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--output", type=Path, default=root / "captures/range_calibration")
     args = parser.parse_args()
     if not 2 <= args.bands <= 12:
         parser.error("--bands须为2..12")
     import cv2
-    from run_yolo_x5 import X5YoloV8, load_labels, DEFAULT_LABELS, DEFAULT_YOLO_SCORE_THRESHOLD
+    from run_yolo_x5 import load_labels, DEFAULT_LABELS, DEFAULT_YOLO_SCORE_THRESHOLD
     from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
     from rescue_vision.vision_protocol import IMAGE_WIDTH, IMAGE_HEIGHT
 
-    detector = X5YoloV8(args.model, load_labels(DEFAULT_LABELS), DEFAULT_YOLO_SCORE_THRESHOLD, .45, 0, [0])
+    detector = X5Yolo26(args.model, load_labels(DEFAULT_LABELS), DEFAULT_YOLO_SCORE_THRESHOLD, .45, 0, [0])
     camera = LatestFrameCamera(resolve_camera_device(args.device), IMAGE_WIDTH, IMAGE_HEIGHT, 180,
                                decoder="jpu", decode_fps=15, output_format="bgr")
     layout = RangeBands(args.output / "layouts", IMAGE_WIDTH, IMAGE_HEIGHT, args.bands)

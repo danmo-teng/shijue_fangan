@@ -24,10 +24,10 @@ from rescue_vision.camera import LatestFrameCamera, resolve_camera_device
 from rescue_vision.config import require_native_resolution
 from rescue_vision.localizer import GroundLocalizer
 from rescue_vision.vse import VseScaler
+from rescue_vision.yolo26 import DEFAULT_MODEL, X5Yolo26
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_MODEL = ROOT / "models" / "best_bayese_320x320_nv12.bin"
 DEFAULT_LABELS = ROOT / "config" / "yolo_labels.txt"
 DEFAULT_OUTPUT = ROOT / "runtime_result.json"
 DEFAULT_YOLO_SCORE_THRESHOLD = 0.20
@@ -573,7 +573,7 @@ def main() -> int:
         raise ValueError("显示帧率和尺寸必须为正数")
     labels = load_labels(args.labels)
     localizer = GroundLocalizer.load(args.homography, (args.width, args.height))
-    detector = X5YoloV8(args.model, labels, args.score_thres, args.nms_thres,
+    detector = X5Yolo26(args.model, labels, args.score_thres, args.nms_thres,
                         args.priority, args.bpu_cores)
     scaler: VseScaler | None = None
     use_vse = args.preprocess in ("auto", "vse") and args.decoder == "jpu"

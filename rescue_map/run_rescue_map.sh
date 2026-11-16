@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "${script_dir}/.." && pwd)"
 localizer="${project_dir}/localization/build/t265_omni_localizer"
-vision_model="${project_dir}/vision/models/best_bayese_320x320_nv12.bin"
+vision_model="${project_dir}/yolo26n/x5_output_640_1116/yolo26n_6cls_640_1116_bpu_bayese_640x640_nv12.bin"
 mission_runner="${project_dir}/mission_test/run_mission_test.sh"
 
 if ! python3 -c 'import cv2, numpy; from PIL import Image, ImageDraw, ImageFont' >/dev/null 2>&1; then
@@ -13,7 +13,7 @@ if ! python3 -c 'import cv2, numpy; from PIL import Image, ImageDraw, ImageFont'
 fi
 
 if [[ ! -f "${vision_model}" || ! -x "${mission_runner}" ]]; then
-    echo "YOLO模型或任务识别入口缺失；请确认vision/models与mission_test已完整部署。" >&2
+    echo "YOLO模型或任务识别入口缺失；请确认比赛模型与mission_test已完整部署。" >&2
     exit 1
 fi
 

@@ -41,7 +41,7 @@ from run_yolo_x5 import (
     DEFAULT_LABELS,
     DEFAULT_MODEL,
     DEFAULT_YOLO_SCORE_THRESHOLD,
-    X5YoloV8,
+    X5Yolo26,
     load_labels,
 )
 
@@ -672,7 +672,7 @@ def main() -> int:
     yolo_detector = None
     scaler = None
     if args.detector == "yolo":
-        yolo_detector = X5YoloV8(
+        yolo_detector = X5Yolo26(
             args.model, load_labels(args.labels), args.score_thres, args.nms_thres,
             args.priority, args.bpu_cores,
         )

@@ -39,7 +39,7 @@ from run_yolo_x5 import (  # noqa: E402
     DEFAULT_LABELS,
     DEFAULT_MODEL,
     DEFAULT_YOLO_SCORE_THRESHOLD,
-    X5YoloV8,
+    X5Yolo26,
     load_labels,
 )
 
@@ -79,7 +79,7 @@ def main() -> int:
     args = arguments()
     if args.vision_fps <= 0.0:
         raise ValueError("vision-fps must be positive")
-    detector = X5YoloV8(
+    detector = X5Yolo26(
         args.model,
         load_labels(args.labels),
         args.score_thres,

@@ -186,7 +186,7 @@ def test_editor_saves_green_orange_lines_without_changing_roi(tmp_path, selector
         if n==4: return ord('p')
         return ord('q')
     with ExitStack() as stack:
-        for name,value in (('arguments',lambda:args),('X5YoloV8',lambda *a:detector),
+        for name,value in (('arguments',lambda:args),('X5Yolo26',lambda *a:detector),
                            ('load_labels',lambda _:[]),('LatestFrameCamera',lambda *a,**k:camera),
                            ('resolve_camera_device',lambda _: 'unused')):
             stack.enter_context(patch.object(editor,name,value))

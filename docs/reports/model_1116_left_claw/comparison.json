@@ -1,0 +1,606 @@
+{
+  "note": "Paired offline replay, MJPEG compressed 960x768 camera region resized to 1280x1024; original detection/ROI overlays remain. Not original raw inference inputs, no field accuracy claim.",
+  "models": {
+    "old": {
+      "path": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640_1020/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+      "sha256": "2a7b3f7406dbf59a39ea9a227e7bd32e597fa435e7d1783f560d8a08c1703065"
+    },
+    "1116": {
+      "path": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640_1116/yolo26n_6cls_640_1116_bpu_bayese_640x640_nv12.bin",
+      "sha256": "7ae6267e269d2c9f8c2708b37ecf2696dfa184f364bfe0a0b454e8ee0d573859"
+    }
+  },
+  "preprocess": "existing VSE 1280x1024 -> 640x512 + original NV12 letterbox",
+  "score_threshold": 0.2,
+  "nms_threshold": 0.45,
+  "results": [
+    {
+      "clip": 4,
+      "video_frame_index": 38,
+      "frame_sequence": 6537,
+      "seconds": 176.6907812410002,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8000556230545044,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8000556230545044,
+            "bbox": [
+              340,
+              173,
+              263,
+              262
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 40,
+      "frame_sequence": 6547,
+      "seconds": 177.15286257300022,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8364420533180237,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8364420533180237,
+            "bbox": [
+              340,
+              175,
+              264,
+              259
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 43,
+      "frame_sequence": 6562,
+      "seconds": 177.75851336900018,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.908546507358551,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.908546507358551,
+            "bbox": [
+              340,
+              173,
+              263,
+              261
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 45,
+      "frame_sequence": 6573,
+      "seconds": 178.204596777,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.7552194595336914,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7552194595336914,
+            "bbox": [
+              340,
+              174,
+              264,
+              261
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 48,
+      "frame_sequence": 6586,
+      "seconds": 178.801865507,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8602690100669861,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8602690100669861,
+            "bbox": [
+              340,
+              173,
+              264,
+              261
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 51,
+      "frame_sequence": 6599,
+      "seconds": 179.37280182200016,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.907219409942627,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.907219409942627,
+            "bbox": [
+              340,
+              173,
+              264,
+              262
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 53,
+      "frame_sequence": 6607,
+      "seconds": 179.66770043100018,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.9440526962280273,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9440526962280273,
+            "bbox": [
+              340,
+              173,
+              263,
+              261
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 56,
+      "frame_sequence": 6623,
+      "seconds": 180.36215933400013,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.9038789868354797,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9038789868354797,
+            "bbox": [
+              340,
+              174,
+              263,
+              261
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 59,
+      "frame_sequence": 6635,
+      "seconds": 180.8880544210001,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.6937746405601501,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6937746405601501,
+            "bbox": [
+              339,
+              173,
+              265,
+              262
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 61,
+      "frame_sequence": 6645,
+      "seconds": 181.32928666500015,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.9076296091079712,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9076296091079712,
+            "bbox": [
+              340,
+              174,
+              263,
+              261
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 64,
+      "frame_sequence": 6659,
+      "seconds": 181.89991528300015,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.9226644039154053,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9226644039154053,
+            "bbox": [
+              340,
+              176,
+              264,
+              259
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 4,
+      "video_frame_index": 67,
+      "frame_sequence": 6673,
+      "seconds": 182.46934663700017,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.9093546867370605,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9093546867370605,
+            "bbox": [
+              340,
+              176,
+              263,
+              258
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 88,
+      "frame_sequence": 8746,
+      "seconds": 276.569519979,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.7845959663391113,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7845959663391113,
+            "bbox": [
+              365,
+              198,
+              273,
+              271
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 89,
+      "frame_sequence": 8750,
+      "seconds": 276.71458061199996,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.749763548374176,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.749763548374176,
+            "bbox": [
+              365,
+              198,
+              275,
+              271
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 90,
+      "frame_sequence": 8754,
+      "seconds": 276.88864514700003,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.7827335000038147,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7827335000038147,
+            "bbox": [
+              365,
+              199,
+              275,
+              270
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 91,
+      "frame_sequence": 8804,
+      "seconds": 278.45249212500016,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8420407772064209,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8420407772064209,
+            "bbox": [
+              365,
+              198,
+              271,
+              271
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 92,
+      "frame_sequence": 8808,
+      "seconds": 278.5922575310003,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8767018914222717,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8767018914222717,
+            "bbox": [
+              365,
+              200,
+              275,
+              267
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 93,
+      "frame_sequence": 8814,
+      "seconds": 278.8728476040003,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8524633049964905,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8524633049964905,
+            "bbox": [
+              365,
+              198,
+              275,
+              271
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 94,
+      "frame_sequence": 8816,
+      "seconds": 279.00139637899997,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8397544622421265,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8397544622421265,
+            "bbox": [
+              365,
+              198,
+              275,
+              271
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 95,
+      "frame_sequence": 8819,
+      "seconds": 279.16669014900003,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.8069924116134644,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8069924116134644,
+            "bbox": [
+              365,
+              198,
+              275,
+              270
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clip": 8,
+      "video_frame_index": 96,
+      "frame_sequence": 8822,
+      "seconds": 279.32376451100004,
+      "original_detections": [],
+      "old": {
+        "left_green_found": false,
+        "left_green_confidence": null,
+        "detections": []
+      },
+      "1116": {
+        "left_green_found": true,
+        "left_green_confidence": 0.7937340140342712,
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7937340140342712,
+            "bbox": [
+              365,
+              198,
+              274,
+              272
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
