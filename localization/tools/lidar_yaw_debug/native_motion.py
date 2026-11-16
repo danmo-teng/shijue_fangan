@@ -245,5 +245,6 @@ class NativeDynamicFence(DynamicFence):
             result['lidar_corrections_enabled']=self.lidar_corrections_enabled
         if include_display:
             result.update(last_fit=dict(self.last_fit) if self.last_fit else None,
-                          points_field=list(self.latest_points))
+                          points_field=list(self.latest_points),
+                          matched_points_field=list(self.latest_matched_points) if self.last_fit else [])
         return result

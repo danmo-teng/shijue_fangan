@@ -30,6 +30,7 @@ from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
 from motion_log_storage import read_json, WHEEL_SESSION_FILES
 from operator_panel import OperatorPanel
+from localization_overlay import LocalizationOverlay
 from field_model import initial_pose
 
 WHEEL_OWNER = "competition_wheel_input"
@@ -42,6 +43,7 @@ class CompetitionMapApp(RescueMapApp):
 
     def __init__(self, options) -> None:
         super().__init__(options)
+        self.localization_overlay = LocalizationOverlay()
         self.control_ipc_dir = RUNTIME
         if not getattr(options, "disk_control_ipc", False):
             try:
@@ -431,8 +433,25 @@ class CompetitionMapApp(RescueMapApp):
         except (OSError, ValueError, TypeError) as error:
             print(f"轮速会话收尾失败（原始文件保留）：{error}", file=sys.stderr)
 
+    def draw_trajectory(self, canvas):
+        if self.selecting:
+            self.localization_overlay.reset()
+        elif self.dynamic is not None:
+            self.localization_overlay.update(self.dynamic.snapshot())
+            self.localization_overlay.draw(canvas, self.map_left, self.map_top, self.map_size)
+        elif self.localization_mode == "t265":
+            self.localization_overlay.update(dict(ready=self.pose.quality in {"GOOD","DEGRADED"},
+                t265_center_xy_m=[self.pose.x_m,self.pose.y_m], reference="direct_t265"))
+            self.localization_overlay.draw(canvas, self.map_left, self.map_top, self.map_size)
+        super().draw_trajectory(canvas)
+
     def draw_panel(self, canvas, text):
         super().draw_panel(canvas, text)
+        if not self.selecting:
+            axes='/'.join(self.localization_overlay.axes)
+            label='青点：本次匹配墙面' + ('（仅'+axes+'方向有约束）' if axes and len(self.localization_overlay.axes)==1 else '')
+            text.add('绿线：T265输出轨迹；' + label, (self.map_left, self.map_top+self.map_size+32),
+                     16, (180,220,180))
         if self.operator is not None:
             y = 890 if self.selecting else 570
             for line in ('实体键：1长按选起点 / 2长按选红蓝',

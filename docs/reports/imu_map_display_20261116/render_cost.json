@@ -1,0 +1,17 @@
+{
+  "overlay_max_points": 256,
+  "overlay_max_trail": 4000,
+  "component_median_ms": 1.1624759999999998,
+  "component_p95_ms": 1.2043593499999998,
+  "full_render": {
+    "overlay": {
+      "median_ms": 272.990358,
+      "p95_ms": 303.41143739999995
+    },
+    "without_overlay": {
+      "median_ms": 272.24129800000003,
+      "p95_ms": 276.58659845
+    }
+  },
+  "conditions": "Offline synthetic worst-size overlay on this RDK; no camera/SDK/UART/YOLO, no live-performance guarantee."
+}

@@ -56,8 +56,8 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
     lines = outer_supported_lines(extract_lines(points)) if _lines is None else _lines
     normals = np.array([[1.,0.],[1.,0.],[0.,1.],[0.,1.]])
     distances = np.array([0.,3.,0.,3.])
-    assigned = []
-    for line in lines:
+    assigned = []; assigned_indices = []
+    for line_index, line in enumerate(lines):
         wp = transform(line["points"],prior)
         normal = transform([line["normal"]],[0,0,yaw_rad])[0]
         costs = np.median(abs(wp@normals.T-distances),axis=0)
@@ -69,9 +69,10 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
         # not reject an X wall on its tangential extent (and vice versa).
         if costs[wid] < .20 and (independent_axes or support > .85):
             assigned.append((wid,line["points"]))
+            assigned_indices.append((wid//2,line_index))
     result = dict(position_observed_axes=[], rank_xy=0, candidate_center_xy_m=None,
                   inherited_axes=["x","y"], covariance=None, qualified_pose=False,
-                  yaw_rad=yaw_rad, supported_lines=len(lines), wall_ids=[])
+                  yaw_rad=yaw_rad, supported_lines=len(lines), wall_ids=[], wall_support_lines={})
     if not assigned:
         return dict(result,reason="NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH")
     ids = np.concatenate([np.full(len(p),wid,dtype=int) for wid,p in assigned])
@@ -121,6 +122,8 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
             inherited_axes=[a for a in ('x','y') if a not in observed],
             candidate_center_xy_m=(candidate-1.5).tolist() if observed else None,
             axis_rejections=axis_rejections,
+            wall_support_lines={a:[idx for axis,idx in assigned_indices if axis==i]
+                                for i,a in enumerate(("x","y")) if a in observed},
             reason='AXIS_GEOMETRY_ACCEPTED' if observed else 'AXIS_GEOMETRY_REJECTED')
     rejection=[]
     if rms>max_residual_m:rejection.append('wall_residual')
@@ -137,6 +140,8 @@ def fixed_yaw_position(points_lidar, prior_center_xy, yaw_rad, extrinsic, *,
     result.update(position_observed_axes=observed,rank_xy=len(observed),
         inherited_axes=[a for a in ("x","y") if a not in observed],
         candidate_center_xy_m=(pose[:2]-1.5).tolist(),
+        wall_support_lines={a:[idx for axis,idx in assigned_indices if axis==i]
+                            for i,a in enumerate(("x","y")) if a in observed},
         reason="STATIC_GEOMETRY_DIAGNOSTIC_ONLY")
     return result
 

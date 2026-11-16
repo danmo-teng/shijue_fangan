@@ -78,7 +78,9 @@ def solve_lines_position(points,ref,offset,lines):
                 for a in recovered:
                     i=('x','y').index(a);candidate[i]=opposite['candidate_center_xy_m'][i]
                 observed=[a for a in ('x','y') if a in local['position_observed_axes'] or a in recovered]
-                local.update(position_observed_axes=observed,rank_xy=len(observed),
+                support=dict(local.get('wall_support_lines',{}))
+                support.update({a:opposite['wall_support_lines'][a] for a in recovered})
+                local.update(wall_support_lines=support,position_observed_axes=observed,rank_xy=len(observed),
                     inherited_axes=[a for a in ('x','y') if a not in observed],
                     candidate_center_xy_m=candidate.tolist(),position_reacquired=True,
                     correction_m=float(np.linalg.norm(candidate-prior)),
@@ -87,6 +89,16 @@ def solve_lines_position(points,ref,offset,lines):
         reacquire_fixed_yaw_position(points,ref[2],_lines=lines))
     return local,found
 
+def matched_wall_display_points(lines, fit, yaw, center, limit=256):
+    """Display a bounded subset of the exact line support used by accepted axes."""
+    indices=sorted({i for axis in fit.get('position_observed_axes',[])
+                    for i in fit.get('wall_support_lines',{}).get(axis,[])})
+    if not indices:return []
+    points=np.concatenate([lines[i]['points'] for i in indices])
+    if len(points)>limit:points=points[np.linspace(0,len(points)-1,limit,dtype=int)]
+    return (points@rotation(yaw).T+center).tolist()
+
+
 class DynamicFence:
     def __init__(self,installation,geometry=None):
         self.geometry=geometry;self.geometry_backend=None
@@ -94,7 +106,7 @@ class DynamicFence:
         self.lock=threading.RLock();self.reference=None;self.revision=0
         self.offset=np.zeros(2);self.last_fit=None;self.scan_count=0;self.fit_count=0
         self.has_anchor=False
-        self.latest_points=[];self.last_sample=None;self.last_yaw=None;self.last_scan_ns=None
+        self.latest_points=[];self.latest_matched_points=[];self.last_sample=None;self.last_yaw=None;self.last_scan_ns=None
         self.initialization=None;self.pending_initial_pose=None
         self.last_initial_scan_id=None
         self.lidar_corrections_enabled=True
@@ -141,7 +153,7 @@ class DynamicFence:
             if not self.poses or not self.yaws:raise ValueError('等待实际T265 Pose和主yaw数据')
             self.reference=None;self.revision+=1;self.offset[:]=0;self.has_anchor=False
             self.motion.reference=None;self.motion.history.clear()
-            self.last_fit=None;self.latest_points=[];self.pending_initial_pose=None
+            self.last_fit=None;self.latest_points=[];self.latest_matched_points=[];self.pending_initial_pose=None
             self.pending_reacquisition=None
             self.last_initial_scan_id=None
             self.initialization=dict(status='SEARCHING_WALLS',description=description,
@@ -258,7 +270,7 @@ class DynamicFence:
             if round_token is not None:
                 self.reference.update(round_token=round_token,source='selected_competition_start_at_button',
                     selected_start=dict(center_xy_m=list(center_xy),yaw_deg=heading_deg))
-            self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.has_anchor=False;self.revision+=1
+            self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.latest_matched_points=[];self.has_anchor=False;self.revision+=1
             self.pending_reacquisition=None
             self.reference['reference_sample_ns']=p[0]
             self.motion.configure(self.reference)
@@ -366,9 +378,9 @@ class DynamicFence:
             corrected,ref=geometry_result['corrected'],geometry_result['ref']
         deskew_done=time.monotonic_ns()
         if self.lidar_corrections_enabled:
-            fit=(self._fit_position(corrected,ref,offset,scan.scan_id,revision) if geometry_result is None else
-                self._fit_lines_position(corrected,ref,offset,scan.scan_id,geometry_result['lines'],
-                    revision=revision,solved=(geometry_result['local'],geometry_result['found'])))
+            lines=(outer_supported_lines(extract_lines(corrected)) if geometry_result is None else geometry_result['lines'])
+            fit=self._fit_lines_position(corrected,ref,offset,scan.scan_id,lines,revision=revision,
+                solved=None if geometry_result is None else (geometry_result['local'],geometry_result['found']))
         else:
             fit=dict(position_observed_axes=[],rank_xy=0,candidate_center_xy_m=None,
                 inherited_axes=['x','y'],covariance=None,qualified_pose=False,
@@ -402,6 +414,8 @@ class DynamicFence:
                 if fit.get('position_reacquired'):self.reacquisition_count+=1
             self.last_scan_ns=scan.reference_ns
             self.latest_points=(corrected@rotation(ref[2]).T+current_xy+self.offset).tolist()
+            self.latest_matched_points=(matched_wall_display_points(lines,fit,ref[2],current_xy+self.offset)
+                                        if fit.get('position_observed_axes') else [])
             result['applied_motion_reference_xy_m']=current_xy.tolist()
             result['motion_reference_update_m']=(current_xy-ref[:2]).tolist()
             result['map_translation_offset_m']=self.offset.tolist()
@@ -456,7 +470,8 @@ class DynamicFence:
                 last_scan_age_ms=None if self.last_scan_ns is None else (now-self.last_scan_ns)/1e6,
                 scans=self.scan_count,fixes=self.fit_count)
             if include_display:
-                result.update(last_fit=dict(fit) if fit else None,points_field=list(self.latest_points))
+                result.update(last_fit=dict(fit) if fit else None,points_field=list(self.latest_points),
+                              matched_points_field=list(self.latest_matched_points) if fit else [])
         # Publish at latest actual motion support, never stamp extrapolation as a new sensor frame.
         c,s=math.cos(reference['vio_rotation']),math.sin(reference['vio_rotation'])
         def field_xy(xy):
