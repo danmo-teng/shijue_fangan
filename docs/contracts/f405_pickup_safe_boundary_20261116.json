@@ -1,0 +1,596 @@
+{
+  "request_id": "MATCH-PICKUP-SAFE-BOUNDARY-20261116",
+  "status": "upper implemented; lower motion guard and mode8 cancel extension pending; not field verified",
+  "units": "metres except integer protocol millimetres/centidegrees",
+  "planning_radius_m": 0.2,
+  "extra_margin_m": 0,
+  "measured_open_tip_reach_m": 0.27,
+  "measured_plate_reach_m": 0.18,
+  "scope": "user selects 0.20m planning envelope; not a certified physical outline of 0.27m tips",
+  "zones": {
+    "red": [
+      -0.33,
+      1.14,
+      0.33,
+      1.5
+    ],
+    "blue": [
+      -0.33,
+      -1.5,
+      0.33,
+      -1.14
+    ]
+  },
+  "geometry_cases": [
+    {
+      "start": [
+        0,
+        0.692
+      ],
+      "end": [
+        0,
+        0.922
+      ],
+      "crossed": null
+    },
+    {
+      "start": [
+        0,
+        0.868
+      ],
+      "end": [
+        0,
+        1.068
+      ],
+      "crossed": "red"
+    },
+    {
+      "start": [
+        0.55,
+        1.0
+      ],
+      "end": [
+        0.55,
+        1.4
+      ],
+      "crossed": null
+    },
+    {
+      "start": [
+        0.49,
+        0.98
+      ],
+      "end": [
+        0.49,
+        0.98
+      ],
+      "crossed": null
+    },
+    {
+      "start": [
+        0,
+        1.0
+      ],
+      "end": [
+        0,
+        0.8
+      ],
+      "crossed": null
+    },
+    {
+      "start": [
+        0,
+        1.0
+      ],
+      "end": [
+        0,
+        1.1
+      ],
+      "crossed": "red"
+    },
+    {
+      "start": [
+        0,
+        1.2
+      ],
+      "end": [
+        0,
+        1.16
+      ],
+      "crossed": null
+    }
+  ],
+  "frames_are": "synthetic contract examples, not raw field records",
+  "frames": [
+    {
+      "label": "cancel_open_core_advance_mode8",
+      "side": "red",
+      "task": 101,
+      "action": 1,
+      "source_frame": 0,
+      "context_hex": "a3b31d010065000100000000e53ec3",
+      "command_hex": "a3b318010f0900000000000024a8c3",
+      "opcode": 15,
+      "flags": 9,
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "requires_lower_extension": true
+    },
+    {
+      "label": "empty_sweep_empty_body_move",
+      "side": "red",
+      "task": 101,
+      "action": 10,
+      "source_frame": 0,
+      "context_hex": "a3b31d0a0065000a0000000033cfc3",
+      "command_hex": "a3b3180a14d9012cd1222328d6e5c3",
+      "opcode": 20,
+      "flags": 217,
+      "A": 300,
+      "B": -11998,
+      "U": 9000
+    },
+    {
+      "label": "same_action_remaining_zero_empty_body_move",
+      "side": "red",
+      "task": 101,
+      "action": 10,
+      "source_frame": 0,
+      "context_hex": "a3b31d0a0065000a0000000033cfc3",
+      "command_hex": "a3b3180a14d9000000002328dfc4c3",
+      "opcode": 20,
+      "flags": 217,
+      "A": 0,
+      "B": 0,
+      "U": 9000
+    },
+    {
+      "label": "empty_sweep_turn_right",
+      "side": "red",
+      "task": 101,
+      "action": 11,
+      "source_frame": 0,
+      "context_hex": "a3b31d0b0065000b00000000039fc3",
+      "command_hex": "a3b3180b14090000000000001ab7c3",
+      "opcode": 20,
+      "flags": 9,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_back_to_sweep",
+      "side": "red",
+      "task": 101,
+      "action": 12,
+      "source_frame": 0,
+      "context_hex": "a3b31d0c0065000c00000000906fc3",
+      "command_hex": "a3b3180c1459019a465000002016c3",
+      "opcode": 20,
+      "flags": 89,
+      "A": 410,
+      "B": 18000,
+      "U": 0
+    },
+    {
+      "label": "same_action_remaining_zero_back_to_sweep",
+      "side": "red",
+      "task": 101,
+      "action": 12,
+      "source_frame": 0,
+      "context_hex": "a3b31d0c0065000c00000000906fc3",
+      "command_hex": "a3b3180c14590000000000006c82c3",
+      "opcode": 20,
+      "flags": 89,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_left_to_sweep",
+      "side": "red",
+      "task": 101,
+      "action": 13,
+      "source_frame": 0,
+      "context_hex": "a3b31d0d0065000d00000000a03fc3",
+      "command_hex": "a3b3180d1469017223280000e347c3",
+      "opcode": 20,
+      "flags": 105,
+      "A": 370,
+      "B": 9000,
+      "U": 0
+    },
+    {
+      "label": "same_action_remaining_zero_left_to_sweep",
+      "side": "red",
+      "task": 101,
+      "action": 13,
+      "source_frame": 0,
+      "context_hex": "a3b31d0d0065000d00000000a03fc3",
+      "command_hex": "a3b3180d14690000000000005111c3",
+      "opcode": 20,
+      "flags": 105,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_full_open",
+      "side": "red",
+      "task": 101,
+      "action": 14,
+      "source_frame": 0,
+      "context_hex": "a3b31d0e0065000e00000000f0cfc3",
+      "command_hex": "a3b3180e14790000000000005420c3",
+      "opcode": 20,
+      "flags": 121,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_sweep_1000",
+      "side": "red",
+      "task": 101,
+      "action": 15,
+      "source_frame": 0,
+      "context_hex": "a3b31d0f0065000f00000000c09fc3",
+      "command_hex": "a3b3180f148903e800000000c99bc3",
+      "opcode": 20,
+      "flags": 137,
+      "A": 1000,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_raise_return",
+      "side": "red",
+      "task": 101,
+      "action": 16,
+      "source_frame": 0,
+      "context_hex": "a3b31d100065001000000000d96dc3",
+      "command_hex": "a3b318101499000000000000344ec3",
+      "opcode": 20,
+      "flags": 153,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_back_to_stage",
+      "side": "red",
+      "task": 101,
+      "action": 17,
+      "source_frame": 0,
+      "context_hex": "a3b31d110065001100000000e93dc3",
+      "command_hex": "a3b3181114a9024e465000007568c3",
+      "opcode": 20,
+      "flags": 169,
+      "A": 590,
+      "B": 18000,
+      "U": 0
+    },
+    {
+      "label": "same_action_remaining_zero_back_to_stage",
+      "side": "red",
+      "task": 101,
+      "action": 17,
+      "source_frame": 0,
+      "context_hex": "a3b31d110065001100000000e93dc3",
+      "command_hex": "a3b3181114a900000000000009ddc3",
+      "opcode": 20,
+      "flags": 169,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_right_to_stage",
+      "side": "red",
+      "task": 101,
+      "action": 18,
+      "source_frame": 0,
+      "context_hex": "a3b31d120065001200000000b9cdc3",
+      "command_hex": "a3b3181214b90172dcd800008e9dc3",
+      "opcode": 20,
+      "flags": 185,
+      "A": 370,
+      "B": -9000,
+      "U": 0
+    },
+    {
+      "label": "same_action_remaining_zero_right_to_stage",
+      "side": "red",
+      "task": 101,
+      "action": 18,
+      "source_frame": 0,
+      "context_hex": "a3b31d120065001200000000b9cdc3",
+      "command_hex": "a3b3181214b90000000000000cecc3",
+      "opcode": 20,
+      "flags": 185,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_pickup_ready",
+      "side": "red",
+      "task": 101,
+      "action": 19,
+      "source_frame": 0,
+      "context_hex": "a3b31d130065001300000000899dc3",
+      "command_hex": "a3b3181314c900000000000070bbc3",
+      "opcode": 20,
+      "flags": 201,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "cancel_open_core_advance_mode8",
+      "side": "blue",
+      "task": 101,
+      "action": 1,
+      "source_frame": 0,
+      "context_hex": "a3b31d010065000100000000e53ec3",
+      "command_hex": "a3b318010f01000000000000ad68c3",
+      "opcode": 15,
+      "flags": 1,
+      "A": 0,
+      "B": 0,
+      "U": 0,
+      "requires_lower_extension": true
+    },
+    {
+      "label": "empty_sweep_empty_body_move",
+      "side": "blue",
+      "task": 101,
+      "action": 10,
+      "source_frame": 0,
+      "context_hex": "a3b31d0a0065000a0000000033cfc3",
+      "command_hex": "a3b3180a14d1012c1772697854e0c3",
+      "opcode": 20,
+      "flags": 209,
+      "A": 300,
+      "B": 6002,
+      "U": 27000
+    },
+    {
+      "label": "same_action_remaining_zero_empty_body_move",
+      "side": "blue",
+      "task": 101,
+      "action": 10,
+      "source_frame": 0,
+      "context_hex": "a3b31d0a0065000a0000000033cfc3",
+      "command_hex": "a3b3180a14d10000000069786158c3",
+      "opcode": 20,
+      "flags": 209,
+      "A": 0,
+      "B": 0,
+      "U": 27000
+    },
+    {
+      "label": "empty_sweep_turn_right",
+      "side": "blue",
+      "task": 101,
+      "action": 11,
+      "source_frame": 0,
+      "context_hex": "a3b31d0b0065000b00000000039fc3",
+      "command_hex": "a3b3180b1401000000004650a12bc3",
+      "opcode": 20,
+      "flags": 1,
+      "A": 0,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "empty_sweep_back_to_sweep",
+      "side": "blue",
+      "task": 101,
+      "action": 12,
+      "source_frame": 0,
+      "context_hex": "a3b31d0c0065000c00000000906fc3",
+      "command_hex": "a3b3180c1451019a000046508ed3c3",
+      "opcode": 20,
+      "flags": 81,
+      "A": 410,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "same_action_remaining_zero_back_to_sweep",
+      "side": "blue",
+      "task": 101,
+      "action": 12,
+      "source_frame": 0,
+      "context_hex": "a3b31d0c0065000c00000000906fc3",
+      "command_hex": "a3b3180c1451000000004650d71ec3",
+      "opcode": 20,
+      "flags": 81,
+      "A": 0,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "empty_sweep_left_to_sweep",
+      "side": "blue",
+      "task": 101,
+      "action": 13,
+      "source_frame": 0,
+      "context_hex": "a3b31d0d0065000d00000000a03fc3",
+      "command_hex": "a3b3180d14610172dcd8465068fcc3",
+      "opcode": 20,
+      "flags": 97,
+      "A": 370,
+      "B": -9000,
+      "U": 18000
+    },
+    {
+      "label": "same_action_remaining_zero_left_to_sweep",
+      "side": "blue",
+      "task": 101,
+      "action": 13,
+      "source_frame": 0,
+      "context_hex": "a3b31d0d0065000d00000000a03fc3",
+      "command_hex": "a3b3180d1461000000004650ea8dc3",
+      "opcode": 20,
+      "flags": 97,
+      "A": 0,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "empty_sweep_full_open",
+      "side": "blue",
+      "task": 101,
+      "action": 14,
+      "source_frame": 0,
+      "context_hex": "a3b31d0e0065000e00000000f0cfc3",
+      "command_hex": "a3b3180e1471000000000000dde0c3",
+      "opcode": 20,
+      "flags": 113,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_sweep_1000",
+      "side": "blue",
+      "task": 101,
+      "action": 15,
+      "source_frame": 0,
+      "context_hex": "a3b31d0f0065000f00000000c09fc3",
+      "command_hex": "a3b3180f148103e8000046507207c3",
+      "opcode": 20,
+      "flags": 129,
+      "A": 1000,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "empty_sweep_raise_return",
+      "side": "blue",
+      "task": 101,
+      "action": 16,
+      "source_frame": 0,
+      "context_hex": "a3b31d100065001000000000d96dc3",
+      "command_hex": "a3b318101491000000000000bd8ec3",
+      "opcode": 20,
+      "flags": 145,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    },
+    {
+      "label": "empty_sweep_back_to_stage",
+      "side": "blue",
+      "task": 101,
+      "action": 17,
+      "source_frame": 0,
+      "context_hex": "a3b31d110065001100000000e93dc3",
+      "command_hex": "a3b3181114a1024e00004650dbadc3",
+      "opcode": 20,
+      "flags": 161,
+      "A": 590,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "same_action_remaining_zero_back_to_stage",
+      "side": "blue",
+      "task": 101,
+      "action": 17,
+      "source_frame": 0,
+      "context_hex": "a3b31d110065001100000000e93dc3",
+      "command_hex": "a3b3181114a1000000004650b241c3",
+      "opcode": 20,
+      "flags": 161,
+      "A": 0,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "empty_sweep_right_to_stage",
+      "side": "blue",
+      "task": 101,
+      "action": 18,
+      "source_frame": 0,
+      "context_hex": "a3b31d120065001200000000b9cdc3",
+      "command_hex": "a3b3181214b10172232846500526c3",
+      "opcode": 20,
+      "flags": 177,
+      "A": 370,
+      "B": 9000,
+      "U": 18000
+    },
+    {
+      "label": "same_action_remaining_zero_right_to_stage",
+      "side": "blue",
+      "task": 101,
+      "action": 18,
+      "source_frame": 0,
+      "context_hex": "a3b31d120065001200000000b9cdc3",
+      "command_hex": "a3b3181214b1000000004650b770c3",
+      "opcode": 20,
+      "flags": 177,
+      "A": 0,
+      "B": 0,
+      "U": 18000
+    },
+    {
+      "label": "empty_sweep_pickup_ready",
+      "side": "blue",
+      "task": 101,
+      "action": 19,
+      "source_frame": 0,
+      "context_hex": "a3b31d130065001300000000899dc3",
+      "command_hex": "a3b3181314c1000000000000f97bc3",
+      "opcode": 20,
+      "flags": 193,
+      "A": 0,
+      "B": 0,
+      "U": 0
+    }
+  ],
+  "status_context_extension": {
+    "field": "TYPE0x1E action_status (existing payload byte5 / frame byte9)",
+    "mask": "0x30",
+    "red_boundary": "0x10",
+    "blue_boundary": "0x20",
+    "none": "0x00",
+    "invalid_reserved": "0x30",
+    "original_low_bits": "accept/done/reject/cancel unchanged",
+    "meaning": "Actual lower ordinary-pickup boundary cancellation; preserve through mode24 to actual SEARCH and across HOLD/PAUSE/repeated action or later explicit cancellation. Clear on genuinely accepted next operation leaving recovery/SEARCH, new task/session or STOP. No extra packet/ACK."
+  },
+  "lower_status_examples": [
+    {
+      "side": "red",
+      "mode": 24,
+      "action_status": 25,
+      "context_hex": "a3b31e2a0065000709190000a59bc3",
+      "status_hex": "a3b3172a001836b000000000fb64c3"
+    },
+    {
+      "side": "red",
+      "mode": 3,
+      "action_status": 27,
+      "context_hex": "a3b31e2a00650007091b0000045bc3",
+      "status_hex": "a3b3172a000336b0000000005065c3"
+    },
+    {
+      "side": "blue",
+      "mode": 24,
+      "action_status": 41,
+      "context_hex": "a3b31e2a0065000709290000a594c3",
+      "status_hex": "a3b3172a001836b000000000fb64c3"
+    },
+    {
+      "side": "blue",
+      "mode": 3,
+      "action_status": 43,
+      "context_hex": "a3b31e2a00650007092b00000454c3",
+      "status_hex": "a3b3172a000336b0000000005065c3"
+    }
+  ]
+}

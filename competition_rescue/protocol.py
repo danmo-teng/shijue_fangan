@@ -17,6 +17,11 @@ FRAME_SIZE = 15
 TYPE_MISSION_COMMAND = 0x18
 TYPE_COMMAND_CONTEXT = 0x1D
 TYPE_STATUS_CONTEXT = 0x1E
+# Existing 0x1E action_status high bits: why an ordinary pickup was cancelled.
+# No new packet or acknowledgement; emitted only by the paired lower firmware.
+ACTION_PICKUP_BOUNDARY_MASK = 0x30
+ACTION_PICKUP_BOUNDARY_RED = 0x10
+ACTION_PICKUP_BOUNDARY_BLUE = 0x20
 
 
 def command_context_frame(sequence: int, task_id: int, action_id: int, vision_frame: int) -> bytes:

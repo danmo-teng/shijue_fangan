@@ -26,7 +26,8 @@ class RouteStep(IntEnum):
 
 
 LIVE_STEPS = frozenset({RouteStep.BACK_TO_SWEEP, RouteStep.LEFT_TO_SWEEP,
-                        RouteStep.BACK_TO_STAGE, RouteStep.RIGHT_TO_STAGE})
+                        RouteStep.BACK_TO_STAGE, RouteStep.RIGHT_TO_STAGE,
+                        RouteStep.EMPTY_BODY_MOVE})
 LOCAL_DISTANCES = {RouteStep.FORWARD_PARK: 200, RouteStep.BACK_200: -200,
                    RouteStep.SWEEP_1000: 1000, RouteStep.ATTACK_BACK_150: -150}
 TURN_STEPS = frozenset({RouteStep.TURN_RIGHT, RouteStep.TURN_LEFT,
@@ -62,8 +63,18 @@ class ObstacleRoute:
     awaiting_obstacle_delivery: bool = False
     recover_after_delivery: bool = False
     replaced_stash_ids: tuple[int, ...] = ()
+    empty_entry: bool = False
 
     def __post_init__(self) -> None:
+        if self.empty_entry:
+            # Actual empty SEARCH after cancellation: stage first, then the
+            # existing sweep. There is no cargo to park or later retrieve.
+            self.steps = (RouteStep.EMPTY_BODY_MOVE, RouteStep.TURN_RIGHT,
+                          RouteStep.BACK_TO_SWEEP, RouteStep.LEFT_TO_SWEEP,
+                          RouteStep.FULL_OPEN, RouteStep.SWEEP_1000,
+                          RouteStep.RAISE_RETURN, RouteStep.BACK_TO_STAGE,
+                          RouteStep.RIGHT_TO_STAGE, RouteStep.PICKUP_READY)
+            return
         common = (RouteStep.TURN_RIGHT, RouteStep.FORWARD_PARK, RouteStep.RELEASE_LOAD)
         self.steps = common + (
             (RouteStep.BACK_200, RouteStep.TURN_LEFT, RouteStep.PICKUP_READY)
@@ -109,6 +120,8 @@ class ObstacleRoute:
         if step is None:
             return None
         heading = self.sweep_heading_cdeg
+        if step == RouteStep.EMPTY_BODY_MOVE:
+            heading = (heading + 9000) % 36000
         if step in TURN_STEPS:
             if step == RouteStep.ATTACK_FACE_OPPONENT:
                 return 0, 0, (heading + 27000) % 36000

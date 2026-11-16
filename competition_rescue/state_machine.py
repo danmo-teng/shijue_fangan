@@ -16,9 +16,13 @@ from typing import Iterable
 from attack_return import AttackReturnRoute, opponent_heading_deg
 from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
+from safe_zone_boundary import crossed_safe_zone, forward_endpoint
 from closed_deflect import VIEW, PULL, STAGE, CARRYING, END_AT_ORIGINAL, choose_plan, nearest_blocker
 
 from protocol import (
+    ACTION_PICKUP_BOUNDARY_MASK,
+    ACTION_PICKUP_BOUNDARY_RED,
+    ACTION_PICKUP_BOUNDARY_BLUE,
     AUDIT_DESTINATION_INJURY,
     AUDIT_SWEEP_PICKUP,
     CargoAuditPayload,
@@ -185,6 +189,11 @@ class StmSnapshot:
     action_status: int = 0
     rejected_action_id: int = 0
     context_matches: bool = False
+
+    @property
+    def pickup_boundary_side(self) -> str | None:
+        return {ACTION_PICKUP_BOUNDARY_RED: "red", ACTION_PICKUP_BOUNDARY_BLUE: "blue"}.get(
+            self.action_status & ACTION_PICKUP_BOUNDARY_MASK) if self.context_valid else None
 
     @property
     def claw_visible(self) -> bool:
@@ -969,6 +978,11 @@ class CompetitionMission:
         self.recovery_interrupted_pickup = None
         self.recovery_task_locked = False
         self.range_command = None
+        self.range_boundary_end: tuple[float, float] | None = None
+        self.pre_grab_boundary_end: tuple[float, float] | None = None
+        self.core_grab_boundary_end: tuple[float, float] | None = None
+        self.capture_crawl_boundary_end: tuple[float, float] | None = None
+        self.boundary_sweep_point: tuple[float, float] | None = None
         self.range_started_s = None
         self.range_frame_floor = 0
         self.range_pitch_cdeg = 0
@@ -998,6 +1012,17 @@ class CompetitionMission:
 
     def _set_state(self, state: CompetitionState, now: float) -> None:
         if self.state != state:
+            if state not in {CompetitionState.AUDIT_CONFIRM, CompetitionState.GRAB}:
+                self.core_grab_boundary_end = None
+            if state != CompetitionState.PRE_GRAB_ADVANCE:
+                self.pre_grab_boundary_end = None
+            if state not in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
+                             CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT,
+                             CompetitionState.AUDIT_CONFIRM, CompetitionState.PRE_GRAB_ADVANCE,
+                             CompetitionState.GRAB}:
+                self.capture_crawl_boundary_end = None
+            if state in {CompetitionState.FAULT, CompetitionState.FINISHED}:
+                self.boundary_sweep_point = None
             if state in {CompetitionState.INVALID_RELEASE, CompetitionState.INVALID_BACKOFF,
                          CompetitionState.DISPERSE, CompetitionState.RECOVERY_WAIT,
                          CompetitionState.WAIT_SEARCH_RECOVERY, CompetitionState.SEARCH,
@@ -1424,6 +1449,9 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.core_grab_boundary_end = None
+        self.pre_grab_boundary_end = None
+        self.capture_crawl_boundary_end = None
         self.delivery_search_point_number = self.search_point_number
         self.pre_grab_command = None
         self.pre_grab_completed_frame = None
@@ -1818,6 +1846,9 @@ class CompetitionMission:
             STM_MODE_SEARCH,
         )
         if stm.fresh and stm.mode == STM_MODE_SEARCH:
+            boundary = self._begin_pending_boundary_sweep(stm, now)
+            if boundary is not None:
+                return boundary
             resume_state = self.search_recovery_resume_state or CompetitionState.SEARCH
             if self.settings.initial_stash_enabled and not self.initial_stash_done:
                 resume_state = CompetitionState.INITIAL_OBSERVE
@@ -1956,6 +1987,12 @@ class CompetitionMission:
                        if (self.settings.top_edge_range_reobserve_enabled and target.bbox[1] <= 0 and
                            target.track_id in vision.range_top_band_ids)
                        else 0)
+        if pose is not None and pose.valid:
+            end = forward_endpoint(pose.x_m, pose.y_m, pose.yaw_deg, distance / 1000.)
+            side = crossed_safe_zone((pose.x_m, pose.y_m), end)
+            if side is not None:
+                return self._cancel_boundary_pickup(side, stm, now)
+            self.range_boundary_end = end
         self.range_command = CommandRequest(CMD_APPROACH_TARGET, flags, distance,
                                             self.range_pitch_cdeg, finish_mode,
                                             source_vision_frame=vision.frame_sequence)
@@ -1965,6 +2002,7 @@ class CompetitionMission:
 
     def _clear_range_approach(self) -> None:
         self.range_command = None
+        self.range_boundary_end = None
         self.range_started_s = None
         self.range_frame_floor = 0
 
@@ -2433,7 +2471,9 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
         if (self.state not in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
-                               CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT} or
+                               CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT,
+                               CompetitionState.AUDIT_CONFIRM, CompetitionState.PRE_GRAB_ADVANCE,
+                               CompetitionState.GRAB} or
                 self.selected_batch is None or stm.gripper_closed):
             return None
         ids = {self.locked_target_track_id, self.cluster_target_track_id}
@@ -2443,11 +2483,110 @@ class CompetitionMission:
             return None
         # Must precede finite-range resend and the ordinary missing-target grace.
         self._clear_range_approach()
+        self.pre_grab_command = None
         result = self._start_capture_abandon(CargoAudit(), stm, now)
         self.invalid_release_context = "safe_zone_target"
         return replace(result, audit=None, event="safe_zone_target_cancel",
             reason="safe_zone_target_cancel",
             message="目标已确认在红/蓝安全区内，结束本次靠近后重新搜索")
+
+    def _cancel_boundary_pickup(self, side: str, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        batch = self.selected_batch
+        if side == self.settings.side and batch is not None and not batch.initial_stash:
+            target_x = (self.settings.injury_target_x_m if batch.destination == "injury"
+                        else self.settings.material_target_x_m)
+            self.boundary_sweep_point = (target_x, self.settings.safe_staging_y_m)
+        self._clear_range_approach()
+        self.pre_grab_command = None
+        self.pre_grab_boundary_end = None
+        self.core_grab_boundary_end = None
+        result = self._start_capture_abandon(CargoAudit(), stm, now)
+        self.invalid_release_context = "safe_zone_motion"
+        return replace(result, audit=None, event="safe_zone_motion_cancel",
+                       reason="safe_zone_motion_cancel",
+                       message=("普通抓取将跨己方安全区，取消后先到预备点再扫障"
+                                if self.boundary_sweep_point is not None else
+                                "普通抓取将跨对方安全区，取消本次抓取并重新搜索"))
+
+    def _local_boundary_recovery_output(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        if (stm.pickup_boundary_side is None or stm.gripper_closed or stm.mode not in {24, 3} or
+                self.state not in {CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH,
+                                   CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM,
+                                   CompetitionState.PRE_GRAB_ADVANCE, CompetitionState.GRAB,
+                                   CompetitionState.INVALID_RELEASE, CompetitionState.WAIT_SEARCH_RECOVERY}):
+            return None
+        batch = self.selected_batch
+        if batch is not None and batch.initial_stash:
+            return None
+        if stm.pickup_boundary_side == self.settings.side and batch is not None:
+            x = self.settings.injury_target_x_m if batch.destination == "injury" else self.settings.material_target_x_m
+            self.boundary_sweep_point = (x, self.settings.safe_staging_y_m)
+        if self.state == CompetitionState.WAIT_SEARCH_RECOVERY:
+            return self._search_recovery_output(vision, stm, now)
+        self._remember_failed_search_target()
+        self._clear_range_approach()
+        self.pre_grab_command = None
+        return replace(self._audit_reacquire_output(vision, stm, now),
+            event="lower_pickup_boundary_cancel", reason="lower_pickup_boundary_cancel",
+            message="下位已因安全区边界结束普通抓取，按红/蓝区回报处理恢复")
+
+    def _begin_pending_boundary_sweep(self, stm: StmSnapshot, now: float) -> CompetitionOutput | None:
+        if self.boundary_sweep_point is None or stm.mode != STM_MODE_SEARCH or stm.gripper_closed:
+            return None
+        point = self.boundary_sweep_point
+        self.boundary_sweep_point = None
+        self._clear_selected_batch()
+        self._clear_carried_manifest()
+        self._finish_abandoned_batch_budget()
+        self.obstacle_route = ObstacleRoute(
+            self.settings.side, (), (), "material", point, point, (), "sweep",
+            self.settings.bulldozer_position_tolerance_m, empty_entry=True)
+        self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
+        return CompetitionOutput(self.state, self._hold(),
+            "下位已结束抓取并恢复空爪搜索，先回预备点再执行安全扫障",
+            event="boundary_sweep_stage_start", reason="boundary_sweep_stage_start")
+
+    def _safe_zone_motion_exit(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        capture_states = {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
+                          CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT,
+                          CompetitionState.AUDIT_CONFIRM, CompetitionState.PRE_GRAB_ADVANCE,
+                          CompetitionState.GRAB}
+        if (self.state not in capture_states or self.selected_batch is None or
+                self.selected_batch.initial_stash or stm.gripper_closed or not pose.valid or
+                stm.mode in {STM_MODE_SEARCH, STM_MODE_APPROACH_RECOVER, STM_MODE_RECOVERY_WAIT}):
+            return None
+        start = (pose.x_m, pose.y_m)
+        end = start
+        if self.state == CompetitionState.PRE_GRAB_ADVANCE:
+            end = self.pre_grab_boundary_end or start
+        elif self.range_command is not None and stm.mode in {52, 53}:
+            # A resend is the remaining segment, not the full original distance
+            # measured a second time from the now-advanced vehicle.
+            end = self.range_boundary_end or start
+        elif self.state in {CompetitionState.AUDIT_CONFIRM, CompetitionState.GRAB}:
+            audit = self.pending_audit or vision.capture_audit
+            if (audit is not None and "core_black" in self._manifest_for_audit(audit) and
+                    (self.state == CompetitionState.GRAB or self.pending_audit_valid)):
+                if self.core_grab_boundary_end is None:
+                    self.core_grab_boundary_end = forward_endpoint(*start, pose.yaw_deg, .05)
+                end = self.core_grab_boundary_end
+        elif stm.mode in {STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT}:
+            if self.capture_crawl_boundary_end is None:
+                self.capture_crawl_boundary_end = forward_endpoint(*start, pose.yaw_deg, .20)
+            audit = vision.capture_audit
+            if audit is None or not vision.capture_observation_valid or audit.total_count == 0:
+                # Existing lower empty-observation crawl can use up to 200 mm.
+                # Non-empty observation stops that crawl; do not add this
+                # possible travel to an already visible, ready-to-grab load.
+                end = self.capture_crawl_boundary_end
+        if end == start:
+            return None  # No forward path requested by this phase to intercept.
+        side = crossed_safe_zone(start, end)
+        return self._cancel_boundary_pickup(side, stm, now) if side is not None else None
 
     def _audit_vision_fresh(self, vision: VisionSnapshot, now: float) -> bool:
         return (vision.observed_monotonic_s is None or
@@ -2697,6 +2836,9 @@ class CompetitionMission:
         )
         self.grab_initial_ack = None
         if stm.mode == STM_MODE_SEARCH:
+            boundary = self._begin_pending_boundary_sweep(stm, now)
+            if boundary is not None:
+                return boundary
             if resume_state == CompetitionState.SEARCH and not stm.gripper_closed:
                 self._finish_abandoned_batch_budget()
             self._set_state(resume_state, now)
@@ -3887,6 +4029,13 @@ class CompetitionMission:
                 self.selected_batch, reason="pre_grab_target_missing")
         if region != "upper":
             return None  # Middle/lower still require the original real cargo audit.
+        if self.search_observer is not None:
+            x, y, yaw, _ = self.search_observer
+            end = forward_endpoint(x, y, yaw, .05)
+            side = crossed_safe_zone((x, y), end)
+            if side is not None:
+                return self._cancel_boundary_pickup(side, stm, now)
+            self.pre_grab_boundary_end = end
         self._invalidate_audit_evidence()
         self.audit_epoch += 1
         self.range_epoch += 1
@@ -4220,6 +4369,7 @@ class CompetitionMission:
         else:
             message = f"夹内组合非法，释放{side}侧后退复审"
         exit_reason = {
+            "safe_zone_motion": ("safe_zone_motion_cancel", "普通抓取会跨安全区，等待下位实际结束旧动作"),
             "safe_zone_target": ("safe_zone_target_cancel", "目标在安全区内，等待下位结束靠近并恢复搜索"),
             "unconfirmed_load_gap": ("unconfirmed_load_gap_release", "缺框复看结束，等待放下未确认载荷并恢复搜索"),
         }.get(self.invalid_release_context)
@@ -4659,6 +4809,10 @@ class CompetitionMission:
                 self._clear_cluster_context(reset_attempts=True)
             route.advance()
             if route.step is None:
+                if route.empty_entry:
+                    self.obstacle_route = None
+                    return self._complete_return_search(vision, now,
+                        "空爪安全扫障完成，恢复正常搜索；没有寄存货物需要找回", new_visit=False)
                 route.pickup_frame_floor = vision.frame_sequence
                 self._set_state(CompetitionState.OBSTACLE_PICKUP, now)
                 return CompetitionOutput(self.state, self._hold(),
@@ -7014,6 +7168,10 @@ class CompetitionMission:
                                 if pose.valid else None)
         self._observe_first_green_core(vision, stm)
         reuse_conflict = self._observe_confirmed_load(vision, stm)
+        if stm.context_matches:
+            boundary_recovery = self._local_boundary_recovery_output(vision, stm, now)
+            if boundary_recovery is not None:
+                return boundary_recovery
         if self.recovered_injury_audit_reuse:
             audit = vision.capture_audit if vision.capture_observation_valid else None
             positive_conflict = (audit is not None and
@@ -7039,6 +7197,9 @@ class CompetitionMission:
             zone_exit = self._safe_zone_target_exit(vision, stm, now)
             if zone_exit is not None:
                 return zone_exit
+            motion_exit = self._safe_zone_motion_exit(vision, pose, stm, now)
+            if motion_exit is not None:
+                return motion_exit
         if (stm.fresh and not stm.fault and stm.mode in {52, 53} and
                 self.state in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
                                CompetitionState.CLUSTER_APPROACH}):
