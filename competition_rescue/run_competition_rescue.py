@@ -79,6 +79,7 @@ from protocol import (  # noqa: E402
     CMD_VISUAL_CORRECTION_VALID,
     command_context_frame,
 )
+from capture_grip_bands import GripBands, CLASSES as GRIP_CLASSES  # noqa: E402
 from capture_roi import (  # noqa: E402
     bbox_capture_roi_overlap_ratio,
     CaptureRois,
@@ -176,6 +177,9 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--enable-delivery-early-exit", action="store_true",
         default=os.environ.get("RDK_ENABLE_DELIVERY_EARLY_EXIT") == "1",
         help="推进中确认本次载荷入区即放下退出；须先核对并部署配套F405，默认关闭")
+    parser.add_argument("--enable-pre-grab-advance", action="store_true",
+        help="启用已标定的绿橙抓前50mm补进；须先部署配套F405 aux=2，默认关闭")
+    parser.add_argument("--grip-bands", type=Path, default=VISION_ROOT / "config/capture_grip_bands.json")
     parser.add_argument("--enable-top-edge-range-reobserve", action="store_true",
         help="顶端截断目标分段接近后原角度重测；须配套F405 RANGE aux=1，默认关闭")
     parser.add_argument("--enable-closed-deflect", action="store_true",
@@ -908,6 +912,7 @@ def make_vision_snapshot(
     recent_corridor_obstacle: TrackedCargo | None = None,
     recent_carried_pitch_cdeg: int = 0,
     held_cargo_evidence: HeldCargoEvidence | None = None,
+    grip_bands: GripBands | None = None,
 ) -> VisionSnapshot:
     # A cached rectangle from another camera angle cannot prove membership
     # in the current view. Retain the existing per-class area requirement.
@@ -1230,7 +1235,16 @@ def make_vision_snapshot(
                     first_band = min(bands, key=lambda band: band["y_min"])
                     if first_band["y_min"] <= item.center_px[1] < first_band["y_max"]:
                         range_top_band_ids.append(item.track_id)
+    grip_regions = []
+    grip_configured = tuple(name for name in GRIP_CLASSES
+                            if grip_bands is not None and getattr(grip_bands, name) is not None)
+    if grip_configured and stm.camera_pitch_cdeg == 14000 and not image_quality_reason:
+        for item in cargo:
+            region = grip_bands.region(item.class_name, item.center_px[1])
+            if item.visible and region is not None:
+                grip_regions.append((item.track_id, region))
     return VisionSnapshot(
+        pre_grab_regions=tuple(grip_regions), pre_grab_configured_classes=grip_configured,
         range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
         range_top_band_ids=tuple(range_top_band_ids),
         range_reason=range_reason,
@@ -2603,6 +2617,7 @@ class CompetitionPlanner:
             "bulldozer_enabled": self.mission.settings.bulldozer_enabled,
             "closed_deflect_enabled": self.mission.settings.closed_deflect_enabled,
             "top_edge_range_reobserve_enabled": self.mission.settings.top_edge_range_reobserve_enabled,
+            "pre_grab_advance_enabled": self.mission.settings.pre_grab_advance_enabled,
             "closed_deflect_phase": self.mission.deflect_phase if self.mission.state == CompetitionState.CLOSED_DEFLECT else None,
             "bulldozer_route": (None if self.mission.obstacle_route is None
                                 else asdict(self.mission.obstacle_route)),
@@ -2770,6 +2785,7 @@ class CompetitionPlanner:
             "audit_last_evidence_s": self.mission.audit_last_evidence_s,
             "capture_observation_valid": vision.capture_observation_valid,
             "capture_observation_reason": vision.capture_observation_reason,
+            "pre_grab_regions": vision.pre_grab_regions,
             "safe_sweep_observation_valid": vision.safe_sweep_observation_valid,
             "safe_sweep_observation_reason": vision.safe_sweep_observation_reason,
             "missing_committed_audit_mode": self.mission.missing_committed_audit_mode,
@@ -3245,6 +3261,7 @@ def main() -> int:
     config = load_config(args.config)
     range_calibration = ApproachRangeCalibration.load(VISION_ROOT / "config/approach_range.json")
     capture_rois = load_capture_rois(args.capture_roi)
+    grip_bands = GripBands.load(args.grip_bands)
     args.homography = args.homography.resolve()
     homography_metadata = args.homography.with_suffix(
         args.homography.suffix + ".meta.json"
@@ -3286,6 +3303,7 @@ def main() -> int:
         bulldozer_enabled=args.enable_bulldozer,
         closed_deflect_enabled=args.enable_closed_deflect,
         top_edge_range_reobserve_enabled=args.enable_top_edge_range_reobserve,
+        pre_grab_advance_enabled=args.enable_pre_grab_advance,
         delivery_early_exit_enabled=args.enable_delivery_early_exit,
     ))
     planner = CompetitionPlanner(
@@ -3327,6 +3345,8 @@ def main() -> int:
             "bulldozer_enabled": mission.settings.bulldozer_enabled,
             "closed_deflect_enabled": args.enable_closed_deflect,
             "top_edge_range_reobserve_enabled": args.enable_top_edge_range_reobserve,
+            "pre_grab_advance_enabled": args.enable_pre_grab_advance,
+            "grip_bands": asdict(grip_bands),
             "bulldozer_contract": "F405_BULLDOZER_STEP_20261113",
             **homography_diagnostics,
             "homography_calibrated": localizer.calibrated,
@@ -3447,6 +3467,7 @@ def main() -> int:
             bulldozer_enabled=args.enable_bulldozer,
             closed_deflect_enabled=args.enable_closed_deflect,
             top_edge_range_reobserve_enabled=args.enable_top_edge_range_reobserve,
+            pre_grab_advance_enabled=args.enable_pre_grab_advance,
             delivery_early_exit_enabled=args.enable_delivery_early_exit))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)
@@ -3715,6 +3736,7 @@ def main() -> int:
                     ),
                     observed_s=packet.published_ns / 1_000_000_000.0,
                     range_calibration=range_calibration,
+                    grip_bands=grip_bands,
                     recent_carried_track_ids=recent_carried_track_ids,
                     recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
                     held_cargo_evidence=held_cargo_evidence,

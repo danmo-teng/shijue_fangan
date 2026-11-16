@@ -1,0 +1,88 @@
+{
+  "request_id": "MATCH-PRE-GRAB-BANDS-20261116",
+  "status": "upper implemented; lower review and implementation pending; not deployed",
+  "lower_review_commit": "81a3557e41395536ce685220106f63eab08e90aa",
+  "wire": {
+    "type": 24,
+    "opcode": 9,
+    "range_flag": 64,
+    "aux": 2,
+    "distance_mm": 50,
+    "pitch_cdeg": 14000
+  },
+  "entry_wire_modes": [
+    21,
+    38,
+    37
+  ],
+  "motion_wire_mode": 53,
+  "done_wire_mode": "same as entry, matching task/action opcode9 ACCEPT|DONE",
+  "constraints": [
+    "open claw, actual current target, ordinary pre-grab only",
+    "same action replay never restarts movement, including after DONE",
+    "keep 140deg and claw positions; clear old cargo-audit permission on acceptance",
+    "finite measured-wheel completion, not remaining-10mm shortcut",
+    "charge existing 200mm capture budget; preserve original decision budget",
+    "hold stationary for post-segment real frame/audit; no autonomous extra crawl",
+    "original recovery when budget insufficient; never fake 50mm DONE",
+    "aux0/1 unchanged; no new age gate, handshake or ordinary FAULT"
+  ],
+  "samples": [
+    {
+      "side": "blue",
+      "cluster": false,
+      "task_id": 501,
+      "action_id": 61,
+      "vision_frame": 300,
+      "context_hex": "a3 b3 1d 14 01 f5 00 3d 00 00 01 2c 16 23 c3",
+      "command_hex": "a3 b3 18 14 09 51 00 32 36 b0 00 02 39 bd c3",
+      "opcode": 9,
+      "flags": 81,
+      "distance_mm": 50,
+      "pitch_cdeg": 14000,
+      "aux": 2
+    },
+    {
+      "side": "blue",
+      "cluster": true,
+      "task_id": 501,
+      "action_id": 61,
+      "vision_frame": 300,
+      "context_hex": "a3 b3 1d 15 01 f5 00 3d 00 00 01 2c 1b b3 c3",
+      "command_hex": "a3 b3 18 15 09 71 00 32 36 b0 00 02 15 ef c3",
+      "opcode": 9,
+      "flags": 113,
+      "distance_mm": 50,
+      "pitch_cdeg": 14000,
+      "aux": 2
+    },
+    {
+      "side": "red",
+      "cluster": false,
+      "task_id": 501,
+      "action_id": 61,
+      "vision_frame": 300,
+      "context_hex": "a3 b3 1d 16 01 f5 00 3d 00 00 01 2c 0f 43 c3",
+      "command_hex": "a3 b3 18 16 09 59 00 32 36 b0 00 02 a9 1d c3",
+      "opcode": 9,
+      "flags": 89,
+      "distance_mm": 50,
+      "pitch_cdeg": 14000,
+      "aux": 2
+    },
+    {
+      "side": "red",
+      "cluster": true,
+      "task_id": 501,
+      "action_id": 61,
+      "vision_frame": 300,
+      "context_hex": "a3 b3 1d 17 01 f5 00 3d 00 00 01 2c 02 d3 c3",
+      "command_hex": "a3 b3 18 17 09 79 00 32 36 b0 00 02 85 4f c3",
+      "opcode": 9,
+      "flags": 121,
+      "distance_mm": 50,
+      "pitch_cdeg": 14000,
+      "aux": 2
+    }
+  ]
+}

@@ -20,6 +20,7 @@ VISION_ROOT = PROJECT_ROOT / "vision"
 sys.path.insert(0, str(VISION_ROOT))
 sys.path.insert(0, str(ROOT))
 
+from capture_grip_bands import GripBands, CLASSES  # noqa: E402
 from capture_roi_trails import CaptureTrail  # noqa: E402
 from capture_roi import (  # noqa: E402
     CaptureRois,
@@ -46,7 +47,7 @@ from run_yolo_x5 import (  # noqa: E402
 WINDOW_NAME = "capture_roi_editor"
 DISPLAY_WIDTH = 960
 DISPLAY_HEIGHT = 768
-PANEL_HEIGHT = 76
+PANEL_HEIGHT = 150
 GREEN_SUPPLY_SCORE_THRESHOLD = DEFAULT_YOLO_SCORE_THRESHOLD
 
 
@@ -69,6 +70,7 @@ def arguments() -> argparse.Namespace:
         type=Path,
         default=VISION_ROOT / "config/capture_roi.json",
     )
+    parser.add_argument("--grip-bands", type=Path, default=VISION_ROOT / "config/capture_grip_bands.json")
     return parser.parse_args()
 
 
@@ -119,6 +121,11 @@ def main() -> int:
         "left": list(loaded_rois.left),
         "right": list(loaded_rois.right),
     }
+    band_path = getattr(args, "grip_bands", args.output.with_name("capture_grip_bands.json"))
+    loaded_bands = GripBands.load(band_path)
+    band_points = {name: list(getattr(loaded_bands, name) or ()) for name in CLASSES}
+    edit_band = None
+    drag_line = None
     active_roi = "overall"
     status = "Left:add  Right:undo  C:clear ROI  R:reload ROI  S:save ROI"
     trail: CaptureTrail | None = None
@@ -134,8 +141,29 @@ def main() -> int:
         trail.paint(canvas, (255, 210, 0))
         return canvas
 
+    def save_bands():
+        nonlocal status
+        if any(len(values) == 1 for values in band_points.values()):
+            status = "mark both lines before saving"
+            return
+        try:
+            bands = GripBands(**{name: tuple(sorted(values)) if values else None
+                                 for name, values in band_points.items()})
+            bands.save(band_path)
+            status = "grip bands saved; claw ROI unchanged"
+        except (ValueError, OSError) as error:
+            status = str(error)
+
     def trail_action(action):
-        nonlocal trail, recording, show_trails, status
+        nonlocal trail, recording, show_trails, status, edit_band, drag_line
+        if action in {"roi", *CLASSES}:
+            edit_band = None if action == "roi" else action
+            drag_line = None
+            status = "editing claw ROI" if edit_band is None else "140deg: click two lines; drag to adjust; S:save bands"
+            return
+        if action == "save_bands":
+            save_bands()
+            return
         if action == "record":
             if last_frame_id == 0:
                 status = "wait for camera image before recording"
@@ -164,7 +192,9 @@ def main() -> int:
         status = "recording trail" if recording else "trail paused"
 
     def mouse(event: int, x: int, y: int, _flags: int, _data) -> None:
-        nonlocal status
+        nonlocal status, drag_line
+        if event == cv2.EVENT_LBUTTONUP:
+            drag_line = None
         if y >= DISPLAY_HEIGHT:
             if event == cv2.EVENT_LBUTTONDOWN:
                 for x0, y0, x1, y1, action in buttons:
@@ -175,6 +205,23 @@ def main() -> int:
         points = roi_points["overall"]
         image_x = max(0, min(IMAGE_WIDTH - 1, round(x * IMAGE_WIDTH / DISPLAY_WIDTH)))
         image_y = max(0, min(IMAGE_HEIGHT - 1, round(y * IMAGE_HEIGHT / DISPLAY_HEIGHT)))
+        if edit_band is not None:
+            values = band_points[edit_band]
+            image_y = max(1, min(IMAGE_HEIGHT-1, image_y))
+            if event == cv2.EVENT_LBUTTONDOWN:
+                if len(values) < 2:
+                    values.append(image_y)
+                    drag_line = len(values)-1
+                else:
+                    drag_line = min(range(2), key=lambda i: abs(values[i]-image_y))
+                    values[drag_line] = image_y
+            elif event == cv2.EVENT_MOUSEMOVE and drag_line is not None and _flags & cv2.EVENT_FLAG_LBUTTON:
+                values[drag_line] = image_y
+            elif event == cv2.EVENT_RBUTTONDOWN:
+                values.clear()
+                drag_line = None
+            status = f"{edit_band}: {sorted(values)}; S:save bands (ROI unchanged)"
+            return
         if event == cv2.EVENT_LBUTTONDOWN:
             points.append((image_x, image_y))
             status = f"point added: ({image_x}, {image_y})"
@@ -330,6 +377,13 @@ def main() -> int:
                             1,
                             cv2.LINE_AA,
                         )
+            if edit_band is not None:
+                lines = sorted(band_points[edit_band])
+                for label, image_y in zip(("upper/middle", "middle/lower"), lines):
+                    y = round(image_y * scale_y)
+                    cv2.line(shown, (0, y), (DISPLAY_WIDTH-1, y), (0, 255, 255), 2)
+                    cv2.putText(shown, f"{label} y={image_y}", (10, max(65, y-6)),
+                                cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 255), 1, cv2.LINE_AA)
             cv2.rectangle(shown, (0, 0), (DISPLAY_WIDTH, 48), (0, 0, 0), -1)
             cv2.putText(
                 shown,
@@ -368,11 +422,34 @@ def main() -> int:
             count = trail.samples if trail is not None else 0
             draw.text((8, 40), f"{'记录中' if recording else '已暂停'} · 已留影 {count} 次 · 开始前移开物块和手；固定相机和爪子。",
                       font=font, fill=(255, 220, 120))
+            band_entries = (("roi", "编辑爪内ROI"), ("green_supply", "绿色分区"),
+                            ("injured_orange", "橙色分区"), ("save_bands", "保存绿橙分区"))
+            for column, (action, label) in enumerate(band_entries):
+                x0, y0, x1, y1 = column*button_width+3, 75, (column+1)*button_width-3, 108
+                active = action == edit_band or (action == "roi" and edit_band is None)
+                draw.rectangle((x0, y0, x1, y1), fill=(42, 108, 73) if active else (65, 65, 65))
+                draw.text((x0+8, y0+3), label, font=font, fill="white")
+                buttons.append((x0, y0+DISPLAY_HEIGHT, x1, y1+DISPLAY_HEIGHT, action))
+            hint = ("分区：相机固定140°；点击两次画线，拖动调位置；右键清除本类。" if edit_band else
+                    "分区单独保存，不修改爪内ROI；绿、橙分别标定后生效。")
+            draw.text((8, 116), hint, font=font, fill=(255, 220, 120))
             shown = np.vstack((shown, cv2.cvtColor(np.asarray(panel), cv2.COLOR_RGB2BGR)))
             cv2.imshow(WINDOW_NAME, shown)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), ord("Q"), 27):
                 break
+            if edit_band is not None:
+                if key in (ord("s"), ord("S")):
+                    save_bands()
+                elif key in (ord("c"), ord("C")):
+                    band_points[edit_band].clear()
+                    drag_line = None
+                elif key in (ord("r"), ord("R")):
+                    reloaded = GripBands.load(band_path)
+                    band_points[edit_band][:] = getattr(reloaded, edit_band) or ()
+                if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                    break
+                continue
             if key == ord("1"):
                 active_roi = "overall"
                 status = "editing overall ROI"

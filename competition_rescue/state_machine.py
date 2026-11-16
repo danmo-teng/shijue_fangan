@@ -27,6 +27,7 @@ from protocol import (
     CMD_APPROACH_TARGET,
     CMD_APPROACH_RANGE,
     APPROACH_RANGE_REOBSERVE,
+    APPROACH_RANGE_PRE_GRAB,
     CMD_CARGO_AUDIT,
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
@@ -381,6 +382,8 @@ class VisionSnapshot:
     range_pitch_cdeg: int = 0
     range_distances: tuple[tuple[int, int], ...] = ()
     range_top_band_ids: tuple[int, ...] = ()
+    pre_grab_regions: tuple[tuple[int, str], ...] = ()
+    pre_grab_configured_classes: tuple[str, ...] = ()
     range_reason: str = "range_calibration_missing"
     safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
     safe_corridor_obstacle_classes: tuple[str, ...] = ()
@@ -483,6 +486,7 @@ class CompetitionState(str, Enum):
     INITIAL_CLAW_CHECK = "INITIAL_CLAW_CHECK"
     INITIAL_APPROACH = "INITIAL_APPROACH"
     CAPTURE_AUDIT = "CAPTURE_AUDIT"
+    PRE_GRAB_ADVANCE = "PRE_GRAB_ADVANCE"
     AUDIT_CONFIRM = "AUDIT_CONFIRM"
     GRAB = "GRAB"
     POST_GRAB_AUDIT = "POST_GRAB_AUDIT"
@@ -536,6 +540,7 @@ class CompetitionSettings:
     max_batch_count: int = 2
     center_stop_radius_m: float = 0.0
     return_zero_tolerance_m: float = 0.080
+    pre_grab_advance_enabled: bool = False
     post_delivery_return_offset_m: float = 0.30
     post_delivery_return_tolerance_m: float = 0.15
     vision_stale_s: float = 0.30
@@ -821,6 +826,9 @@ class CompetitionMission:
         self.recovering_original_load = False
         self.recovered_injury_audit_reuse = False
         self.search_transfer_route: SearchTransferRoute | None = None
+        self.pre_grab_command: CommandRequest | None = None
+        self.pre_grab_completed_frame: int | None = None
+        self.pre_grab_return_mode = STM_MODE_CAPTURE_AUDIT
         self.search_transfer_epoch = 0
         self.search_point_sign = int(settings.side_sign)
         self.opponent_search_preferred = False
@@ -1191,6 +1199,10 @@ class CompetitionMission:
         return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.PRE_GRAB_ADVANCE:
+            return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT,
+                    STM_MODE_CLUSTER_READY, STM_MODE_APPROACH_RANGE_MOVE,
+                    STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
         if self.state == CompetitionState.CLOSED_DEFLECT:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH, STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_APPROACH_RANGE_WAIT)
         if self.state == CompetitionState.SEARCH_TRANSFER:
@@ -1399,6 +1411,8 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.pre_grab_command = None
+        self.pre_grab_completed_frame = None
         self.initial_attack_arrival_latched = False
         self.recovering_original_load = False
         self.recovered_injury_audit_reuse = False
@@ -2661,6 +2675,9 @@ class CompetitionMission:
     def _audit_confirmation_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
+        depth = self._pre_grab_depth_output(vision, stm, now)
+        if depth is not None:
+            return depth
         assert self.pending_audit is not None
         assert self.pending_audit_payload is not None
         stable_command = CommandRequest(
@@ -3707,6 +3724,72 @@ class CompetitionMission:
                 return "left"
         return "both"
 
+    def _pre_grab_depth_output(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        if (not self.settings.pre_grab_advance_enabled or self.selected_batch is None or
+                stm.gripper_closed or self.post_grab_audit_active or self.cargo_recheck_pending or
+                (self.selected_batch.initial_stash and not self.selected_batch.track_ids) or
+                stm.mode not in {STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT,
+                                 STM_MODE_CLUSTER_READY}):
+            return None
+        configured = set(vision.pre_grab_configured_classes)
+        if not configured.intersection(self.selected_batch.classes):
+            return None
+        target = self._target_for_batch(vision)
+        region = (dict(vision.pre_grab_regions).get(target.track_id)
+                  if target is not None and target.visible else None)
+        if target is not None and target.class_name not in configured:
+            return None
+        if (stm.camera_pitch_cdeg != 14000 or not stm.claw_visible or
+                region is None or vision.frame_sequence <= 0):
+            # No current box is neither a deeper grip nor another advance.
+            self._invalidate_audit_evidence()
+            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+            return CompetitionOutput(self.state, self._hold(),
+                "抓前分区：当前没有可用目标框，保持开爪，沿原复看/恢复流程处理",
+                self.selected_batch, reason="pre_grab_target_missing")
+        if region != "upper":
+            return None  # Middle/lower still require the original real cargo audit.
+        self._invalidate_audit_evidence()
+        self.audit_epoch += 1
+        self.range_epoch += 1
+        self.pre_grab_return_mode = stm.mode
+        self.pre_grab_completed_frame = None
+        self.pre_grab_command = CommandRequest(CMD_APPROACH_TARGET,
+            self._side_flags() | CMD_DISTANCE_VALID | CMD_APPROACH_RANGE |
+            (CMD_CLUSTER_TARGET if self.cluster_audit_active else 0),
+            50, 14000, APPROACH_RANGE_PRE_GRAB, source_vision_frame=vision.frame_sequence)
+        self._set_state(CompetitionState.PRE_GRAB_ADVANCE, now)
+        return replace(self._pre_grab_advance_output(vision,
+            replace(stm, context_matches=False), now), event="pre_grab_advance_start")
+
+    def _pre_grab_advance_output(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH}:
+            self.pre_grab_command = None
+            self.pre_grab_completed_frame = None
+            self._begin_search_recovery(vision, now)
+            return self._search_recovery_output(vision, stm, now)
+        assert self.pre_grab_command is not None
+        done = (stm.context_valid and stm.context_matches and
+                stm.accepted_command == CMD_APPROACH_TARGET and stm.action_status & 3 == 3 and
+                stm.mode == self.pre_grab_return_mode)
+        if done and self.pre_grab_completed_frame is None:
+            self.pre_grab_completed_frame = vision.frame_sequence
+        if (done and self.pre_grab_completed_frame is not None and
+                vision.frame_sequence > self.pre_grab_completed_frame):
+            self.pre_grab_command = None
+            self.pre_grab_completed_frame = None
+            self._set_state(CompetitionState.CAPTURE_AUDIT, now)
+            return self._audit_output(vision, stm, now)
+        return CompetitionOutput(self.state, self.pre_grab_command,
+            "抓前补进50mm已完成，按下一张图复看" if done else "抓前框中心偏上，完成本段50mm轮程后再审核",
+            self.selected_batch, motion_expected=not done,
+            reason="pre_grab_advance_reobserve" if done else "pre_grab_advance_move",
+            expected_stm_modes=self.expected_stm_modes())
+
     def _audit_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
@@ -3716,6 +3799,9 @@ class CompetitionMission:
             return self._missing_committed_audit_output(stm, now)
         if self.selected_batch is None:
             return self._audit_placeholder("audit_batch_missing", wire_mode=stm.mode)
+        depth = self._pre_grab_depth_output(vision, stm, now)
+        if depth is not None:
+            return depth
         waiting = self._audit_observation_wait(vision, stm, now)
         if waiting is not None:
             return waiting
@@ -7121,6 +7207,9 @@ class CompetitionMission:
                 now,
                 message="靠近锁定批次",
             )
+
+        if self.state == CompetitionState.PRE_GRAB_ADVANCE:
+            return self._pre_grab_advance_output(vision, stm, now)
 
         if self.state == CompetitionState.CAPTURE_AUDIT:
             return self._audit_output(vision, stm, now)

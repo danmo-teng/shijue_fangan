@@ -62,6 +62,7 @@ CMD_FIRST_GREEN_BUMP = 1 << 5
 CMD_APPROACH_RANGE = 1 << 6
 # APPROACH_RANGE aux only: finish this segment at the same measuring pitch.
 APPROACH_RANGE_REOBSERVE = 1
+APPROACH_RANGE_PRE_GRAB = 2  # Paired firmware: open claw, 140deg, finite 50mm.
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
@@ -195,9 +196,11 @@ def mission_frame(
             raise ValueError("audit reuse requires the existing STAGE NAV distance/heading payload")
     if command == CMD_APPROACH_TARGET and flags & CMD_APPROACH_RANGE:
         allowed = CMD_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
+        ordinary = (aux_cdeg in {0, APPROACH_RANGE_REOBSERVE} and
+                    0 <= arg_a <= 2500 and arg_b in {10500, 12000})
+        pre_grab = aux_cdeg == APPROACH_RANGE_PRE_GRAB and arg_a == 50 and arg_b == 14000
         if (flags & ~allowed or flags & (CMD_VALID | CMD_DISTANCE_VALID) != (CMD_VALID | CMD_DISTANCE_VALID) or
-                not 0 <= arg_a <= 2500 or arg_b not in {10500, 12000} or
-                aux_cdeg not in {0, APPROACH_RANGE_REOBSERVE}):
+                not (ordinary or pre_grab)):
             raise ValueError("invalid fixed-pitch approach range request")
     if flags & CMD_STAGE_ONLY and command not in {
         CMD_APPROACH_TARGET,
