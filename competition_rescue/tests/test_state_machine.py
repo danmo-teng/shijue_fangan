@@ -3616,6 +3616,7 @@ def test_transport_real_contradiction_or_opening_revokes_retained_result():
         CargoAudit(danger_present=True),
         "open",
         "wrong_context",
+        "occluded_mixture",
     )
     for change in cases:
         m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
@@ -3636,8 +3637,13 @@ def test_transport_real_contradiction_or_opening_revokes_retained_result():
         value = change if isinstance(change, CargoAudit) else CargoAudit()
         if change == "open": ack = replace(ack, flags=81)
         if change == "wrong_context": ack = replace(ack, context_matches=False)
-        result = m._transport_audit_output(VisionSnapshot(frame_sequence=4,
-            observed_monotonic_s=1.3, capture_audit=value), p, ack, 1.3)
+        view = VisionSnapshot(frame_sequence=4, observed_monotonic_s=1.3, capture_audit=value)
+        if change == "occluded_mixture":
+            view = replace(view, capture_audit=None, capture_observation_valid=False,
+                capture_observation_reason="claw_targets_occluded",
+                capture_cargo=(cargo(393, "green_supply", 550, 230),
+                               cargo(900, "injured_orange", 560, 240)))
+        result = m._transport_audit_output(view, p, ack, 1.3)
         assert m.state == CompetitionState.TRANSPORT_AUDIT
         assert result.command.opcode == CMD_CARGO_AUDIT
         if change != "wrong_context": assert not result.command.audit.stable

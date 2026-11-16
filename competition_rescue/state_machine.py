@@ -6145,14 +6145,21 @@ class CompetitionMission:
     ) -> CompetitionOutput:
         assert self.selected_batch is not None
         observed_audit = vision.capture_audit
-        if (self._retains_transport_audit(stm) and vision.capture_observation_valid and
-                self._audit_vision_fresh(vision, now) and observed_audit is not None and
+        retain = self._retains_transport_audit(stm)
+        expected = Counter(self._manifest_for_audit(self.transport_audit_value)) if retain else Counter()
+        visible_load = Counter(item.class_name for item in vision.capture_cargo if item.visible)
+        observed_extra = any(count > expected[name] for name, count in visible_load.items())
+        changed_audit = (
+                vision.capture_observation_valid and observed_audit is not None and
                 (observed_audit.total_count > 0 or observed_audit.danger_present or
                  observed_audit.unknown_present or observed_audit.injury_mixed) and
                 self._audit_signature_for_state(observed_audit, self._audit_valid(observed_audit)) !=
-                self.audit_last_signature):
+                self.audit_last_signature)
+        if (retain and self._audit_vision_fresh(vision, now) and
+                (changed_audit or observed_extra or vision.carried_incompatible_cargo)):
             # Real changed cargo still revokes the old result BEFORE any ACK
-            # can advance it. An empty detection list cannot establish that.
+            # can advance it, including overlapping mixed boxes whose full
+            # audit is unavailable. An empty detection list cannot establish that.
             self._invalidate_audit_evidence()
         waiting = self._audit_observation_wait(vision, stm, now)
         retained_stable = (
