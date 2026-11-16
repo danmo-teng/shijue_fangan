@@ -66,6 +66,7 @@ class CompetitionMapApp(RescueMapApp):
         self.prewarm_enabled = bool(getattr(options, 'gpio_buttons', False) and self.dynamic_localization
             and not options.demo and not options.screenshot)
         self.warming = False
+        self.warm_ready = False
         self.start_requested = False
         self.start_released = False
         self.warm_ready_announced = False
@@ -87,13 +88,15 @@ class CompetitionMapApp(RescueMapApp):
 
     def prepare_warm_session(self):
         """Start the one SDK/UART and vision owners, with command production disarmed."""
-        if self.warming or self.session_started:
+        if self.warming or self.session_started or self.operator.stopped:
             return
+        self.warm_ready = False
         self.warm_error = None
         self.start_requested = self.start_released = self.warm_ready_announced = False
         self.warm_status_path.unlink(missing_ok=True)
         try:
-            self.operator.before_start()
+            if not self.operator.before_start():
+                return
             super().start_session()
             if not self.session_started:
                 raise RuntimeError(self.message)
@@ -105,7 +108,7 @@ class CompetitionMapApp(RescueMapApp):
             self.vision_start_pending = False
             if self.options.launch_vision:
                 self.vision_process = self.start_owned_process(self.vision_command(), PROJECT_ROOT / 'mission_test')
-            self.message = '预热T265、雷达和视觉；可选区，按3一次记录开赛请求'
+            self.message = '正在预热T265、雷达和视觉；可选区，等循环双短音后再短按3发车'
             self.record_reset_event('prewarm_started', 'same_sdk_session_until_start')
         except Exception as error:
             self._warm_failed(str(error))
@@ -114,14 +117,16 @@ class CompetitionMapApp(RescueMapApp):
 
     def _warm_failed(self, reason):
         self.warm_error = reason
+        self.warm_ready = False
         self.start_requested = self.start_released = self.warming = False
         self.session_started = False
         self.selecting = True
+        self.operator.set_alarm(True)
         self.stop_session_processes()
         self.operator._start_standby()
-        self.message = f'预热失败：{reason}；修复后按3重试，未发送开赛命令'
+        self.operator.set_alarm(True)  # Latest alarm also goes to the new UART owner.
+        self.message = f'预热失败：{reason}；修复后长按3重试，未发送开赛命令'
         self.record_reset_event('prewarm_failed', reason)
-        self.operator._beep(3, long=True)
 
     def _update_warm_start(self):
         for name, process in (('定位', self.localization_process), ('视觉', self.vision_process)):
@@ -138,14 +143,18 @@ class CompetitionMapApp(RescueMapApp):
             '视觉推理': bool(status.get('session_token') == self.reset_session_token and status.get('ready')),
         }
         ready = all(arrivals.values())
+        self.warm_ready = ready and not self.operator.stopped and not self.start_released
+        self.operator.set_ready_feedback(self.warm_ready and not self.start_requested)
         if ready and not self.warm_ready_announced:
             self.warm_ready_announced = True
-            self.operator._beep(1)
-            self.record_reset_event('prewarm_ready', 'one_short_beep; SDK Pose, gyro and actual inference present')
+            self.operator._ready_heartbeat()
+            self.record_reset_event('prewarm_ready', 'repeating_two_short_beeps; SDK Pose, gyro and actual inference present')
         if self.operator.stopped:
             self.start_requested = False
-            self.message = '已请求停止；长按4退出后自动重新预热'
+            self.message = '已请求停止；长按4回待机，再长按3预热'
             return
+        if self.start_requested and not ready and not self.start_released:
+            self.reject_unready_start()
         if self.start_requested and ready and not self.start_released:
             selected = initial_pose(self.zone, self.corner_offset_m)
             start = dict(x_m=selected.x_m, y_m=selected.y_m, yaw_deg=selected.yaw_deg)
@@ -171,6 +180,7 @@ class CompetitionMapApp(RescueMapApp):
                 self._warm_failed(f'开赛控制文件写入失败：{error}')
                 return
             self.record_reset_event('warm_start_requested', 'bind_latest_pose_and_primary_yaw')
+            self.warm_ready = False
         if self.start_released and status.get('competition_started'):
             self.warming = False
             self.session_started = True
@@ -183,12 +193,17 @@ class CompetitionMapApp(RescueMapApp):
         if not ready:
             received = '、'.join(name for name, present in arrivals.items() if present) or '无'
             missing = '、'.join(name for name, present in arrivals.items() if not present)
-            request_note = '已记录开赛请求，4号可取消' if self.start_requested else '按3可提前记录开赛请求'
-            self.message = f'预热已到：{received}；待到：{missing}。{request_note}'
+            self.message = f'预热已到：{received}；待到：{missing}。尚未就绪，提前按3不会预约发车'
         elif self.start_requested:
-            self.message = '已记录开赛请求，正在绑定正式起点；4号可取消'
+            self.message = '已接受就绪后的发车按键，正在绑定正式起点；4号可取消'
         else:
-            self.message = '预热完成：按3开始'
+            self.message = '预热完成：循环双短音，短按3一次发车'
+
+    def reject_unready_start(self):
+        self.start_requested = False
+        self.operator.set_alarm(True)
+        self.message = '此次按3未被接受，也不会稍后自动发车；待循环双短音后重新短按3。未预热/失败时须长按3预热'
+        self.record_reset_event('operator_start_rejected', 'press_not_ready; no queued start')
 
     def start_session(self):
         if self.prewarm_enabled:
@@ -197,12 +212,14 @@ class CompetitionMapApp(RescueMapApp):
             if self.operator.stopped:
                 self.message = '本轮已停止；长按4退出后可重新开始'
                 return
-            if not self.warming:
-                self.prepare_warm_session()
-            if self.warming:
-                self.start_requested = True
-                self.selecting = False
-                self.record_reset_event('operator_start_requested', 'gpio_or_map; no SDK restart')
+            if not self.warming or not getattr(self, 'warm_ready', False):
+                self.reject_unready_start()
+                return
+            self.operator.silence()
+            self.start_requested = True
+            self.record_reset_event('operator_start_requested', 'ready_press; no SDK restart')
+            self._update_warm_start()
+            self.selecting = not self.start_released
             return
         if self.session_started:
             return  # A new round starts after explicit exit/reset, never resumes old actions.
@@ -249,11 +266,13 @@ class CompetitionMapApp(RescueMapApp):
             if self.operator is not None:
                 self.operator.start()
                 if self.prewarm_enabled:
-                    self.prepare_warm_session()
+                    self.message = '待机：长按3约1秒只预热，循环双短音后短按3发车'
             return super().run()
         finally:
             # Also covers setup/window errors before the base run-loop finally.
             try:
+                if self.operator is not None:
+                    self.operator.silence()
                 self.stop_session_processes()
             finally:
                 if self.operator is not None:
@@ -397,6 +416,11 @@ class CompetitionMapApp(RescueMapApp):
         text.add(build, (920, 105), 13, (165, 165, 170))
 
     def stop_localization(self) -> None:
+        # The base GUI/headless loop closes its owners before run() returns.
+        # Silence while UART still exists; failure cleanup keeps the alarm and
+        # hands it to standby instead. Explicit reset already requests silence.
+        if self.operator is not None and self.warm_error is None:
+            self.operator.silence()
         process = self.localization_process
         super().stop_localization()
         adapter = self.wheel_input
@@ -566,8 +590,10 @@ class CompetitionMapApp(RescueMapApp):
             print(f"复位日志写入失败：{error}", file=sys.stderr)
 
     def reset_session(self, source: str = "map_window") -> None:
+        self.warm_ready = False
         self.warming = self.start_requested = self.start_released = False
         if self.operator is not None:
+            self.operator.silence()
             self.operator.transitioning = True
         self.record_reset_event("session_reset_requested", source)
         super().reset_session()
@@ -577,7 +603,7 @@ class CompetitionMapApp(RescueMapApp):
         if self.operator is not None:
             self.operator.after_reset()
             if self.prewarm_enabled:
-                self.prepare_warm_session()
+                self.message = '待机：长按3约1秒只预热，循环双短音后短按3发车'
 
     def consume_reset_request(self) -> bool:
         try:

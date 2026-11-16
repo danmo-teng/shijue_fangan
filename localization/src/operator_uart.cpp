@@ -19,7 +19,11 @@ bool validate_operator_frame(const std::uint8_t *data, std::size_t size)
     const auto crc = modbus_crc16(data + 2, 10);
     if (data[12] != (crc & 0xff) || data[13] != (crc >> 8)) return false;
     if (data[2] == kOperatorBeepMessageType) {
-        if (data[4] != 1 || data[5] < 1 || data[5] > 4 || data[6] > 1) return false;
+        if (data[4] == 1) {
+            if (data[5] < 1 || data[5] > 4 || data[6] > 1) return false;
+        } else if (data[4] == 2) {
+            if (data[5] > 1 || data[6] != 0) return false;
+        } else return false;
         for (int i = 7; i < 12; ++i) if (data[i] != 0) return false;
         return true;
     }

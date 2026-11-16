@@ -133,6 +133,8 @@ class SysfsButtonInput:
                 button.long_sent = False
                 if key == 4 and button.armed:
                     emit('stop', key)
+                elif key == 3 and button.armed and not self._chord_blocked:
+                    emit('start_pressed', key)
             else:
                 if (button.armed and not button.long_sent and
                         (key == 4 or not self._chord_blocked)):
@@ -141,6 +143,7 @@ class SysfsButtonInput:
                     held_s = button.changed_at - button.pressed_at
                     long_action, duration = {
                         1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
+                        3: ('prewarm', 1.0),
                         4: ('exit_session', 2.0),
                     }.get(key, (None, 0.0))
                     action = (long_action if long_action and held_s >= duration else
@@ -155,6 +158,7 @@ class SysfsButtonInput:
                 continue
             action, duration = {
                 1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
+                3: ('prewarm', 1.0),
                 4: ('exit_session', 2.0),
             }.get(key, (None, 0.0))
             if action and now - button.pressed_at >= duration:

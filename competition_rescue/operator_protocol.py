@@ -1,7 +1,7 @@
-"""One-shot operator feedback to the existing C++ UART owner.
+"""Operator feedback to the existing C++ UART owner.
 
 True means the local IPC datagram was delivered, not that firmware played it.
-Firmware TYPE 0x20 support is a separate lower-computer implementation task.
+v1 finite beeps and v2 persistent alarm share the existing TYPE 0x20.
 """
 from __future__ import annotations
 
@@ -31,6 +31,17 @@ def _send(socket_name: str, frame: bytes) -> bool:
             return client.sendto(frame, "\0" + socket_name[1:]) == len(frame)
     except OSError:
         return False
+
+
+def alarm_frame(enabled: bool, sequence: int = 0) -> bytes:
+    if not 0 <= sequence <= 255:
+        raise ValueError("sequence must be 0..255")
+    body = bytes((TYPE_OPERATOR_BEEP, sequence, 2, int(bool(enabled)), 0, 0, 0, 0, 0, 0))
+    return FRAME_HEAD + body + crc16_modbus(body).to_bytes(2, "little") + bytes((FRAME_TAIL,))
+
+
+def send_alarm(socket_name: str, enabled: bool, sequence: int = 0) -> bool:
+    return _send(socket_name, alarm_frame(enabled, sequence))
 
 
 def send_beep(socket_name: str, count: int = 1, long: bool = False, sequence: int = 0) -> bool:

@@ -2,9 +2,9 @@
   "name": "f405_operator_alarm_v2",
   "date": "2026-11-16",
   "status": {
-    "scope": "current_user_requested_handoff",
-    "upper": "not_implemented",
-    "lower": "implemented_source_reviewed_not_flashed",
+    "scope": "approved_upper_integration",
+    "upper": "implemented_built_deployed_not_hardware_verified",
+    "lower": "source_reviewed_at_logged_6b05d94_dirty1_hardware_audio_unverified",
     "hardware_playback": "not_tested"
   },
   "transport": {
@@ -88,5 +88,5 @@
       "hex": "a3 b3 20 00 02 01 00 00 00 00 00 00 e0 74 c3"
     }
   ],
-  "lower_reviewed_commit": "666d8d0c053fa6db869fcf634fda7203e98b766f"
+  "lower_reviewed_commit": "6b05d9450b740848bf9436e63b6e9da10a293579"
 }

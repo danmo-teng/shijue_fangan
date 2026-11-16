@@ -2008,7 +2008,7 @@ def test_incident_video_replay_and_log_only_timeout():
 def test_operator_buttons_and_feedback_encoding():
     """Human input sequences only; no GPIO, UART or sensor access."""
     from button_input import SysfsButtonInput
-    from operator_protocol import beep_frame
+    from operator_protocol import beep_frame, alarm_frame
     from protocol import crc16_modbus
     levels = {1: 1, 2: 1, 3: 0, 4: 1}
     buttons = SysfsButtonInput(read_level=lambda key: levels[key])
@@ -2030,6 +2030,22 @@ def test_operator_buttons_and_feedback_encoding():
             assert len(frame) == 15 and frame[2:7] == bytes((0x20, 9, 1, count, long))
             assert int.from_bytes(frame[12:14], 'little') == crc16_modbus(frame[2:12])
     assert beep_frame().hex() == 'a3b320000101000000000000a061c3'
+    assert alarm_frame(False).hex() == 'a3b320000200000000000000f0b4c3'
+    assert alarm_frame(True).hex() == 'a3b320000201000000000000e074c3'
+    levels = {key: 1 for key in range(1, 5)}
+    buttons = SysfsButtonInput(read_level=lambda key: levels[key])
+    buttons.poll(0.)
+    levels[3] = 0; buttons.poll(.1)
+    assert [e['action'] for e in buttons.poll(.14)] == ['start_pressed']
+    assert [e['action'] for e in buttons.poll(1.2)] == ['prewarm']
+    levels[3] = 1; buttons.poll(1.3)
+    assert buttons.poll(1.34) == []  # Long3 release never starts.
+    levels[3] = 0; buttons.poll(2.); buttons.poll(2.04)
+    levels[3] = 1; buttons.poll(3.2)
+    assert [e['action'] for e in buttons.poll(3.24)] == ['prewarm']
+    levels[3] = 0; buttons.poll(4.); buttons.poll(4.04)
+    levels[3] = 1; buttons.poll(4.2)
+    assert [e['action'] for e in buttons.poll(4.24)] == ['start']
 
 
 def test_operator_panel_stop_and_session_ownership():
@@ -2046,6 +2062,7 @@ def test_operator_panel_stop_and_session_ownership():
             message='', record_reset_event=Mock(), start_session=Mock(), reset_session=Mock())
         with patch.object(panel_module, 'RUNTIME', root), \
                 patch.object(panel_module, 'send_abort', return_value=True) as abort, \
+                patch.object(panel_module, 'send_alarm', return_value=True), \
                 patch.object(panel_module, 'send_beep', return_value=True) as beep:
             panel = OperatorPanel(app)
             assert (app.zone, app.side, app.selecting) == (3, 'blue', True)
@@ -2089,7 +2106,8 @@ def test_formal_button_launcher_wiring_without_hardware():
             screenshot=None, official_wheel_input=False, dynamic_localization=False,
             gpio_buttons=True, headless=True)
         with patch.object(map_app,'RUNTIME',runtime), patch.object(formal,'RUNTIME',runtime), \
-                patch.object(panel_module,'RUNTIME',runtime):
+                patch.object(panel_module,'RUNTIME',runtime), \
+                patch.object(panel_module,'send_alarm',return_value=True):
             app = formal.CompetitionMapApp(options)
             assert app.selecting and not app.session_started  # Even with CLI zone/side.
             app.start_session()
@@ -2191,7 +2209,8 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
             uart='MOCK',baud=230400,tx_rate=20.,fullscreen=False,demo=False,screenshot=None,
             official_wheel_input=True,dynamic_localization=True,gpio_buttons=True,headless=True)
         with patch.object(map_app,'RUNTIME',runtime), patch.object(formal,'RUNTIME',runtime), \
-             patch.object(panel_module,'RUNTIME',runtime), patch.object(panel_module,'send_beep',return_value=True):
+             patch.object(panel_module,'RUNTIME',runtime), patch.object(panel_module,'send_beep',return_value=True), \
+             patch.object(panel_module,'send_alarm',return_value=True):
             app = formal.CompetitionMapApp(options)
             owner = Mock(); owner.poll.return_value = None
             vision = Mock(); vision.poll.return_value = None
@@ -2208,14 +2227,23 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
                 assert '--wait-for-operator' in spawn.call_args.args[0]
                 token = app.reset_session_token
                 app.zone,app.side = 4,'blue'
-                app.start_session()  # Press before ready is remembered.
+                app.start_session()  # Press before ready must never be remembered.
                 app._update_warm_start()
-                assert app.start_requested and not app.start_released
+                assert not app.start_requested and not app.start_released
                 dynamic.request_start.assert_not_called()
                 assert not app.operator.control_path.exists()
                 app.warm_status_path.write_text(json.dumps(dict(session_token=token,ready=True,competition_started=False)))
                 dynamic.radar.state.update(have_tracked_pose=True,have_primary_yaw=True)
                 app._update_warm_start()
+                assert app.warm_ready and not app.start_released
+                dynamic.request_start.assert_not_called()
+                # A release queued before readiness cannot turn into START.
+                app.operator._enqueue(dict(action='start',key=3,_stop_serial=0,_ready_press_token=None))
+                app.operator.tick()
+                assert not app.start_requested and not app.start_released
+                app._update_warm_start()
+                app.operator._enqueue(dict(action='start',key=3,_stop_serial=0,_ready_press_token=token))
+                app.operator.tick()
                 assert app.start_released and spawn.call_count == 1 and app.localization_process is owner
                 request=json.loads(app.operator.control_path.read_text())
                 assert request['side']=='blue' and request['start_zone']==4 and request['reference_token']==token
@@ -2255,7 +2283,8 @@ def test_warm_start_stop_wins_before_release_and_failure_does_not_retry():
     app.warm_status_path=Path('/nonexistent/mock-warm-status')
     app.reset_session_token='mock'
     app.dynamic=SimpleNamespace(radar=SimpleNamespace(state={}),request_start=Mock())
-    app.operator=SimpleNamespace(stopped=True,_beep=Mock(),_start_standby=Mock())
+    app.operator=SimpleNamespace(stopped=True,set_alarm=Mock(),set_ready_feedback=Mock(),
+        _ready_heartbeat=Mock(),_start_standby=Mock())
     app.record_reset_event=Mock();app.stop_session_processes=Mock()
     app._update_warm_start()
     assert not app.start_requested and not app.start_released
@@ -2266,7 +2295,8 @@ def test_warm_start_stop_wins_before_release_and_failure_does_not_retry():
     assert not app.warming and app.selecting and not app.start_requested
     app.stop_session_processes.assert_called_once()
     app.operator._start_standby.assert_called_once()
-    app.operator._beep.assert_called_once_with(3,long=True)
+    assert app.operator.set_alarm.call_count == 2  # Before cleanup and across owner handoff.
+    app.operator.set_alarm.assert_called_with(True)
 
 
 
@@ -2284,6 +2314,77 @@ def test_warm_config_partial_start_remembers_abort_obligation():
         assert not sent and not facts
         assert runner_module.publish_start_config(Path('/unused'),'red',1,lambda:True,lambda:facts.append(1))
         assert len(sent)==3 and len(facts)==3
+
+
+def test_prewarm_press_readiness_and_feedback_states():
+    from unittest.mock import Mock, patch
+    from types import SimpleNamespace
+    import operator_panel as panel_module
+    app = SimpleNamespace(options=SimpleNamespace(zone=1,side='red'),zone=1,side='red',
+        corner_offset_m=.2,record_reset_event=Mock(),prewarm_enabled=True,warm_ready=False,
+        reset_session_token='round',start_session=Mock(),reject_unready_start=Mock())
+    with tempfile.TemporaryDirectory() as directory, patch.object(panel_module,'RUNTIME',Path(directory)), \
+         patch.object(panel_module,'send_alarm',return_value=True) as alarm, \
+         patch.object(panel_module,'send_beep',return_value=True) as beep:
+        panel=panel_module.OperatorPanel(app)
+        panel.buttons=Mock()
+        panel.buttons.poll.side_effect=[[dict(action='start_pressed')],[dict(action='start')]]
+        def between_polls(_):
+            if app.warm_ready:
+                panel._quit.set()
+            app.warm_ready=True
+        with patch.object(panel._quit,'wait',side_effect=between_polls):
+            panel._poll_buttons()
+        panel.tick()
+        app.start_session.assert_not_called()
+        app.reject_unready_start.assert_called_once()
+        # Persistent alarm is sent once, not repeated every GUI tick; query
+        # beeps cannot cancel it. A failed local send retains only latest state.
+        panel.set_alarm(True)
+        count=alarm.call_count
+        panel._query_zone();panel.tick();panel.tick()
+        assert alarm.call_count==count and beep.call_count==0
+        alarm.return_value=False
+        panel.set_alarm(True)
+        panel.silence()
+        assert panel._pending_alarm[0] is False
+        alarm.return_value=True
+        panel.tick()
+        assert panel._pending_alarm is None and alarm.call_args.args[1] is False
+        with patch.object(panel_module.time,'monotonic',return_value=10.) as clock:
+            panel.set_ready_feedback(True);panel.tick()
+            assert beep.call_count==1 and beep.call_args.kwargs['count']==2
+            clock.return_value=12.9;panel.tick()
+            assert beep.call_count==1
+            clock.return_value=13.;panel.tick()
+            assert beep.call_count==2
+            panel.silence();clock.return_value=17.;panel.tick()
+            assert beep.call_count==2
+        panel.stopped=True
+        with patch.object(panel,'_stop_standby') as close_owner:
+            assert panel.before_start() is False
+            close_owner.assert_not_called()
+        assert panel.stopped  # STOP cannot be cleared by a prewarm race.
+
+
+def test_prewarm_boot_and_reset_stay_idle():
+    from unittest.mock import Mock, patch
+    import competition_map_app as formal
+    app=formal.CompetitionMapApp.__new__(formal.CompetitionMapApp)
+    app.prewarm_enabled=True
+    app.operator=Mock()
+    app.prepare_warm_session=Mock()
+    app.stop_session_processes=Mock()
+    app.record_reset_event=Mock()
+    app.reset_request_path=Mock()
+    app.warm_ready=True
+    with patch.object(formal.RescueMapApp,'run',return_value=0), \
+         patch.object(formal.RescueMapApp,'reset_session'):
+        assert app.run()==0
+        app.reset_session()
+    app.prepare_warm_session.assert_not_called()
+    assert not app.warming and not app.start_requested and not app.warm_ready
+    app.operator.after_reset.assert_called_once()
 
 
 

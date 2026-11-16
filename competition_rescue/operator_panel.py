@@ -14,13 +14,14 @@ import queue
 import secrets
 import subprocess
 import threading
+import time
 
 try:
     from .button_input import SysfsButtonInput
-    from .operator_protocol import send_abort, send_beep
+    from .operator_protocol import send_abort, send_beep, send_alarm
 except ImportError:
     from button_input import SysfsButtonInput
-    from operator_protocol import send_abort, send_beep
+    from operator_protocol import send_abort, send_beep, send_alarm
 
 try:
     from field_model import initial_pose
@@ -64,6 +65,11 @@ class OperatorPanel:
         self._stop_serial = 0
         self._beep_sequence = 0
         self._pending_beep = None
+        self._pending_alarm = None
+        self._alarm_on = False
+        self._ready_feedback = False
+        self._next_ready_beep = 0.0
+        self._start_press_token = None
         self.buttons = SysfsButtonInput()
         selection = _read_json(self.selection_path)
         if not getattr(app.options, 'zone', None) and selection.get('zone') in (1, 2, 3, 4):
@@ -133,8 +139,8 @@ class OperatorPanel:
         self._lock_file = lock_file
         self.active = True
         self._quit.clear()
-        if not getattr(self.app, 'prewarm_enabled', False):
-            self._start_standby()
+        self._start_standby()
+        self.silence()
         self._thread = threading.Thread(target=self._poll_buttons, name='competition-buttons', daemon=True)
         self._thread.start()
 
@@ -171,6 +177,15 @@ class OperatorPanel:
     def _poll_buttons(self):
         while not self._quit.is_set():
             for event in self.buttons.poll():
+                if event['action'] == 'start_pressed':
+                    # Capture the readiness of this press, before the GUI can
+                    # process a later release after prewarming has completed.
+                    self._start_press_token = (self.app.reset_session_token
+                        if getattr(self.app, 'warm_ready', False) and not self.stopped else None)
+                    continue
+                if event['action'] == 'start':
+                    event['_ready_press_token'] = self._start_press_token
+                    self._start_press_token = None
                 if event['action'] == 'stop':
                     self.request_stop()
                 if (event['action'] == 'start' and self.transitioning
@@ -181,6 +196,14 @@ class OperatorPanel:
             self._quit.wait(.02)
 
     def _flush_beep(self):
+        if self._pending_alarm is not None:
+            enabled, sequence = self._pending_alarm
+            if not send_alarm(self.socket_name, enabled, sequence):
+                return False
+            self._pending_alarm = None
+        if self._alarm_on or self.stopped:
+            self._pending_beep = None
+            return True
         if self._pending_beep is None:
             return True
         count, long, sequence = self._pending_beep
@@ -190,11 +213,41 @@ class OperatorPanel:
         return False
 
     def _beep(self, count, long=False):
+        if self._alarm_on or self.stopped:
+            return
         self._beep_sequence = (self._beep_sequence + 1) & 255
         # One replaceable local notification, never a UART acknowledgment wait.
         self._pending_beep = (count, long, self._beep_sequence)
         if not self._flush_beep():
             self._record('operator_feedback_pending', '本地IPC暂未绑定；保留一条声音请求，不等待下位机回执')
+
+    def set_alarm(self, enabled):
+        self._ready_feedback = False
+        self._pending_beep = None
+        self._alarm_on = bool(enabled)
+        self._beep_sequence = (self._beep_sequence + 1) & 255
+        self._pending_alarm = (self._alarm_on, self._beep_sequence)
+        if not self._flush_beep():
+            self._record('operator_feedback_pending', '保留最新警报/消音请求，等待本地串口进程绑定；不等下位回执')
+
+    def silence(self):
+        self.set_alarm(False)
+
+    def set_ready_feedback(self, ready):
+        ready = bool(ready) and not self.stopped
+        if ready and not self._ready_feedback:
+            self.silence()
+            self._next_ready_beep = 0.0
+        elif not ready and self._ready_feedback:
+            self.silence()
+        self._ready_feedback = ready
+
+    def _ready_heartbeat(self):
+        if self._ready_feedback and not self.stopped:
+            now = time.monotonic()
+            if now >= self._next_ready_beep:
+                self._next_ready_beep = now + 3.0
+                self._beep(2)
 
     def _query_zone(self):
         self.app.message = f'当前出发区：{self.app.zone}号'
@@ -222,6 +275,7 @@ class OperatorPanel:
             elif action == 'input_recovered':
                 self._record('operator_input_recovered', f"key{event['key']}")
             elif action == 'stop':
+                self.silence()
                 self.app.vision_start_pending = False
                 self.app.start_requested = False
                 self._notice('已请求停止本轮运动；长按4号返回待机', 'operator_stop')
@@ -243,14 +297,27 @@ class OperatorPanel:
                     self.app.side = 'blue' if self.app.side == 'red' else 'red'
                     self.save_selection()
                 self._query_side()
+            elif action == 'prewarm':
+                if (getattr(self.app, 'prewarm_enabled', False) and self.app.selecting
+                        and not self.transitioning and not self.stopped
+                        and event.get('_stop_serial') == self._stop_serial):
+                    self.app.prepare_warm_session()
             elif action == 'start':
                 if (self.app.selecting and not self.transitioning and
                         event.get('_stop_serial') == self._stop_serial):
-                    self.app.start_session()
+                    if (getattr(self.app, 'prewarm_enabled', False) and
+                            (event.get('_ready_press_token') is None or
+                             event['_ready_press_token'] != self.app.reset_session_token)):
+                        self.app.reject_unready_start()
+                    else:
+                        self.app.start_session()
+        self._ready_heartbeat()
 
     def before_start(self):
-        self._pending_beep = None
+        self.silence()
         with self._state_lock:
+            if getattr(self.app, 'prewarm_enabled', False) and self.stopped:
+                return False  # STOP may arrive after the caller's initial check.
             self.transitioning = True
             self.stopped = False
             self.app.reset_session_token = secrets.token_hex(16)
@@ -260,6 +327,10 @@ class OperatorPanel:
                 self._notice(f'旧按键控制记录清理失败：{error}')
         self.save_selection()
         self._stop_standby()
+        # Carry the latest sound state across UART ownership transfer. This is
+        # one local request, not a firmware acknowledgment or periodic retry.
+        self._pending_alarm = (self._alarm_on, self._beep_sequence)
+        return True
 
     def release_start(self, zone, side, opening_strategy):
         # Serialize with the independent GPIO STOP writer: a STOP must never
@@ -291,11 +362,12 @@ class OperatorPanel:
             except OSError as error:
                 self._notice(f'按键控制记录清理失败：{error}')
             self.transitioning = False
-        if self.active and not getattr(self.app, 'prewarm_enabled', False):
+        if self.active:
             self._start_standby()
+        self.silence()
 
     def close(self):
-        self._pending_beep = None
+        self.silence()
         self._quit.set()
         if self._thread is not None:
             self._thread.join(timeout=1)
