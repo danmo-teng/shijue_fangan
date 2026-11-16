@@ -2798,7 +2798,7 @@ def test_blue_separation_after_closed_and_transport_audit_keeps_original_handoff
             assert m.transport_audit_command is None and m.transport_audit_value is None
 
 
-def test_first_green_prefers_near_pile_and_post_first_has_no_class_priority():
+def test_first_green_prefers_near_pile_and_post_first_prefers_orange():
     near = TrackedCargo(1, "green_supply", .9, (600, 650, 100, 100), hits=5)
     neighbour = TrackedCargo(2, "core_black", .9, (710, 650, 100, 100), hits=5)
     far = TrackedCargo(3, "green_supply", .9, (100, 100, 180, 180), hits=5)
@@ -2822,7 +2822,7 @@ def test_first_green_prefers_near_pile_and_post_first_has_no_class_priority():
     assert m._choose_next_batch(replace(view, cargo=(far, neighbour, casualty))).classes == ("injured_orange",)
 
 
-def test_post_first_nearest_selection_across_classes_and_distance_sources():
+def test_nearest_helper_distance_sources_and_post_first_orange_priority():
     from itertools import permutations
 
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
@@ -2834,21 +2834,26 @@ def test_post_first_nearest_selection_across_classes_and_distance_sources():
         )
         # No ground coordinates: use one common pixel source, not box size/color.
         view = VisionSnapshot(cargo=(far, middle, near))
-        assert m._choose_next_batch(view).track_ids == (near.track_id,)
+        assert m._choose_nearest_cargo(view, view.cargo) == near
+        orange = next(item for item in view.cargo if item.class_name == "injured_orange")
+        assert m._choose_next_batch(view).track_ids == (orange.track_id,)
         # Existing calibrated bands override pixel order for all classes.
         bands = replace(view, range_pitch_cdeg=12000,
                         range_distances=((1, 460), (2, 230), (3, 100)))
-        assert m._choose_next_batch(bands).track_ids == (far.track_id,)
+        assert m._choose_nearest_cargo(bands, bands.cargo) == far
+        assert m._choose_next_batch(bands).track_ids == (orange.track_id,)
         # Ground coordinates, when available for every candidate, come first.
         ground = replace(bands, cargo=tuple(
             replace(item, relative_xy_m=(distance, 0))
             for item, distance in ((near, .6), (middle, .2), (far, 1.))
         ))
-        assert m._choose_next_batch(ground).track_ids == (middle.track_id,)
+        assert m._choose_nearest_cargo(ground, ground.cargo).track_id == middle.track_id
+        assert m._choose_next_batch(ground).track_ids == (orange.track_id,)
     # Exactly tied appearance stays deterministic; class and input order do not win.
     tied = tuple(cargo(i, name, 500, 500) for i, name in enumerate(names, 1))
     for order in permutations(tied):
-        assert m._choose_next_batch(VisionSnapshot(cargo=order)).track_ids == (1,)
+        assert m._choose_nearest_cargo(VisionSnapshot(cargo=order), order).track_id == 1
+        assert m._choose_next_batch(VisionSnapshot(cargo=order)).classes == ("injured_orange",)
 
 
 def test_search_selects_nearest_before_choosing_single_or_pile_path():
@@ -2873,6 +2878,38 @@ def test_search_selects_nearest_before_choosing_single_or_pile_path():
             changed = replace(view, cargo=(*items, new_near))
             resolver = m._cluster_target_for_vision if in_pile else m._target_for_batch
             assert resolver(changed).track_id == near.track_id
+
+
+def test_post_first_orange_preference_preserves_eligibility_and_material_fallback():
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    start_search(m)
+    m.first_common_delivered = True
+    green = cargo(1, "green_supply", 700, 850)
+    black = cargo(2, "core_black", 900, 700)
+    orange_far = cargo(3, "injured_orange", 200, 100)
+    orange_near = cargo(4, "injured_orange", 400, 400)
+    invalid = (
+        replace(cargo(5, "injured_orange", 600, 950), inside_safe_zone=True),
+        replace(cargo(6, "injured_orange", 800, 950), visible=False),
+        cargo(7, "injured_orange", 1000, 950, hits=1),
+    )
+    view = VisionSnapshot(frame_sequence=1, cargo=(green, black, orange_far, orange_near, *invalid))
+    out = m.step(view, pose(), stm(), .1)
+    assert out.state == CompetitionState.APPROACH
+    assert m.selected_batch.track_ids == (orange_near.track_id,)
+    # No continuous reranking when a closer orange appears after locking.
+    assert m._target_for_batch(replace(view, cargo=(*view.cargo, cargo(8, "injured_orange", 700, 950)))) == orange_near
+    assert m._choose_next_batch(replace(view, cargo=(green, black, *invalid))).track_ids == (green.track_id,)
+    # New selection does not relax the real cargo check or the two-item limit.
+    assert m._audit_valid(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
+    assert not m._audit_valid(CargoAudit(left_class="injured_orange", left_count=2, total_count=2))
+    assert not m._audit_valid(CargoAudit(left_class="green_supply", left_count=3, total_count=3))
+    # Cargo continuation follows what was actually caught, not the selected ID/class.
+    actual = CargoAudit(left_class="core_black", left_count=1, total_count=1)
+    assert m._audit_valid(actual)
+    m._latch_carried_manifest(actual)
+    assert m.selected_batch.destination == "material"
+    assert m.carried_manifest == ("core_black",)
 
 
 def test_search_nearest_keeps_existing_eligibility_and_first_green_rule():

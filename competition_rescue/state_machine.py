@@ -3424,12 +3424,18 @@ class CompetitionMission:
         return target if target is not None and self._is_isolated(target, self._visible_cargo(vision)) else None
 
     def _choose_search_target(self, vision: VisionSnapshot) -> TrackedCargo | None:
-        # Post-first selection: compare every legal destination together before
-        # deciding whether the selected target needs the existing pile path.
-        return self._choose_nearest_cargo(vision, (
+        candidates = tuple(
             item for item in self._visible_cargo(vision)
             if item.class_name in MATERIAL_CLASSES | {"injured_orange"} and item.hits >= 2
-        ))
+        )
+        # Only rank a new search choice. A locked approach and the actual
+        # post-grab load remain independent of this preference. Selecting an
+        # orange does not certify a single-orange load; the original audit does.
+        if self.first_common_delivered:
+            orange = tuple(item for item in candidates if item.class_name == "injured_orange")
+            if orange:
+                candidates = orange
+        return self._choose_nearest_cargo(vision, candidates)
 
     def _choose_next_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
         target = self._choose_search_target(vision)
@@ -5696,8 +5702,8 @@ class CompetitionMission:
                 item for item in candidates if item.class_name == "green_supply"
             ]
         else:
-            # Keep the same all-class choice as SEARCH; a farther pile must
-            # never displace a nearer isolated target.
+            # Use the same choice as SEARCH; an unrelated pile must not
+            # override the selected orange or the nearest material fallback.
             target = self._choose_search_target(vision)
             return target if target in candidates else None
         return self._choose_nearest_cargo(vision, candidates)
