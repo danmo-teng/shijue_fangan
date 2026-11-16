@@ -1,0 +1,302 @@
+{
+  "sdk_session_id": "5f6971e1d33275080168d42421a2633b",
+  "frame_sequence": 4371,
+  "camera_frame_id": 9461,
+  "capture_monotonic_ns": 318711884868,
+  "snapshot_monotonic_ns": 318827639558,
+  "source_size": [
+    1280,
+    1024
+  ],
+  "detections": [
+    {
+      "class": "green_supply",
+      "confidence": 0.8562,
+      "bbox": [
+        310,
+        178,
+        281,
+        257
+      ],
+      "center": [
+        450,
+        306
+      ],
+      "ground_xy_mm": null
+    },
+    {
+      "class": "danger_cyan",
+      "confidence": 0.7923,
+      "bbox": [
+        466,
+        1,
+        215,
+        149
+      ],
+      "center": [
+        573,
+        75
+      ],
+      "ground_xy_mm": null
+    },
+    {
+      "class": "danger_cyan",
+      "confidence": 0.2901,
+      "bbox": [
+        646,
+        7,
+        244,
+        274
+      ],
+      "center": [
+        768,
+        144
+      ],
+      "ground_xy_mm": null
+    }
+  ],
+  "tracks": [
+    {
+      "id": 274,
+      "class": "green_supply",
+      "confidence": 0.8088463807722777,
+      "bbox": [
+        310,
+        178,
+        281,
+        257
+      ],
+      "relative_xy_m": null,
+      "hits": 104,
+      "misses": 0,
+      "visible": true
+    },
+    {
+      "id": 280,
+      "class": "danger_cyan",
+      "confidence": 0.8940959940440952,
+      "bbox": [
+        807,
+        55,
+        304,
+        302
+      ],
+      "relative_xy_m": null,
+      "hits": 5,
+      "misses": 2,
+      "visible": false
+    },
+    {
+      "id": 281,
+      "class": "danger_cyan",
+      "confidence": 0.5599773198366165,
+      "bbox": [
+        1131,
+        255,
+        147,
+        272
+      ],
+      "relative_xy_m": null,
+      "hits": 2,
+      "misses": 5,
+      "visible": false
+    },
+    {
+      "id": 282,
+      "class": "danger_cyan",
+      "confidence": 0.6933135032132267,
+      "bbox": [
+        646,
+        7,
+        244,
+        274
+      ],
+      "relative_xy_m": null,
+      "hits": 4,
+      "misses": 0,
+      "visible": true
+    },
+    {
+      "id": 283,
+      "class": "danger_cyan",
+      "confidence": 0.8041524648666382,
+      "bbox": [
+        1009,
+        0,
+        217,
+        82
+      ],
+      "relative_xy_m": null,
+      "hits": 2,
+      "misses": 1,
+      "visible": false
+    },
+    {
+      "id": 284,
+      "class": "danger_cyan",
+      "confidence": 0.8318465560674667,
+      "bbox": [
+        466,
+        1,
+        215,
+        149
+      ],
+      "relative_xy_m": null,
+      "hits": 2,
+      "misses": 0,
+      "visible": true
+    }
+  ],
+  "pose": {
+    "valid": true,
+    "x_m": 0.295843560434862,
+    "y_m": 0.115755540952681,
+    "yaw_deg": 253.427,
+    "age_ms": 10.971075,
+    "wheel_progress_m": null
+  },
+  "stm": {
+    "mode": 10,
+    "flags": 86,
+    "age_ms": 12.563465,
+    "fault_code": 0,
+    "acknowledged_sequence": 83,
+    "relay_mission_tx_frames": 18260,
+    "relay_last_mission_command": 3,
+    "relay_last_mission_sequence": 83,
+    "relay_last_mission_payload": [
+      3,
+      89,
+      2,
+      103,
+      0,
+      0,
+      53,
+      67
+    ],
+    "relay_last_mission_tx_monotonic_ns": 318781571020,
+    "relay_last_mission_tx_age_ms": 4.937,
+    "relay_tx_frames": 18263,
+    "relay_tx_errors": 0,
+    "relay_last_sequence": 83,
+    "relay_last_tx_age_ms": 4.938,
+    "camera_pitch_cdeg": 14000,
+    "context_valid": true,
+    "task_id": 39530,
+    "action_id": 52478,
+    "accepted_command": 3,
+    "action_status": 1,
+    "rejected_action_id": 0,
+    "context_matches": false
+  },
+  "upper_state": "NAVIGATE",
+  "reason": "safe_zone_staging_navigation",
+  "message": "前往对应安全区半区围栏前600 mm预备点",
+  "command": {
+    "opcode": 3,
+    "flags": 89,
+    "arg_a": 615,
+    "arg_b": 0,
+    "aux": 13642,
+    "audit": null,
+    "audit_vision_frame": null,
+    "source_vision_frame": null
+  },
+  "acquire_started_s": null,
+  "safe_bbox": null,
+  "safe_zone_filter_blocked": false,
+  "roi_polygons": [
+    [
+      [
+        669,
+        96
+      ],
+      [
+        733,
+        100
+      ],
+      [
+        792,
+        116
+      ],
+      [
+        856,
+        140
+      ],
+      [
+        915,
+        173
+      ],
+      [
+        976,
+        224
+      ],
+      [
+        1037,
+        309
+      ],
+      [
+        1060,
+        379
+      ],
+      [
+        1083,
+        504
+      ],
+      [
+        1095,
+        597
+      ],
+      [
+        1095,
+        667
+      ],
+      [
+        168,
+        615
+      ],
+      [
+        175,
+        517
+      ],
+      [
+        203,
+        429
+      ],
+      [
+        233,
+        343
+      ],
+      [
+        257,
+        277
+      ],
+      [
+        308,
+        209
+      ],
+      [
+        340,
+        168
+      ],
+      [
+        415,
+        125
+      ],
+      [
+        487,
+        104
+      ],
+      [
+        567,
+        91
+      ]
+    ],
+    []
+  ],
+  "model": "/home/sunrise/RDK_X5/shijue_fangan/yolo26n/x5_output_640/yolo26n_6cls_640_bpu_bayese_640x640_nv12.bin",
+  "model_family": "YOLO26",
+  "pose_alignment": "latest planner state, not capture synchronized",
+  "video_frame_index": 88,
+  "seconds_from_trigger": 14.974330126
+}

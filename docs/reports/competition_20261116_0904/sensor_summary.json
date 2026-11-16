@@ -1,0 +1,130 @@
+{
+  "pose": {
+    "rows": 107600,
+    "confidence": {
+      "2": 403,
+      "3": 107197
+    },
+    "short_step_gt5cm": 1,
+    "largest_short_steps": [
+      {
+        "t_s": 212.941078778,
+        "line": 43298,
+        "step_m": 0.10745978546172638,
+        "dt_s": 0.005006103515625,
+        "step3_m": 0.10821028370129,
+        "confidence": [
+          "3",
+          "3"
+        ],
+        "velocity_mps": 0.11315039556789445
+      }
+    ],
+    "largest_all_steps": [
+      {
+        "t_s": 212.941078778,
+        "line": 43298,
+        "step_m": 0.10745978546172638,
+        "dt_s": 0.005006103515625,
+        "step3_m": 0.10821028370129,
+        "confidence": [
+          "3",
+          "3"
+        ],
+        "velocity_mps": 0.11315039556789445
+      },
+      {
+        "t_s": 350.824965092,
+        "line": 70846,
+        "step_m": 0.0394622656629635,
+        "dt_s": 0.005005859375,
+        "step3_m": 0.04008559863887116,
+        "confidence": [
+          "3",
+          "3"
+        ],
+        "velocity_mps": 0.22907078715282267
+      },
+      {
+        "t_s": 355.324152213,
+        "line": 71745,
+        "step_m": 0.024182433804823596,
+        "dt_s": 0.005006103515625,
+        "step3_m": 0.024532975261389277,
+        "confidence": [
+          "3",
+          "3"
+        ],
+        "velocity_mps": 0.018080966253073247
+      },
+      {
+        "t_s": 350.854640765,
+        "line": 70852,
+        "step_m": 0.022704023546996292,
+        "dt_s": 0.005005126953125,
+        "step3_m": 0.022804608107188235,
+        "confidence": [
+          "3",
+          "3"
+        ],
+        "velocity_mps": 0.23162240777739074
+      },
+      {
+        "t_s": 342.681388431,
+        "line": 69219,
+        "step_m": 0.022406258132893746,
+        "dt_s": 0.005005126953125,
+        "step3_m": 0.02247575978160323,
+        "confidence": [
+          "3",
+          "3"
+        ],
+        "velocity_mps": 0.10051459174363578
+      }
+    ]
+  },
+  "imu": {
+    "rows": {
+      "accel": 33970,
+      "gyro": 108649
+    },
+    "temperature_range_c": {
+      "accel": [
+        21.0,
+        28.0
+      ],
+      "gyro": [
+        21.0,
+        28.0
+      ]
+    }
+  },
+  "lidar": {
+    "reasons": {
+      "AXIS_GEOMETRY_ACCEPTED": 3591,
+      "AXIS_GEOMETRY_REJECTED": 1425,
+      "NO_SUPPORTED_WALL_AT_OPERATOR_BRANCH": 363
+    },
+    "axes": {
+      "x,y": 1418,
+      "y": 1624,
+      "x": 551,
+      "": 1786
+    },
+    "accepted_final_candidate_correction_gt_10cm": 22,
+    "max_final_candidate_correction_m": 0.26002006180258763,
+    "note": "correction_m includes rejected-axis unconstrained motion; accepted magnitude recomputed from candidate_center_xy_m minus prior_center_xy_m."
+  },
+  "business_backup": {
+    "competition_events.jsonl": {
+      "sha256": "9990ad522ec58ab08c6bddba382df0c9d4c6d37f71017a03525f2b22a06dffbc",
+      "bytes": 1937644
+    },
+    "competition_detections.jsonl": {
+      "sha256": "d36d3cbf12f9d1575f856145c87d4db0367e7aac634b771aeaf8d1631253c0a1",
+      "bytes": 4800289
+    }
+  },
+  "t0_monotonic_ns": 130411860732,
+  "end_before_abort_ns": 669062303814
+}

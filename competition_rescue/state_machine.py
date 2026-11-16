@@ -558,7 +558,7 @@ class CompetitionSettings:
     safe_zone_freeze_frames: int = 3
     safe_zone_lateral_start_px: int = 64
     safe_zone_lateral_tolerance_px: int = 32
-    safe_zone_acquire_timeout_s: float = 5.0
+    safe_zone_acquire_timeout_s: float = 0.5
     safe_sweep_capture_offset_mm: float = 150.0  # Legacy config; visual sweep ignores it.
     audit_min_interframe_s: float = 0.100
     audit_min_span_s: float = 0.100

@@ -1519,15 +1519,19 @@ def test_safe_zone_no_box_requests_one_higher_view_and_blocks_retired_sweep() ->
     m.carried_total_count = 1
     m._begin_safe_zone_acquire(VisionSnapshot(frame_sequence=1), 1.)
     status = replace(stm(mode=11, flags=2), camera_pitch_cdeg=12000)
-    view = VisionSnapshot(frame_sequence=2, observed_monotonic_s=6.1)
-    out = m.step(view, pose(), status, 6.1)
+    view = VisionSnapshot(frame_sequence=2, observed_monotonic_s=1.49)
+    waiting = m.step(view, pose(), status, 1.49)
+    assert waiting.reason == "safe_zone_acquire_wait"
+    assert m.safe_zone_view_pitch_cdeg == 12000
+    view = replace(view, frame_sequence=3, observed_monotonic_s=1.51)
+    out = m.step(view, pose(), status, 1.51)
     assert out.command.opcode == CMD_ALIGN_SAFE_ZONE and out.command.arg_b == 11500
-    assert m.step(replace(view, frame_sequence=3, observed_monotonic_s=6.2),
-        pose(), status, 6.2).command == out.command
+    assert m.step(replace(view, frame_sequence=4, observed_monotonic_s=1.61),
+        pose(), status, 1.61).command == out.command
     m.state = CompetitionState.ENTER_SAFE_ZONE
     obstacle = replace(view, safe_corridor_obstacle_class="green_supply",
         safe_corridor_obstacle_track_id=258, safe_corridor_obstacle_bbox=(308,566,258,239))
-    out = m.step(obstacle, pose(), replace(status, mode=10), 6.3)
+    out = m.step(obstacle, pose(), replace(status, mode=10), 1.71)
     assert out.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR
     assert out.command.opcode != CMD_CLEAR_SAFE_ZONE
     assert out.reason == "legacy_safe_sweep_disabled"
@@ -2304,7 +2308,7 @@ def test_locked_safe_zone_loss_reacquires_higher_view_without_losing_cargo():
             assert waiting.state == CompetitionState.ACQUIRE_SAFE_ZONE
             assert not waiting.event and waiting.command == lost.command
             # Existing new-view ownership and three-frame acquisition are reused.
-            centered = (320, 0, 960, 113)
+            centered = (388, 0, 864, 113)  # 388 + 864 * 7/24 = 640.
             for frame, now in ((13, 1.02), (14, 1.03), (15, 1.04)):
                 recovered = m.step(VisionSnapshot(frame_sequence=frame, safe_bbox=centered,
                     observed_monotonic_s=now), pose(), reported, now)
