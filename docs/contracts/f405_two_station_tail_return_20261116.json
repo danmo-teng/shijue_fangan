@@ -1,0 +1,643 @@
+{
+  "request_id": "MATCH-TWO-STATION-TAIL-RETURN-20261116",
+  "status": "upper implemented; lower step15/14/13 transition updates pending; no deployment",
+  "lower_review_commit": "c14b0a77246da5c71a9897fefaca8528177305a4",
+  "semantics": {
+    "step15": "A=-150 B=0 U=red27000/blue9000; retain -100 parse compatibility",
+    "step14": "A=B=0 U=0..35999; loaded NAV entry still opponent-only, empty entry only after owned step15 DONE",
+    "step13": "existing D/H/U; allow following owned empty step14 DONE; U held for the reverse segment",
+    "step12": "existing restore-search completion",
+    "yaw_source": "actual available pose after owned step15 DONE; latch atan2(goal-current)+180 once",
+    "no_move_if_already_at_station": "reuse original 50mm navigation arrival tolerance; skip undefined turn",
+    "stations": "only 1/3, x=+/-0.30 y=0; station1 nearest start-zone X side",
+    "delivery": "finish original local exit, then direct to saved source station, no via point",
+    "interrupted_transfer": "until actual destination completion keep last visited station as source",
+    "unchanged": "original wheel/turn/navigation controllers, speed, tolerance, PAUSE/STOP, recovery"
+  },
+  "examples": [
+    {
+      "side": "red",
+      "start_zone": 1,
+      "example_only": true,
+      "release_xy_m": [
+        0.15,
+        -0.69
+      ],
+      "after_back_xy_m": [
+        0.15,
+        -0.5399999999999999
+      ],
+      "station_1": [
+        -0.3,
+        0.0
+      ],
+      "station_3": [
+        0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 600,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 27000,
+          "context_hex": "a3 b3 1d 0a 02 58 00 64 00 00 00 00 b7 1c c3",
+          "command_hex": "a3 b3 18 0a 14 f9 ff 6a 00 00 69 78 c5 5c c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 600,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 30981,
+          "context_hex": "a3 b3 1d 0b 02 58 00 65 00 00 00 00 87 4c c3",
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 79 05 18 ea c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 600,
+          "action_id": 102,
+          "step": 13,
+          "A": 703,
+          "B": 12981,
+          "U": 30981,
+          "context_hex": "a3 b3 1d 0c 02 58 00 66 00 00 00 00 e5 7c c3",
+          "command_hex": "a3 b3 18 0c 14 d9 02 bf 32 b5 79 05 05 be c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 600,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 30981,
+          "context_hex": "a3 b3 1d 0d 02 58 00 66 00 00 00 00 e8 ec c3",
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 79 05 03 49 c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 600,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 58 00 67 00 00 00 00 c1 dc c3",
+          "command_hex": "a3 b3 18 0e 14 c9 00 00 00 00 00 00 e5 eb c3"
+        }
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 2,
+      "example_only": true,
+      "release_xy_m": [
+        0.15,
+        -0.69
+      ],
+      "after_back_xy_m": [
+        0.15,
+        -0.5399999999999999
+      ],
+      "station_1": [
+        0.3,
+        0.0
+      ],
+      "station_3": [
+        -0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 601,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 27000,
+          "context_hex": "a3 b3 1d 0a 02 59 00 64 00 00 00 00 a7 dc c3",
+          "command_hex": "a3 b3 18 0a 14 f9 ff 6a 00 00 69 78 c5 5c c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 601,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 25448,
+          "context_hex": "a3 b3 1d 0b 02 59 00 65 00 00 00 00 97 8c c3",
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 63 68 d2 67 c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 601,
+          "action_id": 102,
+          "step": 13,
+          "A": 560,
+          "B": 7448,
+          "U": 25448,
+          "context_hex": "a3 b3 1d 0c 02 59 00 66 00 00 00 00 f5 bc c3",
+          "command_hex": "a3 b3 18 0c 14 d9 02 30 1d 18 63 68 03 d9 c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 601,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 25448,
+          "context_hex": "a3 b3 1d 0d 02 59 00 66 00 00 00 00 f8 2c c3",
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 63 68 c9 c4 c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 601,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 59 00 67 00 00 00 00 d1 1c c3",
+          "command_hex": "a3 b3 18 0e 14 c9 00 00 00 00 00 00 e5 eb c3"
+        }
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 3,
+      "example_only": true,
+      "release_xy_m": [
+        0.15,
+        -0.69
+      ],
+      "after_back_xy_m": [
+        0.15,
+        -0.5399999999999999
+      ],
+      "station_1": [
+        -0.3,
+        0.0
+      ],
+      "station_3": [
+        0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 602,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 27000,
+          "context_hex": "a3 b3 1d 0a 02 5a 00 64 00 00 00 00 94 dc c3",
+          "command_hex": "a3 b3 18 0a 14 f9 ff 6a 00 00 69 78 c5 5c c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 602,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 30981,
+          "context_hex": "a3 b3 1d 0b 02 5a 00 65 00 00 00 00 a4 8c c3",
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 79 05 18 ea c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 602,
+          "action_id": 102,
+          "step": 13,
+          "A": 703,
+          "B": 12981,
+          "U": 30981,
+          "context_hex": "a3 b3 1d 0c 02 5a 00 66 00 00 00 00 c6 bc c3",
+          "command_hex": "a3 b3 18 0c 14 d9 02 bf 32 b5 79 05 05 be c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 602,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 30981,
+          "context_hex": "a3 b3 1d 0d 02 5a 00 66 00 00 00 00 cb 2c c3",
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 79 05 03 49 c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 602,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 5a 00 67 00 00 00 00 e2 1c c3",
+          "command_hex": "a3 b3 18 0e 14 c9 00 00 00 00 00 00 e5 eb c3"
+        }
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 4,
+      "example_only": true,
+      "release_xy_m": [
+        0.15,
+        -0.69
+      ],
+      "after_back_xy_m": [
+        0.15,
+        -0.5399999999999999
+      ],
+      "station_1": [
+        0.3,
+        0.0
+      ],
+      "station_3": [
+        -0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 603,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 27000,
+          "context_hex": "a3 b3 1d 0a 02 5b 00 64 00 00 00 00 84 1c c3",
+          "command_hex": "a3 b3 18 0a 14 f9 ff 6a 00 00 69 78 c5 5c c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 603,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 25448,
+          "context_hex": "a3 b3 1d 0b 02 5b 00 65 00 00 00 00 b4 4c c3",
+          "command_hex": "a3 b3 18 0b 14 e9 00 00 00 00 63 68 d2 67 c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 603,
+          "action_id": 102,
+          "step": 13,
+          "A": 560,
+          "B": 7448,
+          "U": 25448,
+          "context_hex": "a3 b3 1d 0c 02 5b 00 66 00 00 00 00 d6 7c c3",
+          "command_hex": "a3 b3 18 0c 14 d9 02 30 1d 18 63 68 03 d9 c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 603,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 25448,
+          "context_hex": "a3 b3 1d 0d 02 5b 00 66 00 00 00 00 db ec c3",
+          "command_hex": "a3 b3 18 0d 14 d9 00 00 00 00 63 68 c9 c4 c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 603,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 5b 00 67 00 00 00 00 f2 dc c3",
+          "command_hex": "a3 b3 18 0e 14 c9 00 00 00 00 00 00 e5 eb c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 1,
+      "example_only": true,
+      "release_xy_m": [
+        -0.15,
+        0.69
+      ],
+      "after_back_xy_m": [
+        -0.15,
+        0.5399999999999999
+      ],
+      "station_1": [
+        -0.3,
+        0.0
+      ],
+      "station_3": [
+        0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 604,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 9000,
+          "context_hex": "a3 b3 1d 0a 02 5c 00 64 00 00 00 00 f2 dc c3",
+          "command_hex": "a3 b3 18 0a 14 f1 ff 6a 00 00 23 28 7b c0 c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 604,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 7448,
+          "context_hex": "a3 b3 1d 0b 02 5c 00 65 00 00 00 00 c2 8c c3",
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 1d 18 7b e3 c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 604,
+          "action_id": 102,
+          "step": 13,
+          "A": 560,
+          "B": -10552,
+          "U": 7448,
+          "context_hex": "a3 b3 1d 0c 02 5c 00 66 00 00 00 00 a0 bc c3",
+          "command_hex": "a3 b3 18 0c 14 d1 02 30 d6 c8 1d 18 95 80 c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 604,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 7448,
+          "context_hex": "a3 b3 1d 0d 02 5c 00 66 00 00 00 00 ad 2c c3",
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 1d 18 60 40 c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 604,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 5c 00 67 00 00 00 00 84 1c c3",
+          "command_hex": "a3 b3 18 0e 14 c1 00 00 00 00 00 00 6c 2b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 2,
+      "example_only": true,
+      "release_xy_m": [
+        -0.15,
+        0.69
+      ],
+      "after_back_xy_m": [
+        -0.15,
+        0.5399999999999999
+      ],
+      "station_1": [
+        0.3,
+        0.0
+      ],
+      "station_3": [
+        -0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 605,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 9000,
+          "context_hex": "a3 b3 1d 0a 02 5d 00 64 00 00 00 00 e2 1c c3",
+          "command_hex": "a3 b3 18 0a 14 f1 ff 6a 00 00 23 28 7b c0 c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 605,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 12981,
+          "context_hex": "a3 b3 1d 0b 02 5d 00 65 00 00 00 00 d2 4c c3",
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 32 b5 a6 6e c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 605,
+          "action_id": 102,
+          "step": 13,
+          "A": 703,
+          "B": -5019,
+          "U": 12981,
+          "context_hex": "a3 b3 1d 0c 02 5d 00 66 00 00 00 00 b0 7c c3",
+          "command_hex": "a3 b3 18 0c 14 d1 02 bf ec 65 32 b5 80 eb c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 605,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 12981,
+          "context_hex": "a3 b3 1d 0d 02 5d 00 66 00 00 00 00 bd ec c3",
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 32 b5 bd cd c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 605,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 5d 00 67 00 00 00 00 94 dc c3",
+          "command_hex": "a3 b3 18 0e 14 c1 00 00 00 00 00 00 6c 2b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 3,
+      "example_only": true,
+      "release_xy_m": [
+        -0.15,
+        0.69
+      ],
+      "after_back_xy_m": [
+        -0.15,
+        0.5399999999999999
+      ],
+      "station_1": [
+        -0.3,
+        0.0
+      ],
+      "station_3": [
+        0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 606,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 9000,
+          "context_hex": "a3 b3 1d 0a 02 5e 00 64 00 00 00 00 d1 1c c3",
+          "command_hex": "a3 b3 18 0a 14 f1 ff 6a 00 00 23 28 7b c0 c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 606,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 7448,
+          "context_hex": "a3 b3 1d 0b 02 5e 00 65 00 00 00 00 e1 4c c3",
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 1d 18 7b e3 c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 606,
+          "action_id": 102,
+          "step": 13,
+          "A": 560,
+          "B": -10552,
+          "U": 7448,
+          "context_hex": "a3 b3 1d 0c 02 5e 00 66 00 00 00 00 83 7c c3",
+          "command_hex": "a3 b3 18 0c 14 d1 02 30 d6 c8 1d 18 95 80 c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 606,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 7448,
+          "context_hex": "a3 b3 1d 0d 02 5e 00 66 00 00 00 00 8e ec c3",
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 1d 18 60 40 c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 606,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 5e 00 67 00 00 00 00 a7 dc c3",
+          "command_hex": "a3 b3 18 0e 14 c1 00 00 00 00 00 00 6c 2b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 4,
+      "example_only": true,
+      "release_xy_m": [
+        -0.15,
+        0.69
+      ],
+      "after_back_xy_m": [
+        -0.15,
+        0.5399999999999999
+      ],
+      "station_1": [
+        0.3,
+        0.0
+      ],
+      "station_3": [
+        -0.3,
+        0.0
+      ],
+      "messages": [
+        {
+          "name": "finite_back_150",
+          "task_id": 607,
+          "action_id": 100,
+          "step": 15,
+          "A": -150,
+          "B": 0,
+          "U": 9000,
+          "context_hex": "a3 b3 1d 0a 02 5f 00 64 00 00 00 00 c1 dc c3",
+          "command_hex": "a3 b3 18 0a 14 f1 ff 6a 00 00 23 28 7b c0 c3"
+        },
+        {
+          "name": "turn_tail_to_station_1",
+          "task_id": 607,
+          "action_id": 101,
+          "step": 14,
+          "A": 0,
+          "B": 0,
+          "U": 12981,
+          "context_hex": "a3 b3 1d 0b 02 5f 00 65 00 00 00 00 f1 8c c3",
+          "command_hex": "a3 b3 18 0b 14 e1 00 00 00 00 32 b5 a6 6e c3"
+        },
+        {
+          "name": "direct_reverse",
+          "task_id": 607,
+          "action_id": 102,
+          "step": 13,
+          "A": 703,
+          "B": -5019,
+          "U": 12981,
+          "context_hex": "a3 b3 1d 0c 02 5f 00 66 00 00 00 00 93 bc c3",
+          "command_hex": "a3 b3 18 0c 14 d1 02 bf ec 65 32 b5 80 eb c3"
+        },
+        {
+          "name": "navigation_arrival",
+          "task_id": 607,
+          "action_id": 102,
+          "step": 13,
+          "A": 0,
+          "B": 0,
+          "U": 12981,
+          "context_hex": "a3 b3 1d 0d 02 5f 00 66 00 00 00 00 9e 2c c3",
+          "command_hex": "a3 b3 18 0d 14 d1 00 00 00 00 32 b5 bd cd c3"
+        },
+        {
+          "name": "restore_search",
+          "task_id": 607,
+          "action_id": 103,
+          "step": 12,
+          "A": 0,
+          "B": 0,
+          "U": 0,
+          "context_hex": "a3 b3 1d 0e 02 5f 00 67 00 00 00 00 b7 1c c3",
+          "command_hex": "a3 b3 18 0e 14 c1 00 00 00 00 00 00 6c 2b c3"
+        }
+      ]
+    }
+  ]
+}

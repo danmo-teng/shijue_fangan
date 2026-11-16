@@ -1,4 +1,4 @@
-"""Two search stations and bounded failed-target context; no device IO."""
+"""Direct transfers between search stations 1/3 and failed-target context."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,47 +7,30 @@ import math
 
 @dataclass
 class SearchTransferRoute:
-    source_sign: int
-    target_sign: int
-    origin_xy_m: tuple[float, float]
+    source_point: int
+    target_point: int
+    target_xy_m: tuple[float, float]
     yaw_deg: float
-    own_sign: int
-    offset_m: float = .30
     tolerance_m: float = .05
     index: int = 0
     arrival_latched: bool = False
     interrupted: bool = False
-    direct_from_exit: bool = False
-    lane_x_m: float = field(init=False)
     waypoints: tuple[tuple[float, float], ...] = field(init=False)
 
     def __post_init__(self) -> None:
-        x, y = self.origin_xy_m
-        self.lane_x_m = min((-.50, .50), key=lambda lane: (abs(lane-x), lane*self.own_sign < 0))
-        target = (0., self.target_sign*self.offset_m)
-        points = (((x, target[1]), target) if self.direct_from_exit else
-                  ((self.lane_x_m, y), (self.lane_x_m, target[1]), target))
-        if math.dist(self.origin_xy_m, target) <= self.tolerance_m:
-            self.waypoints = (target,)
-        else:
-            kept = []
-            previous = self.origin_xy_m
-            for point in points[:-1]:
-                if math.dist(previous, point) > self.tolerance_m:
-                    kept.append(point)
-                    previous = point
-            self.waypoints = (*kept, target)
+        if self.source_point not in {1, 3} or self.target_point not in {1, 3}:
+            raise ValueError("search stations are 1 and 3 only")
+        self.waypoints = (self.target_xy_m,)
 
     @property
     def search_ready(self) -> bool:
         return self.index >= len(self.waypoints)
 
     def finish_leg(self) -> None:
-        self.index = len(self.waypoints) if self.interrupted else self.index+1
-        self.arrival_latched = False
+        self.index = len(self.waypoints)
 
     def payload(self, x_m: float, y_m: float) -> tuple[int, int, int]:
-        dx, dy = self.waypoints[self.index][0]-x_m, self.waypoints[self.index][1]-y_m
+        dx, dy = self.target_xy_m[0]-x_m, self.target_xy_m[1]-y_m
         distance = math.hypot(dx, dy)
         self.arrival_latched = self.arrival_latched or distance <= self.tolerance_m+1e-9
         return (0 if self.interrupted or self.arrival_latched else min(5000, round(distance*1000)),

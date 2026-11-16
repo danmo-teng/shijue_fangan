@@ -34,7 +34,7 @@ def test_bulldozer_step_contract_roundtrips_without_legacy_flag_aliases():
             assert int.from_bytes(packet[8:10], 'big', signed=True) == payload[1]
             assert int.from_bytes(packet[10:12], 'big') == payload[2]
             assert int.from_bytes(packet[12:14], 'little') == crc16_modbus(packet[2:12])
-    for flags, args in ((0xE9, (0,0,0)), (0x0B, (0,0,0)),
+    for flags, args in ((0xE9, (0,0,36000)), (0x0B, (0,0,0)),
                         (0x19, (201,0,0)), (0x59, (10,0,9000))):
         try:
             mission_frame(1, CMD_BULLDOZER_STEP, flags, *args)
@@ -103,11 +103,11 @@ def test_empty_body_move_extension_keeps_field_translation_and_chassis_heading_s
         assert command_context_frame(9,11,12,0)[3]==packet[3]
 
 
-def test_attack_back_100_has_fixed_wheel_distance_and_opponent_heading():
+def test_attack_back_150_keeps_legacy_record_encoding_and_opponent_heading():
     from protocol import CMD_BULLDOZER_STEP, command_context_frame
     for flags, heading in ((0xF9, 27000), (0xF1, 9000)):
-        packet = mission_frame(7, CMD_BULLDOZER_STEP, flags, -100, 0, heading)
-        assert int.from_bytes(packet[6:8], 'big', signed=True) == -100
+        packet = mission_frame(7, CMD_BULLDOZER_STEP, flags, -150, 0, heading)
+        assert int.from_bytes(packet[6:8], 'big', signed=True) == -150
         for frame in (packet, command_context_frame(7, 10, 100, 0)):
             assert frame[12:14] == crc16_modbus(frame[2:12]).to_bytes(2,'little')
         for a,b,u in ((0,0,heading),(100,0,heading),(-200,0,heading),
@@ -120,22 +120,22 @@ def test_attack_back_100_has_fixed_wheel_distance_and_opponent_heading():
                 raise AssertionError('variable distance or wrong finite-back payload accepted')
 
 
-def test_attack_face_opponent_extension_keeps_old_sweep_turns_fixed():
+def test_attack_turn_heading_extension_keeps_old_sweep_turns_fixed():
     from protocol import CMD_BULLDOZER_STEP
-    for flags, heading in ((0xE9, 27000), (0xE1, 9000)):
-        packet = mission_frame(9, CMD_BULLDOZER_STEP, flags, 0, 0, heading)
-        assert int.from_bytes(packet[10:12], "big") == heading
-        assert packet[12:14] == crc16_modbus(packet[2:12]).to_bytes(2, "little")
-        for wrong in (0, 18000, (heading + 18000) % 36000):
-            try:
-                mission_frame(9, CMD_BULLDOZER_STEP, flags, 0, 0, wrong)
-            except ValueError:
-                pass
-            else:
-                raise AssertionError("wrong attack-facing heading accepted")
-    # Existing step0/4 retain their original red/blue sweep headings.
-    for flags, heading in ((0x09, 0), (0x01, 18000), (0x49, 9000), (0x41, 27000)):
-        mission_frame(1, CMD_BULLDOZER_STEP, flags, 0, 0, heading)
+    for flags in (0xE9,0xE1):
+        for heading in (0,7450,12981,25448,27000,30981,35999):
+            packet=mission_frame(9,CMD_BULLDOZER_STEP,flags,0,0,heading)
+            assert int.from_bytes(packet[10:12],'big')==heading
+            assert packet[12:14]==crc16_modbus(packet[2:12]).to_bytes(2,'little')
+        for a,b,u in ((1,0,27000),(0,1,9000),(0,0,36000)):
+            try: mission_frame(9,CMD_BULLDOZER_STEP,flags,a,b,u)
+            except ValueError: pass
+            else: raise AssertionError('invalid turn payload accepted')
+    for flags,heading in ((0x09,0),(0x01,18000),(0x49,9000),(0x41,27000)):
+        mission_frame(1,CMD_BULLDOZER_STEP,flags,0,0,heading)
+        try: mission_frame(1,CMD_BULLDOZER_STEP,flags,0,0,(heading+100)%36000)
+        except ValueError: pass
+        else: raise AssertionError('old sweep turn was widened')
 
 
 def test_reused_post_grab_audit_flag_only_extends_stage_nav():

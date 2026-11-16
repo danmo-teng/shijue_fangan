@@ -3261,9 +3261,8 @@ def test_attack_return_live_updates_keep_action_and_each_leg_changes_action():
     from attack_return import AttackReturnRoute
     m=CompetitionMission(CompetitionSettings(side='red'))
     m._set_state(CompetitionState.INITIAL_ATTACK_RETURN,1.)
-    m.attack_return_route=AttackReturnRoute('red',1,(.15,-.69),270,(0,.3))
-    v=VisionSnapshot(frame_sequence=10)
-    p=PoseSnapshot(True,.15,-.69,270,0)
+    m.attack_return_route=AttackReturnRoute('red',1,(.15,-.69),270.,(-.3,0.))
+    v=VisionSnapshot(frame_sequence=10);p=PoseSnapshot(True,.15,-.69,270.,0)
     with tempfile.TemporaryDirectory() as d:
         root=Path(d)
         planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'command',root/'diag',JsonlLog(root/'events'),50)
@@ -3271,22 +3270,23 @@ def test_attack_return_live_updates_keep_action_and_each_leg_changes_action():
         out=planner._output_for_cycle(v,p,old,False,1.)
         planner._publish(out);ids=(planner.protocol_task,planner.protocol_action)
         stale=replace(old,mode=25,task_id=ids[0],action_id=(ids[1]-1)&65535,accepted_command=CMD_BULLDOZER_STEP)
-        updated=planner._output_for_cycle(v,replace(p,y_m=-.66),stale,False,1.1)
-        assert updated.command.arg_a == -100 and updated.command.arg_b == 0
-        planner._publish(updated);assert (planner.protocol_task,planner.protocol_action)==ids
-        target=m.attack_return_route.waypoints[0];at=replace(p,x_m=target[0],y_m=target[1])
-        waiting=planner._output_for_cycle(v,at,stale,False,1.2)
-        planner._publish(waiting);assert m.attack_return_route.index==0
-        assert waiting.command.arg_a == -100 and waiting.command.flags >> 4 == 15
-        second=planner._output_for_cycle(v,at,replace(stale,action_id=ids[1]),False,1.3)
-        assert m.attack_return_route.index==1 and second.command.arg_a==500
-        planner._publish(second)
-        assert planner.protocol_task==ids[0] and planner.protocol_action!=ids[1]
-        # A heartbeat and a pose refresh in the second leg cannot allocate again.
-        second_ids=planner.protocol_action
-        same=planner._output_for_cycle(v,replace(at,x_m=at.x_m+.1),stale,False,1.4)
+        q=replace(p,y_m=-.54)
+        waiting=planner._output_for_cycle(v,q,stale,False,1.1)
+        planner._publish(waiting)
+        assert waiting.command.arg_a==-150 and (planner.protocol_task,planner.protocol_action)==ids
+        turn=planner._output_for_cycle(v,q,replace(stale,action_id=ids[1]),False,1.2)
+        assert turn.command.flags>>4==14
+        planner._publish(turn);turn_id=planner.protocol_action
+        assert turn_id!=ids[1] and planner.protocol_task==ids[0]
+        same=planner._output_for_cycle(v,replace(q,x_m=.22),stale,False,1.3)
         planner._publish(same)
-        assert planner.protocol_action==second_ids and same.command.arg_a==400
+        assert same.command==turn.command and planner.protocol_action==turn_id
+        move=planner._output_for_cycle(v,q,replace(stale,action_id=turn_id),False,1.4)
+        planner._publish(move);move_id=planner.protocol_action
+        assert move.command.flags>>4==13 and move.command.aux==turn.command.aux and move_id!=turn_id
+        update=planner._output_for_cycle(v,replace(q,y_m=-.3),stale,False,1.5)
+        planner._publish(update)
+        assert update.command.arg_a<move.command.arg_a and planner.protocol_action==move_id
 
 
 def test_search_transfer_updates_and_target_interrupt_keep_action_until_ready():
@@ -3294,7 +3294,7 @@ def test_search_transfer_updates_and_target_interrupt_keep_action_until_ready():
     from protocol import CMD_BULLDOZER_STEP
     m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
     m.initial_stash_done=True;m._set_state(CompetitionState.SEARCH,1.);m.search_yaw_accum_deg=720.
-    p=PoseSnapshot(True,0.,.3,270.,0);v=VisionSnapshot(frame_sequence=1)
+    p=PoseSnapshot(True,-.3,0.,270.,0);v=VisionSnapshot(frame_sequence=1)
     s=StmSnapshot(mode=3,age_ms=0,context_valid=True,task_id=2,action_id=1)
     with tempfile.TemporaryDirectory() as directory:
         root=Path(directory)
@@ -3303,7 +3303,7 @@ def test_search_transfer_updates_and_target_interrupt_keep_action_until_ready():
         planner._publish(initial);ids=(planner.protocol_task,planner.protocol_action)
         previous=replace(s,mode=25,task_id=ids[0],action_id=(ids[1]-1)&65535,
                          accepted_command=CMD_BULLDOZER_STEP,action_status=3)
-        update=planner._output_for_cycle(v,replace(p,x_m=.1),previous,False,1.1)
+        update=planner._output_for_cycle(v,replace(p,x_m=-.1),previous,False,1.1)
         assert update.command.arg_a==400
         planner._publish(update);assert (planner.protocol_task,planner.protocol_action)==ids
         target=runner_module.TrackedCargo(7,'green_supply',.9,(600,500,60,60),hits=4)
