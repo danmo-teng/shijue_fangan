@@ -146,7 +146,8 @@ def test_pre_grab_protocol_only_allows_50mm_at_140_with_aux2():
             mission_frame(7,CMD_APPROACH_TARGET,flags,460,12000,1)
 
 
-def test_editor_saves_green_orange_lines_without_changing_roi(tmp_path):
+@pytest.mark.parametrize("selector", ("button", "key"))
+def test_editor_saves_green_orange_lines_without_changing_roi(tmp_path, selector):
     import numpy as np
     from contextlib import ExitStack
     from unittest.mock import Mock
@@ -168,17 +169,21 @@ def test_editor_saves_green_orange_lines_without_changing_roi(tmp_path):
         mouse['callback'](editor.cv2.EVENT_LBUTTONDOWN,x,y,0,None)
         mouse['callback'](editor.cv2.EVENT_LBUTTONUP,x,y,0,None)
     def key(_):
-        if step[0]==0:
-            click(300,editor.DISPLAY_HEIGHT+90)  # Green button.
+        n=step[0];step[0]+=1
+        if n in (0,2):
+            if selector=='key': return ord('g' if n==0 else 'o')
+            click(300 if n==0 else 540,editor.DISPLAY_HEIGHT+90)
+            return 255
+        if n==1:
             click(500,225);click(500,375)  # Full-image y=300/500.
             mouse['callback'](editor.cv2.EVENT_LBUTTONDOWN,500,225,0,None)
             mouse['callback'](editor.cv2.EVENT_MOUSEMOVE,500,240,editor.cv2.EVENT_FLAG_LBUTTON,None)
             mouse['callback'](editor.cv2.EVENT_LBUTTONUP,500,240,0,None)
-            step[0]+=1;return ord('s')
-        if step[0]==1:
-            click(540,editor.DISPLAY_HEIGHT+90)  # Orange button.
+            return ord('s')
+        if n==3:
             click(500,135);click(500,315)  # Full-image y=180/420.
-            step[0]+=1;return ord('s')
+            return ord('s')
+        if n==4: return ord('p')
         return ord('q')
     with ExitStack() as stack:
         for name,value in (('arguments',lambda:args),('X5YoloV8',lambda *a:detector),

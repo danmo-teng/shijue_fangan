@@ -48,6 +48,7 @@ WINDOW_NAME = "capture_roi_editor"
 DISPLAY_WIDTH = 960
 DISPLAY_HEIGHT = 768
 PANEL_HEIGHT = 150
+INITIAL_WINDOW_WIDTH = 640  # Full toolbar fits the RDK's 1024x768 desktop.
 GREEN_SUPPLY_SCORE_THRESHOLD = DEFAULT_YOLO_SCORE_THRESHOLD
 
 
@@ -127,7 +128,7 @@ def main() -> int:
     edit_band = None
     drag_line = None
     active_roi = "overall"
-    status = "Left:add  Right:undo  C:clear ROI  R:reload ROI  S:save ROI"
+    status = "G:green bands  O:orange bands  P:ROI  S:save current mode"
     trail: CaptureTrail | None = None
     recording = False
     show_trails = True
@@ -238,7 +239,10 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-    cv2.resizeWindow(WINDOW_NAME, DISPLAY_WIDTH, DISPLAY_HEIGHT + PANEL_HEIGHT)
+    # Keep drawing/mouse coordinates in the original canvas; HighGUI scales
+    # its display. The former 918px-high window hid the new bottom buttons.
+    cv2.resizeWindow(WINDOW_NAME, INITIAL_WINDOW_WIDTH,
+                     round((DISPLAY_HEIGHT + PANEL_HEIGHT) * INITIAL_WINDOW_WIDTH / DISPLAY_WIDTH))
     cv2.setMouseCallback(WINDOW_NAME, mouse)
     camera.start()
     last_frame_id = 0
@@ -422,22 +426,28 @@ def main() -> int:
             count = trail.samples if trail is not None else 0
             draw.text((8, 40), f"{'记录中' if recording else '已暂停'} · 已留影 {count} 次 · 开始前移开物块和手；固定相机和爪子。",
                       font=font, fill=(255, 220, 120))
-            band_entries = (("roi", "编辑爪内ROI"), ("green_supply", "绿色分区"),
-                            ("injured_orange", "橙色分区"), ("save_bands", "保存绿橙分区"))
+            band_entries = (("roi", "P：编辑爪内ROI"), ("green_supply", "G：绿色分区"),
+                            ("injured_orange", "O：橙色分区"), ("save_bands", "保存绿橙分区"))
             for column, (action, label) in enumerate(band_entries):
                 x0, y0, x1, y1 = column*button_width+3, 75, (column+1)*button_width-3, 108
                 active = action == edit_band or (action == "roi" and edit_band is None)
                 draw.rectangle((x0, y0, x1, y1), fill=(42, 108, 73) if active else (65, 65, 65))
                 draw.text((x0+8, y0+3), label, font=font, fill="white")
                 buttons.append((x0, y0+DISPLAY_HEIGHT, x1, y1+DISPLAY_HEIGHT, action))
-            hint = ("分区：相机固定140°；点击两次画线，拖动调位置；右键清除本类。" if edit_band else
-                    "分区单独保存，不修改爪内ROI；绿、橙分别标定后生效。")
+            hint = ("分区：点两次画线，拖动调整；S保存，P回ROI；相机固定140°。" if edit_band else
+                    "按G画绿色分区，按O画橙色分区；分区单独保存，不改爪内ROI。")
             draw.text((8, 116), hint, font=font, fill=(255, 220, 120))
             shown = np.vstack((shown, cv2.cvtColor(np.asarray(panel), cv2.COLOR_RGB2BGR)))
             cv2.imshow(WINDOW_NAME, shown)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), ord("Q"), 27):
                 break
+            if key in (ord("g"), ord("G")):
+                trail_action("green_supply")
+            elif key in (ord("o"), ord("O")):
+                trail_action("injured_orange")
+            elif key in (ord("p"), ord("P")):
+                trail_action("roi")
             if edit_band is not None:
                 if key in (ord("s"), ord("S")):
                     save_bands()
