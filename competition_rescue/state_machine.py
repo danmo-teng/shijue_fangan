@@ -2215,6 +2215,7 @@ class CompetitionMission:
     def _audit_observation_wait(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
+        retain_transport = self._retains_transport_audit(stm)
         ready = stm.audit_fresh and stm.claw_visible and stm.camera_pitch_cdeg == 14000
         if self.empty_load_recheck_pending:
             if stm.camera_pitch_cdeg in {13800, 14200}:
@@ -2228,7 +2229,8 @@ class CompetitionMission:
                 self.audit_camera_key = key
                 self.audit_camera_ready_since = now if ready else None
                 self.audit_camera_floor = vision.frame_sequence
-                self._invalidate_audit_evidence()
+                if not retain_transport:
+                    self._invalidate_audit_evidence()
             if not ready or self.audit_camera_ready_since is None:
                 self.audit_camera_floor = vision.frame_sequence
                 return self._audit_placeholder("audit_camera_settling")
@@ -2244,7 +2246,9 @@ class CompetitionMission:
         if (not ready or not self._audit_vision_fresh(vision, now) or
                 not vision.capture_observation_valid or vision.capture_audit is None or
                 vision.frame_sequence <= 0):
-            if (not ready or self.audit_last_accepted_observed_s is None or
+            if retain_transport:
+                pass  # No detection is not a contradictory observation of the held batch.
+            elif (not ready or self.audit_last_accepted_observed_s is None or
                     now - self.audit_last_accepted_observed_s > self.settings.audit_evidence_timeout_s):
                 self._invalidate_audit_evidence()
             else:
@@ -2254,7 +2258,7 @@ class CompetitionMission:
                 self.transport_audit_value = None
             self.audit_recheck_frame_floor = max(vision.frame_sequence, self.audit_last_frame_sequence or 0)
             return self._audit_placeholder("audit_no_observation")
-        if (self.audit_last_evidence_s is not None and
+        if (not retain_transport and self.audit_last_evidence_s is not None and
                 now - self.audit_last_evidence_s > self.settings.audit_evidence_timeout_s):
             self._invalidate_audit_evidence()
             self.audit_recheck_frame_floor = vision.frame_sequence
@@ -2272,13 +2276,16 @@ class CompetitionMission:
             not (audit.danger_present or audit.unknown_present or audit.injury_mixed)
         )
         if closed_load_missing:
-            # Missing detections revoke authorization, not the short window
-            # of actual positive samples. Camera changes/expiry still clear
-            # those samples through the existing paths above.
-            self._clear_pending_audit()
-            self.transport_audit_command = None
-            self.transport_audit_value = None
+            # Grab-time review retains its original short sample window.
+            # The same closed transport batch keeps real positive samples
+            # and its completed review through detection gaps.
+            if not retain_transport:
+                self._clear_pending_audit()
+                self.transport_audit_command = None
+                self.transport_audit_value = None
             self.audit_recheck_frame_floor = max(vision.frame_sequence, self.audit_last_frame_sequence or 0)
+            if retain_transport and self.transport_audit_command.audit.stable:
+                return self._audit_placeholder("transport_audit_observation_gap")
             if self.empty_load_recheck_pending or self.empty_load_recheck_done:
                 # Never turn two missed detections into a STABLE empty load.
                 # The MCU's existing finite re-observation/exit remains active.
@@ -2309,13 +2316,14 @@ class CompetitionMission:
         signature: tuple,
         frame_sequence: int,
         observed_s: float,
+        *, preserve_across_gaps: bool = False,
     ) -> bool:
         """Consume one real frame and enforce the audit sampling cadence."""
         if frame_sequence <= (self.audit_last_frame_sequence or 0):
             return False
         self.audit_last_frame_sequence = frame_sequence
         self.audit_last_evidence_s = observed_s
-        if (self.audit_first_accepted_observed_s is not None and
+        if (not preserve_across_gaps and self.audit_first_accepted_observed_s is not None and
                 observed_s - self.audit_first_accepted_observed_s > self.settings.audit_evidence_timeout_s):
             previous = self.audit_last_accepted_observed_s
             self.audit_hits = 1 if previous is not None and observed_s - previous <= self.settings.audit_evidence_timeout_s else 0
@@ -6118,26 +6126,55 @@ class CompetitionMission:
             event="transport_audit_start",
         )
 
+    def _retains_transport_audit(self, stm: StmSnapshot) -> bool:
+        """Only real positive samples from this closed-claw mode48 review.
+
+        Entry, a contradictory observation, opening and a new task clear these
+        fields. Never borrow a grab-time manifest to pass a new review.
+        """
+        return (
+            self.state == CompetitionState.TRANSPORT_AUDIT and
+            stm.mode == STM_MODE_TRANSPORT_AUDIT and stm.gripper_closed and
+            self.transport_audit_command is not None and
+            self.transport_audit_value is not None and self.audit_hits > 0 and
+            self._audit_valid(self.transport_audit_value)
+        )
+
     def _transport_audit_output(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
         assert self.selected_batch is not None
+        observed_audit = vision.capture_audit
+        if (self._retains_transport_audit(stm) and vision.capture_observation_valid and
+                self._audit_vision_fresh(vision, now) and observed_audit is not None and
+                (observed_audit.total_count > 0 or observed_audit.danger_present or
+                 observed_audit.unknown_present or observed_audit.injury_mixed) and
+                self._audit_signature_for_state(observed_audit, self._audit_valid(observed_audit)) !=
+                self.audit_last_signature):
+            # Real changed cargo still revokes the old result BEFORE any ACK
+            # can advance it. An empty detection list cannot establish that.
+            self._invalidate_audit_evidence()
         waiting = self._audit_observation_wait(vision, stm, now)
-        if waiting is not None:
+        retained_stable = (
+            self._retains_transport_audit(stm) and self.transport_audit_command.audit.stable and
+            stm.claw_visible and stm.camera_pitch_cdeg == 14000
+        )
+        if waiting is not None and not retained_stable:
             return waiting
         if stm.mode != STM_MODE_TRANSPORT_AUDIT or not stm.gripper_closed:
             self._invalidate_audit_evidence()
             self.transport_audit_frame_floor = vision.frame_sequence
             return self._audit_placeholder("transport_audit_camera_wait")
         self.transport_audit_camera_ready = True
-        if (self.audit_recheck_frame_floor is not None and
+        if (waiting is None and self.audit_recheck_frame_floor is not None and
                 vision.frame_sequence <= self.audit_recheck_frame_floor):
             return self._audit_placeholder("audit_recheck_wait_frame")
-        self.audit_recheck_frame_floor = None
+        if waiting is None:
+            self.audit_recheck_frame_floor = None
         empty_command = self._audit_placeholder("transport_audit_pending").command
         previous_command = self.transport_audit_command
         previous_signature = self.audit_last_signature
-        if vision.frame_sequence > max(self.transport_audit_frame_floor, self.audit_last_frame_sequence or 0):
+        if waiting is None and vision.frame_sequence > max(self.transport_audit_frame_floor, self.audit_last_frame_sequence or 0):
             audit = vision.capture_audit or CargoAudit()
             valid = self._audit_valid(audit)
             signature = self._audit_signature_for_state(audit, valid)
@@ -6145,7 +6182,8 @@ class CompetitionMission:
                 vision.observed_monotonic_s
                 if vision.observed_monotonic_s is not None else now
             )
-            self._record_audit_frame(signature, vision.frame_sequence, observed_s)
+            self._record_audit_frame(signature, vision.frame_sequence, observed_s,
+                                     preserve_across_gaps=valid)
             if not valid and audit.total_count > 0:
                 self._observe_disperse_side_vote(vision.frame_sequence, audit, observed_s)
             self.audit_id = (self.audit_id + 1) & 0xFF

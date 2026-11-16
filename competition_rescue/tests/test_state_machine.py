@@ -1454,7 +1454,9 @@ def test_range_recheck_accepts_small_error_and_realigns_large_overshoot() -> Non
 
 
 def test_loaded_empty_reobserves_once_without_stable_empty_or_fake_load() -> None:
-    for mode in (23, 48):
+    # Grab-time review keeps the original rules; closed transport review is
+    # covered by test_transport_reappearing_load_survives_gaps_and_handoff.
+    for mode in (23,):
         m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
         m.state = CompetitionState.POST_GRAB_AUDIT if mode == 23 else CompetitionState.TRANSPORT_AUDIT
         m.post_grab_audit_active = mode == 23
@@ -1833,10 +1835,14 @@ def test_transport_audit_handoff_retains_exact_payload_and_observation_checks() 
         else:
             received = replace(received, flags=3)
         out = m._transport_audit_output(view, current_pose, received, 1.52)
+        if changed == "missing":
+            assert m.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+            assert out.reason == "transport_audit_valid"
+            continue
         assert m.state == CompetitionState.TRANSPORT_AUDIT, changed
-        if changed in {"missing", "camera"}:
+        if changed == "camera":
             assert not out.command.audit.stable
-            assert m.transport_audit_command is None
+            assert m.transport_audit_command == published  # Same closed-claw samples survive re-view.
         else:
             assert out.command.audit.audit_id != published.audit.audit_id, changed
 
@@ -3556,3 +3562,82 @@ def test_top_edge_range_reobserves_only_after_matching_segment_done():
         m._range_approach_output(view, status, 1.)
         out = m._range_approach_output(replace(view, frame_sequence=2, observed_monotonic_s=1.1), status, 1.1)
         assert out.command.aux == 0
+
+
+def test_transport_reappearing_load_survives_gaps_and_handoff():
+    from protocol import CMD_ALIGN_SAFE_ZONE
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((393,), ("green_supply",), "material"))
+    audit = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+    m._latch_carried_manifest(audit)
+    p = pose(*m._target_point())
+    status = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000,
+        context_valid=True, context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    m._begin_transport_audit(VisionSnapshot(frame_sequence=1), p, status, 1.)
+
+    def observe(frame, now, value, current=status):
+        return m._transport_audit_output(VisionSnapshot(frame_sequence=frame,
+            observed_monotonic_s=now, capture_audit=value), p, current, now)
+
+    first = observe(2, 1.01, audit)
+    assert m.audit_hits == 1 and not first.command.audit.stable
+    missing = observe(3, 1.04, CargoAudit())
+    assert missing.reason == "load_empty_reobserve" and m.audit_hits == 1
+    observe(4, 1.10, CargoAudit(), replace(status, flags=2, camera_pitch_cdeg=13800))
+    observe(5, 1.60, CargoAudit())
+    observe(6, 2.00, CargoAudit())
+    assert m.audit_hits == 1
+    # A real reappearance, over 0.5 s later, is the second sample of this
+    # still-closed batch. The old frame isn't relabelled as a new image.
+    recovered = observe(7, 2.60, audit)
+    assert recovered.command.audit.stable and recovered.command.audit_vision_frame == 7
+    assert m.audit_hits == 2
+    gap = observe(8, 2.63, CargoAudit())
+    assert gap.command == recovered.command
+    ack = replace(relay_stm(recovered, mode=48, flags=83, relay_mission_tx_frames=5),
+        camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+        accepted_command=CMD_CARGO_AUDIT, action_status=3)
+    completed = observe(9, 2.70, CargoAudit(), ack)
+    assert completed.command.opcode == CMD_ALIGN_SAFE_ZONE
+    assert completed.reason == "transport_audit_valid" and m.carried_total_count == 1
+    # A new review cannot pass by borrowing the previous review/manifest.
+    m._begin_transport_audit(VisionSnapshot(frame_sequence=10), p, status, 3.)
+    empty = observe(11, 3.1, CargoAudit(), ack)
+    assert m.state == CompetitionState.TRANSPORT_AUDIT
+    assert not empty.command.audit.stable and m.audit_hits == 0
+
+
+def test_transport_real_contradiction_or_opening_revokes_retained_result():
+    cases = (
+        CargoAudit(left_class="core_black", left_count=1, total_count=1),
+        CargoAudit(left_class="green_supply", right_class="danger_cyan",
+            left_count=1, right_count=1, left_green_count=1, total_count=2, danger_present=True),
+        CargoAudit(danger_present=True),
+        "open",
+        "wrong_context",
+    )
+    for change in cases:
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((393,), ("green_supply",), "material"))
+        audit = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+        m._latch_carried_manifest(audit)
+        p = pose(*m._target_point())
+        status = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000,
+            context_valid=True, context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        m._begin_transport_audit(VisionSnapshot(frame_sequence=1), p, status, 1.)
+        for frame, now in ((2, 1.1), (3, 1.25)):
+            out = m._transport_audit_output(VisionSnapshot(frame_sequence=frame,
+                observed_monotonic_s=now, capture_audit=audit), p, status, now)
+        ack = replace(relay_stm(out, mode=48, flags=83, relay_mission_tx_frames=5),
+            camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+            accepted_command=CMD_CARGO_AUDIT, action_status=3)
+        value = change if isinstance(change, CargoAudit) else CargoAudit()
+        if change == "open": ack = replace(ack, flags=81)
+        if change == "wrong_context": ack = replace(ack, context_matches=False)
+        result = m._transport_audit_output(VisionSnapshot(frame_sequence=4,
+            observed_monotonic_s=1.3, capture_audit=value), p, ack, 1.3)
+        assert m.state == CompetitionState.TRANSPORT_AUDIT
+        assert result.command.opcode == CMD_CARGO_AUDIT
+        if change != "wrong_context": assert not result.command.audit.stable
