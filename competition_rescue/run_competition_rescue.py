@@ -177,8 +177,8 @@ def arguments() -> argparse.Namespace:
         default=os.environ.get("RDK_ENABLE_DELIVERY_EARLY_EXIT") == "1",
         help="推进中确认本次载荷入区即放下退出；须先核对并部署配套F405，默认关闭")
     parser.add_argument("--enable-closed-deflect", action="store_true",
-        default=os.environ.get("RDK_ENABLE_CLOSED_DEFLECT", "0") == "1",
-        help="启用闭爪转车身抽障及预备排复核；须先部署配套F405 opcode0x15，默认关闭")
+        default=False,
+        help="归档抽障候选，尚未定案，本轮不测；默认关闭且不再读取旧环境开关")
     parser.add_argument("--enable-bulldozer", action="store_true",
         default=os.environ.get("RDK_ENABLE_BULLDOZER") == "1",
         help="启用新分段扫障；须先部署配套F405 0x14接口，默认关闭")

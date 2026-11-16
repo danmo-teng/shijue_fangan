@@ -1,6 +1,6 @@
 {
   "id": "MATCH-CLOSED-DEFLECT-20261116",
-  "status": "candidate_only_reassessment_pending_do_not_deploy",
+  "status": "idea_only_deferred_not_for_next_test_no_lower_implementation_request",
   "type": 24,
   "opcode": 21,
   "flags": {
@@ -16,7 +16,7 @@
     "2": "STAGE: held load, live a=remaining mm b=field travel heading aux=body yaw; a=0 then mode25 done closed"
   },
   "ownership": "Original 0x1D/0x1E pairing; new phase/new pull new action; live stage updates same action; DONE only matching accepted action and actual completion",
-  "feature_flag": "--enable-closed-deflect / RDK_ENABLE_CLOSED_DEFLECT=1; default off until lower deployed",
+  "feature_flag": "default false; old RDK_ENABLE_CLOSED_DEFLECT environment variable ignored; explicit CLI candidate is not authorization to test or deploy",
   "examples": [
     {
       "name": "red_view",
