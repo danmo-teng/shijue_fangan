@@ -1,0 +1,23 @@
+{
+  "snapshot": "/tmp/rdk-t265-workspace-cuh1lw9e",
+  "backup": "/home/sunrise/RDK_X5/shijue_fangan/localization/build/deployment_backups/t265_options_20261116_0s2fp6_n",
+  "artifacts": {
+    "t265_omni_localizer": {
+      "sha256": "ae330205458d5ba485c58071d0da28697911ad08adda8b4390cfb67b1f13586e",
+      "previous_sha256": "9450e224dd13eb71638b1afdb819b734a980d3be2b3e27ae2d59be05339fd174"
+    },
+    "libmotion_runtime.so": {
+      "sha256": "c41c14afffef8f3bdcf8c23a34edfd0a79da5fb5e968c59de72a9eba5f17bf0a",
+      "previous_sha256": "ac8cc3de9ae61e00fea0f828ab071249ae580f2ec528878e42b2fb07f349c8a6"
+    },
+    "liblidar_geometry.so": {
+      "sha256": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975",
+      "previous_sha256": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975"
+    }
+  },
+  "source_manifest_sha256": "33252ea229dc4cd1e13c5b9e8855d959d566d722af820109f2e385d9442aaf51",
+  "contains_preserved_uncommitted_experiment_sources": true,
+  "experimental_mode_enabled": false,
+  "device_started": false,
+  "build": "complete workspace snapshot; no source changes during final build"
+}

@@ -4191,7 +4191,7 @@ def test_motion_lab_stdio():
             with patch.object(module.subprocess,'Popen',return_value=child):
                 current.start_session()
             metadata=json.loads((current.run_dir/'metadata.json').read_text());command=metadata['localizer_command']
-            assert all(flag in command for flag in ['--enable-pose-jumping','--t265-only-output','--ignore-encoders','--debug-fresh-session'])
+            assert all(flag in command for flag in ['--disable-pose-jumping','--disable-relocalization','--enable-mapping','--disable-map-preservation','--t265-only-output','--ignore-encoders','--debug-fresh-session'])
             assert ('--debug-wheel-socket' in command)==(wheel=='on')
             assert ('--debug-wheel-experiment' in command)==experiment
             assert ('--experimental-robust-localization' in command)==robust

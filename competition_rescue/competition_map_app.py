@@ -261,6 +261,12 @@ class CompetitionMapApp(RescueMapApp):
         if self.wheel_input is not None:
             return list(self.wheel_command)
         command = super().localization_command()
+        if self.localization_mode == "t265":
+            # Formal field coordinates are corrected by lidar. Keep the local
+            # map, but do not let matching to an old SDK location jump Pose.
+            command.remove("--enable-pose-jumping")
+            command += ["--disable-pose-jumping", "--disable-relocalization",
+                        "--enable-mapping", "--disable-map-preservation"]
         if self.operator is not None:
             command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:

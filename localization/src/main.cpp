@@ -83,6 +83,9 @@ struct Options {
     bool ignore_encoders = false;
     bool t265_only_output = false;
     int pose_jumping_override = -1; // -1 leaves the SDK setting unchanged.
+    int mapping_override = -1;
+    int relocalization_override = -1;
+    int map_preservation_override = -1;
     bool debug_fresh_session = false;
     bool debug_wheel_synthetic = false;
     bool debug_wheel_experiment = false;
@@ -270,6 +273,9 @@ void usage(const char *program)
         << "  --t265-only-output  output T265 directly, retaining wheel reference logs\n"
         << "  --enable-pose-jumping   enable T265 pose jumps and log debug continuity events\n"
         << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
+        << "  --enable-mapping       keep T265 internal mapping enabled\n"
+        << "  --disable-relocalization  disable matching back to previously mapped poses\n"
+        << "  --disable-map-preservation  do not keep internal map across pipeline restarts\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
         << "  --debug-sdk         detailed librealsense log\n"
         << "  --experimental-robust-localization  retain UART without T265; retry once per attach or SIGUSR1 (test only)\n"
@@ -384,6 +390,12 @@ Options parse_options(int argc, char **argv)
             options.pose_jumping_override = 1;
         } else if (argument == "--disable-pose-jumping") {
             options.pose_jumping_override = 0;
+        } else if (argument == "--enable-mapping") {
+            options.mapping_override = 1;
+        } else if (argument == "--disable-relocalization") {
+            options.relocalization_override = 0;
+        } else if (argument == "--disable-map-preservation") {
+            options.map_preservation_override = 0;
         } else {
             throw std::invalid_argument("unknown option: " + argument);
         }
@@ -422,16 +434,18 @@ Options parse_options(int argc, char **argv)
         wheel != !options.debug_wheel_session.empty())
         throw std::invalid_argument("debug wheel input requires socket/config/log/session together");
     if (wheel && ((!competition_wheel && !test_uart && (!options.uart_path.empty() || options.tx_rate_hz != 0)) ||
-                  !options.ignore_encoders || !options.t265_only_output || options.pose_jumping_override != 1))
-        throw std::invalid_argument("wheel input needs direct Pose, ignore-encoders, pose jumping; internal UART only with competition feedback tap");
+                  !options.ignore_encoders || !options.t265_only_output || options.pose_jumping_override < 0))
+        throw std::invalid_argument("wheel input needs direct Pose, ignore-encoders, explicit pose-jumping setting; internal UART only with competition feedback tap");
     if (options.debug_fresh_session && (!options.t265_only_output || !options.ignore_encoders ||
-                                       (!competition_wheel && !test_uart && !options.uart_path.empty()) || options.pose_jumping_override != 1 ||
+                                       (!competition_wheel && !test_uart && !options.uart_path.empty()) || options.pose_jumping_override < 0 ||
                                        !options.t265_map_path.empty()))
-        throw std::invalid_argument("fresh debug A/B requires direct Pose, external UART, pose jumping, no imported map");
+        throw std::invalid_argument("fresh debug A/B requires direct Pose, external UART, explicit pose-jumping setting, no imported map");
     if(options.debug_fisheye_output.empty()!=options.debug_fisheye_request.empty())
         throw std::invalid_argument("fisheye evidence requires both output and trigger paths");
     if(!options.debug_fisheye_output.empty() && (!options.debug_fresh_session || options.debug_test_session.empty()))
         throw std::invalid_argument("fisheye evidence is confined to an identified debug session");
+    if (!options.t265_map_path.empty() && options.relocalization_override == 0)
+        throw std::invalid_argument("imported-map startup requires relocalization; omit the imported map for continuous local mapping");
     return options;
 }
 
@@ -1456,9 +1470,20 @@ int main(int argc, char **argv)
             rs_config.enable_stream(RS2_STREAM_FISHEYE,2,RS2_FORMAT_Y8);
         }
 
+        const rs2_option pose_options[] = {
+            RS2_OPTION_ENABLE_MAPPING, RS2_OPTION_ENABLE_RELOCALIZATION,
+            RS2_OPTION_ENABLE_POSE_JUMPING, RS2_OPTION_ENABLE_MAP_PRESERVATION,
+            RS2_OPTION_ENABLE_DYNAMIC_CALIBRATION};
+        const char *pose_option_names[] = {
+            "enable_mapping", "enable_relocalization", "enable_pose_jumping", "enable_map_preservation",
+            "enable_dynamic_calibration"};
+        const int pose_option_values[] = {options.mapping_override, options.relocalization_override,
+            options.pose_jumping_override, options.map_preservation_override, -1};
+        const bool configure_pose_options = std::any_of(std::begin(pose_option_values),
+            std::end(pose_option_values), [](int value) { return value >= 0; });
         std::unique_ptr<rs2::pose_sensor> map_pose_sensor;
         try {
-        if (t265_map.enabled || options.pose_jumping_override >= 0 || !options.debug_wheel_socket.empty()) {
+        if (t265_map.enabled || configure_pose_options || options.debug_fresh_session || !options.debug_wheel_socket.empty()) {
             // Resolve and obtain the pose sensor from the same pipeline
             // configuration before importing the map. This is required by the
             // T265 map API and avoids opening a second USB handle.
@@ -1470,29 +1495,21 @@ int main(int argc, char **argv)
                 throw std::runtime_error("T265 pose sensor is unavailable for configuration");
             }
         }
-        if (options.pose_jumping_override >= 0) {
-            if (!map_pose_sensor->supports(RS2_OPTION_ENABLE_POSE_JUMPING)) {
-                throw std::runtime_error("T265 does not support enable_pose_jumping");
-            }
-            const rs2_option pose_options[] = {
-                RS2_OPTION_ENABLE_MAPPING, RS2_OPTION_ENABLE_RELOCALIZATION,
-                RS2_OPTION_ENABLE_POSE_JUMPING, RS2_OPTION_ENABLE_MAP_PRESERVATION};
-            const char *names[] = {
-                "enable_mapping", "enable_relocalization", "enable_pose_jumping", "enable_map_preservation"};
-            for (int i = 0; i < 4; ++i) {
+        if (configure_pose_options) {
+            for (int i = 0; i < 5; ++i) {
                 std::ostringstream data;
-                data << "{\"name\":\"" << names[i] << "\"";
+                data << "{\"name\":\"" << pose_option_names[i] << "\"";
                 if (map_pose_sensor->supports(pose_options[i])) {
                     const float before = map_pose_sensor->get_option(pose_options[i]);
-                    if (pose_options[i] == RS2_OPTION_ENABLE_POSE_JUMPING) {
-                        map_pose_sensor->set_option(
-                            pose_options[i], static_cast<float>(options.pose_jumping_override));
-                    }
+                    if (pose_option_values[i] >= 0)
+                        map_pose_sensor->set_option(pose_options[i], static_cast<float>(pose_option_values[i]));
                     const float after = map_pose_sensor->get_option(pose_options[i]);
                     data << ",\"supported\":true,\"before\":" << before << ",\"after\":" << after;
-                    std::cerr << "[T265 OPTION] " << names[i] << '=' << after << '\n';
+                    std::cerr << "[T265 OPTION] " << pose_option_names[i] << '=' << after << '\n';
                 } else {
                     data << ",\"supported\":false";
+                    if (pose_option_values[i] >= 0)
+                        throw std::runtime_error(std::string("T265 does not support requested ") + pose_option_names[i]);
                 }
                 data << '}';
                 event_log.write("t265_debug_option", data.str());
@@ -1611,6 +1628,14 @@ int main(int argc, char **argv)
             event_log.write("t265_pose_jumping_final",
                             "{\"value\":" + std::to_string(pose_jumping) + "}");
             std::cerr << "[T265 OPTION FINAL] enable_pose_jumping=" << pose_jumping << '\n';
+            for (int i = 0; i < 5; ++i) {
+                if (!map_pose_sensor->supports(pose_options[i])) continue;
+                std::ostringstream data;
+                data << "{\"name\":\"" << pose_option_names[i]
+                     << "\",\"requested\":" << pose_option_values[i]
+                     << ",\"value\":" << map_pose_sensor->get_option(pose_options[i]) << '}';
+                event_log.write("t265_pose_option_final", data.str());
+            }
         }
         event_log.write(
             "pipeline_started",

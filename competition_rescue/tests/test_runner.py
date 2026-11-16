@@ -1556,7 +1556,9 @@ def test_formal_t265_mount_is_independent_of_wheel_input():
                     assert config['start_zone'] == str(zone) and config['start_center_m'] == '1.350000'
                     assert config['start_heading_offset_deg'] == '0.0'
                     assert (app.pose.x_m, app.pose.y_m, app.pose.yaw_deg) == starts[zone]
-                    assert '--t265-only-output' in cmd and '--enable-pose-jumping' in cmd
+                    assert all(flag in cmd for flag in ('--t265-only-output', '--disable-pose-jumping',
+                        '--disable-relocalization', '--enable-mapping', '--disable-map-preservation'))
+                    assert '--enable-pose-jumping' not in cmd
                     assert wheel.call_count == int(official or dynamic)
                     assert start.call_count == int(dynamic)
                     if not (official or dynamic):
@@ -1599,7 +1601,7 @@ def test_formal_wheel_start_and_pose_adoption():
                 assert cmd.count('--uart') == 1 and '--ignore-encoders' in cmd
                 assert cmd[cmd.index('--baud')+1] == '921600'
                 assert all(x in cmd for x in ('--debug-fresh-session', '--debug-test-session',
-                    '--enable-pose-jumping', '--t265-only-output', '--wheel-feedback-socket'))
+                    '--disable-pose-jumping', '--t265-only-output', '--wheel-feedback-socket'))
                 conf = Path(cmd[cmd.index('--config')+1]).read_text()
                 assert 'start_zone = 1' in conf and 'start_center_m = 1.350000' in conf
                 assert 'start_heading_offset_deg = 0.0' in conf
@@ -1613,13 +1615,13 @@ def test_formal_wheel_start_and_pose_adoption():
                 session = json.loads((runtime/'session.json').read_text())
                 assert session['actual_lower_firmware'] == 'unconfirmed'
                 assert 'expected_lower_firmware' not in session
-                options.localization_json.write_text(json.dumps(dict(frame='field',quality='GOOD',
+                app.localization_json.write_text(json.dumps(dict(frame='field',quality='GOOD',
                     timestamp_monotonic_ns=time.monotonic_ns()-5_000_000_000,
                     pose=dict(x_m=.1,y_m=.2,yaw_deg=30))))
-                assert load_localization_pose(options.localization_json).quality == 'STALE'
+                assert load_localization_pose(app.localization_json).quality == 'STALE'
                 app.update_pose()
                 assert app.pose.quality == 'GOOD' and app.pose.age_ms > 250
-                pose = runner_module.load_pose(options.localization_json)
+                pose = runner_module.load_pose(app.localization_json)
                 assert pose.valid and CompetitionMission._pose_fresh(pose)
             finally:
                 adapter = app.wheel_input
