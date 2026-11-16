@@ -21,7 +21,7 @@ DYNAMIC_SESSION_FILES = frozenset({"dynamic_events.jsonl", "dynamic_scans.jsonl"
     "lidar_worker_events.jsonl", "lidar_worker_summary.json", "dynamic_initialization.jsonl",
     "lidar_reader_events.jsonl", "lidar_reader_summary.json", "native_motion_events.jsonl"})
 WHEEL_SESSION_FILES = frozenset({"metadata.json", "localization.conf", "session_complete.json",
-    "wheel_feedback_requests.bin", "t265_raw_pose.csv", "localization_debug.csv",
+    "wheel_feedback_requests.bin", "t265_raw_pose.csv", "t265_raw_imu.csv", "localization_debug.csv",
     "localization_events.jsonl", "wheel_sdk_config.json", "wheel_sdk.jsonl", "wheel_sdk_status.json",
     "wheel_input.jsonl", "wheel_measurements.jsonl", "chassis_identity.json",
     "chassis_extended.jsonl", "logging_events.jsonl", "final_status.json", "raw_t265_result.json",

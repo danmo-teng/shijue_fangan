@@ -270,6 +270,8 @@ class CompetitionMapApp(RescueMapApp):
         if self.operator is not None:
             command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:
+            if self.localization_mode == "t265":
+                command += ["--raw-imu-csv", str(RUNTIME / "t265_raw_imu.csv")]
             return command
         full_diagnostics = getattr(self.options, "full_diagnostics", False)
         sdk_log_profile = "full" if full_diagnostics else "summary"
@@ -350,6 +352,7 @@ class CompetitionMapApp(RescueMapApp):
             command[command.index(flag) + 1] = str(value)
         command += ["--ignore-encoders", "--debug-fresh-session", "--debug-test-session", session_id,
                     "--raw-pose-csv", str(run_dir / "t265_raw_pose.csv"),
+                    "--raw-imu-csv", str(run_dir / "t265_raw_imu.csv"),
                     "--debug-wheel-socket", "@t265-wheel-" + session_id,
                     "--debug-wheel-config", str(run_dir / "wheel_sdk_config.json"),
                     "--debug-wheel-log", str(run_dir / "wheel_sdk.jsonl"),

@@ -1,0 +1,21 @@
+{
+  "snapshot": "/tmp/rdk-imu-logging-pghtqr2i",
+  "backup": "/home/sunrise/RDK_X5/shijue_fangan/localization/build/deployment_backups/imu_logging_20261116_7hc2og_o",
+  "artifacts": {
+    "t265_omni_localizer": {
+      "sha256": "4c20802311c78fee42e444dc18e181500ff3a071cc5c7702d94b628c36b9e63a",
+      "previous_sha256": "ae330205458d5ba485c58071d0da28697911ad08adda8b4390cfb67b1f13586e"
+    },
+    "libmotion_runtime.so": {
+      "sha256": "c41c14afffef8f3bdcf8c23a34edfd0a79da5fb5e968c59de72a9eba5f17bf0a",
+      "previous_sha256": "c41c14afffef8f3bdcf8c23a34edfd0a79da5fb5e968c59de72a9eba5f17bf0a"
+    },
+    "liblidar_geometry.so": {
+      "sha256": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975",
+      "previous_sha256": "8ba7d1ad9a3dd6fb273192e39c8eef2cb821f2e863958703ebdc7bf9dbca8975"
+    }
+  },
+  "raw_imu_control_enabled": false,
+  "device_started": false,
+  "preserved_experiments_enabled": false
+}

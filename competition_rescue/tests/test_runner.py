@@ -1557,7 +1557,7 @@ def test_formal_t265_mount_is_independent_of_wheel_input():
                     assert config['start_heading_offset_deg'] == '0.0'
                     assert (app.pose.x_m, app.pose.y_m, app.pose.yaw_deg) == starts[zone]
                     assert all(flag in cmd for flag in ('--t265-only-output', '--disable-pose-jumping',
-                        '--disable-relocalization', '--enable-mapping', '--disable-map-preservation'))
+                        '--disable-relocalization', '--enable-mapping', '--disable-map-preservation', '--raw-imu-csv'))
                     assert '--enable-pose-jumping' not in cmd
                     assert wheel.call_count == int(official or dynamic)
                     assert start.call_count == int(dynamic)

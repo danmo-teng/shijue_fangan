@@ -141,7 +141,7 @@ def wrap_degrees(value: float) -> float:
 
 
 SESSION_FILES = frozenset({"metadata.json", "localization.conf", "localization_result.json",
-    "localization_debug.csv", "t265_raw_pose.csv", "localization_events.jsonl", "localizer.log",
+    "localization_debug.csv", "t265_raw_pose.csv", "t265_raw_imu.csv", "localization_events.jsonl", "localizer.log",
     "f407_motion_status.json", "f407_motion_status.jsonl", "uart_rx.jsonl", "uart_rx_native.jsonl", "events.jsonl",
     "commands.jsonl", "analysis.json", "ground_truth.jsonl", "session_complete.json",
     "imu_telemetry.jsonl", "chassis_telemetry.jsonl", "chassis_actions.jsonl",
@@ -1142,6 +1142,7 @@ class MotionMapApp:
             "--output", str(self.localization_json),
             "--csv", str(self.run_dir / "localization_debug.csv"),
             "--raw-pose-csv", str(self.run_dir / "t265_raw_pose.csv"),
+            "--raw-imu-csv", str(self.run_dir / "t265_raw_imu.csv"),
             "--events", str(self.run_dir / "localization_events.jsonl"),
             "--disable-pose-jumping", "--disable-relocalization",
             "--enable-mapping", "--disable-map-preservation",
@@ -1262,6 +1263,7 @@ class MotionMapApp:
             "files": {
                 "localization_csv": "localization_debug.csv",
                 "raw_pose_csv": "t265_raw_pose.csv",
+                "raw_t265_imu_csv": "t265_raw_imu.csv",
                 "ground_truth": "ground_truth.jsonl",
                 "imu_telemetry": "imu_telemetry.jsonl",
                 "chassis_telemetry": "chassis_telemetry.jsonl",
@@ -1511,7 +1513,7 @@ class MotionMapApp:
                 if diagnostics is not None:
                     self.record_event('native_diagnostic_log_status',diagnostics)
                     logs_ok=logs_ok and not any(diagnostics.get(key,0) for key in
-                        ('localization_dropped_rows','localization_io_failed','raw_pose_dropped_rows','raw_pose_io_failed',
+                        ('localization_dropped_rows','localization_io_failed','raw_pose_dropped_rows','raw_pose_io_failed','raw_imu_dropped_rows','raw_imu_io_failed','raw_imu_read_errors',
                          'raw_json_write_errors','uart_raw_dropped_rows','uart_raw_io_failed'))
             except (OSError,ValueError,KeyError):
                 logs_ok=False  # Completeness only; never a motion/input gate.

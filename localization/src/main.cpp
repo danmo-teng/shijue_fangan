@@ -11,6 +11,7 @@
 #include "dynamic_pose_relay.hpp"
 #include "debug_fisheye_evidence.hpp"
 #include "async_csv_log.hpp"
+#include "raw_imu_csv.hpp"
 #include "async_latest_file.hpp"
 #include "priority_inheritance_mutex.hpp"
 #include <unistd.h>
@@ -60,6 +61,7 @@ struct Options {
     std::string output_path = "localization_result.json";
     std::string csv_path;
     std::string raw_pose_csv_path;
+    std::string raw_imu_csv_path;
     std::string command_file_path;
     std::string stm_status_output_path;
     std::string t265_map_path;
@@ -259,6 +261,7 @@ void usage(const char *program)
         << "  --output FILE       atomic JSON output\n"
         << "  --csv FILE          full-rate T265/odometry diagnostic CSV log\n"
         << "  --raw-pose-csv FILE  retain all received SDK Pose samples, including confidence=0\n"
+        << "  --raw-imu-csv FILE   record raw T265 gyro/accel in the same SDK session (no WIO)\n"
         << "  --command-file FILE relay new valid TYPE 0x11/0x12/0x18 frames\n"
         << "  --stm-status FILE   atomic TYPE 0x17 status JSON output\n"
         << "  --dynamic-pose-socket @NAME  receive desktop dynamic localization result\n"
@@ -324,6 +327,8 @@ Options parse_options(int argc, char **argv)
             options.csv_path = value("--csv");
         } else if (argument == "--raw-pose-csv") {
             options.raw_pose_csv_path = value("--raw-pose-csv");
+        } else if (argument == "--raw-imu-csv") {
+            options.raw_imu_csv_path = value("--raw-imu-csv");
         } else if (argument == "--command-file") {
             options.command_file_path = value("--command-file");
         } else if (argument == "--stm-status") {
@@ -1436,6 +1441,8 @@ int main(int argc, char **argv)
         // Optional diagnostic stream precedes confidence/startup gating, so
         // lost tracking and initial invalid samples are retained verbatim.
         omni::AsyncCsvLog raw_pose_log(options.raw_pose_csv_path);
+        omni::RawImuCsv raw_imu_log(options.raw_imu_csv_path);
+        std::uint64_t imu_run_number = 0;
         std::ostringstream raw_pose_csv;
         if (!options.raw_pose_csv_path.empty()) {
             raw_pose_csv << "receive_monotonic_ns,frame_number,capture_timestamp_ms,timestamp_domain,capture_age_ms,"
@@ -1465,6 +1472,11 @@ int main(int argc, char **argv)
         rs2::config rs_config;
         if (!serial.empty()) rs_config.enable_device(serial);
         rs_config.enable_stream(RS2_STREAM_POSE, RS2_FORMAT_6DOF);
+        const auto imu_run = ++imu_run_number;
+        if (raw_imu_log.enabled()) {
+            rs_config.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
+            rs_config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
+        }
         if(!options.debug_fisheye_output.empty()) {
             rs_config.enable_stream(RS2_STREAM_FISHEYE,1,RS2_FORMAT_Y8);
             rs_config.enable_stream(RS2_STREAM_FISHEYE,2,RS2_FORMAT_Y8);
@@ -1601,9 +1613,9 @@ int main(int argc, char **argv)
         rs2::pipeline_profile active_profile;
         // Destroy this guard BEFORE callback targets on every exit/exception.
         std::unique_ptr<DebugPipelineGuard> debug_pipeline_guard;
-        if(!options.debug_test_session.empty() || debug_wheel)
+        if(!options.debug_test_session.empty() || debug_wheel || raw_imu_log.enabled())
             debug_pipeline_guard.reset(new DebugPipelineGuard{pipeline,debug_wheel.get()});
-        const bool debug_pose_callbacks=!options.debug_test_session.empty();
+        const bool debug_pose_callbacks=!options.debug_test_session.empty() || raw_imu_log.enabled();
         if(!options.debug_fisheye_output.empty()) {
             fisheye.reset(new omni::DebugFisheyeEvidence(options.debug_fisheye_output,
                 options.debug_fisheye_request,options.debug_test_session));
@@ -1613,6 +1625,24 @@ int main(int argc, char **argv)
             // unsynchronized Pose independently, preserving its native cadence.
             active_profile=pipeline.start(rs_config,[&](rs2::frame frame){
                 if(auto pose=frame.as<rs2::pose_frame>())evidence_pose_queue.push(pose);
+                else if (auto motion = frame.as<rs2::motion_frame>()) {
+                    if (!raw_imu_log.enabled()) return;
+                    try {
+                        const auto type = motion.get_profile().stream_type();
+                        if (type != RS2_STREAM_GYRO && type != RS2_STREAM_ACCEL) return;
+                        const auto xyz = motion.get_motion_data();
+                        bool have_temperature = false; double temperature = 0.;
+                        try {
+                            if (motion.supports_frame_metadata(RS2_FRAME_METADATA_TEMPERATURE)) {
+                                temperature = motion.get_frame_metadata(RS2_FRAME_METADATA_TEMPERATURE);
+                                have_temperature = true;
+                            }
+                        } catch (const rs2::error &) { raw_imu_log.read_error(); }
+                        raw_imu_log.submit(imu_run, type == RS2_STREAM_GYRO, motion.get_frame_number(),
+                            motion.get_timestamp(), static_cast<int>(motion.get_frame_timestamp_domain()),
+                            xyz.x, xyz.y, xyz.z, have_temperature, temperature);
+                    } catch (const rs2::error &) { raw_imu_log.read_error(); }
+                }
                 else if(fisheye) {
                     if(auto frames=frame.as<rs2::frameset>())fisheye->offer(frames,monotonic_ns());
                 }
@@ -1641,9 +1671,10 @@ int main(int argc, char **argv)
             "pipeline_started",
             "{\"t265_map_enabled\":" +
             std::string(t265_map.enabled ? "true" : "false") + "}");
-        if(!options.debug_test_session.empty()) {
+        if(!options.debug_test_session.empty() || raw_imu_log.enabled()) {
             omni::DebugWheelInput::Json actual{{"session_id",options.debug_test_session},{"pid",::getpid()},
-                {"sdk_device_session_id",sdk_device_session_id},
+                {"sdk_device_session_id",sdk_device_session_id},{"imu_sdk_run",imu_run},
+                {"raw_imu_csv",options.raw_imu_csv_path},{"raw_imu_used_for_control",false},
                 {"serial",serial},{"firmware",device_info(active_profile.get_device(),RS2_CAMERA_INFO_FIRMWARE_VERSION)},
                 {"librealsense_compile_time",RS2_API_VERSION_STR},{"librealsense_api_version",rs2_get_api_version(nullptr)},
                 {"device_boot_epoch",nullptr},{"clean_fusion_state_verified",false}};
@@ -1652,6 +1683,22 @@ int main(int argc, char **argv)
                 omni::DebugWheelInput::Json stream{{"stream",rs2_stream_to_string(profile.stream_type())},
                     {"index",profile.stream_index()},{"fps",profile.fps()},{"format",rs2_format_to_string(profile.format())}};
                 if(auto video=profile.as<rs2::video_stream_profile>()) {stream["width"]=video.width();stream["height"]=video.height();}
+                if (auto motion = profile.as<rs2::motion_stream_profile>()) {
+                    stream["units"] = profile.stream_type() == RS2_STREAM_GYRO ? "rad/s" : "m/s^2";
+                    stream["axes"] = "SDK motion sensor axes, not body/field axes";
+                    try {
+                        const auto intr = motion.get_motion_intrinsics();
+                        stream["intrinsics"] = {{"data",omni::DebugWheelInput::Json::array()},
+                            {"noise_variances",std::vector<float>(intr.noise_variances,intr.noise_variances+3)},
+                            {"bias_variances",std::vector<float>(intr.bias_variances,intr.bias_variances+3)}};
+                        for (const auto &row : intr.data)
+                            stream["intrinsics"]["data"].push_back(std::vector<float>(row,row+4));
+                        const auto ext = profile.get_extrinsics_to(active_profile.get_stream(RS2_STREAM_POSE));
+                        stream["extrinsics_to_pose"] = {
+                            {"rotation_column_major",std::vector<float>(ext.rotation,ext.rotation+9)},
+                            {"translation_m",std::vector<float>(ext.translation,ext.translation+3)}};
+                    } catch (const rs2::error &error) { stream["calibration_read_error"] = error.what(); }
+                }
                 actual["profiles"].push_back(stream);
             }
             event_log.write("actual_sdk_session",actual.dump());
@@ -2498,14 +2545,18 @@ int main(int argc, char **argv)
         if (relay_thread.joinable()) relay_thread.join();
         test_uart_relay.reset();
         stm_status_writer->close();
-        csv_log.close();raw_pose_log.close();uart_raw_log.close();
+        csv_log.close();raw_pose_log.close();raw_imu_log.close();uart_raw_log.close();
         raw_snapshot.close();
         pose_stdout.close();
         event_log.write("diagnostic_csv_status", "{\"localization_dropped_rows\":" +
             std::to_string(csv_log.dropped()) + ",\"localization_io_failed\":" +
             (csv_log.failed() ? "true" : "false") + ",\"raw_pose_dropped_rows\":" +
             std::to_string(raw_pose_log.dropped()) + ",\"raw_pose_io_failed\":" +
-            (raw_pose_log.failed() ? "true" : "false") + ",\"raw_json_write_errors\":" +
+            (raw_pose_log.failed() ? "true" : "false") + ",\"raw_imu_samples\":" +
+            std::to_string(raw_imu_log.samples()) + ",\"raw_imu_dropped_rows\":" +
+            std::to_string(raw_imu_log.dropped()) + ",\"raw_imu_read_errors\":" +
+            std::to_string(raw_imu_log.read_errors()) + ",\"raw_imu_io_failed\":" +
+            (raw_imu_log.failed() ? "true" : "false") + ",\"raw_json_write_errors\":" +
             std::to_string(raw_snapshot.errors()) + ",\"uart_raw_dropped_rows\":"+std::to_string(uart_raw_log.dropped())+
             ",\"uart_raw_io_failed\":"+(uart_raw_log.failed()?"true":"false")+",\"raw_json_coalesced\":" +
             std::to_string(raw_snapshot.coalesced()) + ",\"pose_stdout_write_errors\":" +
