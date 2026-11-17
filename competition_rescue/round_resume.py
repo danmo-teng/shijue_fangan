@@ -10,6 +10,8 @@ def match_progress(mission):
                 search_point=int(mission.search_point_number),
                 delivery_count=int(mission.delivery_count),
                 search_direction=int(mission.search_scan_direction),
+                orange_search_round=int(mission.orange_search_round),
+                orange_search_turn_deg=float(mission.orange_search_turn_deg),
                 stash_has_cargo=bool(mission.stash_has_cargo))
 
 
@@ -19,6 +21,9 @@ def restore_progress(mission, progress):
     mission.search_point_number = mission.delivery_search_point_number = int(progress['search_point'])
     mission.delivery_count = int(progress['delivery_count'])
     mission.search_scan_direction = int(progress.get('search_direction', 1))
+    mission.orange_search_round = int(progress.get('orange_search_round',
+        min(4, mission.delivery_count) if mission.first_common_delivered else 0))
+    mission.orange_search_turn_deg = float(progress.get('orange_search_turn_deg', 0.0))
     mission.stash_has_cargo = bool(progress['stash_has_cargo'])
     mission.resume_search_after_start = mission.initial_stash_done
 
@@ -29,10 +34,14 @@ class ProgressStore:
 
     def save(self, mission):
         progress = match_progress(mission)
-        if progress == self.last:
+        # Retain the exact live angle for hot resume, but write only milestones
+        # (round changes/full circle), never one disk update per yaw sample.
+        milestone = dict(progress, orange_search_turn_deg=(
+            360.0 if progress['orange_search_turn_deg'] >= 360.0 else 0.0))
+        if milestone == self.last:
             return
         # Only milestone changes write; not one disk operation per camera frame.
-        self.last = progress.copy()
+        self.last = milestone
         value = dict(version=1, session_token=self.session, side=mission.settings.side,
                      start_zone=mission.settings.start_zone, progress=progress)
         temporary = self.path.with_suffix('.tmp')

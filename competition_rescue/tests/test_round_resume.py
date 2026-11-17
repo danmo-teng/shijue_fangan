@@ -98,3 +98,18 @@ def test_resume_keeps_sdk_owner_and_new_stop_wins(tmp_path):
     before=panel.control_path.read_text()
     assert not panel.release_resume(1,'red','attack','stale',7)
     assert panel.control_path.read_text()==before and panel.stopped
+
+
+def test_orange_search_hot_resume_retains_angle_without_per_frame_disk_writes(tmp_path):
+    m=CompetitionMission(CompetitionSettings(side='red'))
+    m.first_common_delivered=True;m.orange_search_round=2;m.orange_search_turn_deg=125.
+    store=ProgressStore(tmp_path/'progress.json','round');store.save(m)
+    initial=store.path.read_bytes()
+    m.orange_search_turn_deg=250.;store.save(m)
+    assert store.path.read_bytes()==initial
+    new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
+    assert new.orange_search_round==2 and new.orange_search_turn_deg==250. and new._orange_only_search()
+    m.orange_search_turn_deg=360.;store.save(m)
+    assert store.path.read_bytes()!=initial
+    new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
+    assert not new._orange_only_search()

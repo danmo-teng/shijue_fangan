@@ -864,6 +864,8 @@ class CompetitionMission:
         self.search_visit = 0
         self.search_site_turn_deg = 0.0
         self.search_scan_direction = 1
+        self.orange_search_round = 0  # 0 before first green; 1..3 orange-first rounds; 4 done.
+        self.orange_search_turn_deg = 0.0
         self.failed_search_targets: deque[FailedSearchTarget] = deque(maxlen=16)
         self.search_observer: tuple[float, float, float, int] | None = None
         self.target_last_observer: tuple[float, float, float, int] | None = None
@@ -1584,6 +1586,8 @@ class CompetitionMission:
             increment = abs(angle_error_deg(pose.yaw_deg, self.search_last_yaw_deg))
             self.search_yaw_accum_deg += increment
             self.search_site_turn_deg += increment
+            if self._orange_only_search():
+                self.orange_search_turn_deg = min(360.0, self.orange_search_turn_deg + increment)
         self.search_last_yaw_deg = pose.yaw_deg
 
     def _remember_failed_search_target(self) -> None:
@@ -3461,6 +3465,10 @@ class CompetitionMission:
         # needs separation, rather than skipping it for a distant singleton.
         return target if target is not None and self._is_isolated(target, self._visible_cargo(vision)) else None
 
+    def _orange_only_search(self) -> bool:
+        return (self.first_common_delivered and 1 <= self.orange_search_round <= 3 and
+                self.orange_search_turn_deg < 360.0)
+
     def _choose_search_target(self, vision: VisionSnapshot) -> TrackedCargo | None:
         candidates = tuple(
             item for item in self._visible_cargo(vision)
@@ -3473,6 +3481,8 @@ class CompetitionMission:
             orange = tuple(item for item in candidates if item.class_name == "injured_orange")
             if orange:
                 candidates = orange
+            elif self._orange_only_search():
+                return None
         return self._choose_nearest_cargo(vision, candidates)
 
     def _choose_next_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
@@ -5174,6 +5184,8 @@ class CompetitionMission:
         self, stm: StmSnapshot, now: float, *, basis: str, message: str, event: str
     ) -> CompetitionOutput:
         batch = self.selected_batch
+        first_green_before = self.first_common_delivered
+        new_delivery = not self.delivery_counted_for_batch
         if self.obstacle_route is not None and self.obstacle_route.awaiting_obstacle_delivery:
             self.obstacle_route.recover_after_delivery = True
         self.delivery_completion_basis = basis
@@ -5188,6 +5200,10 @@ class CompetitionMission:
             (batch is not None and "green_supply" in batch.classes)
         ):
             self.first_common_delivered = True
+        if new_delivery and self.first_common_delivered:
+            self.orange_search_round = (1 if not first_green_before else
+                                        min(4, self.orange_search_round + 1))
+            self.orange_search_turn_deg = 0.0
         return CompetitionOutput(
             self.state,
             CommandRequest(CMD_TASK_COMPLETE, self._side_flags()),
@@ -6979,6 +6995,11 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
             return self._begin_search_transfer(vision, pose, stm, now)
+        if self._orange_only_search():
+            return CompetitionOutput(self.state, self._hold(),
+                f"首绿后第{self.orange_search_round}/3轮优先找橙：已搜索"
+                f"{self.orange_search_turn_deg:.0f}/360°，暂不锁绿黑",
+                reason="orange_first_search_scan", tx_policy="hold")
         reject_reasons: list[str] = []
         if deferred_failure:
             reject_reasons.append("FAILED_TARGET_THIS_VISIT")

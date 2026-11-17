@@ -3931,3 +3931,63 @@ def test_post_first_separation_prioritizes_no_blue_legal_side_and_tracks_orange_
     # Legal whole material load still skips separation.
     m.first_common_delivered=True
     assert m._audit_valid(audit(['green_supply'],['green_supply']*2))
+
+
+def test_first_three_post_green_rounds_scan_orange_then_allow_materials():
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    start_search(m)
+    green=cargo(1,'green_supply',400,500);black=cargo(2,'core_black',850,500)
+    orange=cargo(3,'injured_orange',650,650)
+    v=VisionSnapshot(frame_sequence=10,cargo=(green,black))
+    # First green selection is unchanged before any delivery.
+    assert m._choose_initial_green(VisionSnapshot(cargo=(green,)))==green
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    m._latch_carried_manifest(CargoAudit(left_class='green_supply',left_count=1,total_count=1))
+    def finish(t):return m._finish_delivery(stm(mode=16),t,basis='test_existing_exit',message='',event='')
+    finish(1.)
+    for expected_round in (1,2,3):
+        assert m.orange_search_round==expected_round and m._orange_only_search()
+        assert m._choose_search_target(v) is None
+        assert m._choose_cluster_target(v) is None
+        assert m._choose_search_target(replace(v,cargo=(green,black,orange)))==orange
+        assert m._choose_search_target(replace(v,cargo=(green,replace(orange,inside_safe_zone=True)))) is None
+        m._set_state(CompetitionState.SEARCH,2.)
+        for yaw in [0.,90.,180.,270.]:m._update_search_scan_progress(replace(pose(),yaw_deg=yaw))
+        assert m.orange_search_turn_deg==270 and m._choose_search_target(v) is None
+        # Target alignment / failure is not part of the scan; resume preserves270.
+        m._set_state(CompetitionState.APPROACH,3.)
+        m._set_state(CompetitionState.SEARCH,4.)
+        m._update_search_scan_progress(replace(pose(),yaw_deg=45.))
+        assert m.orange_search_turn_deg==270
+        m._update_search_scan_progress(replace(pose(),yaw_deg=135.))
+        assert m.orange_search_turn_deg==360 and not m._orange_only_search()
+        assert m._choose_search_target(v) in (green,black)
+        assert m._choose_search_target(replace(v,cargo=(green,black,orange)))==orange
+        # Station visits do not consume or restart a round.
+        m._complete_return_search(v,5.,'',point_number=3)
+        assert m.orange_search_turn_deg==360 and m.orange_search_round==expected_round
+        m._select_batch(CargoBatch((3,),('injured_orange',),'injury'))
+        m._latch_carried_manifest(CargoAudit(left_class='injured_orange',left_count=1,total_count=1))
+        m.delivery_counted_for_batch=False
+        finish(6.)
+        after=m.orange_search_round
+        finish(6.1)  # Duplicate completion cannot count another search round.
+        assert m.orange_search_round==after
+    assert m.orange_search_round==4 and not m._orange_only_search()
+    assert m._choose_search_target(v) in (green,black)
+
+
+def test_orange_only_search_keeps_whole_claw_evidence_and_locks_once():
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    start_search(m);m.first_common_delivered=True;m.orange_search_round=1
+    green=cargo(1,'green_supply',500,450);black=cargo(2,'core_black',570,450)
+    view=VisionSnapshot(frame_sequence=1,cargo=(green,black))
+    out=m._handle_search(view,pose(),stm(),1.)
+    assert m.selected_batch is None and out.reason=='orange_first_search_scan'
+    orange=cargo(3,'injured_orange',1100,800)
+    out=m._handle_search(replace(view,frame_sequence=2,cargo=(green,black,orange)),pose(),stm(),1.1)
+    assert m.selected_batch.track_ids==(3,) and m.state==CompetitionState.APPROACH
+    another=cargo(4,'injured_orange',1100,900)
+    assert m._target_for_batch(replace(view,cargo=(orange,another)))==orange
+    # Selection-only policy never changes the actual audited material permission.
+    assert m._audit_valid(CargoAudit(left_class='core_black',left_count=1,total_count=1))
