@@ -2423,7 +2423,10 @@ class CompetitionPlanner:
             ranged_vision = replace(vision, range_distances=()) if paused else vision
             self.mission.search_observer = ((pose.x_m, pose.y_m, pose.yaw_deg, stm.camera_pitch_cdeg)
                                             if pose.valid else None)
-            return self.mission._range_approach_output(ranged_vision, stm, now, pose)
+            matches = (stm.context_valid and stm.task_id == self.protocol_task and
+                       stm.action_id == self.protocol_action)
+            return self.mission._range_approach_output(
+                ranged_vision, replace(stm, context_matches=matches), now, pose)
         handoff = self.mission._range_handoff_output(stm)
         if handoff is not None:
             return handoff

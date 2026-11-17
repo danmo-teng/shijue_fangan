@@ -62,3 +62,9 @@ state_machine.py::_range_approach_output接受aux1分段DONE时，明确要求co
 - 框贴顶且最远B1的aux1：本次只是一段接近；走完先保持120°（若原105则保持105），上位用新图重新对准/测距，最终段完成后才140°。不是每走完460mm都直接低头抓，否则会恢复“远目标只走一段就提前抓”的旧问题。
 
 最小修法应在正式52/53分支按当前task/action传递真实匹配结果，拒绝/重新接管上下文后也重新计算；保留旧action不能完成新段的检查。必要验证应覆盖真实planner入口、普通/聚堆、匹配DONE续段、旧DONE不推进及aux0原140°交接，而不是只测试_range_approach_output并手工预置context_matches=True。此处是上位衔接修复，下位现有aux1流程已按原记录完成，无需先改距离表、增加等待或改成强制140°。本轮按用户要求仅分析，未实施。
+
+## 后续授权修复
+
+用户明确批准最小修复。本次只在正式52/53快捷入口处理可能的拒绝/上下文接管后，重新按当前protocol_task/protocol_action与真实回包比较，使用replace(stm,context_matches=matches)传给既有_range_approach_output。原测距/相机流程未改，无新等待、握手或下位字段。
+
+6项必要检查通过：冻结原帧4378/6041在正式planner入口完成交接、同一DONE不重复推进、像素回正后新最终段aux0、任务/动作任一不匹配仍不推进、相机恢复期间不发新距离，以及原标定/140°交接/分段边界检查。测试位于tests/test_range_handoff_match.py；reproduction.json和reproduce.py保留为dab3ab8时的原故障证据，后者的旧行为断言不代表修复后预期。未启设备，地面待实测。
