@@ -282,7 +282,7 @@ class OperatorPanel:
                 self.silence()
                 self.app.vision_start_pending = False
                 self.app.start_requested = False
-                self._notice('已停止当前动作并保留本局；摆回原出发位短按3重发，长按4结束本局', 'operator_stop')
+                self._notice('已停车并保留本局；松开4，收纳后摆回原出发位短按3重发；按住4满5秒清空本局', 'operator_stop')
             elif action == 'exit_session':
                 if not self.transitioning:
                     self.transitioning = True

@@ -146,7 +146,7 @@ class SysfsButtonInput:
                     long_action, duration = {
                         1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
                         3: ('prewarm', 1.0),
-                        4: ('exit_session', 2.0),
+                        4: ('exit_session', 5.0),
                     }.get(key, (None, 0.0))
                     action = (long_action if long_action and held_s >= duration else
                               {1: 'query_zone', 2: 'query_side', 3: 'start'}.get(key))
@@ -161,7 +161,7 @@ class SysfsButtonInput:
             action, duration = {
                 1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
                 3: ('prewarm', 1.0),
-                4: ('exit_session', 2.0),
+                4: ('exit_session', 5.0),
             }.get(key, (None, 0.0))
             if action and now - button.pressed_at >= duration:
                 if key == 4 or not self._chord_blocked:

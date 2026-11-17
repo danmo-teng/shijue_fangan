@@ -82,7 +82,7 @@ def main():
     worker.start()
     names = {'start_pressed':'3号按下已确认', 'start':'短按3：识别成功（不发车）',
              'prewarm':'长按3：识别成功（不启动预热）', 'stop':'短按4：识别成功（仅记录）',
-             'exit_session':'长按4：识别成功（原程序当前2秒；仅记录）'}
+             'exit_session':'长按4：识别成功（原程序当前5秒；仅记录）'}
 
     def describe(row):
         prefix = f"{row['elapsed_s']:8.3f}s  "

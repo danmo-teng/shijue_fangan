@@ -2057,7 +2057,8 @@ def test_operator_buttons_and_feedback_encoding():
     levels[3] = 0; buttons.poll(6.); buttons.poll(6.04)
     levels[4] = 0; levels[3] = 1; buttons.poll(6.1)
     assert [e['action'] for e in buttons.poll(6.14)] == ['stop']
-    assert [e['action'] for e in buttons.poll(8.2)] == ['exit_session']
+    assert buttons.poll(8.2) == []  # Holding STOP for two seconds keeps this match.
+    assert [e['action'] for e in buttons.poll(11.2)] == ['exit_session']
     for count in range(1, 5):
         for long in (False, True):
             frame = beep_frame(count, long, 9)

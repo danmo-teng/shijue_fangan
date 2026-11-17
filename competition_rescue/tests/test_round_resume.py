@@ -10,6 +10,22 @@ from state_machine import CompetitionMission, CompetitionSettings, CompetitionSt
 from protocol import crc16_modbus, CMD_BULLDOZER_STEP
 
 
+def test_stop_keeps_match_until_five_seconds_including_release_poll():
+    from button_input import SysfsButtonInput
+    # Both a held-key poll and the release fallback use the same 5s rule.
+    for hold, reset in ((2.1, False), (4.9, False), (5.1, True)):
+        levels = {key: 1 for key in range(1, 5)}
+        buttons = SysfsButtonInput(read_level=lambda key: levels[key])
+        buttons.poll(0.)
+        levels[4] = 0
+        buttons.poll(1.)
+        assert [e['action'] for e in buttons.poll(1.04)] == ['stop']
+        levels[4] = 1
+        buttons.poll(1. + hold)
+        events = buttons.poll(1.04 + hold)
+        assert [e['action'] for e in events] == (['exit_session'] if reset else [])
+
+
 def test_match_progress_three_reachable_cases_drop_load_and_return_to_source(tmp_path):
     for green,attack in ((False,False),(False,True),(True,True)):
         old=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=True))
