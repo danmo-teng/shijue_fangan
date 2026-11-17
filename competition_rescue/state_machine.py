@@ -909,6 +909,7 @@ class CompetitionMission:
         self.separation_progress_attempt = 0
         self.separation_reviewed_attempt = 0
         self.separation_start_audit: CargoAudit | None = None
+        self.separation_wanted_class: str | None = None
         self.separation_keep_side: str | None = None
         self.separation_side_attempts = 0
         self.separation_request_epoch = 0
@@ -1461,6 +1462,7 @@ class CompetitionMission:
             self.separation_progress_attempt = 0
             self.separation_reviewed_attempt = 0
             self.separation_start_audit = None
+            self.separation_wanted_class = None
         self.deferred_cluster_ids = frozenset()
         self.deferred_cluster_bbox = None
         self.deferred_cluster_class = None
@@ -1530,6 +1532,7 @@ class CompetitionMission:
             self.separation_progress_attempt = 0
             self.separation_reviewed_attempt = 0
             self.separation_start_audit = None
+            self.separation_wanted_class = None
             self.separation_keep_side = None
             self.separation_side_attempts = 0
             self.disperse_observe_attempts = 0
@@ -1661,6 +1664,10 @@ class CompetitionMission:
         assert self.selected_batch is not None
         if self.selected_batch.initial_stash:
             return self.selected_batch.destination
+        keep = self._post_first_legal_keep_side(audit)
+        if keep is not None:
+            return ("injury" if self._legal_separation_side_manifest(audit, keep) ==
+                    ("injured_orange",) else "material")
         manifest = self._manifest_for_audit(audit)
         if audit.total_count == 1 and manifest == ("injured_orange",):
             return "injury"
@@ -2143,6 +2150,12 @@ class CompetitionMission:
         self.separation_request_counted = False
         near_keep = audit is not None and audit.near_keep_side == keep_side and keep_side is not None
         self.separation_start_audit = audit if keep_count > 0 or near_keep else None
+        self.separation_wanted_class = None
+        if audit is not None and keep_side is not None and self.first_common_delivered:
+            manifest = self._legal_separation_side_manifest(audit, keep_side)
+            if manifest:
+                self.separation_wanted_class = ("green_supply" if "green_supply" in manifest else
+                    "injured_orange" if "injured_orange" in manifest else "core_black")
         if first_green_bump:
             self.disperse_context = "first_green_bump"
             self.disperse_command = CommandRequest(
@@ -2195,6 +2208,13 @@ class CompetitionMission:
             self.separation_request_epoch += 1
             self.separation_request_counted = False
             self.separation_start_audit = audit
+            self.separation_wanted_class = None
+            if audit is not None and self.first_common_delivered and self.invalid_release_side in {"left", "right"}:
+                keep = "right" if self.invalid_release_side == "left" else "left"
+                manifest = self._legal_separation_side_manifest(audit, keep)
+                if manifest:
+                    self.separation_wanted_class = ("green_supply" if "green_supply" in manifest else
+                        "injured_orange" if "injured_orange" in manifest else "core_black")
             self.invalid_release_initial_ack = (
                 stm.acknowledged_sequence if stm.fresh else None
             )
@@ -3599,8 +3619,46 @@ class CompetitionMission:
             return self._sweep_original_destination()
         return self._audit_destination(audit)
 
+    def _legal_separation_side_manifest(self, audit: CargoAudit, side: str) -> tuple[str, ...]:
+        """A real, individually transportable side; never a new whole-claw audit."""
+        if (not self.first_common_delivered or self.selected_batch is None or
+                self.selected_batch.initial_stash or side not in {"left", "right"} or
+                audit.total_count != audit.left_count + audit.right_count):
+            return ()
+        count = getattr(audit, side + "_count")
+        category = getattr(audit, side + "_class")
+        if not 1 <= count <= self.settings.max_batch_count or getattr(audit, side + "_invalid"):
+            return ()
+        if category == "injured_orange":
+            manifest = (category,) if count == 1 else ()
+        elif category in MATERIAL_CLASSES:
+            manifest = (category,) * count
+        elif category == "mixed_material":
+            green = getattr(audit, side + "_green_count")
+            manifest = (("green_supply",) * green + ("core_black",) * (count-green)
+                        if 0 < green < count else ())
+        else:
+            return ()
+        composition = dict(getattr(audit, side + "_class_counts"))
+        if composition and Counter(composition) != Counter(manifest):
+            return ()
+        return manifest
+
+    def _post_first_legal_keep_side(self, audit: CargoAudit) -> str | None:
+        candidates = {side: self._legal_separation_side_manifest(audit, side)
+                      for side in ("left", "right")}
+        candidates = {side: items for side, items in candidates.items() if items}
+        if not candidates:
+            return None
+        most_green = max(items.count("green_supply") for items in candidates.values())
+        choices = [side for side, items in candidates.items() if items.count("green_supply") == most_green]
+        locked = self.cluster_keep_side or self.separation_keep_side
+        return locked if locked in choices else choices[0]
+
     def _side_is_disperse_candidate(self, audit: CargoAudit, side: str) -> bool:
         """A side worth separating is not permission to transport its contents."""
+        if self._legal_separation_side_manifest(audit, side):
+            return True
         if (self.selected_batch is None or side not in {"left", "right"} or
                 (audit.unknown_present and not audit.danger_present) or
                 audit.total_count != audit.left_count + audit.right_count):
@@ -3654,6 +3712,9 @@ class CompetitionMission:
         return category in MATERIAL_CLASSES | {"mixed_material"}
 
     def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
+        legal = self._post_first_legal_keep_side(audit)
+        if legal is not None:
+            return legal
         left_nonempty = self._side_is_disperse_candidate(audit, "left")
         right_nonempty = self._side_is_disperse_candidate(audit, "right")
         if left_nonempty != right_nonempty:
@@ -6170,7 +6231,7 @@ class CompetitionMission:
         if before is not None:
             old = Counter(self._manifest_for_audit(before))
             current = Counter(self._manifest_for_audit(audit))
-            wanted = (
+            wanted = getattr(self, "separation_wanted_class", None) or (
                 "green_supply" if old["green_supply"] > 0 else
                 "injured_orange" if self.selected_batch is not None and
                 self.selected_batch.destination == "injury" else "core_black"
@@ -6195,6 +6256,18 @@ class CompetitionMission:
 
     def _prefer_green_batch(self, audit: CargoAudit) -> None:
         batch = self.selected_batch
+        keep = self._post_first_legal_keep_side(audit)
+        if keep is not None:
+            manifest = self._legal_separation_side_manifest(audit, keep)
+            category = "injured_orange" if manifest == ("injured_orange",) else (
+                "green_supply" if "green_supply" in manifest else "core_black")
+            track_id = getattr(audit, keep + "_stable_track_id")
+            self.selected_batch = replace(batch,
+                track_ids=(track_id,) if getattr(audit, keep + "_class") == category and track_id is not None else batch.track_ids,
+                classes=(category,), destination="injury" if category == "injured_orange" else "material",
+                confirmed_total_count=None)
+            self.target_last_class = category
+            return
         if (batch is None or batch.initial_stash or
                 self._separation_destination(audit) != "material" or
                 not any(self._side_green_count(audit, side) > 0 for side in ("left", "right"))):

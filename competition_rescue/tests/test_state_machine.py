@@ -1936,7 +1936,7 @@ def test_safe_staging_terminal_only_corrects_out_of_window_axes() -> None:
                     assert generic.aux != axial.aux
 
 
-def test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception() -> None:
+def test_post_first_sorting_prefers_legal_more_green_over_visual_singleton() -> None:
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     m.first_common_delivered = True
     m._select_batch(CargoBatch((10,), ("injured_orange",), "injury"))
@@ -1948,7 +1948,7 @@ def test_green_sorting_uses_one_keep_policy_and_visual_singleton_exception() -> 
         (replace(greens, left_count=1, right_count=3,
                  left_green_count=1, right_green_count=3), "right"),
         (replace(greens, right_count=2, right_green_count=2, total_count=5), "left"),
-        (replace(greens, right_isolated_green=True), "right"),
+        (replace(greens, right_isolated_green=True), "left"),
         (replace(greens, right_isolated_green=True, right_count=2,
                  right_green_count=2, total_count=5), "left"),
     ):
@@ -3875,3 +3875,59 @@ def test_attack_station_turn_slow_mode_preserves_exclusive_first_search():
     assert m.state==CompetitionState.INITIAL_ATTACK_RETURN and m.selected_batch is None
     out=m._attack_return_output(v,replace(p,yaw_deg=0.),replace(status,context_matches=True,action_status=3),1.2)
     assert out.command.flags>>4==12 and m.search_scan_direction==-1
+
+
+def test_post_first_separation_prioritizes_no_blue_legal_side_and_tracks_orange_progress():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import CMD_DISPERSE_PILE,CMD_TARGET_RIGHT
+    def audit(left,right):
+        names=left+right
+        items=tuple(cargo(i+1,n,400+i*40,450) for i,n in enumerate(names))
+        return replace(audit_from_cargo(items,side_by_track={i+1:('left' if i<len(left) else 'right') for i in range(len(names))}),stable=True)
+    cases=[(['green_supply'],['green_supply']*3,'right'),
+           (['green_supply','danger_cyan'],['injured_orange'],'right'),
+           (['injured_orange'],['green_supply','danger_cyan'],'left'),
+           (['green_supply']*3+['core_black'],['green_supply'],'right'),
+           (['green_supply','core_black'],['green_supply']*2,'right'),
+           (['core_black'],['green_supply','danger_cyan'],'left')]
+    for left,right,keep in cases:
+        m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+        m.first_common_delivered=True
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        a=audit(left,right)
+        assert m._preferred_keep_side(a)==keep
+        assert m._side_is_disperse_candidate(a,keep)
+        assert m._choose_release_side(a)==('left' if keep=='right' else 'right')
+        assert not m._audit_valid(a)
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False));m.first_common_delivered=True
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    a=audit(['green_supply','danger_cyan'],['injured_orange'])
+    assert m._audit_payload(a).destination_injury
+    out=m._start_danger_release(a,stm(mode=37),1.)
+    assert out.command.opcode==CMD_DISPERSE_PILE and out.command.flags & CMD_TARGET_RIGHT
+    assert m.selected_batch.destination=='injury' and m.selected_batch.classes==('injured_orange',)
+    assert m.separation_wanted_class=='injured_orange'
+    assert m.separation_start_audit.total_count==3 and m.separation_start_audit.danger_present
+    # The real result retains orange, loses green/blue: this is progress.
+    m.disperse_attempts=1
+    result=audit([],['injured_orange'])
+    m._review_separation_result(result)
+    assert m.separation_progress_attempt==1
+    assert m._audit_valid(result)
+    m._latch_carried_manifest(result)
+    assert m.carried_manifest==('injured_orange',) and m.confirmed_delivery_destination=='injury'
+    # Green-count ties retain previous choice, with no new singleton criterion.
+    tie=audit(['green_supply','core_black'],['green_supply'])
+    m.cluster_keep_side='left';assert m._preferred_keep_side(tie)=='left'
+    m.cluster_keep_side='right';assert m._preferred_keep_side(tie)=='right'
+    # First green still uses the existing green candidate despite a clean orange.
+    m.first_common_delivered=False
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    assert m._preferred_keep_side(a)=='left'
+    assert not m._audit_payload(a).destination_injury
+    first=audit(['green_supply']*3,['green_supply'])
+    first=replace(first,right_isolated_green=True)
+    assert m._preferred_keep_side(first)=='right'
+    # Legal whole material load still skips separation.
+    m.first_common_delivered=True
+    assert m._audit_valid(audit(['green_supply'],['green_supply']*2))
