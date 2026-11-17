@@ -2260,6 +2260,7 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
                 app.prepare_warm_session()
                 assert app.warming and app.selecting and not app.session_started
                 assert '--wait-for-operator' in spawn.call_args.args[0]
+                assert '--enable-top-edge-range-reobserve' in spawn.call_args.args[0]
                 token = app.reset_session_token
                 app.zone,app.side = 4,'blue'
                 app.start_session()  # Press before ready must never be remembered.
