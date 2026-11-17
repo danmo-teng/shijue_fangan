@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from capture_grip_bands import GripBands, CLASSES  # noqa: E402
 from capture_roi_trails import CaptureTrail  # noqa: E402
+from sweep_boundaries import load_boundaries, save_boundaries
 from capture_roi import (  # noqa: E402
     CaptureRois,
     IMAGE_HEIGHT,
@@ -47,7 +48,7 @@ from run_yolo_x5 import (  # noqa: E402
 WINDOW_NAME = "capture_roi_editor"
 DISPLAY_WIDTH = 960
 DISPLAY_HEIGHT = 768
-PANEL_HEIGHT = 150
+PANEL_HEIGHT = 230
 INITIAL_WINDOW_WIDTH = 640  # Full toolbar fits the RDK's 1024x768 desktop.
 GREEN_SUPPLY_SCORE_THRESHOLD = DEFAULT_YOLO_SCORE_THRESHOLD
 
@@ -126,6 +127,12 @@ def main() -> int:
     loaded_bands = GripBands.load(band_path)
     band_points = {name: list(getattr(loaded_bands, name) or ()) for name in CLASSES}
     edit_band = None
+    sweep_path = args.output.with_name('sweep_boundaries.json')
+    sweep_data = load_boundaries(sweep_path)
+    sweep_mode = None
+    sweep_side = 'left'
+    for angle in ('11500', '12000'):
+        sweep_data.setdefault(angle, {'left': [], 'right': []})
     drag_line = None
     active_roi = "overall"
     status = "G:green bands  O:orange bands  P:ROI  S:save current mode"
@@ -156,8 +163,28 @@ def main() -> int:
             status = str(error)
 
     def trail_action(action):
-        nonlocal trail, recording, show_trails, status, edit_band, drag_line
+        nonlocal trail, recording, show_trails, status, edit_band, drag_line, sweep_mode, sweep_side
+        if action in {'11500', '12000'}:
+            sweep_mode, edit_band = action, None
+            status = f'{int(action)//100}deg sweep: left-click add points; right-click undo; S save'
+            return
+        if action in {'sweep_left', 'sweep_right'}:
+            sweep_side = action.split('_')[1]
+            return
+        if action == 'save_sweep':
+            if sweep_mode is None:
+                status = 'select 115 or 120 sweep first'
+                return
+            try:
+                saved = load_boundaries(sweep_path)
+                saved[sweep_mode] = sweep_data[sweep_mode]
+                save_boundaries(sweep_path, saved)
+                status = 'sweep boundaries saved; restart competition to load'
+            except (ValueError, KeyError, OSError) as error:
+                status = str(error)
+            return
         if action in {"roi", *CLASSES}:
+            sweep_mode = None
             edit_band = None if action == "roi" else action
             drag_line = None
             status = "editing claw ROI" if edit_band is None else "140deg: click two lines; drag to adjust; S:save bands"
@@ -206,6 +233,14 @@ def main() -> int:
         points = roi_points["overall"]
         image_x = max(0, min(IMAGE_WIDTH - 1, round(x * IMAGE_WIDTH / DISPLAY_WIDTH)))
         image_y = max(0, min(IMAGE_HEIGHT - 1, round(y * IMAGE_HEIGHT / DISPLAY_HEIGHT)))
+        if sweep_mode is not None:
+            values = sweep_data[sweep_mode][sweep_side]
+            if event == cv2.EVENT_LBUTTONDOWN:
+                values.append([image_x, image_y])
+            elif event == cv2.EVENT_RBUTTONDOWN and values:
+                values.pop()
+            status = f'{int(sweep_mode)//100}deg {sweep_side}: {len(values)} points; S save'
+            return
         if edit_band is not None:
             values = band_points[edit_band]
             image_y = max(1, min(IMAGE_HEIGHT-1, image_y))
@@ -353,6 +388,8 @@ def main() -> int:
                 ("left", (255, 128, 0)),
                 ("right", (0, 128, 255)),
             ):
+                if sweep_mode is not None:
+                    continue
                 points = roi_points[roi_name]
                 if not points:
                     continue
@@ -388,6 +425,14 @@ def main() -> int:
                     cv2.line(shown, (0, y), (DISPLAY_WIDTH-1, y), (0, 255, 255), 2)
                     cv2.putText(shown, f"{label} y={image_y}", (10, max(65, y-6)),
                                 cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 255), 1, cv2.LINE_AA)
+            if sweep_mode is not None:
+                for side, color in [('left', (255, 220, 0)), ('right', (255, 0, 220))]:
+                    values = sorted(sweep_data[sweep_mode][side], key=lambda p:p[1])
+                    points = np.array([(round(x*scale_x), round(y*scale_y)) for x,y in values], dtype=np.int32)
+                    if len(points) > 1:
+                        cv2.polylines(shown, [points], False, color, 3)
+                    for point in points:
+                        cv2.circle(shown, tuple(point), 5, color, -1)
             cv2.rectangle(shown, (0, 0), (DISPLAY_WIDTH, 48), (0, 0, 0), -1)
             cv2.putText(
                 shown,
@@ -401,7 +446,8 @@ def main() -> int:
             )
             cv2.putText(
                 shown,
-                f"active={active_roi} points={len(roi_points[active_roi])} yellow=accepted",
+                (f"SWEEP {int(sweep_mode)//100}deg / {sweep_side}" if sweep_mode else
+                 f"active={active_roi} points={len(roi_points[active_roi])} yellow=accepted"),
                 (10, 41),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.48,
@@ -437,6 +483,15 @@ def main() -> int:
             hint = ("分区：点两次画线，拖动调整；S保存，P回ROI；相机固定140°。" if edit_band else
                     "按G画绿色分区，按O画橙色分区；分区单独保存，不改爪内ROI。")
             draw.text((8, 116), hint, font=font, fill=(255, 220, 120))
+            sweep_entries = [('11500','扫障115°'),('12000','扫障120°'),
+                             ('sweep_left','画左边界'),('sweep_right','画右边界'),('save_sweep','保存本角度')]
+            for col,(action,label) in enumerate(sweep_entries):
+                x0,y0,x1,y1=col*192+3,150,(col+1)*192-3,184
+                active=action==sweep_mode or action=='sweep_'+sweep_side
+                draw.rectangle((x0,y0,x1,y1),fill=(42,108,73) if active else (65,65,65))
+                draw.text((x0+8,y0+3),label,font=font,fill='white')
+                buttons.append((x0,y0+DISPLAY_HEIGHT,x1,y1+DISPLAY_HEIGHT,action))
+            draw.text((8,192),'先人工调整实际相机角度；沿左右边界连点描线，右键撤点，C清当前线。',font=font,fill=(255,220,120))
             shown = np.vstack((shown, cv2.cvtColor(np.asarray(panel), cv2.COLOR_RGB2BGR)))
             cv2.imshow(WINDOW_NAME, shown)
             key = cv2.waitKey(1) & 0xFF
@@ -448,6 +503,14 @@ def main() -> int:
                 trail_action("injured_orange")
             elif key in (ord("p"), ord("P")):
                 trail_action("roi")
+            if sweep_mode is not None:
+                if key in (ord('s'), ord('S')):
+                    trail_action('save_sweep')
+                elif key in (ord('c'), ord('C')):
+                    sweep_data[sweep_mode][sweep_side].clear()
+                if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                    break
+                continue
             if edit_band is not None:
                 if key in (ord("s"), ord("S")):
                     save_bands()

@@ -33,6 +33,7 @@ import numpy as np
 
 from vision_replay import VisionReplay
 from safe_zone_memory import SafeZoneCargoMemory
+from sweep_boundaries import runtime_boundaries, corridor_polygon
 from async_diagnostics import AsyncDiagnosticWriter
 
 ROOT = Path(__file__).resolve().parent
@@ -552,9 +553,12 @@ def danger_ahead(
     return True, "left" if cx < IMAGE_WIDTH * 0.5 else "right"
 
 
-def safe_zone_corridor_polygon(safe_bbox, destination, claw_polygon):
+def safe_zone_corridor_polygon(safe_bbox, destination, claw_polygon, camera_pitch_cdeg=0):
     if safe_bbox is None or destination not in {"material", "injury"} or not claw_polygon:
         return ()
+    pair = runtime_boundaries().get(str(camera_pitch_cdeg))
+    if pair is not None:
+        return corridor_polygon(pair, safe_bbox[1] + safe_bbox[3])
     # Fixed image template, independent of the current camera pitch.
     left = min(x for x, _ in claw_polygon)
     right = max(x for x, _ in claw_polygon)
@@ -678,6 +682,7 @@ def safe_zone_push_corridor(
     include_compatible_obstacles: bool = False,
     obstacle_classes_out: list[str] | None = None,
     obstacle_items_out: list[TrackedCargo] | None = None,
+    camera_pitch_cdeg: int = 0,
 ) -> tuple[
     tuple[tuple[int, int], ...],
     TrackedCargo | None,
@@ -686,12 +691,12 @@ def safe_zone_push_corridor(
 ]:
     if safe_bbox is None or destination not in {"material", "injury"}:
         return (), None, None, SAFE_CORRIDOR_CLEAR
-    polygon = safe_zone_corridor_polygon(safe_bbox, destination, claw_polygon)
-    if not polygon or polygon[0][1] == polygon[2][1]:
+    polygon = safe_zone_corridor_polygon(safe_bbox, destination, claw_polygon, camera_pitch_cdeg)
+    if not polygon or min(y for x,y in polygon) == max(y for x,y in polygon):
         # No remaining image strip before the placement edge. Keep the
         # geometry result without turning zero length into another wait.
         return polygon, None, None, SAFE_CORRIDOR_CLEAR
-    left, right = polygon[0][0], polygon[1][0]
+    left, right = min(x for x,y in polygon), max(x for x,y in polygon)
     claw_near_field_top = round(IMAGE_HEIGHT * 0.80)
     claw_near_field = np.asarray(
         (
@@ -1243,6 +1248,7 @@ def make_vision_snapshot(
         include_compatible_obstacles=mission.settings.bulldozer_enabled,
         obstacle_classes_out=corridor_classes,
         obstacle_items_out=corridor_items,
+        camera_pitch_cdeg=stm.camera_pitch_cdeg,
     )
     corridor_edge, corridor_b34 = sweep_obstacle_policy(
         corridor_items, corridor_bbox, stm.camera_pitch_cdeg, range_calibration)
