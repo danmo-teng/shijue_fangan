@@ -44,8 +44,9 @@ def test_camera_reopen_failure_keeps_session_and_waits_for_first_result():
     from unittest.mock import Mock, patch
     from rescue_vision import camera as capture
 
-    for fault, recovery_decoder in ((RuntimeError("v4l2src poll error"), "jpu"),
-                                    (capture.CameraDecoderError("JPU decode error"), "software")):
+    for fault, recovery_decoder, unplug in ((RuntimeError("v4l2src poll error"), "jpu", False),
+                                    (capture.CameraDecoderError("JPU decode error"), "software", False),
+                                    (RuntimeError("UVC unplug fixture"), "jpu", True)):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             node, stable, replugged = (root / name for name in ("video0", "camera-index0", "video7"))
@@ -61,9 +62,14 @@ def test_camera_reopen_failure_keeps_session_and_waits_for_first_result():
                                    ("events-log", "events")):
                 argv.extend(("--" + flag, str(root / filename)))
             clock = SimpleNamespace(now=1.)
+            disconnected = []
+            def sleep(seconds):
+                clock.now += seconds
+                if unplug and disconnected and clock.now-disconnected[0]>=.35 and not stable.exists():
+                    stable.unlink();stable.symlink_to(replugged)
             fake_time = SimpleNamespace(monotonic=lambda: clock.now,
                 monotonic_ns=lambda: int(clock.now * 1e9),
-                sleep=lambda seconds: setattr(clock, "now", clock.now + seconds))
+                sleep=sleep)
             planner = Mock(error=None, termination_result={}, localization_wheel_policy=None)
             detector = Mock(input_width=640, input_height=640, shapes={}, preprocess="vse")
             packet = capture.CameraFrame(1, np.zeros((1024, 1280, 3), np.uint8), 1_000_000_000)
@@ -74,7 +80,12 @@ def test_camera_reopen_failure_keeps_session_and_waits_for_first_result():
             # reopen, a failed retry, and the same UVC camera on a new node.
             first, unavailable, retry, restored = [Mock() for _ in range(4)]
             errors = iter((None, fault))
-            first.poll_error.side_effect = lambda: next(errors)
+            def poll_error():
+                error=next(errors)
+                if error and unplug:
+                    node.unlink();disconnected.append(clock.now)
+                return error
+            first.poll_error.side_effect = poll_error
             first.latest.return_value = packet
             unavailable.start.side_effect = RuntimeError("GStreamer: device unavailable")
             restored.poll_error.return_value = None
@@ -99,7 +110,7 @@ def test_camera_reopen_failure_keeps_session_and_waits_for_first_result():
             with patch.object(sys, "argv", argv), patch.object(runner_module, "time", fake_time), \
                  patch.object(runner_module.signal, "signal"), \
                  patch.object(capture, "glob", return_value=[str(stable)]), \
-                 patch.object(runner_module, "LatestFrameCamera", side_effect=(first, unavailable, retry, restored)) as cameras, \
+                 patch.object(runner_module, "LatestFrameCamera", side_effect=((first,restored) if unplug else (first, unavailable, retry, restored))) as cameras, \
                  patch.object(runner_module, "Yolo26Pipeline", return_value=detector), \
                  patch.object(runner_module, "CompetitionPlanner", return_value=planner), \
                  patch.object(runner_module, "load_pose", return_value=PoseSnapshot(valid=True)), \
@@ -109,16 +120,27 @@ def test_camera_reopen_failure_keeps_session_and_waits_for_first_result():
             planner.start.assert_called_once()
             first.stop.assert_called_once()
             detector.reset.assert_called_once()
-            assert [call.args[0] for call in cameras.call_args_list] == [str(stable)] * 4
-            assert [call.kwargs["decoder"] for call in cameras.call_args_list] == ["jpu"] + [recovery_decoder] * 3
+            count=2 if unplug else 4
+            assert [call.args[0] for call in cameras.call_args_list] == [str(stable)] * count
+            assert [call.kwargs["decoder"] for call in cameras.call_args_list] == ["jpu"] + [recovery_decoder] * (count-1)
             views = [call.args[0].frame_sequence for call in planner.set_vision.call_args_list]
             assert views == [1, 0, 2]  # New camera-local frame 1, same running round.
             rows = [json.loads(line) for line in (root / "events").read_text().splitlines()]
             by_event = {row["event"]: row for row in rows}
             assert "fatal_exception" not in by_event and not by_event["competition_stopped"]["camera_recovery_pending"]
-            assert by_event["camera_restart_failed"]["error"] == "GStreamer: device unavailable"
-            assert by_event["camera_recovery_retry_failed"]["error"] == "GStreamer: still enumerating"
+            if unplug:
+                assert sum(row['event']=='camera_node_missing' for row in rows)==1
+                assert 'camera_recovery_retry_failed' not in by_event
+                presence=by_event['camera_node_present']
+                assert presence['observation_gap_ms'] <= 211
+                assert presence['node_observed_monotonic_ns']/1e9-disconnected[0] < .6
+            else:
+                assert by_event["camera_restart_failed"]["error"] == "GStreamer: device unavailable"
+                assert by_event["camera_recovery_retry_failed"]["error"] == "GStreamer: still enumerating"
             assert by_event["camera_recovery_restored"]["vision_frame_sequence"] == 2
+            recovered=by_event['camera_recovery_restored']
+            assert recovered['open_attempts']==count-1
+            assert recovered['first_frame_observed_monotonic_ns']<=recovered['result_ready_monotonic_ns']
 
 
 def test_camera_start_preserves_pipeline_error_before_releasing_bus():

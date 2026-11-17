@@ -36,6 +36,7 @@ from vision_replay import VisionReplay
 from safe_zone_memory import SafeZoneCargoMemory
 from sweep_boundaries import runtime_boundaries, corridor_polygon
 from async_diagnostics import AsyncDiagnosticWriter
+from camera_recovery import CameraRecovery
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
@@ -3487,7 +3488,7 @@ def main() -> int:
     active_window_mode = args.window_mode
     started = time.monotonic()
     camera_recovery_pending = False
-    next_camera_retry = started + 1.0
+    camera_recovery = CameraRecovery(events, time.monotonic_ns)
     display_elapsed_ms = 0.0
     log_write_elapsed_ms = 0.0
     next_detection_log = started
@@ -3678,11 +3679,22 @@ def main() -> int:
     def open_camera(failure_event: str) -> bool:
         nonlocal camera, camera_device, last_inference_id
         attempted_decoder = camera_decoder
+        open_started_ns = None
+        creating_pipeline = False
         try:
             if camera_device is None:
                 camera_device = resolve_camera_device(args.device, prefer_stable=True)
-            if not Path(camera_device).exists():
+            present = Path(camera_device).exists()
+            if camera_recovery.active:
+                camera_recovery.observe_node(camera_device, present)
+            if not present:
                 raise FileNotFoundError(f"摄像头节点尚未出现：{camera_device}")
+            creating_pipeline = True
+            if camera_recovery.active:
+                if failure_event == 'camera_recovery_retry_failed':
+                    events.write('camera_recovery_retry', {
+                        'decoder': camera_decoder, 'recovery_id': camera_recovery.incident})
+                open_started_ns = camera_recovery.open_started()
             opened = LatestFrameCamera(camera_device, IMAGE_WIDTH, IMAGE_HEIGHT, args.camera_fps,
                 decoder=attempted_decoder, decode_fps=args.decode_fps, output_format=camera_output_format)
             opened.start()
@@ -3690,11 +3702,25 @@ def main() -> int:
             # LatestFrameCamera.start cleans up its failed open. Do not leave a
             # dead pipeline installed or let an unplug unwind the session.
             fallback_for_decoder_error(error)
-            events.write(failure_event, {
-                "error": str(error), "device": camera_device or args.device,
-                "decoder": attempted_decoder, "next_decoder": camera_decoder,
-            })
+            camera_recovery.begin(camera_device or args.device, error)
+            if creating_pipeline:
+                camera_recovery.open_finished(open_started_ns, error,
+                    retry_s=1. if failure_event in {'camera_start_error','camera_restart_failed'} else 2.)
+            elif camera_device is not None and isinstance(error, FileNotFoundError):
+                camera_recovery.observe_node(camera_device, False)
+            # Node checks run at5Hz, but a repeated absent node is not a new
+            # failure record or a pipeline initialization attempt.
+            error_key = (type(error).__name__, str(error))
+            if creating_pipeline or error_key != camera_recovery.last_resolution_error:
+                events.write(failure_event, {
+                    "error": str(error), "device": camera_device or args.device,
+                    "decoder": attempted_decoder, "next_decoder": camera_decoder,
+                    "recovery_id": camera_recovery.incident,
+                })
+            camera_recovery.last_resolution_error = error_key
             return False
+        if camera_recovery.active:
+            camera_recovery.open_finished(open_started_ns)
         camera = opened
         last_inference_id = 0
         return True
@@ -3761,10 +3787,7 @@ def main() -> int:
                 exit_reason = "duration"
                 break
             if camera is None:
-                if now >= next_camera_retry:
-                    events.write("camera_recovery_retry", {
-                        "decoder": camera_decoder,
-                    })
+                if camera_recovery.ready(camera_device, int(now*1e9)):
                     if open_camera("camera_recovery_retry_failed"):
                         camera_restarts = 0
                         next_vision = now
@@ -3772,18 +3795,23 @@ def main() -> int:
                             "decoder": camera_decoder,
                             "output_format": camera_output_format,
                         })
-                    else:
-                        next_camera_retry = now + 2.0
                 time.sleep(0.01)
                 continue
             assert camera is not None
             error = camera.poll_error()
             if error:
+                failure_stm = load_stm(args.stm_status)
+                camera_recovery.begin(camera_device, error, dict(
+                    upper_state=mission.state.value, stm_mode=failure_stm.mode,
+                    camera_pitch_cdeg=failure_stm.camera_pitch_cdeg,
+                    task_id=failure_stm.task_id, action_id=failure_stm.action_id,
+                    stm_context_valid=failure_stm.context_valid))
                 events.write("camera_error", {
                     "error": str(error),
                     "device": camera_device,
                     "decoder": camera_decoder,
                     "retry": camera_restarts,
+                    "recovery_id": camera_recovery.incident,
                 })
                 planner.set_paused(True, reason="camera_recovery")
                 planner.set_vision(VisionSnapshot(capture_observation_valid=False,
@@ -3803,7 +3831,6 @@ def main() -> int:
                             "retry": camera_restarts,
                         })
                 if camera is None:
-                    next_camera_retry = now + 1.0
                     events.write("camera_recovery_wait", {
                         "error": str(error), "decoder": camera_decoder,
                         "action": "keep_task_alive_and_hold",
@@ -3811,6 +3838,8 @@ def main() -> int:
                 continue
             fetch_started = time.monotonic()
             packet = camera.latest()
+            if camera_recovery_pending and packet is not None:
+                camera_recovery.observe_frame(packet)
             fetch_ms = (time.monotonic() - fetch_started) * 1000.0
             if packet is not None and packet.frame_id != last_inference_id and now >= next_vision:
                 next_vision = now + 1.0 / args.vision_fps
@@ -3898,6 +3927,7 @@ def main() -> int:
                     camera_recovery_pending = False
                     planner.set_paused(False, reason="camera_recovery")
                     events.write("camera_recovery_restored", {
+                        **camera_recovery.finish(packet),
                         "decoder": camera_decoder, "output_format": camera_output_format,
                         "vision_frame_sequence": vision_sequence,
                     })
