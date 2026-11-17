@@ -1,10 +1,56 @@
-"""User-drawn left/right sweep boundaries, independent of claw capture ROI."""
+"""User-drawn closed sweep region; retain legacy left/right file support."""
 from pathlib import Path
 import json
 from functools import lru_cache
 import numpy as np
+from datetime import datetime
+import shutil
 
 DEFAULT_PATH = Path(__file__).resolve().parents[1] / 'vision/config/sweep_boundaries.json'
+
+
+def validated_region(region):
+    points = region.get('polygon')
+    if not isinstance(points, (list, tuple)) or len(points) < 3:
+        raise ValueError('请沿区域轮廓至少标三个点，再保存闭合区域')
+    result = []
+    for point in points:
+        if (not isinstance(point, (list, tuple)) or len(point) != 2 or
+                not all(isinstance(v, (int, float)) and np.isfinite(v) for v in point) or
+                not (0 <= point[0] < 1280 and 0 <= point[1] < 1024)):
+            raise ValueError('扫障区域坐标须在1280×1024画面内')
+        p = list(map(float, point))
+        if not result or p != result[-1]:
+            result.append(p)
+    if len(result) > 1 and result[0] == result[-1]:
+        result.pop()
+    if len(result) < 3:
+        raise ValueError('闭合区域至少需要三个不同的点')
+
+    def cross(a, b, c):
+        return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+
+    def intersects(a, b, c, d):
+        if (max(a[0],b[0]) < min(c[0],d[0]) or max(c[0],d[0]) < min(a[0],b[0]) or
+                max(a[1],b[1]) < min(c[1],d[1]) or max(c[1],d[1]) < min(a[1],b[1])):
+            return False
+        return cross(a,b,c)*cross(a,b,d) <= 0 and cross(c,d,a)*cross(c,d,b) <= 0
+
+    n = len(result)
+    area = sum(result[i][0]*result[(i+1)%n][1]-result[(i+1)%n][0]*result[i][1] for i in range(n))
+    if abs(area) < 1:
+        raise ValueError('区域没有面积，请沿外轮廓画一圈')
+    for i in range(n):
+        for j in range(i+1, n):
+            if j == i+1 or (i == 0 and j == n-1):
+                continue
+            if intersects(result[i], result[(i+1)%n], result[j], result[(j+1)%n]):
+                raise ValueError('轮廓不能交叉；请按边界顺序描一圈')
+    return {'polygon': result}
+
+
+def validated_boundary(value):
+    return validated_region(value) if 'polygon' in value else validated_pair(value)
 
 
 def validated_pair(pair):
@@ -34,7 +80,7 @@ def _xs(points, ys):
 def load_boundaries(path=DEFAULT_PATH):
     try:
         data = json.loads(Path(path).read_text())
-        return {key: validated_pair(pair) for key, pair in data.get('angles', {}).items()
+        return {key: validated_boundary(pair) for key, pair in data.get('angles', {}).items()
                 if key in {'11500', '12000'}}
     except FileNotFoundError:
         return {}
@@ -50,16 +96,24 @@ def runtime_boundaries():
 
 
 def save_boundaries(path, data):
-    checked = {str(k): validated_pair(v) for k, v in data.items()}
+    checked = {str(k): validated_boundary(v) for k, v in data.items()}
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix('.json.tmp')
-    tmp.write_text(json.dumps({'schema_version': 1, 'width': 1280, 'height': 1024,
-        'interpolation': 'piecewise_linear', 'angles': checked}, ensure_ascii=False, indent=2)+'\n')
+    tmp.write_text(json.dumps({'schema_version': 2, 'width': 1280, 'height': 1024,
+        'interpolation': 'piecewise_linear', 'object_reference': 'bbox_bottom_center',
+        'angles': checked}, ensure_ascii=False, indent=2)+'\n')
+    if path.exists():
+        backup = path.with_name(path.name + '.' + datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '.bak')
+        shutil.copy2(path, backup)
     tmp.replace(path)
 
 
 def corridor_polygon(pair, safe_bottom):
+    if 'polygon' in pair:
+        # A complete user outline owns every edge. No bounding rectangle or
+        # interpolation/extrapolation from two independently drawn sides.
+        return tuple((round(x), round(y)) for x,y in pair['polygon'])
     top = max(float(safe_bottom), pair['left'][0][1], pair['right'][0][1])
     bottom = min(pair['left'][-1][1], pair['right'][-1][1])
     if top >= bottom:

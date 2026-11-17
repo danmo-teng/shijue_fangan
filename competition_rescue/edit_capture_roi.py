@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from capture_grip_bands import GripBands, CLASSES  # noqa: E402
 from capture_roi_trails import CaptureTrail  # noqa: E402
-from sweep_boundaries import load_boundaries, save_boundaries
+from sweep_boundaries import load_boundaries, save_boundaries, corridor_polygon
 from capture_roi import (  # noqa: E402
     CaptureRois,
     IMAGE_HEIGHT,
@@ -130,9 +130,10 @@ def main() -> int:
     sweep_path = args.output.with_name('sweep_boundaries.json')
     sweep_data = load_boundaries(sweep_path)
     sweep_mode = None
-    sweep_side = 'left'
+    sweep_polygons = {angle: [list(p) for p in corridor_polygon(value, 0)]
+                      for angle, value in sweep_data.items()}
     for angle in ('11500', '12000'):
-        sweep_data.setdefault(angle, {'left': [], 'right': []})
+        sweep_polygons.setdefault(angle, [])
     drag_line = None
     active_roi = "overall"
     status = "G:green bands  O:orange bands  P:ROI  S:save current mode"
@@ -163,13 +164,18 @@ def main() -> int:
             status = str(error)
 
     def trail_action(action):
-        nonlocal trail, recording, show_trails, status, edit_band, drag_line, sweep_mode, sweep_side
+        nonlocal trail, recording, show_trails, status, edit_band, drag_line, sweep_mode
         if action in {'11500', '12000'}:
             sweep_mode, edit_band = action, None
-            status = f'{int(action)//100}deg sweep: left-click add points; right-click undo; S save'
+            status = f'{int(action)//100}deg closed region: click or drag around boundary; S save'
             return
-        if action in {'sweep_left', 'sweep_right'}:
-            sweep_side = action.split('_')[1]
+        if action in {'sweep_clear', 'sweep_undo'}:
+            if sweep_mode is not None:
+                if action == 'sweep_clear':
+                    sweep_polygons[sweep_mode].clear()
+                elif sweep_polygons[sweep_mode]:
+                    sweep_polygons[sweep_mode].pop()
+                status = 'region edited; S saves current angle'
             return
         if action == 'save_sweep':
             if sweep_mode is None:
@@ -177,7 +183,7 @@ def main() -> int:
                 return
             try:
                 saved = load_boundaries(sweep_path)
-                saved[sweep_mode] = sweep_data[sweep_mode]
+                saved[sweep_mode] = {'polygon': sweep_polygons[sweep_mode]}
                 save_boundaries(sweep_path, saved)
                 status = 'sweep boundaries saved; restart competition to load'
             except (ValueError, KeyError, OSError) as error:
@@ -234,12 +240,15 @@ def main() -> int:
         image_x = max(0, min(IMAGE_WIDTH - 1, round(x * IMAGE_WIDTH / DISPLAY_WIDTH)))
         image_y = max(0, min(IMAGE_HEIGHT - 1, round(y * IMAGE_HEIGHT / DISPLAY_HEIGHT)))
         if sweep_mode is not None:
-            values = sweep_data[sweep_mode][sweep_side]
+            values = sweep_polygons[sweep_mode]
             if event == cv2.EVENT_LBUTTONDOWN:
                 values.append([image_x, image_y])
+            elif event == cv2.EVENT_MOUSEMOVE and _flags & cv2.EVENT_FLAG_LBUTTON:
+                if not values or (image_x-values[-1][0])**2 + (image_y-values[-1][1])**2 >= 16:
+                    values.append([image_x, image_y])
             elif event == cv2.EVENT_RBUTTONDOWN and values:
                 values.pop()
-            status = f'{int(sweep_mode)//100}deg {sweep_side}: {len(values)} points; S save'
+            status = f'{int(sweep_mode)//100}deg region: {len(values)} points; S save'
             return
         if edit_band is not None:
             values = band_points[edit_band]
@@ -357,6 +366,12 @@ def main() -> int:
                 )
                 if inside_overall and capture_side is None and item.class_name == "green_supply":
                     capture_side = "left" if x + width * .5 <= IMAGE_WIDTH // 2 else "right"
+                if sweep_mode is not None:
+                    values = sweep_polygons[sweep_mode]
+                    inside_overall = (len(values) >= 3 and cv2.pointPolygonTest(
+                        np.array(values, dtype=np.float32),
+                        (float(x+width*.5), float(y+height)), False) >= 0)
+                    capture_side = 'REGION' if inside_overall else None
                 color = (
                     (0, 255, 255)
                     if capture_side is not None else
@@ -426,13 +441,28 @@ def main() -> int:
                     cv2.putText(shown, f"{label} y={image_y}", (10, max(65, y-6)),
                                 cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 255), 1, cv2.LINE_AA)
             if sweep_mode is not None:
-                for side, color in [('left', (255, 220, 0)), ('right', (255, 0, 220))]:
-                    values = sorted(sweep_data[sweep_mode][side], key=lambda p:p[1])
-                    points = np.array([(round(x*scale_x), round(y*scale_y)) for x,y in values], dtype=np.int32)
-                    if len(points) > 1:
-                        cv2.polylines(shown, [points], False, color, 3)
-                    for point in points:
-                        cv2.circle(shown, tuple(point), 5, color, -1)
+                values = sweep_polygons[sweep_mode]
+                points = np.array([(round(x*scale_x), round(y*scale_y)) for x,y in values], dtype=np.int32)
+                if len(points) >= 3:
+                    overlay = shown.copy()
+                    cv2.fillPoly(overlay, [points], (255, 210, 0))
+                    cv2.addWeighted(overlay, .18, shown, .82, 0, shown)
+                if len(points) > 1:
+                    cv2.polylines(shown, [points], len(points) >= 3, (255, 210, 0), 2)
+                for point in points:
+                    cv2.circle(shown, tuple(point), 3, (255, 210, 0), -1)
+                if len(values) >= 3:
+                    region = np.array(values, dtype=np.float32)
+                    for item in preview_items:
+                        x,y,w,h = item.bbox
+                        foot = (float(x+w*.5), float(y+h))
+                        inside = cv2.pointPolygonTest(region, foot, False) >= 0
+                        at = (round(foot[0]*scale_x), round(foot[1]*scale_y))
+                        color = (0,255,255) if inside else (160,160,160)
+                        cv2.circle(shown, at, 5, color, -1)
+                        cv2.putText(shown, 'IN' if inside else 'OUT', (at[0]+6,at[1]),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    .45, color, 1, cv2.LINE_AA)
             cv2.rectangle(shown, (0, 0), (DISPLAY_WIDTH, 48), (0, 0, 0), -1)
             cv2.putText(
                 shown,
@@ -446,7 +476,7 @@ def main() -> int:
             )
             cv2.putText(
                 shown,
-                (f"SWEEP {int(sweep_mode)//100}deg / {sweep_side}" if sweep_mode else
+                (f"SWEEP {int(sweep_mode)//100}deg / closed region / foot IN or OUT" if sweep_mode else
                  f"active={active_roi} points={len(roi_points[active_roi])} yellow=accepted"),
                 (10, 41),
                 cv2.FONT_HERSHEY_SIMPLEX,
@@ -482,16 +512,20 @@ def main() -> int:
                 buttons.append((x0, y0+DISPLAY_HEIGHT, x1, y1+DISPLAY_HEIGHT, action))
             hint = ("分区：点两次画线，拖动调整；S保存，P回ROI；相机固定140°。" if edit_band else
                     "按G画绿色分区，按O画橙色分区；分区单独保存，不改爪内ROI。")
+            if sweep_mode is not None:
+                hint = f"当前{int(sweep_mode)//100}°扫障区域：框底边中点在内才参与判障；仍排除载荷和区内物块。"
+                if any('\u4e00' <= c <= '\u9fff' for c in status):
+                    hint = status
             draw.text((8, 116), hint, font=font, fill=(255, 220, 120))
             sweep_entries = [('11500','扫障115°'),('12000','扫障120°'),
-                             ('sweep_left','画左边界'),('sweep_right','画右边界'),('save_sweep','保存本角度')]
+                             ('sweep_clear','清空本区域'),('sweep_undo','撤销上一点'),('save_sweep','保存本角度')]
             for col,(action,label) in enumerate(sweep_entries):
                 x0,y0,x1,y1=col*192+3,150,(col+1)*192-3,184
-                active=action==sweep_mode or action=='sweep_'+sweep_side
+                active=action==sweep_mode
                 draw.rectangle((x0,y0,x1,y1),fill=(42,108,73) if active else (65,65,65))
                 draw.text((x0+8,y0+3),label,font=font,fill='white')
                 buttons.append((x0,y0+DISPLAY_HEIGHT,x1,y1+DISPLAY_HEIGHT,action))
-            draw.text((8,192),'先人工调整实际相机角度；沿左右边界连点描线，右键撤点，C清当前线。',font=font,fill=(255,220,120))
+            draw.text((8,192),'先调实际相机角度；沿轮廓连点或按住左键描一圈，自动闭合；右键撤点，S保存。',font=font,fill=(255,220,120))
             shown = np.vstack((shown, cv2.cvtColor(np.asarray(panel), cv2.COLOR_RGB2BGR)))
             cv2.imshow(WINDOW_NAME, shown)
             key = cv2.waitKey(1) & 0xFF
@@ -507,7 +541,7 @@ def main() -> int:
                 if key in (ord('s'), ord('S')):
                     trail_action('save_sweep')
                 elif key in (ord('c'), ord('C')):
-                    sweep_data[sweep_mode][sweep_side].clear()
+                    trail_action('sweep_clear')
                 if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                     break
                 continue

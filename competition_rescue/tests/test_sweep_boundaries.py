@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import pytest
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolve().parents[2]/'vision')]
-from sweep_boundaries import validated_pair, corridor_polygon, save_boundaries, load_boundaries
+from sweep_boundaries import validated_pair, validated_region, corridor_polygon, save_boundaries, load_boundaries
 import run_competition_rescue as runner
 from state_machine import TrackedCargo
 
@@ -50,10 +50,11 @@ def test_editor_saves_two_sweep_angles_without_changing_claw_roi(tmp_path):
         n=step[0];step[0]+=1
         if n in (0,2):
             click(50 if n==0 else 250,editor.DISPLAY_HEIGHT+160)
-            click(450,editor.DISPLAY_HEIGHT+160)
-            click(150,80);click(200,600)
-            click(650,editor.DISPLAY_HEIGHT+160)
-            click(750 if n==0 else 700,80);click(800,600)
+            click(450,editor.DISPLAY_HEIGHT+160)  # Clear the current region only.
+            click(150,80)
+            mouse['cb'](editor.cv2.EVENT_MOUSEMOVE,200,600,editor.cv2.EVENT_FLAG_LBUTTON,None)
+            mouse['cb'](editor.cv2.EVENT_LBUTTONUP,200,600,0,None)
+            click(800,600);click(750 if n==0 else 700,80)
             return ord('s')
         if n==4:return ord('q')
         return 255
@@ -68,3 +69,34 @@ def test_editor_saves_two_sweep_angles_without_changing_claw_roi(tmp_path):
     loaded=load_boundaries(tmp_path/'sweep_boundaries.json')
     assert set(loaded)=={'11500','12000'} and loaded['11500']!=loaded['12000']
     assert roi.read_bytes()==original and not args.grip_bands.exists()
+
+
+
+def test_closed_region_keeps_concavity_and_uses_bottom_center(tmp_path):
+    # One loop, including a notch: bounding rectangle must not admit the notch.
+    region=validated_region({'polygon':[[100,100],[900,100],[900,900],
+        [600,900],[600,500],[400,500],[400,900],[100,900]]})
+    path=tmp_path/'regions.json'
+    old=validated_pair({'left':[[50,0],[100,900]],'right':[[1000,0],[1100,900]]})
+    save_boundaries(path,{'11500':old})
+    original=path.read_bytes()
+    save_boundaries(path,{'11500':old,'12000':region})
+    assert list(tmp_path.glob('regions.json.*.bak'))[0].read_bytes()==original
+    data=load_boundaries(path)
+    assert data['11500']==old and data['12000']==region
+    assert corridor_polygon(region,350)==tuple(tuple(p) for p in region['polygon'])
+    in_notch=TrackedCargo(1,'danger_cyan',.9,(450,600,100,100),hits=3)
+    in_region=TrackedCargo(2,'danger_cyan',.9,(200,600,100,100),hits=3)
+    # Its top lies outside the region, but the bottom midpoint is inside.
+    tall=TrackedCargo(3,'danger_cyan',.9,(200,0,100,200),hits=3)
+    roi=((100,100),(900,100),(900,900),(100,900))
+    with patch.object(runner,'runtime_boundaries',return_value=data):
+        for item,expected in [(in_notch,None),(in_region,in_region),(tall,tall)]:
+            result=runner.safe_zone_push_corridor((item,),(950,0,200,50),'injury',True,
+                claw_polygon=roi,camera_pitch_cdeg=12000)
+            assert result[1] is expected
+    for points in [[],[[1,1],[2,2],[3,3]],[[100,100],[900,800],[100,900],[900,100]]]:
+        with pytest.raises(ValueError):validated_region({'polygon':points})
+    previous=path.read_bytes()
+    with pytest.raises(ValueError):save_boundaries(path,{'12000':{'polygon':[[0,0],[1,1]]}})
+    assert path.read_bytes()==previous
