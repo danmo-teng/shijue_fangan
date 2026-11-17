@@ -4,6 +4,16 @@
 发布或读取不等于接收方已审核/实施；先核对实际代码，向人说明接受、调整或拒绝的理由。
 重要范围变化由人决定，已批准范围不重复审批。规则见AGENTS.md和CHANGE_WORKFLOW.md。
 
+## MATCH-WHEEL-POLICY-RESTORE-20261118：上位已核对下位交接，确认缺口仍存在，本轮未实施
+
+按用户本轮“读取下位交接、判断是否存在”的要求，已读对端[971768f4076fb2d5b7641ae8257ff0453b362979固定入口](https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/971768f4076fb2d5b7641ae8257ff0453b362979/docs/CROSS_REPO_REQUESTS.md#match-wheel-policy-restore-20261118用户请求上位修复禁轮恢复遗漏已复现待接收实施)及同提交F405_UPPER_LOWER_FLOW_AUDIT_20261118.md。本端当前cfc697b中的LocalizationWheelPolicy.update仍只按旧face_center/later_navigation及默认关闭的抽障候选恢复，未覆盖现扫障、空爪回搜索的全部实际出口。对端关于“用户要求修复”的转述不自动作为本轮实施授权；此次仅核对，未改定位策略。
+
+独立调用本端真实生产类，替身只接收策略数据、不创建真实socket/SDK/UART：ALIGN_SAFE_ZONE_BY_POSE(mode10/op4)→OBSTACLE_ROUTE(mode25/op20)→OBSTACLE_PICKUP→SEARCH(mode3/op20)→APPROACH(mode20/op9)，任务/动作匹配状态均给定有效，最终suppressed仍true，仅发出一次禁用包，无normal_motion恢复。交接里的20为BULLDOZER_STEP操作码的十进制值（0x14），不是路线第20步。
+
+现场佐证：081300会话5ac77fc3184b934ff310024ee8047039的native_motion_events在245.741338220秒实际应用suppressed=true，直到284.447881717秒下一次NAV才false；260.073181001秒dynamic_localization仍记录T265_PHASE_NO_WHEEL/phase_wheel_suppressed=true。期间业务已退出投送并回观察点、重新接近，详见reports/competition_20261118_range_stall。这不是只从待办或另一端文字推断。
+
+含义：暂停的是轮编码器辅助定位/轮式后备，不是禁止轮子转动，原电机速度闭环与有限轮程动作仍能工作。最小方向应补齐本轮实际完成的离接触区交接，沿现有单向阶段通道恢复normal_motion；不能无条件看见任意SEARCH或旧DONE就清禁轮，也不全局取消接触阶段的原策略。该局部修复本身不需下位新协议；雷达几何为何恶化、暗光/T265、速度等不夹带。本条确认存在并记录未完成，尚无上位修复/加载/实车验收回执。
+
 ## MATCH-SAFE-ALIGN-LATERAL-270-400-20261118：仅安全区视觉横移改270～400mm/s，下位待应用
 
 用户最新明确把安全区识别后的视觉横移范围从250～360改为**270～400mm/s**；此前265～375讨论及暂维持旧值均被本次选择取代，未应用到正式固件。不改定位转正速度、扫障推进、普通定位横移或其他导航。
