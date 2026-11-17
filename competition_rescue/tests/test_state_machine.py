@@ -4164,3 +4164,104 @@ def test_orange_core_lift_request_is_latched_for_repeated_disperse_and_release()
     assert m._invalid_release_output(CargoAudit(),stm(mode=25),2.1).command==out.command
     m.invalid_release_side='both'
     assert m._invalid_release_command().aux==0
+
+
+def _orange_gate_fixture(side='blue', black_side='left', same_side=False):
+    from run_competition_rescue import audit_from_cargo
+    m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1,), ('injured_orange',), 'injury'))
+    orange = cargo(1, 'injured_orange', 450, 500)
+    black = cargo(2, 'core_black', 550, 500)
+    orange_side = black_side if same_side else ('right' if black_side == 'left' else 'left')
+    single = audit_from_cargo((orange,), side_by_track={1: orange_side})
+    m._latch_carried_manifest(single)
+    sides = {1: orange_side, 2: black_side}
+    mixed = audit_from_cargo((orange, black), side_by_track=sides)
+    current = PoseSnapshot(True, m.settings.injury_target_x_m, m.settings.safe_staging_y_m,
+                           m.settings.safe_heading_deg, 0.)
+    status = replace(stm(mode=48, flags=3), camera_pitch_cdeg=14000)
+    view = VisionSnapshot(frame_sequence=1, observed_monotonic_s=1., capture_audit=mixed,
+        capture_cargo=(orange, black), capture_explicit_sides=tuple(sides.items()))
+    return m, view, current, status
+
+
+def _orange_gate_confirm_review(m, view, current, status, start_frame=1, start_s=1.):
+    m._begin_transport_audit(replace(view, frame_sequence=start_frame), current, status, start_s)
+    for offset in (1, 2, 3):
+        now = start_s+offset*.15
+        view = replace(view, frame_sequence=start_frame+offset, observed_monotonic_s=now)
+        out = m.step(view, current, status, now)
+        assert out.command.opcode == CMD_CARGO_AUDIT
+    ready = replace(relay_stm(out, mode=48, flags=67 | (16 if m._audit_valid(view.capture_audit) else 0)),
+        camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+        accepted_command=CMD_CARGO_AUDIT, action_status=1)
+    return m.step(replace(view, frame_sequence=start_frame+4, observed_monotonic_s=start_s+.8),
+                  current, ready, start_s+.8)
+
+
+def test_orange_gate_filter_symmetric_once_and_real_reaudit():
+    from protocol import CMD_ORANGE_GATE_FILTER, CMD_ALIGN_SAFE_ZONE
+    for side in ('red', 'blue'):
+        for black_side in ('left', 'right'):
+            for same_side in (False, True):
+                m, view, current, status = _orange_gate_fixture(side, black_side, same_side)
+                out = _orange_gate_confirm_review(m, view, current, status)
+                assert out.state == CompetitionState.ORANGE_GATE_FILTER
+                assert out.command.opcode == CMD_ORANGE_GATE_FILTER
+                assert bool(out.command.flags & CMD_TARGET_RIGHT) == (black_side == 'right')
+                assert (out.command.arg_a, out.command.arg_b, out.command.aux) == (
+                    100, 8800, 9000 if side == 'red' else 27000)
+                assert m.orange_gate_filter_attempted and m.disperse_attempts == 0
+                assert m.confirmed_load_audit is None  # Mixture cannot reuse old single-orange permission.
+                command = out.command
+                done = replace(status, context_valid=True, context_matches=True,
+                    accepted_command=CMD_ORANGE_GATE_FILTER, action_status=3)
+                for invalid in (replace(done, context_matches=False), replace(done, action_status=1),
+                                replace(done, accepted_command=CMD_CARGO_AUDIT), replace(done, mode=25)):
+                    waiting = m.step(replace(view, frame_sequence=7), current, invalid, 2.)
+                    assert waiting.command == command and m.state == CompetitionState.ORANGE_GATE_FILTER
+                reviewed = m.step(replace(view, frame_sequence=8), current, done, 2.1)
+                assert reviewed.state == CompetitionState.TRANSPORT_AUDIT
+                assert reviewed.command.opcode == CMD_CARGO_AUDIT and not reviewed.command.audit.stable
+                assert m.orange_gate_filter_attempted
+                # Still black: original separation, never repeat the lateral move.
+                out = _orange_gate_confirm_review(m, view, current, status, 9, 3.)
+                assert out.command.opcode == CMD_DISPERSE_PILE
+                assert m.orange_gate_filter_attempted
+                # A real single-orange review takes the normal alignment path.
+                from run_competition_rescue import audit_from_cargo
+                orange = view.capture_cargo[0]
+                single = audit_from_cargo((orange,), side_by_track={orange.track_id: 'right'})
+                clean = replace(view, capture_audit=single, capture_cargo=(orange,))
+                out = _orange_gate_confirm_review(m, clean, current, status, 15, 5.)
+                assert out.command.opcode == CMD_ALIGN_SAFE_ZONE
+                assert m.carried_manifest == ('injured_orange',) and m.orange_gate_filter_attempted
+                m._clear_search_recovery_context(VisionSnapshot(), clear_carried=True)
+                m._select_batch(CargoBatch((9,), ('injured_orange',), 'injury'))
+                assert not m.orange_gate_filter_attempted
+
+
+def test_orange_gate_filter_does_not_guess_load_side_or_expand_scope():
+    from run_competition_rescue import audit_from_cargo
+    m, view, current, status = _orange_gate_fixture()
+    audit = replace(view.capture_audit, stable=True)
+    assert m._orange_gate_filter_side(audit, view, current, status) == 'left'
+    for bad in (replace(audit, stable=False), replace(audit, unknown_present=True),
+                replace(audit, danger_present=True), replace(audit, total_count=4),
+                replace(audit, class_counts=(('injured_orange', 2), ('core_black', 1)))):
+        assert m._orange_gate_filter_side(bad, view, current, status) is None
+    for bad_view in (replace(view, capture_explicit_sides=()),
+                     replace(view, capture_cargo=(view.capture_cargo[0],)),
+                     replace(view, capture_explicit_sides=((2, 'right'),))):
+        assert m._orange_gate_filter_side(audit, bad_view, current, status) is None
+    assert m._orange_gate_filter_side(audit, view, replace(current, y_m=0.), status) is None
+    assert m._orange_gate_filter_side(audit, view, current, replace(status, mode=23)) is None
+    extra = cargo(3, 'core_black', 750, 500)
+    both = audit_from_cargo(view.capture_cargo+(extra,), side_by_track={1:'right',2:'left',3:'right'})
+    assert m._orange_gate_filter_side(replace(both, stable=True), view, current, status) is None
+    m.first_common_delivered = False
+    assert m._orange_gate_filter_side(audit, view, current, status) is None
+    m.first_common_delivered = True
+    m.carried_manifest = ('core_black',)
+    assert m._orange_gate_filter_side(audit, view, current, status) is None

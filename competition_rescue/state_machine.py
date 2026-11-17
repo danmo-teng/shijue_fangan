@@ -33,6 +33,7 @@ from protocol import (
     CMD_CARGO_AUDIT,
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
+    CMD_ORANGE_GATE_FILTER,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
@@ -407,6 +408,7 @@ class VisionSnapshot:
     safe_corridor_obstacle_classes: tuple[str, ...] = ()
     safe_corridor_edge_obstacle: bool = False
     safe_corridor_b34_obstacle: bool = False
+    capture_explicit_sides: tuple[tuple[int, str], ...] = ()
 
 
 @dataclass
@@ -521,6 +523,7 @@ class CompetitionState(str, Enum):
     APPROACH = "APPROACH"
     NAVIGATE = "NAVIGATE"
     TRANSPORT_AUDIT = "TRANSPORT_AUDIT"
+    ORANGE_GATE_FILTER = "ORANGE_GATE_FILTER"
     ALIGN_SAFE_ZONE_BY_POSE = "ALIGN_SAFE_ZONE_BY_POSE"
     ACQUIRE_SAFE_ZONE = "ACQUIRE_SAFE_ZONE"
     ALIGN_SAFE_ZONE_BY_LOCKED_BOX = "ALIGN_SAFE_ZONE_BY_LOCKED_BOX"
@@ -1004,6 +1007,8 @@ class CompetitionMission:
         self.orange_top_view_bbox = None
         self.transport_separation_active = False
         self.stage_redirect_active = False
+        self.orange_gate_filter_attempted = False
+        self.orange_gate_filter_command = None
 
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
         self.delivery_window_started_s: float | None = None
@@ -1241,6 +1246,8 @@ class CompetitionMission:
         return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.ORANGE_GATE_FILTER:
+            return (STM_MODE_REMOTE_ACTION, STM_MODE_TRANSPORT_AUDIT)
         if self.state == CompetitionState.PRE_GRAB_ADVANCE:
             return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT,
                     STM_MODE_CLUSTER_READY, STM_MODE_APPROACH_RANGE_MOVE,
@@ -1468,6 +1475,8 @@ class CompetitionMission:
         self.transport_audit_handoff_active = False
         if self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.task_generation += 1
+            self.orange_gate_filter_attempted = False
+            self.orange_gate_filter_command = None
             self.delivery_counted_for_batch = False
             self.separation_keep_side = None
             self.separation_side_attempts = 0
@@ -1501,6 +1510,8 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
+        self.orange_gate_filter_attempted = False
+        self.orange_gate_filter_command = None
         self._clear_orange_top_view()
         self.confirmed_load_audit = None
         self.transport_load_reuse_active = False
@@ -6667,6 +6678,75 @@ class CompetitionMission:
             0,
         )
 
+    def _orange_gate_filter_side(
+        self, audit: CargoAudit, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot,
+    ) -> str | None:
+        # Use the existing full 140-degree audit/side assignment; no new ROI
+        # or guess about unseen black cargo. Only a previously confirmed orange.
+        if (self.orange_gate_filter_attempted or not self.first_common_delivered or
+                self.selected_batch is None or self.selected_batch.initial_stash or
+                self.confirmed_delivery_destination != "injury" or
+                self.carried_manifest != ("injured_orange",) or
+                not stm.gripper_closed or stm.mode != STM_MODE_TRANSPORT_AUDIT or
+                not audit.stable or audit.danger_present or audit.unknown_present or
+                not pose.valid or
+                abs(pose.y_m-self.settings.safe_staging_y_m) >
+                    self.settings.safe_zone_staging_axial_tolerance_m + 1e-9 or
+                pose.x_m*self.settings.injury_target_x_m <= 0):
+            return None
+        counts = Counter(dict(audit.class_counts))
+        if (set(counts) != {"injured_orange", "core_black"} or
+                counts["injured_orange"] != 1 or counts["core_black"] <= 0 or
+                sum(counts.values()) != audit.total_count or
+                not 2 <= audit.total_count <= self.settings.max_batch_count or
+                audit.left_count + audit.right_count != audit.total_count):
+            return None
+        sides = {side: Counter(self._separation_side_manifest(audit, side))
+                 for side in ("left", "right")}
+        if sides["left"] + sides["right"] != counts:
+            return None  # A middle/unassigned object is not an invented side.
+        black_sides = [side for side, composition in sides.items() if composition["core_black"]]
+        black = [item for item in vision.capture_cargo if item.visible and item.class_name == "core_black"]
+        explicit_sides = dict(vision.capture_explicit_sides)
+        if (len(black_sides) != 1 or len(black) != counts["core_black"] or
+                any(explicit_sides.get(item.track_id) != black_sides[0] for item in black)):
+            return None
+        return black_sides[0]
+
+    def _begin_orange_gate_filter(self, side: str, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        self.orange_gate_filter_attempted = True
+        self.orange_gate_filter_command = CommandRequest(CMD_ORANGE_GATE_FILTER,
+            self._side_flags() | CMD_SIDE_VALID | (CMD_TARGET_RIGHT if side == "right" else 0),
+            100, 8800, round(self.settings.safe_heading_deg*100) % 36000)
+        self.confirmed_load_audit = None
+        self.transport_load_reuse_active = False
+        self.transport_audit_handoff_active = False
+        self.transport_audit_command = None
+        self.transport_audit_value = None
+        self._reset_safe_zone_alignment()
+        self._reset_delivery_evidence()
+        self._set_state(CompetitionState.ORANGE_GATE_FILTER, now)
+        return CompetitionOutput(self.state, self.orange_gate_filter_command,
+            "门口橙黑混装：转正后向黑块异侧移10cm，降88°，移回后复审；本批只试一次",
+            self.selected_batch, event="orange_gate_filter_start", reason="orange_gate_filter_move",
+            motion_expected=True, expected_stm_modes=self.expected_stm_modes())
+
+    def _orange_gate_filter_output(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        done = (stm.context_valid and stm.context_matches and
+                stm.accepted_command == CMD_ORANGE_GATE_FILTER and stm.action_status & 1 and
+                stm.action_status & 2 and stm.mode == STM_MODE_TRANSPORT_AUDIT and stm.gripper_closed)
+        if done:
+            self.orange_gate_filter_command = None
+            # Completion proves the round trip, NOT that the black is gone.
+            return replace(self._begin_transport_audit(vision, pose, stm, now),
+                event="orange_gate_filter_reaudit", message="横移滤除已返回，保持88°，沿原140°复审实际载荷")
+        return CompetitionOutput(self.state, self.orange_gate_filter_command,
+            "下位执行本次门口横移滤除，完成返回后才接复审", self.selected_batch,
+            reason="orange_gate_filter_move", motion_expected=True,
+            expected_stm_modes=self.expected_stm_modes())
+
     def _begin_transport_audit(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput:
@@ -6841,6 +6921,9 @@ class CompetitionMission:
                     reason="transport_audit_valid", tx_policy="normal_command",
                     expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
                 )
+            filter_side = self._orange_gate_filter_side(audit, vision, pose, stm)
+            if filter_side is not None:
+                return self._begin_orange_gate_filter(filter_side, stm, now)
             if self._separation_limit_reached():
                 return self._start_capture_abandon(audit, stm, now, limit_reached=True)
             if audit.danger_present:
@@ -7537,6 +7620,7 @@ class CompetitionMission:
             CompetitionState.POST_GRAB_AUDIT, CompetitionState.CAPTURE_AUDIT,
             CompetitionState.AUDIT_CONFIRM,
             CompetitionState.TRANSPORT_AUDIT,
+            CompetitionState.ORANGE_GATE_FILTER,
         }:
             return self._audit_reacquire_output(vision, stm, now)
 
@@ -7559,6 +7643,7 @@ class CompetitionMission:
             CompetitionState.GRAB, CompetitionState.DISPERSE,
             CompetitionState.INVALID_RELEASE, CompetitionState.INVALID_BACKOFF,
             CompetitionState.TRANSPORT_AUDIT,
+            CompetitionState.ORANGE_GATE_FILTER,
         }:
             if self.state == CompetitionState.CLUSTER_APPROACH:
                 self._defer_failed_cluster(vision)
@@ -7672,6 +7757,8 @@ class CompetitionMission:
         if self.state == CompetitionState.INITIAL_CLAW_CHECK:
             return self._initial_claw_check_output(vision, stm, now)
 
+        if self.state == CompetitionState.ORANGE_GATE_FILTER:
+            return self._orange_gate_filter_output(vision, pose, stm, now)
         if self.state == CompetitionState.TRANSPORT_AUDIT:
             return self._transport_audit_output(vision, pose, stm, now)
 

@@ -1,0 +1,79 @@
+{
+  "request_id": "MATCH-ORANGE-GATE-FILTER-20261118",
+  "lower_source_reviewed": "f1567079ad73fb2fca63f7373dc617c4293d1542",
+  "lower_support": "not_implemented_in_reviewed_source",
+  "cases": [
+    {
+      "side": "red",
+      "black_side": "left",
+      "first_body_translation": "right",
+      "return_body_translation": "left",
+      "distance_each_mm": 100,
+      "lift_before_deg": 82,
+      "lift_after_deg": 88,
+      "command": {
+        "opcode": 22,
+        "flags": 73,
+        "arg_a": 100,
+        "arg_b": 8800,
+        "aux": 9000
+      },
+      "context_frame_hex": "a3b31d07006500ca000000006b4ec3",
+      "mission_frame_hex": "a3b318071649006422602328ed2ac3"
+    },
+    {
+      "side": "red",
+      "black_side": "right",
+      "first_body_translation": "left",
+      "return_body_translation": "right",
+      "distance_each_mm": 100,
+      "lift_before_deg": 82,
+      "lift_after_deg": 88,
+      "command": {
+        "opcode": 22,
+        "flags": 201,
+        "arg_a": 100,
+        "arg_b": 8800,
+        "aux": 9000
+      },
+      "context_frame_hex": "a3b31d07006500ca000000006b4ec3",
+      "mission_frame_hex": "a3b3180716c90064226023286ce2c3"
+    },
+    {
+      "side": "blue",
+      "black_side": "left",
+      "first_body_translation": "right",
+      "return_body_translation": "left",
+      "distance_each_mm": 100,
+      "lift_before_deg": 82,
+      "lift_after_deg": 88,
+      "command": {
+        "opcode": 22,
+        "flags": 65,
+        "arg_a": 100,
+        "arg_b": 8800,
+        "aux": 27000
+      },
+      "context_frame_hex": "a3b31d07006500ca000000006b4ec3",
+      "mission_frame_hex": "a3b31807164100642260697853b6c3"
+    },
+    {
+      "side": "blue",
+      "black_side": "right",
+      "first_body_translation": "left",
+      "return_body_translation": "right",
+      "distance_each_mm": 100,
+      "lift_before_deg": 82,
+      "lift_after_deg": 88,
+      "command": {
+        "opcode": 22,
+        "flags": 193,
+        "arg_a": 100,
+        "arg_b": 8800,
+        "aux": 27000
+      },
+      "context_frame_hex": "a3b31d07006500ca000000006b4ec3",
+      "mission_frame_hex": "a3b3180716c1006422606978d27ec3"
+    }
+  ]
+}

@@ -3930,3 +3930,74 @@ def test_three_material_wire_preserves_real_green_count_for_filter():
     invalid=replace(audit,left_class='mixed_material',left_count=3,left_green_count=0,right_class='',right_count=0,total_count=3)
     wire=invalid.to_protocol(initial_stash=False,destination='material',audit_id=0)
     assert wire.unknown_present and wire.left_class=='unknown'
+
+
+def test_orange_gate_filter_planner_pairs_completion_pause_and_rejection():
+    from dataclasses import replace
+    from protocol import CMD_ORANGE_GATE_FILTER, CMD_CARGO_AUDIT, CMD_PAUSE
+    from state_machine import CargoAudit, CargoBatch
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        m = CompetitionMission(CompetitionSettings(side='blue', initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((1,), ('injured_orange',), 'injury'))
+        m._latch_carried_manifest(CargoAudit(right_class='injured_orange', right_count=1, total_count=1))
+        planner = CompetitionPlanner(m, root/'pose', root/'stm', root/'command', root/'diagnostic',
+                                     JsonlLog(root/'events'), 50)
+        status = StmSnapshot(mode=48, flags=3, age_ms=0, camera_pitch_cdeg=14000)
+        current = PoseSnapshot(True, m.settings.injury_target_x_m, m.settings.safe_staging_y_m, 270., 0.)
+        view = VisionSnapshot(frame_sequence=10, observed_monotonic_s=1.)
+        output = m._begin_orange_gate_filter('left', status, 1.)
+        planner._publish(output, stm=status)
+        action = planner.protocol_action
+        assert (root/'command').read_bytes()[19] == CMD_ORANGE_GATE_FILTER
+        done = replace(status, context_valid=True, task_id=planner.protocol_task, action_id=action,
+                       accepted_command=CMD_ORANGE_GATE_FILTER, action_status=3)
+        for old in (replace(done, task_id=done.task_id-1), replace(done, action_id=action-1),
+                    replace(done, action_status=1)):
+            result = planner._output_for_cycle(view, current, old, False, 1.1)
+            assert result.command == output.command and m.state == CompetitionState.ORANGE_GATE_FILTER
+        paused = planner._output_for_cycle(view, current, done, True, 1.2)
+        assert paused.command.opcode == CMD_PAUSE and m.orange_gate_filter_attempted
+        result = planner._output_for_cycle(view, current, done, False, 1.3)
+        assert result.state == CompetitionState.TRANSPORT_AUDIT
+        assert result.command.opcode == CMD_CARGO_AUDIT and not result.command.audit.stable
+        assert m.orange_gate_filter_attempted and m.confirmed_load_audit is None
+        # A new fixture request rejected before acceptance falls back to the
+        # original audit without trying this manoeuvre repeatedly.
+        output = m._begin_orange_gate_filter('right', status, 2.)
+        planner._publish(output, stm=status)
+        reject = replace(done, action_id=action, accepted_command=CMD_CARGO_AUDIT, action_status=5,
+                         rejected_action_id=planner.protocol_action)
+        stale = replace(reject, rejected_action_id=planner.protocol_action-1)
+        assert planner._reconcile_orange_gate_filter_rejection(view,current,stale,2.1) is None
+        already_accepted = replace(reject, action_id=planner.protocol_action,
+                                  accepted_command=CMD_ORANGE_GATE_FILTER)
+        assert planner._reconcile_orange_gate_filter_rejection(view,current,already_accepted,2.1) is None
+        result = planner._output_for_cycle(view, current, reject, False, 2.2)
+        assert result.event == 'orange_gate_filter_rejected'
+        assert m.state == CompetitionState.TRANSPORT_AUDIT and m.orange_gate_filter_attempted
+
+
+def test_orange_gate_filter_keeps_explicit_roi_side_separate_from_old_fallback():
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois
+    from state_machine import CargoBatch, TrackedCargo
+    m = CompetitionMission(CompetitionSettings(side='blue', initial_stash_enabled=False))
+    m.first_common_delivered = True
+    m._select_batch(CargoBatch((1,), ('injured_orange',), 'injury'))
+    orange = TrackedCargo(1,'injured_orange',.9,(750,300,80,100),hits=3)
+    black = TrackedCargo(2,'core_black',.9,(300,300,80,100),hits=3)
+    overall=((100,100),(1100,100),(1100,800),(100,800))
+    right=((700,100),(1100,100),(1100,800),(700,800))
+    # Real overall-only inclusion still uses the OLD side fallback for audits,
+    # but it must not invent explicit side evidence for the new manoeuvre.
+    for left in ((), ((100,100),(600,100),(600,800),(100,800))):
+        with patch.object(runner_module,'tracked_cargo',return_value=(orange,black)):
+            view=runner_module.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,
+                StmSnapshot(mode=48,flags=3,age_ms=0,camera_pitch_cdeg=14000),m,1,
+                capture_rois=CaptureRois(overall,left,right))
+        assert view.capture_audit.total_count == 2
+        assert view.capture_audit.left_class == 'core_black'
+        assert dict(view.capture_explicit_sides).get(2) == ('left' if left else None)

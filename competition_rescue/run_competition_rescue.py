@@ -67,6 +67,7 @@ from protocol import (  # noqa: E402
     CMD_ENTER_SAFE_ZONE,
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
+    CMD_ORANGE_GATE_FILTER,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
@@ -977,6 +978,7 @@ def make_vision_snapshot(
     roi_started = time.monotonic()
     capture_items: list[TrackedCargo] = []
     capture_side_by_track: dict[int, str] = {}
+    capture_explicit_sides: dict[int, str] = {}
     capture_enabled = (
         stm.audit_fresh and
         stm.claw_visible and
@@ -1030,6 +1032,8 @@ def make_vision_snapshot(
             capture_side_by_track[item.track_id] = capture_side or (
                 "left" if item.center_px[0] <= IMAGE_WIDTH // 2 else "right"
             )
+            if capture_side is not None:
+                capture_explicit_sides[item.track_id] = capture_side
     partial_orange_ids = set()
     if capture_enabled and stm.gripper_closed:
         for item in partial_orange_mixed_evidence(cargo,capture_items,rois.overall):
@@ -1306,6 +1310,7 @@ def make_vision_snapshot(
         observed_monotonic_s=time.monotonic() if observed_s is None else observed_s,
         cargo=cargo,
         capture_cargo=capture,
+        capture_explicit_sides=tuple(capture_explicit_sides.items()),
         safe_bbox=safe_bbox,
         danger_ahead=danger,
         danger_side=side,
@@ -1469,6 +1474,7 @@ def stm_dict(stm: StmSnapshot) -> dict:
 class LocalizationWheelPolicy:
     """One-way business-stage policy; owns neither chassis UART nor SDK."""
     SAFE_ZONE_STATES = frozenset({
+        CompetitionState.ORANGE_GATE_FILTER,
         CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
         CompetitionState.ACQUIRE_SAFE_ZONE,
         CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
@@ -2288,6 +2294,26 @@ class CompetitionPlanner:
             message="下位机明确拒绝当前扫障请求，按实际模式恢复目标查找或新帧审核",
         )
 
+    def _reconcile_orange_gate_filter_rejection(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        pending = self.protocol_last_output.command if self.protocol_last_output else None
+        if not (self.mission.state == CompetitionState.ORANGE_GATE_FILTER and
+                pending is not None and pending.opcode == CMD_ORANGE_GATE_FILTER and
+                stm.context_valid and stm.mode == STM_MODE_TRANSPORT_AUDIT and not stm.fault and
+                stm.action_status & 4 and stm.task_id == self.protocol_task and
+                stm.rejected_action_id == self.protocol_action):
+            return None
+        if (stm.action_id == self.protocol_action and stm.accepted_command == pending.opcode and
+                stm.action_status & 1):
+            return None  # A rejected duplicate cannot cancel an executing action.
+        self._adopt_recovery_context()
+        self.mission.orange_gate_filter_command = None
+        return replace(self.mission._begin_transport_audit(
+            vision, pose, replace(stm, context_matches=True), now),
+            event="orange_gate_filter_rejected", reason="orange_gate_filter_rejected",
+            message="门口横移请求未被接受，保留本批已尝试记录，重新复审后走原分离")
+
     def _reconcile_separation_rejection(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
@@ -2510,6 +2536,9 @@ class CompetitionPlanner:
         reconciled = self._reconcile_sweep_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
+        reconciled = self._reconcile_orange_gate_filter_rejection(vision, pose, stm, now)
+        if reconciled is not None:
+            return reconciled
         reconciled = self._reconcile_separation_rejection(vision, stm, now)
         if reconciled is not None:
             return reconciled
@@ -2523,6 +2552,9 @@ class CompetitionPlanner:
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and not stm.fault and
                 stm.mode in {3, 25, 34}):
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (self.mission.state == CompetitionState.ORANGE_GATE_FILTER and not stm.fault and
+                stm.mode in {STM_MODE_REMOTE_ACTION, STM_MODE_TRANSPORT_AUDIT}):
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.CLOSED_DEFLECT and not stm.fault and
                 stm.mode in {3, 10, 11, 25, 52}):
