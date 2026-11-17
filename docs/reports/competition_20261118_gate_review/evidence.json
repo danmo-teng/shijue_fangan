@@ -1,0 +1,3682 @@
+{
+  "source_session": "rescue_map/runtime/history/competition_wheel_input/20000101_080057_competition_wheel",
+  "session_id": "1bc6425991deaba1bea5bc0ccfbefad7",
+  "upper": "d92f45183a9136a4e1dc7585123013f3b99fefbe",
+  "actual_lower": {
+    "version": 1,
+    "type": 2,
+    "sequence": 0,
+    "nonce": 1884138836570334463,
+    "epoch_fault": 0,
+    "boot_epoch": "92ec8f25e27de3fe930cbf82ab2a8e19",
+    "reference_epoch": 0,
+    "capabilities": 991,
+    "board": 405,
+    "mode": 5,
+    "service": 2,
+    "protocol_major": 1,
+    "protocol_minor": 3,
+    "tick_hz": 1000000,
+    "uart_baud": 921600,
+    "clock_flags": 3,
+    "drift_bound_ppm": 4294967295,
+    "mcu_uid": "002c00203335470434383831",
+    "device_idcode": 269444115,
+    "cpu_id": 1091551809,
+    "flash_kib": 1024,
+    "firmware_id": "cfa4a40c0e5747dd6ff0edd79c2f88802570f5879bcb52f9adf61f7dc98b01eb",
+    "git_commit": "f1dd0464d7de72b8f3489edef66dc1c3f6da4848",
+    "source_dirty": 1,
+    "max_payload": 160,
+    "receive_monotonic_ns": 53207198937,
+    "capture_time_qualified": false,
+    "sdk_time_qualified": false,
+    "epoch_valid": true,
+    "interface_compatible": true,
+    "board_name": "F405",
+    "mode_name": "NormalRun",
+    "service_name": "TASK",
+    "identity_source": "actual_uart_reply"
+  },
+  "start_monotonic_s": 59.581943213,
+  "invalid_json_lines": {
+    "events": [],
+    "detections": [
+      3130
+    ]
+  },
+  "audit_pairs": [
+    {
+      "start_s": 116.104975848,
+      "end_s": 116.91278039,
+      "duration_s": 0.8078045419999995,
+      "start_line": 183,
+      "end_line": 187,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 125.853039809,
+      "end_s": 126.561207407,
+      "duration_s": 0.7081675980000028,
+      "start_line": 212,
+      "end_line": 217,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 150.375788103,
+      "end_s": 151.097210712,
+      "duration_s": 0.7214226090000011,
+      "start_line": 271,
+      "end_line": 275,
+      "category": "injured_orange"
+    },
+    {
+      "start_s": 187.142629757,
+      "end_s": 187.865447078,
+      "duration_s": 0.7228173209999795,
+      "start_line": 373,
+      "end_line": 377,
+      "category": "injured_orange"
+    },
+    {
+      "start_s": 217.500566664,
+      "end_s": 218.104271423,
+      "duration_s": 0.60370475900001,
+      "start_line": 445,
+      "end_line": 449,
+      "category": "injured_orange"
+    },
+    {
+      "start_s": 272.440405582,
+      "end_s": 273.050270847,
+      "duration_s": 0.6098652649999963,
+      "start_line": 594,
+      "end_line": 598,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 275.394386276,
+      "end_s": 276.122324485,
+      "duration_s": 0.7279382090000013,
+      "start_line": 611,
+      "end_line": 615,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 295.006038189,
+      "end_s": 295.631981781,
+      "duration_s": 0.6259435919999987,
+      "start_line": 667,
+      "end_line": 671,
+      "category": "core_black"
+    },
+    {
+      "start_s": 303.117613071,
+      "end_s": 303.801657175,
+      "duration_s": 0.6840441040000087,
+      "start_line": 694,
+      "end_line": 699,
+      "category": "core_black"
+    },
+    {
+      "start_s": 325.056846062,
+      "end_s": 325.735282463,
+      "duration_s": 0.678436400999999,
+      "start_line": 764,
+      "end_line": 768,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 334.32112245,
+      "end_s": 334.91159402,
+      "duration_s": 0.590471569999977,
+      "start_line": 797,
+      "end_line": 801,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 411.224594642,
+      "end_s": 411.844245847,
+      "duration_s": 0.6196512050000251,
+      "start_line": 1018,
+      "end_line": 1022,
+      "category": "green_supply"
+    },
+    {
+      "start_s": 439.435313548,
+      "end_s": 440.093601625,
+      "duration_s": 0.6582880770000088,
+      "start_line": 1093,
+      "end_line": 1097,
+      "category": "green_supply"
+    }
+  ],
+  "camera_recoveries": [
+    {
+      "start_s": 117.034198442,
+      "end_s": 121.315439239,
+      "duration_s": 4.281240796999995,
+      "start_line": 189,
+      "end_line": 197
+    },
+    {
+      "start_s": 151.312495811,
+      "end_s": 155.570184802,
+      "duration_s": 4.257688991000009,
+      "start_line": 276,
+      "end_line": 284
+    },
+    {
+      "start_s": 187.924075265,
+      "end_s": 192.192843288,
+      "duration_s": 4.268768023000007,
+      "start_line": 378,
+      "end_line": 386
+    },
+    {
+      "start_s": 218.375203023,
+      "end_s": 222.590508579,
+      "duration_s": 4.215305555999976,
+      "start_line": 450,
+      "end_line": 458
+    },
+    {
+      "start_s": 295.937329303,
+      "end_s": 300.146514953,
+      "duration_s": 4.209185649999995,
+      "start_line": 672,
+      "end_line": 680
+    },
+    {
+      "start_s": 325.920750728,
+      "end_s": 330.141707767,
+      "duration_s": 4.220957039000041,
+      "start_line": 769,
+      "end_line": 777
+    },
+    {
+      "start_s": 371.447085367,
+      "end_s": 375.624556632,
+      "duration_s": 4.177471265000008,
+      "start_line": 917,
+      "end_line": 928
+    },
+    {
+      "start_s": 411.891412842,
+      "end_s": 416.123122802,
+      "duration_s": 4.231709959999989,
+      "start_line": 1023,
+      "end_line": 1031
+    },
+    {
+      "start_s": 440.307044474,
+      "end_s": 444.529386865,
+      "duration_s": 4.222342390999984,
+      "start_line": 1098,
+      "end_line": 1106
+    }
+  ],
+  "events": [
+    {
+      "source_line": 75,
+      "timestamp_monotonic_ns": 84597818305,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留left侧目标，启动选择性分离",
+      "vision_frame_sequence": 543,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 3,
+      "audit_right_count": 2,
+      "audit_left_green_count": 2,
+      "audit_right_green_count": 1,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 5,
+      "audit_stable": false
+    },
+    {
+      "source_line": 88,
+      "timestamp_monotonic_ns": 87347972333,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留right侧目标，启动选择性分离",
+      "vision_frame_sequence": 595,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 1,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 118,
+      "timestamp_monotonic_ns": 98167754849,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_recheck_wait_frame",
+      "frame": 750,
+      "observed_monotonic_s": 98.03508494,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 27.303531,
+      "roi": [
+        {
+          "track_id": 72,
+          "class": "green_supply",
+          "overlap": 1.0,
+          "included": true,
+          "reason": "included"
+        },
+        {
+          "track_id": 124,
+          "class": "danger_cyan",
+          "overlap": 0.8260671426401337,
+          "included": true,
+          "reason": "included"
+        },
+        {
+          "track_id": 131,
+          "class": "injured_orange",
+          "overlap": 0.0,
+          "included": false,
+          "reason": "outside_capture_roi"
+        },
+        {
+          "track_id": 134,
+          "class": "core_black",
+          "overlap": 0.7100591715976331,
+          "included": true,
+          "reason": "included"
+        },
+        {
+          "track_id": 135,
+          "class": "green_supply",
+          "overlap": 0.9109980528861252,
+          "included": true,
+          "reason": "included"
+        }
+      ],
+      "observation_valid": true,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [
+        [
+          "core_black",
+          1
+        ],
+        [
+          "danger_cyan",
+          1
+        ],
+        [
+          "green_supply",
+          2
+        ]
+      ],
+      "left_green": 0,
+      "right_green": 2,
+      "raw_audit": {
+        "left_class": "",
+        "right_class": "unknown",
+        "left_count": 0,
+        "right_count": 4,
+        "left_green_count": 0,
+        "right_green_count": 2,
+        "total_count": 4,
+        "danger_present": true,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": false,
+        "right_invalid": true,
+        "left_selected_count": 0,
+        "right_selected_count": 0,
+        "left_track_stability": 0,
+        "right_track_stability": 274,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": null,
+        "right_stable_track_id": 72,
+        "class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "danger_cyan",
+            1
+          ],
+          [
+            "green_supply",
+            2
+          ]
+        ],
+        "left_class_counts": [],
+        "right_class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "danger_cyan",
+            1
+          ],
+          [
+            "green_supply",
+            2
+          ]
+        ],
+        "left_isolated_green": false,
+        "right_isolated_green": false,
+        "near_claw_keep_side": null,
+        "near_claw_green_id": null,
+        "near_claw_frame": 0,
+        "first_green_core_conflict": false
+      },
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 0,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12704,
+      "action_id": 29474,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12704,
+      "request_action_id": 29473
+    },
+    {
+      "source_line": 124,
+      "timestamp_monotonic_ns": 98519642059,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留right侧目标，启动选择性分离",
+      "vision_frame_sequence": 754,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 4,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 2,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 4,
+      "audit_stable": false
+    },
+    {
+      "source_line": 125,
+      "timestamp_monotonic_ns": 98672509659,
+      "event": "capture_decision",
+      "state": "DISPERSE",
+      "reason": "disperse_visual_not_required_during_action",
+      "frame": 757,
+      "observed_monotonic_s": 98.532066703,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 53.295894,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": "right",
+      "keep_count": 4,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12704,
+      "action_id": 29475,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12704,
+      "request_action_id": 29475
+    },
+    {
+      "source_line": 126,
+      "timestamp_monotonic_ns": 100560196439,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_no_observation",
+      "frame": 785,
+      "observed_monotonic_s": 100.363357311,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 16.137064,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12704,
+      "action_id": 29476,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12704,
+      "request_action_id": 29475
+    },
+    {
+      "source_line": 132,
+      "timestamp_monotonic_ns": 100945531188,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留left侧目标，启动选择性分离",
+      "vision_frame_sequence": 790,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 133,
+      "timestamp_monotonic_ns": 101071984747,
+      "event": "capture_decision",
+      "state": "DISPERSE",
+      "reason": "disperse_visual_not_required_during_action",
+      "frame": 792,
+      "observed_monotonic_s": 100.860116997,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 60.01073,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": "left",
+      "keep_count": 1,
+      "separation_branch": "selective",
+      "separation_attempts": 2,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12704,
+      "action_id": 29477,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12704,
+      "request_action_id": 29477
+    },
+    {
+      "source_line": 134,
+      "timestamp_monotonic_ns": 103342838232,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_no_observation",
+      "frame": 818,
+      "observed_monotonic_s": 103.139394363,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 42.541865,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 2,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12704,
+      "action_id": 29478,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12704,
+      "request_action_id": 29477
+    },
+    {
+      "source_line": 141,
+      "timestamp_monotonic_ns": 103861068735,
+      "event": "capture_decision",
+      "state": "GRAB",
+      "reason": "",
+      "frame": 824,
+      "observed_monotonic_s": 103.611346752,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 11.72758,
+      "roi": [
+        {
+          "track_id": 135,
+          "class": "green_supply",
+          "overlap": 1.0,
+          "included": true,
+          "reason": "included"
+        },
+        {
+          "track_id": 136,
+          "class": "green_supply",
+          "overlap": 0.0,
+          "included": false,
+          "reason": "claw_target_truncated_outside_roi"
+        },
+        {
+          "track_id": 137,
+          "class": "danger_cyan",
+          "overlap": 0.0,
+          "included": false,
+          "reason": "claw_target_truncated_outside_roi"
+        }
+      ],
+      "observation_valid": true,
+      "observation_reason": "",
+      "left_composition": [
+        [
+          "green_supply",
+          1
+        ]
+      ],
+      "right_composition": [],
+      "left_green": 1,
+      "right_green": 0,
+      "raw_audit": {
+        "left_class": "green_supply",
+        "right_class": "",
+        "left_count": 1,
+        "right_count": 0,
+        "left_green_count": 1,
+        "right_green_count": 0,
+        "total_count": 1,
+        "danger_present": false,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": false,
+        "right_invalid": false,
+        "left_selected_count": 1,
+        "right_selected_count": 0,
+        "left_track_stability": 90,
+        "right_track_stability": 0,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": 135,
+        "right_stable_track_id": null,
+        "class_counts": [
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "left_class_counts": [
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "right_class_counts": [],
+        "left_isolated_green": true,
+        "right_isolated_green": false,
+        "near_claw_keep_side": null,
+        "near_claw_green_id": null,
+        "near_claw_frame": 0,
+        "first_green_core_conflict": false
+      },
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 2,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12704,
+      "action_id": 29479,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12704,
+      "request_action_id": 29479
+    },
+    {
+      "source_line": 156,
+      "timestamp_monotonic_ns": 108942753100,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 902,
+      "audit_id": 40,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 159,
+      "timestamp_monotonic_ns": 109817498636,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留left侧目标，启动选择性分离",
+      "vision_frame_sequence": 915,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 2,
+      "audit_right_count": 0,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 183,
+      "timestamp_monotonic_ns": 116104975848,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 1023,
+      "audit_id": 52,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 187,
+      "timestamp_monotonic_ns": 116912780390,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 1036,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 189,
+      "timestamp_monotonic_ns": 117034198442,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline0/GstV4l2Src:v4l2src0:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 190,
+      "timestamp_monotonic_ns": 117067515975,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 191,
+      "timestamp_monotonic_ns": 117068048475,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline0/GstV4l2Src:v4l2src0:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 193,
+      "timestamp_monotonic_ns": 118036076683,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 194,
+      "timestamp_monotonic_ns": 118036771224,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 195,
+      "timestamp_monotonic_ns": 120046407241,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 196,
+      "timestamp_monotonic_ns": 121193006813,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 197,
+      "timestamp_monotonic_ns": 121315439239,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 1039
+    },
+    {
+      "source_line": 201,
+      "timestamp_monotonic_ns": 122213047333,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 203,
+      "timestamp_monotonic_ns": 122385288245,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准790px分区点"
+    },
+    {
+      "source_line": 207,
+      "timestamp_monotonic_ns": 124927092103,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 208,
+      "timestamp_monotonic_ns": 124973588299,
+      "event": "state_changed",
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "NAVIGATE",
+      "message": "前后位置未到预备点：保留视觉修正的左右位置，补到后重新对准和横移"
+    },
+    {
+      "source_line": 212,
+      "timestamp_monotonic_ns": 125853039809,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 1107,
+      "audit_id": 58,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 217,
+      "timestamp_monotonic_ns": 126561207407,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 1119,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 219,
+      "timestamp_monotonic_ns": 126910179270,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 222,
+      "timestamp_monotonic_ns": 127196561275,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准679px分区点"
+    },
+    {
+      "source_line": 224,
+      "timestamp_monotonic_ns": 127284334376,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 226,
+      "timestamp_monotonic_ns": 127358758147,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 271,
+      "timestamp_monotonic_ns": 150375788103,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 1530,
+      "audit_id": 71,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 275,
+      "timestamp_monotonic_ns": 151097210712,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 1544,
+      "audit_id": null,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 0,
+      "audit_right_count": 1,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 276,
+      "timestamp_monotonic_ns": 151312495811,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline1/GstV4l2Src:v4l2src1:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 277,
+      "timestamp_monotonic_ns": 151332861222,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 278,
+      "timestamp_monotonic_ns": 151333148972,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline1/GstV4l2Src:v4l2src1:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 280,
+      "timestamp_monotonic_ns": 152317505580,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 281,
+      "timestamp_monotonic_ns": 152318185288,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 282,
+      "timestamp_monotonic_ns": 154338079735,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 283,
+      "timestamp_monotonic_ns": 155457435796,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 284,
+      "timestamp_monotonic_ns": 155570184802,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 1550
+    },
+    {
+      "source_line": 288,
+      "timestamp_monotonic_ns": 156772826626,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 290,
+      "timestamp_monotonic_ns": 156931066408,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准724px分区点"
+    },
+    {
+      "source_line": 293,
+      "timestamp_monotonic_ns": 157553386250,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 295,
+      "timestamp_monotonic_ns": 157598063194,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 325,
+      "timestamp_monotonic_ns": 170099314648,
+      "event": "invalid_cargo_release",
+      "state": "INVALID_RELEASE",
+      "message": "危险物明确位于left侧，强制释放后YIELD复审",
+      "vision_frame_sequence": 1824,
+      "audit_id": null,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 349,
+      "timestamp_monotonic_ns": 176023202490,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留right侧目标，启动选择性分离",
+      "vision_frame_sequence": 1975,
+      "audit_id": null,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 373,
+      "timestamp_monotonic_ns": 187142629757,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 2264,
+      "audit_id": 100,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 377,
+      "timestamp_monotonic_ns": 187865447078,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 2279,
+      "audit_id": null,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 0,
+      "audit_right_count": 1,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 378,
+      "timestamp_monotonic_ns": 187924075265,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline2/GstV4l2Src:v4l2src2:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 379,
+      "timestamp_monotonic_ns": 187936462469,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 380,
+      "timestamp_monotonic_ns": 187936739886,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline2/GstV4l2Src:v4l2src2:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 382,
+      "timestamp_monotonic_ns": 188915521155,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 383,
+      "timestamp_monotonic_ns": 188916111363,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 384,
+      "timestamp_monotonic_ns": 190921033714,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 385,
+      "timestamp_monotonic_ns": 192063383711,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 386,
+      "timestamp_monotonic_ns": 192192843288,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 2282
+    },
+    {
+      "source_line": 390,
+      "timestamp_monotonic_ns": 193022921566,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 392,
+      "timestamp_monotonic_ns": 193133128358,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准884px分区点"
+    },
+    {
+      "source_line": 396,
+      "timestamp_monotonic_ns": 194521629553,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 398,
+      "timestamp_monotonic_ns": 194550074750,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 445,
+      "timestamp_monotonic_ns": 217500566664,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 2919,
+      "audit_id": 114,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 449,
+      "timestamp_monotonic_ns": 218104271423,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 2933,
+      "audit_id": null,
+      "selected_target_class": "injured_orange",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 450,
+      "timestamp_monotonic_ns": 218375203023,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline3/GstV4l2Src:v4l2src3:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 451,
+      "timestamp_monotonic_ns": 218395967932,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 452,
+      "timestamp_monotonic_ns": 218396236848,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline3/GstV4l2Src:v4l2src3:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 454,
+      "timestamp_monotonic_ns": 219379869997,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 455,
+      "timestamp_monotonic_ns": 219380656538,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 456,
+      "timestamp_monotonic_ns": 221389640481,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 457,
+      "timestamp_monotonic_ns": 222525236439,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 458,
+      "timestamp_monotonic_ns": 222590508579,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 2938
+    },
+    {
+      "source_line": 462,
+      "timestamp_monotonic_ns": 223137423775,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 464,
+      "timestamp_monotonic_ns": 223260524642,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准709px分区点"
+    },
+    {
+      "source_line": 468,
+      "timestamp_monotonic_ns": 226081777328,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 470,
+      "timestamp_monotonic_ns": 226158061089,
+      "event": "bulldozer_start",
+      "state": "OBSTACLE_ROUTE",
+      "message": "清障/sweep：贴边=True，B3/B4=False，扫障点=(0.56, -0.91)，横扫1000mm"
+    },
+    {
+      "source_line": 526,
+      "timestamp_monotonic_ns": 250200187882,
+      "event": "recovered_injury_audit_reused",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "保持闭爪，沿已确认载荷的运输许可开始对准，不记为本帧审核通过"
+    },
+    {
+      "source_line": 530,
+      "timestamp_monotonic_ns": 252470174395,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 532,
+      "timestamp_monotonic_ns": 252572606059,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准585px分区点"
+    },
+    {
+      "source_line": 534,
+      "timestamp_monotonic_ns": 252640949196,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 535,
+      "timestamp_monotonic_ns": 252664309310,
+      "event": "state_changed",
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "NAVIGATE",
+      "message": "前后位置未到预备点：保留视觉修正的左右位置，补到后重新对准和横移"
+    },
+    {
+      "source_line": 539,
+      "timestamp_monotonic_ns": 252979159548,
+      "event": "recovered_injury_audit_reused",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "保持闭爪，沿已确认载荷的运输许可开始对准，不记为本帧审核通过"
+    },
+    {
+      "source_line": 542,
+      "timestamp_monotonic_ns": 253334806351,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 544,
+      "timestamp_monotonic_ns": 253443476720,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准595px分区点"
+    },
+    {
+      "source_line": 546,
+      "timestamp_monotonic_ns": 253485114161,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 549,
+      "timestamp_monotonic_ns": 253529860474,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 594,
+      "timestamp_monotonic_ns": 272440405582,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 4129,
+      "audit_id": 138,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 598,
+      "timestamp_monotonic_ns": 273050270847,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 4144,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 1,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 602,
+      "timestamp_monotonic_ns": 274782939973,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 604,
+      "timestamp_monotonic_ns": 274915826745,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准679px分区点"
+    },
+    {
+      "source_line": 606,
+      "timestamp_monotonic_ns": 274970480929,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 607,
+      "timestamp_monotonic_ns": 275000036748,
+      "event": "state_changed",
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "NAVIGATE",
+      "message": "前后位置未到预备点：保留视觉修正的左右位置，补到后重新对准和横移"
+    },
+    {
+      "source_line": 611,
+      "timestamp_monotonic_ns": 275394386276,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 4199,
+      "audit_id": 143,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 615,
+      "timestamp_monotonic_ns": 276122324485,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 4217,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 1,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 618,
+      "timestamp_monotonic_ns": 276583230815,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 620,
+      "timestamp_monotonic_ns": 276697535513,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准647px分区点"
+    },
+    {
+      "source_line": 622,
+      "timestamp_monotonic_ns": 276794232093,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 625,
+      "timestamp_monotonic_ns": 276852095650,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 667,
+      "timestamp_monotonic_ns": 295006038189,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 4674,
+      "audit_id": 160,
+      "selected_target_class": "core_black",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 671,
+      "timestamp_monotonic_ns": 295631981781,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 4688,
+      "audit_id": null,
+      "selected_target_class": "core_black",
+      "audit_left_count": 0,
+      "audit_right_count": 2,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 672,
+      "timestamp_monotonic_ns": 295937329303,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline4/GstV4l2Src:v4l2src4:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 674,
+      "timestamp_monotonic_ns": 295957002236,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 675,
+      "timestamp_monotonic_ns": 295957300362,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline4/GstV4l2Src:v4l2src4:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 676,
+      "timestamp_monotonic_ns": 296945948464,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 677,
+      "timestamp_monotonic_ns": 296946692717,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 678,
+      "timestamp_monotonic_ns": 298954456804,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 679,
+      "timestamp_monotonic_ns": 300088250577,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 680,
+      "timestamp_monotonic_ns": 300146514953,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 4694
+    },
+    {
+      "source_line": 684,
+      "timestamp_monotonic_ns": 301617738130,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 686,
+      "timestamp_monotonic_ns": 301742038860,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准729px分区点"
+    },
+    {
+      "source_line": 689,
+      "timestamp_monotonic_ns": 302524807009,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 690,
+      "timestamp_monotonic_ns": 302541619057,
+      "event": "state_changed",
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "NAVIGATE",
+      "message": "前后位置未到预备点：保留视觉修正的左右位置，补到后重新对准和横移"
+    },
+    {
+      "source_line": 694,
+      "timestamp_monotonic_ns": 303117613071,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 4762,
+      "audit_id": 165,
+      "selected_target_class": "core_black",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 699,
+      "timestamp_monotonic_ns": 303801657175,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 4778,
+      "audit_id": null,
+      "selected_target_class": "core_black",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 701,
+      "timestamp_monotonic_ns": 304127451348,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 704,
+      "timestamp_monotonic_ns": 304280196153,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准684px分区点"
+    },
+    {
+      "source_line": 706,
+      "timestamp_monotonic_ns": 304316589922,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 708,
+      "timestamp_monotonic_ns": 304387660539,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 733,
+      "timestamp_monotonic_ns": 316310753562,
+      "event": "capture_decision",
+      "state": "APPROACH",
+      "reason": "approach_range_handoff",
+      "frame": 5079,
+      "observed_monotonic_s": 316.199152431,
+      "camera_pitch_cdeg": 12100,
+      "stm_age_ms": 18.052048,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 0,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12712,
+      "action_id": 29609,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12712,
+      "request_action_id": 29609
+    },
+    {
+      "source_line": 734,
+      "timestamp_monotonic_ns": 316967366395,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_no_observation",
+      "frame": 5096,
+      "observed_monotonic_s": 316.892433987,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 14.019912,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 0,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12712,
+      "action_id": 29610,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12712,
+      "request_action_id": 29609
+    },
+    {
+      "source_line": 740,
+      "timestamp_monotonic_ns": 317212648590,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留left侧目标，启动选择性分离",
+      "vision_frame_sequence": 5101,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 3,
+      "audit_right_count": 0,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 3,
+      "audit_stable": false
+    },
+    {
+      "source_line": 741,
+      "timestamp_monotonic_ns": 317496917636,
+      "event": "capture_decision",
+      "state": "DISPERSE",
+      "reason": "disperse_visual_not_required_during_action",
+      "frame": 5107,
+      "observed_monotonic_s": 317.3422926,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 39.906898,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": "left",
+      "keep_count": 3,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12712,
+      "action_id": 29611,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12712,
+      "request_action_id": 29611
+    },
+    {
+      "source_line": 742,
+      "timestamp_monotonic_ns": 320087555806,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_no_observation",
+      "frame": 5170,
+      "observed_monotonic_s": 319.936050033,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 11.722698,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12712,
+      "action_id": 29612,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12712,
+      "request_action_id": 29611
+    },
+    {
+      "source_line": 749,
+      "timestamp_monotonic_ns": 320609758881,
+      "event": "capture_decision",
+      "state": "GRAB",
+      "reason": "",
+      "frame": 5180,
+      "observed_monotonic_s": 320.462989538,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 46.922831,
+      "roi": [
+        {
+          "track_id": 381,
+          "class": "danger_cyan",
+          "overlap": 0.0,
+          "included": false,
+          "reason": "claw_target_truncated_outside_roi"
+        },
+        {
+          "track_id": 383,
+          "class": "green_supply",
+          "overlap": 1.0,
+          "included": true,
+          "reason": "included"
+        },
+        {
+          "track_id": 389,
+          "class": "core_black",
+          "overlap": 1.0,
+          "included": true,
+          "reason": "included"
+        }
+      ],
+      "observation_valid": true,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [
+        [
+          "core_black",
+          1
+        ],
+        [
+          "green_supply",
+          1
+        ]
+      ],
+      "left_green": 0,
+      "right_green": 1,
+      "raw_audit": {
+        "left_class": "",
+        "right_class": "mixed_material",
+        "left_count": 0,
+        "right_count": 2,
+        "left_green_count": 0,
+        "right_green_count": 1,
+        "total_count": 2,
+        "danger_present": false,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": false,
+        "right_invalid": false,
+        "left_selected_count": 0,
+        "right_selected_count": 0,
+        "left_track_stability": 0,
+        "right_track_stability": 166,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": null,
+        "right_stable_track_id": 383,
+        "class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "left_class_counts": [],
+        "right_class_counts": [
+          [
+            "core_black",
+            1
+          ],
+          [
+            "green_supply",
+            1
+          ]
+        ],
+        "left_isolated_green": false,
+        "right_isolated_green": false,
+        "near_claw_keep_side": null,
+        "near_claw_green_id": null,
+        "near_claw_frame": 0,
+        "first_green_core_conflict": false
+      },
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12712,
+      "action_id": 29613,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12712,
+      "request_action_id": 29613
+    },
+    {
+      "source_line": 764,
+      "timestamp_monotonic_ns": 325056846062,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 5288,
+      "audit_id": 183,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 768,
+      "timestamp_monotonic_ns": 325735282463,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 5305,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 2,
+      "audit_right_count": 0,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 769,
+      "timestamp_monotonic_ns": 325920750728,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline5/GstV4l2Src:v4l2src5:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 770,
+      "timestamp_monotonic_ns": 325931076504,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 771,
+      "timestamp_monotonic_ns": 325931473380,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline5/GstV4l2Src:v4l2src5:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 773,
+      "timestamp_monotonic_ns": 326919522895,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 774,
+      "timestamp_monotonic_ns": 326920134064,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 775,
+      "timestamp_monotonic_ns": 328926911927,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 776,
+      "timestamp_monotonic_ns": 330029720861,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 777,
+      "timestamp_monotonic_ns": 330141707767,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 5311
+    },
+    {
+      "source_line": 781,
+      "timestamp_monotonic_ns": 330945773732,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 783,
+      "timestamp_monotonic_ns": 331064557486,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准749px分区点"
+    },
+    {
+      "source_line": 788,
+      "timestamp_monotonic_ns": 331721027951,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准748px分区点"
+    },
+    {
+      "source_line": 792,
+      "timestamp_monotonic_ns": 333714832419,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 793,
+      "timestamp_monotonic_ns": 333741420317,
+      "event": "state_changed",
+      "from": "SAFE_ZONE_CORRIDOR_CHECK",
+      "to": "NAVIGATE",
+      "message": "前后位置未到预备点：保留视觉修正的左右位置，补到后重新对准和横移"
+    },
+    {
+      "source_line": 797,
+      "timestamp_monotonic_ns": 334321122450,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 5407,
+      "audit_id": 190,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 801,
+      "timestamp_monotonic_ns": 334911594020,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 5419,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 804,
+      "timestamp_monotonic_ns": 335444494530,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 806,
+      "timestamp_monotonic_ns": 335578810357,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准653px分区点"
+    },
+    {
+      "source_line": 808,
+      "timestamp_monotonic_ns": 335647268607,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 810,
+      "timestamp_monotonic_ns": 335687206871,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    },
+    {
+      "source_line": 899,
+      "timestamp_monotonic_ns": 368333538854,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_no_observation",
+      "frame": 6236,
+      "observed_monotonic_s": 368.22659434,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 9.334186,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 0,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12718,
+      "action_id": 29637,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12718,
+      "request_action_id": 29636
+    },
+    {
+      "source_line": 905,
+      "timestamp_monotonic_ns": 368572642267,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留right侧目标，启动选择性分离",
+      "vision_frame_sequence": 6241,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 2,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 1,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 906,
+      "timestamp_monotonic_ns": 368844119998,
+      "event": "capture_decision",
+      "state": "DISPERSE",
+      "reason": "disperse_visual_not_required_during_action",
+      "frame": 6247,
+      "observed_monotonic_s": 368.729162093,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 34.248155,
+      "roi": [],
+      "observation_valid": false,
+      "observation_reason": "",
+      "left_composition": [],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": null,
+      "wire_signature": null,
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": "right",
+      "keep_count": 2,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12718,
+      "action_id": 29638,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12718,
+      "request_action_id": 29638
+    },
+    {
+      "source_line": 907,
+      "timestamp_monotonic_ns": 370610311523,
+      "event": "capture_decision",
+      "state": "CAPTURE_AUDIT",
+      "reason": "audit_recheck_wait_frame",
+      "frame": 6293,
+      "observed_monotonic_s": 370.51303699,
+      "camera_pitch_cdeg": 14000,
+      "stm_age_ms": 13.288194,
+      "roi": [
+        {
+          "track_id": 458,
+          "class": "danger_cyan",
+          "overlap": 1.0,
+          "included": true,
+          "reason": "included"
+        }
+      ],
+      "observation_valid": true,
+      "observation_reason": "",
+      "left_composition": [
+        [
+          "danger_cyan",
+          1
+        ]
+      ],
+      "right_composition": [],
+      "left_green": 0,
+      "right_green": 0,
+      "raw_audit": {
+        "left_class": "danger_cyan",
+        "right_class": "",
+        "left_count": 1,
+        "right_count": 0,
+        "left_green_count": 0,
+        "right_green_count": 0,
+        "total_count": 1,
+        "danger_present": true,
+        "unknown_present": false,
+        "injury_mixed": false,
+        "stable": false,
+        "left_invalid": true,
+        "right_invalid": false,
+        "left_selected_count": 0,
+        "right_selected_count": 0,
+        "left_track_stability": 193,
+        "right_track_stability": 0,
+        "left_nearest_distance_m": null,
+        "right_nearest_distance_m": null,
+        "left_stable_track_id": 458,
+        "right_stable_track_id": null,
+        "class_counts": [
+          [
+            "danger_cyan",
+            1
+          ]
+        ],
+        "left_class_counts": [
+          [
+            "danger_cyan",
+            1
+          ]
+        ],
+        "right_class_counts": [],
+        "left_isolated_green": false,
+        "right_isolated_green": false,
+        "near_claw_keep_side": null,
+        "near_claw_green_id": null,
+        "near_claw_frame": 0,
+        "first_green_core_conflict": false
+      },
+      "wire_signature": [
+        0,
+        0,
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        0
+      ],
+      "audit_hits": 0,
+      "stable": false,
+      "keep_side": null,
+      "keep_count": 0,
+      "separation_branch": "selective",
+      "separation_attempts": 1,
+      "separation_no_progress_attempts": 0,
+      "task_id": 12718,
+      "action_id": 29639,
+      "rejected_action_id": 0,
+      "matched_rejection": false,
+      "request_task_id": 12718,
+      "request_action_id": 29638
+    },
+    {
+      "source_line": 913,
+      "timestamp_monotonic_ns": 370845460507,
+      "event": "invalid_cargo_release",
+      "state": "INVALID_RELEASE",
+      "message": "危险物无法可靠分侧，强制RELEASE_BOTH",
+      "vision_frame_sequence": 6297,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 917,
+      "timestamp_monotonic_ns": 371447085367,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline6/GstV4l2Src:v4l2src6:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 918,
+      "timestamp_monotonic_ns": 371474516923,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 919,
+      "timestamp_monotonic_ns": 371474794965,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline6/GstV4l2Src:v4l2src6:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 920,
+      "timestamp_monotonic_ns": 372455228844,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 921,
+      "timestamp_monotonic_ns": 372455846304,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 926,
+      "timestamp_monotonic_ns": 374461750416,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 927,
+      "timestamp_monotonic_ns": 375567739143,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 928,
+      "timestamp_monotonic_ns": 375624556632,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 6311
+    },
+    {
+      "source_line": 959,
+      "timestamp_monotonic_ns": 390123109883,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留right侧目标，启动选择性分离",
+      "vision_frame_sequence": 6686,
+      "audit_id": null,
+      "selected_target_class": "core_black",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 967,
+      "timestamp_monotonic_ns": 392602284776,
+      "event": "disperse_start",
+      "state": "DISPERSE",
+      "message": "锁定保留right侧目标，启动选择性分离",
+      "vision_frame_sequence": 6756,
+      "audit_id": null,
+      "selected_target_class": "core_black",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": false
+    },
+    {
+      "source_line": 975,
+      "timestamp_monotonic_ns": 394721549498,
+      "event": "invalid_cargo_release",
+      "state": "INVALID_RELEASE",
+      "message": "连续分离无进展，结束本批；原释放/脱离完成后重新选择目标",
+      "vision_frame_sequence": 6808,
+      "audit_id": null,
+      "selected_target_class": "core_black",
+      "audit_left_count": 1,
+      "audit_right_count": 0,
+      "audit_left_green_count": 0,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 1,
+      "audit_stable": true
+    },
+    {
+      "source_line": 1018,
+      "timestamp_monotonic_ns": 411224594642,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 7215,
+      "audit_id": 219,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 1022,
+      "timestamp_monotonic_ns": 411844245847,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 7229,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 2,
+      "audit_right_count": 0,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 1023,
+      "timestamp_monotonic_ns": 411891412842,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline7/GstV4l2Src:v4l2src7:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 1024,
+      "timestamp_monotonic_ns": 411917753761,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 1025,
+      "timestamp_monotonic_ns": 411918058137,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline7/GstV4l2Src:v4l2src7:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 1027,
+      "timestamp_monotonic_ns": 412890996135,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 1028,
+      "timestamp_monotonic_ns": 412891607677,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 1029,
+      "timestamp_monotonic_ns": 414901848713,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 1030,
+      "timestamp_monotonic_ns": 416013419913,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 1031,
+      "timestamp_monotonic_ns": 416123122802,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 7231
+    },
+    {
+      "source_line": 1035,
+      "timestamp_monotonic_ns": 416903247700,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 1037,
+      "timestamp_monotonic_ns": 417040899508,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准709px分区点"
+    },
+    {
+      "source_line": 1040,
+      "timestamp_monotonic_ns": 417807620462,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 1042,
+      "timestamp_monotonic_ns": 417850886115,
+      "event": "bulldozer_start",
+      "state": "OBSTACLE_ROUTE",
+      "message": "清障/sweep：贴边=True，B3/B4=False，扫障点=(0.56, -0.91)，横扫1000mm"
+    },
+    {
+      "source_line": 1093,
+      "timestamp_monotonic_ns": 439435313548,
+      "event": "transport_audit_start",
+      "state": "TRANSPORT_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核",
+      "vision_frame_sequence": 7766,
+      "audit_id": 232,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 0,
+      "audit_right_count": 0,
+      "audit_left_green_count": null,
+      "audit_right_green_count": null,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 0,
+      "audit_stable": false
+    },
+    {
+      "source_line": 1097,
+      "timestamp_monotonic_ns": 440093601625,
+      "event": "transport_audit_confirmed",
+      "state": "ALIGN_SAFE_ZONE_BY_POSE",
+      "message": "预备点载荷及实际半区核对合法，开始定位ALIGN",
+      "vision_frame_sequence": 7781,
+      "audit_id": null,
+      "selected_target_class": "green_supply",
+      "audit_left_count": 1,
+      "audit_right_count": 1,
+      "audit_left_green_count": 1,
+      "audit_right_green_count": 0,
+      "audit_unassigned_count": 0,
+      "audit_total_count": 2,
+      "audit_stable": true
+    },
+    {
+      "source_line": 1098,
+      "timestamp_monotonic_ns": 440307044474,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline8/GstV4l2Src:v4l2src8:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "source_line": 1099,
+      "timestamp_monotonic_ns": 440330883133,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 1100,
+      "timestamp_monotonic_ns": 440331168884,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline8/GstV4l2Src:v4l2src8:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "source_line": 1102,
+      "timestamp_monotonic_ns": 441312379044,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 1103,
+      "timestamp_monotonic_ns": 441313054461,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "source_line": 1104,
+      "timestamp_monotonic_ns": 443325336747,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "source_line": 1105,
+      "timestamp_monotonic_ns": 444456758971,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "source_line": 1106,
+      "timestamp_monotonic_ns": 444529386865,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 7787
+    },
+    {
+      "source_line": 1110,
+      "timestamp_monotonic_ns": 446566222219,
+      "event": "safe_zone_acquire_start",
+      "state": "ACQUIRE_SAFE_ZONE",
+      "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+    },
+    {
+      "source_line": 1112,
+      "timestamp_monotonic_ns": 446692857478,
+      "event": "safe_zone_bbox_locked",
+      "state": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+      "message": "安全区已识别，保持垂直航向并横移对准571px分区点"
+    },
+    {
+      "source_line": 1115,
+      "timestamp_monotonic_ns": 447157664334,
+      "event": "safe_zone_corridor_check_start",
+      "state": "SAFE_ZONE_CORRIDOR_CHECK",
+      "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+    },
+    {
+      "source_line": 1117,
+      "timestamp_monotonic_ns": 447216976249,
+      "event": "safe_zone_entry",
+      "state": "ENTER_SAFE_ZONE",
+      "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+    }
+  ],
+  "frames": [
+    {
+      "requested_frame": 750,
+      "source_line": 316,
+      "timestamp_monotonic_ns": 98154892135,
+      "event": "frame",
+      "frame_sequence": 750,
+      "timing_ms": {
+        "preprocess_ms": 8.213385999994216,
+        "inference_ms": 14.68532100000175,
+        "postprocess_ms": 9.059567999997853,
+        "total_ms": 31.95827499999382,
+        "fetch": 0.008209000000647393,
+        "roi": 3.714909000009925,
+        "snapshot": 18.590254000002915,
+        "capture_to_publish": 119.64914299998952,
+        "previous_display": 88.6400440000017,
+        "previous_log_write": 1.0914070000040965
+      },
+      "detections": [
+        {
+          "class": "green_supply",
+          "confidence": 0.7201,
+          "bbox": [
+            807,
+            262,
+            244,
+            261
+          ],
+          "center": [
+            929,
+            392
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "green_supply",
+          "confidence": 0.7058,
+          "bbox": [
+            584,
+            253,
+            244,
+            240
+          ],
+          "center": [
+            706,
+            373
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "core_black",
+          "confidence": 0.619,
+          "bbox": [
+            958,
+            483,
+            169,
+            116
+          ],
+          "center": [
+            1042,
+            541
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "danger_cyan",
+          "confidence": 0.7694,
+          "bbox": [
+            546,
+            104,
+            227,
+            261
+          ],
+          "center": [
+            659,
+            234
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "injured_orange",
+          "confidence": 0.6742,
+          "bbox": [
+            1196,
+            201,
+            82,
+            392
+          ],
+          "center": [
+            1237,
+            397
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 72,
+          "class": "green_supply",
+          "confidence": 0.7073972766380457,
+          "bbox": [
+            584,
+            253,
+            244,
+            240
+          ],
+          "relative_xy_m": null,
+          "hits": 274,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 124,
+          "class": "danger_cyan",
+          "confidence": 0.7910789063379613,
+          "bbox": [
+            546,
+            104,
+            227,
+            261
+          ],
+          "relative_xy_m": null,
+          "hits": 53,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 131,
+          "class": "injured_orange",
+          "confidence": 0.7660433261126518,
+          "bbox": [
+            1196,
+            201,
+            82,
+            392
+          ],
+          "relative_xy_m": null,
+          "hits": 30,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 134,
+          "class": "core_black",
+          "confidence": 0.6165595408191904,
+          "bbox": [
+            958,
+            483,
+            169,
+            116
+          ],
+          "relative_xy_m": null,
+          "hits": 17,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 135,
+          "class": "green_supply",
+          "confidence": 0.7216553657946052,
+          "bbox": [
+            807,
+            262,
+            244,
+            261
+          ],
+          "relative_xy_m": null,
+          "hits": 16,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "requested_frame": 5101,
+      "source_line": 1888,
+      "timestamp_monotonic_ns": 317243080754,
+      "event": "frame",
+      "frame_sequence": 5102,
+      "timing_ms": {
+        "preprocess_ms": 4.3812609999918095,
+        "inference_ms": 14.041078999980527,
+        "postprocess_ms": 3.779135000002043,
+        "total_ms": 22.20147499997438,
+        "fetch": 0.0099169999998594,
+        "roi": 4.565178999996533,
+        "snapshot": 15.505291000010857,
+        "capture_to_publish": 108.38612100002365,
+        "previous_display": 48.20858600004385,
+        "previous_log_write": 0.6782099999895763
+      },
+      "detections": [
+        {
+          "class": "green_supply",
+          "confidence": 0.6274,
+          "bbox": [
+            300,
+            101,
+            292,
+            310
+          ],
+          "center": [
+            446,
+            256
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "core_black",
+          "confidence": 0.9284,
+          "bbox": [
+            475,
+            388,
+            107,
+            79
+          ],
+          "center": [
+            528,
+            427
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "danger_cyan",
+          "confidence": 0.9337,
+          "bbox": [
+            481,
+            34,
+            255,
+            316
+          ],
+          "center": [
+            608,
+            192
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 381,
+          "class": "danger_cyan",
+          "confidence": 0.933024808306006,
+          "bbox": [
+            481,
+            34,
+            255,
+            316
+          ],
+          "relative_xy_m": null,
+          "hits": 91,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 383,
+          "class": "green_supply",
+          "confidence": 0.7053174770302845,
+          "bbox": [
+            300,
+            101,
+            292,
+            310
+          ],
+          "relative_xy_m": null,
+          "hits": 88,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 385,
+          "class": "core_black",
+          "confidence": 0.9339082613248461,
+          "bbox": [
+            475,
+            388,
+            107,
+            79
+          ],
+          "relative_xy_m": null,
+          "hits": 87,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "requested_frame": 6241,
+      "source_line": 2272,
+      "timestamp_monotonic_ns": 368551022264,
+      "event": "frame",
+      "frame_sequence": 6241,
+      "timing_ms": {
+        "preprocess_ms": 4.579508999995596,
+        "inference_ms": 13.874236999981804,
+        "postprocess_ms": 6.397929999991447,
+        "total_ms": 24.851675999968847,
+        "fetch": 0.01824999998234489,
+        "roi": 5.518677999987176,
+        "snapshot": 22.470214000009037,
+        "capture_to_publish": 83.41704899999058,
+        "previous_display": 44.358758999976544,
+        "previous_log_write": 0.5814600000348946
+      },
+      "detections": [
+        {
+          "class": "green_supply",
+          "confidence": 0.55,
+          "bbox": [
+            685,
+            109,
+            234,
+            162
+          ],
+          "center": [
+            802,
+            190
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "danger_cyan",
+          "confidence": 0.944,
+          "bbox": [
+            670,
+            252,
+            265,
+            234
+          ],
+          "center": [
+            802,
+            369
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 457,
+          "class": "green_supply",
+          "confidence": 0.5777531047661619,
+          "bbox": [
+            685,
+            109,
+            234,
+            162
+          ],
+          "relative_xy_m": null,
+          "hits": 136,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 458,
+          "class": "danger_cyan",
+          "confidence": 0.9318053574800684,
+          "bbox": [
+            670,
+            252,
+            265,
+            234
+          ],
+          "relative_xy_m": null,
+          "hits": 141,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "requested_frame": 6293,
+      "source_line": 2289,
+      "timestamp_monotonic_ns": 370549644732,
+      "event": "frame",
+      "frame_sequence": 6292,
+      "timing_ms": {
+        "preprocess_ms": 5.398095000032299,
+        "inference_ms": 14.37148799999477,
+        "postprocess_ms": 3.2724649999522626,
+        "total_ms": 23.04204799997933,
+        "fetch": 0.010707999990700046,
+        "roi": 0.11116700000002311,
+        "snapshot": 4.688051000016458,
+        "capture_to_publish": 74.61798700001054,
+        "previous_display": 42.98071300001993,
+        "previous_log_write": 0.9871269999734977
+      },
+      "detections": [
+        {
+          "class": "danger_cyan",
+          "confidence": 0.9252,
+          "bbox": [
+            486,
+            164,
+            248,
+            291
+          ],
+          "center": [
+            610,
+            309
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 458,
+          "class": "danger_cyan",
+          "confidence": 0.9358930954406506,
+          "bbox": [
+            486,
+            164,
+            248,
+            291
+          ],
+          "relative_xy_m": null,
+          "hits": 192,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 461,
+          "class": "green_supply",
+          "confidence": 0.5629269731399429,
+          "bbox": [
+            441,
+            0,
+            157,
+            33
+          ],
+          "relative_xy_m": null,
+          "hits": 37,
+          "misses": 4,
+          "visible": false
+        }
+      ]
+    }
+  ],
+  "uart_transitions": [
+    {
+      "t_s": 98.008361893,
+      "source_line": 42886,
+      "task": 12704,
+      "action": 29473,
+      "opcode": 9,
+      "status": 1,
+      "mode": 20,
+      "pitch": 14000,
+      "raw": "a3b317c1081436b08c000000a6a6c3",
+      "context": "a3b31ec131a0732109010000ca78c3"
+    },
+    {
+      "t_s": 98.129474727,
+      "source_line": 43004,
+      "task": 12704,
+      "action": 29473,
+      "opcode": 9,
+      "status": 3,
+      "mode": 38,
+      "pitch": 14000,
+      "raw": "a3b317c3092636b09900000069c5c3",
+      "context": "a3b31ec331a073210903000072d8c3"
+    },
+    {
+      "t_s": 98.189488851,
+      "source_line": 43059,
+      "task": 12704,
+      "action": 29474,
+      "opcode": 18,
+      "status": 1,
+      "mode": 38,
+      "pitch": 14000,
+      "raw": "a3b317c40d2636b09f0000004e8ec3",
+      "context": "a3b31ec431a0732212010000b7ccc3"
+    },
+    {
+      "t_s": 98.489500259,
+      "source_line": 43318,
+      "task": 12704,
+      "action": 29474,
+      "opcode": 18,
+      "status": 3,
+      "mode": 37,
+      "pitch": 14000,
+      "raw": "a3b317c9412536b0ba0000002a77c3",
+      "context": "a3b31ec931a07322120300004e9cc3"
+    },
+    {
+      "t_s": 98.54879192,
+      "source_line": 43370,
+      "task": 12704,
+      "action": 29475,
+      "opcode": 16,
+      "status": 1,
+      "mode": 25,
+      "pitch": 14000,
+      "raw": "a3b317ca401936b0c00000001a50c3",
+      "context": "a3b31eca31a0732310010000c7d4c3"
+    },
+    {
+      "t_s": 100.529145177,
+      "source_line": 45129,
+      "task": 12704,
+      "action": 29475,
+      "opcode": 16,
+      "status": 3,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b317eb012336b07e000000f5d6c3",
+      "context": "a3b31eeb31a0732310030000f245c3"
+    },
+    {
+      "t_s": 100.598899874,
+      "source_line": 45182,
+      "task": 12704,
+      "action": 29476,
+      "opcode": 18,
+      "status": 1,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b317ec012336b084000000e33ec3",
+      "context": "a3b31eec31a0732412010000c1cdc3"
+    },
+    {
+      "t_s": 100.708649876,
+      "source_line": 45277,
+      "task": 12704,
+      "action": 29476,
+      "opcode": 18,
+      "status": 1,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b317ee011536b08f000000ae79c3",
+      "context": "a3b31eee31a0732412010000d8adc3"
+    },
+    {
+      "t_s": 100.82892406,
+      "source_line": 45400,
+      "task": 12704,
+      "action": 29476,
+      "opcode": 18,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b317f0411536b09a0000002fe5c3",
+      "context": "a3b31ef031a0732412030000f8cdc3"
+    },
+    {
+      "t_s": 100.950775715,
+      "source_line": 45505,
+      "task": 12704,
+      "action": 29477,
+      "opcode": 16,
+      "status": 1,
+      "mode": 25,
+      "pitch": 14000,
+      "raw": "a3b317f2401936b0a700000036e5c3",
+      "context": "a3b31ef231a07325100100007c15c3"
+    },
+    {
+      "t_s": 103.289494369,
+      "source_line": 47718,
+      "task": 12704,
+      "action": 29477,
+      "opcode": 16,
+      "status": 3,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b31719012336b07d000000e8f6c3",
+      "context": "a3b31e1931a07325100300006721c3"
+    },
+    {
+      "t_s": 103.348923813,
+      "source_line": 47774,
+      "task": 12704,
+      "action": 29478,
+      "opcode": 18,
+      "status": 1,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b3171a012336b083000000cdeec3",
+      "context": "a3b31e1a31a073261201000097a9c3"
+    },
+    {
+      "t_s": 103.469014619,
+      "source_line": 47889,
+      "task": 12704,
+      "action": 29478,
+      "opcode": 18,
+      "status": 1,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b3171c011536b08e000000b2e1c3",
+      "context": "a3b31e1c31a0732612010000bc09c3"
+    },
+    {
+      "t_s": 103.589700757,
+      "source_line": 47998,
+      "task": 12704,
+      "action": 29478,
+      "opcode": 18,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b3171e511536b099000000ab09c3",
+      "context": "a3b31e1e31a073261203000004a9c3"
+    },
+    {
+      "t_s": 103.708639854,
+      "source_line": 48089,
+      "task": 12704,
+      "action": 29479,
+      "opcode": 2,
+      "status": 1,
+      "mode": 8,
+      "pitch": 14000,
+      "raw": "a3b31720510836b0a6000000727dc3",
+      "context": "a3b31e2031a07327020100008408c3"
+    },
+    {
+      "t_s": 150.508218562,
+      "source_line": 90280,
+      "task": 12705,
+      "action": 29506,
+      "opcode": 18,
+      "status": 1,
+      "mode": 48,
+      "pitch": 14000,
+      "raw": "a3b3172c023036b081000000d123c3",
+      "context": "a3b31e2c31a17342120100008900c3"
+    },
+    {
+      "t_s": 151.048216811,
+      "source_line": 90781,
+      "task": 12705,
+      "action": 29506,
+      "opcode": 18,
+      "status": 3,
+      "mode": 48,
+      "pitch": 14000,
+      "raw": "a3b31735533036b0b9000000bf23c3",
+      "context": "a3b31e3531a17342120300008f50c3"
+    },
+    {
+      "t_s": 151.109334958,
+      "source_line": 90823,
+      "task": 12705,
+      "action": 29507,
+      "opcode": 4,
+      "status": 1,
+      "mode": 10,
+      "pitch": 12000,
+      "raw": "a3b31736560a2ee0bf00000032b3c3",
+      "context": "a3b31e3631a173430401000003e8c3"
+    },
+    {
+      "t_s": 316.82654202,
+      "source_line": 262838,
+      "task": 12712,
+      "action": 29609,
+      "opcode": 9,
+      "status": 1,
+      "mode": 20,
+      "pitch": 14000,
+      "raw": "a3b31700081436b0e5000000e6afc3",
+      "context": "a3b31e0031a873a909010000fe32c3"
+    },
+    {
+      "t_s": 316.946614757,
+      "source_line": 262957,
+      "task": 12712,
+      "action": 29609,
+      "opcode": 9,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b31702011536b0f20000002ad1c3",
+      "context": "a3b31e0231a873a9090300004692c3"
+    },
+    {
+      "t_s": 317.007265752,
+      "source_line": 263026,
+      "task": 12712,
+      "action": 29610,
+      "opcode": 18,
+      "status": 1,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b31703051536b0f90000002496c3",
+      "context": "a3b31e0331a873aa12010000a826c3"
+    },
+    {
+      "t_s": 317.186708771,
+      "source_line": 263211,
+      "task": 12712,
+      "action": 29610,
+      "opcode": 18,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b31706411536b00b0000002cbdc3",
+      "context": "a3b31e0631a873aa1203000036b6c3"
+    },
+    {
+      "t_s": 317.247701058,
+      "source_line": 263279,
+      "task": 12712,
+      "action": 29611,
+      "opcode": 16,
+      "status": 1,
+      "mode": 25,
+      "pitch": 14000,
+      "raw": "a3b31707401936b0110000002bf9c3",
+      "context": "a3b31e0731a873ab10010000a69ec3"
+    },
+    {
+      "t_s": 320.066635667,
+      "source_line": 266077,
+      "task": 12712,
+      "action": 29611,
+      "opcode": 16,
+      "status": 3,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b31736012336b0320000002613c3",
+      "context": "a3b31e3631a873ab100300005ecfc3"
+    },
+    {
+      "t_s": 320.126961993,
+      "source_line": 266141,
+      "task": 12712,
+      "action": 29612,
+      "opcode": 18,
+      "status": 1,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b31737012336b038000000285bc3",
+      "context": "a3b31e3731a873ac1201000046e7c3"
+    },
+    {
+      "t_s": 320.188251611,
+      "source_line": 266207,
+      "task": 12712,
+      "action": 29612,
+      "opcode": 18,
+      "status": 1,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b31738011536b03f0000003edcc3",
+      "context": "a3b31e3831a873ac120100000717c3"
+    },
+    {
+      "t_s": 320.367800414,
+      "source_line": 266387,
+      "task": 12712,
+      "action": 29612,
+      "opcode": 18,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b3173b511536b0530000003240c3",
+      "context": "a3b31e3b31a873ac12030000b227c3"
+    },
+    {
+      "t_s": 320.427260653,
+      "source_line": 266436,
+      "task": 12712,
+      "action": 29613,
+      "opcode": 2,
+      "status": 1,
+      "mode": 8,
+      "pitch": 14000,
+      "raw": "a3b3173c550836b059000000db5ac3",
+      "context": "a3b31e3c31a873ad020100000cd7c3"
+    },
+    {
+      "t_s": 368.007063591,
+      "source_line": 316464,
+      "task": 12718,
+      "action": 29636,
+      "opcode": 9,
+      "status": 1,
+      "mode": 20,
+      "pitch": 14000,
+      "raw": "a3b31755081436b0580000000190c3",
+      "context": "a3b31e5531ae73c409010000f6a8c3"
+    },
+    {
+      "t_s": 368.306318256,
+      "source_line": 316784,
+      "task": 12718,
+      "action": 29636,
+      "opcode": 9,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b3175a011536b07600000099e2c3",
+      "context": "a3b31e5a31ae73c4090300001698c3"
+    },
+    {
+      "t_s": 368.366388131,
+      "source_line": 316851,
+      "task": 12718,
+      "action": 29637,
+      "opcode": 18,
+      "status": 1,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b3175b051536b07e00000097e1c3",
+      "context": "a3b31e5b31ae73c51201000081ecc3"
+    },
+    {
+      "t_s": 368.546320379,
+      "source_line": 317038,
+      "task": 12718,
+      "action": 29637,
+      "opcode": 18,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b3175e411536b09100000099a6c3",
+      "context": "a3b31e5e31ae73c5120300001f7cc3"
+    },
+    {
+      "t_s": 368.607353715,
+      "source_line": 317105,
+      "task": 12718,
+      "action": 29638,
+      "opcode": 16,
+      "status": 1,
+      "mode": 25,
+      "pitch": 14000,
+      "raw": "a3b3175f401936b0970000009972c3",
+      "context": "a3b31e5f31ae73c610010000f694c3"
+    },
+    {
+      "t_s": 370.586398932,
+      "source_line": 319149,
+      "task": 12718,
+      "action": 29638,
+      "opcode": 16,
+      "status": 3,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b31780012336b0660000002844c3",
+      "context": "a3b31e8031ae73c6100300008b61c3"
+    },
+    {
+      "t_s": 370.655499908,
+      "source_line": 319225,
+      "task": 12718,
+      "action": 29639,
+      "opcode": 18,
+      "status": 1,
+      "mode": 35,
+      "pitch": 14000,
+      "raw": "a3b31781012336b06c000000260cc3",
+      "context": "a3b31e8131ae73c7120100001b49c3"
+    },
+    {
+      "t_s": 370.707376681,
+      "source_line": 319286,
+      "task": 12718,
+      "action": 29639,
+      "opcode": 18,
+      "status": 1,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b31782011536b073000000632bc3",
+      "context": "a3b31e8231ae73c7120100000fb9c3"
+    },
+    {
+      "t_s": 370.827375386,
+      "source_line": 319414,
+      "task": 12718,
+      "action": 29639,
+      "opcode": 18,
+      "status": 3,
+      "mode": 21,
+      "pitch": 14000,
+      "raw": "a3b31784411536b0800000007fffc3",
+      "context": "a3b31e8431ae73c71203000085d9c3"
+    },
+    {
+      "t_s": 370.886231216,
+      "source_line": 319491,
+      "task": 12718,
+      "action": 29640,
+      "opcode": 15,
+      "status": 1,
+      "mode": 24,
+      "pitch": 14000,
+      "raw": "a3b31785081836b0860000006a7dc3",
+      "context": "a3b31e8531ae73c80f0100007be4c3"
+    },
+    {
+      "t_s": 371.186295583,
+      "source_line": 319859,
+      "task": 12718,
+      "action": 29640,
+      "opcode": 15,
+      "status": 1,
+      "mode": 24,
+      "pitch": 12000,
+      "raw": "a3b3178a08182ee0a4000000e221c3",
+      "context": "a3b31e8a31ae73c80f0100003a14c3"
+    }
+  ]
+}
