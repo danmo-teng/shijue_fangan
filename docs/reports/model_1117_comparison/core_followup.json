@@ -1,0 +1,155 @@
+[
+  {
+    "video_frame_index": 76,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 77,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 78,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 79,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 80,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 81,
+    "1116": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.5825636386871338,
+        "bbox": [
+          1222,
+          62,
+          56,
+          74
+        ]
+      }
+    ],
+    "1117": []
+  },
+  {
+    "video_frame_index": 82,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 83,
+    "1116": [],
+    "1117": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.5687589645385742,
+        "bbox": [
+          1192,
+          64,
+          53,
+          61
+        ]
+      }
+    ]
+  },
+  {
+    "video_frame_index": 84,
+    "1116": [],
+    "1117": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.22562642395496368,
+        "bbox": [
+          1181,
+          65,
+          52,
+          58
+        ]
+      }
+    ]
+  },
+  {
+    "video_frame_index": 85,
+    "1116": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.4314956068992615,
+        "bbox": [
+          1181,
+          67,
+          54,
+          59
+        ]
+      }
+    ],
+    "1117": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.5900089740753174,
+        "bbox": [
+          1182,
+          69,
+          55,
+          56
+        ]
+      }
+    ]
+  },
+  {
+    "video_frame_index": 86,
+    "1116": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.2436305731534958,
+        "bbox": [
+          0,
+          6,
+          20,
+          91
+        ]
+      }
+    ],
+    "1117": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.25747808814048767,
+        "bbox": [
+          0,
+          3,
+          26,
+          91
+        ]
+      }
+    ]
+  },
+  {
+    "video_frame_index": 87,
+    "1116": [],
+    "1117": []
+  },
+  {
+    "video_frame_index": 88,
+    "1116": [
+      {
+        "class_name": "core_black",
+        "confidence": 0.5738464593887329,
+        "bbox": [
+          971,
+          248,
+          95,
+          110
+        ]
+      }
+    ],
+    "1117": []
+  }
+]

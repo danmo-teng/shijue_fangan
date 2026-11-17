@@ -1,0 +1,4806 @@
+{
+  "models": {
+    "1116": {
+      "path": "yolo26n/x5_output_640_1116/yolo26n_6cls_640_1116_bpu_bayese_640x640_nv12.bin",
+      "sha256": "7ae6267e269d2c9f8c2708b37ecf2696dfa184f364bfe0a0b454e8ee0d573859",
+      "shapes": {
+        "602": [
+          1,
+          40,
+          40,
+          4
+        ],
+        "616": [
+          1,
+          20,
+          20,
+          6
+        ],
+        "594": [
+          1,
+          40,
+          40,
+          6
+        ],
+        "624": [
+          1,
+          20,
+          20,
+          4
+        ],
+        "580": [
+          1,
+          80,
+          80,
+          4
+        ],
+        "output0": [
+          1,
+          80,
+          80,
+          6
+        ]
+      }
+    },
+    "1117": {
+      "path": "yolo26n/x5_output_640_1117/yolo26n_6cls_640_1117_bpu_bayese_640x640_nv12.bin",
+      "sha256": "84b696cef218d99847583faaf480b0beb1cb51235173332707d98af4e8394ca1",
+      "shapes": {
+        "602": [
+          1,
+          40,
+          40,
+          4
+        ],
+        "616": [
+          1,
+          20,
+          20,
+          6
+        ],
+        "594": [
+          1,
+          40,
+          40,
+          6
+        ],
+        "624": [
+          1,
+          20,
+          20,
+          4
+        ],
+        "580": [
+          1,
+          80,
+          80,
+          4
+        ],
+        "output0": [
+          1,
+          80,
+          80,
+          6
+        ]
+      }
+    }
+  },
+  "labels": [
+    "conmon",
+    "kernel",
+    "risk",
+    "wound",
+    "safe_blue",
+    "safe_red"
+  ],
+  "note": "MJPEG replay contains original overlays, 960x768 resized to1280x1024; not clean raw frames or independent annotated validation. No full-match FPS or ground recall claim.",
+  "threshold": 0.2,
+  "nms": 0.45,
+  "median_timing_ms": {
+    "1116": {
+      "preprocess_ms": 3.8650950000373996,
+      "inference_ms": 11.785666999912792,
+      "postprocess_ms": 2.9549490000135847,
+      "total_ms": 18.625294999765174
+    },
+    "1117": {
+      "preprocess_ms": 3.866929000196251,
+      "inference_ms": 11.784249999891472,
+      "postprocess_ms": 3.099285000189411,
+      "total_ms": 18.76921399980347
+    }
+  },
+  "results": [
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 38,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8000556230545044,
+            "bbox": [
+              340,
+              173,
+              263,
+              262
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.901208999854134,
+          "inference_ms": 14.894254999944678,
+          "postprocess_ms": 10.677021999981662,
+          "total_ms": 30.472485999780474
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6100708246231079,
+            "bbox": [
+              338,
+              175,
+              266,
+              260
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9287250001507346,
+          "inference_ms": 12.013931999717897,
+          "postprocess_ms": 2.565440000125818,
+          "total_ms": 18.50809699999445
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 40,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5003116726875305,
+            "bbox": [
+              335,
+              175,
+              274,
+              258
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.184855999938009,
+          "inference_ms": 12.205394000375236,
+          "postprocess_ms": 2.8816149997510365,
+          "total_ms": 19.27186500006428
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8364420533180237,
+            "bbox": [
+              340,
+              175,
+              264,
+              259
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.144022000218683,
+          "inference_ms": 12.317355000050156,
+          "postprocess_ms": 2.831280999998853,
+          "total_ms": 19.292658000267693
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 43,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.908546507358551,
+            "bbox": [
+              340,
+              173,
+              263,
+              261
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.009768999821972,
+          "inference_ms": 11.969388000125036,
+          "postprocess_ms": 2.49556400012807,
+          "total_ms": 18.47472100007508
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7743622064590454,
+            "bbox": [
+              336,
+              175,
+              272,
+              259
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.872391000186326,
+          "inference_ms": 11.924219999855268,
+          "postprocess_ms": 2.5107309998020355,
+          "total_ms": 18.30734199984363
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 45,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.755539059638977,
+            "bbox": [
+              338,
+              175,
+              269,
+              259
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.989643000295473,
+          "inference_ms": 12.050931999965542,
+          "postprocess_ms": 2.545273000123416,
+          "total_ms": 18.58584800038443
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7552194595336914,
+            "bbox": [
+              340,
+              174,
+              264,
+              261
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9583089996995113,
+          "inference_ms": 11.86967800003913,
+          "postprocess_ms": 2.4965630000224337,
+          "total_ms": 18.324549999761075
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 48,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8602690100669861,
+            "bbox": [
+              340,
+              173,
+              264,
+              261
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9702680001028057,
+          "inference_ms": 11.869802000092022,
+          "postprocess_ms": 2.5054799998542876,
+          "total_ms": 18.345550000049116
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6174598336219788,
+            "bbox": [
+              336,
+              175,
+              269,
+              259
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9000579999992624,
+          "inference_ms": 11.846634999983507,
+          "postprocess_ms": 2.5055639998754486,
+          "total_ms": 18.25225699985822
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 51,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.592135488986969,
+            "bbox": [
+              336,
+              175,
+              273,
+              260
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9731010001560207,
+          "inference_ms": 11.894843999925797,
+          "postprocess_ms": 2.5215229998138966,
+          "total_ms": 18.389467999895714
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.907219409942627,
+            "bbox": [
+              340,
+              173,
+              264,
+              262
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.918432999853394,
+          "inference_ms": 11.854760000005626,
+          "postprocess_ms": 2.5293979997513816,
+          "total_ms": 18.302590999610402
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 53,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9440526962280273,
+            "bbox": [
+              340,
+              173,
+              263,
+              261
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.948851000131981,
+          "inference_ms": 11.880302000008669,
+          "postprocess_ms": 2.5034810000761354,
+          "total_ms": 18.332634000216785
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6038245558738708,
+            "bbox": [
+              338,
+              175,
+              271,
+              259
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9093079999474867,
+          "inference_ms": 11.924136999823531,
+          "postprocess_ms": 2.4971470002128626,
+          "total_ms": 18.33059199998388
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 56,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5736464262008667,
+            "bbox": [
+              338,
+              178,
+              269,
+              256
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.978308999649016,
+          "inference_ms": 11.970971000209829,
+          "postprocess_ms": 2.4966890000541753,
+          "total_ms": 18.44596899991302
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9038789868354797,
+            "bbox": [
+              340,
+              174,
+              263,
+              261
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.93347499993979,
+          "inference_ms": 11.988638000275387,
+          "postprocess_ms": 2.6382749997537758,
+          "total_ms": 18.560387999968952
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 59,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6937746405601501,
+            "bbox": [
+              339,
+              173,
+              265,
+              262
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.006435000064812,
+          "inference_ms": 11.884592999649612,
+          "postprocess_ms": 2.499314000033337,
+          "total_ms": 18.39034199974776
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7256220579147339,
+            "bbox": [
+              335,
+              177,
+              274,
+              256
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.857722999782709,
+          "inference_ms": 11.810509000042657,
+          "postprocess_ms": 2.499230000012176,
+          "total_ms": 18.167461999837542
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 61,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.599042534828186,
+            "bbox": [
+              336,
+              175,
+              273,
+              258
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9934760002324765,
+          "inference_ms": 12.026805999994394,
+          "postprocess_ms": 2.641899999616726,
+          "total_ms": 18.662181999843597
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9076296091079712,
+            "bbox": [
+              340,
+              174,
+              263,
+              261
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.84738999991896,
+          "inference_ms": 11.841133999951126,
+          "postprocess_ms": 2.487146000021312,
+          "total_ms": 18.175669999891397
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 64,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9226644039154053,
+            "bbox": [
+              340,
+              176,
+              264,
+              259
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.0132690000973525,
+          "inference_ms": 12.046223000197642,
+          "postprocess_ms": 2.586814999631315,
+          "total_ms": 18.64630699992631
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7632837891578674,
+            "bbox": [
+              338,
+              175,
+              270,
+              258
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.044686000270303,
+          "inference_ms": 12.064972999723977,
+          "postprocess_ms": 2.5497730002825847,
+          "total_ms": 18.659432000276865
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 67,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5721209645271301,
+            "bbox": [
+              338,
+              175,
+              271,
+              258
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.07268600019961,
+          "inference_ms": 12.239144999966811,
+          "postprocess_ms": 2.9045729997960734,
+          "total_ms": 19.216403999962495
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9093546867370605,
+            "bbox": [
+              340,
+              176,
+              263,
+              258
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.041101999973762,
+          "inference_ms": 12.239395000051445,
+          "postprocess_ms": 2.5517730000501615,
+          "total_ms": 18.83227000007537
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 88,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7845959663391113,
+            "bbox": [
+              365,
+              198,
+              273,
+              271
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.980225999839604,
+          "inference_ms": 11.853384999994887,
+          "postprocess_ms": 2.5001049998536473,
+          "total_ms": 18.33371599968814
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8506006002426147,
+            "bbox": [
+              365,
+              203,
+              278,
+              263
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8603900002271985,
+          "inference_ms": 11.98676300009538,
+          "postprocess_ms": 2.4915209996834164,
+          "total_ms": 18.338674000005994
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 89,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8836374282836914,
+            "bbox": [
+              363,
+              201,
+              280,
+              269
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9748090002831304,
+          "inference_ms": 11.884884999744827,
+          "postprocess_ms": 2.502188000107708,
+          "total_ms": 18.361882000135665
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.749763548374176,
+            "bbox": [
+              365,
+              198,
+              275,
+              271
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.856639000332507,
+          "inference_ms": 11.955720000059955,
+          "postprocess_ms": 2.5005629995575873,
+          "total_ms": 18.31292199995005
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 90,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7827335000038147,
+            "bbox": [
+              365,
+              199,
+              275,
+              270
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.968767000060325,
+          "inference_ms": 11.934136000036233,
+          "postprocess_ms": 2.4941050000961695,
+          "total_ms": 18.397008000192727
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8538975119590759,
+            "bbox": [
+              365,
+              203,
+              277,
+              264
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.843848000087746,
+          "inference_ms": 11.748463999992964,
+          "postprocess_ms": 2.548522999859415,
+          "total_ms": 18.140834999940125
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 91,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8098151683807373,
+            "bbox": [
+              365,
+              203,
+              276,
+              266
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9458910000575997,
+          "inference_ms": 11.888635000104841,
+          "postprocess_ms": 2.501897000001918,
+          "total_ms": 18.33642300016436
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8420407772064209,
+            "bbox": [
+              365,
+              198,
+              271,
+              271
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.867681999963679,
+          "inference_ms": 11.774798000260489,
+          "postprocess_ms": 2.564272999734385,
+          "total_ms": 18.206752999958553
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 92,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8767018914222717,
+            "bbox": [
+              365,
+              200,
+              275,
+              267
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9769349996277015,
+          "inference_ms": 11.836549000236118,
+          "postprocess_ms": 2.547564999986207,
+          "total_ms": 18.361048999850027
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8686344623565674,
+            "bbox": [
+              363,
+              203,
+              280,
+              264
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.844931000003271,
+          "inference_ms": 11.834132999865687,
+          "postprocess_ms": 2.7864039998348744,
+          "total_ms": 18.465467999703833
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 93,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8815703988075256,
+            "bbox": [
+              365,
+              203,
+              278,
+              264
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.950391999751446,
+          "inference_ms": 11.871134000102757,
+          "postprocess_ms": 2.568481999787764,
+          "total_ms": 18.390007999641966
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8524633049964905,
+            "bbox": [
+              365,
+              198,
+              275,
+              271
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.874681000070268,
+          "inference_ms": 11.939886000163824,
+          "postprocess_ms": 2.4885210000320512,
+          "total_ms": 18.303088000266143
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 94,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8397544622421265,
+            "bbox": [
+              365,
+              198,
+              275,
+              271
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9796839996597555,
+          "inference_ms": 12.011054000140575,
+          "postprocess_ms": 2.4831470000208355,
+          "total_ms": 18.473884999821166
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7573766112327576,
+            "bbox": [
+              365,
+              202,
+              278,
+              265
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9201409999805037,
+          "inference_ms": 11.770632000207115,
+          "postprocess_ms": 2.496979999705218,
+          "total_ms": 18.187752999892837
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 95,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9143323302268982,
+            "bbox": [
+              363,
+              201,
+              280,
+              269
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.008267999779491,
+          "inference_ms": 11.871467000219127,
+          "postprocess_ms": 2.4966880000647507,
+          "total_ms": 18.37642300006337
+        },
+        "left_green_found": true
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8069924116134644,
+            "bbox": [
+              365,
+              198,
+              275,
+              270
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.83776399985436,
+          "inference_ms": 11.729005000233883,
+          "postprocess_ms": 2.495478999662737,
+          "total_ms": 18.06224799975098
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "left_green",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261116_155030_competition_wheel",
+      "clip": 8,
+      "video_frame_index": 96,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7937340140342712,
+            "bbox": [
+              365,
+              198,
+              274,
+              272
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.032143000131327,
+          "inference_ms": 11.868259000038961,
+          "postprocess_ms": 2.500062999843067,
+          "total_ms": 18.400465000013355
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8673486709594727,
+            "bbox": [
+              365,
+              203,
+              277,
+              267
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.87372300019706,
+          "inference_ms": 11.79642299985062,
+          "postprocess_ms": 2.500022000276658,
+          "total_ms": 18.170168000324338
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 0,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5699831247329712,
+            "bbox": [
+              324,
+              495,
+              287,
+              245
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9166358113288879,
+            "bbox": [
+              990,
+              556,
+              288,
+              282
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.7905980348587036,
+            "bbox": [
+              654,
+              2,
+              624,
+              93
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.971058999923116,
+          "inference_ms": 12.019469999813737,
+          "postprocess_ms": 3.355459999966115,
+          "total_ms": 19.345988999702968
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5326056480407715,
+            "bbox": [
+              327,
+              493,
+              273,
+              245
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.942723274230957,
+            "bbox": [
+              987,
+              552,
+              285,
+              286
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8778724074363708,
+            "bbox": [
+              662,
+              4,
+              616,
+              85
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8684729997839895,
+          "inference_ms": 11.784755999997287,
+          "postprocess_ms": 3.081619000113278,
+          "total_ms": 18.734847999894555
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 12,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.43086937069892883,
+            "bbox": [
+              328,
+              493,
+              270,
+              247
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9557705521583557,
+            "bbox": [
+              844,
+              408,
+              272,
+              257
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.3883480429649353,
+            "bbox": [
+              370,
+              0,
+              797,
+              42
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9548079998894536,
+          "inference_ms": 12.297394000142958,
+          "postprocess_ms": 3.7054689996693924,
+          "total_ms": 19.957670999701804
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5422907471656799,
+            "bbox": [
+              324,
+              494,
+              281,
+              249
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.92975914478302,
+            "bbox": [
+              833,
+              411,
+              295,
+              258
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.3351325988769531,
+            "bbox": [
+              351,
+              0,
+              837,
+              54
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 5.093503999887616,
+          "inference_ms": 12.940244000219536,
+          "postprocess_ms": 3.0828280000605446,
+          "total_ms": 21.116576000167697
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 25,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.4915847182273865,
+            "bbox": [
+              350,
+              513,
+              282,
+              252
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9556019902229309,
+            "bbox": [
+              978,
+              540,
+              296,
+              276
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8665649890899658,
+            "bbox": [
+              300,
+              0,
+              882,
+              105
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.070312000294507,
+          "inference_ms": 12.01513599971804,
+          "postprocess_ms": 3.5104220000903297,
+          "total_ms": 19.595870000102877
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.960940957069397,
+            "bbox": [
+              980,
+              536,
+              292,
+              278
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9007439613342285,
+            "bbox": [
+              310,
+              3,
+              864,
+              100
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.965100000186794,
+          "inference_ms": 11.805797999841161,
+          "postprocess_ms": 2.9302819998520135,
+          "total_ms": 18.70117999987997
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 38,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8020010590553284,
+            "bbox": [
+              478,
+              502,
+              260,
+              249
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9083324074745178,
+            "bbox": [
+              1110,
+              742,
+              168,
+              178
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9534720778465271,
+            "bbox": [
+              420,
+              2,
+              848,
+              122
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.184688999885111,
+          "inference_ms": 11.901591999958328,
+          "postprocess_ms": 3.225373000077525,
+          "total_ms": 19.311653999920964
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6115527749061584,
+            "bbox": [
+              480,
+              507,
+              261,
+              246
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.5692757964134216,
+            "bbox": [
+              1109,
+              746,
+              169,
+              171
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.960133969783783,
+            "bbox": [
+              397,
+              0,
+              881,
+              124
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.868014000090625,
+          "inference_ms": 11.855881999963458,
+          "postprocess_ms": 3.0921200000193494,
+          "total_ms": 18.816016000073432
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 50,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9519956707954407,
+            "bbox": [
+              666,
+              219,
+              204,
+              196
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.009850999864284,
+          "inference_ms": 11.966677000145864,
+          "postprocess_ms": 2.834737999819481,
+          "total_ms": 18.81126599982963
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.4194607734680176,
+            "bbox": [
+              666,
+              216,
+              200,
+              199
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8467639997179504,
+          "inference_ms": 11.944926000069245,
+          "postprocess_ms": 2.493687999958638,
+          "total_ms": 18.285377999745833
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 63,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9574853777885437,
+            "bbox": [
+              0,
+              98,
+              168,
+              150
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.964141999858839,
+          "inference_ms": 12.037136999879294,
+          "postprocess_ms": 2.804111999921588,
+          "total_ms": 18.80539099965972
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9435937404632568,
+            "bbox": [
+              0,
+              100,
+              173,
+              148
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8659309998365643,
+          "inference_ms": 11.799964000147156,
+          "postprocess_ms": 2.498895999906381,
+          "total_ms": 18.1647909998901
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 76,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9396571516990662,
+            "bbox": [
+              1,
+              70,
+              170,
+              143
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9719750002404908,
+          "inference_ms": 12.091637999674276,
+          "postprocess_ms": 2.793695000036678,
+          "total_ms": 18.857307999951445
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9638787508010864,
+            "bbox": [
+              4,
+              71,
+              164,
+              141
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.834013999949093,
+          "inference_ms": 11.796255999797722,
+          "postprocess_ms": 2.545397000176308,
+          "total_ms": 18.175666999923124
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 89,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9048320055007935,
+            "bbox": [
+              440,
+              56,
+              132,
+              136
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.0281020001202705,
+          "inference_ms": 11.97284399995624,
+          "postprocess_ms": 2.7761110000028566,
+          "total_ms": 18.777057000079367
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9030144810676575,
+            "bbox": [
+              439,
+              58,
+              136,
+              131
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.849347000141279,
+          "inference_ms": 11.864425000112533,
+          "postprocess_ms": 2.5224380001418467,
+          "total_ms": 18.23621000039566
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 43,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9613497257232666,
+            "bbox": [
+              495,
+              9,
+              89,
+              94
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9514208436012268,
+            "bbox": [
+              348,
+              0,
+              930,
+              188
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.039143000227341,
+          "inference_ms": 11.98259299962956,
+          "postprocess_ms": 3.323792000173853,
+          "total_ms": 19.345528000030754
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.959464430809021,
+            "bbox": [
+              497,
+              9,
+              85,
+              94
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.941209614276886,
+            "bbox": [
+              366,
+              0,
+              906,
+              178
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8832640002510743,
+          "inference_ms": 11.794629999712924,
+          "postprocess_ms": 2.9551580000770628,
+          "total_ms": 18.63305200004106
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 44,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.918813943862915,
+            "bbox": [
+              483,
+              6,
+              90,
+              74
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9464224576950073,
+            "bbox": [
+              385,
+              1,
+              883,
+              162
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9919340001688397,
+          "inference_ms": 12.126263000027393,
+          "postprocess_ms": 3.3183340001414763,
+          "total_ms": 19.43653100033771
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.2979598641395569,
+            "bbox": [
+              487,
+              5,
+              85,
+              76
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9630551338195801,
+            "bbox": [
+              366,
+              2,
+              907,
+              166
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.839764000076684,
+          "inference_ms": 11.810587999661948,
+          "postprocess_ms": 3.0062840000937285,
+          "total_ms": 18.65663599983236
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 1,
+      "video_frame_index": 45,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5390236377716064,
+            "bbox": [
+              482,
+              4,
+              74,
+              50
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9655976295471191,
+            "bbox": [
+              343,
+              0,
+              895,
+              139
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9978089998840005,
+          "inference_ms": 11.984967999978835,
+          "postprocess_ms": 3.3081250003306195,
+          "total_ms": 19.290902000193455
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6658825278282166,
+            "bbox": [
+              481,
+              8,
+              75,
+              48
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.3070613145828247,
+            "bbox": [
+              1211,
+              644,
+              67,
+              302
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9643041491508484,
+            "bbox": [
+              365,
+              2,
+              869,
+              128
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8420959999712068,
+          "inference_ms": 11.92792499978168,
+          "postprocess_ms": 3.378752000116947,
+          "total_ms": 19.148772999869834
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 0,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.4847467839717865,
+            "bbox": [
+              326,
+              493,
+              274,
+              245
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.8972082138061523,
+            "bbox": [
+              958,
+              516,
+              307,
+              279
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.957350000291626,
+          "inference_ms": 11.862130999816145,
+          "postprocess_ms": 2.710151999963273,
+          "total_ms": 18.529633000071044
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5140230655670166,
+            "bbox": [
+              319,
+              495,
+              282,
+              248
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9121297001838684,
+            "bbox": [
+              957,
+              521,
+              314,
+              276
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.851222000321286,
+          "inference_ms": 11.775422000027902,
+          "postprocess_ms": 2.66310799997882,
+          "total_ms": 18.289752000328008
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 12,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6835502982139587,
+            "bbox": [
+              715,
+              6,
+              95,
+              50
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.515268862247467,
+            "bbox": [
+              319,
+              498,
+              281,
+              249
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.9281446933746338,
+            "bbox": [
+              577,
+              463,
+              112,
+              121
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9325472712516785,
+            "bbox": [
+              30,
+              361,
+              286,
+              268
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9392942786216736,
+            "bbox": [
+              556,
+              0,
+              722,
+              124
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.991433999999572,
+          "inference_ms": 12.157013999967603,
+          "postprocess_ms": 4.03843499998402,
+          "total_ms": 20.186882999951195
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7886762022972107,
+            "bbox": [
+              715,
+              9,
+              106,
+              49
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5432243943214417,
+            "bbox": [
+              326,
+              499,
+              266,
+              245
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.8638174533843994,
+            "bbox": [
+              568,
+              452,
+              123,
+              132
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9567247033119202,
+            "bbox": [
+              30,
+              355,
+              283,
+              277
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8978502750396729,
+            "bbox": [
+              575,
+              2,
+              700,
+              120
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8796809999439574,
+          "inference_ms": 11.791128999902867,
+          "postprocess_ms": 3.5743820003517612,
+          "total_ms": 19.245192000198585
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 25,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.4716506600379944,
+            "bbox": [
+              358,
+              209,
+              271,
+              264
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.44176051020622253,
+            "bbox": [
+              1,
+              365,
+              191,
+              152
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9925169999150967,
+          "inference_ms": 12.051762000282906,
+          "postprocess_ms": 2.785069999845291,
+          "total_ms": 18.829349000043294
+        },
+        "left_green_found": true
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7155816555023193,
+            "bbox": [
+              355,
+              211,
+              284,
+              263
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.6133155226707458,
+            "bbox": [
+              0,
+              359,
+              197,
+              161
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.841845999886573,
+          "inference_ms": 11.931426000046486,
+          "postprocess_ms": 2.8674879999925906,
+          "total_ms": 18.64075999992565
+        },
+        "left_green_found": true
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 37,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9289330244064331,
+            "bbox": [
+              546,
+              6,
+              102,
+              78
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8588051795959473,
+            "bbox": [
+              440,
+              496,
+              268,
+              258
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9448988437652588,
+            "bbox": [
+              377,
+              2,
+              900,
+              153
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.978642000220134,
+          "inference_ms": 12.056595000103698,
+          "postprocess_ms": 3.3049999997274426,
+          "total_ms": 19.340237000051275
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9228849411010742,
+            "bbox": [
+              545,
+              6,
+              104,
+              79
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8867526054382324,
+            "bbox": [
+              441,
+              495,
+              260,
+              258
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9635195136070251,
+            "bbox": [
+              392,
+              4,
+              880,
+              149
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.872221999699832,
+          "inference_ms": 15.267133000179456,
+          "postprocess_ms": 3.4050859999297245,
+          "total_ms": 22.544440999809012
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 50,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9727066159248352,
+            "bbox": [
+              724,
+              186,
+              189,
+              185
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.006351000043651,
+          "inference_ms": 12.024052000015217,
+          "postprocess_ms": 2.7081510002062714,
+          "total_ms": 18.73855400026514
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9656184911727905,
+            "bbox": [
+              729,
+              190,
+              186,
+              179
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8403459998335165,
+          "inference_ms": 11.86988100016606,
+          "postprocess_ms": 2.49127100005353,
+          "total_ms": 18.201498000053107
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 62,
+      "1117": {
+        "detections": [],
+        "timing_ms": {
+          "preprocess_ms": 4.008933000022807,
+          "inference_ms": 11.976383999808604,
+          "postprocess_ms": 1.6903760001696355,
+          "total_ms": 17.675693000001047
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [],
+        "timing_ms": {
+          "preprocess_ms": 3.9013900000099966,
+          "inference_ms": 11.775420000049053,
+          "postprocess_ms": 1.4834540002084395,
+          "total_ms": 17.16026400026749
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 75,
+      "1116": {
+        "detections": [],
+        "timing_ms": {
+          "preprocess_ms": 4.0775610000309825,
+          "inference_ms": 12.060386000030121,
+          "postprocess_ms": 1.778543999989779,
+          "total_ms": 17.916491000050883
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8049611449241638,
+            "bbox": [
+              860,
+              0,
+              76,
+              18
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.8272147178649902,
+            "bbox": [
+              960,
+              0,
+              77,
+              51
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9176400000542344,
+          "inference_ms": 11.81304600004296,
+          "postprocess_ms": 2.6882339998337557,
+          "total_ms": 18.41891999993095
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 88,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7041031718254089,
+            "bbox": [
+              1152,
+              279,
+              72,
+              111
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6094774603843689,
+            "bbox": [
+              1008,
+              251,
+              146,
+              179
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9730045795440674,
+            "bbox": [
+              771,
+              127,
+              141,
+              149
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.35895949602127075,
+            "bbox": [
+              1151,
+              376,
+              127,
+              213
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.23665854334831238,
+            "bbox": [
+              635,
+              84,
+              142,
+              164
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.005933999906119,
+          "inference_ms": 12.097177999748965,
+          "postprocess_ms": 3.337043000101403,
+          "total_ms": 19.440154999756487
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5471590161323547,
+            "bbox": [
+              998,
+              255,
+              153,
+              175
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5363401174545288,
+            "bbox": [
+              1150,
+              265,
+              72,
+              135
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.5738464593887329,
+            "bbox": [
+              971,
+              248,
+              95,
+              110
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.942723274230957,
+            "bbox": [
+              773,
+              126,
+              137,
+              149
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.5519410967826843,
+            "bbox": [
+              636,
+              83,
+              139,
+              165
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.4484352767467499,
+            "bbox": [
+              1152,
+              412,
+              123,
+              172
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8984729999356205,
+          "inference_ms": 11.770877999879303,
+          "postprocess_ms": 3.439128000081837,
+          "total_ms": 19.10847899989676
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 6,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.938391923904419,
+            "bbox": [
+              1084,
+              30,
+              105,
+              90
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.4734760820865631,
+            "bbox": [
+              323,
+              500,
+              275,
+              245
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.9503023624420166,
+            "bbox": [
+              771,
+              538,
+              159,
+              152
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9022229909896851,
+            "bbox": [
+              417,
+              322,
+              216,
+              155
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8360430002212524,
+            "bbox": [
+              918,
+              6,
+              360,
+              177
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.962058000070101,
+          "inference_ms": 11.985633999756828,
+          "postprocess_ms": 3.623299000082625,
+          "total_ms": 19.570990999909554
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.938669741153717,
+            "bbox": [
+              1082,
+              28,
+              109,
+              96
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5218055844306946,
+            "bbox": [
+              322,
+              500,
+              283,
+              249
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.9070066809654236,
+            "bbox": [
+              768,
+              543,
+              165,
+              148
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9351550340652466,
+            "bbox": [
+              413,
+              319,
+              227,
+              160
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9398190975189209,
+            "bbox": [
+              926,
+              7,
+              352,
+              174
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8653469996461354,
+          "inference_ms": 11.81342100016991,
+          "postprocess_ms": 3.6135489999651327,
+          "total_ms": 19.29231699978118
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 23,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9103443026542664,
+            "bbox": [
+              334,
+              508,
+              284,
+              247
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5819748640060425,
+            "bbox": [
+              481,
+              6,
+              85,
+              52
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.8829483389854431,
+            "bbox": [
+              45,
+              500,
+              185,
+              150
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9289718270301819,
+            "bbox": [
+              311,
+              0,
+              966,
+              122
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.040767999867967,
+          "inference_ms": 11.88313200009361,
+          "postprocess_ms": 3.452169999945909,
+          "total_ms": 19.376069999907486
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7944679856300354,
+            "bbox": [
+              480,
+              7,
+              88,
+              52
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.8173744082450867,
+            "bbox": [
+              48,
+              503,
+              180,
+              144
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9363507628440857,
+            "bbox": [
+              343,
+              3,
+              925,
+              116
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9127649997681146,
+          "inference_ms": 11.781087000144908,
+          "postprocess_ms": 3.3999190000031376,
+          "total_ms": 19.09377099991616
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 68,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.2744726240634918,
+            "bbox": [
+              1019,
+              17,
+              87,
+              51
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.951391000100557,
+          "inference_ms": 11.859171999731188,
+          "postprocess_ms": 2.5089380001190875,
+          "total_ms": 18.319500999950833
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.4502425193786621,
+            "bbox": [
+              1021,
+              16,
+              71,
+              49
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.892847000315669,
+          "inference_ms": 11.790669999754755,
+          "postprocess_ms": 2.5261880000471137,
+          "total_ms": 18.209705000117538
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 2,
+      "video_frame_index": 88,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7041031718254089,
+            "bbox": [
+              1152,
+              279,
+              72,
+              111
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6094774603843689,
+            "bbox": [
+              1008,
+              251,
+              146,
+              179
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9730045795440674,
+            "bbox": [
+              771,
+              127,
+              141,
+              149
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.35895949602127075,
+            "bbox": [
+              1151,
+              376,
+              127,
+              213
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.23665854334831238,
+            "bbox": [
+              635,
+              84,
+              142,
+              164
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.959391000080359,
+          "inference_ms": 11.892005999925459,
+          "postprocess_ms": 3.2070390002445492,
+          "total_ms": 19.058436000250367
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5471590161323547,
+            "bbox": [
+              998,
+              255,
+              153,
+              175
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5363401174545288,
+            "bbox": [
+              1150,
+              265,
+              72,
+              135
+            ]
+          },
+          {
+            "class_name": "core_black",
+            "confidence": 0.5738464593887329,
+            "bbox": [
+              971,
+              248,
+              95,
+              110
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.942723274230957,
+            "bbox": [
+              773,
+              126,
+              137,
+              149
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.5519410967826843,
+            "bbox": [
+              636,
+              83,
+              139,
+              165
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.4484352767467499,
+            "bbox": [
+              1152,
+              412,
+              123,
+              172
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8848059998599638,
+          "inference_ms": 11.788253000304394,
+          "postprocess_ms": 3.3396669996363926,
+          "total_ms": 19.01272599980075
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 0,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.27006620168685913,
+            "bbox": [
+              209,
+              6,
+              98,
+              36
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9607800245285034,
+            "bbox": [
+              1080,
+              471,
+              197,
+              300
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9002912640571594,
+            "bbox": [
+              513,
+              397,
+              429,
+              342
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9415898323059082,
+            "bbox": [
+              45,
+              3,
+              975,
+              105
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.120478000004368,
+          "inference_ms": 11.942882000312238,
+          "postprocess_ms": 3.5151299998688046,
+          "total_ms": 19.57849000018541
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9373688101768494,
+            "bbox": [
+              1069,
+              473,
+              209,
+              297
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9654653668403625,
+            "bbox": [
+              517,
+              398,
+              428,
+              346
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9635046720504761,
+            "bbox": [
+              53,
+              0,
+              979,
+              119
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8618459998360777,
+          "inference_ms": 11.781379000240122,
+          "postprocess_ms": 3.084451999711746,
+          "total_ms": 18.727676999787946
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 12,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9272972345352173,
+            "bbox": [
+              1015,
+              515,
+              263,
+              308
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9728178381919861,
+            "bbox": [
+              517,
+              404,
+              426,
+              340
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8492622971534729,
+            "bbox": [
+              114,
+              1,
+              978,
+              133
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9478069998040155,
+          "inference_ms": 11.935799000184488,
+          "postprocess_ms": 3.083868999965489,
+          "total_ms": 18.967474999953993
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.2981126308441162,
+            "bbox": [
+              264,
+              9,
+              84,
+              30
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9531059861183167,
+            "bbox": [
+              1018,
+              511,
+              256,
+              307
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9207237362861633,
+            "bbox": [
+              510,
+              410,
+              431,
+              334
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9507295489311218,
+            "bbox": [
+              99,
+              2,
+              981,
+              119
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.845345999707206,
+          "inference_ms": 11.785878000409866,
+          "postprocess_ms": 3.5364219997973123,
+          "total_ms": 19.167645999914384
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 24,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.910213828086853,
+            "bbox": [
+              894,
+              353,
+              239,
+              242
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.5988156795501709,
+            "bbox": [
+              851,
+              410,
+              105,
+              204
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9473676681518555,
+            "bbox": [
+              19,
+              2,
+              891,
+              99
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.014225999981136,
+          "inference_ms": 11.967006999839214,
+          "postprocess_ms": 3.105578000031528,
+          "total_ms": 19.086810999851878
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9110988974571228,
+            "bbox": [
+              893,
+              354,
+              236,
+              245
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.5003198385238647,
+            "bbox": [
+              850,
+              407,
+              106,
+              206
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8938111662864685,
+            "bbox": [
+              13,
+              2,
+              897,
+              95
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8528050004060788,
+          "inference_ms": 11.792503999913606,
+          "postprocess_ms": 3.0106579997664085,
+          "total_ms": 18.655967000086093
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 36,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.763484537601471,
+            "bbox": [
+              189,
+              268,
+              251,
+              226
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9485720992088318,
+            "bbox": [
+              517,
+              411,
+              426,
+              344
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.953890000047977,
+          "inference_ms": 11.884256000030291,
+          "postprocess_ms": 2.964699000131077,
+          "total_ms": 18.802845000209345
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9403702020645142,
+            "bbox": [
+              190,
+              266,
+              254,
+              229
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.955622136592865,
+            "bbox": [
+              513,
+              417,
+              428,
+              338
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.2610093653202057,
+            "bbox": [
+              0,
+              4,
+              197,
+              186
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8652219996038184,
+          "inference_ms": 11.763294000047608,
+          "postprocess_ms": 3.1518290002168214,
+          "total_ms": 18.780344999868248
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 49,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9473837018013,
+            "bbox": [
+              22,
+              312,
+              251,
+              237
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9757660001669137,
+          "inference_ms": 11.87204699999711,
+          "postprocess_ms": 2.5073960000554507,
+          "total_ms": 18.355209000219475
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9386336207389832,
+            "bbox": [
+              23,
+              316,
+              259,
+              237
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.48467692732810974,
+            "bbox": [
+              525,
+              0,
+              73,
+              18
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.863554999952612,
+          "inference_ms": 11.963339999965683,
+          "postprocess_ms": 3.039491999970778,
+          "total_ms": 18.866386999889073
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 61,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9374439120292664,
+            "bbox": [
+              608,
+              540,
+              283,
+              250
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.7351511120796204,
+            "bbox": [
+              669,
+              13,
+              113,
+              92
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.8294214606285095,
+            "bbox": [
+              7,
+              6,
+              256,
+              240
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.002057999969111,
+          "inference_ms": 11.855587000354717,
+          "postprocess_ms": 3.00399199977619,
+          "total_ms": 18.861637000100018
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9522059559822083,
+            "bbox": [
+              605,
+              534,
+              291,
+              254
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.8937397003173828,
+            "bbox": [
+              670,
+              12,
+              110,
+              96
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.6934753656387329,
+            "bbox": [
+              0,
+              5,
+              266,
+              240
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.85222100021565,
+          "inference_ms": 11.784210999849165,
+          "postprocess_ms": 3.0026169997654506,
+          "total_ms": 18.639048999830266
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 73,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.8086191415786743,
+            "bbox": [
+              648,
+              408,
+              238,
+              153
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.20965071022510529,
+            "bbox": [
+              601,
+              542,
+              277,
+              238
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9917660001265176,
+          "inference_ms": 11.992340999768203,
+          "postprocess_ms": 2.7931530003115768,
+          "total_ms": 18.777260000206297
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9144597053527832,
+            "bbox": [
+              601,
+              541,
+              284,
+              244
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.30520811676979065,
+            "bbox": [
+              642,
+              409,
+              241,
+              147
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.951682000206347,
+          "inference_ms": 11.798795000231621,
+          "postprocess_ms": 2.5855649996628927,
+          "total_ms": 18.33604200010086
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 86,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9366893768310547,
+            "bbox": [
+              1,
+              57,
+              105,
+              185
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.978066086769104,
+            "bbox": [
+              581,
+              117,
+              258,
+              197
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.978599000220129,
+          "inference_ms": 11.874129999796423,
+          "postprocess_ms": 2.703483999994205,
+          "total_ms": 18.556213000010757
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.43901365995407104,
+            "bbox": [
+              1,
+              59,
+              99,
+              182
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9537250399589539,
+            "bbox": [
+              581,
+              115,
+              259,
+              199
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.860721999899397,
+          "inference_ms": 11.813503000212222,
+          "postprocess_ms": 2.6870669998970698,
+          "total_ms": 18.36129200000869
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 0,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.27006620168685913,
+            "bbox": [
+              209,
+              6,
+              98,
+              36
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9607800245285034,
+            "bbox": [
+              1080,
+              471,
+              197,
+              300
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9002912640571594,
+            "bbox": [
+              513,
+              397,
+              429,
+              342
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9415898323059082,
+            "bbox": [
+              45,
+              3,
+              975,
+              105
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.970224000113376,
+          "inference_ms": 11.898463999841624,
+          "postprocess_ms": 3.5162540002602327,
+          "total_ms": 19.384942000215233
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9373688101768494,
+            "bbox": [
+              1069,
+              473,
+              209,
+              297
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9654653668403625,
+            "bbox": [
+              517,
+              398,
+              428,
+              346
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9635046720504761,
+            "bbox": [
+              53,
+              0,
+              979,
+              119
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8410550000662624,
+          "inference_ms": 11.774627000249893,
+          "postprocess_ms": 3.0761180000808963,
+          "total_ms": 18.691800000397052
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 16,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.8922061920166016,
+            "bbox": [
+              972,
+              513,
+              306,
+              270
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9730678796768188,
+            "bbox": [
+              517,
+              404,
+              423,
+              340
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9571347236633301,
+            "bbox": [
+              56,
+              1,
+              979,
+              133
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9816409998820745,
+          "inference_ms": 11.892797000200517,
+          "postprocess_ms": 3.4170019998782664,
+          "total_ms": 19.291439999960858
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.5402095317840576,
+            "bbox": [
+              196,
+              7,
+              96,
+              38
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9477378726005554,
+            "bbox": [
+              970,
+              512,
+              302,
+              274
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9183735847473145,
+            "bbox": [
+              509,
+              409,
+              432,
+              335
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9303520917892456,
+            "bbox": [
+              62,
+              2,
+              965,
+              119
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8398880001295765,
+          "inference_ms": 12.192178999612224,
+          "postprocess_ms": 4.197355000087555,
+          "total_ms": 20.229421999829356
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 41,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.6868398785591125,
+            "bbox": [
+              73,
+              14,
+              107,
+              89
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9743910001561744,
+          "inference_ms": 11.85954499987929,
+          "postprocess_ms": 2.505687999928341,
+          "total_ms": 18.339623999963806
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.873166561126709,
+            "bbox": [
+              73,
+              13,
+              108,
+              89
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8955970003371476,
+          "inference_ms": 11.955172999932984,
+          "postprocess_ms": 2.6524830000198563,
+          "total_ms": 18.503253000289988
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 3,
+      "video_frame_index": 64,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9483007788658142,
+            "bbox": [
+              614,
+              532,
+              292,
+              259
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9317381381988525,
+            "bbox": [
+              685,
+              99,
+              153,
+              144
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.5409083962440491,
+            "bbox": [
+              1059,
+              20,
+              147,
+              95
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9657240004089545,
+          "inference_ms": 11.875544999838894,
+          "postprocess_ms": 3.0921610000405053,
+          "total_ms": 18.933430000288354
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9642245769500732,
+            "bbox": [
+              686,
+              97,
+              147,
+              143
+            ]
+          },
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9550418257713318,
+            "bbox": [
+              617,
+              530,
+              285,
+              258
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.40348711609840393,
+            "bbox": [
+              1063,
+              19,
+              137,
+              95
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8689299999532523,
+          "inference_ms": 11.790793999807647,
+          "postprocess_ms": 3.125869000086823,
+          "total_ms": 18.785592999847722
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 0,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9143310785293579,
+            "bbox": [
+              383,
+              148,
+              454,
+              290
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.956807000122353,
+          "inference_ms": 11.854877999667224,
+          "postprocess_ms": 2.4875200001588382,
+          "total_ms": 18.299204999948415
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9543195366859436,
+            "bbox": [
+              386,
+              148,
+              450,
+              290
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.875095999774203,
+          "inference_ms": 11.820669999906386,
+          "postprocess_ms": 2.4892700002965285,
+          "total_ms": 18.185035999977117
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 12,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9400908946990967,
+            "bbox": [
+              92,
+              14,
+              248,
+              158
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9580113291740417,
+            "bbox": [
+              466,
+              469,
+              471,
+              278
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9819319999878644,
+          "inference_ms": 11.842087000331958,
+          "postprocess_ms": 2.9657820000466018,
+          "total_ms": 18.789801000366424
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "danger_cyan",
+            "confidence": 0.9531059861183167,
+            "bbox": [
+              93,
+              14,
+              238,
+              154
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.941227376461029,
+            "bbox": [
+              461,
+              472,
+              476,
+              274
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8794719998804794,
+          "inference_ms": 11.797459999797866,
+          "postprocess_ms": 3.0005749999872933,
+          "total_ms": 18.67750699966564
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 24,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.5004495978355408,
+            "bbox": [
+              470,
+              485,
+              475,
+              272
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9983079996090964,
+          "inference_ms": 12.061549999998533,
+          "postprocess_ms": 2.7421100003266474,
+          "total_ms": 18.801967999934277
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.6797395348548889,
+            "bbox": [
+              474,
+              487,
+              471,
+              274
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8655540001855115,
+          "inference_ms": 11.780126999838103,
+          "postprocess_ms": 2.573356000084459,
+          "total_ms": 18.219037000108074
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 36,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7197548747062683,
+            "bbox": [
+              134,
+              5,
+              81,
+              51
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.643976628780365,
+            "bbox": [
+              463,
+              554,
+              488,
+              288
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.897959291934967,
+            "bbox": [
+              0,
+              0,
+              773,
+              109
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9668489998803125,
+          "inference_ms": 12.064425000062329,
+          "postprocess_ms": 3.136995000204479,
+          "total_ms": 19.16826900014712
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6112870573997498,
+            "bbox": [
+              134,
+              7,
+              79,
+              50
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.8530460000038147,
+            "bbox": [
+              460,
+              559,
+              492,
+              282
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9381197690963745,
+            "bbox": [
+              7,
+              3,
+              760,
+              105
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8716379999641504,
+          "inference_ms": 11.77208499984772,
+          "postprocess_ms": 3.1287030001294625,
+          "total_ms": 18.772425999941333
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 48,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9545721411705017,
+            "bbox": [
+              7,
+              73,
+              92,
+              97
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.3055083155632019,
+            "bbox": [
+              450,
+              561,
+              506,
+              285
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9575701951980591,
+            "bbox": [
+              6,
+              11,
+              845,
+              208
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9983500000744243,
+          "inference_ms": 11.9572970002082,
+          "postprocess_ms": 3.116160999979911,
+          "total_ms": 19.071808000262536
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9302268624305725,
+            "bbox": [
+              10,
+              76,
+              92,
+              94
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.30405405163764954,
+            "bbox": [
+              0,
+              60,
+              7,
+              111
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.7568936347961426,
+            "bbox": [
+              459,
+              557,
+              492,
+              289
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9806500673294067,
+            "bbox": [
+              0,
+              6,
+              861,
+              212
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.880804999880638,
+          "inference_ms": 11.80404400020052,
+          "postprocess_ms": 3.2169969999813475,
+          "total_ms": 18.901846000062505
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 60,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9317808747291565,
+            "bbox": [
+              2,
+              72,
+              100,
+              99
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.8898659348487854,
+            "bbox": [
+              463,
+              557,
+              488,
+              289
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9773174524307251,
+            "bbox": [
+              0,
+              3,
+              861,
+              215
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9847240000199236,
+          "inference_ms": 12.103593000119872,
+          "postprocess_ms": 3.3460829999967245,
+          "total_ms": 19.43440000013652
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9376108050346375,
+            "bbox": [
+              2,
+              72,
+              97,
+              97
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9656590819358826,
+            "bbox": [
+              6,
+              11,
+              841,
+              208
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.889305000029708,
+          "inference_ms": 11.84487699993042,
+          "postprocess_ms": 2.9361980000430776,
+          "total_ms": 18.670380000003206
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 72,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9154738783836365,
+            "bbox": [
+              7,
+              72,
+              92,
+              99
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.960020124912262,
+            "bbox": [
+              6,
+              11,
+              841,
+              201
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9836820001255546,
+          "inference_ms": 11.997506999705365,
+          "postprocess_ms": 3.0892429999767046,
+          "total_ms": 19.070431999807624
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9234614372253418,
+            "bbox": [
+              10,
+              75,
+              91,
+              95
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.2569592595100403,
+            "bbox": [
+              0,
+              70,
+              8,
+              101
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9193831086158752,
+            "bbox": [
+              459,
+              557,
+              496,
+              289
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9784051775932312,
+            "bbox": [
+              1,
+              3,
+              856,
+              215
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8554699999622244,
+          "inference_ms": 11.826294000002235,
+          "postprocess_ms": 3.1617040003766306,
+          "total_ms": 18.84346800034109
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "mixed_scene",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 85,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9352487325668335,
+            "bbox": [
+              9,
+              75,
+              94,
+              96
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.8335086703300476,
+            "bbox": [
+              459,
+              557,
+              492,
+              289
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9753707647323608,
+            "bbox": [
+              1,
+              6,
+              856,
+              212
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9838069997131242,
+          "inference_ms": 12.01409000032072,
+          "postprocess_ms": 3.406626000014512,
+          "total_ms": 19.404523000048357
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9553337693214417,
+            "bbox": [
+              4,
+              72,
+              96,
+              98
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9486033916473389,
+            "bbox": [
+              13,
+              14,
+              834,
+              197
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.860096000153135,
+          "inference_ms": 11.805293000179518,
+          "postprocess_ms": 2.9469899996001914,
+          "total_ms": 18.612378999932844
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 36,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.6112870573997498,
+            "bbox": [
+              134,
+              7,
+              79,
+              50
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.8530460000038147,
+            "bbox": [
+              460,
+              559,
+              492,
+              282
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9381197690963745,
+            "bbox": [
+              7,
+              3,
+              760,
+              105
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.9951409999048337,
+          "inference_ms": 12.025673000152892,
+          "postprocess_ms": 3.4299600001759245,
+          "total_ms": 19.45077400023365
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.7197548747062683,
+            "bbox": [
+              134,
+              5,
+              81,
+              51
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.643976628780365,
+            "bbox": [
+              463,
+              554,
+              488,
+              288
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.897959291934967,
+            "bbox": [
+              0,
+              0,
+              773,
+              109
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8602630002060323,
+          "inference_ms": 11.775458999636612,
+          "postprocess_ms": 3.1742460000714345,
+          "total_ms": 18.80996799991408
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 52,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8859193325042725,
+            "bbox": [
+              4,
+              75,
+              98,
+              97
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9252052903175354,
+            "bbox": [
+              459,
+              557,
+              496,
+              292
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9770210385322571,
+            "bbox": [
+              0,
+              6,
+              861,
+              212
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.020017000129883,
+          "inference_ms": 12.060966000262852,
+          "postprocess_ms": 3.4077509999406175,
+          "total_ms": 19.488734000333352
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9496487379074097,
+            "bbox": [
+              2,
+              74,
+              97,
+              95
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9684712290763855,
+            "bbox": [
+              9,
+              11,
+              838,
+              205
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.871554999932414,
+          "inference_ms": 11.774708999837458,
+          "postprocess_ms": 2.9454900000018824,
+          "total_ms": 18.591753999771754
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 68,
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.899986743927002,
+            "bbox": [
+              14,
+              74,
+              85,
+              94
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.3419731557369232,
+            "bbox": [
+              0,
+              66,
+              20,
+              101
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.970971941947937,
+            "bbox": [
+              13,
+              20,
+              838,
+              198
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.795118999936676,
+          "inference_ms": 12.01204900007724,
+          "postprocess_ms": 3.0177409998941584,
+          "total_ms": 19.824908999908075
+        },
+        "left_green_found": false
+      },
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.8407702445983887,
+            "bbox": [
+              13,
+              76,
+              88,
+              93
+            ]
+          },
+          {
+            "class_name": "green_supply",
+            "confidence": 0.447376549243927,
+            "bbox": [
+              0,
+              65,
+              18,
+              102
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.9462050199508667,
+            "bbox": [
+              456,
+              557,
+              495,
+              285
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.958922803401947,
+            "bbox": [
+              0,
+              11,
+              861,
+              206
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8839300000290677,
+          "inference_ms": 11.925587999940035,
+          "postprocess_ms": 3.23387200023717,
+          "total_ms": 19.043390000206273
+        },
+        "left_green_found": false
+      }
+    },
+    {
+      "group": "far_small",
+      "folder": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel",
+      "clip": 4,
+      "video_frame_index": 85,
+      "1117": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9352487325668335,
+            "bbox": [
+              9,
+              75,
+              94,
+              96
+            ]
+          },
+          {
+            "class_name": "injured_orange",
+            "confidence": 0.8335086703300476,
+            "bbox": [
+              459,
+              557,
+              492,
+              289
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9753707647323608,
+            "bbox": [
+              1,
+              6,
+              856,
+              212
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 4.027767000025051,
+          "inference_ms": 11.854209999910381,
+          "postprocess_ms": 3.1181189997369074,
+          "total_ms": 19.00009599967234
+        },
+        "left_green_found": false
+      },
+      "1116": {
+        "detections": [
+          {
+            "class_name": "green_supply",
+            "confidence": 0.9553337693214417,
+            "bbox": [
+              4,
+              72,
+              96,
+              98
+            ]
+          },
+          {
+            "class_name": "safe_blue",
+            "confidence": 0.9486033916473389,
+            "bbox": [
+              13,
+              14,
+              834,
+              197
+            ]
+          }
+        ],
+        "timing_ms": {
+          "preprocess_ms": 3.8701369999216695,
+          "inference_ms": 11.797958999977709,
+          "postprocess_ms": 2.958573999876535,
+          "total_ms": 18.626669999775913
+        },
+        "left_green_found": false
+      }
+    }
+  ]
+}

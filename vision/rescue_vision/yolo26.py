@@ -10,7 +10,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-DEFAULT_MODEL = Path(__file__).resolve().parents[2] / "yolo26n/x5_output_640_1116/yolo26n_6cls_640_1116_bpu_bayese_640x640_nv12.bin"
+DEFAULT_MODEL = Path(__file__).resolve().parents[2] / "yolo26n/x5_output_640_1117/yolo26n_6cls_640_1117_bpu_bayese_640x640_nv12.bin"
 
 class X5Yolo26:
     def __init__(self, model, labels, threshold=.2, nms=.45, priority=0, bpu_cores=None):

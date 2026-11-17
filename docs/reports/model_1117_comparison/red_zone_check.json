@@ -1,0 +1,48 @@
+{
+  "source": "rescue_map/runtime/history/competition_wheel_input/20261116_212809_competition_wheel/safe_zone_replay_0001.avi",
+  "video_frame_index": 37,
+  "1116": [
+    {
+      "class_name": "green_supply",
+      "confidence": 0.5082385540008545,
+      "bbox": [
+        487,
+        514,
+        259,
+        262
+      ]
+    },
+    {
+      "class_name": "safe_red",
+      "confidence": 0.8889195919036865,
+      "bbox": [
+        400,
+        4,
+        872,
+        159
+      ]
+    }
+  ],
+  "1117": [
+    {
+      "class_name": "green_supply",
+      "confidence": 0.33248332142829895,
+      "bbox": [
+        490,
+        517,
+        259,
+        263
+      ]
+    },
+    {
+      "class_name": "safe_red",
+      "confidence": 0.9332675337791443,
+      "bbox": [
+        378,
+        0,
+        895,
+        163
+      ]
+    }
+  ]
+}
