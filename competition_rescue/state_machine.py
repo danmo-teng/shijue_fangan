@@ -28,6 +28,7 @@ from protocol import (
     CMD_APPROACH_RANGE,
     APPROACH_RANGE_REOBSERVE,
     APPROACH_RANGE_PRE_GRAB,
+    APPROACH_ORANGE_TOP_VIEW,
     CMD_CARGO_AUDIT,
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
@@ -995,6 +996,10 @@ class CompetitionMission:
         self.range_frame_floor = 0
         self.range_pitch_cdeg = 0
         self.range_epoch = 0
+        self.orange_top_view_command = None
+        self.orange_top_view_frame_floor = None
+        self.orange_top_view_used = False
+        self.orange_top_view_bbox = None
         self.transport_separation_active = False
         self.stage_redirect_active = False
 
@@ -1446,6 +1451,7 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self._clear_orange_top_view()
         self.staging_repair_target = None
         self.delivery_search_point_number = self.search_point_number
         self.pre_grab_command = None
@@ -1493,6 +1499,7 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
+        self._clear_orange_top_view()
         self.confirmed_load_audit = None
         self.transport_load_reuse_active = False
         self.recovering_original_load = False
@@ -1902,6 +1909,86 @@ class CompetitionMission:
         self._begin_search_recovery(vision, now)
         return replace(self._search_recovery_output(vision, stm, now),
             event="green_anchor_lost_reselect", reason="green_anchor_lost_reselect")
+
+    def _clear_orange_top_view(self) -> None:
+        self.orange_top_view_command = None
+        self.orange_top_view_frame_floor = None
+        self.orange_top_view_used = False
+        self.orange_top_view_bbox = None
+
+    def _orange_top_view_output(
+        self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput | None:
+        if (self.state not in {CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH} or
+                self.selected_batch is None or self.selected_batch.initial_stash or
+                stm.gripper_closed or not stm.fresh or stm.fault):
+            return None
+        # Recovery still belongs to the existing mode24->SEARCH exit.
+        if stm.mode not in {STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RANGE_WAIT}:
+            self.orange_top_view_command = None
+            self.orange_top_view_frame_floor = None
+            return None
+        if self.orange_top_view_command is not None:
+            done = (stm.mode == STM_MODE_APPROACH_TARGET and stm.camera_pitch_cdeg == 10500 and
+                    stm.context_valid and stm.context_matches and
+                    stm.accepted_command == CMD_APPROACH_TARGET and stm.action_status & 2)
+            if not done:
+                return CompetitionOutput(self.state, self.orange_top_view_command,
+                    "停转并抬到105°，保持本次橙块目标，等待原相机动作完成",
+                    self.selected_batch, reason="orange_top_view_move", expected_stm_modes=(20, 24, 3))
+            self.orange_top_view_command = None
+            self.orange_top_view_frame_floor = vision.frame_sequence
+            # Old 120-degree pixels cannot steer the 105-degree view. Keep the
+            # selected target/identity, but discard only its old steering packet.
+            self.last_approach_command = None
+            self.cluster_command_observed_s = None
+        if self.orange_top_view_frame_floor is not None:
+            if (stm.camera_pitch_cdeg == vision.range_pitch_cdeg == 10500 and
+                    vision.frame_sequence > self.orange_top_view_frame_floor):
+                old_x, _, old_w, _ = self.orange_top_view_bbox
+                candidates = [item for item in vision.cargo if item.visible and
+                    item.class_name == "injured_orange" and
+                    item.bbox[0] < old_x + old_w and item.bbox[0] + item.bbox[2] > old_x]
+                if len(candidates) > 1:
+                    self._begin_search_recovery(vision, now)
+                    return replace(self._search_recovery_output(vision, stm, now),
+                        event="orange_top_view_ambiguous", reason="orange_top_view_ambiguous",
+                        message="抬头后原左右位置有多个橙框，不能确定原目标，沿原丢失恢复")
+                if len(candidates) == 1:
+                    target = candidates[0]
+                    self._mark_target_seen(target, now)
+                    if self.state == CompetitionState.CLUSTER_APPROACH:
+                        self.cluster_target_track_id = target.track_id
+                        self.cluster_target_bbox = target.bbox
+                        self.cluster_bbox = target.bbox
+                    self.orange_top_view_frame_floor = None
+                    return None  # Same target intent; original alignment and zone checks resume.
+            return CompetitionOutput(self.state, self._hold(),
+                "相机已到105°，用换角后的画面继续对准原橙块",
+                self.selected_batch, reason="orange_top_view_image", expected_stm_modes=(20, 24, 3))
+        if (self.orange_top_view_used or self.range_command is not None or
+                stm.camera_pitch_cdeg != 12000 or vision.range_pitch_cdeg != 12000 or
+                not (stm.context_valid and stm.context_matches and stm.action_status & 1 and
+                     stm.accepted_command == CMD_APPROACH_TARGET) or
+                not self._vision_fresh(vision, now) or vision.frame_sequence <= 0):
+            return None
+        target = self._target_for_batch(vision)
+        if (target is None or target.class_name != "injured_orange" or target.bbox[1] > 0 or
+                target.track_id not in vision.range_top_band_ids):
+            return None
+        self.orange_top_view_used = True
+        self._mark_target_seen(target, now)
+        self.orange_top_view_bbox = target.bbox
+        self.range_epoch += 1
+        flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
+        if self.state == CompetitionState.CLUSTER_APPROACH:
+            flags |= CMD_CLUSTER_TARGET
+        self.orange_top_view_command = CommandRequest(CMD_APPROACH_TARGET, flags,
+            0, 10500, APPROACH_ORANGE_TOP_VIEW, source_vision_frame=vision.frame_sequence)
+        return CompetitionOutput(self.state, self.orange_top_view_command,
+            "锁定橙块贴顶且位于最远B1档：停转抬到105°后继续对准",
+            self.selected_batch, event="orange_top_view_start", reason="orange_top_view_start",
+            expected_stm_modes=(20, 24, 3))
 
     def _range_approach_output(self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
                                pose: PoseSnapshot | None = None) -> CompetitionOutput:
@@ -2481,6 +2568,8 @@ class CompetitionMission:
     def _safe_zone_target_exit(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
+        if (self.orange_top_view_command is not None or self.orange_top_view_frame_floor is not None):
+            return None  # Do not classify an in-progress camera change as a new scene.
         if (self.state not in {CompetitionState.INITIAL_APPROACH, CompetitionState.APPROACH,
                                CompetitionState.CLUSTER_APPROACH, CompetitionState.CAPTURE_AUDIT} or
                 self.selected_batch is None or stm.gripper_closed):
@@ -7267,6 +7356,9 @@ class CompetitionMission:
             self.recovery_wait_active = False
             self.recovery_command = None
         if stm.fresh and not stm.fault:
+            orange_view = self._orange_top_view_output(vision, stm, now)
+            if orange_view is not None:
+                return orange_view
             zone_exit = self._safe_zone_target_exit(vision, stm, now)
             if zone_exit is not None:
                 return zone_exit

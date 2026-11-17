@@ -64,6 +64,7 @@ CMD_APPROACH_RANGE = 1 << 6
 # APPROACH_RANGE aux only: finish this segment at the same measuring pitch.
 APPROACH_RANGE_REOBSERVE = 1
 APPROACH_RANGE_PRE_GRAB = 2  # Paired firmware: open claw, 140deg, finite 50mm.
+APPROACH_ORANGE_TOP_VIEW = 4  # Stop alignment, camera120->105, resume alignment; no travel.
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
@@ -216,8 +217,9 @@ def mission_frame(
         ordinary = (aux_cdeg in {0, APPROACH_RANGE_REOBSERVE} and
                     0 <= arg_a <= 2500 and arg_b in {10500, 12000})
         pre_grab = aux_cdeg == APPROACH_RANGE_PRE_GRAB and arg_a == 50 and arg_b == 14000
+        orange_view = aux_cdeg == APPROACH_ORANGE_TOP_VIEW and arg_a == 0 and arg_b == 10500
         if (flags & ~allowed or flags & (CMD_VALID | CMD_DISTANCE_VALID) != (CMD_VALID | CMD_DISTANCE_VALID) or
-                not (ordinary or pre_grab)):
+                not (ordinary or pre_grab or orange_view)):
             raise ValueError("invalid fixed-pitch approach range request")
     if flags & CMD_STAGE_ONLY and command not in {
         CMD_APPROACH_TARGET,

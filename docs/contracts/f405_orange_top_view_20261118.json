@@ -1,0 +1,78 @@
+{
+  "request_id": "MATCH-ORANGE-TOP-VIEW-20261118",
+  "status": "upper implemented; lower1136492 lacks aux4; not deployed or ground verified",
+  "trigger": "selected orange; 120deg; bbox.y<=0; centre in existing farthest B1 band",
+  "wire": "TYPE0x18 opcode9 RANGE|DISTANCE_VALID A0 B10500 U4; original0x1D context",
+  "source_frame_rule": "real trigger frame may equal the preceding pixel APPROACH frame; no invented visual update",
+  "completion": {
+    "mode": 20,
+    "camera_pitch_cdeg": 10500,
+    "accepted_command": 9,
+    "action_status": 3,
+    "meaning": "camera ready; not aligned, no chassis translation"
+  },
+  "continue_rule": "same task, new pixel action for original target at105deg; then original mode52/53 range using105deg calibration; cluster bit retained",
+  "hold_rule": "during mechanical camera change retain action; after DONE use ordinary mode20 HOLD/recovery, not aux3 immediate return to SEARCH",
+  "cases": [
+    {
+      "side": "red",
+      "cluster": false,
+      "task_id": 32593,
+      "action_id": 12613,
+      "source_frame": 6925,
+      "opcode": 9,
+      "flags": 89,
+      "arg_a": 0,
+      "arg_b": 10500,
+      "aux": 4,
+      "context_hex": "a3b31d077f51314500001b0dc322c3",
+      "command_hex": "a3b3180709590000290400049779c3",
+      "combined_hex": "a3b31d077f51314500001b0dc322c3a3b3180709590000290400049779c3"
+    },
+    {
+      "side": "red",
+      "cluster": true,
+      "task_id": 32593,
+      "action_id": 12613,
+      "source_frame": 6925,
+      "opcode": 9,
+      "flags": 121,
+      "arg_a": 0,
+      "arg_b": 10500,
+      "aux": 4,
+      "context_hex": "a3b31d077f51314500001b0dc322c3",
+      "command_hex": "a3b318070979000029040004b6bbc3",
+      "combined_hex": "a3b31d077f51314500001b0dc322c3a3b318070979000029040004b6bbc3"
+    },
+    {
+      "side": "blue",
+      "cluster": false,
+      "task_id": 32593,
+      "action_id": 12613,
+      "source_frame": 6925,
+      "opcode": 9,
+      "flags": 81,
+      "arg_a": 0,
+      "arg_b": 10500,
+      "aux": 4,
+      "context_hex": "a3b31d077f51314500001b0dc322c3",
+      "command_hex": "a3b3180709510000290400041eb9c3",
+      "combined_hex": "a3b31d077f51314500001b0dc322c3a3b3180709510000290400041eb9c3"
+    },
+    {
+      "side": "blue",
+      "cluster": true,
+      "task_id": 32593,
+      "action_id": 12613,
+      "source_frame": 6925,
+      "opcode": 9,
+      "flags": 113,
+      "arg_a": 0,
+      "arg_b": 10500,
+      "aux": 4,
+      "context_hex": "a3b31d077f51314500001b0dc322c3",
+      "command_hex": "a3b3180709710000290400043f7bc3",
+      "combined_hex": "a3b31d077f51314500001b0dc322c3a3b3180709710000290400043f7bc3"
+    }
+  ]
+}

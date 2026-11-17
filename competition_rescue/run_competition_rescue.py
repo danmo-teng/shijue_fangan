@@ -72,6 +72,7 @@ from protocol import (  # noqa: E402
     CMD_PAUSE,
     CMD_APPROACH_TARGET,
     CMD_APPROACH_RANGE,
+    APPROACH_ORANGE_TOP_VIEW,
     CMD_CARGO_AUDIT,
     CMD_DISPERSE_PILE,
     CMD_RELEASE_LEFT,
@@ -2282,11 +2283,16 @@ class CompetitionPlanner:
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float
     ) -> CompetitionOutput | None:
         pending = self.protocol_last_output
+        orange_view = (pending is not None and pending.command is not None and
+                       pending.command.opcode == CMD_APPROACH_TARGET and
+                       pending.command.flags & CMD_APPROACH_RANGE and
+                       pending.command.aux == APPROACH_ORANGE_TOP_VIEW)
         if not (pending is not None and pending.command is not None and
                 pending.command.opcode == CMD_APPROACH_TARGET and
                 self.mission.state in {CompetitionState.INITIAL_APPROACH,
                     CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH} and
-                stm.fresh and stm.context_valid and stm.mode == 3 and
+                stm.fresh and stm.context_valid and
+                stm.mode in ({3, 20, 52} if orange_view else {3}) and
                 stm.task_id == self.protocol_task and stm.action_status & 4 and
                 stm.rejected_action_id == self.protocol_action):
             return None
@@ -2295,6 +2301,13 @@ class CompetitionPlanner:
             return None  # A late duplicate rejection cannot cancel an accepted action.
         self._adopt_recovery_context()
         current = replace(stm, context_matches=True)
+        if orange_view:
+            self.mission.orange_top_view_command = None
+            self.mission.orange_top_view_frame_floor = None
+            self.mission._begin_search_recovery(vision, now)
+            return replace(self.mission._search_recovery_output(vision, current, now),
+                event="orange_top_view_rejected", reason="orange_top_view_rejected",
+                message="105°抬头请求被下位拒绝，结束本次对准并沿原丢失恢复；需配套固件")
         if self.mission.disperse_attempts or self.mission.recovery_task_locked:
             # The existing MCU keeps the pile budget until RETURN_CENTER.
             # Finish that route rather than retrying a cancelled same-task target.
@@ -2367,6 +2380,21 @@ class CompetitionPlanner:
         if (reuse_conflict and stm.fresh and stm.gripper_closed and
                 self.mission.selected_batch is not None and stm.mode in {10, 11, 48}):
             return self.mission._begin_transport_audit(vision, pose, stm, now)
+        if (self.mission.orange_top_view_command is not None or
+                self.mission.orange_top_view_frame_floor is not None):
+            if paused:
+                return CompetitionOutput(self.mission.state, CommandRequest(CMD_PAUSE),
+                    "摄像头恢复中，冻结当前抬头动作", tx_policy="pause", reason="camera_recovery")
+            rejected = self._reconcile_approach_rejection(vision, pose, stm, now)
+            if rejected is not None:
+                return rejected
+        if not paused and stm.fresh and not stm.fault:
+            matches = (stm.context_valid and stm.task_id == self.protocol_task and
+                       stm.action_id == self.protocol_action)
+            orange_view = self.mission._orange_top_view_output(
+                vision, replace(stm, context_matches=matches), now)
+            if orange_view is not None:
+                return orange_view
         if stm.fresh and not stm.fault:
             zone_exit = self.mission._safe_zone_target_exit(vision, stm, now)
             if zone_exit is not None:
