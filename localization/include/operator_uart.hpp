@@ -14,6 +14,8 @@ namespace omni {
 constexpr std::uint8_t kOperatorBeepMessageType = 0x20;
 bool validate_operator_frame(const std::uint8_t *data, std::size_t size);
 bool is_operator_abort(const std::array<std::uint8_t, kFrameSize> &frame);
+bool is_resume_config_for_stop(const std::array<std::uint8_t, kFrameSize> &frame,
+                               std::uint8_t stop_sequence);
 
 class OperatorUartRelay {
 public:

@@ -1126,6 +1126,7 @@ int main(int argc, char **argv)
         // It prevents an in-flight model startup or old command file from
         // sending CONFIG/mission heartbeats again after the manual ABORT.
         std::atomic<bool> operator_stopped{false};
+        std::atomic<std::uint8_t> operator_stop_sequence{0};
         std::unique_ptr<omni::OperatorUartRelay> operator_relay;
         auto feedback_tap = std::make_shared<omni::WheelTelemetryTap>(options.wheel_feedback_socket);
         auto motion_feedback_tap = std::make_shared<omni::MotionTelemetryTap>(options.motion_feedback_socket);
@@ -1159,6 +1160,7 @@ int main(int argc, char **argv)
                     [&](const std::array<std::uint8_t, omni::kFrameSize> &frame) {
                         std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
                         if (omni::is_operator_abort(frame)) {
+                            operator_stop_sequence.store(frame[3], std::memory_order_relaxed);
                             operator_stopped.store(true, std::memory_order_relaxed);
                             navigation_command_active.store(false, std::memory_order_relaxed);
                         }
@@ -1282,8 +1284,20 @@ int main(int argc, char **argv)
                         if (operator_stopped.load(std::memory_order_relaxed)) {
                             have_active_mission = false;
                             navigation_command_active.store(false, std::memory_order_relaxed);
-                            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-                            continue;
+                            std::array<std::uint8_t, omni::kFrameSize> resume{}, ignored_context{};
+                            bool contextual = false;
+                            if (read_relay_frame(options.command_file_path, resume, ignored_context, contextual)) {
+                                std::lock_guard<omni::PriorityInheritanceMutex> lock(uart_tx_mutex);
+                                if (omni::is_resume_config_for_stop(resume,
+                                        operator_stop_sequence.load(std::memory_order_relaxed))) {
+                                    operator_stopped.store(false, std::memory_order_relaxed);
+                                    have_last_input = false;
+                                }
+                            }
+                            if (operator_stopped.load(std::memory_order_relaxed)) {
+                                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                                continue;
+                            }
                         }
                         std::array<std::uint8_t, omni::kFrameSize> input{};
                         std::array<std::uint8_t, omni::kFrameSize> context{};

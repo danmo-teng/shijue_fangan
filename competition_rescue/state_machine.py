@@ -745,6 +745,7 @@ class CompetitionMission:
         self.stash_zero_tx_baseline: int | None = None
         self.stash_handoff_hold_tx_baseline: int | None = None
         self.first_common_delivered = False
+        self.resume_search_after_start = False
         self.first_green_core_evidence: tuple[int, int, int, tuple[int, int, int, int]] | None = None
         self.first_green_bump_used = False
         self.delivery_count = 0
@@ -7289,6 +7290,10 @@ class CompetitionMission:
 
         if self.state == CompetitionState.WAIT_START:
             if self._start_ready(pose, stm):
+                if self.resume_search_after_start:
+                    self.resume_search_after_start = False
+                    return self._begin_search_transfer(vision, pose, stm, now,
+                        target_point=self.search_point_number)
                 self._set_state(CompetitionState.INITIAL_OBSERVE if not self.initial_stash_done else CompetitionState.SEARCH, now)
                 return CompetitionOutput(self.state, self._hold(), "已离开出发区，开始中心观察", event="start_clear")
             return CompetitionOutput(

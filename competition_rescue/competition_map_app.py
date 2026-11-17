@@ -73,6 +73,7 @@ class CompetitionMapApp(RescueMapApp):
         self.warm_error = None
         self.window_exit_requested = False
         self.warm_status_path = RUNTIME / 'operator_warm_status.json'
+        self.progress_path = RUNTIME / 'competition_progress.json'
         if self.localization_mode == "t265" or self.official_wheel_input:
             # Mounting is independent of SDK wheel injection. The normal writer
             # still sets the selected competition corner/heading, not the test centre.
@@ -207,6 +208,19 @@ class CompetitionMapApp(RescueMapApp):
 
     def start_session(self):
         if self.prewarm_enabled:
+            if self.session_started and self.operator.stopped:
+                serial = self.operator._stop_serial
+                selected = initial_pose(self.zone, self.corner_offset_m)
+                reference = secrets.token_hex(16)
+                self.dynamic.request_start(dict(x_m=selected.x_m, y_m=selected.y_m,
+                    yaw_deg=selected.yaw_deg), reference)
+                if self.operator.release_resume(self.zone, self.side, self.opening_strategy, reference, serial):
+                    self.operator.silence()
+                    self.trajectory.reset()
+                    self.odometry_trajectory.reset()
+                    self.message = '已请求本局重发，按原出发位重设定位，保留首绿和进攻进度'
+                    self.record_reset_event('operator_resume_requested', reference)
+                return
             if self.session_started:
                 return
             if self.operator.stopped:
@@ -597,6 +611,8 @@ class CompetitionMapApp(RescueMapApp):
             self.operator.transitioning = True
         self.record_reset_event("session_reset_requested", source)
         super().reset_session()
+        if isinstance(getattr(self, 'progress_path', None), Path):
+            self.progress_path.unlink(missing_ok=True)
         self.reset_session_token = None
         self.reset_request_path.unlink(missing_ok=True)
         self.record_reset_event("session_reset_completed", source)

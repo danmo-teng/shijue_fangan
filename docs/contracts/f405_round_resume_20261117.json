@@ -1,0 +1,121 @@
+{
+  "request_id": "MATCH-ROUND-RESUME-20261117",
+  "status": "upper implemented; lower support/deployment pending",
+  "packet": "existing TYPE0x11, 15 bytes; sequences 0,1,2 as original CONFIG",
+  "payload": {
+    "P0": "colour 0x11 red / 0x12 blue",
+    "P1": "original zone 1..4",
+    "P2": "0x52 explicit match resume",
+    "P3": "bit0 first green complete, bit1 opening stash/attack placed; other bits zero",
+    "P4": "delivery_count modulo256, preserve search rotation parity; first-green bit distinguishes never-delivered from positive even wrap",
+    "P5": "latest physical STOP serial low8; same value as direct ABORT SEQ; RDK sole UART owner compares before rearm",
+    "P6_P7": "zero"
+  },
+  "normal_config": "Original zero P2..P7 still means new match, clear old progress",
+  "behavior": "Restore lower first-delivery qualification and search rotation after ordinary task reset and before original autonomous start; no load, no old task/action; no countdown or extra audit",
+  "synthetic_examples": [
+    {
+      "side": "red",
+      "start_zone": 1,
+      "progress": {
+        "first_green": false,
+        "attack_done": false,
+        "delivery_count": 0,
+        "search_point": 3,
+        "stash_has_cargo": false,
+        "stop_serial": 7
+      },
+      "frames": [
+        "a3b3110011015200000700004c24c3",
+        "a3b31101110152000007000041b4c3",
+        "a3b3110211015200000700005544c3"
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 1,
+      "progress": {
+        "first_green": false,
+        "attack_done": true,
+        "delivery_count": 0,
+        "search_point": 3,
+        "stash_has_cargo": true,
+        "stop_serial": 7
+      },
+      "frames": [
+        "a3b31100110152020007000035e4c3",
+        "a3b3110111015202000700003874c3",
+        "a3b3110211015202000700002c84c3"
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 1,
+      "progress": {
+        "first_green": true,
+        "attack_done": true,
+        "delivery_count": 3,
+        "search_point": 3,
+        "stash_has_cargo": true,
+        "stop_serial": 7
+      },
+      "frames": [
+        "a3b3110011015203030700000860c3",
+        "a3b31101110152030307000005f0c3",
+        "a3b3110211015203030700001100c3"
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 1,
+      "progress": {
+        "first_green": false,
+        "attack_done": false,
+        "delivery_count": 0,
+        "search_point": 3,
+        "stash_has_cargo": false,
+        "stop_serial": 7
+      },
+      "frames": [
+        "a3b3110012015200000700000c31c3",
+        "a3b31101120152000007000001a1c3",
+        "a3b3110212015200000700001551c3"
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 1,
+      "progress": {
+        "first_green": false,
+        "attack_done": true,
+        "delivery_count": 0,
+        "search_point": 3,
+        "stash_has_cargo": true,
+        "stop_serial": 7
+      },
+      "frames": [
+        "a3b31100120152020007000075f1c3",
+        "a3b3110112015202000700007861c3",
+        "a3b3110212015202000700006c91c3"
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 1,
+      "progress": {
+        "first_green": true,
+        "attack_done": true,
+        "delivery_count": 3,
+        "search_point": 3,
+        "stash_has_cargo": true,
+        "stop_serial": 7
+      },
+      "frames": [
+        "a3b3110012015203030700004875c3",
+        "a3b31101120152030307000045e5c3",
+        "a3b3110212015203030700005115c3"
+      ]
+    }
+  ],
+  "rdk_native": "STOP latch cleared only by CRC-valid resume CONFIG matching most recent physical STOP serial; normal/stale config cannot unlock; old mission cache cleared before rearm; no new messages/ACKs"
+}

@@ -7,6 +7,7 @@ competition strategy and writes its command frames through the existing
 atomic command-file relay.
 """
 from __future__ import annotations
+from round_resume import ProgressStore, match_progress, restore_progress, resume_config_frame
 
 import argparse
 from collections import Counter
@@ -225,22 +226,27 @@ def operator_start_request(control_path: Path | None, pose_path: Path, session_t
     """Match the one local coordinate commit to this human start, no age check."""
     request = load_json(control_path) if control_path else None
     if (not session_token or not isinstance(request, dict) or request.get('session_token') != session_token
-            or request.get('action') != 'start' or request.get('reference_token') != session_token
+            or request.get('action') not in {'start', 'resume'} or not request.get('reference_token')
+            or (request.get('action') == 'start' and request.get('reference_token') != session_token)
             or request.get('side') not in ('red', 'blue') or request.get('start_zone') not in (1, 2, 3, 4)):
         return None
+    if request['action'] == 'resume' and (not isinstance(request.get('stop_serial'), int) or request['stop_serial'] < 0):
+        return None
     pose = load_json(pose_path) or {}
-    if pose.get('reference', {}).get('round_token') != session_token:
+    if pose.get('reference', {}).get('round_token') != request['reference_token']:
         return None
     return dict(request, reference=pose['reference'])
 
 
 
-def publish_start_config(command_path, side, start_zone, continue_start, on_sent):
+def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None):
     """Existing CONFIG sequence; remember the first write before any interruption."""
     for sequence in range(3):
         if not continue_start():
             return False
-        write_command_frame(command_path, config_frame(sequence, 0x11 if side == 'red' else 0x12, start_zone))
+        frame = (config_frame(sequence, 0x11 if side == 'red' else 0x12, start_zone)
+                 if resume_progress is None else resume_config_frame(sequence, side, start_zone, resume_progress))
+        write_command_frame(command_path, frame)
         on_sent()
         time.sleep(.04)
     return continue_start()
@@ -1776,14 +1782,14 @@ class CompetitionPlanner:
         self.running = True
         self.thread.start()
 
-    def stop(self, reason: str = "runner_exit") -> None:
+    def stop(self, reason: str = "runner_exit", *, preserve_warm=False) -> None:
         if self.termination_attempted:
             return
         self.termination_attempted = True
         self.running = False
         if self.thread.is_alive():
             self.thread.join(timeout=2.0)
-        if self.localization_wheel_policy is not None:
+        if self.localization_wheel_policy is not None and not preserve_warm:
             self.localization_wheel_policy.close()
         abort_command = CommandRequest(CMD_ABORT, self.mission._side_flags())
         abort_sequence = self.sequence
@@ -1844,7 +1850,16 @@ class CompetitionPlanner:
         from protocol import mission_frame
         return mission_frame(self.sequence, CMD_HOLD)
 
+    def save_progress(self) -> None:
+        progress_store = getattr(self, 'progress_store', None)
+        if progress_store is not None:
+            try:
+                progress_store.save(self.mission)
+            except OSError as error:
+                self.events_log.write('match_progress_save_failed', dict(error=str(error)))
+
     def _publish(self, output: CompetitionOutput, *, stm: StmSnapshot | None = None) -> None:
+        self.save_progress()
         if self.localization_wheel_policy is not None and stm is not None:
             matched = (stm.context_valid and stm.task_id == self.protocol_task and
                        stm.action_id == self.protocol_action)
@@ -3481,6 +3496,11 @@ def main() -> int:
     warm_ready_written = False
     warm_status_error_reported = False
     next_operator_poll = 0.0
+    last_start_reference = None
+    resume_progress = None
+    progress_store = (ProgressStore(args.operator_control.parent / 'competition_progress.json',
+                                   args.reset_session_token) if args.operator_control else None)
+    planner.progress_store = progress_store
 
     def write_warm_status():
         nonlocal warm_status_error_reported
@@ -3489,7 +3509,8 @@ def main() -> int:
             # per-frame disk writes: only first inference and start transition.
             try:
                 write_atomic_json(args.warm_status, dict(session_token=args.reset_session_token,
-                    ready=True, competition_started=competition_started))
+                    ready=True, competition_started=competition_started,
+                    reference_token=last_start_reference))
             except OSError as error:
                 if not warm_status_error_reported:
                     print(f'预热控制状态写入失败，尚不能向按键入口报告就绪：{error}',file=sys.stderr)
@@ -3500,13 +3521,40 @@ def main() -> int:
 
     def prepare_operator_start():
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
+        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress
+        nonlocal wheel_policy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
         nonlocal recent_carried_track_ids, recent_carried_pitch_cdeg
-        if operator_start_ready or operator_stopped or not args.wait_for_operator:
+        if not args.wait_for_operator:
             return
         request = operator_start_request(args.operator_control,args.pose,args.reset_session_token)
         if request is None:
             return
+        is_resume = request['action'] == 'resume'
+        if request['reference_token'] == last_start_reference:
+            return
+        if is_resume:
+            if not competition_started:
+                return
+            # STOP already has a direct UART path. End this old planner before
+            # taking progress; no old target/load/action is transplanted.
+            planner.stop('operator_resume', preserve_warm=True)
+            if planner.thread.is_alive():
+                return  # The old command producer must actually have ended.
+            resume_progress = match_progress(mission)
+            resume_progress['stop_serial'] = int(request['stop_serial'])
+            planner.save_progress()
+            args.command_file.unlink(missing_ok=True)  # Do not replay the old ABORT/mission after rearm.
+            if wheel_policy is not None:
+                address, session = wheel_policy.address, wheel_policy.session_id
+                wheel_policy.close()
+                wheel_policy = LocalizationWheelPolicy(address, session, events)
+            operator_stopped = False
+            competition_started = config_sent = False
+        elif operator_start_ready or operator_stopped:
+            return
+        else:
+            resume_progress = None
         side, start_zone = request['side'], request['start_zone']
         opening_strategy = request.get('opening_strategy', opening_strategy)
         mission = CompetitionMission(CompetitionSettings(side=side,start_zone=start_zone,
@@ -3520,6 +3568,9 @@ def main() -> int:
             delivery_early_exit_enabled=args.enable_delivery_early_exit))
         planner = CompetitionPlanner(mission,args.pose,args.stm_status,args.command_file,
             args.diagnostics,events,args.planner_fps)
+        if resume_progress is not None:
+            restore_progress(mission, resume_progress)
+        planner.progress_store = progress_store
         planner.localization_wheel_policy = wheel_policy
         if replay is not None:
             planner.replay_event_sink = replay.record_event
@@ -3534,6 +3585,7 @@ def main() -> int:
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
+        last_start_reference = request['reference_token']
         events.write('warm_reference_bound', dict(session_token=args.reset_session_token,
             reference=request['reference'],side=side,start_zone=start_zone))
 
@@ -3549,10 +3601,11 @@ def main() -> int:
         if not operator_stop_requested(args.operator_control, args.reset_session_token):
             return False
         operator_stopped = True
-        planner.stop("operator_stop")
+        planner.stop("operator_stop", preserve_warm=True)
+        planner.save_progress()
         with planner.lock:
             planner.latest_output = CompetitionOutput(
-                mission.state, None, "本轮已停止；保留视觉和定位观察，长按退出后可重新开始",
+                mission.state, None, "本局已停止并保留进度；摆回原出发位后短按3重发",
                 suppress_command_tx=True, suppression_reason="operator_stop",
                 reason="operator_stop")
         events.write("operator_stopped", {
@@ -3571,7 +3624,7 @@ def main() -> int:
             nonlocal config_sent
             config_sent = True
         if not publish_start_config(args.command_file,side,start_zone,
-                lambda: running and not apply_operator_stop(force=True),remember_config_sent):
+                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress):
             return
         competition_started = True
         warm_ready_written = write_warm_status()
@@ -3580,6 +3633,7 @@ def main() -> int:
             "camera_device": camera_device,
             "first_vision_sequence": vision_sequence,
             "start_basis": "warm_operator_start_and_reference_bound" if args.wait_for_operator else "explicit_session_start_and_first_inference",
+            "resume_progress": resume_progress,
         })
         planner.set_paused(False, reason="camera_recovery")
         planner.start()

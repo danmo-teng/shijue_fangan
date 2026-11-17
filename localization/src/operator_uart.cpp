@@ -39,6 +39,15 @@ bool is_operator_abort(const std::array<std::uint8_t, kFrameSize> &frame)
     return frame[2] == kMissionCommandMessageType && frame[4] == 7;
 }
 
+bool is_resume_config_for_stop(const std::array<std::uint8_t, kFrameSize> &f,
+                               std::uint8_t stop_sequence)
+{
+    return validate_relay_frame(f.data(), f.size()) && f[2] == 0x11 &&
+        (f[4] == 0x11 || f[4] == 0x12) && f[5] >= 1 && f[5] <= 4 &&
+        f[6] == 0x52 && (f[7] & ~3u) == 0 && f[9] == stop_sequence &&
+        f[10] == 0 && f[11] == 0;
+}
+
 OperatorUartRelay::OperatorUartRelay(const std::string &name, Send send)
     : send_(std::move(send))
 {

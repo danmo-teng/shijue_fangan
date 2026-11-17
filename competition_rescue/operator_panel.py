@@ -160,14 +160,17 @@ class OperatorPanel:
                 pass
 
     def _write_stop(self):
-        _write_json(self.control_path, dict(session_token=self.app.reset_session_token, action='stop'))
+        _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
+                                          action='stop', stop_serial=self._stop_serial))
 
     def request_stop(self):
         # UART first; no acknowledgement or GUI frame is required.
-        sent = send_abort(self.socket_name)
+        # This counter has one producer: the GPIO polling thread. Publish the
+        # new serial before UART, so an older resume cannot unlock this STOP.
+        self._stop_serial += 1
+        sent = send_abort(self.socket_name, sequence=self._stop_serial & 255)
         with self._state_lock:
             self.stopped = True
-            self._stop_serial += 1
             try:
                 self._write_stop()
             except OSError as error:
@@ -181,7 +184,8 @@ class OperatorPanel:
                     # Capture the readiness of this press, before the GUI can
                     # process a later release after prewarming has completed.
                     self._start_press_token = (self.app.reset_session_token
-                        if getattr(self.app, 'warm_ready', False) and not self.stopped else None)
+                        if ((getattr(self.app, 'warm_ready', False) and not self.stopped) or
+                            (self.stopped and getattr(self.app, 'session_started', False))) else None)
                     continue
                 if event['action'] == 'start':
                     event['_ready_press_token'] = self._start_press_token
@@ -278,7 +282,7 @@ class OperatorPanel:
                 self.silence()
                 self.app.vision_start_pending = False
                 self.app.start_requested = False
-                self._notice('已请求停止本轮运动；长按4号返回待机', 'operator_stop')
+                self._notice('已停止当前动作并保留本局；摆回原出发位短按3重发，长按4结束本局', 'operator_stop')
             elif action == 'exit_session':
                 if not self.transitioning:
                     self.transitioning = True
@@ -303,7 +307,7 @@ class OperatorPanel:
                         and event.get('_stop_serial') == self._stop_serial):
                     self.app.prepare_warm_session()
             elif action == 'start':
-                if (self.app.selecting and not self.transitioning and
+                if ((self.app.selecting or (self.stopped and self.app.session_started)) and not self.transitioning and
                         event.get('_stop_serial') == self._stop_serial):
                     if (getattr(self.app, 'prewarm_enabled', False) and
                             (event.get('_ready_press_token') is None or
@@ -341,6 +345,16 @@ class OperatorPanel:
             _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
                 action='start', start_zone=zone, side=side, opening_strategy=opening_strategy,
                 reference_token=self.app.reset_session_token))
+        return True
+
+    def release_resume(self, zone, side, opening_strategy, reference_token, stop_serial):
+        with self._state_lock:
+            if not self.stopped or self._stop_serial != stop_serial:
+                return False
+            _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
+                action='resume', start_zone=zone, side=side, opening_strategy=opening_strategy,
+                reference_token=reference_token, stop_serial=stop_serial))
+            self.stopped = False
         return True
 
     def after_start(self):
