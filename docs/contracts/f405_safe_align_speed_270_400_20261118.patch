@@ -1,0 +1,24 @@
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -619,6 +619,8 @@
+ #define APP_SAFE_ALIGN_LATERAL_START_PX      64.0f
+ #define APP_SAFE_ALIGN_LATERAL_STOP_PX       32.0f
+ #define APP_SAFE_ALIGN_LATERAL_MM_S_PER_PX    1.0f
++#define APP_SAFE_ALIGN_LATERAL_MIN_MM_S     270.0f
++#define APP_SAFE_ALIGN_LATERAL_MAX_MM_S     400.0f
+ #define APP_SAFE_ENTER_CRUISE_SPEED_MM_S   400.0f
+ #define APP_SAFE_ENTER_MIN_SPEED_MM_S      200.0f
+ #define APP_SAFE_ENTER_SLOWDOWN_MM         300.0f
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -4381,8 +4381,8 @@
+   if (safe_align_visual_confirmed && safe_align_lateral_active) {
+     safe_align_done = false;
+     accepted_context.completed = false;
+-    const float speed_mm_s = fminf(APP_NAV_FINE_MAX_SPEED_MM_S,
+-        fmaxf(APP_NAV_FINE_MIN_SPEED_MM_S,
++    const float speed_mm_s = fminf(APP_SAFE_ALIGN_LATERAL_MAX_MM_S,
++        fmaxf(APP_SAFE_ALIGN_LATERAL_MIN_MM_S,
+             task_abs((float)safe_align_pixel_error_px) * APP_SAFE_ALIGN_LATERAL_MM_S_PER_PX));
+     /* MoveAngle's +90 is body-left. A target to the right needs -90. */
+     task_status.motors_active = Motor_MoveAngleHeading(speed_mm_s,
