@@ -86,6 +86,7 @@ CARGO_INJURED = 3
 CARGO_DANGER = 4
 CARGO_UNKNOWN = 5
 CARGO_MIXED_MATERIAL = 6
+CARGO_MIXED_TWO_GREEN = 7  # Same claw: exactly two green plus one core.
 
 CARGO_CLASS_CODES = {
     "": CARGO_NONE,
@@ -96,6 +97,7 @@ CARGO_CLASS_CODES = {
     "danger_cyan": CARGO_DANGER,
     "unknown": CARGO_UNKNOWN,
     "mixed_material": CARGO_MIXED_MATERIAL,
+    "mixed_material_two_green": CARGO_MIXED_TWO_GREEN,
 }
 
 
@@ -298,7 +300,7 @@ class CargoAuditPayload:
     def semantic_signature(self) -> tuple:
         """Compare exactly the evidence visible to F407, ignoring claw side."""
         payload = self.frame(0)[4:12]
-        histogram = [0] * (CARGO_MIXED_MATERIAL + 1)
+        histogram = [0] * (CARGO_MIXED_TWO_GREEN + 1)
         zero_class_mask = 0
         for class_code, count in ((payload[2], payload[4] & 3),
                                   (payload[3], (payload[4] >> 2) & 3)):

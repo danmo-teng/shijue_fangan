@@ -3719,3 +3719,38 @@ def test_sweep_staging_repair_and_edge_priority_without_pull():
         assert m.obstacle_route.kind=='pickup'
         m._blocked_corridor_output(replace(view,safe_corridor_edge_obstacle=False,safe_corridor_obstacle_class='danger_cyan'),stm,4.,pose=replace(pose,y_m=.54*sign))
         assert m.obstacle_route.kind=='sweep' and m.obstacle_route.sweep_left_offset_m==.15
+
+
+def test_three_material_wire_preserves_real_green_count_for_filter():
+    from dataclasses import replace
+    from itertools import product
+    from collections import Counter
+    from state_machine import CargoBatch, TrackedCargo
+    from protocol import crc16_modbus
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    for names in product(('green_supply','core_black'),repeat=3):
+        for sides in product(('left','right'),repeat=3):
+            items=tuple(TrackedCargo(i+1,n,.9,(400+i*80,450,60,80),hits=5) for i,n in enumerate(names))
+            audit=runner_module.audit_from_cargo(items,side_by_track=dict(zip(range(1,4),sides)))
+            assert m._audit_valid(audit)
+            packet=m._audit_payload(audit).frame(5)
+            assert len(m._audit_payload(audit).semantic_signature[2]) == 8
+            assert len(packet)==15 and crc16_modbus(packet[2:12])==int.from_bytes(packet[12:14],'little')
+            green=0
+            for code,count in [(packet[6],packet[8]&3),(packet[7],(packet[8]>>2)&3)]:
+                if code==1:green+=count
+                elif code==6:
+                    assert count in (2,3)
+                    green+=1
+                elif code==7:
+                    assert count==3
+                    green+=2
+                else:assert code in (0,2)
+            assert green==names.count('green_supply')
+            m._latch_carried_manifest(audit)
+            assert Counter(m.carried_manifest)==Counter(names) and m.carried_total_count==3
+    invalid=replace(audit,left_class='mixed_material',left_count=3,left_green_count=0,right_class='',right_count=0,total_count=3)
+    wire=invalid.to_protocol(initial_stash=False,destination='material',audit_id=0)
+    assert wire.unknown_present and wire.left_class=='unknown'

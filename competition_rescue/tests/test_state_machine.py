@@ -2104,13 +2104,19 @@ def test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone() -> None:
 
 
 
-def test_post_first_two_materials_follow_existing_grab_and_transport() -> None:
+def test_post_first_materials_up_to_three_follow_existing_grab_and_transport() -> None:
     from collections import Counter
     from run_competition_rescue import audit_from_cargo
     cases = ((("green_supply", "core_black"), ("left", "left")),
              (("green_supply", "core_black"), ("left", "right")),
              (("green_supply", "green_supply"), ("left", "right")),
-             (("core_black", "core_black"), ("right", "right")))
+             (("core_black", "core_black"), ("right", "right")),
+             (("green_supply",)*3, ("left",)*3),
+             (("core_black",)*3, ("right",)*3),
+             (("green_supply","green_supply","core_black"), ("left",)*3),
+             (("green_supply","core_black","core_black"), ("right",)*3),
+             (("green_supply","green_supply","core_black"), ("left","left","right")),
+             (("green_supply","core_black","core_black"), ("left","right","right")))
     for names, sides, entry_mode in ((n, s, mode) for n, s in cases for mode in (21, 38)):
         items = tuple(cargo(i + 1, name, 460 + 65 * i, 470) for i, name in enumerate(names))
         audit = audit_from_cargo(items, side_by_track=dict(zip(range(1, len(items) + 1), sides)))
@@ -2149,6 +2155,11 @@ def test_post_first_two_materials_follow_existing_grab_and_transport() -> None:
                                   capture_audit=audit)
             out = m._audit_output(view, replace(stm(mode=23, flags=3),
                                                camera_pitch_cdeg=14000), now)
+        if len(names) >= 2 and names.count("green_supply") >= 2:
+            filtering = m._audit_confirmation_output(
+                view, replace(stm(mode=50, flags=83), camera_pitch_cdeg=14000), 2.25)
+            assert filtering.reason == "post_grab_regrip_wait"
+            assert filtering.command.audit.total_count == len(names)
         acknowledged = replace(relay_stm(out, mode=22, flags=83,
             acknowledged_sequence=3, relay_mission_tx_frames=3),
             camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
@@ -2179,10 +2190,10 @@ def test_post_first_two_materials_follow_existing_grab_and_transport() -> None:
         assert m.carried_total_count == len(names)
 
 
-def test_two_material_policy_keeps_first_green_and_excludes_other_loads() -> None:
+def test_three_material_policy_keeps_first_green_and_excludes_other_loads() -> None:
     from run_competition_rescue import audit_from_cargo
     m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
-    assert m.settings.max_batch_count == 2
+    assert m.settings.max_batch_count == 3
     m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
     def audited(names):
         items = tuple(cargo(i + 1, name, 450 + 45 * i, 480) for i, name in enumerate(names))
@@ -2193,7 +2204,7 @@ def test_two_material_policy_keeps_first_green_and_excludes_other_loads() -> Non
         assert not m._audit_valid(audited(names))
     m.first_common_delivered = True
     assert m._audit_valid(audited(("injured_orange",)))
-    for names in (("green_supply",) * 3, ("injured_orange",) * 2,
+    for names in (("green_supply",) * 4, ("injured_orange",) * 2,
                   ("green_supply", "injured_orange"), ("green_supply", "danger_cyan")):
         assert not m._audit_valid(audited(names))
     legal = audited(("green_supply", "core_black"))
@@ -2202,13 +2213,13 @@ def test_two_material_policy_keeps_first_green_and_excludes_other_loads() -> Non
         assert not m._audit_valid(invalid)
     assert m._side_is_legal_for_task("mixed_material", 2)
     assert not m._side_is_legal_for_task("injured_orange", 2)
-    for invalid_max in (0, 3):
+    for invalid_max in (0, 4):
         try:
             CompetitionSettings(side="red", max_batch_count=invalid_max)
         except ValueError:
             pass
         else:
-            raise AssertionError("material batch must stay within one or two")
+            raise AssertionError("material batch must stay within one to three")
 
 
 def test_two_material_retrieval_keeps_actual_single_remaining():
@@ -2900,10 +2911,10 @@ def test_post_first_orange_preference_preserves_eligibility_and_material_fallbac
     # No continuous reranking when a closer orange appears after locking.
     assert m._target_for_batch(replace(view, cargo=(*view.cargo, cargo(8, "injured_orange", 700, 950)))) == orange_near
     assert m._choose_next_batch(replace(view, cargo=(green, black, *invalid))).track_ids == (green.track_id,)
-    # New selection does not relax the real cargo check or the two-item limit.
+    # New selection keeps the real cargo check; materials now allow three.
     assert m._audit_valid(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
     assert not m._audit_valid(CargoAudit(left_class="injured_orange", left_count=2, total_count=2))
-    assert not m._audit_valid(CargoAudit(left_class="green_supply", left_count=3, total_count=3))
+    assert m._audit_valid(CargoAudit(left_class="green_supply", left_count=3, total_count=3))
     # Cargo continuation follows what was actually caught, not the selected ID/class.
     actual = CargoAudit(left_class="core_black", left_count=1, total_count=1)
     assert m._audit_valid(actual)
@@ -3753,3 +3764,17 @@ def test_closed_gap_green_core_orange_redirect_keeps_permission_through_navigati
         assert result.command.flags & CMD_REUSE_CONFIRMED_LOAD
         assert not arrived.audit_valid and not arrived.audit_ready  # No fabricated fresh audit needed.
         assert m.carried_manifest==(name,)
+
+
+def test_new_orange_never_reranks_locked_green_and_missing_green_is_not_orange():
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    green=cargo(301,'green_supply',600,500)
+    orange=cargo(302,'injured_orange',600,800)
+    m._select_batch(CargoBatch((green.track_id,),('green_supply',),'material'))
+    m.locked_target_track_id=green.track_id
+    m._mark_target_seen(green,1.)
+    assert m._choose_search_target(VisionSnapshot(cargo=(green,orange)))==orange
+    assert m._target_for_batch(VisionSnapshot(cargo=(green,orange)))==green
+    assert m._target_for_batch(VisionSnapshot(cargo=(orange,))) is None
+    assert m.selected_batch.track_ids==(green.track_id,)

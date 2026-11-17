@@ -328,14 +328,27 @@ class CargoAudit:
         # invalid audit instead of the planner raising while serializing it.
         left_overflow = self.left_count > 3
         right_overflow = self.right_count > 3
+        def wire_class(category: str, count: int, green: int) -> str:
+            if count > 3:
+                return "unknown"
+            if category == "mixed_material" and count == 3:
+                if green == 2:
+                    return "mixed_material_two_green"
+                if green != 1:
+                    return "unknown"  # Never guess the composition of three.
+            return category
+        left_wire = wire_class(self.left_class, self.left_count, self.left_green_count)
+        right_wire = wire_class(self.right_class, self.right_count, self.right_green_count)
         return CargoAuditPayload(
-            left_class="unknown" if left_overflow else self.left_class,
-            right_class="unknown" if right_overflow else self.right_class,
+            left_class=left_wire,
+            right_class=right_wire,
             left_count=max(0, min(3, self.left_count)),
             right_count=max(0, min(3, self.right_count)),
             total_count=self.total_count,
             danger_present=self.danger_present,
-            unknown_present=self.unknown_present or left_overflow or right_overflow,
+            unknown_present=(self.unknown_present or left_overflow or right_overflow or
+                             (left_wire == "unknown" and self.left_class == "mixed_material") or
+                             (right_wire == "unknown" and self.right_class == "mixed_material")),
             injury_mixed=self.injury_mixed,
             stable=self.stable,
             initial_stash=initial_stash,
@@ -540,7 +553,7 @@ class CompetitionSettings:
     batch_radius_m: float = 0.55
     near_material_max_distance_m: float = 0.85
     capture_clearance_m: float = 0.16
-    max_batch_count: int = 2
+    max_batch_count: int = 3
     center_stop_radius_m: float = 0.0
     return_zero_tolerance_m: float = 0.080
     pre_grab_advance_enabled: bool = False
@@ -599,8 +612,8 @@ class CompetitionSettings:
             raise ValueError("side must be red or blue")
         if self.start_zone not in {1, 2, 3, 4}:
             raise ValueError("start zone must be 1..4")
-        if not 1 <= self.max_batch_count <= 2:
-            raise ValueError("post-first material delivery supports one or two items")
+        if not 1 <= self.max_batch_count <= 3:
+            raise ValueError("post-first material delivery supports one to three items")
         if not 1 <= self.approach_center_tolerance_px <= CAMERA_IMAGE_CENTER_X_PX:
             raise ValueError("approach centre tolerance is outside the image")
         if (

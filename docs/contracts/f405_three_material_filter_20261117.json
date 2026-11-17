@@ -1,0 +1,212 @@
+{
+  "request_id": "MATCH-THREE-MATERIAL-FILTER-20261117",
+  "status": "upper_implemented_lower_parser_audit_filter_pending_not_deployed_or_hardware_verified",
+  "transport": "same 15-byte audit frame, no new opcode or added frame",
+  "class_codes": {
+    "0": "none",
+    "1": "green",
+    "2": "core",
+    "3": "injury",
+    "4": "danger",
+    "5": "unknown",
+    "6": "mixed: count2=1green1core; count3=1green2core",
+    "7": "mixed: count3 only=2green1core"
+  },
+  "limits": {
+    "first_delivery": "one green only",
+    "post_first_material_total_max": 3,
+    "injury": "single orange only; no material mixture",
+    "four_or_more": "invalid; never saturate raw total to3"
+  },
+  "filter": {
+    "new_trigger": "real stable valid closed-grab material audit with green count2 or3; one action per actual grasp",
+    "existing_triggers": "first single green and single orange unchanged",
+    "motion": "keep claws closed, Lift82deg, existing finite -100mm wheel motion, Lift85deg; existing normal NAV handoff",
+    "after_filter": "no extra audit, no extra wait; do not invent new counts",
+    "invalidation": "existing real incompatible evidence and manual STOP behavior retained"
+  },
+  "examples": [
+    {
+      "name": "two_green",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "green_supply"
+      ],
+      "claw_sides": [
+        "left",
+        "left"
+      ],
+      "audit_legal": true,
+      "filter_required": true,
+      "left_class_code": 1,
+      "right_class_code": 0,
+      "counts": 2,
+      "total": 2,
+      "context_hex": "a3 b3 1d 00 02 c6 00 78 00 00 03 e8 67 09 c3",
+      "audit_hex": "a3 b3 18 00 12 01 01 00 02 10 00 02 e0 00 c3",
+      "example_only": true
+    },
+    {
+      "name": "three_green",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "green_supply",
+        "green_supply"
+      ],
+      "claw_sides": [
+        "right",
+        "right",
+        "right"
+      ],
+      "audit_legal": true,
+      "filter_required": true,
+      "left_class_code": 0,
+      "right_class_code": 1,
+      "counts": 12,
+      "total": 3,
+      "context_hex": "a3 b3 1d 01 02 c6 00 78 00 00 03 e9 ab 59 c3",
+      "audit_hex": "a3 b3 18 01 12 01 00 01 0c 10 01 03 13 39 c3",
+      "example_only": true
+    },
+    {
+      "name": "two_green_one_core_same",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "green_supply",
+        "core_black"
+      ],
+      "claw_sides": [
+        "left",
+        "left",
+        "left"
+      ],
+      "audit_legal": true,
+      "filter_required": true,
+      "left_class_code": 7,
+      "right_class_code": 0,
+      "counts": 3,
+      "total": 3,
+      "context_hex": "a3 b3 1d 02 02 c6 00 78 00 00 03 ea ff a8 c3",
+      "audit_hex": "a3 b3 18 02 12 01 07 00 03 10 02 03 38 5a c3",
+      "example_only": true
+    },
+    {
+      "name": "two_green_one_core_split",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "green_supply",
+        "core_black"
+      ],
+      "claw_sides": [
+        "left",
+        "left",
+        "right"
+      ],
+      "audit_legal": true,
+      "filter_required": true,
+      "left_class_code": 1,
+      "right_class_code": 2,
+      "counts": 6,
+      "total": 3,
+      "context_hex": "a3 b3 1d 03 02 c6 00 78 00 00 03 eb 33 f8 c3",
+      "audit_hex": "a3 b3 18 03 12 01 01 02 06 10 03 03 4d 30 c3",
+      "example_only": true
+    },
+    {
+      "name": "one_green_two_core_same",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "core_black",
+        "core_black"
+      ],
+      "claw_sides": [
+        "right",
+        "right",
+        "right"
+      ],
+      "audit_legal": true,
+      "filter_required": false,
+      "left_class_code": 0,
+      "right_class_code": 6,
+      "counts": 12,
+      "total": 3,
+      "context_hex": "a3 b3 1d 04 02 c6 00 78 00 00 03 ec 54 0a c3",
+      "audit_hex": "a3 b3 18 04 12 01 00 06 0c 10 04 03 9a f9 c3",
+      "example_only": true
+    },
+    {
+      "name": "three_core",
+      "post_first_green": true,
+      "classes": [
+        "core_black",
+        "core_black",
+        "core_black"
+      ],
+      "claw_sides": [
+        "left",
+        "left",
+        "left"
+      ],
+      "audit_legal": true,
+      "filter_required": false,
+      "left_class_code": 2,
+      "right_class_code": 0,
+      "counts": 3,
+      "total": 3,
+      "context_hex": "a3 b3 1d 05 02 c6 00 78 00 00 03 ed 98 5a c3",
+      "audit_hex": "a3 b3 18 05 12 01 02 00 03 10 05 03 1c 0f c3",
+      "example_only": true
+    },
+    {
+      "name": "old_green_core",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "core_black"
+      ],
+      "claw_sides": [
+        "left",
+        "left"
+      ],
+      "audit_legal": true,
+      "filter_required": false,
+      "left_class_code": 6,
+      "right_class_code": 0,
+      "counts": 2,
+      "total": 2,
+      "context_hex": "a3 b3 1d 06 02 c6 00 78 00 00 03 ee cc ab c3",
+      "audit_hex": "a3 b3 18 06 12 01 06 00 02 10 06 02 c9 b7 c3",
+      "example_only": true
+    },
+    {
+      "name": "four_material",
+      "post_first_green": true,
+      "classes": [
+        "green_supply",
+        "green_supply",
+        "core_black",
+        "core_black"
+      ],
+      "claw_sides": [
+        "left",
+        "left",
+        "right",
+        "right"
+      ],
+      "audit_legal": false,
+      "filter_required": false,
+      "left_class_code": 1,
+      "right_class_code": 2,
+      "counts": 10,
+      "total": 4,
+      "context_hex": "a3 b3 1d 07 02 c6 00 78 00 00 03 ef 00 fb c3",
+      "audit_hex": "a3 b3 18 07 12 01 01 02 0a 10 07 04 3f a2 c3",
+      "example_only": true
+    }
+  ]
+}
