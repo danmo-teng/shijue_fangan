@@ -1900,6 +1900,7 @@ class CompetitionPlanner:
                 self.mission.state == CompetitionState.SEARCH_TRANSFER and
                 self.mission.search_transfer_route is not None):
             range_epoch = ("search_transfer", self.mission.search_transfer_epoch,
+                           self.mission.search_transfer_route.move_epoch,
                            self.mission.search_transfer_route.index)
         if command.opcode == CMD_CLOSED_DEFLECT:
             range_epoch = ("closed_deflect", self.mission.deflect_epoch)

@@ -1,0 +1,404 @@
+{
+  "source": "rescue_map/runtime/competition_detections.jsonl",
+  "frames": [
+    {
+      "frame": 20006,
+      "timestamp_monotonic_ns": 863318344027,
+      "detections": [
+        {
+          "class": "green_supply",
+          "confidence": 0.6684,
+          "bbox": [
+            1168,
+            2,
+            110,
+            69
+          ],
+          "center": [
+            1223,
+            36
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "green_supply",
+          "confidence": 0.2881,
+          "bbox": [
+            1023,
+            2,
+            73,
+            24
+          ],
+          "center": [
+            1059,
+            14
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "core_black",
+          "confidence": 0.2032,
+          "bbox": [
+            1175,
+            58,
+            41,
+            41
+          ],
+          "center": [
+            1195,
+            78
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "safe_red",
+          "confidence": 0.3915,
+          "bbox": [
+            942,
+            3,
+            336,
+            91
+          ],
+          "center": [
+            1110,
+            48
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 1000,
+          "class": "green_supply",
+          "confidence": 0.501048964112997,
+          "bbox": [
+            1235,
+            31,
+            43,
+            55
+          ],
+          "relative_xy_m": null,
+          "hits": 3,
+          "misses": 1,
+          "visible": false
+        },
+        {
+          "id": 1002,
+          "class": "green_supply",
+          "confidence": 0.7278286421298981,
+          "bbox": [
+            1168,
+            2,
+            110,
+            69
+          ],
+          "relative_xy_m": null,
+          "hits": 3,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 1003,
+          "class": "green_supply",
+          "confidence": 0.41473242208361627,
+          "bbox": [
+            1023,
+            2,
+            73,
+            24
+          ],
+          "relative_xy_m": null,
+          "hits": 3,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 1004,
+          "class": "core_black",
+          "confidence": 0.2032328099012375,
+          "bbox": [
+            1175,
+            58,
+            41,
+            41
+          ],
+          "relative_xy_m": null,
+          "hits": 1,
+          "misses": 0,
+          "visible": true
+        }
+      ],
+      "recomputed": [
+        {
+          "track_id": 1004,
+          "class_name": "core_black",
+          "hits": 1,
+          "visible": true,
+          "bbox": [
+            1175,
+            58,
+            41,
+            41
+          ],
+          "inside_safe_zone": false,
+          "overlap": [
+            0.8780487804878049
+          ]
+        }
+      ],
+      "selected": null
+    },
+    {
+      "frame": 20009,
+      "timestamp_monotonic_ns": 863444340570,
+      "detections": [
+        {
+          "class": "injured_orange",
+          "confidence": 0.4632,
+          "bbox": [
+            1196,
+            20,
+            82,
+            64
+          ],
+          "center": [
+            1237,
+            52
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "safe_red",
+          "confidence": 0.913,
+          "bbox": [
+            757,
+            0,
+            521,
+            114
+          ],
+          "center": [
+            1017,
+            57
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 1000,
+          "class": "green_supply",
+          "confidence": 0.501048964112997,
+          "bbox": [
+            1235,
+            31,
+            43,
+            55
+          ],
+          "relative_xy_m": null,
+          "hits": 3,
+          "misses": 4,
+          "visible": false
+        },
+        {
+          "id": 1002,
+          "class": "green_supply",
+          "confidence": 0.7292976481318474,
+          "bbox": [
+            1132,
+            0,
+            120,
+            68
+          ],
+          "relative_xy_m": null,
+          "hits": 4,
+          "misses": 2,
+          "visible": false
+        },
+        {
+          "id": 1003,
+          "class": "green_supply",
+          "confidence": 0.47163990306109194,
+          "bbox": [
+            1052,
+            0,
+            125,
+            47
+          ],
+          "relative_xy_m": null,
+          "hits": 4,
+          "misses": 1,
+          "visible": false
+        },
+        {
+          "id": 1004,
+          "class": "core_black",
+          "confidence": 0.2032328099012375,
+          "bbox": [
+            1175,
+            58,
+            41,
+            41
+          ],
+          "relative_xy_m": null,
+          "hits": 1,
+          "misses": 3,
+          "visible": false
+        },
+        {
+          "id": 1005,
+          "class": "injured_orange",
+          "confidence": 0.463157057762146,
+          "bbox": [
+            1196,
+            20,
+            82,
+            64
+          ],
+          "relative_xy_m": null,
+          "hits": 1,
+          "misses": 0,
+          "visible": true
+        }
+      ],
+      "recomputed": [
+        {
+          "track_id": 1004,
+          "class_name": "core_black",
+          "hits": 1,
+          "visible": false,
+          "bbox": [
+            1175,
+            58,
+            41,
+            41
+          ],
+          "inside_safe_zone": true,
+          "overlap": [
+            1.0
+          ]
+        },
+        {
+          "track_id": 1005,
+          "class_name": "injured_orange",
+          "hits": 1,
+          "visible": true,
+          "bbox": [
+            1196,
+            20,
+            82,
+            64
+          ],
+          "inside_safe_zone": true,
+          "overlap": [
+            1.0
+          ]
+        }
+      ],
+      "selected": null
+    },
+    {
+      "frame": 20011,
+      "timestamp_monotonic_ns": 863546329859,
+      "detections": [
+        {
+          "class": "injured_orange",
+          "confidence": 0.6879,
+          "bbox": [
+            1043,
+            0,
+            132,
+            48
+          ],
+          "center": [
+            1109,
+            24
+          ],
+          "ground_xy_mm": null
+        },
+        {
+          "class": "safe_red",
+          "confidence": 0.8509,
+          "bbox": [
+            588,
+            1,
+            690,
+            99
+          ],
+          "center": [
+            933,
+            50
+          ],
+          "ground_xy_mm": null
+        }
+      ],
+      "tracks": [
+        {
+          "id": 1002,
+          "class": "green_supply",
+          "confidence": 0.7292976481318474,
+          "bbox": [
+            1132,
+            0,
+            120,
+            68
+          ],
+          "relative_xy_m": null,
+          "hits": 4,
+          "misses": 4,
+          "visible": false
+        },
+        {
+          "id": 1003,
+          "class": "green_supply",
+          "confidence": 0.47163990306109194,
+          "bbox": [
+            1052,
+            0,
+            125,
+            47
+          ],
+          "relative_xy_m": null,
+          "hits": 4,
+          "misses": 3,
+          "visible": false
+        },
+        {
+          "id": 1005,
+          "class": "injured_orange",
+          "confidence": 0.6173859371244907,
+          "bbox": [
+            1043,
+            0,
+            132,
+            48
+          ],
+          "relative_xy_m": null,
+          "hits": 3,
+          "misses": 0,
+          "visible": true
+        }
+      ],
+      "recomputed": [
+        {
+          "track_id": 1005,
+          "class_name": "injured_orange",
+          "hits": 3,
+          "visible": true,
+          "bbox": [
+            1043,
+            0,
+            132,
+            48
+          ],
+          "inside_safe_zone": true,
+          "overlap": [
+            0.9791666666666666
+          ]
+        }
+      ],
+      "selected": null
+    }
+  ],
+  "user_ground_observation": "橙块实物在安全区前的场地上；这是误排除，不代表实物真的在安全区内",
+  "limitation": "该时段没有原始相机图像；矩形与跟踪记录不足验证实际地面边界"
+}

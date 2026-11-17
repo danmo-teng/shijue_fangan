@@ -3124,6 +3124,9 @@ def test_search_stations_one_and_three_alternate_directly_for_all_starts():
                 done=replace(idle,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=3)
                 assert m.step(v,p,done,2.1+cycle*5).command.arg_a==0 and r.index==0
                 out=m.step(v,replace(p,x_m=p.x_m+.3),replace(done,context_matches=True),2.2+cycle*5)
+                assert r.index==0 and out.command.flags>>4==13 and out.command.arg_a==300
+                assert r.move_epoch==1
+                out=m.step(v,p,replace(done,context_matches=True),2.22+cycle*5)
                 assert r.turning and out.command.flags>>4==14
                 out=m.step(v,p,replace(done,context_matches=True),2.25+cycle*5)
                 assert r.search_ready and out.command.flags>>4==12
@@ -3448,6 +3451,45 @@ def test_closed_deflect_staging_boundary_uses_original_safety_sweep_both_sides()
         assert not m._outside_deflect_zone(replace(p,y_m=.49*sign))
         assert m._outside_deflect_zone(replace(p,y_m=.30*sign),100)
         assert not m._outside_deflect_zone(replace(p,y_m=.30*sign),200)
+
+
+def test_search_transfer_rechecks_position_at_each_completed_phase():
+    from search_transfer import SearchTransferRoute
+    from protocol import CMD_BULLDOZER_STEP
+    for phase in (0, 1, 2):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.initial_stash_done = True
+        m.state = CompetitionState.SEARCH_TRANSFER
+        route = SearchTransferRoute(1, 3, (.4, 0.), 270., index=phase,
+                                    arrival_latched=True, centre_yaw_deg=180.)
+        m.search_transfer_route = route
+        done = replace(stm(mode=3 if phase == 2 else 25), context_valid=True,
+                       context_matches=True, accepted_command=CMD_BULLDOZER_STEP,
+                       action_status=3)
+        shifted = replace(pose(.4, .10), yaw_deg=180.)
+        # No different action interrupts unfinished turning/mechanics.
+        pending = m._search_transfer_output(VisionSnapshot(), shifted,
+                                             replace(done, action_status=1), 1.)
+        assert pending.command.flags >> 4 == (13, 14, 12)[phase]
+        assert route.move_epoch == 0
+        out = m._search_transfer_output(VisionSnapshot(), shifted, done, 1.1)
+        assert out.state == CompetitionState.SEARCH_TRANSFER
+        assert out.command.flags >> 4 == 13 and out.command.arg_a == 100
+        assert out.command.aux == 18000  # Keep actual heading during correction.
+        assert route.index == 0 and route.move_epoch == 1
+        assert not route.arrival_latched and route.centre_yaw_deg is None
+        # The preceding completion cannot finish the correction move.
+        waiting = m._search_transfer_output(VisionSnapshot(), shifted,
+                                            replace(done, context_matches=False), 1.2)
+        assert waiting.command.arg_a == 100 and route.index == 0
+        at = replace(shifted, y_m=0.)
+        turn = m._search_transfer_output(VisionSnapshot(), at, done, 1.3)
+        assert turn.command.flags >> 4 == 14
+        ready = m._search_transfer_output(VisionSnapshot(), at, done, 1.4)
+        assert ready.command.flags >> 4 == 12
+        finished = m._search_transfer_output(VisionSnapshot(), at,
+                                             replace(done, mode=3), 1.5)
+        assert finished.state == CompetitionState.SEARCH
 
 
 def test_closed_deflect_navigation_does_not_cross_staging_row_or_sweep_sideways():

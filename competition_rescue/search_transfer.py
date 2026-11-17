@@ -16,6 +16,7 @@ class SearchTransferRoute:
     index: int = 0
     arrival_latched: bool = False
     centre_yaw_deg: float | None = None
+    move_epoch: int = 0
     waypoints: tuple[tuple[float, float], ...] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -33,6 +34,18 @@ class SearchTransferRoute:
 
     def finish_leg(self) -> None:
         self.index += 1
+
+    def at_station(self, x_m: float, y_m: float) -> bool:
+        return math.dist((x_m, y_m), self.target_xy_m) <= self.tolerance_m + 1e-9
+
+    def reposition(self, yaw_deg: float) -> None:
+        # D=0 may already have completed the old MCU action. A correction
+        # starts a new move, never resumes that completed action in place.
+        self.index = 0
+        self.arrival_latched = False
+        self.centre_yaw_deg = None
+        self.yaw_deg = yaw_deg
+        self.move_epoch += 1
 
     def payload(self, x_m: float, y_m: float) -> tuple[int, int, int]:
         if self.turning:

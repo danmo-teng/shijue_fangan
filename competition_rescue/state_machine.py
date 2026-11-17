@@ -5518,6 +5518,13 @@ class CompetitionMission:
         assert route is not None
         complete = (stm.context_valid and stm.context_matches and
                     stm.accepted_command == CMD_BULLDOZER_STEP and bool(stm.action_status & 2))
+        if (complete and pose.valid and not route.at_station(pose.x_m, pose.y_m) and
+                (route.arrival_latched or route.turning or route.search_ready)):
+            route.reposition(pose.yaw_deg)
+            return replace(self._search_transfer_output(vision, pose,
+                replace(stm, context_matches=False), now),
+                event="search_transfer_reposition", reason="search_transfer_reposition",
+                message="最新位置已偏出搜索点5cm范围，重新补位后再转向搜索")
         if route.search_ready:
             if complete and stm.mode == STM_MODE_SEARCH:
                 destination = route.target_point

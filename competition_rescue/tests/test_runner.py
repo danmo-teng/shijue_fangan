@@ -3451,6 +3451,40 @@ def test_search_transfer_updates_wait_for_station_and_turn_before_ready():
         assert ready.command.flags>>4==14 and planner.protocol_action!=ids[1]
 
 
+def test_search_transfer_correction_allocates_new_action_after_zero_distance():
+    from dataclasses import replace
+    from search_transfer import SearchTransferRoute
+    from protocol import CMD_BULLDOZER_STEP
+    m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+    m.initial_stash_done = True
+    m.state = CompetitionState.SEARCH_TRANSFER
+    m.search_transfer_route = SearchTransferRoute(1, 3, (.4, 0.), 270.)
+    at = PoseSnapshot(True, .4, 0., 270., 0)
+    view = VisionSnapshot(frame_sequence=1)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        planner = CompetitionPlanner(m, root/'pose', root/'stm', root/'command',
+                                     root/'diag', JsonlLog(root/'events'), 50)
+        prior = StmSnapshot(mode=25, age_ms=0, context_valid=True)
+        zero = planner._output_for_cycle(view, at, prior, False, 1.)
+        assert zero.command.arg_a == 0
+        planner._publish(zero)
+        old_task, old_action = planner.protocol_task, planner.protocol_action
+        done = replace(prior, task_id=old_task, action_id=old_action,
+                       accepted_command=CMD_BULLDOZER_STEP, action_status=3)
+        shifted = replace(at, y_m=.10)
+        correction = planner._output_for_cycle(view, shifted, done, False, 1.1)
+        planner._publish(correction)
+        assert correction.command.flags >> 4 == 13 and correction.command.arg_a == 100
+        new_action = planner.protocol_action
+        assert planner.protocol_task == old_task and new_action != old_action
+        # A later H/D refresh keeps this new action, old DONE stays old.
+        update = planner._output_for_cycle(view, replace(shifted, y_m=.08), done, False, 1.2)
+        planner._publish(update)
+        assert update.command.arg_a == 80 and planner.protocol_action == new_action
+        assert m.search_transfer_route.index == 0
+
+
 def test_recorded_partial_green_guides_separation_without_inflating_cargo():
     from dataclasses import replace
     from types import SimpleNamespace
