@@ -388,6 +388,8 @@ class VisionSnapshot:
     range_reason: str = "range_calibration_missing"
     safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
     safe_corridor_obstacle_classes: tuple[str, ...] = ()
+    safe_corridor_edge_obstacle: bool = False
+    safe_corridor_b34_obstacle: bool = False
 
 
 @dataclass
@@ -1424,6 +1426,7 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.staging_repair_target = None
         self.delivery_search_point_number = self.search_point_number
         self.pre_grab_command = None
         self.pre_grab_completed_frame = None
@@ -4597,13 +4600,10 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
         *, pose: PoseSnapshot | None = None,
     ) -> CompetitionOutput:
-        if (self.settings.closed_deflect_enabled and self.selected_batch is not None and
-                pose is not None and pose.valid and stm.gripper_closed):
-            # Visual lateral alignment may change X legitimately. Recheck Y
-            # now, not an old NAV DONE, without undoing the aligned X.
-            if abs(pose.y_m-self.settings.safe_staging_y_m) > self.settings.safe_zone_staging_axial_tolerance_m:
-                return self._begin_deflect_stage(pose, now)
-            # At the staging row, only the original safety sweep applies.
+        if pose is not None:
+            repair = self._ensure_delivery_staging(pose, stm, now)
+            if repair is not None:
+                return repair
         if (self.settings.bulldozer_enabled and self.selected_batch is not None and
                 pose is not None and pose.valid):
             classes = vision.safe_corridor_obstacle_classes or (
@@ -4611,19 +4611,26 @@ class CompetitionMission:
             if classes:
                 batch = self.selected_batch
                 destination = self.confirmed_delivery_destination or batch.destination
+                kind = ("sweep" if vision.safe_corridor_edge_obstacle else
+                        handling_kind(destination, classes, first=not self.first_common_delivered))
                 previous_stash = self.obstacle_route
                 self.obstacle_route = ObstacleRoute(
                     self.settings.side, batch.track_ids,
                     self.carried_manifest or batch.classes, destination,
                     self._target_point(), (pose.x_m, pose.y_m), classes,
-                    handling_kind(destination, classes, first=not self.first_common_delivered),
+                    kind,
                     self.settings.bulldozer_position_tolerance_m,
                     replaced_stash_ids=(() if previous_stash is None else previous_stash.original_ids),
+                    sweep_left_offset_m=(.15 if kind == "sweep" and vision.safe_corridor_b34_obstacle and
+                        not vision.safe_corridor_edge_obstacle else 0.0),
                 )
                 self._reset_safe_zone_alignment()
                 self._set_state(CompetitionState.OBSTACLE_ROUTE, now)
                 return replace(self._obstacle_route_output(vision, pose, stm, now),
-                               event="bulldozer_start", reason="bulldozer_start")
+                               event="bulldozer_start", reason="bulldozer_start",
+                               message=f"清障/{kind}：贴边={vision.safe_corridor_edge_obstacle}，"
+                               f"B3/B4={vision.safe_corridor_b34_obstacle}，"
+                               f"扫障点={self.obstacle_route.sweep_point}，横扫1000mm")
         # Retire the release/pickup/retrieve sweep; retain the existing
         # blocked-corridor state for the replacement route.
         self.safe_sweep_command = None
@@ -4986,6 +4993,7 @@ class CompetitionMission:
         self._set_state(CompetitionState.BOUNDARY_RECOVERY, now)
 
     def _begin_safe_zone_pose_align(self, stm: StmSnapshot, now: float) -> None:
+        self.staging_repair_target = None
         self.safe_zone_align_initial_ack = (
             stm.acknowledged_sequence if stm.fresh else None
         )
@@ -5152,6 +5160,8 @@ class CompetitionMission:
 
     def _target_point(self) -> tuple[float, float]:
         assert self.selected_batch is not None
+        if getattr(self, 'staging_repair_target', None) is not None:
+            return self.staging_repair_target
         if self.selected_batch.destination == "stash":
             return self.settings.stash_point
         if self.confirmed_delivery_destination == "injury":
@@ -5159,6 +5169,26 @@ class CompetitionMission:
         if self.confirmed_delivery_destination == "material":
             return self.settings.material_target_x_m, self.settings.safe_staging_y_m
         raise RuntimeError("formal delivery destination is not audit-confirmed")
+
+    def _ensure_delivery_staging(self, pose: PoseSnapshot, stm: StmSnapshot,
+                                 now: float) -> CompetitionOutput | None:
+        if not pose.valid:
+            return CompetitionOutput(self.state, self._hold(),
+                "判障前等待当前位置，尚未执行判障或推进", self.selected_batch,
+                reason="corridor_staging_pose_missing")
+        if abs(pose.y_m-self.settings.safe_staging_y_m) <= self.settings.safe_zone_staging_axial_tolerance_m + 1e-9:
+            return None
+        # Keep the visually aligned lateral position; use the existing STAGE
+        # NAV and its audit/heading/visual-align handoff, not the disabled pull.
+        self.staging_repair_target = (pose.x_m, self.settings.safe_staging_y_m)
+        self._reset_safe_zone_alignment()
+        self.staging_zero_tx_baseline = None
+        self.navigation_initial_ack = stm.acknowledged_sequence
+        self._set_state(CompetitionState.NAVIGATE, now)
+        return CompetitionOutput(self.state,
+            self._navigation_command(pose, self.staging_repair_target, staging_only=True),
+            "前后位置未到预备点：保留视觉修正的左右位置，补到后重新对准和横移",
+            self.selected_batch, reason="corridor_return_to_staging")
 
     def _at_target(
         self, pose: PoseSnapshot, target: tuple[float, float], *,
@@ -7662,6 +7692,9 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.SAFE_ZONE_CORRIDOR_CHECK:
+            repair = self._ensure_delivery_staging(pose, stm, now)
+            if repair is not None:
+                return repair
             if (vision.safe_bbox is not None and not vision.safe_zone_filter_blocked and
                     stm.camera_pitch_cdeg == self.safe_zone_view_pitch_cdeg and
                     vision.frame_sequence > self.safe_zone_visual_frame):
@@ -7714,43 +7747,15 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.WAIT_SAFE_ZONE_CLEAR:
-            if self.settings.bulldozer_enabled and vision.safe_corridor_obstacle_class is not None:
-                return self._blocked_corridor_output(vision, stm, now, pose=pose)
-            new_corridor_frame = (
-                self._vision_fresh(vision, now) and
-                vision.frame_sequence > 0 and
-                vision.frame_sequence != self.safe_corridor_last_frame_sequence and
-                bool(vision.safe_corridor_polygon)
-            )
-            if new_corridor_frame:
-                self.safe_corridor_last_frame_sequence = vision.frame_sequence
-                if vision.safe_corridor_obstacle_class is None:
-                    self.enter_initial_ack = stm.acknowledged_sequence
-                    self.enter_tx_baseline = stm.relay_mission_tx_frames
-                    self.enter_command_accepted = False
-                    self._set_state(CompetitionState.ENTER_SAFE_ZONE, now)
-                    return CompetitionOutput(
-                        self.state,
-                        self._enter_safe_zone_command(),
-                        "推进走廊已清空，沿原投送动作进入安全区",
-                        self.selected_batch,
-                        event="safe_zone_clear_wait_resolved",
-                        tx_policy="normal_command",
-                        reason="safe_zone_clear_wait_resolved",
-                        expected_stm_modes=(STM_MODE_RAM_VERIFY,),
-                    )
-            return CompetitionOutput(
-                self.state,
-                self._pause(),
-                "旧清障已停用，保持载荷；走廊仍有阻挡，待新绕行/清障接管",
-                self.selected_batch,
-                tx_policy="pause",
-                reason="legacy_safe_sweep_disabled",
-                expected_stm_modes=(STM_MODE_ALIGN_SAFE_ZONE,),
-            )
+            self._begin_safe_zone_pose_align(stm, now)
+            return CompetitionOutput(self.state, self._safe_zone_pose_align_command(),
+                "重新对准与视觉横移后再判障", self.selected_batch,
+                reason="corridor_wait_realign")
 
         if self.state == CompetitionState.CLEAR_SAFE_ZONE:
-            return self._blocked_corridor_output(vision, stm, now, pose=pose)
+            self._begin_safe_zone_pose_align(stm, now)
+            return CompetitionOutput(self.state, self._safe_zone_pose_align_command(),
+                "清障前重新对准和横移", self.selected_batch, reason="clear_realign")
 
         if self.state == CompetitionState.INVALID_RELEASE:
             if stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}:
@@ -7941,6 +7946,10 @@ class CompetitionMission:
             return self._attack_return_output(vision, pose, stm, now)
 
         if self.state == CompetitionState.ENTER_SAFE_ZONE:
+            if not self.enter_command_published and not self.enter_command_accepted:
+                repair = self._ensure_delivery_staging(pose, stm, now)
+                if repair is not None:
+                    return repair
             local_exit = self._delivery_local_exit_output(pose, stm, now)
             if local_exit is not None:
                 return local_exit

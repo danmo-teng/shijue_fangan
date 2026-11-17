@@ -677,6 +677,7 @@ def safe_zone_push_corridor(
     claw_polygon: tuple[tuple[int, int], ...],
     include_compatible_obstacles: bool = False,
     obstacle_classes_out: list[str] | None = None,
+    obstacle_items_out: list[TrackedCargo] | None = None,
 ) -> tuple[
     tuple[tuple[int, int], ...],
     TrackedCargo | None,
@@ -749,6 +750,8 @@ def safe_zone_push_corridor(
         candidates.append(item)
     if obstacle_classes_out is not None:
         obstacle_classes_out.extend(item.class_name for item in candidates)
+    if obstacle_items_out is not None:
+        obstacle_items_out.extend(candidates)
     if not candidates:
         return polygon, None, None, SAFE_CORRIDOR_CLEAR
     # Pixel ordering chooses a target; it is not a ground-distance estimate.
@@ -759,6 +762,26 @@ def safe_zone_push_corridor(
         item.bbox[1] + item.bbox[3], item.area_px, -item.track_id,
     ))
     return polygon, obstacle, None, SAFE_CORRIDOR_BLOCKED
+
+
+def sweep_obstacle_policy(items, safe_bbox, pitch, calibration):
+    """Pixel decisions only; 115 uses the user-approved 120 band layout."""
+    if safe_bbox is None or pitch not in {11500, 12000}:
+        return False, False
+    sx, sy, sw, sh = safe_bbox
+    edge = False
+    b34 = False
+    bands = (calibration.data.get('angles', {}).get('12000', {}).get('bands', [])
+             if calibration is not None else [])
+    for item in items:
+        x, y, w, h = item.bbox
+        dx = max(sx-(x+w), x-(sx+sw), 0)
+        dy = max(sy-(y+h), y-(sy+sh), 0)
+        edge = edge or dx*dx+dy*dy <= 100
+        cy = item.center_px[1]
+        b34 = b34 or any(b['band'] in {'B3', 'B4'} and
+                         b['y_min'] <= cy < b['y_max'] for b in bands)
+    return edge, b34
 
 
 @lru_cache(maxsize=8)
@@ -1200,6 +1223,7 @@ def make_vision_snapshot(
     # The legacy offline keyword recent_corridor_obstacle is intentionally
     # ignored: a pre-alignment pixel box is not an obstacle in the new strip.
     corridor_classes: list[str] = []
+    corridor_items = []
     (
         corridor,
         corridor_obstacle,
@@ -1218,7 +1242,10 @@ def make_vision_snapshot(
         claw_polygon=rois.overall,
         include_compatible_obstacles=mission.settings.bulldozer_enabled,
         obstacle_classes_out=corridor_classes,
+        obstacle_items_out=corridor_items,
     )
+    corridor_edge, corridor_b34 = sweep_obstacle_policy(
+        corridor_items, corridor_bbox, stm.camera_pitch_cdeg, range_calibration)
     range_distances = []
     range_top_band_ids = []
     range_reason = ("range_calibration_missing" if range_calibration is None else
@@ -1279,6 +1306,8 @@ def make_vision_snapshot(
             None if corridor_obstacle is None else corridor_obstacle.class_name
         ),
         safe_corridor_obstacle_classes=tuple(sorted(set(corridor_classes))),
+        safe_corridor_edge_obstacle=corridor_edge,
+        safe_corridor_b34_obstacle=corridor_b34,
         safe_corridor_obstacle_distance_mm=corridor_distance_mm,
         safe_corridor_obstacle_track_id=(
             None if corridor_obstacle is None else corridor_obstacle.track_id

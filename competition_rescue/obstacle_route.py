@@ -62,6 +62,7 @@ class ObstacleRoute:
     awaiting_obstacle_delivery: bool = False
     recover_after_delivery: bool = False
     replaced_stash_ids: tuple[int, ...] = ()
+    sweep_left_offset_m: float = 0.0
 
     def __post_init__(self) -> None:
         common = (RouteStep.TURN_RIGHT, RouteStep.FORWARD_PARK, RouteStep.RELEASE_LOAD)
@@ -81,7 +82,7 @@ class ObstacleRoute:
     @property
     def sweep_point(self) -> tuple[float, float]:
         # Right-turn frame: behind wall 94cm, left wall 59cm, robot CENTRE.
-        return -.56 * self.side_sign, .91 * self.side_sign
+        return -.56 * self.side_sign, (.91 - self.sweep_left_offset_m) * self.side_sign
 
     @property
     def sweep_heading_cdeg(self) -> int:

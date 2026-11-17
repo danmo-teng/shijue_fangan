@@ -3641,3 +3641,48 @@ def test_runner_real_conflict_revokes_reuse_even_while_align_ack_is_pending():
         out=p._output_for_cycle(v,PoseSnapshot(True,-.15,.54,90.,0.),old,False,1.)
         assert out.command.opcode==CMD_CARGO_AUDIT and m.state==CompetitionState.TRANSPORT_AUDIT
         assert not m.transport_load_reuse_active and m.confirmed_load_audit is None
+
+
+def test_sweep_two_stations_pixel_policy_and_mirrored_geometry():
+    from types import SimpleNamespace
+    from state_machine import TrackedCargo
+    from obstacle_route import ObstacleRoute, RouteStep
+    calibration=SimpleNamespace(data=json.loads((PROJECT_ROOT/'vision/config/approach_range.json').read_text()))
+    def item(y): return TrackedCargo(1,'green_supply',.9,(250,y,40,20),hits=3)
+    for pitch in (11500,12000):
+        assert runner_module.sweep_obstacle_policy([item(110)],(200,0,100,100),pitch,calibration)==(True,False)
+        assert runner_module.sweep_obstacle_policy([item(111)],(200,0,100,100),pitch,calibration)==(False,False)
+        assert runner_module.sweep_obstacle_policy([item(90),item(300)],(200,0,100,100),pitch,calibration)==(True,True)
+        assert runner_module.sweep_obstacle_policy([item(207)],(200,0,100,100),pitch,calibration)==(False,True)
+        assert runner_module.sweep_obstacle_policy([item(570)],(200,0,100,100),pitch,calibration)==(False,False)
+    for side,sign in [('red',1),('blue',-1)]:
+        route=ObstacleRoute(side,(1,),('green_supply',),'material',(0,.54*sign),(0,.54*sign),('core_black',),'sweep',sweep_left_offset_m=.15)
+        assert abs(route.sweep_point[1]-.76*sign)<1e-9
+        assert abs(1.5-sign*route.sweep_point[1]-.74)<1e-9
+        route.index=route.steps.index(RouteStep.SWEEP_1000)
+        assert route.payload(0,0,pose_valid=True)[0]==1000
+
+
+def test_sweep_staging_repair_and_edge_priority_without_pull():
+    from state_machine import CargoBatch
+    from dataclasses import replace
+    for side,sign in [('red',1),('blue',-1)]:
+        m=CompetitionMission(CompetitionSettings(side=side,initial_stash_enabled=False,bulldozer_enabled=True))
+        m.first_common_delivered=True
+        m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+        m.confirmed_delivery_destination='material'
+        m.state=CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+        stm=StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=12000)
+        pose=PoseSnapshot(True,.23,.47*sign,90,0)
+        view=VisionSnapshot(safe_corridor_obstacle_class='green_supply',safe_corridor_edge_obstacle=True,safe_corridor_b34_obstacle=True)
+        out=m._blocked_corridor_output(view,stm,1.,pose=pose)
+        assert out.reason=='corridor_return_to_staging' and m.obstacle_route is None
+        assert m.staging_repair_target==(.23,m.settings.safe_staging_y_m)
+        m._begin_safe_zone_pose_align(stm,1.1)
+        assert m.staging_repair_target is None
+        m._blocked_corridor_output(view,stm,2.,pose=replace(pose,y_m=.54*sign))
+        assert m.obstacle_route.kind=='sweep' and m.obstacle_route.sweep_left_offset_m==0
+        m._blocked_corridor_output(replace(view,safe_corridor_edge_obstacle=False),stm,3.,pose=replace(pose,y_m=.54*sign))
+        assert m.obstacle_route.kind=='pickup'
+        m._blocked_corridor_output(replace(view,safe_corridor_edge_obstacle=False,safe_corridor_obstacle_class='danger_cyan'),stm,4.,pose=replace(pose,y_m=.54*sign))
+        assert m.obstacle_route.kind=='sweep' and m.obstacle_route.sweep_left_offset_m==.15
