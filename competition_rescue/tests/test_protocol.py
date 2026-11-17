@@ -240,3 +240,21 @@ def test_station_only_turn_modes_have_strict_payload_and_preserve_legacy():
         for mode,direction in [(0,1),(1,0),(2,2),(3,1),(-1,-1)]:
             with pytest.raises(ValueError):mission_frame(0,CMD_BULLDOZER_STEP,0xe1|side,mode,direction,0)
         with pytest.raises(ValueError):mission_frame(0,CMD_BULLDOZER_STEP,0x01|side,1,1,0)
+
+
+def test_orange_core_82_separation_payload_is_strict_and_keeps_legacy_zero():
+    import pytest
+    from protocol import (mission_frame,CMD_DISPERSE_PILE,CMD_RELEASE_LEFT,CMD_RELEASE_RIGHT,
+        CMD_SIDE_VALID,CMD_TARGET_RIGHT,CMD_VALID,CMD_RED_SIDE,SEPARATION_ORANGE_CORE_82,crc16_modbus)
+    for red in (0,CMD_RED_SIDE):
+        for command,flags in [(CMD_DISPERSE_PILE,CMD_VALID|red|CMD_SIDE_VALID),
+                              (CMD_DISPERSE_PILE,CMD_VALID|red|CMD_SIDE_VALID|CMD_TARGET_RIGHT),
+                              (CMD_RELEASE_LEFT,CMD_VALID|red),(CMD_RELEASE_RIGHT,CMD_VALID|red)]:
+            for angle in (0,SEPARATION_ORANGE_CORE_82):
+                f=mission_frame(1,command,flags,0,0,angle)
+                assert int.from_bytes(f[12:14],'little')==crc16_modbus(f[2:12])
+            for a,b,angle in [(1,0,8200),(0,1,8200),(0,0,8800)]:
+                with pytest.raises(ValueError):mission_frame(1,command,flags,a,b,angle)
+    with pytest.raises(ValueError):mission_frame(1,CMD_DISPERSE_PILE,CMD_VALID,0,0,8200)
+    from protocol import CMD_RELEASE_BOTH
+    with pytest.raises(ValueError):mission_frame(1,CMD_RELEASE_BOTH,CMD_VALID,0,0,8200)

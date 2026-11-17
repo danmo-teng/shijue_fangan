@@ -69,6 +69,7 @@ CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
 CMD_TARGET_RIGHT = 1 << 7
 CMD_DISPERSE_NEAR_KEEP = 1 << 4  # DISPERSE only: side evidence, never cargo validity.
+SEPARATION_ORANGE_CORE_82 = 8200  # Opcode-specific lift request; not a chassis heading.
 
 AUDIT_INITIAL_STASH = 1 << 0
 AUDIT_DANGER_PRESENT = 1 << 1
@@ -241,6 +242,19 @@ def mission_frame(
         if (not flags & CMD_SIDE_VALID or flags & CMD_FIRST_GREEN_BUMP or
                 arg_a != 0 or arg_b != 0 or aux_cdeg != 0):
             raise ValueError("near-claw keep requires an explicit side and zero motion payload")
+    if command in {CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT}:
+        if arg_a != 0 or arg_b != 0 or aux_cdeg not in {0, SEPARATION_ORANGE_CORE_82}:
+            raise ValueError("separation requires zero motion and a supported lift mode")
+        if aux_cdeg == SEPARATION_ORANGE_CORE_82:
+            allowed = CMD_VALID | CMD_RED_SIDE
+            if command == CMD_DISPERSE_PILE:
+                allowed |= CMD_SIDE_VALID | CMD_TARGET_RIGHT
+                if not flags & CMD_SIDE_VALID:
+                    raise ValueError("82-degree separation requires an explicit retained side")
+            if not flags & CMD_VALID or flags & ~allowed:
+                raise ValueError("invalid 82-degree separation flags")
+    if command == CMD_RELEASE_BOTH and aux_cdeg == SEPARATION_ORANGE_CORE_82:
+        raise ValueError("release both has no retained orange side")
     if command == CMD_ENTER_SAFE_ZONE:
         visual = bool(flags & CMD_VISUAL_CORRECTION_VALID)
         fallback_heading = 9000 if flags & CMD_RED_SIDE else 27000

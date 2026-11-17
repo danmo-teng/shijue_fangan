@@ -34,6 +34,7 @@ from protocol import (
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
+    SEPARATION_ORANGE_CORE_82,
     CMD_REUSE_POST_GRAB_AUDIT,
     CMD_REUSE_CONFIRMED_LOAD,
     CMD_DISTANCE_VALID,
@@ -785,6 +786,7 @@ class CompetitionMission:
         self.pending_audit_event_emitted = False
         self.pending_audit_handoff_accepted = False
         self.invalid_release_side = "both"
+        self.invalid_release_lift_cdeg = 0
         self.invalid_release_final = False
         self.invalid_release_context = "none"
         self.initial_release_initial_ack: int | None = None
@@ -1668,10 +1670,10 @@ class CompetitionMission:
         assert self.selected_batch is not None
         if self.selected_batch.initial_stash:
             return self.selected_batch.destination
-        keep = self._post_first_legal_keep_side(audit)
+        keep = self._post_first_preferred_keep_side(audit)
         if keep is not None:
-            return ("injury" if self._legal_separation_side_manifest(audit, keep) ==
-                    ("injured_orange",) else "material")
+            return ("injury" if "injured_orange" in self._separation_side_manifest(audit, keep)
+                    else "material")
         manifest = self._manifest_for_audit(audit)
         if audit.total_count == 1 and manifest == ("injured_orange",):
             return "injury"
@@ -2156,10 +2158,10 @@ class CompetitionMission:
         self.separation_start_audit = audit if keep_count > 0 or near_keep else None
         self.separation_wanted_class = None
         if audit is not None and keep_side is not None and self.first_common_delivered:
-            manifest = self._legal_separation_side_manifest(audit, keep_side)
+            manifest = self._separation_side_manifest(audit, keep_side)
             if manifest:
-                self.separation_wanted_class = ("green_supply" if "green_supply" in manifest else
-                    "injured_orange" if "injured_orange" in manifest else "core_black")
+                self.separation_wanted_class = ("injured_orange" if "injured_orange" in manifest else
+                    "green_supply" if "green_supply" in manifest else "core_black")
         if first_green_bump:
             self.disperse_context = "first_green_bump"
             self.disperse_command = CommandRequest(
@@ -2188,6 +2190,8 @@ class CompetitionMission:
             "selective" if keep_side is not None else "observe"
         )
         self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags,
+            aux=(SEPARATION_ORANGE_CORE_82 if not near_keep and audit is not None and
+                 self._orange_core_separation(audit, keep_side) else 0),
             source_vision_frame=audit.near_claw_frame if near_keep else None)
         self.disperse_initial_ack = stm.acknowledged_sequence if stm.fresh else None
         self.disperse_relay_tx_baseline = stm.relay_mission_tx_frames
@@ -2213,12 +2217,15 @@ class CompetitionMission:
             self.separation_request_counted = False
             self.separation_start_audit = audit
             self.separation_wanted_class = None
+            self.invalid_release_lift_cdeg = 0
             if audit is not None and self.first_common_delivered and self.invalid_release_side in {"left", "right"}:
                 keep = "right" if self.invalid_release_side == "left" else "left"
-                manifest = self._legal_separation_side_manifest(audit, keep)
+                manifest = self._separation_side_manifest(audit, keep)
                 if manifest:
-                    self.separation_wanted_class = ("green_supply" if "green_supply" in manifest else
-                        "injured_orange" if "injured_orange" in manifest else "core_black")
+                    self.separation_wanted_class = ("injured_orange" if "injured_orange" in manifest else
+                        "green_supply" if "green_supply" in manifest else "core_black")
+                if self._orange_core_separation(audit, keep):
+                    self.invalid_release_lift_cdeg = SEPARATION_ORANGE_CORE_82
             self.invalid_release_initial_ack = (
                 stm.acknowledged_sequence if stm.fresh else None
             )
@@ -3654,11 +3661,54 @@ class CompetitionMission:
             return ()
         return manifest
 
-    def _post_first_legal_keep_side(self, audit: CargoAudit) -> str | None:
+    def _orange_mixed_side_manifest(self, audit: CargoAudit, side: str) -> tuple[str, ...]:
+        if (not self.first_common_delivered or self.selected_batch is None or
+                self.selected_batch.initial_stash or side not in {"left", "right"} or
+                audit.total_count != audit.left_count + audit.right_count):
+            return ()
+        count = getattr(audit, side + "_count")
+        counts = dict(getattr(audit, side + "_class_counts"))
+        if (getattr(audit, side + "_class") != "unknown" or
+                not 2 <= count <= self.settings.max_batch_count or
+                sum(counts.values()) != count or counts.get("injured_orange") != 1 or
+                counts.get("green_supply", 0) != getattr(audit, side + "_green_count") or
+                not set(counts).issubset(MATERIAL_CLASSES | {"injured_orange"}) or
+                any(n <= 0 for n in counts.values())):
+            return ()
+        return tuple(name for name, n in counts.items() for _ in range(n))
+
+    def _separation_side_manifest(self, audit: CargoAudit, side: str) -> tuple[str, ...]:
+        return (self._legal_separation_side_manifest(audit, side) or
+                self._orange_mixed_side_manifest(audit, side))
+
+    def _orange_core_separation(self, audit: CargoAudit, keep_side: str | None) -> bool:
+        if (keep_side is None or audit.danger_present or audit.unknown_present or
+                "injured_orange" not in self._separation_side_manifest(audit, keep_side)):
+            return False
+        # The full real composition must identify black+orange. Do not infer
+        # black from the wire UNKNOWN category or from a missed detection.
+        counts = dict(audit.class_counts)
+        return (sum(counts.values()) == audit.total_count and
+                all(n > 0 for n in counts.values()) and
+                set(counts).issubset(MATERIAL_CLASSES | {"injured_orange"}) and
+                counts.get("core_black", 0) > 0 and counts.get("injured_orange", 0) > 0)
+
+    def _post_first_preferred_keep_side(self, audit: CargoAudit) -> str | None:
         candidates = {side: self._legal_separation_side_manifest(audit, side)
                       for side in ("left", "right")}
         candidates = {side: items for side, items in candidates.items() if items}
-        if not candidates:
+        mixed = {side: self._orange_mixed_side_manifest(audit, side) for side in ("left", "right")}
+        mixed = {side: items for side, items in mixed.items() if items}
+        orange = {side: items for side, items in candidates.items() if items == ("injured_orange",)}
+        if orange:
+            candidates = orange
+        elif mixed:
+            groups = {side: items for side, items in candidates.items() if len(items) >= 2}
+            candidates = groups or mixed
+            if not groups:
+                locked = self.cluster_keep_side or self.separation_keep_side
+                return locked if locked in candidates else next(iter(candidates))
+        elif not candidates:
             return None
         most_green = max(items.count("green_supply") for items in candidates.values())
         choices = [side for side, items in candidates.items() if items.count("green_supply") == most_green]
@@ -3667,7 +3717,7 @@ class CompetitionMission:
 
     def _side_is_disperse_candidate(self, audit: CargoAudit, side: str) -> bool:
         """A side worth separating is not permission to transport its contents."""
-        if self._legal_separation_side_manifest(audit, side):
+        if self._separation_side_manifest(audit, side):
             return True
         if (self.selected_batch is None or side not in {"left", "right"} or
                 (audit.unknown_present and not audit.danger_present) or
@@ -3722,7 +3772,7 @@ class CompetitionMission:
         return category in MATERIAL_CLASSES | {"mixed_material"}
 
     def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
-        legal = self._post_first_legal_keep_side(audit)
+        legal = self._post_first_preferred_keep_side(audit)
         if legal is not None:
             return legal
         left_nonempty = self._side_is_disperse_candidate(audit, "left")
@@ -4353,7 +4403,8 @@ class CompetitionMission:
             "right": CMD_RELEASE_RIGHT,
             "both": CMD_RELEASE_BOTH,
         }[self.invalid_release_side]
-        return CommandRequest(opcode, self._side_flags())
+        return CommandRequest(opcode, self._side_flags(), aux=(
+            self.invalid_release_lift_cdeg if self.invalid_release_side != "both" else 0))
 
     def _update_delivery_observation(self, vision: VisionSnapshot, now: float) -> None:
         if self.state not in {
@@ -6252,7 +6303,8 @@ class CompetitionMission:
                 "injured_orange" if self.selected_batch is not None and
                 self.selected_batch.destination == "injury" else "core_black"
             )
-            gained_green = old["green_supply"] == 0 and current["green_supply"] > 0
+            gained_green = (wanted != "injured_orange" and
+                            old["green_supply"] == 0 and current["green_supply"] > 0)
             reduced = current[wanted] > 0 and (
                 audit.total_count,
                 audit.total_count - current[wanted],
@@ -6272,10 +6324,10 @@ class CompetitionMission:
 
     def _prefer_green_batch(self, audit: CargoAudit) -> None:
         batch = self.selected_batch
-        keep = self._post_first_legal_keep_side(audit)
+        keep = self._post_first_preferred_keep_side(audit)
         if keep is not None:
-            manifest = self._legal_separation_side_manifest(audit, keep)
-            category = "injured_orange" if manifest == ("injured_orange",) else (
+            manifest = self._separation_side_manifest(audit, keep)
+            category = "injured_orange" if "injured_orange" in manifest else (
                 "green_supply" if "green_supply" in manifest else "core_black")
             track_id = getattr(audit, keep + "_stable_track_id")
             self.selected_batch = replace(batch,

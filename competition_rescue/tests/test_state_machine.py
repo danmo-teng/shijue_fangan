@@ -1958,12 +1958,12 @@ def test_post_first_sorting_prefers_legal_more_green_over_visual_singleton() -> 
     mixed = CargoAudit(left_class="injured_orange", right_class="green_supply",
                        left_count=1, right_count=2, right_green_count=2,
                        total_count=3, injury_mixed=True, right_stable_track_id=20)
-    assert m._preferred_keep_side(mixed) == "right"
-    assert not m._audit_payload(mixed).destination_injury
+    assert m._preferred_keep_side(mixed) == "left"
+    assert m._audit_payload(mixed).destination_injury
     generation = m.task_generation
     m._prefer_green_batch(mixed)
-    assert m.selected_batch.destination == "material"
-    assert m.selected_batch.classes == ("green_supply",) and m.selected_batch.track_ids == (20,)
+    assert m.selected_batch.destination == "injury"
+    assert m.selected_batch.classes == ("injured_orange",)
     assert m.task_generation == generation  # No new task/handshake to change sorting priority.
     m.first_common_delivered = False
     assert not m._audit_valid(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
@@ -3991,3 +3991,77 @@ def test_orange_only_search_keeps_whole_claw_evidence_and_locks_once():
     assert m._target_for_batch(replace(view,cargo=(orange,another)))==orange
     # Selection-only policy never changes the actual audited material permission.
     assert m._audit_valid(CargoAudit(left_class='core_black',left_count=1,total_count=1))
+
+
+def test_orange_separation_tradeoff_is_symmetric_and_never_certifies_mixture():
+    from itertools import product
+    from run_competition_rescue import audit_from_cargo
+    from protocol import CMD_TARGET_RIGHT,SEPARATION_ORANGE_CORE_82
+    def audited(left,right):
+        items=tuple(cargo(i+1,n,400+i*50,450) for i,n in enumerate(left+right))
+        return replace(audit_from_cargo(items,side_by_track={i+1:('left' if i<len(left) else 'right') for i in range(len(items))}),stable=True)
+    cases=[]
+    for n in (1,2,3):
+        for materials in product(('green_supply','core_black'),repeat=n):
+            cases.append((['injured_orange'],list(materials),True))
+            for mixed in [['injured_orange','core_black'],['injured_orange','green_supply']]:
+                cases.append((mixed,list(materials),n==1))
+    for left,right,orange_wins in cases:
+        for mirror in (False,True):
+            a=audited(right,left) if mirror else audited(left,right)
+            orange_side='right' if mirror else 'left'
+            keep=orange_side if orange_wins else ('left' if mirror else 'right')
+            m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+            m.first_common_delivered=True
+            m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
+            assert m._preferred_keep_side(a)==keep
+            assert m._choose_release_side(a)==('right' if keep=='left' else 'left')
+            assert m._audit_payload(a).destination_injury==orange_wins
+            assert not m._audit_valid(a)
+            m.cluster_keep_side=keep
+            out=m._start_disperse(a,stm(mode=37),1.)
+            assert bool(out.command.flags & CMD_TARGET_RIGHT)==(keep=='right')
+            expect_82=orange_wins and 'core_black' in left+right
+            assert out.command.aux==(SEPARATION_ORANGE_CORE_82 if expect_82 else 0)
+            out.command.to_frame(1)
+            assert m.selected_batch.destination==('injury' if orange_wins else 'material')
+            assert m.separation_start_audit==a and a.total_count==len(left+right)
+            if orange_wins:
+                assert m.separation_wanted_class=='injured_orange'
+                m.disperse_attempts=1
+                remaining=audited(['injured_orange'],[])
+                m._review_separation_result(remaining)
+                assert m.separation_progress_attempt==1 and m._audit_valid(remaining)
+                m._latch_carried_manifest(remaining)
+                assert m.carried_manifest==('injured_orange',)
+    # Blue-bearing/uncertain sides never gain the special orange mixture priority.
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False));m.first_common_delivered=True
+    m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
+    danger=audited(['injured_orange','danger_cyan'],['green_supply'])
+    assert m._preferred_keep_side(danger)=='right' and not m._orange_core_separation(danger,'left')
+    mixed=audited(['injured_orange','core_black'],['green_supply'])
+    unknown=replace(mixed,left_class_counts=())
+    assert m._orange_mixed_side_manifest(unknown,'left')==()
+    assert not m._orange_core_separation(replace(mixed,unknown_present=True),'left')
+    m.first_common_delivered=False
+    assert m._preferred_keep_side(mixed)=='right' and not m._orange_core_separation(mixed,'left')
+
+
+def test_orange_core_lift_request_is_latched_for_repeated_disperse_and_release():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import SEPARATION_ORANGE_CORE_82,CMD_RELEASE_LEFT
+    items=(cargo(1,'core_black',400,450),cargo(2,'injured_orange',800,450))
+    a=replace(audit_from_cargo(items,side_by_track={1:'left',2:'right'}),stable=True)
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False));m.first_common_delivered=True
+    m._select_batch(CargoBatch((2,),('injured_orange',),'injury'))
+    m.cluster_keep_side='right'
+    out=m._start_disperse(a,stm(mode=37),1.)
+    assert out.command.aux==SEPARATION_ORANGE_CORE_82
+    original=out.command
+    assert m._disperse_output(VisionSnapshot(),stm(mode=25),1.1).command==original
+    m.invalid_release_side='left';m.invalid_release_initial_ack=None
+    out=m._invalid_release_output(a,stm(mode=23),2.)
+    assert out.command.opcode==CMD_RELEASE_LEFT and out.command.aux==SEPARATION_ORANGE_CORE_82
+    assert m._invalid_release_output(CargoAudit(),stm(mode=25),2.1).command==out.command
+    m.invalid_release_side='both'
+    assert m._invalid_release_command().aux==0

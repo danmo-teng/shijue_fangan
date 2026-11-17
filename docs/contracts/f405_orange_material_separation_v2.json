@@ -1,0 +1,636 @@
+{
+  "request_id": "MATCH-ORANGE-MATERIAL-SEPARATION-V2",
+  "status": "upper_implemented_lower_lift_and_protocol_pending_not_field_verified",
+  "protocol": {
+    "type": "0x18",
+    "disperse": "0x10 explicit retained side",
+    "single_release": "0x0D releases left / 0x0E releases right",
+    "A_B": "both zero",
+    "U": "0 legacy / 8200 explicit keep-orange-remove-core at Lift82; never chassis yaw",
+    "forbidden": "no side DISPERSE, FIRST_GREEN_BUMP, NEAR_KEEP, RELEASE_BOTH cannot request U8200"
+  },
+  "transport_degrees": {
+    "single_orange": 82,
+    "legal_material": 88,
+    "empty_start_release": "original separate poses unchanged"
+  },
+  "operation": "move lift to82 then existing separation, no added100mm retreat; original real post-separation audit; legal orange82/material88; never infer successful removal from angle completion",
+  "examples": [
+    {
+      "name": "single_orange_vs_two_green",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "green_supply",
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 00 02 da 01 2c 00 00 00 00 8a 6b c3",
+      "command_hex": "a3 b3 18 00 10 49 00 00 00 00 00 00 29 b0 c3",
+      "real_audit_hex": "a3 b3 18 00 12 01 03 01 09 38 00 03 9f ce c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_two_green",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "green_supply",
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 01 02 da 01 2d 00 00 00 00 ba 3b c3",
+      "command_hex": "a3 b3 18 01 10 41 00 00 00 00 00 00 ad e0 c3",
+      "real_audit_hex": "a3 b3 18 01 12 01 03 01 09 38 00 03 92 5e c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_two_green",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "green_supply",
+        "green_supply"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 02 02 da 01 2e 00 00 00 00 ea cb c3",
+      "command_hex": "a3 b3 18 02 10 c9 00 00 00 00 00 00 b1 18 c3",
+      "real_audit_hex": "a3 b3 18 02 12 01 01 03 06 38 00 03 fd 98 c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_two_green",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "green_supply",
+        "green_supply"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 03 02 da 01 2f 00 00 00 00 da 9b c3",
+      "command_hex": "a3 b3 18 03 10 c1 00 00 00 00 00 00 35 48 c3",
+      "real_audit_hex": "a3 b3 18 03 12 01 01 03 06 38 00 03 f0 08 c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_three_core",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "core_black",
+        "core_black",
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 04 02 da 01 30 00 00 00 00 69 69 c3",
+      "command_hex": "a3 b3 18 04 10 49 00 00 00 00 20 08 03 76 c3",
+      "real_audit_hex": "a3 b3 18 04 12 01 03 02 0d 38 00 04 a9 fc c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_three_core",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "core_black",
+        "core_black",
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 05 02 da 01 31 00 00 00 00 59 39 c3",
+      "command_hex": "a3 b3 18 05 10 41 00 00 00 00 20 08 87 26 c3",
+      "real_audit_hex": "a3 b3 18 05 12 01 03 02 0d 38 00 04 a4 6c c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_three_core",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "core_black",
+        "core_black",
+        "core_black"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 06 02 da 01 32 00 00 00 00 09 c9 c3",
+      "command_hex": "a3 b3 18 06 10 c9 00 00 00 00 20 08 9b de c3",
+      "real_audit_hex": "a3 b3 18 06 12 01 02 03 07 38 00 04 8f 55 c3",
+      "example_only": true
+    },
+    {
+      "name": "single_orange_vs_three_core",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "core_black",
+        "core_black",
+        "core_black"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 07 02 da 01 33 00 00 00 00 39 99 c3",
+      "command_hex": "a3 b3 18 07 10 c1 00 00 00 00 20 08 1f 8e c3",
+      "real_audit_hex": "a3 b3 18 07 12 01 02 03 07 38 00 04 82 c5 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_single_green",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "core_black"
+      ],
+      "right": [
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 08 02 da 01 34 00 00 00 00 cd a9 c3",
+      "command_hex": "a3 b3 18 08 10 49 00 00 00 00 20 08 56 76 c3",
+      "real_audit_hex": "a3 b3 18 08 12 01 05 01 06 38 00 03 fb 7c c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_single_green",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "core_black"
+      ],
+      "right": [
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 09 02 da 01 35 00 00 00 00 fd f9 c3",
+      "command_hex": "a3 b3 18 09 10 41 00 00 00 00 20 08 d2 26 c3",
+      "real_audit_hex": "a3 b3 18 09 12 01 05 01 06 38 00 03 f6 ec c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_single_green",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "green_supply"
+      ],
+      "right": [
+        "injured_orange",
+        "core_black"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 0a 02 da 01 36 00 00 00 00 ad 09 c3",
+      "command_hex": "a3 b3 18 0a 10 c9 00 00 00 00 20 08 ce de c3",
+      "real_audit_hex": "a3 b3 18 0a 12 01 01 05 09 38 00 03 11 4c c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_single_green",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "green_supply"
+      ],
+      "right": [
+        "injured_orange",
+        "core_black"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 0b 02 da 01 37 00 00 00 00 9d 59 c3",
+      "command_hex": "a3 b3 18 0b 10 c1 00 00 00 00 20 08 4a 8e c3",
+      "real_audit_hex": "a3 b3 18 0b 12 01 01 05 09 38 00 03 1c dc c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_single_core",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "right": [
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 0c 02 da 01 38 00 00 00 00 ef 68 c3",
+      "command_hex": "a3 b3 18 0c 10 49 00 00 00 00 20 08 64 b6 c3",
+      "real_audit_hex": "a3 b3 18 0c 12 01 05 02 06 38 00 03 8d bc c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_single_core",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "right": [
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 0d 02 da 01 39 00 00 00 00 df 38 c3",
+      "command_hex": "a3 b3 18 0d 10 41 00 00 00 00 20 08 e0 e6 c3",
+      "real_audit_hex": "a3 b3 18 0d 12 01 05 02 06 38 00 03 80 2c c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_single_core",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "core_black"
+      ],
+      "right": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 0e 02 da 01 3a 00 00 00 00 8f c8 c3",
+      "command_hex": "a3 b3 18 0e 10 c9 00 00 00 00 20 08 fc 1e c3",
+      "real_audit_hex": "a3 b3 18 0e 12 01 02 05 09 38 00 03 23 bf c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_single_core",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "core_black"
+      ],
+      "right": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 0f 02 da 01 3b 00 00 00 00 bf 98 c3",
+      "command_hex": "a3 b3 18 0f 10 c1 00 00 00 00 20 08 78 4e c3",
+      "real_audit_hex": "a3 b3 18 0f 12 01 02 05 09 38 00 03 2e 2f c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_two_core",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "core_black"
+      ],
+      "right": [
+        "core_black",
+        "core_black"
+      ],
+      "keep": "right",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 10 02 da 01 3c 00 00 00 00 86 68 c3",
+      "command_hex": "a3 b3 18 10 10 c9 00 00 00 00 00 00 65 b8 c3",
+      "real_audit_hex": "a3 b3 18 10 12 01 05 02 0a 18 00 04 56 24 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_two_core",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "core_black"
+      ],
+      "right": [
+        "core_black",
+        "core_black"
+      ],
+      "keep": "right",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 11 02 da 01 3d 00 00 00 00 b6 38 c3",
+      "command_hex": "a3 b3 18 11 10 c1 00 00 00 00 00 00 e1 e8 c3",
+      "real_audit_hex": "a3 b3 18 11 12 01 05 02 0a 18 00 04 5b b4 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_two_core",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "core_black",
+        "core_black"
+      ],
+      "right": [
+        "injured_orange",
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 12 02 da 01 3e 00 00 00 00 e6 c8 c3",
+      "command_hex": "a3 b3 18 12 10 49 00 00 00 00 00 00 fd 10 c3",
+      "real_audit_hex": "a3 b3 18 12 12 01 02 05 0a 18 00 04 fb 33 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_core_vs_two_core",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "core_black",
+        "core_black"
+      ],
+      "right": [
+        "injured_orange",
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 13 02 da 01 3f 00 00 00 00 d6 98 c3",
+      "command_hex": "a3 b3 18 13 10 41 00 00 00 00 00 00 79 40 c3",
+      "real_audit_hex": "a3 b3 18 13 12 01 02 05 0a 18 00 04 f6 a3 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_green_core",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "right": [
+        "green_supply",
+        "core_black"
+      ],
+      "keep": "right",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 14 02 da 01 40 00 00 00 00 e5 62 c3",
+      "command_hex": "a3 b3 18 14 10 c9 00 00 00 00 00 00 57 78 c3",
+      "real_audit_hex": "a3 b3 18 14 12 01 05 06 0a 18 00 04 95 24 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_green_core",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "right": [
+        "green_supply",
+        "core_black"
+      ],
+      "keep": "right",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 15 02 da 01 41 00 00 00 00 d5 32 c3",
+      "command_hex": "a3 b3 18 15 10 c1 00 00 00 00 00 00 d3 28 c3",
+      "real_audit_hex": "a3 b3 18 15 12 01 05 06 0a 18 00 04 98 b4 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_green_core",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "green_supply",
+        "core_black"
+      ],
+      "right": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 16 02 da 01 42 00 00 00 00 85 c2 c3",
+      "command_hex": "a3 b3 18 16 10 49 00 00 00 00 00 00 cf d0 c3",
+      "real_audit_hex": "a3 b3 18 16 12 01 06 05 0a 18 00 04 c8 77 c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_green_vs_green_core",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "green_supply",
+        "core_black"
+      ],
+      "right": [
+        "injured_orange",
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "material",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 17 02 da 01 43 00 00 00 00 b5 92 c3",
+      "command_hex": "a3 b3 18 17 10 41 00 00 00 00 00 00 4b 80 c3",
+      "real_audit_hex": "a3 b3 18 17 12 01 06 05 0a 18 00 04 c5 e7 c3",
+      "example_only": true
+    },
+    {
+      "name": "split_core_orange",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 18 02 da 01 44 00 00 00 00 41 a2 c3",
+      "command_hex": "a3 b3 18 18 10 49 00 00 00 00 20 08 9b b6 c3",
+      "real_audit_hex": "a3 b3 18 18 12 01 03 02 05 38 00 02 b3 5e c3",
+      "example_only": true
+    },
+    {
+      "name": "split_core_orange",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "core_black"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 19 02 da 01 45 00 00 00 00 71 f2 c3",
+      "command_hex": "a3 b3 18 19 10 41 00 00 00 00 20 08 1f e6 c3",
+      "real_audit_hex": "a3 b3 18 19 12 01 03 02 05 38 00 02 be ce c3",
+      "example_only": true
+    },
+    {
+      "name": "split_core_orange",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "core_black"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 1a 02 da 01 46 00 00 00 00 21 02 c3",
+      "command_hex": "a3 b3 18 1a 10 c9 00 00 00 00 20 08 03 1e c3",
+      "real_audit_hex": "a3 b3 18 1a 12 01 02 03 05 38 00 02 96 2f c3",
+      "example_only": true
+    },
+    {
+      "name": "split_core_orange",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "core_black"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 8200,
+      "context_hex": "a3 b3 1d 1b 02 da 01 47 00 00 00 00 11 52 c3",
+      "command_hex": "a3 b3 18 1b 10 c1 00 00 00 00 20 08 87 4e c3",
+      "real_audit_hex": "a3 b3 18 1b 12 01 02 03 05 38 00 02 9b bf c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_vs_blue_green",
+      "side": "red",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "danger_cyan",
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 1c 02 da 01 48 00 00 00 00 63 63 c3",
+      "command_hex": "a3 b3 18 1c 10 49 00 00 00 00 00 00 b1 70 c3",
+      "real_audit_hex": "a3 b3 18 1c 12 01 03 05 09 3a 00 03 57 0e c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_vs_blue_green",
+      "side": "blue",
+      "mirror": false,
+      "left": [
+        "injured_orange"
+      ],
+      "right": [
+        "danger_cyan",
+        "green_supply"
+      ],
+      "keep": "left",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 1d 02 da 01 49 00 00 00 00 53 33 c3",
+      "command_hex": "a3 b3 18 1d 10 41 00 00 00 00 00 00 35 20 c3",
+      "real_audit_hex": "a3 b3 18 1d 12 01 03 05 09 3a 00 03 5a 9e c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_vs_blue_green",
+      "side": "red",
+      "mirror": true,
+      "left": [
+        "danger_cyan",
+        "green_supply"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 1e 02 da 01 4a 00 00 00 00 03 c3 c3",
+      "command_hex": "a3 b3 18 1e 10 c9 00 00 00 00 00 00 29 d8 c3",
+      "real_audit_hex": "a3 b3 18 1e 12 01 05 03 06 3a 00 03 c5 1c c3",
+      "example_only": true
+    },
+    {
+      "name": "orange_vs_blue_green",
+      "side": "blue",
+      "mirror": true,
+      "left": [
+        "danger_cyan",
+        "green_supply"
+      ],
+      "right": [
+        "injured_orange"
+      ],
+      "keep": "right",
+      "destination": "injury",
+      "separation_lift_cdeg": 0,
+      "context_hex": "a3 b3 1d 1f 02 da 01 4b 00 00 00 00 33 93 c3",
+      "command_hex": "a3 b3 18 1f 10 c1 00 00 00 00 00 00 ad 88 c3",
+      "real_audit_hex": "a3 b3 18 1f 12 01 05 03 06 3a 00 03 c8 8c c3",
+      "example_only": true
+    }
+  ]
+}
