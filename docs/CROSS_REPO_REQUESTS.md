@@ -4,15 +4,29 @@
 发布或读取不等于接收方已审核/实施；先核对实际代码，向人说明接受、调整或拒绝的理由。
 重要范围变化由人决定，已批准范围不重复审批。规则见AGENTS.md和CHANGE_WORKFLOW.md。
 
-## MATCH-WHEEL-POLICY-RESTORE-20261118：上位已核对下位交接，确认缺口仍存在，本轮未实施
+## MATCH-WHEEL-POLICY-RESTORE-20261118：上位最小修复已完成，待重启加载/实测，无新下位协议需求
 
-按用户本轮“读取下位交接、判断是否存在”的要求，已读对端[971768f4076fb2d5b7641ae8257ff0453b362979固定入口](https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/971768f4076fb2d5b7641ae8257ff0453b362979/docs/CROSS_REPO_REQUESTS.md#match-wheel-policy-restore-20261118用户请求上位修复禁轮恢复遗漏已复现待接收实施)及同提交F405_UPPER_LOWER_FLOW_AUDIT_20261118.md。本端当前cfc697b中的LocalizationWheelPolicy.update仍只按旧face_center/later_navigation及默认关闭的抽障候选恢复，未覆盖现扫障、空爪回搜索的全部实际出口。对端关于“用户要求修复”的转述不自动作为本轮实施授权；此次仅核对，未改定位策略。
+已只读核对对端[971768f固定入口](https://github.com/kkkkkkkkkkkkkkkk222222/F407-Rescue-Robot/blob/971768f4076fb2d5b7641ae8257ff0453b362979/docs/CROSS_REPO_REQUESTS.md)及同提交F405_UPPER_LOWER_FLOW_AUDIT_20261118.md。先前本端2280b89已独立复现并确认遗漏；**本次用户明确授权最小修复：安全区内保持原禁轮，确认脱离后恢复轮式辅助，不改其他定位逻辑。** 这次实施依据是用户新授权，不是对端任务单自动授权。
 
-独立调用本端真实生产类，替身只接收策略数据、不创建真实socket/SDK/UART：ALIGN_SAFE_ZONE_BY_POSE(mode10/op4)→OBSTACLE_ROUTE(mode25/op20)→OBSTACLE_PICKUP→SEARCH(mode3/op20)→APPROACH(mode20/op9)，任务/动作匹配状态均给定有效，最终suppressed仍true，仅发出一次禁用包，无normal_motion恢复。交接里的20为BULLDOZER_STEP操作码的十进制值（0x14），不是路线第20步。
+### 实现范围
 
-现场佐证：081300会话5ac77fc3184b934ff310024ee8047039的native_motion_events在245.741338220秒实际应用suppressed=true，直到284.447881717秒下一次NAV才false；260.073181001秒dynamic_localization仍记录T265_PHASE_NO_WHEEL/phase_wheel_suppressed=true。期间业务已退出投送并回观察点、重新接近，详见reports/competition_20261118_range_stall。这不是只从待办或另一端文字推断。
+只修改上位run_competition_rescue.py中原LocalizationWheelPolicy及其发布入口：
 
-含义：暂停的是轮编码器辅助定位/轮式后备，不是禁止轮子转动，原电机速度闭环与有限轮程动作仍能工作。最小方向应补齐本轮实际完成的离接触区交接，沿现有单向阶段通道恢复normal_motion；不能无条件看见任意SEARCH或旧DONE就清禁轮，也不全局取消接触阶段的原策略。该局部修复本身不需下位新协议；雷达几何为何恶化、暗光/T265、速度等不夹带。本条确认存在并记录未完成，尚无上位修复/加载/实车验收回执。
+- 安全区相关阶段、扫障仍在接触/推进时保持原suppressed=true；进入mode16只代表开始退出，不能当成已经脱离。
+- 发布器在分配下一个动作编号之前，传入本task/action实际已发出的命令。复用现有上下文匹配，核对回包接受的是哪个步骤，不能把本次待发的第12步与上一第11步的DONE混为一谈。
+- 扫障第12步PICKUP_READY真实接受并完成、mode3且空爪，接OBSTACLE_PICKUP/SEARCH/靠近时恢复。此时正常HOLD只是在等下一张识别图，不应继续保留已经结束的禁轮；HOLD本身不构成恢复证据。
+- 投送退出后进入SEARCH_TRANSFER：沿本次RETURN的mode3完成回包，或本次已接受的空爪搜索点移动/朝中心步骤13/14/12恢复；朝中心第14步直接完成进入SEARCH的出口也覆盖。原流程已完成退出才进入该空爪路径，不凭仅发出导航请求恢复。
+- 两类新增出口都使用本任务/本动作的真实匹配、接受状态及空爪回报；普通暂停、ABORT、禁止发布、故障/恢复等待不借此清禁轮。原face_center/later_navigation/候选抽障路径未改变，原旧会话关闭后不恢复保持。
+
+沿现有单向策略通道只在阶段变化时发包；没有新增等待、时间资格、反复握手或高频诊断。这里“禁轮”仅指轮编码器辅助定位/轮式后备，不是禁止电机转动。雷达匹配、T265配置、融合算法及所有行车动作不在本次修改范围；**本项不需要下位新增协议或改固件**，其他下位既有任务各自核对。
+
+### 检查与实际状态
+
+5项必要离线检查通过（复用test_runner.py）：原安全区策略/退出语义、原发送失败不阻塞发布、扫障真实完成与旧任务/旧动作/错误步骤/未完成/暂停边界、空爪回搜索点各出口、实际发布器跨步骤及HOLD衔接。生产发布器验证先发第12步不恢复，旧第11步DONE不恢复，匹配第12步完成才恢复，后续搜索/靠近不重复发包；再次进入安全区仍禁轮。
+
+原日志证据保留：081300会话5ac77fc3184b934ff310024ee8047039在245.741338220秒suppressed=true，直到284.447881717秒才false，260.073181001秒仍T265_PHASE_NO_WHEEL。详见reports/competition_20261118_range_stall；操作码20是BULLDOZER_STEP的十进制值，不是路线第20步。
+
+未启动设备、未烧录下位，当前上位运行进程是否重新加载及地面定位改善尚未验证。重开整个上位入口后核对正常脱离时恢复、下一轮进安全区仍禁轮；不能把离线通过写成整链实测通过。雷达低修正率根因仍是独立未完成项。
 
 ## MATCH-SAFE-ALIGN-LATERAL-270-400-20261118：仅安全区视觉横移改270～400mm/s，下位待应用
 

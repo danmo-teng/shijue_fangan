@@ -1718,6 +1718,124 @@ def test_safe_zone_wheel_policy_preserves_phase_and_requires_own_departure():
         receiver.close()
 
 
+def test_safe_zone_wheel_policy_sweep_exit_requires_owned_completion():
+    from dataclasses import replace
+    from unittest.mock import Mock
+    from obstacle_route import RouteStep
+    from protocol import CMD_BULLDOZER_STEP, CMD_PAUSE
+    from run_competition_rescue import LocalizationWheelPolicy
+
+    policy = LocalizationWheelPolicy('@fixture-wheel-policy', 'fixture-session')
+    policy.socket = Mock()
+    safe = CompetitionOutput(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+                             CommandRequest(CMD_HOLD), 'fixture')
+    policy.update(safe, StmSnapshot(), 11, 22)
+    ready = CommandRequest(CMD_BULLDOZER_STEP, 1 | (int(RouteStep.PICKUP_READY) << 4))
+    hold = CompetitionOutput(CompetitionState.OBSTACLE_PICKUP, CommandRequest(CMD_HOLD), 'fixture')
+    done = StmSnapshot(mode=runner_module.STM_MODE_SEARCH, context_valid=True,
+        context_matches=True, task_id=11, action_id=22,
+        accepted_command=CMD_BULLDOZER_STEP, action_status=3)
+    # Old/partial feedback and contact steps cannot stand in for the real exit.
+    invalid = [dict(context_valid=False), dict(context_matches=False), dict(task_id=12),
+               dict(action_id=23), dict(action_status=1), dict(action_status=2),
+               dict(mode=16), dict(mode=25), dict(flags=2), dict(fault_code=1),
+               dict(accepted_command=CMD_APPROACH_TARGET)]
+    for fields in invalid:
+        policy.update(hold, replace(done, **fields), 11, 22, accepted_request=ready)
+        assert policy.suppressed, fields
+    for request in (None, CommandRequest(CMD_BULLDOZER_STEP, 1 | (8 << 4)),
+                    CommandRequest(CMD_BULLDOZER_STEP, 1 | (11 << 4))):
+        policy.update(hold, done, 11, 22, accepted_request=request)
+        assert policy.suppressed
+    for blocked in (replace(hold, suppress_command_tx=True),
+                    replace(hold, command=CommandRequest(CMD_PAUSE)),
+                    replace(hold, command=CommandRequest(CMD_ABORT)),
+                    replace(hold, state=CompetitionState.RECOVERY_WAIT),
+                    replace(hold, state=CompetitionState.FAULT)):
+        policy.update(blocked, done, 11, 22, accepted_request=ready)
+        assert policy.suppressed
+    assert policy.socket.sendto.call_count == 1
+    # The completion is real even though the next output waits for an image.
+    policy.update(hold, done, 11, 22, accepted_request=ready)
+    assert not policy.suppressed
+    for state in (CompetitionState.SEARCH, CompetitionState.APPROACH):
+        policy.update(replace(hold, state=state), done, 11, 22, accepted_request=ready)
+    packets = [json.loads(call.args[0]) for call in policy.socket.sendto.call_args_list]
+    assert [p['suppressed'] for p in packets] == [True, False]
+    policy.update(safe, done, 11, 22, accepted_request=ready)
+    assert policy.suppressed and policy.socket.sendto.call_count == 3
+    policy.close()
+
+
+def test_safe_zone_wheel_policy_empty_station_return_exits():
+    from dataclasses import replace
+    from unittest.mock import Mock
+    from protocol import CMD_BULLDOZER_STEP, CMD_RETURN_CENTER
+    from run_competition_rescue import LocalizationWheelPolicy
+
+    # Both the actual completed RETURN and already accepted empty-station
+    # movement prove the handoff; merely requesting a station move does not.
+    for opcode, step, mode, status, state in (
+        (CMD_RETURN_CENTER, 0, 3, 3, CompetitionState.SEARCH_TRANSFER),
+        (CMD_BULLDOZER_STEP, 13, 25, 1, CompetitionState.SEARCH_TRANSFER),
+        (CMD_BULLDOZER_STEP, 14, 25, 1, CompetitionState.SEARCH_TRANSFER),
+        (CMD_BULLDOZER_STEP, 12, 3, 3, CompetitionState.SEARCH_TRANSFER),
+        (CMD_BULLDOZER_STEP, 14, 3, 3, CompetitionState.SEARCH),
+    ):
+        policy = LocalizationWheelPolicy('@fixture-wheel-policy', 'fixture-session')
+        policy.socket = Mock()
+        safe = CompetitionOutput(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+                                 CommandRequest(CMD_HOLD), 'fixture')
+        policy.update(safe, StmSnapshot(), 11, 22)
+        output = CompetitionOutput(state, CommandRequest(CMD_BULLDOZER_STEP, 1 | (13 << 4)), 'fixture')
+        request = CommandRequest(opcode, 1 | (step << 4))
+        done = StmSnapshot(mode=mode, context_valid=True, context_matches=True,
+            task_id=11, action_id=22, accepted_command=opcode, action_status=status)
+        for fields in (dict(action_status=0), dict(action_id=23), dict(mode=16)):
+            policy.update(output, replace(done, **fields), 11, 22, accepted_request=request)
+            assert policy.suppressed
+        policy.update(output, done, 11, 22, accepted_request=request)
+        assert not policy.suppressed
+        assert policy.socket.sendto.call_count == 2
+        policy.close()
+
+
+def test_safe_zone_wheel_policy_publisher_uses_issued_step_before_next_output():
+    from dataclasses import replace
+    from unittest.mock import Mock
+    from protocol import CMD_BULLDOZER_STEP
+    from run_competition_rescue import LocalizationWheelPolicy
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        planner = CompetitionPlanner(CompetitionMission(CompetitionSettings(side='red')),
+            root/'pose', root/'stm', root/'command', root/'diagnostic', JsonlLog(root/'events'), 50)
+        policy = LocalizationWheelPolicy('@fixture-wheel-policy', 'fixture-session')
+        policy.socket = Mock()
+        planner.localization_wheel_policy = policy
+        safe = CompetitionOutput(CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
+                                 CommandRequest(CMD_HOLD), 'fixture')
+        planner._publish(safe, stm=StmSnapshot())
+        step11 = CompetitionOutput(CompetitionState.OBSTACLE_ROUTE,
+                                  CommandRequest(CMD_BULLDOZER_STEP,
+                                      planner.mission._side_flags() | (11 << 4)), 'fixture')
+        planner._publish(step11, stm=StmSnapshot())
+        done11 = StmSnapshot(mode=3, context_valid=True, task_id=planner.protocol_task,
+            action_id=planner.protocol_action, accepted_command=CMD_BULLDOZER_STEP, action_status=3)
+        step12 = replace(step11, command=CommandRequest(CMD_BULLDOZER_STEP,
+            planner.mission._side_flags() | (12 << 4)))
+        planner._publish(step12, stm=done11)
+        assert policy.suppressed  # Issuing PICKUP_READY is not completion.
+        hold = CompetitionOutput(CompetitionState.OBSTACLE_PICKUP, CommandRequest(CMD_HOLD), 'fixture')
+        planner._publish(hold, stm=done11)
+        assert policy.suppressed  # Same opcode but previous step/action.
+        done12 = replace(done11, action_id=planner.protocol_action)
+        planner._publish(hold, stm=done12)
+        assert not policy.suppressed
+        assert policy.socket.sendto.call_count == 2
+        policy.close()
+
+
 def test_safe_zone_wheel_policy_retry_does_not_block_existing_task_publish():
     import socket
     import uuid

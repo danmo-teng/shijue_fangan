@@ -37,6 +37,7 @@ from safe_zone_memory import SafeZoneCargoMemory
 from sweep_boundaries import runtime_boundaries, corridor_polygon
 from async_diagnostics import AsyncDiagnosticWriter
 from camera_recovery import CameraRecovery
+from obstacle_route import RouteStep
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
@@ -115,6 +116,7 @@ from state_machine import (  # noqa: E402
     STM_MODE_ALIGN_SAFE_ZONE,
     STM_MODE_FACE_FIELD_CENTER,
     STM_MODE_SEARCH,
+    STM_MODE_REMOTE_ACTION,
     cargo_in_front_region,
 )
 
@@ -1501,7 +1503,7 @@ class LocalizationWheelPolicy:
             except (OSError, ValueError):
                 pass  # A diagnostic write must not block command publication.
 
-    def update(self, output, stm, task_id, action_id):
+    def update(self, output, stm, task_id, action_id, *, accepted_request=None):
         if self.closed:
             return
         entering = (output.state in self.SAFE_ZONE_STATES and
@@ -1529,7 +1531,36 @@ class LocalizationWheelPolicy:
             command.opcode == CMD_CLOSED_DEFLECT and command.flags >> 4 in {1, 2} and
             stm.context_valid and stm.context_matches and stm.accepted_command == CMD_CLOSED_DEFLECT and
             bool(stm.action_status & 1))
-        if self.suppressed and not overlay and (face_center or later_navigation or deflect_motion):
+        # The publisher supplies the command already issued under these IDs,
+        # not the next output (which may advance to another step or be HOLD).
+        owned_empty = (stm.context_valid and stm.context_matches and
+            stm.task_id == task_id and stm.action_id == action_id and
+            not stm.gripper_closed and not stm.fault and accepted_request is not None and
+            accepted_request.opcode == stm.accepted_command and bool(stm.action_status & 1))
+        step = (accepted_request.flags >> 4 if accepted_request is not None and
+                accepted_request.opcode == CMD_BULLDOZER_STEP else None)
+        pickup_departed = (owned_empty and step == int(RouteStep.PICKUP_READY) and
+            stm.mode == STM_MODE_SEARCH and bool(stm.action_status & 2) and
+            output.state in {CompetitionState.OBSTACLE_PICKUP, CompetitionState.SEARCH,
+                CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH})
+        station_departed = (owned_empty and
+            ((output.state == CompetitionState.SEARCH_TRANSFER and
+              stm.accepted_command == CMD_RETURN_CENTER and stm.mode == STM_MODE_SEARCH and
+              bool(stm.action_status & 2)) or
+             (output.state == CompetitionState.SEARCH_TRANSFER and
+              step in {int(RouteStep.EMPTY_BODY_MOVE), int(RouteStep.ATTACK_FACE_OPPONENT),
+                       int(RouteStep.PICKUP_READY)} and
+              stm.mode in {STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH}) or
+             (output.state == CompetitionState.SEARCH and
+              step == int(RouteStep.ATTACK_FACE_OPPONENT) and
+              stm.mode == STM_MODE_SEARCH and bool(stm.action_status & 2))))
+        # A normal post-completion HOLD waits for an image, not another exit.
+        # It carries no proof itself; PAUSE/ABORT/disabled publication never resume.
+        completed_departure = ((pickup_departed or station_departed) and
+            not output.suppress_command_tx and command is not None and
+            command.opcode not in {CMD_PAUSE, CMD_ABORT})
+        if self.suppressed and ((not overlay and (face_center or later_navigation or deflect_motion)) or
+                                completed_departure):
             self.suppressed = False
             self.safe_cycle_departed = True
             self.contact_task_ids.clear()
@@ -1871,7 +1902,8 @@ class CompetitionPlanner:
             matched = (stm.context_valid and stm.task_id == self.protocol_task and
                        stm.action_id == self.protocol_action)
             self.localization_wheel_policy.update(output, replace(stm, context_matches=matched),
-                self.protocol_task, self.protocol_action)
+                self.protocol_task, self.protocol_action,
+                accepted_request=(self.protocol_last_output.command if self.protocol_last_output else None))
         if output.suppress_command_tx:
             return
         command = output.command or CommandRequest(CMD_HOLD)
