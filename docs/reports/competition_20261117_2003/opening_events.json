@@ -1,0 +1,123 @@
+{
+  "t0_monotonic_s": 7489.939864557,
+  "source": "rescue_map/runtime/competition_events.jsonl",
+  "events": [
+    {
+      "timestamp_monotonic_ns": 7495970559610,
+      "event": "state_changed",
+      "from": "WAIT_START",
+      "to": "INITIAL_OBSERVE",
+      "message": "已离开出发区，开始中心观察"
+    },
+    {
+      "timestamp_monotonic_ns": 7496031258366,
+      "event": "state_changed",
+      "from": "INITIAL_OBSERVE",
+      "to": "INITIAL_CLAW_CHECK",
+      "message": "开局先静止观察夹内，等待下位机完成140°观察后按真实画面审核"
+    },
+    {
+      "timestamp_monotonic_ns": 7496298272894,
+      "event": "camera_error",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline0/GstV4l2Src:v4l2src0:\npoll error 1: Resource temporarily unavailable (11)",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "retry": 0
+    },
+    {
+      "timestamp_monotonic_ns": 7496308628562,
+      "event": "camera_restart_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "timestamp_monotonic_ns": 7496308984104,
+      "event": "camera_recovery_wait",
+      "error": "GStreamer错误：gst-resource-error-quark: Could not read from resource. (9); ../sys/v4l2/gstv4l2bufferpool.c(1181): gst_v4l2_buffer_pool_poll (): /GstPipeline:pipeline0/GstV4l2Src:v4l2src0:\npoll error 1: Resource temporarily unavailable (11)",
+      "decoder": "jpu",
+      "action": "keep_task_alive_and_hold"
+    },
+    {
+      "timestamp_monotonic_ns": 7497283556623,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "timestamp_monotonic_ns": 7497284350206,
+      "event": "camera_recovery_retry_failed",
+      "error": "摄像头节点尚未出现：/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "device": "/dev/v4l/by-id/usb-DHZJ_250303_XH_DHZJ_Camera_01.00.00-video-index0",
+      "decoder": "jpu",
+      "next_decoder": "jpu"
+    },
+    {
+      "timestamp_monotonic_ns": 7499288813000,
+      "event": "camera_recovery_retry",
+      "decoder": "jpu"
+    },
+    {
+      "timestamp_monotonic_ns": 7500382789447,
+      "event": "camera_reopened",
+      "decoder": "jpu",
+      "output_format": "nv12"
+    },
+    {
+      "timestamp_monotonic_ns": 7500469288415,
+      "event": "camera_recovery_restored",
+      "decoder": "jpu",
+      "output_format": "nv12",
+      "vision_frame_sequence": 1376
+    },
+    {
+      "timestamp_monotonic_ns": 7501239460954,
+      "event": "state_changed",
+      "from": "INITIAL_CLAW_CHECK",
+      "to": "CAPTURE_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核"
+    },
+    {
+      "timestamp_monotonic_ns": 7501429493723,
+      "event": "state_changed",
+      "from": "CAPTURE_AUDIT",
+      "to": "AUDIT_CONFIRM",
+      "message": "持续转发稳定夹内审核，等待relay成功证据"
+    },
+    {
+      "timestamp_monotonic_ns": 7501541184568,
+      "event": "state_changed",
+      "from": "AUDIT_CONFIRM",
+      "to": "GRAB",
+      "message": "稳定审核已转发确认：1件，等待合爪"
+    },
+    {
+      "timestamp_monotonic_ns": 7504658386810,
+      "event": "state_changed",
+      "from": "GRAB",
+      "to": "POST_GRAB_AUDIT",
+      "message": "等待完整140°夹爪新画面，发送非STABLE全零审核"
+    },
+    {
+      "timestamp_monotonic_ns": 7504978665052,
+      "event": "state_changed",
+      "from": "POST_GRAB_AUDIT",
+      "to": "AUDIT_CONFIRM",
+      "message": "持续发送合爪后稳定审核，等待AUDIT_VALID和mode=22"
+    },
+    {
+      "timestamp_monotonic_ns": 7505024568265,
+      "event": "state_changed",
+      "from": "AUDIT_CONFIRM",
+      "to": "GRAB",
+      "message": "合爪后2帧审核已确认，下一周期启动对应目的地NAV"
+    },
+    {
+      "timestamp_monotonic_ns": 7505061994644,
+      "event": "state_changed",
+      "from": "GRAB",
+      "to": "INITIAL_STASH_NAV",
+      "message": "前往临时物资点，持续更新剩余距离"
+    }
+  ]
+}

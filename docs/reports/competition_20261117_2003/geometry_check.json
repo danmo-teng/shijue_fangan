@@ -1,0 +1,40 @@
+[
+  {
+    "frame": 8174,
+    "video_frame_index": 33,
+    "black_id": 544,
+    "bbox": [
+      279,
+      627,
+      143,
+      101
+    ],
+    "foot": [
+      350.5,
+      728
+    ],
+    "in_saved_sweep_polygon": true,
+    "in_existing_carried_platform": false,
+    "recomputed_obstacle_id": 544,
+    "prior_confirmed_id": 513
+  },
+  {
+    "frame": 8612,
+    "video_frame_index": 122,
+    "black_id": 568,
+    "bbox": [
+      278,
+      633,
+      148,
+      99
+    ],
+    "foot": [
+      352.0,
+      732
+    ],
+    "in_saved_sweep_polygon": true,
+    "in_existing_carried_platform": false,
+    "recomputed_obstacle_id": 568,
+    "prior_confirmed_id": 564
+  }
+]
