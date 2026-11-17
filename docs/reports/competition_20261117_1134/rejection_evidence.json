@@ -1,0 +1,24 @@
+{
+  "source": "rescue_map/runtime/history/competition_wheel_input/20261117_113433_competition_wheel/uart_rx_native.jsonl",
+  "count": 469,
+  "first": {
+    "source_line": 128028,
+    "timestamp_monotonic_ns": 453831453904,
+    "hex": "a3b31e1d79bf0ec803070ec999ffc3",
+    "task": 31167,
+    "action": 3784,
+    "opcode": 3,
+    "status": 7,
+    "rejected_action": 3785
+  },
+  "last": {
+    "source_line": 153578,
+    "timestamp_monotonic_ns": 481910913891,
+    "hex": "a3b31ef179bf0ec803070ec9053bc3",
+    "task": 31167,
+    "action": 3784,
+    "opcode": 3,
+    "status": 7,
+    "rejected_action": 3785
+  }
+}
