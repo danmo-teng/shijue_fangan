@@ -1,0 +1,79 @@
+[
+  {
+    "session": "20261117_200258_competition_wheel",
+    "confidence": {
+      "2": 1050,
+      "3": 34909
+    },
+    "high_confidence_pct": 97.08000778664591,
+    "first_fallback_after_reference_s": 1.3005000000002838,
+    "normal_phase_conflict_median": 0.0170943830134965,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  },
+  {
+    "session": "20261117_232906_competition_wheel",
+    "confidence": {
+      "2": 670,
+      "3": 35289
+    },
+    "high_confidence_pct": 98.13676687338358,
+    "first_fallback_after_reference_s": 1.3007499999999936,
+    "normal_phase_conflict_median": 0.02222811180090615,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  },
+  {
+    "session": "20261118_004831_competition_wheel",
+    "confidence": {
+      "2": 4165,
+      "3": 31792
+    },
+    "high_confidence_pct": 88.41671997107656,
+    "first_fallback_after_reference_s": 0.6009999999999991,
+    "normal_phase_conflict_median": 0.0229994744957196,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  },
+  {
+    "session": "20000101_080057_competition_wheel",
+    "confidence": {
+      "2": 160,
+      "3": 35801
+    },
+    "high_confidence_pct": 99.55507355190345,
+    "first_fallback_after_reference_s": 1.2007499999999993,
+    "normal_phase_conflict_median": 0.0185951676118814,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  },
+  {
+    "session": "20261118_034119_competition_wheel",
+    "confidence": {
+      "2": 827,
+      "3": 35135
+    },
+    "high_confidence_pct": 97.70035036983482,
+    "first_fallback_after_reference_s": 10.210416667000004,
+    "normal_phase_conflict_median": 0.022866632045142,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  },
+  {
+    "session": "20000101_081057_competition_wheel",
+    "confidence": {
+      "2": 102,
+      "3": 6118
+    },
+    "high_confidence_pct": 98.36012861736334,
+    "first_fallback_after_reference_s": 3.703166667000005,
+    "normal_phase_conflict_median": 0.0166715776559885,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  },
+  {
+    "session": "20000101_081300_competition_wheel",
+    "confidence": {
+      "2": 623,
+      "3": 35344
+    },
+    "high_confidence_pct": 98.26785664637029,
+    "first_fallback_after_reference_s": 1.4009999999999962,
+    "normal_phase_conflict_median": 0.0200744456423377,
+    "interpretation": "Confidence and sampled disagreement are not ground truth; fallback already occurred in older good-lidar runs."
+  }
+]
