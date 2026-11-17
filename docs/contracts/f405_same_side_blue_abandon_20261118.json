@@ -1,0 +1,97 @@
+{
+  "request_id": "MATCH-SAME-SIDE-BLUE-ABANDON-20261118",
+  "upper_status": "implemented; 6 related checks passed",
+  "lower_basis": "f1dd0464d7de72b8f3489edef66dc1c3f6da4848; old U1 ignored, >=2 attempts may skip90; new reason pending",
+  "semantics": "RELEASE_BOTH A0/B0/U1: open, original300mm reverse, original+90deg, empty SEARCH; no station return",
+  "audit_note": "Raw known composition remains unmodified; four objects on one side retain original wire side-count3/total4/UNKNOWN overflow reporting. This release reason grants no transport permission.",
+  "cases": [
+    {
+      "team": "red",
+      "mixed_side": "left",
+      "raw_classes": [
+        "green_supply",
+        "danger_cyan"
+      ],
+      "audit_hex": "a3b3180712010500021200026674c3",
+      "context_hex": "a3b31d0831ae73c60000000089a8c3",
+      "release_hex": "a3b318080f090000000000018f38c3",
+      "combined_hex": "a3b31d0831ae73c60000000089a8c3a3b318080f090000000000018f38c3",
+      "expected": {
+        "opcode": 15,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 1,
+        "escape_mm": 300,
+        "turn_deg": 90,
+        "next_mode": 3,
+        "return_to_station": false
+      }
+    },
+    {
+      "team": "red",
+      "mixed_side": "right",
+      "raw_classes": [
+        "green_supply",
+        "danger_cyan"
+      ],
+      "audit_hex": "a3b318071201000508120002a9f9c3",
+      "context_hex": "a3b31d0831ae73c60000000089a8c3",
+      "release_hex": "a3b318080f090000000000018f38c3",
+      "combined_hex": "a3b31d0831ae73c60000000089a8c3a3b318080f090000000000018f38c3",
+      "expected": {
+        "opcode": 15,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 1,
+        "escape_mm": 300,
+        "turn_deg": 90,
+        "next_mode": 3,
+        "return_to_station": false
+      }
+    },
+    {
+      "team": "blue",
+      "mixed_side": "left",
+      "raw_classes": [
+        "green_supply",
+        "danger_cyan"
+      ],
+      "audit_hex": "a3b3180712010500021200026674c3",
+      "context_hex": "a3b31d0831ae73c60000000089a8c3",
+      "release_hex": "a3b318080f0100000000000106f8c3",
+      "combined_hex": "a3b31d0831ae73c60000000089a8c3a3b318080f0100000000000106f8c3",
+      "expected": {
+        "opcode": 15,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 1,
+        "escape_mm": 300,
+        "turn_deg": 90,
+        "next_mode": 3,
+        "return_to_station": false
+      }
+    },
+    {
+      "team": "blue",
+      "mixed_side": "right",
+      "raw_classes": [
+        "green_supply",
+        "danger_cyan"
+      ],
+      "audit_hex": "a3b318071201000508120002a9f9c3",
+      "context_hex": "a3b31d0831ae73c60000000089a8c3",
+      "release_hex": "a3b318080f0100000000000106f8c3",
+      "combined_hex": "a3b31d0831ae73c60000000089a8c3a3b318080f0100000000000106f8c3",
+      "expected": {
+        "opcode": 15,
+        "arg_a": 0,
+        "arg_b": 0,
+        "aux": 1,
+        "escape_mm": 300,
+        "turn_deg": 90,
+        "next_mode": 3,
+        "return_to_station": false
+      }
+    }
+  ]
+}

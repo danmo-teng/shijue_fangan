@@ -65,6 +65,7 @@ CMD_APPROACH_RANGE = 1 << 6
 APPROACH_RANGE_REOBSERVE = 1
 APPROACH_RANGE_PRE_GRAB = 2  # Paired firmware: open claw, 140deg, finite 50mm.
 APPROACH_ORANGE_TOP_VIEW = 4  # Stop alignment, camera120->105, resume alignment; no travel.
+RELEASE_SAME_SIDE_BLUE = 1  # RELEASE_BOTH aux: original300mm escape +90deg, then SEARCH.
 CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
@@ -257,6 +258,10 @@ def mission_frame(
                 raise ValueError("invalid 82-degree separation flags")
     if command == CMD_RELEASE_BOTH and aux_cdeg == SEPARATION_ORANGE_CORE_82:
         raise ValueError("release both has no retained orange side")
+    if command == CMD_RELEASE_BOTH and aux_cdeg == RELEASE_SAME_SIDE_BLUE:
+        if (arg_a != 0 or arg_b != 0 or not flags & CMD_VALID or
+                flags & ~(CMD_VALID | CMD_RED_SIDE)):
+            raise ValueError("same-side blue abandonment requires zero motion payload")
     if command == CMD_ENTER_SAFE_ZONE:
         visual = bool(flags & CMD_VISUAL_CORRECTION_VALID)
         fallback_heading = 9000 if flags & CMD_RED_SIDE else 27000

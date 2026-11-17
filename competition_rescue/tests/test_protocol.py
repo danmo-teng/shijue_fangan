@@ -43,6 +43,18 @@ def test_bulldozer_step_contract_roundtrips_without_legacy_flag_aliases():
         raise AssertionError('invalid new step request accepted')
 
 
+def test_same_side_blue_release_reason_is_not_a_motion_or_lift_angle():
+    import pytest
+    from protocol import CMD_RELEASE_BOTH, CMD_RED_SIDE, RELEASE_SAME_SIDE_BLUE
+    for side in (0,CMD_RED_SIDE):
+        frame=mission_frame(7,CMD_RELEASE_BOTH,CMD_VALID|side,0,0,RELEASE_SAME_SIDE_BLUE)
+        assert frame[6:10]==bytes(4) and int.from_bytes(frame[10:12],'big')==1
+        assert int.from_bytes(frame[12:14],'little')==crc16_modbus(frame[2:12])
+        assert mission_frame(7,CMD_RELEASE_BOTH,CMD_VALID|side)[10:12]==bytes(2)
+    for flags,a,b in [(0,0,0),(1,300,0),(1,0,9000),(1|64,0,0)]:
+        with pytest.raises(ValueError):mission_frame(7,CMD_RELEASE_BOTH,flags,a,b,RELEASE_SAME_SIDE_BLUE)
+
+
 def main() -> None:
     from protocol import CMD_APPROACH_TARGET, CMD_APPROACH_RANGE, CMD_DISTANCE_VALID, CMD_RED_SIDE, CMD_CLUSTER_TARGET
     flags = CMD_VALID | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID | CMD_RED_SIDE | CMD_CLUSTER_TARGET

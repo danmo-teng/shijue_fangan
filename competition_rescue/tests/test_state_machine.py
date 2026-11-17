@@ -2748,9 +2748,102 @@ def test_blue_with_recoverable_cargo_uses_existing_disperse_without_rearming():
         left_green_count=1,danger_present=True,left_invalid=True,
         left_class_counts=(('green_supply',1),('danger_cyan',1)),
         class_counts=(('green_supply',1),('danger_cyan',1)),stable=True)
-    assert m._start_danger_release(same,s,2.).command.opcode==CMD_DISPERSE_PILE
+    from protocol import RELEASE_SAME_SIDE_BLUE
+    out = m._start_danger_release(same,s,2.)
+    assert out.command.opcode == CMD_RELEASE_BOTH and out.command.aux == RELEASE_SAME_SIDE_BLUE
     only=CargoAudit(left_class='danger_cyan',left_count=1,total_count=1,danger_present=True,stable=True)
     assert not m._side_is_disperse_candidate(only,'left')  # No useful cargo to retain.
+
+
+def test_same_side_blue_abandonment_mirrors_and_keeps_real_audit_and_budget():
+    from protocol import RELEASE_SAME_SIDE_BLUE
+    from run_competition_rescue import audit_from_cargo
+    for team in ('red','blue'):
+        for side in ('left','right'):
+            for category in ('green_supply','core_black','injured_orange'):
+                for mode in (21,23,37,48):
+                    m=CompetitionMission(CompetitionSettings(side=team,initial_stash_enabled=False))
+                    m.first_common_delivered=True
+                    m._select_batch(CargoBatch((1,),(category,),'injury' if category=='injured_orange' else 'material'))
+                    items=(cargo(1,category,400,350),cargo(2,'danger_cyan',400,450))
+                    a=replace(audit_from_cargo(items,side_by_track={1:side,2:side}),stable=True)
+                    assert m._same_side_blue_mixture(a) and not m._audit_valid(a)
+                    out=m._start_danger_release(a,stm(mode=mode),1.)
+                    assert out.command.opcode==CMD_RELEASE_BOTH and out.command.aux==RELEASE_SAME_SIDE_BLUE
+                    assert out.command.arg_a==out.command.arg_b==0 and out.audit==a
+                    assert m.disperse_attempts==0 and m.invalid_release_context=='same_side_blue_abandon'
+                    epoch=m.separation_request_epoch
+                    again=m._invalid_release_output(a,stm(mode=mode),1.1)
+                    assert again.command==out.command and m.separation_request_epoch==epoch
+                    opened_only=replace(stm(mode=34),context_valid=True,context_matches=True,
+                        accepted_command=CMD_RELEASE_BOTH,action_status=3)
+                    not_finished=m.step(VisionSnapshot(frame_sequence=19),pose(),opened_only,1.15)
+                    assert not_finished.state==CompetitionState.INVALID_RELEASE
+                    assert not_finished.command==out.command  # Opening alone is not escape completion.
+                    # Actual mode24 escape owns movement; host only HOLDs until SEARCH.
+                    before=(m.delivery_count,m.orange_search_round,m.search_point_number)
+                    v=VisionSnapshot(frame_sequence=20,capture_audit=a)
+                    recovered=m.step(v,pose(),stm(mode=24),1.2)
+                    assert recovered.command.opcode==CMD_HOLD
+                    searched=m.step(replace(v,frame_sequence=21),pose(),stm(mode=3),3.)
+                    assert searched.state==CompetitionState.SEARCH and m.selected_batch is None
+                    assert (m.delivery_count,m.orange_search_round,m.search_point_number)==before
+    # Even after two earlier attempts, use the explicit reason, never fake the budget.
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    m.disperse_attempts=2
+    a=replace(audit_from_cargo((cargo(1,'green_supply',400,350),cargo(2,'danger_cyan',400,450)),
+        side_by_track={1:'left',2:'left'}),stable=True)
+    out=m._start_capture_abandon(a,stm(mode=21),1.,limit_reached=True)
+    assert out.command.aux==RELEASE_SAME_SIDE_BLUE and m.disperse_attempts==2
+    # The real frame750 had four on one side. Keep the existing wire overflow
+    # report; the new release reason must not rewrite it into a legal batch.
+    items=(cargo(1,'green_supply',400,350),cargo(2,'green_supply',450,350),
+           cargo(3,'core_black',500,450),cargo(4,'danger_cyan',400,450))
+    overflow=replace(audit_from_cargo(items,side_by_track={i:'right' for i in (1,2,3,4)}),stable=True)
+    assert m._same_side_blue_mixture(overflow)
+    wire=m._audit_payload(overflow)
+    assert wire.total_count==4 and wire.right_count==3 and wire.unknown_present
+
+
+def test_same_side_blue_does_not_infer_empty_side_or_change_stash():
+    from run_competition_rescue import audit_from_cargo
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    items=(cargo(1,'green_supply',400,350),cargo(2,'danger_cyan',400,450))
+    a=replace(audit_from_cargo(items,side_by_track={1:'left',2:'left'}),stable=True)
+    for bad in (replace(a,stable=False),replace(a,unknown_present=True),
+                replace(a,total_count=3),replace(a,right_class='unknown'),
+                replace(a,left_class_counts=()),replace(a,class_counts=(('green_supply',2),)),
+                replace(a,right_count=1,total_count=3,right_class='green_supply')):
+        assert not m._same_side_blue_mixture(bad)
+    assert not m._same_side_blue_mixture(replace(audit_from_cargo((items[1],),side_by_track={2:'left'}),stable=True))
+    assert not m._same_side_blue_mixture(replace(audit_from_cargo(items,side_by_track={1:'left',2:'right'}),stable=True))
+    m.selected_batch=replace(m.selected_batch,initial_stash=True)
+    assert not m._same_side_blue_mixture(a)
+
+
+def test_same_side_blue_release_follows_confirmed_audit_not_first_frame():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import RELEASE_SAME_SIDE_BLUE
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m.first_common_delivered=True
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    m.state=CompetitionState.CAPTURE_AUDIT
+    m.initial_stash_done=True
+    a=replace(audit_from_cargo((cargo(1,'green_supply',400,350),cargo(2,'danger_cyan',400,450)),
+        side_by_track={1:'right',2:'right'}),stable=True)
+    s=replace(stm(mode=21,flags=65),camera_pitch_cdeg=14000)
+    v=VisionSnapshot(frame_sequence=10,observed_monotonic_s=1.,capture_audit=a)
+    m.audit_last_frame_sequence=10
+    m.audit_last_accepted_observed_s=1.
+    m._begin_audit_confirmation(a,m._audit_payload(a),False,'both',False,'disperse_reaudit',s,1.)
+    out=m._audit_confirmation_output(v,s,1.)
+    assert out.command.opcode==CMD_CARGO_AUDIT
+    accepted=replace(relay_stm(out,mode=21,flags=65,acknowledged_sequence=1,
+        relay_mission_tx_frames=1),camera_pitch_cdeg=14000)
+    out=m._audit_confirmation_output(v,accepted,1.01)
+    assert out.command.opcode==CMD_RELEASE_BOTH and out.command.aux==RELEASE_SAME_SIDE_BLUE
 
 
 def test_single_anchor_audits_actual_load_before_grab_and_separates_overload():

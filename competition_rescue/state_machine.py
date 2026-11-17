@@ -37,6 +37,7 @@ from protocol import (
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
     SEPARATION_ORANGE_CORE_82,
+    RELEASE_SAME_SIDE_BLUE,
     CMD_REUSE_POST_GRAB_AUDIT,
     CMD_REUSE_CONFIRMED_LOAD,
     CMD_DISTANCE_VALID,
@@ -3932,12 +3933,36 @@ class CompetitionMission:
             return "left" if left_danger_only else "right"
         return "both"
 
+    def _same_side_blue_mixture(self, audit: CargoAudit) -> bool:
+        """A known mixed side and a genuinely empty opposite side; never infer missing cargo."""
+        if (self.selected_batch is None or self.selected_batch.initial_stash or
+                not audit.stable or not audit.danger_present or audit.unknown_present or
+                audit.total_count != audit.left_count + audit.right_count):
+            return False
+        for side, other in (("left", "right"), ("right", "left")):
+            count = getattr(audit, side + "_count")
+            composition = dict(getattr(audit, side + "_class_counts"))
+            if (getattr(audit, other + "_count") != 0 or
+                    getattr(audit, other + "_class") not in {"", "none"} or
+                    getattr(audit, other + "_class_counts") or count < 2 or
+                    sum(composition.values()) != count or any(n <= 0 for n in composition.values()) or
+                    not set(composition) <= MATERIAL_CLASSES | {"injured_orange", "danger_cyan"} or
+                    (audit.class_counts and Counter(dict(audit.class_counts)) != Counter(composition))):
+                continue
+            if (composition.get("danger_cyan", 0) > 0 and
+                    any(composition.get(name, 0) > 0 for name in
+                        MATERIAL_CLASSES | {"injured_orange"})):
+                return True
+        return False
+
     def _start_danger_release(
         self,
         audit: CargoAudit,
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
+        if self._same_side_blue_mixture(audit):
+            return self._start_capture_abandon(audit, stm, now)
         keep = self._preferred_keep_side(audit)
         if keep is not None and stm.mode != STM_MODE_RECOVERY_WAIT and not self._separation_limit_reached():
             self.cluster_keep_side = keep
@@ -4434,6 +4459,8 @@ class CompetitionMission:
             message = "首次无法判断左右归属，发送无侧DISPERSE执行20°观察转向"
         elif self.invalid_release_context == "separation_limit_failed":
             message = "连续分离无进展，结束本批；原释放/脱离完成后重新选择目标"
+        elif self.invalid_release_context == "same_side_blue_abandon":
+            message = "蓝与有用物块同侧、另一侧空：放下，原后退30cm并转90°后继续搜索"
         elif self.invalid_release_context in {
             "final_release",
             "disperse_final_release",
@@ -4474,6 +4501,8 @@ class CompetitionMission:
             tx_policy="normal_command",
             reason=exit_reason[0] if exit_reason else "invalid_audit_release",
             expected_stm_modes=(
+                (STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
+                if self.invalid_release_context == "same_side_blue_abandon" else
                 (STM_MODE_APPROACH_RECOVER, STM_MODE_CAPTURE_RETURN_WAIT, STM_MODE_SEARCH)
                 if self.invalid_release_context == "separation_limit_failed" else
                 (expected_mode, STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH)
@@ -4493,6 +4522,8 @@ class CompetitionMission:
             "right": CMD_RELEASE_RIGHT,
             "both": CMD_RELEASE_BOTH,
         }[self.invalid_release_side]
+        if opcode == CMD_RELEASE_BOTH and self.invalid_release_context == "same_side_blue_abandon":
+            return CommandRequest(opcode, self._side_flags(), aux=RELEASE_SAME_SIDE_BLUE)
         return CommandRequest(opcode, self._side_flags(), aux=(
             self.invalid_release_lift_cdeg if self.invalid_release_side != "both" else 0))
 
@@ -6369,7 +6400,8 @@ class CompetitionMission:
         self._remember_failed_search_target()
         self.invalid_release_side = "both"
         self.invalid_release_final = True
-        self.invalid_release_context = "separation_limit_failed" if limit_reached else "final_release"
+        self.invalid_release_context = ("same_side_blue_abandon" if self._same_side_blue_mixture(audit)
+            else "separation_limit_failed" if limit_reached else "final_release")
         self._set_state(CompetitionState.INVALID_RELEASE, now)
         return self._invalid_release_output(audit, stm, now)
 
@@ -8087,7 +8119,8 @@ class CompetitionMission:
             release_complete = (
                 stm.fresh and
                 stm.mode == expected_mode and
-                self.invalid_release_command_accepted
+                self.invalid_release_command_accepted and
+                self.invalid_release_context != "same_side_blue_abandon"
             )
             if release_complete:
                 if observe_release:
