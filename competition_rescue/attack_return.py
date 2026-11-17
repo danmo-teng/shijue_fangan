@@ -12,6 +12,14 @@ def centre_heading_deg(x_m: float, y_m: float) -> float:
     return math.degrees(math.atan2(-y_m, -x_m)) % 360.0
 
 
+def centre_turn_direction(target_deg: float, current_deg: float, previous: int) -> int:
+    """CCW=+1; aligned/180-degree tie inherits the preceding site scan."""
+    delta = (target_deg-current_deg+180.0) % 360.0-180.0
+    if abs(delta) <= 3.0 or abs(abs(delta)-180.0) < 1e-9:
+        return previous
+    return 1 if delta > 0 else -1
+
+
 @dataclass
 class AttackReturnRoute:
     side: str
@@ -24,6 +32,7 @@ class AttackReturnRoute:
     arrival_latched: bool = False
     after_back_xy_m: tuple[float, float] | None = None
     centre_yaw_deg: float | None = None
+    scan_direction: int | None = None
 
     @property
     def return_yaw_deg(self):

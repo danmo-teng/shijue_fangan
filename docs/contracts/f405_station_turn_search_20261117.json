@@ -1,0 +1,90 @@
+{
+  "request_id": "MATCH-STATION-TURN-SEARCH-20261117",
+  "status": "upper_implemented_lower_parser_and_state_pending_no_hardware_validation",
+  "transport": "existing TYPE0x18 opcode0x14 step14; existing frame length, CRC, context",
+  "fields": {
+    "A0_B0": "legacy turning unchanged",
+    "A1": "empty station-only slow centre turn; DONE in mode25 only on actual heading reached",
+    "A2": "empty station prepare search posture then handoff to SEARCH(mode3) with matched DONE; may lock a target before facing centre",
+    "B": "signed direction +1=field CCW,-1=field CW",
+    "U": "latched field centre absolute heading0..35999"
+  },
+  "speed": "reuse APP_SEARCH_ROTATE_SPEED_MM_S (actual reviewed341e3b7:150), no global align speed change",
+  "direction": "shortest signed yaw difference; aligned within existing3deg or exact180deg inherits preceding site direction; initial+1",
+  "budget": "A2 begins one site search when posture ready; turn-to-centre is part of that search, no reset or pause at centre; A1 turn excluded",
+  "scope": "only observation station turning/search handoff; no startup/approach/attack-loaded/sweep alignment changes",
+  "examples": [
+    {
+      "side": "red",
+      "mode": 1,
+      "direction": -1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 00 02 d0 00 c8 00 00 00 00 51 ac c3",
+      "command_hex": "a3 b3 18 00 14 e9 00 01 ff ff 46 50 87 f1 c3"
+    },
+    {
+      "side": "red",
+      "mode": 1,
+      "direction": 1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 01 02 d0 00 c9 00 00 00 00 61 fc c3",
+      "command_hex": "a3 b3 18 01 14 e9 00 01 00 01 46 50 db 85 c3"
+    },
+    {
+      "side": "red",
+      "mode": 2,
+      "direction": -1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 02 02 d0 00 ca 00 00 00 00 31 0c c3",
+      "command_hex": "a3 b3 18 02 14 e9 00 02 ff ff 46 50 da 91 c3"
+    },
+    {
+      "side": "red",
+      "mode": 2,
+      "direction": 1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 03 02 d0 00 cb 00 00 00 00 01 5c c3",
+      "command_hex": "a3 b3 18 03 14 e9 00 02 00 01 46 50 86 e5 c3"
+    },
+    {
+      "side": "blue",
+      "mode": 1,
+      "direction": -1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 04 02 d0 00 cc 00 00 00 00 92 ac c3",
+      "command_hex": "a3 b3 18 04 14 e1 00 01 ff ff 46 50 3c f1 c3"
+    },
+    {
+      "side": "blue",
+      "mode": 1,
+      "direction": 1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 05 02 d0 00 cd 00 00 00 00 a2 fc c3",
+      "command_hex": "a3 b3 18 05 14 e1 00 01 00 01 46 50 60 85 c3"
+    },
+    {
+      "side": "blue",
+      "mode": 2,
+      "direction": -1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 06 02 d0 00 ce 00 00 00 00 f2 0c c3",
+      "command_hex": "a3 b3 18 06 14 e1 00 02 ff ff 46 50 61 91 c3"
+    },
+    {
+      "side": "blue",
+      "mode": 2,
+      "direction": 1,
+      "target_heading_cdeg": 18000,
+      "example_only": true,
+      "context_hex": "a3 b3 1d 07 02 d0 00 cf 00 00 00 00 c2 5c c3",
+      "command_hex": "a3 b3 18 07 14 e1 00 02 00 01 46 50 3d e5 c3"
+    }
+  ]
+}

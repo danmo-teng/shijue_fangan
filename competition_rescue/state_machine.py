@@ -13,7 +13,7 @@ from enum import Enum
 import math
 from statistics import median
 from typing import Iterable
-from attack_return import AttackReturnRoute, opponent_heading_deg
+from attack_return import AttackReturnRoute, opponent_heading_deg, centre_turn_direction
 from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
 from closed_deflect import VIEW, PULL, STAGE, CARRYING, END_AT_ORIGINAL, choose_plan, nearest_blocker
@@ -863,6 +863,7 @@ class CompetitionMission:
         self.delivery_search_point_number = 1
         self.search_visit = 0
         self.search_site_turn_deg = 0.0
+        self.search_scan_direction = 1
         self.failed_search_targets: deque[FailedSearchTarget] = deque(maxlen=16)
         self.search_observer: tuple[float, float, float, int] | None = None
         self.target_last_observer: tuple[float, float, float, int] | None = None
@@ -5525,6 +5526,32 @@ class CompetitionMission:
                 replace(stm, context_matches=False), now),
                 event="search_transfer_reposition", reason="search_transfer_reposition",
                 message="最新位置已偏出搜索点5cm范围，重新补位后再转向搜索")
+        if route.turning:
+            if not pose.valid:
+                return CompetitionOutput(self.state, self._pause(), "到观察点后等待位置计算朝中心方向",
+                    reason="search_transfer_pose_unavailable")
+            payload = route.payload(pose.x_m, pose.y_m)
+            if route.scan_direction is None:
+                route.scan_direction = centre_turn_direction(payload[2]/100., pose.yaw_deg,
+                                                            self.search_scan_direction)
+                route.scan_start_yaw_deg = pose.yaw_deg
+            if complete and stm.mode == STM_MODE_SEARCH and stm.camera_pitch_cdeg == 12000:
+                # A=2 DONE means posture ready and SEARCH begun, not centre
+                # reached. The normal SEARCH may lock cargo during this turn.
+                self.search_scan_direction = route.scan_direction
+                result = self._complete_return_search(vision, now,
+                    "观察姿态已准备好，向中心方向边转边搜；越过中心方向后继续同向扫描",
+                    point_number=route.target_point)
+                self.search_last_yaw_deg = route.scan_start_yaw_deg
+                self._update_search_scan_progress(pose)
+                return result
+            return CompetitionOutput(self.state,
+                CommandRequest(CMD_BULLDOZER_STEP,
+                    self._side_flags() | (int(RouteStep.ATTACK_FACE_OPPONENT) << 4),
+                    2, route.scan_direction, payload[2]),
+                "到观察点恢复搜索姿态，然后以搜索速度向中心边转边搜",
+                motion_expected=True, reason="search_transfer_prepare_scan",
+                expected_stm_modes=(STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH))
         if route.search_ready:
             if complete and stm.mode == STM_MODE_SEARCH:
                 destination = route.target_point
@@ -5593,6 +5620,11 @@ class CompetitionMission:
                 "进攻返程到①，复用原搜索姿态恢复", reason="attack_return_search_ready",
                 expected_stm_modes=(STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH))
         payload = route.payload(pose.x_m, pose.y_m)
+        if route.turning:
+            if route.scan_direction is None:
+                route.scan_direction = centre_turn_direction(payload[2]/100., pose.yaw_deg,
+                                                            self.search_scan_direction)
+            payload = (1, route.scan_direction, payload[2])
         segment_done = complete and stm.mode == STM_MODE_REMOTE_ACTION and (
             route.finite_back or route.turning or payload[0] == 0)
         if segment_done:
@@ -5605,6 +5637,8 @@ class CompetitionMission:
                         reason="attack_return_heading_pose_unavailable")
                 route.finish_retreat(pose.x_m, pose.y_m)
             else:
+                if route.turning:
+                    self.search_scan_direction = route.scan_direction
                 route.advance()
             return replace(self._attack_return_output(vision, pose,
                 replace(stm, context_matches=False), now), event="attack_return_step_complete")

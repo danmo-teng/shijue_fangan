@@ -31,6 +31,7 @@ def test_match_progress_three_reachable_cases_drop_load_and_return_to_source(tmp
         old=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=True))
         old.initial_stash_done=attack;old.first_common_delivered=green
         old.search_point_number=3;old.delivery_count=3 if green else 0
+        old.search_scan_direction=-1
         old.selected_batch=CargoBatch((91,),('injured_orange',),'injury')
         old.carried_manifest=('injured_orange',);old.disperse_attempts=2
         store=ProgressStore(tmp_path/'progress.json','this-match');store.save(old)
@@ -39,6 +40,11 @@ def test_match_progress_three_reachable_cases_drop_load_and_return_to_source(tmp
         new=CompetitionMission(old.settings);restore_progress(new,saved['progress'])
         assert new.selected_batch is None and not new.carried_manifest and new.disperse_attempts==0
         assert new.first_common_delivered==green and new.initial_stash_done==attack
+        assert new.search_scan_direction==-1
+        legacy=dict(saved['progress']);legacy.pop('search_direction')
+        restore_progress(new,legacy)
+        assert new.search_scan_direction==1
+        restore_progress(new,saved['progress'])
         p=PoseSnapshot(True,0,0,90,0);st=StmSnapshot(mode=3,age_ms=0,camera_pitch_cdeg=12000)
         out=new.step(VisionSnapshot(),p,st,1.)
         if attack:

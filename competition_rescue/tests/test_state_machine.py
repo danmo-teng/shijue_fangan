@@ -3129,8 +3129,8 @@ def test_search_stations_one_and_three_alternate_directly_for_all_starts():
                 out=m.step(v,p,replace(done,context_matches=True),2.22+cycle*5)
                 assert r.turning and out.command.flags>>4==14
                 out=m.step(v,p,replace(done,context_matches=True),2.25+cycle*5)
-                assert r.search_ready and out.command.flags>>4==12
-                m.step(v,p,replace(done,mode=3,context_matches=True),2.3+cycle*5)
+                assert r.turning and out.command.arg_a==2
+                m.step(v,p,replace(done,mode=3,context_matches=True,camera_pitch_cdeg=12000),2.3+cycle*5)
                 assert m.state==CompetitionState.SEARCH and m.search_point_number==expected
                 assert m.search_visit==cycle+1 and m.search_site_turn_deg==0
             initial=CompetitionMission(CompetitionSettings(side=side,start_zone=zone,initial_stash_enabled=False))
@@ -3155,7 +3155,7 @@ def test_saved_search_station_does_not_skip_retrieval_after_obstacle_delivery():
     assert m.search_transfer_route is None and m.delivery_search_point_number == 3
 
 
-def test_search_transfer_does_not_pick_until_at_station_and_facing_centre():
+def test_search_transfer_scans_during_centre_turn_only_after_posture_ready():
     from protocol import CMD_BULLDOZER_STEP
     m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
     m.initial_stash_done=True;m._set_state(CompetitionState.SEARCH,1.)
@@ -3176,9 +3176,12 @@ def test_search_transfer_does_not_pick_until_at_station_and_facing_centre():
     out=m.step(v,at,replace(done,action_status=1),1.3)
     assert r.turning and m.selected_batch is None
     out=m.step(v,at,done,1.4)
-    assert r.search_ready and out.command.flags>>4==12
-    m.step(v,at,replace(done,mode=3),1.5)
+    assert r.turning and out.command.arg_a==2
+    m.step(v,at,replace(done,mode=3,camera_pitch_cdeg=12000),1.5)
     assert m.state==CompetitionState.SEARCH
+    out=m.step(replace(v,frame_sequence=4),at,replace(status,camera_pitch_cdeg=12000),1.6)
+    assert m.state in {CompetitionState.APPROACH,CompetitionState.CLUSTER_APPROACH}
+    assert m.selected_batch is not None
 
 
 def test_failed_target_context_survives_recovery_without_hiding_claw_audit():
@@ -3486,9 +3489,9 @@ def test_search_transfer_rechecks_position_at_each_completed_phase():
         turn = m._search_transfer_output(VisionSnapshot(), at, done, 1.3)
         assert turn.command.flags >> 4 == 14
         ready = m._search_transfer_output(VisionSnapshot(), at, done, 1.4)
-        assert ready.command.flags >> 4 == 12
+        assert ready.command.flags >> 4 == 14 and ready.command.arg_a == 2
         finished = m._search_transfer_output(VisionSnapshot(), at,
-                                             replace(done, mode=3), 1.5)
+                                             replace(done, mode=3,camera_pitch_cdeg=12000), 1.5)
         assert finished.state == CompetitionState.SEARCH
 
 
@@ -3820,3 +3823,55 @@ def test_new_orange_never_reranks_locked_green_and_missing_green_is_not_orange()
     assert m._target_for_batch(VisionSnapshot(cargo=(green,orange)))==green
     assert m._target_for_batch(VisionSnapshot(cargo=(orange,))) is None
     assert m.selected_batch.track_ids==(green.track_id,)
+
+
+def test_station_turn_direction_ties_and_scan_angle_do_not_reset_at_centre():
+    from attack_return import centre_turn_direction
+    from search_transfer import SearchTransferRoute
+    from protocol import CMD_BULLDOZER_STEP
+    for previous in (-1,1):
+        assert centre_turn_direction(0,0,previous)==previous
+        assert centre_turn_direction(180,0,previous)==previous
+        assert centre_turn_direction(0,180,previous)==previous
+        assert centre_turn_direction(0,359,previous)==previous
+    assert centre_turn_direction(0,90,1)==-1
+    assert centre_turn_direction(180,90,-1)==1
+    assert centre_turn_direction(1,350,-1)==1
+    assert centre_turn_direction(350,1,1)==-1
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m.initial_stash_done=True;m.state=CompetitionState.SEARCH_TRANSFER
+    m.search_scan_direction=-1
+    m.search_transfer_route=SearchTransferRoute(3,1,(-.4,0.),90.,index=1)
+    p=pose(-.4,0.);p=replace(p,yaw_deg=90.)
+    status=replace(stm(mode=25),context_valid=True,context_matches=False,
+                   accepted_command=CMD_BULLDOZER_STEP,action_status=1,camera_pitch_cdeg=12000)
+    v=VisionSnapshot(frame_sequence=10)
+    request=m._search_transfer_output(v,p,status,1.)
+    assert request.command.arg_a==2 and request.command.arg_b==-1
+    # Camera ready at90deg, before centre0deg: SEARCH may begin immediately.
+    ready=replace(status,mode=3,context_matches=True,action_status=3)
+    m._search_transfer_output(v,p,ready,1.1)
+    assert m.state==CompetitionState.SEARCH and m.search_scan_direction==-1
+    m._handle_search(replace(v,frame_sequence=11),replace(p,yaw_deg=30.),ready,1.2)
+    assert m.search_site_turn_deg==60.
+    m._handle_search(replace(v,frame_sequence=12),replace(p,yaw_deg=350.),ready,1.3)
+    assert m.search_site_turn_deg==100. and m.search_scan_direction==-1
+
+
+def test_attack_station_turn_slow_mode_preserves_exclusive_first_search():
+    from attack_return import AttackReturnRoute
+    from protocol import CMD_BULLDOZER_STEP
+    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m.initial_stash_done=True;m.state=CompetitionState.INITIAL_ATTACK_RETURN
+    m.attack_return_route=AttackReturnRoute('blue',1,(-.15,.69),90.,(-.4,0.),index=3)
+    p=replace(pose(-.4,0.),yaw_deg=90.)
+    v=VisionSnapshot(frame_sequence=10,cargo=(cargo(7,'green_supply',600,500),))
+    status=replace(stm(mode=25),context_valid=True,context_matches=False,
+                   accepted_command=CMD_BULLDOZER_STEP,action_status=1)
+    out=m._attack_return_output(v,p,status,1.)
+    assert (out.command.arg_a,out.command.arg_b,out.command.aux)==(1,-1,0)
+    assert m.selected_batch is None and m.state==CompetitionState.INITIAL_ATTACK_RETURN
+    m._attack_return_output(v,replace(p,yaw_deg=40.),replace(status,context_matches=True),1.1)
+    assert m.state==CompetitionState.INITIAL_ATTACK_RETURN and m.selected_batch is None
+    out=m._attack_return_output(v,replace(p,yaw_deg=0.),replace(status,context_matches=True,action_status=3),1.2)
+    assert out.command.flags>>4==12 and m.search_scan_direction==-1

@@ -17,6 +17,8 @@ class SearchTransferRoute:
     arrival_latched: bool = False
     centre_yaw_deg: float | None = None
     move_epoch: int = 0
+    scan_direction: int | None = None
+    scan_start_yaw_deg: float | None = None
     waypoints: tuple[tuple[float, float], ...] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -44,6 +46,8 @@ class SearchTransferRoute:
         self.index = 0
         self.arrival_latched = False
         self.centre_yaw_deg = None
+        self.scan_direction = None
+        self.scan_start_yaw_deg = None
         self.yaw_deg = yaw_deg
         self.move_epoch += 1
 

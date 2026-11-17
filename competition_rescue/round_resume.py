@@ -9,6 +9,7 @@ def match_progress(mission):
                 attack_done=bool(mission.initial_stash_done),
                 search_point=int(mission.search_point_number),
                 delivery_count=int(mission.delivery_count),
+                search_direction=int(mission.search_scan_direction),
                 stash_has_cargo=bool(mission.stash_has_cargo))
 
 
@@ -17,6 +18,7 @@ def restore_progress(mission, progress):
     mission.initial_stash_done = bool(progress['attack_done'])
     mission.search_point_number = mission.delivery_search_point_number = int(progress['search_point'])
     mission.delivery_count = int(progress['delivery_count'])
+    mission.search_scan_direction = int(progress.get('search_direction', 1))
     mission.stash_has_cargo = bool(progress['stash_has_cargo'])
     mission.resume_search_after_start = mission.initial_stash_done
 

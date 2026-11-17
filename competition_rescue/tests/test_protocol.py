@@ -226,3 +226,17 @@ def test_confirmed_load_reuse_align_has_explicit_flag_and_no_audit_payload():
                 pass
             else:
                 raise AssertionError('invalid reuse ALIGN accepted')
+
+
+def test_station_only_turn_modes_have_strict_payload_and_preserve_legacy():
+    import pytest
+    from protocol import mission_frame,CMD_BULLDOZER_STEP,crc16_modbus
+    for side in (0,8):
+        for mode in (1,2):
+            for direction in (-1,1):
+                frame=mission_frame(7,CMD_BULLDOZER_STEP,0xe1|side,mode,direction,18000)
+                assert len(frame)==15 and int.from_bytes(frame[12:14],'little')==crc16_modbus(frame[2:12])
+        assert mission_frame(0,CMD_BULLDOZER_STEP,0xe1|side,0,0,9000)
+        for mode,direction in [(0,1),(1,0),(2,2),(3,1),(-1,-1)]:
+            with pytest.raises(ValueError):mission_frame(0,CMD_BULLDOZER_STEP,0xe1|side,mode,direction,0)
+        with pytest.raises(ValueError):mission_frame(0,CMD_BULLDOZER_STEP,0x01|side,1,1,0)
