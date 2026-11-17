@@ -1,0 +1,345 @@
+{
+  "source_session": "20261118_034119_competition_wheel",
+  "sdk_session_id": "9141d2e228976545403c3d07c75327c0",
+  "capture_roi": {
+    "capture_polygon_px": [
+      [
+        668,
+        148
+      ],
+      [
+        768,
+        160
+      ],
+      [
+        859,
+        192
+      ],
+      [
+        932,
+        235
+      ],
+      [
+        987,
+        283
+      ],
+      [
+        1024,
+        351
+      ],
+      [
+        1068,
+        483
+      ],
+      [
+        1088,
+        615
+      ],
+      [
+        1107,
+        709
+      ],
+      [
+        184,
+        660
+      ],
+      [
+        197,
+        527
+      ],
+      [
+        229,
+        440
+      ],
+      [
+        244,
+        377
+      ],
+      [
+        293,
+        291
+      ],
+      [
+        325,
+        237
+      ],
+      [
+        367,
+        195
+      ],
+      [
+        419,
+        169
+      ],
+      [
+        489,
+        148
+      ],
+      [
+        569,
+        143
+      ]
+    ],
+    "capture_left_polygon_px": [
+      [
+        640,
+        147
+      ],
+      [
+        640,
+        684
+      ],
+      [
+        184,
+        660
+      ],
+      [
+        197,
+        527
+      ],
+      [
+        229,
+        440
+      ],
+      [
+        244,
+        377
+      ],
+      [
+        293,
+        291
+      ],
+      [
+        325,
+        237
+      ],
+      [
+        367,
+        195
+      ],
+      [
+        419,
+        169
+      ],
+      [
+        489,
+        148
+      ],
+      [
+        569,
+        143
+      ]
+    ],
+    "capture_right_polygon_px": [
+      [
+        640,
+        147
+      ],
+      [
+        668,
+        148
+      ],
+      [
+        768,
+        160
+      ],
+      [
+        859,
+        192
+      ],
+      [
+        932,
+        235
+      ],
+      [
+        987,
+        283
+      ],
+      [
+        1024,
+        351
+      ],
+      [
+        1068,
+        483
+      ],
+      [
+        1088,
+        615
+      ],
+      [
+        1107,
+        709
+      ],
+      [
+        640,
+        684
+      ]
+    ]
+  },
+  "frames": [
+    {
+      "frame_sequence": 3382,
+      "timestamp_monotonic_ns": 200939351693,
+      "tracks": [
+        {
+          "id": 270,
+          "class": "green_supply",
+          "confidence": 0.6594879278306445,
+          "bbox": [
+            350,
+            164,
+            289,
+            294
+          ],
+          "relative_xy_m": null,
+          "hits": 157,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 273,
+          "class": "green_supply",
+          "confidence": 0.8838852856727296,
+          "bbox": [
+            628,
+            168,
+            277,
+            295
+          ],
+          "relative_xy_m": null,
+          "hits": 155,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 281,
+          "class": "core_black",
+          "confidence": 0.7029245986735551,
+          "bbox": [
+            658,
+            399,
+            127,
+            69
+          ],
+          "relative_xy_m": null,
+          "hits": 98,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 282,
+          "class": "injured_orange",
+          "confidence": 0.8151700066087104,
+          "bbox": [
+            2,
+            0,
+            256,
+            152
+          ],
+          "relative_xy_m": null,
+          "hits": 20,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 283,
+          "class": "danger_cyan",
+          "confidence": 0.9293227711644626,
+          "bbox": [
+            280,
+            1,
+            181,
+            60
+          ],
+          "relative_xy_m": null,
+          "hits": 15,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "frame_sequence": 3536,
+      "timestamp_monotonic_ns": 207561721885,
+      "tracks": [
+        {
+          "id": 270,
+          "class": "green_supply",
+          "confidence": 0.6263776817740894,
+          "bbox": [
+            348,
+            164,
+            296,
+            293
+          ],
+          "relative_xy_m": null,
+          "hits": 311,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 273,
+          "class": "green_supply",
+          "confidence": 0.8906997312161269,
+          "bbox": [
+            628,
+            168,
+            277,
+            295
+          ],
+          "relative_xy_m": null,
+          "hits": 309,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 281,
+          "class": "core_black",
+          "confidence": 0.7371101826164741,
+          "bbox": [
+            657,
+            396,
+            128,
+            74
+          ],
+          "relative_xy_m": null,
+          "hits": 252,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 282,
+          "class": "injured_orange",
+          "confidence": 0.6980255922917089,
+          "bbox": [
+            2,
+            2,
+            256,
+            148
+          ],
+          "relative_xy_m": null,
+          "hits": 172,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 283,
+          "class": "danger_cyan",
+          "confidence": 0.9263987995981948,
+          "bbox": [
+            280,
+            1,
+            179,
+            60
+          ],
+          "relative_xy_m": null,
+          "hits": 169,
+          "misses": 0,
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "original_result": "claw_targets_occluded; capture_audit=None at mode23"
+}
