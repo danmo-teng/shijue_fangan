@@ -84,7 +84,6 @@ class SysfsButtonInput:
         now = time.monotonic() if now is None else float(now)
         events = []
         transitions = []
-        previous_down = {key for key, b in self._buttons.items() if b.raw or b.stable}
 
         def emit(action, key, **extra):
             events.append(dict(action=action, key=key, monotonic=now, **extra))
@@ -123,7 +122,10 @@ class SysfsButtonInput:
         # Include undebounced presses: STOP's contact debounce must not leave a
         # window in which another key's release starts the robot.
         down = [key for key, b in self._buttons.items() if b.raw or b.stable]
-        if len(set(down) | previous_down) > 1:
+        # A released contact can remain stable-down during release debounce.
+        # Do not merge that old state with a different, newly pressed key:
+        # this would discard an entire legitimate START/prewarm press.
+        if sum(bool(b.raw) for b in self._buttons.values()) > 1:
             self._chord_blocked = True
 
         for key, pressed in transitions:

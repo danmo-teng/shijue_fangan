@@ -2005,6 +2005,40 @@ def test_incident_video_replay_and_log_only_timeout():
         assert broken.close()['error']
 
 
+def test_operator_sequential_keys_do_not_become_false_chord():
+    from button_input import SysfsButtonInput
+    for previous in (1, 2, 4):
+        for long_press in (False, True):
+            levels = {key: 1 for key in range(1, 5)}
+            buttons = SysfsButtonInput(read_level=lambda key: levels[key])
+            buttons.poll(0.)
+            levels[previous] = 0
+            buttons.poll(1.); buttons.poll(1.04)
+            levels[previous] = 1
+            buttons.poll(1.10)
+            levels[3] = 0
+            buttons.poll(1.12)
+            assert 'start_pressed' in [e['action'] for e in buttons.poll(1.16)]
+            if long_press:
+                assert [e['action'] for e in buttons.poll(2.2)] == ['prewarm']
+            else:
+                levels[3] = 1; buttons.poll(1.3)
+                assert [e['action'] for e in buttons.poll(1.34)] == ['start']
+    # Real overlap remains blocked until both keys have been released.
+    levels = {key: 1 for key in range(1, 5)}
+    buttons = SysfsButtonInput(read_level=lambda key: levels[key])
+    buttons.poll(0.)
+    levels[1] = levels[3] = 0
+    buttons.poll(1.)
+    assert buttons.poll(1.04) == []
+    levels[1] = 1; buttons.poll(1.1)
+    assert buttons.poll(2.2) == []
+    levels[3] = 1; buttons.poll(2.3)
+    assert buttons.poll(2.34) == []
+    levels[3] = 0; buttons.poll(3.)
+    assert [e['action'] for e in buttons.poll(3.04)] == ['start_pressed']
+
+
 def test_operator_buttons_and_feedback_encoding():
     """Human input sequences only; no GPIO, UART or sensor access."""
     from button_input import SysfsButtonInput
