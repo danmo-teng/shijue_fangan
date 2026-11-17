@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from capture_grip_bands import GripBands, CLASSES  # noqa: E402
 from capture_roi_trails import CaptureTrail  # noqa: E402
-from sweep_boundaries import load_boundaries, save_boundaries, corridor_polygon
+from sweep_boundaries import load_boundaries, save_boundaries, corridor_polygon, obstacle_reference_point
 from capture_roi import (  # noqa: E402
     CaptureRois,
     IMAGE_HEIGHT,
@@ -454,10 +454,9 @@ def main() -> int:
                 if len(values) >= 3:
                     region = np.array(values, dtype=np.float32)
                     for item in preview_items:
-                        x,y,w,h = item.bbox
-                        foot = (float(x+w*.5), float(y+h))
-                        inside = cv2.pointPolygonTest(region, foot, False) >= 0
-                        at = (round(foot[0]*scale_x), round(foot[1]*scale_y))
+                        reference = obstacle_reference_point(item.class_name, item.bbox)
+                        inside = cv2.pointPolygonTest(region, reference, False) >= 0
+                        at = (round(reference[0]*scale_x), round(reference[1]*scale_y))
                         color = (0,255,255) if inside else (160,160,160)
                         cv2.circle(shown, at, 5, color, -1)
                         cv2.putText(shown, 'IN' if inside else 'OUT', (at[0]+6,at[1]),
@@ -513,7 +512,7 @@ def main() -> int:
             hint = ("分区：点两次画线，拖动调整；S保存，P回ROI；相机固定140°。" if edit_band else
                     "按G画绿色分区，按O画橙色分区；分区单独保存，不改爪内ROI。")
             if sweep_mode is not None:
-                hint = f"当前{int(sweep_mode)//100}°扫障区域：框底边中点在内才参与判障；仍排除载荷和区内物块。"
+                hint = f"当前{int(sweep_mode)//100}°扫障区域：蓝色看框中心，其他看底边中点；仍排除载荷和区内物块。"
                 if any('\u4e00' <= c <= '\u9fff' for c in status):
                     hint = status
             draw.text((8, 116), hint, font=font, fill=(255, 220, 120))

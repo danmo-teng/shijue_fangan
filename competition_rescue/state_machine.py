@@ -13,6 +13,7 @@ from enum import Enum
 import math
 from statistics import median
 from typing import Iterable
+from sweep_boundaries import obstacle_reference_point
 from attack_return import AttackReturnRoute, opponent_heading_deg, centre_turn_direction
 from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
@@ -143,9 +144,9 @@ def cargo_in_front_region(item: TrackedCargo, polygon: tuple[tuple[int, int], ..
         sx, sy, sw, sh = safe_bbox
         if sx <= foot[0] <= sx + sw and sy <= foot[1] <= sy + sh:
             return False
-    # The front region is on the ground. A tall block can project over the
-    # zone colour while its bbox foot remains on the floor in front.
-    return point_in_polygon(foot, polygon)
+    # Keep the original safe-zone foot exclusion above. Only membership in
+    # the sweep region uses the blue box centre; other classes retain the foot.
+    return point_in_polygon(obstacle_reference_point(item.class_name, item.bbox), polygon)
 
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:

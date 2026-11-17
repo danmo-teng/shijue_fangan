@@ -9,6 +9,13 @@ import shutil
 DEFAULT_PATH = Path(__file__).resolve().parents[1] / 'vision/config/sweep_boundaries.json'
 
 
+def obstacle_reference_point(class_name, bbox):
+    """Sweep-region membership only; carried cargo and safe-zone tests keep their rules."""
+    x, y, width, height = bbox
+    return (float(x + width * .5),
+            float(y + height * (.5 if class_name == 'danger_cyan' else 1.)))
+
+
 def validated_region(region):
     points = region.get('polygon')
     if not isinstance(points, (list, tuple)) or len(points) < 3:
@@ -102,6 +109,7 @@ def save_boundaries(path, data):
     tmp = path.with_suffix('.json.tmp')
     tmp.write_text(json.dumps({'schema_version': 2, 'width': 1280, 'height': 1024,
         'interpolation': 'piecewise_linear', 'object_reference': 'bbox_bottom_center',
+        'object_reference_overrides': {'danger_cyan': 'bbox_center'},
         'angles': checked}, ensure_ascii=False, indent=2)+'\n')
     if path.exists():
         backup = path.with_name(path.name + '.' + datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '.bak')

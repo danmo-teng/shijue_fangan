@@ -2075,13 +2075,19 @@ if __name__ == "__main__":
     main()
 
 
-def test_sweep_uses_ground_foot_without_grabbing_inside_safe_zone() -> None:
+def test_sweep_blue_center_preserves_original_safe_zone_exclusions() -> None:
     from state_machine import SweepPickupContext, cargo_in_front_region
     safe_bbox = (352, 4, 926, 245)
     polygon = ((460, 1023), (820, 1023), (815, 249), (352, 249))
     # Actual second-run frame4502: centre(712,232.5) projects over the
     # safe-zone box; foot(712,310) is in the ground corridor in front.
     blue = TrackedCargo(335, "danger_cyan", .85, (644, 155, 136, 155), hits=8)
+    # Blue now uses its centre for the sweep region; other classes keep feet.
+    assert not cargo_in_front_region(blue, polygon, safe_bbox)
+    assert cargo_in_front_region(replace(blue, class_name="injured_orange"), polygon, safe_bbox)
+    # A centre projected over zone colour does not change the original zone
+    # foot exclusion: this item remains outside the zone, if the drawn region admits it.
+    polygon = ((352, 0), (820, 0), (820, 1023), (352, 1023))
     assert cargo_in_front_region(blue, polygon, safe_bbox)
     mission = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
     mission.safe_sweep_pickup = SweepPickupContext(

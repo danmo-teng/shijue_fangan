@@ -10,6 +10,39 @@ import run_competition_rescue as runner
 from state_machine import TrackedCargo
 
 
+def test_recorded_blue_4872_is_blocked_by_center_with_original_polygon():
+    from dataclasses import replace
+    from state_machine import CompetitionMission, CompetitionSettings, SweepPickupContext
+    from sweep_boundaries import obstacle_reference_point
+    evidence = json.loads((Path(__file__).resolve().parents[2] /
+        'docs/reports/competition_20261118_0048/evidence.json').read_text())['blue_geometry']
+    blue = TrackedCargo(234, 'danger_cyan', .9455, tuple(evidence['blue_bbox']), hits=3)
+    polygon = tuple(map(tuple, evidence['saved_sweep_polygon']))
+    safe = tuple(evidence['safe_bbox'])
+    assert not evidence['in_region']  # Original bottom-midpoint result, before this fix.
+    assert obstacle_reference_point(blue.class_name, blue.bbox) == (646., 453.5)
+    with patch.object(runner, 'safe_zone_corridor_polygon', return_value=polygon):
+        for pitch in (11500,12000):
+            for first_done in (False,True):
+                result = runner.safe_zone_push_corridor((blue,), safe, 'material', first_done,
+                    carried_manifest=('green_supply',), carried_total_count=1,
+                    claw_polygon=polygon, camera_pitch_cdeg=pitch)
+                assert result[1] is blue and result[3] == 'BLOCKED'
+            for category in ('green_supply', 'core_black', 'injured_orange'):
+                other = replace(blue, class_name=category)
+                assert obstacle_reference_point(category, other.bbox) == (646.,568.)
+                assert runner.safe_zone_push_corridor((other,), safe, 'injury', True,
+                    claw_polygon=polygon, camera_pitch_cdeg=pitch)[1] is None
+        assert runner.safe_zone_push_corridor((replace(blue,inside_safe_zone=True),), safe,
+            'material', True, claw_polygon=polygon)[1] is None
+    m = CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+    m.safe_sweep_pickup = SweepPickupContext(target_id=blue.track_id,
+        target_class=blue.class_name,target_bbox=blue.bbox,excluded_ids=frozenset())
+    assert m.safe_sweep_target((blue,),polygon,safe) is blue
+    outside = replace(blue, bbox=(0,339,100,100))
+    assert m.safe_sweep_target((outside,),polygon,safe) is None
+
+
 def test_curves_distinguish_angles_and_clip_safe_edge(tmp_path):
     pair=validated_pair({'left':[[200,0],[300,500],[200,900]],'right':[[800,0],[750,500],[1100,900]]})
     other=validated_pair({'left':[[100,0],[200,900]],'right':[[1100,0],[1200,900]]})
@@ -72,7 +105,7 @@ def test_editor_saves_two_sweep_angles_without_changing_claw_roi(tmp_path):
 
 
 
-def test_closed_region_keeps_concavity_and_uses_bottom_center(tmp_path):
+def test_closed_region_keeps_concavity_and_class_reference(tmp_path):
     # One loop, including a notch: bounding rectangle must not admit the notch.
     region=validated_region({'polygon':[[100,100],[900,100],[900,900],
         [600,900],[600,500],[400,500],[400,900],[100,900]]})
@@ -81,13 +114,14 @@ def test_closed_region_keeps_concavity_and_uses_bottom_center(tmp_path):
     save_boundaries(path,{'11500':old})
     original=path.read_bytes()
     save_boundaries(path,{'11500':old,'12000':region})
+    assert json.loads(path.read_text())['object_reference_overrides'] == {'danger_cyan':'bbox_center'}
     assert list(tmp_path.glob('regions.json.*.bak'))[0].read_bytes()==original
     data=load_boundaries(path)
     assert data['11500']==old and data['12000']==region
     assert corridor_polygon(region,350)==tuple(tuple(p) for p in region['polygon'])
     in_notch=TrackedCargo(1,'danger_cyan',.9,(450,600,100,100),hits=3)
     in_region=TrackedCargo(2,'danger_cyan',.9,(200,600,100,100),hits=3)
-    # Its top lies outside the region, but the bottom midpoint is inside.
+    # Its top lies outside the region, but the blue centre is on the boundary.
     tall=TrackedCargo(3,'danger_cyan',.9,(200,0,100,200),hits=3)
     roi=((100,100),(900,100),(900,900),(100,900))
     with patch.object(runner,'runtime_boundaries',return_value=data):
