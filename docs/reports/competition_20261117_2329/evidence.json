@@ -1,0 +1,322 @@
+{
+  "t0": 736.680656748,
+  "session": "rescue_map/runtime/history/competition_wheel_input/20261117_232906_competition_wheel",
+  "cases": [
+    {
+      "relative_s": 111.87639359999991,
+      "frame": 2659,
+      "recorded_event": {
+        "timestamp_monotonic_ns": 848557050348,
+        "event": "disperse_start",
+        "state": "DISPERSE",
+        "message": "锁定保留right侧目标，启动选择性分离",
+        "vision_frame_sequence": 2659,
+        "audit_id": null,
+        "selected_target_class": "injured_orange",
+        "audit_left_count": 2,
+        "audit_right_count": 1,
+        "audit_left_green_count": 0,
+        "audit_right_green_count": 1,
+        "audit_unassigned_count": 0,
+        "audit_total_count": 3,
+        "audit_stable": false
+      },
+      "tracks": [
+        {
+          "id": 240,
+          "class": "injured_orange",
+          "confidence": 0.9681457589264233,
+          "bbox": [
+            268,
+            135,
+            460,
+            303
+          ],
+          "relative_xy_m": null,
+          "hits": 67,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 244,
+          "class": "green_supply",
+          "confidence": 0.5945358607268428,
+          "bbox": [
+            701,
+            241,
+            267,
+            225
+          ],
+          "relative_xy_m": null,
+          "hits": 67,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 245,
+          "class": "core_black",
+          "confidence": 0.6093820102319816,
+          "bbox": [
+            236,
+            352,
+            136,
+            170
+          ],
+          "relative_xy_m": null,
+          "hits": 66,
+          "misses": 0,
+          "visible": true
+        }
+      ],
+      "recomputed_observation_valid": true,
+      "left_composition": [
+        [
+          "core_black",
+          1
+        ],
+        [
+          "injured_orange",
+          1
+        ]
+      ],
+      "right_composition": [
+        [
+          "green_supply",
+          1
+        ]
+      ],
+      "preferred_keep": "right",
+      "destination": "material",
+      "note": "original image-quality/held-memory not fabricated; direct recorded-frame composition recomputation"
+    },
+    {
+      "relative_s": 157.71046773399996,
+      "frame": 3623,
+      "recorded_event": {
+        "timestamp_monotonic_ns": 894391124482,
+        "event": "disperse_start",
+        "state": "DISPERSE",
+        "message": "锁定保留left侧目标，启动选择性分离",
+        "vision_frame_sequence": 3623,
+        "audit_id": null,
+        "selected_target_class": "core_black",
+        "audit_left_count": 1,
+        "audit_right_count": 1,
+        "audit_left_green_count": 0,
+        "audit_right_green_count": 0,
+        "audit_unassigned_count": 0,
+        "audit_total_count": 2,
+        "audit_stable": false
+      },
+      "tracks": [
+        {
+          "id": 302,
+          "class": "injured_orange",
+          "confidence": 0.9491497051379669,
+          "bbox": [
+            453,
+            157,
+            429,
+            303
+          ],
+          "relative_xy_m": null,
+          "hits": 140,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 303,
+          "class": "core_black",
+          "confidence": 0.8795174518328275,
+          "bbox": [
+            347,
+            276,
+            146,
+            154
+          ],
+          "relative_xy_m": null,
+          "hits": 138,
+          "misses": 0,
+          "visible": true
+        }
+      ],
+      "recomputed_observation_valid": true,
+      "left_composition": [
+        [
+          "core_black",
+          1
+        ]
+      ],
+      "right_composition": [
+        [
+          "injured_orange",
+          1
+        ]
+      ],
+      "preferred_keep": "left",
+      "destination": "material",
+      "note": "original image-quality/held-memory not fabricated; direct recorded-frame composition recomputation"
+    },
+    {
+      "relative_s": 81.55320511799994,
+      "frame": 1995,
+      "recorded_event": {
+        "timestamp_monotonic_ns": 818233861866,
+        "event": "disperse_start",
+        "state": "DISPERSE",
+        "message": "锁定保留left侧目标，启动选择性分离",
+        "vision_frame_sequence": 1995,
+        "audit_id": null,
+        "selected_target_class": "injured_orange",
+        "audit_left_count": 1,
+        "audit_right_count": 2,
+        "audit_left_green_count": 0,
+        "audit_right_green_count": 1,
+        "audit_unassigned_count": 0,
+        "audit_total_count": 3,
+        "audit_stable": false
+      },
+      "tracks": [
+        {
+          "id": 175,
+          "class": "danger_cyan",
+          "confidence": 0.9388108008447918,
+          "bbox": [
+            702,
+            228,
+            267,
+            262
+          ],
+          "relative_xy_m": null,
+          "hits": 100,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 176,
+          "class": "green_supply",
+          "confidence": 0.45773485329950847,
+          "bbox": [
+            553,
+            87,
+            219,
+            166
+          ],
+          "relative_xy_m": null,
+          "hits": 93,
+          "misses": 0,
+          "visible": true
+        },
+        {
+          "id": 178,
+          "class": "injured_orange",
+          "confidence": 0.966356493644915,
+          "bbox": [
+            257,
+            197,
+            471,
+            272
+          ],
+          "relative_xy_m": null,
+          "hits": 97,
+          "misses": 0,
+          "visible": true
+        }
+      ],
+      "recomputed_observation_valid": true,
+      "left_composition": [
+        [
+          "injured_orange",
+          1
+        ]
+      ],
+      "right_composition": [
+        [
+          "danger_cyan",
+          1
+        ],
+        [
+          "green_supply",
+          1
+        ]
+      ],
+      "preferred_keep": "left",
+      "destination": "injury",
+      "note": "original image-quality/held-memory not fabricated; direct recorded-frame composition recomputation"
+    }
+  ],
+  "accepted_separations": [
+    {
+      "t": 111.89731958999994,
+      "line": 116830,
+      "task_action_status_mode": [
+        30228,
+        3176,
+        1,
+        25
+      ],
+      "context": "a3b31e8476140c6810010000a46bc3",
+      "frame": "a3b31784401936b0060000005b7bc3"
+    },
+    {
+      "t": 114.11753171599992,
+      "line": 118899,
+      "task_action_status_mode": [
+        30228,
+        3176,
+        3,
+        35
+      ],
+      "context": "a3b31ea976140c6810030000c4fac3",
+      "frame": "a3b317a9012336b0e8000000f0fdc3"
+    },
+    {
+      "t": 156.057707263,
+      "line": 157703,
+      "task_action_status_mode": [
+        30229,
+        3212,
+        1,
+        25
+      ],
+      "context": "a3b31e6476150c8c100100000d79c3",
+      "frame": "a3b31764441936b0480000008464c3"
+    },
+    {
+      "t": 157.4372531319999,
+      "line": 158973,
+      "task_action_status_mode": [
+        30229,
+        3212,
+        3,
+        35
+      ],
+      "context": "a3b31e7b76150c8c100300002089c3",
+      "frame": "a3b3177b012336b0cf0000007eecc3"
+    },
+    {
+      "t": 157.73651564299996,
+      "line": 159242,
+      "task_action_status_mode": [
+        30229,
+        3214,
+        1,
+        25
+      ],
+      "context": "a3b31e8076150c8e100100008fbdc3",
+      "frame": "a3b31780401936b0ee0000005c1bc3"
+    },
+    {
+      "t": 159.41688105499998,
+      "line": 160834,
+      "task_action_status_mode": [
+        30229,
+        3214,
+        3,
+        35
+      ],
+      "context": "a3b31e9c76150c8e10030000b6bdc3",
+      "frame": "a3b3179c012336b098000000816cc3"
+    }
+  ]
+}
