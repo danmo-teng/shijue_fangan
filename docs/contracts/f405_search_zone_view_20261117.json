@@ -1,0 +1,60 @@
+{
+  "request_id": "MATCH-SEARCH-ZONE-VIEW-20261117",
+  "status": "implementation_request_for_paired_review; upper_and_lower_runtime_not_implemented; do_not_deploy_as_done",
+  "wire": "existing TYPE0x18/opcode0x09 plus original TYPE0x1D context; aux3 reserved for this new view-only operation",
+  "production_support": "current upper mission_frame and lower parser reject aux3; examples below are design bytes with verified length/CRC, not successful production parsing",
+  "scope": "empty-claw SEARCH-derived approach, aligned mode52 only; ordinary legal candidates unchanged",
+  "payload": {
+    "flags": "VALID|APPROACH_RANGE|DISTANCE_VALID|selected side; no cluster or other bits for initial view",
+    "A": 0,
+    "B": 10500,
+    "U": 3,
+    "frame": "real source frame before requested camera motion, not fabricated 105deg measurement"
+  },
+  "completion": {
+    "mode": 52,
+    "accepted_command": 9,
+    "task_action": "same accepted view action",
+    "action_status": "existing ACCEPT/DONE bits",
+    "camera_pitch_cdeg": 10500,
+    "meaning": "original camera motion and its existing mechanical travel completed; zero chassis translation; not a cargo audit"
+  },
+  "exits": {
+    "outside": "true new105deg image confirms target outside related complete safe zone; original pixel realign then original normal range with newaction, no old120 pixel reuse",
+    "inside": "same view-action-owned HOLD cancels only view/approach and returns original empty SEARCH at105deg",
+    "unresolved": "one camera visit only, reuse existing brief missing-frame allowance, then same HOLD to SEARCH at105deg; no false outside declaration, no new waiting loop or failed-grab exclusion",
+    "STOP": "original direct ABORT priority"
+  },
+  "compatibility": {
+    "aux0": "unchanged",
+    "aux1": "unchanged: finite move then same-angle remeasure",
+    "aux2": "unchanged:140deg50mm pregrab",
+    "aux3": "new: zero-distance105deg view only; positive A and other B invalid"
+  },
+  "examples": [
+    {
+      "side": "red",
+      "context_hex": "a3 b3 1d 15 02 c6 01 5e 00 00 4e 2b e8 8e c3",
+      "command_hex": "a3 b3 18 15 09 59 00 00 29 04 00 03 02 1b c3",
+      "task_id": 710,
+      "action_id": 350,
+      "source_frame": 20011,
+      "flags": 89,
+      "A": 0,
+      "B": 10500,
+      "U": 3
+    },
+    {
+      "side": "blue",
+      "context_hex": "a3 b3 1d 16 02 c6 01 5e 00 00 4e 2b fc 7e c3",
+      "command_hex": "a3 b3 18 16 09 51 00 00 29 04 00 03 9f 2b c3",
+      "task_id": 710,
+      "action_id": 350,
+      "source_frame": 20011,
+      "flags": 81,
+      "A": 0,
+      "B": 10500,
+      "U": 3
+    }
+  ]
+}
