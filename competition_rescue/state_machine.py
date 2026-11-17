@@ -5506,19 +5506,18 @@ class CompetitionMission:
                     stm.accepted_command == CMD_BULLDOZER_STEP and bool(stm.action_status & 2))
         if route.search_ready:
             if complete and stm.mode == STM_MODE_SEARCH:
-                interrupted, destination = route.interrupted, route.target_point
+                destination = route.target_point
                 return self._complete_return_search(vision, now,
-                    "途中发现可抓目标，结束换点转正常抓取" if interrupted else
-                    f"已到搜索点{destination}{route.target_xy_m}，开始新一轮观察",
-                    point_number=route.source_point if interrupted else destination, new_visit=not interrupted)
+                    f"已到搜索点{destination}{route.target_xy_m}且已朝中心，开始新一轮观察",
+                    point_number=destination, new_visit=True)
             return CompetitionOutput(self.state,
                 CommandRequest(CMD_BULLDOZER_STEP, self._side_flags() | (int(RouteStep.PICKUP_READY) << 4)),
                 "结束当前换点移动，复用原搜索姿态", reason="search_transfer_ready")
         if not pose.valid:
             return CompetitionOutput(self.state, self._pause(), "换搜索点等待有效位置",
                 reason="search_transfer_pose_unavailable")
-        newly_interrupted = not route.interrupted and self._search_target_available(vision, now)
-        route.interrupted = route.interrupted or newly_interrupted
+        # Do not select cargo while returning/moving between observation
+        # stations: first reach the station and face the field centre.
         payload = route.payload(pose.x_m, pose.y_m)
         if complete and payload[0] == 0:
             route.finish_leg()
@@ -5526,11 +5525,12 @@ class CompetitionMission:
                 replace(stm, context_matches=False), now), event="search_transfer_leg_complete")
         return CompetitionOutput(self.state,
             CommandRequest(CMD_BULLDOZER_STEP,
-                self._side_flags() | (int(RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
-            "途中发现目标：结束当前移动，随后正常审核抓取" if route.interrupted else
-            f"直线前往搜索点{route.target_point}：目标{route.target_xy_m}",
-            event="search_transfer_target_seen" if newly_interrupted else "",
-            motion_expected=payload[0] != 0, reason="search_transfer_yield" if route.interrupted else "search_transfer_move")
+                self._side_flags() | (int(RouteStep.ATTACK_FACE_OPPONENT if route.turning
+                                        else RouteStep.EMPTY_BODY_MOVE) << 4), *payload),
+            (f"到观察点后按最短转角朝场地中心，目标航向{payload[2]/100:.2f}°" if route.turning else
+             f"直线前往搜索点{route.target_point}：目标{route.target_xy_m}"),
+            motion_expected=route.turning or payload[0] != 0,
+            reason="search_transfer_face_centre" if route.turning else "search_transfer_move")
 
     def _attack_align_output(self, stm: StmSnapshot, now: float) -> CompetitionOutput:
         complete = (stm.context_valid and stm.context_matches and
@@ -5540,7 +5540,7 @@ class CompetitionMission:
             self._set_state(CompetitionState.INITIAL_RELEASE, now)
             self._arm_initial_release(stm, now)
             return CompetitionOutput(self.state, CommandRequest(CMD_RELEASE_BOTH, self._side_flags()),
-                "进攻点已正对对面安全区，释放并退15cm后转尾返程",
+                "进攻点已正对对面安全区，释放并退10cm、横移后倒退返①",
                 self.selected_batch, event="attack_heading_aligned", reason="attack_heading_aligned")
         return CompetitionOutput(self.state,
             CommandRequest(CMD_BULLDOZER_STEP,
@@ -5553,7 +5553,7 @@ class CompetitionMission:
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
     ) -> CompetitionOutput:
         route = self.attack_return_route
-        if not pose.valid and (route is None or route.index == 2):
+        if not pose.valid and (route is None or not route.finite_back and not route.finished_motion):
             return CompetitionOutput(self.state, self._pause(), "进攻返程等待有效位置",
                 reason="attack_return_pose_unavailable")
         if route is None:
@@ -5564,7 +5564,7 @@ class CompetitionMission:
         if route.finished_motion:
             if complete and stm.mode == STM_MODE_SEARCH:
                 result = self._complete_return_search(vision, now,
-                    "进攻返程已到搜索点①，恢复搜索寻找首绿", point_number=1)
+                    "进攻返程已到①且已朝中心，恢复搜索寻找首绿", point_number=1)
                 self.attack_return_route = None
                 return result
             return CompetitionOutput(self.state,
@@ -5579,20 +5579,20 @@ class CompetitionMission:
                 if not pose.valid:
                     return CompetitionOutput(self.state,
                         CommandRequest(CMD_BULLDOZER_STEP,
-                            self._side_flags() | (int(RouteStep.ATTACK_BACK_150) << 4), *payload),
-                        "15cm轮程已完成，待有效位置计算车尾朝①的方向",
+                            self._side_flags() | (int(RouteStep.ATTACK_BACK_100) << 4), *payload),
+                        "10cm轮程已完成，待有效位置开始横移",
                         reason="attack_return_heading_pose_unavailable")
                 route.finish_retreat(pose.x_m, pose.y_m)
             else:
                 route.advance()
             return replace(self._attack_return_output(vision, pose,
                 replace(stm, context_matches=False), now), event="attack_return_step_complete")
-        step = (RouteStep.ATTACK_BACK_150 if route.finite_back else
+        step = (RouteStep.ATTACK_BACK_100 if route.finite_back else
                 RouteStep.ATTACK_FACE_OPPONENT if route.turning else RouteStep.EMPTY_BODY_MOVE)
-        name = ("BACK_150", "TAIL_TO_FIRST", "REVERSE_TO_FIRST")[route.index]
-        message = ("张爪后本段轮程后退150mm" if route.finite_back else
-                   f"原地转到{route.return_yaw_deg:.2f}°，让车尾对准①" if route.turning else
-                   f"车尾朝①直线倒车，目标{route.return_point}，剩余{payload[0]}mm")
+        name = ("BACK_100", "LATERAL_TO_FIRST", "REVERSE_TO_FIRST", "FACE_CENTRE")[route.index]
+        message = ("张爪后本段轮程后退100mm" if route.finite_back else
+                   f"到①后按最短方向转到{route.return_yaw_deg:.2f}°朝中心" if route.turning else
+                   f"保持朝对方，{'横移到①所在直线' if route.index == 1 else '后退到①'}，剩余{payload[0]}mm")
         return CompetitionOutput(self.state,
             CommandRequest(CMD_BULLDOZER_STEP, self._side_flags() | (int(step) << 4), *payload),
             message, motion_expected=True, reason=f"attack_return_{name.lower()}",

@@ -1,6 +1,6 @@
 {
   "request_id": "MATCH-TWO-STATION-TAIL-RETURN-20261116",
-  "status": "upper stations extended to 0.40m; lower route support reviewed at 49a4c75; ground accuracy pending",
+  "status": "superseded_route_do_not_implement_old_tail_return",
   "lower_review_commit": "49a4c7525453d738f8cdcfd0f8139a1986fa45f1",
   "semantics": {
     "step15": "A=-150 B=0 U=red27000/blue9000; retain -100 parse compatibility",
@@ -639,5 +639,6 @@
         }
       ]
     }
-  ]
+  ],
+  "superseded_by": "f405_attack_lateral_centre_20261117.json"
 }

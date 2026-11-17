@@ -21,14 +21,15 @@ class RouteStep(IntEnum):
     RIGHT_TO_STAGE = 11
     PICKUP_READY = 12
     EMPTY_BODY_MOVE = 13  # Extension: requires MATCH-ATTACK-RETURN-20261114 firmware.
-    ATTACK_FACE_OPPONENT = 14  # Loaded face-opponent or paired empty turn after step15.
-    ATTACK_BACK_150 = 15  # Opening return only: finite -150mm measured-wheel move.
+    ATTACK_FACE_OPPONENT = 14  # Loaded face-opponent; paired empty centre-facing turn.
+    ATTACK_BACK_100 = 15  # Opening return: finite -100mm measured-wheel move.
+    ATTACK_BACK_150 = ATTACK_BACK_100  # Legacy import/packet compatibility.
 
 
 LIVE_STEPS = frozenset({RouteStep.BACK_TO_SWEEP, RouteStep.LEFT_TO_SWEEP,
                         RouteStep.BACK_TO_STAGE, RouteStep.RIGHT_TO_STAGE})
 LOCAL_DISTANCES = {RouteStep.FORWARD_PARK: 200, RouteStep.BACK_200: -200,
-                   RouteStep.SWEEP_1000: 1000, RouteStep.ATTACK_BACK_150: -150}
+                   RouteStep.SWEEP_1000: 1000, RouteStep.ATTACK_BACK_100: -100}
 TURN_STEPS = frozenset({RouteStep.TURN_RIGHT, RouteStep.TURN_LEFT,
                         RouteStep.ATTACK_FACE_OPPONENT})
 ACTUATOR_STEPS = frozenset({RouteStep.RELEASE_LOAD, RouteStep.FULL_OPEN,

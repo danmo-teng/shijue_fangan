@@ -1877,7 +1877,7 @@ class CompetitionPlanner:
         if (command.opcode == CMD_BULLDOZER_STEP and
                 self.mission.state == CompetitionState.INITIAL_ATTACK_RETURN and
                 self.mission.attack_return_route is not None):
-            # Wheel retreat step15, tail turn step14, then live reverse step13.
+            # Wheel retreat15, lateral13, reverse13, then centre-facing14.
             # A leg change, not every D/H refresh,
             # owns the next action ID in the existing task/context protocol.
             range_epoch = ("attack_return", self.mission.attack_return_route.index)

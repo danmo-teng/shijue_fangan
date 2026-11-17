@@ -1,0 +1,574 @@
+{
+  "request_id": "MATCH-ATTACK-LATERAL-CENTRE-20261117",
+  "status": "upper_implemented_lower_empty_turn_entry_pending_not_hardware_tested",
+  "semantics": {
+    "attack": "step15 -100mm -> step13 lateral at opponent heading -> step13 reverse at opponent heading -> step14 face actual field centre -> step12 restore search",
+    "observation": "Return to station1/3 or transfer: step13 direct -> step14 centre -> step12; no cargo selection during transit or turn",
+    "heading": "atan2(-actual_y,-actual_x), latch once at arrival; lower wraps signed error to shortest angle",
+    "action_pairing": "Each leg gets a new action including consecutive step13; H/D updates retain action; only matched completed action advances",
+    "stations": "unchanged x +/-0.40 y0, source station memory remains",
+    "lower": "Permit step14 after owned completed empty step13; retain loaded opponent-only entry; no new command byte or wait"
+  },
+  "examples": [
+    {
+      "side": "red",
+      "start_zone": 1,
+      "example_only": true,
+      "release_xy": [
+        0.15,
+        -0.69
+      ],
+      "station_1": [
+        -0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            27000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f9 ff 9c 00 00 69 78 73 e9 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            550,
+            18000,
+            27000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d9 02 26 46 50 69 78 86 d4 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            9000,
+            27000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d9 02 4e 23 28 69 78 6d 38 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e9 00 00 00 00 00 00 9c b9 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c9 00 00 00 00 00 00 9b 4b c3"
+        }
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 2,
+      "example_only": true,
+      "release_xy": [
+        0.15,
+        -0.69
+      ],
+      "station_1": [
+        0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            27000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f9 ff 9c 00 00 69 78 73 e9 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            250,
+            0,
+            27000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d9 00 fa 00 00 69 78 43 bc c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            9000,
+            27000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d9 02 4e 23 28 69 78 6d 38 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            18000
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e9 00 00 00 00 46 50 ae e5 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c9 00 00 00 00 00 00 9b 4b c3"
+        }
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 3,
+      "example_only": true,
+      "release_xy": [
+        0.15,
+        -0.69
+      ],
+      "station_1": [
+        -0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            27000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f9 ff 9c 00 00 69 78 73 e9 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            550,
+            18000,
+            27000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d9 02 26 46 50 69 78 86 d4 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            9000,
+            27000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d9 02 4e 23 28 69 78 6d 38 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e9 00 00 00 00 00 00 9c b9 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c9 00 00 00 00 00 00 9b 4b c3"
+        }
+      ]
+    },
+    {
+      "side": "red",
+      "start_zone": 4,
+      "example_only": true,
+      "release_xy": [
+        0.15,
+        -0.69
+      ],
+      "station_1": [
+        0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            27000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f9 ff 9c 00 00 69 78 73 e9 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            250,
+            0,
+            27000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d9 00 fa 00 00 69 78 43 bc c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            9000,
+            27000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d9 02 4e 23 28 69 78 6d 38 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            18000
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e9 00 00 00 00 46 50 ae e5 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c9 00 00 00 00 00 00 9b 4b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 1,
+      "example_only": true,
+      "release_xy": [
+        -0.15,
+        0.69
+      ],
+      "station_1": [
+        -0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            9000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f1 ff 9c 00 00 23 28 cd 75 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            250,
+            18000,
+            9000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d1 00 fa 46 50 23 28 e8 79 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            -9000,
+            9000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d1 02 4e dc d8 23 28 e3 83 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e1 00 00 00 00 00 00 15 79 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c1 00 00 00 00 00 00 12 8b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 2,
+      "example_only": true,
+      "release_xy": [
+        -0.15,
+        0.69
+      ],
+      "station_1": [
+        0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            9000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f1 ff 9c 00 00 23 28 cd 75 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            550,
+            0,
+            9000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d1 02 26 00 00 23 28 2d 11 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            -9000,
+            9000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d1 02 4e dc d8 23 28 e3 83 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            18000
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e1 00 00 00 00 46 50 27 25 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c1 00 00 00 00 00 00 12 8b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 3,
+      "example_only": true,
+      "release_xy": [
+        -0.15,
+        0.69
+      ],
+      "station_1": [
+        -0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            9000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f1 ff 9c 00 00 23 28 cd 75 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            250,
+            18000,
+            9000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d1 00 fa 46 50 23 28 e8 79 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            -9000,
+            9000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d1 02 4e dc d8 23 28 e3 83 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e1 00 00 00 00 00 00 15 79 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c1 00 00 00 00 00 00 12 8b c3"
+        }
+      ]
+    },
+    {
+      "side": "blue",
+      "start_zone": 4,
+      "example_only": true,
+      "release_xy": [
+        -0.15,
+        0.69
+      ],
+      "station_1": [
+        0.4,
+        0.0
+      ],
+      "steps": [
+        {
+          "step": 15,
+          "A_B_U": [
+            -100,
+            0,
+            9000
+          ],
+          "action_id": 100,
+          "context_hex": "a3 b3 1d 00 02 bc 00 64 00 00 00 00 6d b2 c3",
+          "command_hex": "a3 b3 18 00 14 f1 ff 9c 00 00 23 28 cd 75 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            550,
+            0,
+            9000
+          ],
+          "action_id": 101,
+          "context_hex": "a3 b3 1d 01 02 bc 00 65 00 00 00 00 5d e2 c3",
+          "command_hex": "a3 b3 18 01 14 d1 02 26 00 00 23 28 2d 11 c3"
+        },
+        {
+          "step": 13,
+          "A_B_U": [
+            590,
+            -9000,
+            9000
+          ],
+          "action_id": 102,
+          "context_hex": "a3 b3 1d 02 02 bc 00 66 00 00 00 00 0d 12 c3",
+          "command_hex": "a3 b3 18 02 14 d1 02 4e dc d8 23 28 e3 83 c3"
+        },
+        {
+          "step": 14,
+          "A_B_U": [
+            0,
+            0,
+            18000
+          ],
+          "action_id": 103,
+          "context_hex": "a3 b3 1d 03 02 bc 00 67 00 00 00 00 3d 42 c3",
+          "command_hex": "a3 b3 18 03 14 e1 00 00 00 00 46 50 27 25 c3"
+        },
+        {
+          "step": 12,
+          "A_B_U": [
+            0,
+            0,
+            0
+          ],
+          "action_id": 104,
+          "context_hex": "a3 b3 1d 04 02 bc 00 68 00 00 00 00 4f 73 c3",
+          "command_hex": "a3 b3 18 04 14 c1 00 00 00 00 00 00 12 8b c3"
+        }
+      ]
+    }
+  ]
+}

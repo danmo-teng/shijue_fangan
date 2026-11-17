@@ -2981,39 +2981,31 @@ def test_cluster_green_loss_and_range_wait_do_not_borrow_a_far_anchor():
         assert m.cluster_target_track_id is None and m.selected_batch is None
 
 
-def test_attack_tail_return_uses_actual_after_back_position_for_all_starts():
-    import math
+def test_attack_lateral_return_and_centre_heading_for_all_starts():
     from attack_return import AttackReturnRoute, opponent_heading_deg
-    for side in ("red", "blue"):
+    for side in ('red','blue'):
         for zone in (1,2,3,4):
-            cfg = CompetitionSettings(side=side,start_zone=zone)
-            origin, goal = cfg.stash_point, cfg.primary_search_point
-            r = AttackReturnRoute(side,zone,origin,135.,goal)
-            assert r.payload(*goal) == (-150,0,round(opponent_heading_deg(side)*100))
-            assert not r.arrival_latched and r.tail_heading_deg is None
-            # Actual feedback intentionally differs from the planned 15cm endpoint.
-            q = (origin[0]+.04, origin[1]+.18*cfg.side_sign)
+            cfg=CompetitionSettings(side=side,start_zone=zone)
+            origin,goal=cfg.stash_point,cfg.primary_search_point
+            r=AttackReturnRoute(side,zone,origin,135.,goal)
+            yaw=round(opponent_heading_deg(side)*100)
+            assert r.payload(*goal)==(-100,0,yaw)
+            q=(origin[0]+.04,origin[1]+.12*cfg.side_sign)
             r.finish_retreat(*q)
-            assert r.after_back_xy_m == q and r.turning
-            heading = r.return_yaw_deg
-            dx,dy = goal[0]-q[0],goal[1]-q[1]
-            expected = (math.degrees(math.atan2(dy,dx))+180)%360
-            assert math.isclose(heading,expected)
-            # Body rear, not body front, lies on the line to station 1.
-            f = (math.cos(math.radians(heading)), math.sin(math.radians(heading)))
-            assert math.isclose(dx*f[0]+dy*f[1],-math.hypot(dx,dy))
-            before = r.payload(*q)
-            assert before[:2] == (0,0)
-            assert r.payload(q[0]+.2,q[1]-.1) == before  # Turn goal cannot chase position jitter.
+            lateral=r.payload(*q)
+            assert lateral[0]==round(abs(goal[0]-q[0])*1000)
+            assert lateral[1] in (0,18000) and lateral[2]==yaw
+            assert r.payload(goal[0],q[1])[0]==0
             r.advance()
-            travel = r.payload(*q)
-            assert travel[0] == round(math.hypot(dx,dy)*1000)
-            assert math.isclose((travel[1]/100-heading)%360,180.,abs_tol=.01)
-            assert r.payload(goal[0]+.05,goal[1])[0] == 0
-            assert r.payload(goal[0]+.3,goal[1])[0] == 0
-    r=AttackReturnRoute('red',1,(.15,-.69),270.,(-.3,0.))
-    r.finish_retreat(-.3,0.)
-    assert r.finished_motion and r.tail_heading_deg is None
+            back=r.payload(goal[0],q[1])
+            assert back[0]==round(abs(q[1])*1000) and back[2]==yaw
+            assert back[1]==(9000 if side=='red' else -9000)
+            assert r.payload(*goal)[0]==0
+            r.advance()
+            turn=r.payload(*goal)
+            assert turn==(0,0,0 if goal[0]<0 else 18000)
+            assert r.payload(goal[0]+.02,.03)==turn
+            r.advance();assert r.finished_motion
 
 
 def test_attack_faces_opponent_before_release_and_does_not_adopt_old_done():
@@ -3059,7 +3051,7 @@ def test_attack_faces_opponent_before_release_and_does_not_adopt_old_done():
 
 def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_ready():
     from protocol import CMD_BULLDOZER_STEP
-    for side, sign in (("red",1),("blue",-1)):
+    for side,sign in [('red',1),('blue',-1)]:
         for zone in (1,2,3,4):
             m=CompetitionMission(CompetitionSettings(side=side,start_zone=zone))
             m._select_batch(CargoBatch((1,),('green_supply',),'stash',initial_stash=True))
@@ -3067,35 +3059,31 @@ def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_read
             p=PoseSnapshot(True,.15*sign,-.69*sign,270 if sign==1 else 90,0)
             v=VisionSnapshot(frame_sequence=10)
             release=StmSnapshot(mode=34,flags=0,age_ms=0,context_valid=True,context_matches=True,
-                                accepted_command=CMD_RELEASE_BOTH,action_status=3)
-            out=m.step(v,p,release,1.)
-            assert out.command.flags>>4==15 and out.command.arg_a==-150
-            route=m.attack_return_route
-            q=replace(p,x_m=p.x_m+.02,y_m=p.y_m+.17*sign)
-            receipt=replace(release,mode=25,accepted_command=CMD_BULLDOZER_STEP)
-            for wrong in (replace(receipt,context_matches=False),replace(receipt,action_status=1),
-                          replace(receipt,mode=3)):
-                assert m.step(v,q,wrong,1.1).command.arg_a==-150 and route.index==0
-            # Finite DONE alone is not a usable position for the turn calculation.
-            assert m.step(v,replace(q,valid=False),receipt,1.2).command.arg_a==-150
-            assert route.after_back_xy_m is None
-            turn=m.step(v,q,receipt,1.3)
-            assert route.index==1 and route.after_back_xy_m==(q.x_m,q.y_m)
-            assert turn.command.flags>>4==14 and turn.command.arg_a==0
-            assert m.step(v,replace(q,x_m=q.x_m+.2),replace(receipt,action_status=1),1.4).command==turn.command
-            assert m.step(v,q,replace(receipt,context_matches=False),1.5).command==turn.command
-            move=m.step(v,q,receipt,1.6)
-            assert route.index==2 and move.command.flags>>4==13 and move.command.arg_a>0
-            assert move.command.aux==turn.command.aux
-            # A translation's old DONE cannot replace the host's still-positive remaining D.
-            assert m.step(v,q,receipt,1.7).command.arg_a>0 and route.index==2
-            at=replace(q,x_m=route.return_point[0],y_m=route.return_point[1])
-            ready=m.step(v,at,receipt,1.8)
-            assert route.finished_motion and ready.command.flags>>4==12
-            assert m.step(v,at,receipt,1.9).state==CompetitionState.INITIAL_ATTACK_RETURN
-            out=m.step(replace(v,frame_sequence=21),at,replace(receipt,mode=3),2.)
-            assert out.state==CompetitionState.SEARCH and out.command.opcode==CMD_HOLD
-            assert m.search_point_number==1 and m.return_search_frame_floor==21
+                accepted_command=CMD_RELEASE_BOTH,action_status=3)
+            assert m.step(v,p,release,1.).command.arg_a==-100
+            r=m.attack_return_route
+            done=replace(release,mode=25,accepted_command=CMD_BULLDOZER_STEP)
+            q=replace(p,y_m=p.y_m+.1*sign)
+            for wrong in [replace(done,context_matches=False),replace(done,action_status=1),replace(done,mode=3)]:
+                assert m.step(v,q,wrong,1.1).command.arg_a==-100 and r.index==0
+            assert m.step(v,replace(q,valid=False),done,1.2).command.arg_a==-100
+            out=m.step(v,q,done,1.3)
+            assert r.index==1 and out.command.flags>>4==13
+            assert m.step(v,q,done,1.4).command.arg_a>0 and r.index==1
+            q=replace(q,x_m=r.return_point[0])
+            out=m.step(v,q,done,1.5)
+            assert r.index==2 and out.command.flags>>4==13
+            at=replace(q,y_m=0.)
+            out=m.step(v,at,done,1.6)
+            assert r.index==3 and out.command.flags>>4==14
+            assert m.step(v,at,replace(done,context_matches=False),1.7).command.flags>>4==14
+            out=m.step(v,at,done,1.8)
+            assert r.finished_motion and out.command.flags>>4==12
+            assert m.step(v,at,done,1.9).state==CompetitionState.INITIAL_ATTACK_RETURN
+            out=m.step(replace(v,frame_sequence=21),at,replace(done,mode=3),2.)
+            assert out.state==CompetitionState.SEARCH and m.search_point_number==1
+            assert m.return_search_frame_floor==21
+
     defense=CompetitionMission(CompetitionSettings(side='red',opening_strategy='defense'))
     defense._select_batch(CargoBatch((1,),('green_supply',),'stash',initial_stash=True))
     defense._set_state(CompetitionState.INITIAL_RELEASE,1.)
@@ -3125,6 +3113,8 @@ def test_search_stations_one_and_three_alternate_directly_for_all_starts():
                 done=replace(idle,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=3)
                 assert m.step(v,p,done,2.1+cycle*5).command.arg_a==0 and r.index==0
                 out=m.step(v,replace(p,x_m=p.x_m+.3),replace(done,context_matches=True),2.2+cycle*5)
+                assert r.turning and out.command.flags>>4==14
+                out=m.step(v,p,replace(done,context_matches=True),2.25+cycle*5)
                 assert r.search_ready and out.command.flags>>4==12
                 m.step(v,p,replace(done,mode=3,context_matches=True),2.3+cycle*5)
                 assert m.state==CompetitionState.SEARCH and m.search_point_number==expected
@@ -3151,33 +3141,30 @@ def test_saved_search_station_does_not_skip_retrieval_after_obstacle_delivery():
     assert m.search_transfer_route is None and m.delivery_search_point_number == 3
 
 
-def test_search_transfer_target_seen_stops_owned_move_then_uses_normal_capture():
+def test_search_transfer_does_not_pick_until_at_station_and_facing_centre():
     from protocol import CMD_BULLDOZER_STEP
-    from obstacle_route import RouteStep
     m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
     m.initial_stash_done=True;m._set_state(CompetitionState.SEARCH,1.)
     p=PoseSnapshot(True,0.,.3,270.,0)
     status=StmSnapshot(mode=3,age_ms=0,context_valid=True,context_matches=False)
     m.search_yaw_accum_deg=720.
     m.step(VisionSnapshot(frame_sequence=1),p,status,1.)
-    blue=cargo(7,'danger_cyan',600,500)
-    moving=replace(status,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=1)
-    out=m.step(VisionSnapshot(frame_sequence=2,cargo=(blue,)),p,moving,1.1)
-    assert not m.search_transfer_route.interrupted and out.command.arg_a>0
     green=cargo(8,'green_supply',620,550)
-    out=m.step(VisionSnapshot(frame_sequence=3,cargo=(green,)),p,moving,1.2)
-    assert out.event=='search_transfer_target_seen' and out.command.arg_a==0
-    assert m.search_transfer_route.index==0
-    out=m.step(VisionSnapshot(frame_sequence=4,cargo=(green,)),p,
-        replace(moving,context_matches=True,action_status=3),1.3)
-    assert m.search_transfer_route.search_ready and out.command.flags>>4==RouteStep.PICKUP_READY
-    m.step(VisionSnapshot(frame_sequence=5,cargo=(green,)),p,
-        replace(moving,context_matches=True,action_status=3,mode=3),1.4)
-    assert m.state==CompetitionState.SEARCH and m.search_point_number==1 and m.search_visit==0
-    out=m.step(VisionSnapshot(frame_sequence=6,cargo=(green,)),p,
-        replace(status,camera_pitch_cdeg=12000),1.5)
-    assert m.state==CompetitionState.APPROACH and out.command.opcode==CMD_APPROACH_TARGET
-    assert m.selected_batch.track_ids==(8,)
+    v=VisionSnapshot(frame_sequence=3,cargo=(green,))
+    moving=replace(status,mode=25,accepted_command=CMD_BULLDOZER_STEP,action_status=1)
+    out=m.step(v,p,moving,1.1)
+    assert out.command.arg_a>0 and m.selected_batch is None
+    r=m.search_transfer_route
+    at=replace(p,x_m=r.target_xy_m[0],y_m=r.target_xy_m[1])
+    done=replace(moving,context_matches=True,action_status=3)
+    out=m.step(v,at,done,1.2)
+    assert r.turning and out.command.flags>>4==14 and m.selected_batch is None
+    out=m.step(v,at,replace(done,action_status=1),1.3)
+    assert r.turning and m.selected_batch is None
+    out=m.step(v,at,done,1.4)
+    assert r.search_ready and out.command.flags>>4==12
+    m.step(v,at,replace(done,mode=3),1.5)
+    assert m.state==CompetitionState.SEARCH
 
 
 def test_failed_target_context_survives_recovery_without_hiding_claw_audit():
