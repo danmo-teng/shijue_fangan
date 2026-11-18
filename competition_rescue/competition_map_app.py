@@ -28,7 +28,7 @@ from competition_wheel_input import CompetitionWheelInput
 from competition_dynamic_localization import CompetitionDynamicLocalization
 from lidar_yaw_debug.diagnostic import load_config
 from lidar_yaw_debug.motion_source import POLICY as MOTION_SOURCE_POLICY
-from motion_log_storage import read_json, WHEEL_SESSION_FILES
+from motion_log_storage import read_json, WHEEL_SESSION_FILES, trim_between_competition_sessions
 from operator_panel import OperatorPanel
 from localization_overlay import LocalizationOverlay
 from field_model import initial_pose
@@ -61,6 +61,7 @@ class CompetitionMapApp(RescueMapApp):
         self.official_wheel_input = self.dynamic_localization or getattr(options, "official_wheel_input", False)
         self.wheel_input = None
         self.wheel_run_dir = None
+        self.yaw_capture_session = None
         self.pose_age_gate = False
         self.operator = None
         self.prewarm_enabled = bool(getattr(options, 'gpio_buttons', False) and self.dynamic_localization
@@ -183,6 +184,19 @@ class CompetitionMapApp(RescueMapApp):
             self.record_reset_event('warm_start_requested', 'bind_latest_pose_and_primary_yaw')
             self.warm_ready = False
         if self.start_released and status.get('competition_started'):
+            if self.yaw_capture_session:
+                path = RUNTIME / "yaw_capture_plan.json"
+                ticket = read_json(path)
+                sessions = ticket.get("sessions")
+                if ticket.get("version") == 1 and isinstance(sessions, list) and self.yaw_capture_session not in sessions:
+                    sessions.append(self.yaw_capture_session)
+                    try:
+                        tmp = path.with_suffix(".tmp")
+                        tmp.write_text(json.dumps(ticket) + "\n")
+                        tmp.replace(path)
+                    except OSError as error:
+                        print(f"雷达两局采集计数写入失败：{error}", file=sys.stderr, flush=True)
+                self.yaw_capture_session = None
             self.warming = False
             self.session_started = True
             self.selecting = False
@@ -312,6 +326,16 @@ class CompetitionMapApp(RescueMapApp):
         sdk_log_profile = "full" if full_diagnostics else "summary"
         root = RUNTIME / "history" / WHEEL_OWNER
         root.mkdir(parents=True, exist_ok=True)
+        try:
+            removed, warning = trim_between_competition_sessions(root, self.wheel_run_dir)
+            if removed or warning:
+                print("定位包空间管理", removed, warning, file=sys.stderr, flush=True)
+        except OSError as error:
+            print(f"定位包空间管理跳过：{error}", file=sys.stderr, flush=True)
+        ticket = read_json(RUNTIME / "yaw_capture_plan.json")
+        yaw_capture = (self.prewarm_enabled and self.dynamic_localization and
+                       ticket.get("version") == 1 and isinstance(ticket.get("sessions"), list)
+                       and len(ticket["sessions"]) < 2)
         stamp = time.strftime("%Y%m%d_%H%M%S") + "_competition_wheel"
         run_dir, suffix = root / stamp, 0
         while run_dir.exists():
@@ -319,6 +343,7 @@ class CompetitionMapApp(RescueMapApp):
             run_dir = root / f"{stamp}_{suffix:02d}"
         run_dir.mkdir()
         session_id = secrets.token_hex(16)
+        self.yaw_capture_session = session_id if yaw_capture else None
         self.wheel_run_dir = run_dir
         config_path = run_dir / "localization.conf"
         shutil.copyfile(RUNTIME / "localization.conf", config_path)
@@ -339,6 +364,7 @@ class CompetitionMapApp(RescueMapApp):
                         pose_source="t265_direct_with_camera_offset", encoder_fusion_weight=0.0,
                         pose_dependencies=["T265 SDK", "measured wheel feedback", "main gyro angular rate"],
                         wheel_processing_owner="native_cpp_sdk_owner",
+                        yaw_capture_requested=bool(yaw_capture),
                         full_diagnostics_requested=full_diagnostics,
                         wheel_sdk_log_profile_requested=sdk_log_profile,
                         wheel_observer_transport="bounded_SEQPACKET_with_native_receive_timestamp",
@@ -353,7 +379,7 @@ class CompetitionMapApp(RescueMapApp):
         session_tmp.replace(RUNTIME / "session.json")
         if self.dynamic_localization:
             dynamic_config = load_config(self.options.dynamic_config)
-            dynamic_config["full_lidar_diagnostics"] = full_diagnostics
+            dynamic_config["full_lidar_diagnostics"] = full_diagnostics or yaw_capture
             dynamic_config['lidar'].update(port=self.options.lidar, baud=self.options.lidar_baud)
             if self.options.lidar == self.options.uart:
                 raise ValueError("雷达与底盘不能共用同一UART")

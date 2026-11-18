@@ -2431,9 +2431,14 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
                 assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token) is None
                 app.localization_json.write_text(json.dumps(dict(reference=dict(round_token=token))))
                 assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token)['start_zone']==4
+                app.yaw_capture_session = 'capture-two'
+                ticket = runtime/'yaw_capture_plan.json'
+                ticket.write_text(json.dumps(dict(version=1,sessions=['capture-one'])))
                 app.warm_status_path.write_text(json.dumps(dict(session_token=token,ready=True,competition_started=True)))
                 app._update_warm_start()
                 assert app.session_started and not app.warming and not app.selecting
+                assert json.loads(ticket.read_text())['sessions']==['capture-one','capture-two']
+                assert app.yaw_capture_session is None
                 assert spawn.call_count==1 and app.localization_process is owner
             # Exactly the existing transform, sampled after carrying/turning.
             engine=DynamicFence({})
@@ -4084,3 +4089,36 @@ def test_aux3_replay_and_real_publisher():
     for c in json.loads((PROJECT_ROOT/'docs/contracts/f405_search_zone_view_20261117.json').read_text())['examples']:
         frame=bytes.fromhex(c['command_hex'])
         assert mission_frame(frame[3],9,c['flags'],0,10500,3)==frame
+
+
+def test_low_space_cleanup_uses_completion_order_only(tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    import competition_map_app as formal
+    import motion_log_storage as store
+    root=tmp_path
+    folders=[]
+    for i,stamp in enumerate(['20261118_090000','20000101_000000','20261118_070000',
+                              '20000101_010000','20000101_020000','20000101_030000'],1):
+        folder=root/(stamp+'_competition_wheel')
+        folders.append(folder)
+        folder.mkdir()
+        (folder/'metadata.json').write_text(json.dumps(dict(owner=formal.WHEEL_OWNER,
+            mode='competition_t265_wheel_input',sdk_session_id=str(i))))
+        if i<6:
+            (folder/'session_complete.json').write_text(json.dumps(dict(owner=formal.WHEEL_OWNER,
+                complete=True,session_index=i)))
+    (root/'protected_sessions.json').write_text(json.dumps(dict(owner=formal.WHEEL_OWNER,
+        sessions=[folders[1].name])))
+    (folders[2]/'user.txt').write_text('keep')
+    with patch.object(store,'disk_capacity',return_value=SimpleNamespace(free=5_000_000_001)):
+        assert store.trim_between_competition_sessions(root)==([], '')
+    with patch.object(store,'disk_capacity',return_value=SimpleNamespace(free=4_990_000_000)):
+        marker=folders[3]/'session_complete.json'
+        saved=marker.read_text()
+        marker.write_text((folders[0]/'session_complete.json').read_text())
+        assert store.trim_between_competition_sessions(root)[0]==[]
+        marker.write_text(saved)
+        removed,warning=store.trim_between_competition_sessions(root,folders[-1])
+        assert removed==[folders[0].name] and warning
+        assert all(f.is_dir() for f in folders[1:])

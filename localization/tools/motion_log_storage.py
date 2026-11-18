@@ -168,6 +168,38 @@ def disk_capacity(root):
     return shutil.disk_usage(path)
 
 
+def trim_between_competition_sessions(root, current=None, *, reserve=5_000_000_000):
+    """Use completed-session indices only. Never fall back to an RTC timestamp."""
+    if disk_capacity(root).free >= reserve:
+        return [], ""
+    rows = list_sessions(root, current, WHEEL_SESSION_FILES, owner=WHEEL_OWNER)
+    ordered = {}
+    for row in rows:
+        folder = root / row["name"]
+        marker = folder / "session_complete.json"
+        if folder.is_symlink() or marker.is_symlink():
+            continue
+        meta = read_json(marker)
+        index = meta.get("session_index")
+        if (meta.get("owner") != WHEEL_OWNER or meta.get("complete") is not True or
+                type(index) is not int or index < 1):
+            continue
+        if index in ordered:
+            return [], "完成序号重复，保留全部定位包"
+        ordered[index] = row
+
+    removed = []
+    for index in sorted(ordered)[:-2]:
+        row = ordered[index]
+        if row["reason"] or row["order"] != (1, index):
+            continue
+        deleted, _ = delete_sessions(root, [row], current, WHEEL_SESSION_FILES, owner=WHEEL_OWNER)
+        removed.extend(deleted)
+        if disk_capacity(root).free >= reserve:
+            return removed, ""
+    return removed, "可用空间不足5 GB，可按完成序号删除的旧完整定位包不足"
+
+
 def size_label(size):
     return f"{size / 2**30:.2f} GiB" if size >= 2**30 else f"{size / 2**20:.1f} MiB"
 
