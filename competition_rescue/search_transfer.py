@@ -19,6 +19,7 @@ class SearchTransferRoute:
     move_epoch: int = 0
     scan_direction: int | None = None
     scan_start_yaw_deg: float | None = None
+    high_start: bool = False
     waypoints: tuple[tuple[float, float], ...] = field(init=False)
 
     def __post_init__(self) -> None:

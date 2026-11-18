@@ -3937,7 +3937,7 @@ def test_station_turn_direction_ties_and_scan_angle_do_not_reset_at_centre():
     p=pose(-.4,0.);p=replace(p,yaw_deg=90.)
     status=replace(stm(mode=25),context_valid=True,context_matches=False,
                    accepted_command=CMD_BULLDOZER_STEP,action_status=1,camera_pitch_cdeg=12000)
-    v=VisionSnapshot(frame_sequence=10)
+    v=VisionSnapshot(frame_sequence=10,range_pitch_cdeg=12000)
     request=m._search_transfer_output(v,p,status,1.)
     assert request.command.arg_a==2 and request.command.arg_b==-1
     # Camera ready at90deg, before centre0deg: SEARCH may begin immediately.
@@ -4258,3 +4258,38 @@ def test_orange_gate_filter_does_not_guess_load_side_or_expand_scope():
     m.first_common_delivered = True
     m.carried_manifest = ('core_black',)
     assert m._orange_gate_filter_side(audit, view, current, status) is None
+
+def test_empty_first_station_switches_at_540_then_third_returns_at_720():
+    m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
+    m.initial_stash_done = True
+    m.first_common_delivered = True
+    m.state = CompetitionState.SEARCH
+    m.search_visit = 1
+    p = pose(*m.settings.search_point(1))
+    status = replace(stm(mode=3), camera_pitch_cdeg=12000, flags=0)
+    v = VisionSnapshot(frame_sequence=10, range_pitch_cdeg=12000)
+    m.search_site_turn_deg = 539
+    m._handle_search(v,p,status,1.)
+    assert m.state == CompetitionState.SEARCH
+    m.search_site_turn_deg = 540
+    m._handle_search(v,p,status,1.1)
+    route = m.search_transfer_route
+    assert route.high_start and route.target_point == 3
+    route.finish_leg()
+    at = pose(*route.target_xy_m)
+    turn = m._search_transfer_output(v,at,status,1.2)
+    assert turn.command.arg_a == 3
+    turn.command.to_frame(1)
+    ready = replace(status,camera_pitch_cdeg=10500,context_valid=True,context_matches=True,
+                    accepted_command=turn.command.opcode,action_status=3)
+    m._search_transfer_output(v,at,ready,1.3)
+    assert m._handle_search(replace(v,frame_sequence=11),at,ready,1.4).reason == 'return_search_frame_gate'
+    high = replace(v,frame_sequence=12,range_pitch_cdeg=10500)
+    m._handle_search(high,at,ready,1.5)
+    assert not m.return_search_mode_seen and m.search_point_number == 3
+    m.search_site_turn_deg = 719
+    m._handle_search(high,at,ready,1.6)
+    assert m.state == CompetitionState.SEARCH
+    m.search_site_turn_deg = 720
+    m._handle_search(high,at,ready,1.7)
+    assert m.search_transfer_route.target_point == 1 and not m.search_transfer_route.high_start

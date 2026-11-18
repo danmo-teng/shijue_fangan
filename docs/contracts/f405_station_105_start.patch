@@ -1,0 +1,65 @@
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -238,5 +238,5 @@
+     case VISION_BULLDOZER_ATTACK_FACE_OPPONENT:
+       return heading < 36000U && ((a == 0 && b == 0) ||
+-          ((a == 1 || a == 2) && (b == -1 || b == 1)));
++          ((a == 1 || a == 2 || a == 3) && (b == -1 || b == 1)));
+     case VISION_BULLDOZER_RELEASE_LOAD:
+     case VISION_BULLDOZER_FULL_OPEN:
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -4990,13 +4990,15 @@
+ static void task_bulldozer_prepare_search(uint32_t now_ms, bool begin_scan)
+ {
++  const bool high_view = begin_scan && remote_action.arg_a == 3;
++  const uint8_t pitch = high_view ? APP_SEARCH_LOW_CAMERA_ANGLE : APP_SEARCH_HIGH_CAMERA_ANGLE;
+   Motor_Stop();
+   task_status.motors_active = false;
+   if (remote_action.phase == 0U) {
+     const uint32_t lift_wait = Lift_PositionWaitMs(APP_LIFT_TRAVEL_ANGLE);
+-    const uint32_t camera_wait = Camera_PositionWaitMs(APP_SEARCH_HIGH_CAMERA_ANGLE);
++    const uint32_t camera_wait = Camera_PositionWaitMs(pitch);
+     remote_action.actuator_wait_ms = lift_wait > camera_wait ? lift_wait : camera_wait;
+     Lift_SetTravelPosition();
+-    Camera_SetAngle(APP_SEARCH_HIGH_CAMERA_ANGLE);
+-    camera_angle = (float)APP_SEARCH_HIGH_CAMERA_ANGLE;
++    Camera_SetAngle(pitch);
++    camera_angle = (float)pitch;
+     step_started_ms = now_ms;
+     remote_action.phase = 1U;
+@@ -5007,5 +5009,5 @@
+     task_enter(TASK_SEARCH, now_ms);
+     if (begin_scan) {
+-      search_phase = SEARCH_SWEEP_120;
++      search_phase = high_view ? SEARCH_SWEEP_90 : SEARCH_SWEEP_120;
+       (void)task_full_turn_reached();
+     }
+@@ -5050,5 +5052,5 @@
+           remote_action.arg_a == 1;
+       if (remote_action.step == VISION_BULLDOZER_ATTACK_FACE_OPPONENT &&
+-          remote_action.arg_a == 2) {
++          (remote_action.arg_a == 2 || remote_action.arg_a == 3)) {
+         task_bulldozer_prepare_search(now_ms, true);
+         return;
+@@ -5218,5 +5220,5 @@
+       !task_status.gripper_closed;
+   const bool station_turn = attack_face &&
+-      (command->target_x_mm == 1 || command->target_x_mm == 2);
++      (command->target_x_mm == 1 || command->target_x_mm == 2 || command->target_x_mm == 3);
+   if (station_turn && (!empty_turn_entry ||
+       remote_action.step != VISION_BULLDOZER_EMPTY_BODY_MOVE)) {
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -329,3 +329,3 @@
+         return 0 <= heading < 36000 and ((a == b == 0) or
+-                                        (a in (1, 2) and b in (-1, 1)))
++                                        (a in (1, 2, 3) and b in (-1, 1)))
+     if step in (5, 6, 10, 11, 13):
+--- a/tools/test_vision_protocol.py
++++ b/tools/test_vision_protocol.py
+@@ -18,3 +18,3 @@
+         self.assertEqual(len(protocol.mission_frame(1, 0x14, 0xE1, 0, 0, 9000)), 15)
+-        for a, b, heading in ((0, 1, 0), (1, 0, 0), (2, 2, 0), (3, 1, 0),
++        for a, b, heading in ((0, 1, 0), (1, 0, 0), (2, 2, 0), (4, 1, 0),
+                               (-1, -1, 0), (1, 1, 36000)):

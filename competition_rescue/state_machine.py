@@ -838,6 +838,7 @@ class CompetitionMission:
         self.return_relay_tx_baseline: int | None = None
         self.return_command_accepted = False
         self.return_search_frame_floor: int | None = None
+        self.return_station_scan = False
         self.return_search_mode_seen = False
         self.return_arrival_latched = False
         self.return_after_delivery = False
@@ -5875,7 +5876,7 @@ class CompetitionMission:
 
     def _complete_return_search(
         self, vision: VisionSnapshot, now: float, message: str, *,
-        point_number: int | None = None, new_visit: bool = True,
+        point_number: int | None = None, new_visit: bool = True, station_scan: bool = False,
     ) -> CompetitionOutput:
         if new_visit:
             self.search_visit += 1
@@ -5889,6 +5890,7 @@ class CompetitionMission:
         self.recovery_task_locked = False
         self._clear_cluster_context(reset_attempts=True)
         self._set_state(CompetitionState.SEARCH, now)
+        self.return_station_scan = station_scan
         self.return_search_mode_seen = True
         self.return_search_frame_floor = max(0, vision.frame_sequence)
         return CompetitionOutput(self.state, self._hold(), message,
@@ -5897,7 +5899,7 @@ class CompetitionMission:
 
     def _begin_search_transfer(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
-        *, target_point: int | None = None,
+        *, target_point: int | None = None, empty_scan: bool = False,
     ) -> CompetitionOutput:
         if not pose.valid:
             return CompetitionOutput(self.state, self._pause(), "换搜索点等待有效位置",
@@ -5911,7 +5913,8 @@ class CompetitionMission:
                 math.dist((pose.x_m, pose.y_m), first) > self.settings.post_delivery_return_tolerance_m)
             target_point = 1 if establish_first else 4-self.search_point_number
         self.search_transfer_route = SearchTransferRoute(self.search_point_number, target_point,
-            self.settings.search_point(target_point), pose.yaw_deg)
+            self.settings.search_point(target_point), pose.yaw_deg,
+            high_start=empty_scan and self.search_point_number == 1 and target_point == 3)
         self._set_state(CompetitionState.SEARCH_TRANSFER, now)
         return replace(self._search_transfer_output(vision, pose,
             replace(stm, context_matches=False), now), event="search_transfer_start")
@@ -5939,20 +5942,27 @@ class CompetitionMission:
                 route.scan_direction = centre_turn_direction(payload[2]/100., pose.yaw_deg,
                                                             self.search_scan_direction)
                 route.scan_start_yaw_deg = pose.yaw_deg
-            if complete and stm.mode == STM_MODE_SEARCH and stm.camera_pitch_cdeg == 12000:
-                # A=2 DONE means posture ready and SEARCH begun, not centre
+            scan_pitches = (10500,) if route.high_start else (12000, 10500)
+            if complete and stm.mode == STM_MODE_SEARCH and stm.camera_pitch_cdeg in scan_pitches:
+                # DONE means posture ready and SEARCH begun, not centre
                 # reached. The normal SEARCH may lock cargo during this turn.
                 self.search_scan_direction = route.scan_direction
                 result = self._complete_return_search(vision, now,
                     "观察姿态已准备好，向中心方向边转边搜；越过中心方向后继续同向扫描",
-                    point_number=route.target_point)
+                    point_number=route.target_point, station_scan=True)
                 self.search_last_yaw_deg = route.scan_start_yaw_deg
+                if (stm.received_monotonic_ns and vision.observed_monotonic_s is not None
+                        and vision.observed_monotonic_s > stm.received_monotonic_ns / 1e9
+                        and vision.range_pitch_cdeg == stm.camera_pitch_cdeg and self._vision_fresh(vision, now)):
+                    self.return_search_mode_seen = False
+                    self.return_search_frame_floor = None
+                    return self._handle_search(vision, pose, stm, now)
                 self._update_search_scan_progress(pose)
                 return result
             return CompetitionOutput(self.state,
                 CommandRequest(CMD_BULLDOZER_STEP,
                     self._side_flags() | (int(RouteStep.ATTACK_FACE_OPPONENT) << 4),
-                    2, route.scan_direction, payload[2]),
+                    3 if route.high_start else 2, route.scan_direction, payload[2]),
                 "到观察点恢复搜索姿态，然后以搜索速度向中心边转边搜",
                 motion_expected=True, reason="search_transfer_prepare_scan",
                 expected_stm_modes=(STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH))
@@ -7237,10 +7247,12 @@ class CompetitionMission:
         now: float,
     ) -> CompetitionOutput:
         if self.return_search_mode_seen:
+            station_view = (stm.camera_pitch_cdeg in (10500, 12000) and
+                            vision.range_pitch_cdeg == stm.camera_pitch_cdeg)
             ready = (
                 stm.fresh and
                 stm.mode == STM_MODE_SEARCH and
-                stm.camera_pitch_cdeg == 12000 and
+                (station_view if self.return_station_scan else stm.camera_pitch_cdeg == 12000) and
                 self._vision_fresh(vision, now) and
                 self.return_search_frame_floor is not None and
                 vision.frame_sequence > self.return_search_frame_floor
@@ -7249,7 +7261,7 @@ class CompetitionMission:
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
-                    "返中完成后等待相机120°和新的SEARCH视觉帧",
+                    "等待实际搜索视角对应的新图",
                     tx_policy="hold",
                     reason="return_search_frame_gate",
                     expected_stm_modes=(STM_MODE_SEARCH,),
@@ -7384,7 +7396,10 @@ class CompetitionMission:
         observation = self._start_zone_observation(vision, stm, now)
         if observation is not None:
             return observation
-        if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= self.settings.search_min_turn_deg:
+        turn_limit = self.settings.search_min_turn_deg
+        if self.search_point_number == 1:
+            turn_limit = min(540.0, turn_limit)
+        if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= turn_limit:
             if not (
                 stm.fresh and
                 stm.mode == STM_MODE_SEARCH and
@@ -7398,7 +7413,7 @@ class CompetitionMission:
                     reason="search_transfer_handoff",
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
-            return self._begin_search_transfer(vision, pose, stm, now)
+            return self._begin_search_transfer(vision, pose, stm, now, empty_scan=True)
         if self._orange_only_search():
             return CompetitionOutput(self.state, self._hold(),
                 f"首绿后第{self.orange_search_round}/3轮优先找橙：已搜索"

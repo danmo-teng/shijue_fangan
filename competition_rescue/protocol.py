@@ -181,8 +181,8 @@ def mission_frame(
             valid = arg_a == arg_b == 0 and (
                 0 <= aux_cdeg < 36000 if step == RouteStep.ATTACK_FACE_OPPONENT
                 else aux_cdeg == expected)
-            if step == RouteStep.ATTACK_FACE_OPPONENT and arg_a in {1, 2}:
-                # Site-only slow turn (1) or prepare-and-scan (2). B is the
+            if step == RouteStep.ATTACK_FACE_OPPONENT and arg_a in {1, 2, 3}:
+                # Site-only slow turn (1) or prepare-and-scan (2: 120°, 3: 105°). B is the
                 # latched signed scan direction, not an angular speed.
                 valid = arg_b in {-1, 1} and 0 <= aux_cdeg < 36000
         elif step in LOCAL_DISTANCES:
