@@ -1,0 +1,1419 @@
+{
+  "session": "20261118_132527_competition_wheel",
+  "upper": "cc51217",
+  "lower": "1ac74f5/dirty1",
+  "radar": [
+    {
+      "line": 1056,
+      "record": {
+        "position_observed_axes": [
+          "y"
+        ],
+        "rank_xy": 1,
+        "candidate_center_xy_m": [
+          0.3535524164155923,
+          0.09095416169520121
+        ],
+        "inherited_axes": [
+          "x"
+        ],
+        "covariance": null,
+        "qualified_pose": false,
+        "yaw_rad": 12.927286727422203,
+        "supported_lines": 2,
+        "wall_ids": [
+          0,
+          3
+        ],
+        "wall_support_lines": {
+          "y": [
+            1
+          ]
+        },
+        "residual_rms_m": 0.03350974581368146,
+        "correction_m": 0.028772572841994904,
+        "unconstrained_center_xy_m": [
+          0.38232283692412916,
+          0.09095416169520121
+        ],
+        "axis_rejections": {
+          "x": [
+            "wall_residual"
+          ]
+        },
+        "reason": "AXIS_GEOMETRY_ACCEPTED",
+        "position_reacquired": false,
+        "reacquisition_status": "LOCAL_TRACKING",
+        "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2014284:0:317ed4ff0d8b44c09120d156560c711c:byte:2014942:8",
+        "reference_ns": 1138260391306,
+        "deskew_applied": true,
+        "rotation_compensated": true,
+        "translation_compensated": true,
+        "timestamp_semantics_verified": false,
+        "deskew_qualified": false,
+        "accuracy_verified": false,
+        "time_policy": "adopt_received_data_timing_diagnostic_only",
+        "motion_source": "WHEEL_FALLBACK",
+        "motion_selection": {
+          "independent_ground_truth": false,
+          "last_paired_pose_ns": 1138299483705,
+          "last_raw_pose_ns": 1138299483705,
+          "last_wheel_sample_id": 114475,
+          "mode": "WHEEL_FALLBACK",
+          "pending_pose_drops": 0,
+          "phase_position_bridges": 0,
+          "phase_restore_wheel_fallback": true,
+          "phase_wheel_suppressed": false,
+          "phase_wheel_suppression_reason": "",
+          "policy": {
+            "comparison_travel_m": 0.25,
+            "displacement_conflict_m": 0.05,
+            "recovery_residual_m": 0.025,
+            "recovery_travel_m": 0.5,
+            "recovery_two_axis_fixes": 2,
+            "single_increment_conflict_m": 0.05
+          },
+          "reason": "phase_exit_rebased",
+          "recovery_travel_m": 0.0,
+          "recovery_two_axis_fixes": 0,
+          "spatial_conflict_m": 0.0258807113231371,
+          "t265_translation_rebase_m": [
+            -0.0503072607259147,
+            0.106420821704587
+          ],
+          "wall_motion_evidence": {
+            "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2014284:0:317ed4ff0d8b44c09120d156560c711c:byte:2014942:8",
+            "status": "NO_FULL_XY_WALL_EVIDENCE"
+          },
+          "wheel_and_gyro_are_sdk_dependencies": true,
+          "wheel_input_policy": {
+            "dependency_persists_after_pause": true,
+            "pause_requested": false,
+            "reason": "measured_wheel_input_enabled"
+          },
+          "wheel_motion_suspect": false,
+          "wheel_time_basis": "receive_end_with_native_interval_duration",
+          "wheel_yaw_support": "MCU_interval_endpoint_held"
+        },
+        "motion_boundary_policy": "hold_outside_measured_support",
+        "primary_yaw_field_rad": 12.927286727422203,
+        "prior_center_xy_m": [
+          0.3535524164155924,
+          0.09130608741160359
+        ],
+        "physical_points": 177,
+        "used_points": 173,
+        "scan_span_ms": 41.0,
+        "motion_unsupported_span_ns": 0,
+        "motion_latest_ns": 1138266965587,
+        "timestamp_monotonic_ns": 1138269643299,
+        "reference_revision": 3,
+        "applied_motion_reference_xy_m": [
+          0.297021320324393,
+          0.0100796803842715
+        ],
+        "motion_reference_update_m": [
+          8.43769498715119e-15,
+          4.0592529337857286e-16
+        ],
+        "map_translation_offset_m": [
+          0.0565310960912078,
+          0.08087448131092971
+        ],
+        "compute_ms": 42.677896,
+        "compute_thread_cpu_ms": 12.508586,
+        "snapshot_ms": 1.940367,
+        "deskew_ms": 4.779623,
+        "fit_ms": 19.358373,
+        "geometry_compute_cpu_ms": 19.360334,
+        "geometry_roundtrip_ms": 30.146515
+      }
+    },
+    {
+      "line": 1057,
+      "record": {
+        "position_observed_axes": [],
+        "rank_xy": 0,
+        "candidate_center_xy_m": null,
+        "inherited_axes": [
+          "x",
+          "y"
+        ],
+        "covariance": null,
+        "qualified_pose": false,
+        "yaw_rad": 13.070327561732945,
+        "supported_lines": 2,
+        "wall_ids": [
+          0
+        ],
+        "wall_support_lines": {},
+        "residual_rms_m": 0.03964948689627064,
+        "correction_m": 0.028487386267738612,
+        "unconstrained_center_xy_m": [
+          0.38272356031917076,
+          0.0913194662497383
+        ],
+        "axis_rejections": {
+          "x": [
+            "wall_residual"
+          ]
+        },
+        "reason": "AXIS_GEOMETRY_REJECTED",
+        "position_reacquired": false,
+        "reacquisition_status": "CONFIRMING_ENCLOSURE",
+        "reacquisition_candidate_xy_m": [
+          0.3827238359320533,
+          0.39991853632833196
+        ],
+        "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2015976:1:317ed4ff0d8b44c09120d156560c711c:byte:2016634:8",
+        "reference_ns": 1138360391306,
+        "deskew_applied": true,
+        "rotation_compensated": true,
+        "translation_compensated": true,
+        "timestamp_semantics_verified": false,
+        "deskew_qualified": false,
+        "accuracy_verified": false,
+        "time_policy": "adopt_received_data_timing_diagnostic_only",
+        "motion_source": "WHEEL_FALLBACK",
+        "motion_selection": {
+          "independent_ground_truth": false,
+          "last_paired_pose_ns": 1138429634536,
+          "last_raw_pose_ns": 1138429634536,
+          "last_wheel_sample_id": 114488,
+          "mode": "WHEEL_FALLBACK",
+          "pending_pose_drops": 0,
+          "phase_position_bridges": 0,
+          "phase_restore_wheel_fallback": true,
+          "phase_wheel_suppressed": false,
+          "phase_wheel_suppression_reason": "",
+          "policy": {
+            "comparison_travel_m": 0.25,
+            "displacement_conflict_m": 0.05,
+            "recovery_residual_m": 0.025,
+            "recovery_travel_m": 0.5,
+            "recovery_two_axis_fixes": 2,
+            "single_increment_conflict_m": 0.05
+          },
+          "reason": "phase_exit_rebased",
+          "recovery_travel_m": 0.0,
+          "recovery_two_axis_fixes": 0,
+          "spatial_conflict_m": 0.0327486585173774,
+          "t265_translation_rebase_m": [
+            -0.0503072607259147,
+            0.106420821704587
+          ],
+          "wall_motion_evidence": {
+            "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2015976:1:317ed4ff0d8b44c09120d156560c711c:byte:2016634:8",
+            "status": "NO_FULL_XY_WALL_EVIDENCE"
+          },
+          "wheel_and_gyro_are_sdk_dependencies": true,
+          "wheel_input_policy": {
+            "dependency_persists_after_pause": true,
+            "pause_requested": false,
+            "reason": "measured_wheel_input_enabled"
+          },
+          "wheel_motion_suspect": false,
+          "wheel_time_basis": "receive_end_with_native_interval_duration",
+          "wheel_yaw_support": "MCU_interval_endpoint_held"
+        },
+        "motion_boundary_policy": "hold_outside_measured_support",
+        "primary_yaw_field_rad": 13.070327561732945,
+        "prior_center_xy_m": [
+          0.3542361740514322,
+          0.09131946624973833
+        ],
+        "physical_points": 176,
+        "used_points": 173,
+        "scan_span_ms": 40.75,
+        "motion_unsupported_span_ns": 0,
+        "motion_latest_ns": 1138367831227,
+        "timestamp_monotonic_ns": 1138393632458,
+        "reference_revision": 3,
+        "applied_motion_reference_xy_m": [
+          0.297705077960233,
+          0.0104449849388086
+        ],
+        "motion_reference_update_m": [
+          8.604228440844963e-15,
+          -3.2959746043559335e-17
+        ],
+        "map_translation_offset_m": [
+          0.0565310960912078,
+          0.0808744813109297
+        ],
+        "compute_ms": 52.014679,
+        "compute_thread_cpu_ms": 10.854586,
+        "snapshot_ms": 0.998184,
+        "deskew_ms": 3.761397,
+        "fit_ms": 30.37906,
+        "geometry_compute_cpu_ms": 27.438165,
+        "geometry_roundtrip_ms": 42.885731
+      }
+    },
+    {
+      "line": 1058,
+      "record": {
+        "position_observed_axes": [
+          "x",
+          "y"
+        ],
+        "rank_xy": 2,
+        "candidate_center_xy_m": [
+          0.38384977891022154,
+          0.4022829883555168
+        ],
+        "inherited_axes": [],
+        "covariance": null,
+        "qualified_pose": false,
+        "yaw_rad": 13.191459900711994,
+        "supported_lines": 2,
+        "wall_ids": [
+          0,
+          3
+        ],
+        "wall_support_lines": {
+          "x": [
+            0
+          ],
+          "y": [
+            1
+          ]
+        },
+        "residual_rms_m": 0.02743054775210796,
+        "correction_m": 0.3119423383320177,
+        "unconstrained_center_xy_m": [
+          0.38384977891022154,
+          0.4022829883555168
+        ],
+        "reason": "FIXED_YAW_ENCLOSURE_REACQUIRED",
+        "position_prior_used": false,
+        "yaw_reference_changed": false,
+        "position_reacquired": true,
+        "reacquisition_status": "REACQUIRED",
+        "reacquisition_confirmations": 2,
+        "local_reason": "AXIS_GEOMETRY_REJECTED",
+        "local_observed_axes": [],
+        "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2017668:1:317ed4ff0d8b44c09120d156560c711c:byte:2018326:8",
+        "reference_ns": 1138460391306,
+        "deskew_applied": true,
+        "rotation_compensated": true,
+        "translation_compensated": true,
+        "timestamp_semantics_verified": false,
+        "deskew_qualified": false,
+        "accuracy_verified": false,
+        "time_policy": "adopt_received_data_timing_diagnostic_only",
+        "motion_source": "WHEEL_FALLBACK",
+        "motion_selection": {
+          "independent_ground_truth": false,
+          "last_paired_pose_ns": 1138504722569,
+          "last_raw_pose_ns": 1138504722569,
+          "last_wheel_sample_id": 114495,
+          "mode": "WHEEL_FALLBACK",
+          "pending_pose_drops": 0,
+          "phase_position_bridges": 0,
+          "phase_restore_wheel_fallback": true,
+          "phase_wheel_suppressed": false,
+          "phase_wheel_suppression_reason": "",
+          "policy": {
+            "comparison_travel_m": 0.25,
+            "displacement_conflict_m": 0.05,
+            "recovery_residual_m": 0.025,
+            "recovery_travel_m": 0.5,
+            "recovery_two_axis_fixes": 2,
+            "single_increment_conflict_m": 0.05
+          },
+          "reason": "phase_exit_rebased",
+          "recovery_travel_m": 0.0,
+          "recovery_two_axis_fixes": 1,
+          "spatial_conflict_m": 0.0375615016874969,
+          "t265_translation_rebase_m": [
+            -0.0503072607259147,
+            0.106420821704587
+          ],
+          "wall_motion_evidence": {
+            "reference_ns": 1138460391306,
+            "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2017668:1:317ed4ff0d8b44c09120d156560c711c:byte:2018326:8",
+            "status": "WALL_MOTION_BASELINE"
+          },
+          "wheel_and_gyro_are_sdk_dependencies": true,
+          "wheel_input_policy": {
+            "dependency_persists_after_pause": true,
+            "pause_requested": false,
+            "reason": "measured_wheel_input_enabled"
+          },
+          "wheel_motion_suspect": false,
+          "wheel_time_basis": "receive_end_with_native_interval_duration",
+          "wheel_yaw_support": "MCU_interval_endpoint_held"
+        },
+        "motion_boundary_policy": "hold_outside_measured_support",
+        "primary_yaw_field_rad": 13.191459900711994,
+        "prior_center_xy_m": [
+          0.3548002069378933,
+          0.09169621334365077
+        ],
+        "physical_points": 176,
+        "used_points": 174,
+        "scan_span_ms": 40.75,
+        "motion_unsupported_span_ns": 0,
+        "motion_latest_ns": 1138467045335,
+        "timestamp_monotonic_ns": 1138468994576,
+        "reference_revision": 3,
+        "applied_motion_reference_xy_m": [
+          0.298269110846694,
+          0.0108217320327213
+        ],
+        "motion_reference_update_m": [
+          8.493206138382448e-15,
+          2.237793284010081e-16
+        ],
+        "map_translation_offset_m": [
+          0.08558066806352754,
+          0.3914612563227955
+        ],
+        "compute_ms": 50.908452,
+        "compute_thread_cpu_ms": 11.252042,
+        "snapshot_ms": 1.131186,
+        "deskew_ms": 5.888392,
+        "fit_ms": 26.729414,
+        "geometry_compute_cpu_ms": 25.803582,
+        "geometry_roundtrip_ms": 40.45969
+      }
+    },
+    {
+      "line": 1061,
+      "record": {
+        "position_observed_axes": [
+          "x"
+        ],
+        "rank_xy": 1,
+        "candidate_center_xy_m": [
+          0.3835325398807572,
+          0.39100500737373345
+        ],
+        "inherited_axes": [
+          "y"
+        ],
+        "covariance": null,
+        "qualified_pose": false,
+        "yaw_rad": 13.56341880549978,
+        "supported_lines": 2,
+        "wall_ids": [
+          0
+        ],
+        "wall_support_lines": {
+          "x": [
+            0
+          ]
+        },
+        "residual_rms_m": 0.033858416772100886,
+        "correction_m": 0.0004359128607855922,
+        "unconstrained_center_xy_m": [
+          0.3835325398807572,
+          0.39100500737373345
+        ],
+        "axis_rejections": {},
+        "reason": "AXIS_GEOMETRY_ACCEPTED",
+        "position_reacquired": false,
+        "reacquisition_status": "LOCAL_TRACKING",
+        "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2022744:4:317ed4ff0d8b44c09120d156560c711c:byte:2023449:0",
+        "reference_ns": 1138760391306,
+        "deskew_applied": true,
+        "rotation_compensated": true,
+        "translation_compensated": true,
+        "timestamp_semantics_verified": false,
+        "deskew_qualified": false,
+        "accuracy_verified": false,
+        "time_policy": "adopt_received_data_timing_diagnostic_only",
+        "motion_source": "WHEEL_FALLBACK",
+        "motion_selection": {
+          "independent_ground_truth": false,
+          "last_paired_pose_ns": 1138795059101,
+          "last_raw_pose_ns": 1138795059101,
+          "last_wheel_sample_id": 114525,
+          "mode": "WHEEL_FALLBACK",
+          "pending_pose_drops": 0,
+          "phase_position_bridges": 0,
+          "phase_restore_wheel_fallback": true,
+          "phase_wheel_suppressed": false,
+          "phase_wheel_suppression_reason": "",
+          "policy": {
+            "comparison_travel_m": 0.25,
+            "displacement_conflict_m": 0.05,
+            "recovery_residual_m": 0.025,
+            "recovery_travel_m": 0.5,
+            "recovery_two_axis_fixes": 2,
+            "single_increment_conflict_m": 0.05
+          },
+          "reason": "phase_exit_rebased",
+          "recovery_travel_m": 0.0,
+          "recovery_two_axis_fixes": 0,
+          "spatial_conflict_m": 0.0398490451788918,
+          "t265_translation_rebase_m": [
+            -0.0503072607259147,
+            0.106420821704587
+          ],
+          "wall_motion_evidence": {
+            "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2022744:4:317ed4ff0d8b44c09120d156560c711c:byte:2023449:0",
+            "status": "NO_FULL_XY_WALL_EVIDENCE"
+          },
+          "wheel_and_gyro_are_sdk_dependencies": true,
+          "wheel_input_policy": {
+            "dependency_persists_after_pause": true,
+            "pause_requested": false,
+            "reason": "measured_wheel_input_enabled"
+          },
+          "wheel_motion_suspect": false,
+          "wheel_time_basis": "receive_end_with_native_interval_duration",
+          "wheel_yaw_support": "MCU_interval_endpoint_held"
+        },
+        "motion_boundary_policy": "hold_outside_measured_support",
+        "primary_yaw_field_rad": 13.56341880549978,
+        "prior_center_xy_m": [
+          0.3830966270199716,
+          0.3910050073737334
+        ],
+        "physical_points": 177,
+        "used_points": 173,
+        "scan_span_ms": 40.416667,
+        "motion_unsupported_span_ns": 0,
+        "motion_latest_ns": 1138767778837,
+        "timestamp_monotonic_ns": 1138771199604,
+        "reference_revision": 3,
+        "applied_motion_reference_xy_m": [
+          0.298236612606066,
+          0.0106660071660074
+        ],
+        "motion_reference_update_m": [
+          8.604228440844963e-15,
+          -6.938893903907228e-18
+        ],
+        "map_translation_offset_m": [
+          0.08529592727469121,
+          0.380339000207726
+        ],
+        "compute_ms": 42.352138,
+        "compute_thread_cpu_ms": 11.742874,
+        "snapshot_ms": 1.478608,
+        "deskew_ms": 4.993418,
+        "fit_ms": 20.507059,
+        "geometry_compute_cpu_ms": 20.252165,
+        "geometry_roundtrip_ms": 32.612056
+      }
+    },
+    {
+      "line": 1232,
+      "record": {
+        "position_observed_axes": [
+          "x",
+          "y"
+        ],
+        "rank_xy": 2,
+        "candidate_center_xy_m": [
+          0.12785400540364056,
+          0.7066531767628863
+        ],
+        "inherited_axes": [],
+        "covariance": null,
+        "qualified_pose": false,
+        "yaw_rad": 14.1172527343888,
+        "supported_lines": 3,
+        "wall_ids": [
+          0
+        ],
+        "wall_support_lines": {
+          "x": [
+            0
+          ],
+          "y": [
+            1,
+            2
+          ]
+        },
+        "residual_rms_m": 0.011465779115219472,
+        "correction_m": 0.28263680077230524,
+        "unconstrained_center_xy_m": [
+          0.12785400540364056,
+          0.9892457236129788
+        ],
+        "axis_rejections": {},
+        "reason": "AXIS_GEOMETRY_ACCEPTED",
+        "position_reacquired": true,
+        "reacquisition_status": "OPPOSING_WALL_AXIS_REACQUIRED",
+        "reacquired_axes": [
+          "y"
+        ],
+        "scan_id": "317ed4ff0d8b44c09120d156560c711c:sector:317ed4ff0d8b44c09120d156560c711c:byte:2312686:10:317ed4ff0d8b44c09120d156560c711c:byte:2313391:5",
+        "reference_ns": 1155873641306,
+        "deskew_applied": true,
+        "rotation_compensated": true,
+        "translation_compensated": true,
+        "timestamp_semantics_verified": false,
+        "deskew_qualified": false,
+        "accuracy_verified": false,
+        "time_policy": "adopt_received_data_timing_diagnostic_only",
+        "motion_source": "T265_PHASE_NO_WHEEL",
+        "motion_selection": {
+          "independent_ground_truth": false,
+          "last_paired_pose_ns": 1147074595745,
+          "last_raw_pose_ns": 1155919779936,
+          "last_wheel_sample_id": 116236,
+          "mode": "T265_PHASE_NO_WHEEL",
+          "pending_pose_drops": 0,
+          "phase_position_bridges": 0,
+          "phase_restore_wheel_fallback": true,
+          "phase_wheel_suppressed": true,
+          "phase_wheel_suppression_reason": "safe_zone_low_speed",
+          "policy": {
+            "comparison_travel_m": 0.25,
+            "displacement_conflict_m": 0.05,
+            "recovery_residual_m": 0.025,
+            "recovery_travel_m": 0.5,
+            "recovery_two_axis_fixes": 2,
+            "single_increment_conflict_m": 0.05
+          },
+          "reason": "safe_zone_low_speed",
+          "recovery_travel_m": 0.0,
+          "recovery_two_axis_fixes": 0,
+          "spatial_conflict_m": 0.00911577708310977,
+          "t265_translation_rebase_m": [
+            -0.0355687018059813,
+            0.0416409210282468
+          ],
+          "wall_motion_evidence": null,
+          "wheel_and_gyro_are_sdk_dependencies": true,
+          "wheel_input_policy": {
+            "dependency_persists_after_pause": true,
+            "pause_requested": true,
+            "reason": "safe_zone_low_speed"
+          },
+          "wheel_motion_suspect": false,
+          "wheel_time_basis": "receive_end_with_native_interval_duration",
+          "wheel_yaw_support": "MCU_interval_endpoint_held"
+        },
+        "motion_boundary_policy": "hold_outside_measured_support",
+        "primary_yaw_field_rad": 14.1172527343888,
+        "prior_center_xy_m": [
+          0.13285536677650028,
+          0.989245723612979
+        ],
+        "physical_points": 176,
+        "used_points": 174,
+        "scan_span_ms": 40.75,
+        "motion_unsupported_span_ns": 1140722,
+        "motion_latest_ns": 1155874726137,
+        "timestamp_monotonic_ns": 1155881571308,
+        "reference_revision": 3,
+        "applied_motion_reference_xy_m": [
+          0.0925335164711525,
+          0.608906723405254
+        ],
+        "motion_reference_update_m": [
+          1.0227929614359255e-14,
+          9.992007221626409e-16
+        ],
+        "map_translation_offset_m": [
+          0.035320488932488056,
+          0.09774645335763232
+        ],
+        "compute_ms": 50.734449,
+        "compute_thread_cpu_ms": 12.114497,
+        "snapshot_ms": 1.035715,
+        "deskew_ms": 3.204563,
+        "fit_ms": 30.208443000000003,
+        "geometry_compute_cpu_ms": 30.680289,
+        "geometry_roundtrip_ms": 40.019672
+      }
+    }
+  ],
+  "business": [
+    {
+      "line": 340,
+      "record": {
+        "timestamp_monotonic_ns": 1146340925595,
+        "event": "state_changed",
+        "from": "GRAB",
+        "to": "NAVIGATE",
+        "message": "前往对应安全区半区围栏前600 mm预备点"
+      }
+    },
+    {
+      "line": 342,
+      "record": {
+        "timestamp_monotonic_ns": 1146522643715,
+        "event": "state_changed",
+        "from": "NAVIGATE",
+        "to": "TRANSPORT_AUDIT",
+        "message": "等待完整140°夹爪新画面，发送非STABLE全零审核"
+      }
+    },
+    {
+      "line": 346,
+      "record": {
+        "timestamp_monotonic_ns": 1147085420602,
+        "event": "state_changed",
+        "from": "TRANSPORT_AUDIT",
+        "to": "ALIGN_SAFE_ZONE_BY_POSE",
+        "message": "预备点载荷及实际半区核对合法，开始定位ALIGN"
+      }
+    },
+    {
+      "line": 350,
+      "record": {
+        "timestamp_monotonic_ns": 1148827789107,
+        "event": "state_changed",
+        "from": "ALIGN_SAFE_ZONE_BY_POSE",
+        "to": "ACQUIRE_SAFE_ZONE",
+        "message": "定位正方向对齐完成，开始连续3帧识别本方安全区"
+      }
+    },
+    {
+      "line": 354,
+      "record": {
+        "timestamp_monotonic_ns": 1149547516329,
+        "event": "state_changed",
+        "from": "ACQUIRE_SAFE_ZONE",
+        "to": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+        "message": "安全区已识别，保持垂直航向并横移对准572px分区点"
+      }
+    },
+    {
+      "line": 358,
+      "record": {
+        "timestamp_monotonic_ns": 1153759344263,
+        "event": "state_changed",
+        "from": "ALIGN_SAFE_ZONE_BY_LOCKED_BOX",
+        "to": "SAFE_ZONE_CORRIDOR_CHECK",
+        "message": "视觉横向偏差已在允许范围，建立入口走廊；随后由下位锁航向直推"
+      }
+    },
+    {
+      "line": 360,
+      "record": {
+        "timestamp_monotonic_ns": 1153783935587,
+        "event": "state_changed",
+        "from": "SAFE_ZONE_CORRIDOR_CHECK",
+        "to": "ENTER_SAFE_ZONE",
+        "message": "推进走廊已确认无须扫障，按锁存航向推进安全区"
+      }
+    },
+    {
+      "line": 364,
+      "record": {
+        "timestamp_monotonic_ns": 1156992823025,
+        "event": "state_changed",
+        "from": "ENTER_SAFE_ZONE",
+        "to": "DELIVERY_VERIFY",
+        "message": "进入安全区并等待视觉确认"
+      }
+    },
+    {
+      "line": 367,
+      "record": {
+        "timestamp_monotonic_ns": 1158017200936,
+        "event": "state_changed",
+        "from": "DELIVERY_VERIFY",
+        "to": "TASK_COMPLETE",
+        "message": "投送视觉观察达到1秒仍未确认，发送TASK_COMPLETE进入退出返中阶段"
+      }
+    },
+    {
+      "line": 369,
+      "record": {
+        "timestamp_monotonic_ns": 1158064102277,
+        "event": "state_changed",
+        "from": "TASK_COMPLETE",
+        "to": "RETURN_CENTER",
+        "message": "F405完成本地退出后接续搜索路线，目标(0.14,0.88) m，剩余0 mm，等待F405进入SEARCH"
+      }
+    },
+    {
+      "line": 372,
+      "record": {
+        "timestamp_monotonic_ns": 1159579759571,
+        "event": "state_changed",
+        "from": "RETURN_CENTER",
+        "to": "SEARCH_TRANSFER",
+        "message": "直线前往搜索点1：目标(0.4, 0.0)"
+      }
+    },
+    {
+      "line": 377,
+      "record": {
+        "timestamp_monotonic_ns": 1162028378688,
+        "event": "state_changed",
+        "from": "SEARCH_TRANSFER",
+        "to": "SEARCH",
+        "message": "观察姿态已准备好，向中心方向边转边搜；越过中心方向后继续同向扫描"
+      }
+    }
+  ],
+  "buttons": [
+    {
+      "line": 436,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1437.585422892,
+        "run": "5e1af62126be38b2",
+        "session": null,
+        "action": "prewarm",
+        "stopped": false,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 441,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1440.906249909,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 444,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1441.11393839,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start"
+      }
+    },
+    {
+      "line": 445,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1441.11393839,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start",
+        "stopped": false,
+        "selecting": true,
+        "session_started": false,
+        "transitioning": false,
+        "same_stop": true,
+        "press_token_matches": false
+      }
+    },
+    {
+      "line": 448,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1442.237127927,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 451,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1442.325985859,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start"
+      }
+    },
+    {
+      "line": 452,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1442.325985859,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start",
+        "stopped": false,
+        "selecting": true,
+        "session_started": false,
+        "transitioning": false,
+        "same_stop": true,
+        "press_token_matches": false
+      }
+    },
+    {
+      "line": 455,
+      "record": {
+        "stage": "classified",
+        "key": 4,
+        "monotonic_s": 1443.134168083,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "stop"
+      }
+    },
+    {
+      "line": 460,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1444.205464684,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 461,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1445.159666373,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 462,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1445.159666373,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 467,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1447.400427511,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 468,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1448.363968096,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 469,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1448.363968096,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 474,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1455.097054274,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 475,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1456.124764054,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 476,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1456.124764054,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 481,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1460.412183187,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 482,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1461.363034655,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 483,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1461.363034655,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 488,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1464.270482409,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 491,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1464.370148236,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start"
+      }
+    },
+    {
+      "line": 492,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1464.370148236,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start",
+        "stopped": true,
+        "selecting": true,
+        "session_started": false,
+        "transitioning": false,
+        "same_stop": true,
+        "press_token_matches": false
+      }
+    },
+    {
+      "line": 495,
+      "record": {
+        "stage": "classified",
+        "key": 4,
+        "monotonic_s": 1466.073747795,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "stop"
+      }
+    },
+    {
+      "line": 500,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1466.579871926,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 501,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1467.555323874,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 502,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1467.555323874,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 507,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1470.367109452,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 508,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1471.310776172,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 509,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1471.310776172,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 514,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1474.527178192,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 515,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1475.473041492,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 516,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1475.473041492,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 521,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1482.487024484,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 522,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1483.462123213,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm"
+      }
+    },
+    {
+      "line": 523,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1483.462123213,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "prewarm",
+        "stopped": true,
+        "selecting": true,
+        "transitioning": false,
+        "same_stop": true
+      }
+    },
+    {
+      "line": 528,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1486.152571855,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start_pressed"
+      }
+    },
+    {
+      "line": 531,
+      "record": {
+        "stage": "classified",
+        "key": 3,
+        "monotonic_s": 1486.292286785,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start"
+      }
+    },
+    {
+      "line": 532,
+      "record": {
+        "stage": "dispatch",
+        "key": 3,
+        "monotonic_s": 1486.292286785,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "start",
+        "stopped": true,
+        "selecting": true,
+        "session_started": false,
+        "transitioning": false,
+        "same_stop": true,
+        "press_token_matches": false
+      }
+    },
+    {
+      "line": 535,
+      "record": {
+        "stage": "classified",
+        "key": 4,
+        "monotonic_s": 1487.448620525,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "stop"
+      }
+    },
+    {
+      "line": 540,
+      "record": {
+        "stage": "classified",
+        "key": 4,
+        "monotonic_s": 1491.205189209,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "stop"
+      }
+    },
+    {
+      "line": 541,
+      "record": {
+        "stage": "classified",
+        "key": 4,
+        "monotonic_s": 1496.108972971,
+        "run": "5e1af62126be38b2",
+        "session": "f055f7d0fb015bb661b3ac5588b86a21",
+        "action": "exit_session"
+      }
+    }
+  ],
+  "startup": [
+    {
+      "line": 1483,
+      "record": {
+        "event": "operator_feedback_pending",
+        "source": "保留最新警报/消音请求，等待本地串口进程绑定；不等下位回执",
+        "timestamp_monotonic_ns": 1437725263229,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1484,
+      "record": {
+        "event": "prewarm_started",
+        "source": "same_sdk_session_until_start",
+        "timestamp_monotonic_ns": 1437757301728,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1485,
+      "record": {
+        "event": "operator_start_rejected",
+        "source": "press_not_ready; no queued start",
+        "timestamp_monotonic_ns": 1441315891557,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1486,
+      "record": {
+        "event": "operator_start_rejected",
+        "source": "press_not_ready; no queued start",
+        "timestamp_monotonic_ns": 1442480145549,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1487,
+      "record": {
+        "event": "prewarm_ready",
+        "source": "repeating_two_short_beeps; SDK Pose, gyro and actual inference present",
+        "timestamp_monotonic_ns": 1442964813083,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1488,
+      "record": {
+        "event": "operator_stop",
+        "source": "已停车并保留本局；松开4，收纳后摆回原出发位短按3重发；按住4满5秒清空本局",
+        "timestamp_monotonic_ns": 1443428331159,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1489,
+      "record": {
+        "event": "operator_start_rejected",
+        "source": "press_not_ready; no queued start",
+        "timestamp_monotonic_ns": 1464764104440,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1490,
+      "record": {
+        "event": "operator_stop",
+        "source": "已停车并保留本局；松开4，收纳后摆回原出发位短按3重发；按住4满5秒清空本局",
+        "timestamp_monotonic_ns": 1466191878032,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1491,
+      "record": {
+        "event": "operator_start_rejected",
+        "source": "press_not_ready; no queued start",
+        "timestamp_monotonic_ns": 1486721783956,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1492,
+      "record": {
+        "event": "operator_stop",
+        "source": "已停车并保留本局；松开4，收纳后摆回原出发位短按3重发；按住4满5秒清空本局",
+        "timestamp_monotonic_ns": 1487649476845,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1493,
+      "record": {
+        "event": "operator_stop",
+        "source": "已停车并保留本局；松开4，收纳后摆回原出发位短按3重发；按住4满5秒清空本局",
+        "timestamp_monotonic_ns": 1491410504761,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1494,
+      "record": {
+        "event": "session_reset_requested",
+        "source": "gpio_buttons",
+        "timestamp_monotonic_ns": 1496485134272,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    },
+    {
+      "line": 1495,
+      "record": {
+        "event": "session_reset_completed",
+        "source": "gpio_buttons",
+        "timestamp_monotonic_ns": 1499546433611,
+        "side": "red",
+        "start_zone": 4,
+        "opening_strategy": "attack"
+      }
+    }
+  ]
+}
