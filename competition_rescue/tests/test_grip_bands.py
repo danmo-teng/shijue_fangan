@@ -272,3 +272,46 @@ def test_cluster_advance_can_finish_in_separation_ready(tmp_path):
     normal.step(view, pose, status, 1.)
     normal.step(view, pose, replace(done, context_matches=True), 1.1)
     assert normal.pre_grab_completed_frame is None
+
+
+def test_red4_old_image_cannot_arm_140_and_inside_cargo_precedes_upper_band(tmp_path):
+    m, view, audit = capture_fixture('injured_orange')
+    m.first_common_delivered = True
+    planner = runner.CompetitionPlanner(m,tmp_path/'pose',tmp_path/'stm',tmp_path/'command',
+        tmp_path/'diag',runner.JsonlLog(tmp_path/'events'),50)
+    ns = lambda s: round(s * 1e9)
+    for t, pitch in [(1104.285, 12000), (1104.705, 14000)]:
+        planner.view_boundary.observe(replace(audit, mode=20, flags=0,
+            camera_pitch_cdeg=pitch, received_monotonic_ns=ns(t)))
+    audit = replace(audit, received_monotonic_ns=ns(1104.947))
+    view = replace(view, frame_sequence=2550, observed_monotonic_s=1104.870580151)
+    out = planner._output_for_cycle(view, PoseSnapshot(), audit, False, 1104.970)
+    assert out.reason == 'camera_view_transition' and m.pre_grab_command is None
+    ready = replace(view, frame_sequence=2554, observed_monotonic_s=1104.98,
+                    capture_cargo=view.cargo)
+    assert m._pre_grab_depth_output(ready, audit, 1105.) is None
+    at_tip = replace(ready,capture_cargo=(),capture_audit=CargoAudit())
+    assert m._pre_grab_depth_output(at_tip, audit, 1105.).command.arg_a == 50
+
+
+def test_max_range_without_clipping_survives_missing_box_then_remeasures():
+    from rescue_vision.localizer import ApproachRangeCalibration
+    calibration = ApproachRangeCalibration.load(ROOT.parent/'vision/config/approach_range.json')
+    for pitch, bbox, distance in [(12000,(610,5,60,44),460),(10500,(610,145,60,70),500)]:
+        m, view, status = capture_fixture('green_supply')
+        m.state = CompetitionState.APPROACH
+        m.settings = replace(m.settings,top_edge_range_reobserve_enabled=True)
+        status = replace(status,mode=52,camera_pitch_cdeg=pitch,flags=0)
+        target = replace(view.cargo[0],bbox=bbox)
+        with patch.object(runner,'tracked_cargo',return_value=(target,)):
+            measured = runner.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,
+                status,m,10,observed_s=1.1,range_calibration=calibration)
+        measured = replace(measured,range_view_ready_s=1.)
+        out=m._range_approach_output(measured,status,1.12)
+        assert (out.command.arg_a,out.command.aux,out.command.source_vision_frame)==(distance,1,10)
+        missing=replace(measured,cargo=(),frame_sequence=11,observed_monotonic_s=1.2)
+        assert m._range_approach_output(missing,replace(status,mode=53),1.2).command==out.command
+        done=replace(status,context_matches=True,accepted_command=9,action_status=3)
+        missing=replace(missing,range_view_ready_s=1.25,observed_monotonic_s=1.28)
+        m._range_approach_output(missing,done,1.3)
+        assert m.range_command is None

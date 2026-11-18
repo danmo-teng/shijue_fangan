@@ -301,6 +301,7 @@ def load_stm(path: Path) -> StmSnapshot:
         timestamp = int(data["timestamp_monotonic_ns"])
         age_ms = max(0.0, (time.monotonic_ns() - timestamp) / 1_000_000.0)
         return StmSnapshot(
+            received_monotonic_ns=timestamp,
             mode=int(data.get("mode", 0)),
             flags=int(data.get("flags", 0)),
             camera_pitch_cdeg=int(data.get("camera_pitch_cdeg", 0)),
@@ -1281,6 +1282,7 @@ def make_vision_snapshot(
         corridor_items, corridor_bbox, stm.camera_pitch_cdeg, range_calibration)
     range_distances = []
     range_top_band_ids = []
+    range_maximum_mm = None
     orange_far_reobserve_ids = []
     range_reason = ("range_calibration_missing" if range_calibration is None else
                     "range_status_unavailable" if not stm.fresh else
@@ -1297,6 +1299,8 @@ def make_vision_snapshot(
                     # Reuse the validated distance-table boundary. A nearby tall
                     # object can also touch the top; that alone must not keep driving.
                     bands = range_calibration.data["angles"][str(stm.camera_pitch_cdeg)]["bands"]
+                    if range_maximum_mm is None:
+                        range_maximum_mm = max(band["advance_mm"] for band in bands)
                     if item.class_name == "injured_orange" and stm.camera_pitch_cdeg == 10500 and any(
                         band.get("band") in {"B1", "B2"} and band["y_min"] <= item.center_px[1] < band["y_max"]
                         for band in bands
@@ -1316,7 +1320,7 @@ def make_vision_snapshot(
     return VisionSnapshot(
         pre_grab_regions=tuple(grip_regions), pre_grab_configured_classes=grip_configured,
         range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
-        range_top_band_ids=tuple(range_top_band_ids),
+        range_top_band_ids=tuple(range_top_band_ids), range_maximum_mm=range_maximum_mm,
         orange_far_reobserve_ids=tuple(orange_far_reobserve_ids),
         range_reason=range_reason,
         roi_decisions=tuple(roi_decisions),
@@ -1618,6 +1622,40 @@ class LocalizationWheelPolicy:
         # STOP/error/exit never resumes wheel input in the remaining SDK session.
 
 
+class CameraViewBoundary:
+    """Earliest camera source frame usable at the current reported viewpoint."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.last_report = 0
+        self.pitch = None
+        self.review = False
+        self.range_wait = None
+        self.ready_ns = 0
+
+    def observe(self, stm):
+        with self.lock:
+            stamp = stm.received_monotonic_ns
+            if not stamp:
+                return self.ready_ns
+            if stamp < self.last_report:
+                return None  # Another consumer has already seen a later chassis report.
+            if stamp == self.last_report:
+                return self.ready_ns
+            self.last_report = stamp
+            pitch = stm.camera_pitch_cdeg
+            review = pitch == 14000 and stm.claw_visible and stm.mode in (21, 23, 37, 38, 43, 45, 48)
+            range_wait = (stm.task_id, stm.action_id, bool(stm.action_status & 2)) if stm.mode == 52 else None
+            if self.pitch != pitch:
+                # Same travel estimate as F405 Camera_PositionWaitMs (195 ms / 60 degrees).
+                travel_ns = 0 if self.pitch is None else abs(pitch - self.pitch) * 32500
+                self.ready_ns = max(self.ready_ns, stamp + travel_ns)
+            if (review and not self.review) or (range_wait is not None and range_wait != self.range_wait):
+                # On grab entry the MCU has already served its 250 ms settling time.
+                self.ready_ns = max(self.ready_ns, stamp)
+            self.pitch, self.review, self.range_wait = pitch, review, range_wait
+            return self.ready_ns
+
+
 class CompetitionPlanner:
     def __init__(
         self,
@@ -1641,6 +1679,7 @@ class CompetitionPlanner:
         self.localization_wheel_policy = None
         self.period_s = 1.0 / rate_hz
         self.lock = threading.Lock()
+        self.view_boundary = CameraViewBoundary()
         self.latest_vision = VisionSnapshot()
         self.latest_output = CompetitionOutput(mission.state, None, "等待第一帧识别")
         self.latest_pose = PoseSnapshot()
@@ -2407,6 +2446,19 @@ class CompetitionPlanner:
         paused: bool,
         now: float,
     ) -> CompetitionOutput:
+        ready_ns = self.view_boundary.observe(stm)
+        if (not paused and not stm.fault and stm.received_monotonic_ns and vision.frame_sequence
+                and (stm.mode in (3, 11, 15, 20, 21, 23, 37, 38, 43, 45, 48, 52)
+                     or self.mission.state in (CompetitionState.ACQUIRE_SAFE_ZONE,
+                                               CompetitionState.SAFE_ZONE_CORRIDOR_CHECK)
+                     and stm.mode in (10, 25))
+                and (ready_ns is None or vision.observed_monotonic_s is None
+                     or vision.observed_monotonic_s <= ready_ns / 1e9)):
+            return CompetitionOutput(self.mission.state, None, "等待本次视角的图像",
+                suppress_command_tx=True, suppression_reason="camera_view_transition",
+                reason="camera_view_transition")
+        if stm.mode == 52 and ready_ns and stm.received_monotonic_ns:
+            vision = replace(vision, range_view_ready_s=ready_ns / 1e9)
         self.protocol_vision = vision
         self.mission._observe_first_green_core(vision, stm)
         self._restore_audit_handoff(stm)
@@ -3798,7 +3850,8 @@ def main() -> int:
                         'decoder': camera_decoder, 'recovery_id': camera_recovery.incident})
                 open_started_ns = camera_recovery.open_started()
             opened = LatestFrameCamera(camera_device, IMAGE_WIDTH, IMAGE_HEIGHT, args.camera_fps,
-                decoder=attempted_decoder, decode_fps=args.decode_fps, output_format=camera_output_format)
+                decoder=attempted_decoder, decode_fps=args.decode_fps, output_format=camera_output_format,
+                use_source_timestamp=True)
             opened.start()
         except Exception as error:
             # LatestFrameCamera.start cleans up its failed open. Do not leave a
@@ -3949,6 +4002,11 @@ def main() -> int:
                 detector.submit(packet)
             result = detector.receive()
             if result is not None:
+                stm = load_stm(args.stm_status)
+                ready_ns = planner.view_boundary.observe(stm)
+                if ready_ns is None or result[0].published_ns <= ready_ns:
+                    result = None
+            if result is not None:
                 packet, detections, timing = result
                 snapshot_started = time.monotonic()
                 # Display exactly the image that produced latest_vision,
@@ -3968,7 +4026,6 @@ def main() -> int:
                 ]
                 detection_objects = [make_detection(item, localizer) for item in detections]
                 tracks = tracker.update(detection_objects)
-                stm = load_stm(args.stm_status)
                 safe_class = "safe_red" if side == "red" else "safe_blue"
                 detected_safe_bbox = safe_bbox_from_detections(detections, safe_class)
                 if detected_safe_bbox is not None:

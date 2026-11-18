@@ -192,6 +192,7 @@ class StmSnapshot:
     action_status: int = 0
     rejected_action_id: int = 0
     context_matches: bool = False
+    received_monotonic_ns: int = 0
 
     @property
     def claw_visible(self) -> bool:
@@ -402,6 +403,8 @@ class VisionSnapshot:
     roi_elapsed_ms: float = 0.0
     range_pitch_cdeg: int = 0
     range_distances: tuple[tuple[int, int], ...] = ()
+    range_maximum_mm: int | None = None
+    range_view_ready_s: float | None = None
     range_top_band_ids: tuple[int, ...] = ()
     pre_grab_regions: tuple[tuple[int, str], ...] = ()
     pre_grab_configured_classes: tuple[str, ...] = ()
@@ -2122,8 +2125,8 @@ class CompetitionMission:
         if self.state == CompetitionState.CLUSTER_APPROACH:
             self.cluster_execution_seen = True
         if self.range_started_s is None:
-            self.range_started_s = now
-            self.range_frame_floor = vision.frame_sequence
+            self.range_started_s = now if vision.range_view_ready_s is None else vision.range_view_ready_s
+            self.range_frame_floor = vision.frame_sequence if vision.range_view_ready_s is None else 0
             self.range_pitch_cdeg = stm.camera_pitch_cdeg
             self.range_epoch += 1
         if self.range_command is not None:
@@ -2141,8 +2144,8 @@ class CompetitionMission:
             # The matched finite segment is over. Reuse mode52's existing
             # new-image measurement and action epoch; never replay its distance.
             self._clear_range_approach()
-            self.range_started_s = now
-            self.range_frame_floor = vision.frame_sequence
+            self.range_started_s = now if vision.range_view_ready_s is None else vision.range_view_ready_s
+            self.range_frame_floor = vision.frame_sequence if vision.range_view_ready_s is None else 0
             self.range_pitch_cdeg = stm.camera_pitch_cdeg
             self.range_epoch += 1
         if stm.mode == STM_MODE_APPROACH_RANGE_MOVE:
@@ -2200,7 +2203,7 @@ class CompetitionMission:
         orange_far = (target.class_name == "injured_orange" and self.range_pitch_cdeg == 10500
                       and target.track_id in vision.orange_far_reobserve_ids)
         finish_mode = (APPROACH_RANGE_REOBSERVE if self.settings.top_edge_range_reobserve_enabled
-                       and (clipped_far or orange_far) else 0)
+                       and (distance == vision.range_maximum_mm or clipped_far or orange_far) else 0)
         self.range_command = CommandRequest(CMD_APPROACH_TARGET, flags, distance,
                                             self.range_pitch_cdeg, finish_mode,
                                             source_vision_frame=vision.frame_sequence)
@@ -4253,6 +4256,9 @@ class CompetitionMission:
                 audit.danger_present or (audit.total_count > 1 and not self._audit_valid(audit)
                                          and self._preferred_keep_side(audit) is not None)):
             return None  # Publish real cargo to the existing audit/side-selection path first.
+        if (vision.capture_observation_valid and vision.capture_cargo and audit is not None
+                and audit.total_count > 0 and self._audit_valid(audit)):
+            return None  # Review the actual cargo already inside before considering another 50 mm.
         configured = set(vision.pre_grab_configured_classes)
         if not configured.intersection(self.selected_batch.classes):
             return None

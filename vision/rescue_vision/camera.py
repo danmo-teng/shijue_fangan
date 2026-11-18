@@ -61,13 +61,14 @@ def resolve_camera_device(requested: str, *, prefer_stable: bool = False) -> str
 class LatestFrameCamera:
     def __init__(self, device: str, width: int, height: int, fps: int,
                  decoder: str = "jpu", decode_fps: float = 60.0,
-                 output_format: str = "bgr") -> None:
+                 output_format: str = "bgr", *, use_source_timestamp: bool = False) -> None:
         Gst.init(None)
         self.width = width
         self.height = height
         self.decoder = decoder
         self.decode_fps = decode_fps
         self.output_format = output_format
+        self.use_source_timestamp = use_source_timestamp
         self._lock = threading.Lock()
         self._latest: Optional[CameraFrame] = None
         self._decoded = 0
@@ -107,13 +108,22 @@ class LatestFrameCamera:
         if sample is None:
             return Gst.FlowReturn.ERROR
         buffer = sample.get_buffer()
+        captured_ns = time.monotonic_ns()
+        if self.use_source_timestamp and buffer.pts != Gst.CLOCK_TIME_NONE:
+            # v4l2src timestamps survive JPEG decode and inference. Convert pipeline
+            # running time to host monotonic time, including time spent in queues.
+            clock = sink.get_clock()
+            pts = sample.get_segment().to_running_time(Gst.Format.TIME, buffer.pts)
+            if clock is not None and pts != Gst.CLOCK_TIME_NONE:
+                queued_ns = clock.get_time() - sink.get_base_time() - pts
+                if 0 <= queued_ns < captured_ns:
+                    captured_ns -= queued_ns
         ok, mapping = buffer.map(Gst.MapFlags.READ)
         if not ok:
             return Gst.FlowReturn.ERROR
         try:
             if self.decoder == "jpu":
                 compressed = bytes(mapping.data)
-                captured_ns = time.monotonic_ns()
                 with self._lock:
                     self._captured += 1
                     self._compressed = (self._captured, compressed, captured_ns)
@@ -127,7 +137,7 @@ class LatestFrameCamera:
             buffer.unmap(mapping)
         with self._lock:
             self._decoded += 1
-            self._latest = CameraFrame(self._decoded, image, time.monotonic_ns(), "bgr")
+            self._latest = CameraFrame(self._decoded, image, captured_ns, "bgr")
         return Gst.FlowReturn.OK
 
     def _jpu_decode_loop(self) -> None:
