@@ -3,8 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "${script_dir}/.." && pwd)"
-# Match runs omit diagnostic recordings. --record enables field-test evidence.
-export RDK_MATCH_RECORDING="${RDK_MATCH_RECORDING:-0}"
+# Record by default. The map switch or --no-record selects a quiet run.
+export RDK_MATCH_RECORDING="${RDK_MATCH_RECORDING:-1}"
 launcher_args=()
 for arg in "$@"; do
     case "$arg" in
