@@ -60,6 +60,7 @@ private:
     bool config_loaded_=false;
     bool synthetic_input_=false;
     bool input_paused_=false;
+    bool zero_body_translation_=false;
     std::string input_policy_reason_="measured_wheel_input_enabled";
     std::uint64_t paused_samples_=0;
     std::uint64_t last_success_ns_=0;

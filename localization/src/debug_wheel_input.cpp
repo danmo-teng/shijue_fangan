@@ -205,7 +205,9 @@ void DebugWheelInput::native_loop() {
 bool DebugWheelInput::source_policy(const Json &p) {
     if(p.at("schema")!=3 || p.at("kind")!="wheel_source_policy" || p.at("session_id")!=session_ || !p.at("pause").is_boolean())return false;
     const bool pause=p.at("pause").get<bool>();const auto reason=p.at("reason").get<std::string>();
-    if(pause==input_paused_&&reason==input_policy_reason_)return true;
+    const bool zero = p.value("zero_body_translation",false);
+    if(pause==input_paused_ && zero==zero_body_translation_ && reason==input_policy_reason_)return true;
+    zero_body_translation_=zero;
     if(pause!=input_paused_){
         ++source_policy_revision_;
         if(native_)native_->discard_motion_support();
@@ -342,6 +344,7 @@ void DebugWheelInput::record(Json event)
     event["input_source"]=synthetic_input_ ? "synthetic_test_fixture" : "measured_wheel_feedback";
     event["last_sdk_success_ns"]=last_success_ns_;
     event["wheel_input_paused"]=input_paused_;
+    event["zero_body_translation"]=zero_body_translation_;
     event["wheel_input_policy_reason"]=input_policy_reason_;
     event["wheel_input_paused_samples"]=paused_samples_;
     std::lock_guard<std::mutex> lock(log_mutex_);
@@ -423,6 +426,7 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     std::string reason;
     std::uint64_t packet_id = 0, start = 0, end = 0;
     rs2_vector v{};
+    std::array<float,3> rotation_only{};
     try {
         const bool valid_source=synthetic_input_
             ? (p.at("source")=="synthetic_test_fixture" && p.at("measurement_valid")==false &&
@@ -467,6 +471,7 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
         const auto &u = config_.camera_robot_up_axis;
         const std::array<double,3> l{u[1]*f[2]-u[2]*f[1], u[2]*f[0]-u[0]*f[2], u[0]*f[1]-u[1]*f[0]};
         for (int i = 0; i < 3; ++i) {
+            rotation_only[i] = float(f[i]*expected_lever[0] + l[i]*expected_lever[1]);
             const double expected = f[i]*(body[0]+expected_lever[0])+l[i]*(body[1]+expected_lever[1]);
             if (std::abs(camera[i]-expected) > 1e-6 || std::abs(lever[i]-expected_lever[i]) > 1e-6)
                 throw std::runtime_error("mount_conversion_mismatch");
@@ -482,6 +487,10 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     }
     last_packet_ = packet_id; last_end_ = end; have_packet_ = true;
     const rs2_vector measured_velocity=v;
+    if (zero_body_translation_) {
+        // Chassis translation is zero at contact; the offset camera still moves when turning.
+        v = {rotation_only[0],rotation_only[1],rotation_only[2]};
+    }
     if(experiment_enabled_)update_experiment(now);
     if(input_paused_) {
         ++paused_samples_;
@@ -550,6 +559,10 @@ bool DebugWheelInput::process(Json p, std::uint64_t now, const Send &send)
     Json result{{"event", "wheel_sdk_result"}, {"frame_num", frame}, {"sdk_result", ok},
             {"packet_id", packet_id}, {"error", error},
             {"timestamp_monotonic_ns", now}, {"accuracy_verified", false}};
+    if(zero_body_translation_) {
+        result["sdk_velocity_source"]="delivery_contact_rotation_only";
+        result["sdk_velocity_camera_mps"]={v.x,v.y,v.z};
+    }
     if(full_diagnostics_ || !ok)
         result["sdk_duration_ns"]=std::chrono::duration_cast<std::chrono::nanoseconds>(
             (experiment_enabled_?call_end:std::chrono::steady_clock::now())-call_start).count();

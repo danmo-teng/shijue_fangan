@@ -394,11 +394,15 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         if policy_output is None:return
         with engine.lock:
             pause=engine.motion.wheel_input_paused();reason=engine.motion.wheel_input_reason()
+            zero = bool(wheel_policy_input is not None and engine.motion.phase_wheel_suppressed)
+            if wheel_policy_input is not None:
+                pause=False
+                reason="delivery_contact_zero_translation" if zero else "measured_wheel_input_enabled"
             requested=(pause,reason)
             if requested==last_policy:return
             evidence=engine.motion.wall_evidence
         packet=dict(schema=3,kind='wheel_source_policy',session_id=sdk_policy['session_id'],
-            pause=pause,reason=reason,wall_motion_evidence=evidence,dependency_persists_after_pause=True)
+            pause=pause,reason=reason,zero_body_translation=zero,wall_motion_evidence=evidence,dependency_persists_after_pause=True)
         try:
             policy_output.sendto(json.dumps(packet,allow_nan=False).encode(),sdk_policy['address'])
             last_policy=requested;policy_error_reported=False

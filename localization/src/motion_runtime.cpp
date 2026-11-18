@@ -261,6 +261,7 @@ public:
             feedback_fd_=duplicate(get<int>(config,"feedback_fd",-1));
             pose_fd_=duplicate(get<int>(config,"pose_fd",-1));
             wheel_policy_fd_=duplicate(get<int>(config,"wheel_policy_fd",-1));
+            motion_.continuous_competition_input = wheel_policy_fd_ >= 0;
             wake_=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);if(wake_<0)throw std::runtime_error(std::strerror(errno));
             control_.open(get<std::string>(config,"control_address",""));policy_.open(get<std::string>(config,"sdk_policy_address",""));
             auto root=get<std::string>(config,"log_root",get<std::string>(config,"root",""));
@@ -489,6 +490,7 @@ private:
         return Json{{"ok",true},{"reference",reference_},{"revision",revision_}};
     }
     void restore_competition_wheel_policy() {
+        motion_.continuous_competition_input = wheel_policy_fd_ >= 0;
         if(!competition_wheel_policy_.is_null())motion_.set_wheel_suppressed(
             competition_wheel_policy_.at("suppressed").get<bool>(),competition_wheel_policy_.at("reason").get<std::string>());
     }
@@ -709,10 +711,11 @@ private:
     }
     void publish_policy() {
         bool pause=motion_.wheel_input_paused();
-        const auto reason=motion_.wheel_input_reason();
+        const bool zero = motion_.continuous_competition_input && motion_.phase_wheel_suppressed;
+        const auto reason = motion_.wheel_input_reason();
         if(policy_.fd<0||(pause==last_policy_pause_&&reason==last_policy_reason_))return;
         Json packet={{"schema",3},{"kind","wheel_source_policy"},{"session_id",policy_session_},{"pause",pause},
-            {"reason",reason},
+            {"reason",reason},{"zero_body_translation",zero},
             {"wall_motion_evidence",motion_.wall_evidence},{"dependency_persists_after_pause",true}};
         if(policy_.send(packet.dump())){
             last_policy_pause_=pause;last_policy_reason_=reason;policy_error_reported_=false;packet["sdk_application_confirmed"]=false;event("wheel_source_policy_requested",packet);

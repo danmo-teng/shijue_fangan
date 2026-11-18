@@ -1556,18 +1556,7 @@ def stm_dict(stm: StmSnapshot) -> dict:
 
 class LocalizationWheelPolicy:
     """One-way business-stage policy; owns neither chassis UART nor SDK."""
-    SAFE_ZONE_STATES = frozenset({
-        CompetitionState.ORANGE_GATE_FILTER,
-        CompetitionState.ALIGN_SAFE_ZONE_BY_POSE,
-        CompetitionState.ACQUIRE_SAFE_ZONE,
-        CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX,
-        CompetitionState.SAFE_ZONE_CORRIDOR_CHECK,
-        CompetitionState.CLEAR_SAFE_ZONE,
-        CompetitionState.WAIT_SAFE_ZONE_CLEAR,
-        CompetitionState.ENTER_SAFE_ZONE,
-        CompetitionState.DELIVERY_VERIFY,
-        CompetitionState.TASK_COMPLETE,
-    })
+    CONTACT_DEPTH_M = 1.03  # Chassis centre, measured along the field Y axis.
 
     def __init__(self, address: str, session_id: str, events_log=None):
         self.address = '\0' + address[1:] if address.startswith('@') else address
@@ -1580,9 +1569,7 @@ class LocalizationWheelPolicy:
         self.suppressed = False
         self.last_sent = None
         self.sequence = 0
-        self.contact_task_ids = set()
-        self.safe_cycle_departed = False
-        self.last_state = None
+        self.contact_task = None
         self.error = None
 
     def _event(self, name, **data):
@@ -1592,80 +1579,38 @@ class LocalizationWheelPolicy:
             except (OSError, ValueError):
                 pass  # A diagnostic write must not block command publication.
 
-    def update(self, output, stm, task_id, action_id, *, accepted_request=None):
+    def update(self, output, stm, task_id, action_id, *, depth_m=None):
         if self.closed:
             return
-        entering = (output.state in self.SAFE_ZONE_STATES and
-                    (not self.safe_cycle_departed or
-                     (output.state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE and
-                      self.last_state != CompetitionState.ALIGN_SAFE_ZONE_BY_POSE)))
-        if entering:
-            self.suppressed = True
-            self.safe_cycle_departed = False
-        if self.suppressed and output.state in self.SAFE_ZONE_STATES:
-            self.contact_task_ids.add(task_id)
-        command = output.command
-        overlay = (output.suppress_command_tx or command is None or
-                   command.opcode in {CMD_HOLD, CMD_PAUSE, CMD_ABORT})
-        belongs = stm.context_valid and stm.task_id in self.contact_task_ids
-        # Release the phase exclusion once this push has actually stopped to unload.
-        # A pending COMPLETE can race the ENTER receipt, so match task/action ownership.
-        unloading = (belongs and stm.context_matches and stm.action_status & 1 and not stm.fault
-                     and stm.mode in (12, 15, 16)
-                     and stm.accepted_command in (CMD_ENTER_SAFE_ZONE, CMD_TASK_COMPLETE))
-        face_center = (output.state in {CompetitionState.TASK_COMPLETE, CompetitionState.RETURN_CENTER}
-                       and stm.mode == STM_MODE_FACE_FIELD_CENTER and belongs)
-        later_navigation = (
-            output.state in {CompetitionState.RETURN_CENTER, CompetitionState.NAVIGATE, CompetitionState.SEARCH}
-            and stm.mode in {STM_MODE_NAVIGATE, STM_MODE_SEARCH}
-            and stm.context_valid and stm.context_matches
-            and stm.accepted_command in {CMD_RETURN_CENTER, CMD_NAVIGATE_WAYPOINT}
-            and (belongs or stm.task_id == task_id))
-        deflect_motion = (output.state == CompetitionState.CLOSED_DEFLECT and command is not None and
-            command.opcode == CMD_CLOSED_DEFLECT and command.flags >> 4 in {1, 2} and
-            stm.context_valid and stm.context_matches and stm.accepted_command == CMD_CLOSED_DEFLECT and
-            bool(stm.action_status & 1))
-        # The publisher supplies the command already issued under these IDs,
-        # not the next output (which may advance to another step or be HOLD).
-        owned_empty = (stm.context_valid and stm.context_matches and
-            stm.task_id == task_id and stm.action_id == action_id and
-            not stm.gripper_closed and not stm.fault and accepted_request is not None and
-            accepted_request.opcode == stm.accepted_command and bool(stm.action_status & 1))
-        step = (accepted_request.flags >> 4 if accepted_request is not None and
-                accepted_request.opcode == CMD_BULLDOZER_STEP else None)
-        pickup_departed = (owned_empty and step == int(RouteStep.PICKUP_READY) and
-            stm.mode == STM_MODE_SEARCH and bool(stm.action_status & 2) and
-            output.state in {CompetitionState.OBSTACLE_PICKUP, CompetitionState.SEARCH,
-                CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH})
-        station_departed = (owned_empty and
-            ((output.state == CompetitionState.SEARCH_TRANSFER and
-              stm.accepted_command == CMD_RETURN_CENTER and stm.mode == STM_MODE_SEARCH and
-              bool(stm.action_status & 2)) or
-             (output.state == CompetitionState.SEARCH_TRANSFER and
-              step in {int(RouteStep.EMPTY_BODY_MOVE), int(RouteStep.ATTACK_FACE_OPPONENT),
-                       int(RouteStep.PICKUP_READY)} and
-              stm.mode in {STM_MODE_REMOTE_ACTION, STM_MODE_SEARCH}) or
-             (output.state == CompetitionState.SEARCH and
-              step == int(RouteStep.ATTACK_FACE_OPPONENT) and
-              stm.mode == STM_MODE_SEARCH and bool(stm.action_status & 2))))
-        # A normal post-completion HOLD waits for an image, not another exit.
-        # It carries no proof itself; PAUSE/ABORT/disabled publication never resume.
-        completed_departure = ((pickup_departed or station_departed) and
-            not output.suppress_command_tx and command is not None and
-            command.opcode not in {CMD_PAUSE, CMD_ABORT})
-        if self.suppressed and (unloading or (not overlay and (face_center or later_navigation or deflect_motion)) or
-                                completed_departure):
+        interrupted = stm.fault or (output.command is not None and output.command.opcode in {CMD_ABORT, CMD_PAUSE})
+        if interrupted or (self.contact_task is not None and task_id != self.contact_task):
+            self.contact_task = None
+        elif stm.context_valid and stm.action_status & 1:
+            if self.contact_task is not None:
+                # ENTER or an early COMPLETE can own the first opening report.
+                if stm.task_id == self.contact_task and stm.mode != STM_MODE_NAVIGATE:
+                    self.contact_task = None
+            elif (output.state == CompetitionState.ENTER_SAFE_ZONE and stm.context_matches
+                  and stm.task_id == task_id and stm.action_id == action_id
+                  and stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.mode == STM_MODE_NAVIGATE
+                  and depth_m is not None and depth_m >= self.CONTACT_DEPTH_M):
+                self.contact_task = task_id
+        self.suppressed = self.contact_task is not None
+        self._send(output.state.value, task_id, action_id)
+
+    def release_contact(self):
+        if self.contact_task is not None or self.last_sent is True:
+            self.contact_task = None
             self.suppressed = False
-            self.safe_cycle_departed = True
-            self.contact_task_ids.clear()
-        self.last_state = output.state
-        # HOLD/PAUSE/recovery/FAULT do not imply that contact risk has ended.
+            self._send("stop", 0, 0)
+
+    def _send(self, state, task_id, action_id):
         if self.last_sent == self.suppressed:
             return
         packet = dict(schema=1, kind='competition_wheel_policy', session_id=self.session_id,
                       sequence=self.sequence, suppressed=self.suppressed,
-                      reason='safe_zone_low_speed' if self.suppressed else 'normal_motion',
-                      state=output.state.value, task_id=task_id, action_id=action_id)
+                      reason='delivery_contact_zero_translation' if self.suppressed else 'normal_motion',
+                      state=state, task_id=task_id, action_id=action_id)
         try:
             if self.socket is None:
                 self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
@@ -1682,6 +1627,7 @@ class LocalizationWheelPolicy:
         self._event('localization_wheel_policy_sent', policy=packet)
 
     def close(self):
+        self.release_contact()
         self.closed = True
         if self.socket is not None:
             self.socket.close()
@@ -1955,6 +1901,8 @@ class CompetitionPlanner:
         self.running = False
         if self.thread.is_alive():
             self.thread.join(timeout=2.0)
+        if self.localization_wheel_policy is not None and preserve_warm:
+            self.localization_wheel_policy.release_contact()
         if self.localization_wheel_policy is not None and not preserve_warm:
             self.localization_wheel_policy.close()
         abort_command = CommandRequest(CMD_ABORT, self.mission._side_flags())
@@ -2017,7 +1965,7 @@ class CompetitionPlanner:
         return mission_frame(self.sequence, CMD_HOLD)
 
     def _publish(self, output: CompetitionOutput, *, stm: StmSnapshot | None = None,
-                 cycle_start_s=None, previous_cycle_start_s=None) -> None:
+                 cycle_start_s=None, previous_cycle_start_s=None, pose=None) -> None:
         publishing_complete = (not output.suppress_command_tx and output.command is not None
                       and output.command.opcode == CMD_TASK_COMPLETE)
         trace_exit = publishing_complete and output.event in {
@@ -2029,7 +1977,7 @@ class CompetitionPlanner:
                        stm.action_id == self.protocol_action)
             self.localization_wheel_policy.update(output, replace(stm, context_matches=matched),
                 self.protocol_task, self.protocol_action,
-                accepted_request=(self.protocol_last_output.command if self.protocol_last_output else None))
+                depth_m=(self.mission.settings.side_sign * pose.y_m if pose is not None and pose.valid else None))
         if output.suppress_command_tx:
             return
         command = output.command or CommandRequest(CMD_HOLD)
@@ -3236,7 +3184,7 @@ class CompetitionPlanner:
                 pending_task, pending_action = self.protocol_task, self.protocol_action
                 output = self._output_for_cycle(vision, pose, stm, paused, started)
                 self._publish(output, stm=stm, cycle_start_s=started,
-                              previous_cycle_start_s=previous_cycle_start_s)
+                              previous_cycle_start_s=previous_cycle_start_s, pose=pose)
                 previous_cycle_start_s = started
                 self._record_replay_event(output, pose, stm, vision, started)
                 try:

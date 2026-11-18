@@ -106,6 +106,8 @@ void NativeMotionSource::yaw(std::int64_t host_ns, double yaw_rad, const Json &s
 }
 
 std::string NativeMotionSource::wheel_input_reason() const {
+    if (continuous_competition_input)
+        return phase_wheel_suppressed ? "delivery_contact_zero_translation" : "measured_wheel_input_enabled";
     return phase_wheel_suppressed ? phase_wheel_reason : wheel_suspect
         ? (robust_odometry_enabled && t265_suspect ? "both_motion_sources_suspect" :
             "two_axis_wall_motion_wheel_suspect") : "measured_wheel_input_enabled";
@@ -333,8 +335,10 @@ void NativeMotionSource::pose(const Json &p) {
                 Pair current{first2(sample(history, at)), wheel_at(at)};
                 if (phase_displacement_reference) {
                     const auto &base = *phase_displacement_reference;
-                    const double residual = norm2(subtract(subtract(current.xy, base.xy),
-                        subtract(first2(current.wheel), first2(base.wheel))));
+                    // At intentional contact, spinning wheels cannot contradict a stationary T265.
+                    const Vec2 expected = continuous_competition_input ? Vec2{{0.,0.}} :
+                        subtract(first2(current.wheel), first2(base.wheel));
+                    const double residual = norm2(subtract(subtract(current.xy, base.xy), expected));
                     if (residual > .05) {
                         phase_translation_held = phase_restore_wheel_fallback = true;
                         event({{"event","phase_T265_displacement_rejected"},{"sample_monotonic_ns",t},
@@ -342,7 +346,7 @@ void NativeMotionSource::pose(const Json &p) {
                     }
                 }
                 if (!phase_displacement_reference ||
-                    current.wheel[2] - phase_displacement_reference->wheel[2] >= .25)
+                    (!continuous_competition_input && current.wheel[2] - phase_displacement_reference->wheel[2] >= .25))
                     phase_displacement_reference = current;
             }
         }
