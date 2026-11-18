@@ -918,6 +918,7 @@ class CompetitionMission:
         self.delivery_outside_seen = False
         self.delivery_inside_hits = 0
         self.delivery_visual_confirmed = False
+        self.delivery_confirming_frame = None
         self.delivery_last_frame_sequence: int | None = None
         self.search_yaw_accum_deg = 0.0
         self.search_last_yaw_deg: float | None = None
@@ -4763,6 +4764,8 @@ class CompetitionMission:
             self.delivery_inside_hits >= self.settings.delivery_inside_required and
             misses <= self.settings.delivery_max_misses
         ):
+            if not self.delivery_visual_confirmed:
+                self.delivery_confirming_frame = (vision.frame_sequence, vision.observed_monotonic_s, now)
             self.delivery_visual_confirmed = True
 
     def _start_delivery_observation(

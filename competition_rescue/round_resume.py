@@ -39,7 +39,7 @@ class ProgressStore:
         milestone = dict(progress, orange_search_turn_deg=(
             360.0 if progress['orange_search_turn_deg'] >= 360.0 else 0.0))
         if milestone == self.last:
-            return
+            return False
         # Only milestone changes write; not one disk operation per camera frame.
         value = dict(version=1, session_token=self.session, side=mission.settings.side,
                      start_zone=mission.settings.start_zone, progress=progress)
@@ -47,6 +47,7 @@ class ProgressStore:
         temporary.write_text(json.dumps(value, ensure_ascii=False)+'\n')
         temporary.replace(self.path)
         self.last = milestone
+        return True
 
 
 def resume_config_frame(sequence, side, zone, progress):

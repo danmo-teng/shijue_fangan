@@ -4188,5 +4188,13 @@ def test_delivery_exit_is_published_before_progress_write(tmp_path):
     def save():
         observed.append(cmd.read_bytes()[19])  # opcode in the second frame of the relay bundle
     planner.save_progress=save
-    planner._publish(CompetitionOutput(CompetitionState.TASK_COMPLETE,CommandRequest(CMD_TASK_COMPLETE),''))
+    output=CompetitionOutput(CompetitionState.TASK_COMPLETE,CommandRequest(CMD_TASK_COMPLETE),'',
+        event='delivery_timeout_complete', reason='delivery_visual_timeout')
+    planner._publish(output, stm=StmSnapshot(mode=15),cycle_start_s=1.,previous_cycle_start_s=.98)
     assert observed==[CMD_TASK_COMPLETE]
+    from dataclasses import replace
+    planner._publish(replace(output,event=''))
+    rows=[json.loads(line) for line in (tmp_path/'events').read_text().splitlines()]
+    row,=[r for r in rows if r['event']=='delivery_exit_timing']
+    assert row['previous_cycle_start_s']==.98 and row['stm_mode']==15 and row['confirming_frame'] is None
+    assert row['decision_ready_ns'] <= row['ipc_write_start_ns'] <= row['ipc_published_ns'] <= row['progress_finished_ns']
