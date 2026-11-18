@@ -4259,7 +4259,7 @@ def test_orange_gate_filter_does_not_guess_load_side_or_expand_scope():
     m.carried_manifest = ('core_black',)
     assert m._orange_gate_filter_side(audit, view, current, status) is None
 
-def test_empty_first_station_switches_at_540_then_third_returns_at_720():
+def test_empty_stations_one_and_three_both_switch_at_540():
     m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))
     m.initial_stash_done = True
     m.first_common_delivered = True
@@ -4287,9 +4287,9 @@ def test_empty_first_station_switches_at_540_then_third_returns_at_720():
     high = replace(v,frame_sequence=12,range_pitch_cdeg=10500)
     m._handle_search(high,at,ready,1.5)
     assert not m.return_search_mode_seen and m.search_point_number == 3
-    m.search_site_turn_deg = 719
+    m.search_site_turn_deg = 539
     m._handle_search(high,at,ready,1.6)
     assert m.state == CompetitionState.SEARCH
-    m.search_site_turn_deg = 720
+    m.search_site_turn_deg = 540
     m._handle_search(high,at,ready,1.7)
     assert m.search_transfer_route.target_point == 1 and not m.search_transfer_route.high_start

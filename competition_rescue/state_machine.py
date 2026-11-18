@@ -576,7 +576,7 @@ class CompetitionSettings:
     post_delivery_return_offset_m: float = 0.40
     post_delivery_return_tolerance_m: float = 0.15
     vision_stale_s: float = 0.30
-    search_min_turn_deg: float = 720.0
+    search_min_turn_deg: float = 540.0
     search_target_confirm_frames: int = 1
     disperse_limit: int = 2  # Consecutive physical attempts without audit progress.
     approach_missing_hold_min_s: float = 0.30
@@ -7396,10 +7396,7 @@ class CompetitionMission:
         observation = self._start_zone_observation(vision, stm, now)
         if observation is not None:
             return observation
-        turn_limit = self.settings.search_min_turn_deg
-        if self.search_point_number == 1:
-            turn_limit = min(540.0, turn_limit)
-        if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= turn_limit:
+        if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= self.settings.search_min_turn_deg:
             if not (
                 stm.fresh and
                 stm.mode == STM_MODE_SEARCH and
