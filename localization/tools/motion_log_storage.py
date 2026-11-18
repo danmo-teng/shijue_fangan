@@ -168,7 +168,7 @@ def disk_capacity(root):
     return shutil.disk_usage(path)
 
 
-def trim_between_competition_sessions(root, current=None, *, reserve=5_000_000_000):
+def trim_between_competition_sessions(root, current=None, *, reserve=10_000_000_000):
     """Use completed-session indices only. Never fall back to an RTC timestamp."""
     if disk_capacity(root).free >= reserve:
         return [], ""
@@ -197,7 +197,7 @@ def trim_between_competition_sessions(root, current=None, *, reserve=5_000_000_0
         removed.extend(deleted)
         if disk_capacity(root).free >= reserve:
             return removed, ""
-    return removed, "可用空间不足5 GB，可按完成序号删除的旧完整定位包不足"
+    return removed, f"可用空间不足{reserve / 1_000_000_000:g} GB，可按完成序号删除的旧完整定位包不足"
 
 
 def size_label(size):
