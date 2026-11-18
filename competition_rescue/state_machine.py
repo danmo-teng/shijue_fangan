@@ -36,6 +36,7 @@ from protocol import (
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
+    CMD_ORANGE_FILTER_AT_PICKUP,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
@@ -1263,7 +1264,7 @@ class CompetitionMission:
         if self.state == CompetitionState.SEARCH_ZONE_VIEW:
             return (3, 20, 52, 24)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
-            return (STM_MODE_REMOTE_ACTION, STM_MODE_TRANSPORT_AUDIT)
+            return (STM_MODE_REMOTE_ACTION, self._orange_filter_review_mode())
         if self.state == CompetitionState.PRE_GRAB_ADVANCE:
             return (STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT,
                     STM_MODE_CLUSTER_READY, STM_MODE_APPROACH_RANGE_MOVE,
@@ -3174,7 +3175,16 @@ class CompetitionMission:
             self.audit_hits = continued_hits
             self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
-        if (self._separation_limit_reached() and not self._orange_separation_rechecked_empty() and
+        pickup_black_side = None
+        if (self.pending_audit_release_context == "post_grab_invalid" and
+                stm.mode == STM_MODE_POST_GRAB_AUDIT and stm.gripper_closed and
+                self.first_common_delivered and self.selected_batch is not None and
+                not self.selected_batch.initial_stash and not self.safe_sweep_reaudit_active and
+                not self.orange_gate_filter_attempted and self.pending_audit.total_count == 2 and
+                any(item.visible and item.class_name == "injured_orange" for item in vision.capture_cargo)):
+            pickup_black_side = self._mixed_orange_black_side(self.pending_audit, vision)
+        if (pickup_black_side is None and self._separation_limit_reached() and
+                not self._orange_separation_rechecked_empty() and
                 not self.pending_audit_valid and stm.fresh and
                 stm.context_valid and stm.context_matches and
                 stm.accepted_command == CMD_CARGO_AUDIT and bool(stm.action_status & 1) and
@@ -3399,6 +3409,8 @@ class CompetitionMission:
                 self._clear_pending_audit()
                 if audit.danger_present:
                     return self._start_danger_release(audit, stm, now)
+                if pickup_black_side:
+                    return self._begin_orange_gate_filter(pickup_black_side, stm, now)
                 keep_side = self._preferred_keep_side(audit)
                 if audit.total_count > 1 and keep_side is not None:
                     self.cluster_keep_side = keep_side
@@ -6881,6 +6893,11 @@ class CompetitionMission:
                     self.settings.safe_zone_staging_axial_tolerance_m + 1e-9 or
                 pose.x_m*self.settings.injury_target_x_m <= 0):
             return None
+        return self._mixed_orange_black_side(audit, vision)
+
+    def _mixed_orange_black_side(self, audit: CargoAudit, vision: VisionSnapshot) -> str | None:
+        if not audit.stable or audit.danger_present or audit.unknown_present:
+            return None
         counts = Counter(dict(audit.class_counts))
         if (set(counts) != {"injured_orange", "core_black"} or
                 counts["injured_orange"] != 1 or counts["core_black"] <= 0 or
@@ -6902,9 +6919,12 @@ class CompetitionMission:
 
     def _begin_orange_gate_filter(self, side: str, stm: StmSnapshot, now: float) -> CompetitionOutput:
         self.orange_gate_filter_attempted = True
-        self.orange_gate_filter_command = CommandRequest(CMD_ORANGE_GATE_FILTER,
-            self._side_flags() | CMD_SIDE_VALID | (CMD_TARGET_RIGHT if side == "right" else 0),
-            100, 8600, round(self.settings.safe_heading_deg*100) % 36000)
+        pickup = stm.mode == STM_MODE_POST_GRAB_AUDIT
+        flags = self._side_flags() | CMD_SIDE_VALID | (CMD_TARGET_RIGHT if side == "right" else 0)
+        if pickup:
+            flags |= CMD_ORANGE_FILTER_AT_PICKUP
+        self.orange_gate_filter_command = CommandRequest(CMD_ORANGE_GATE_FILTER, flags,
+            100, 8600, 0 if pickup else round(self.settings.safe_heading_deg*100) % 36000)
         self.confirmed_load_audit = None
         self.transport_load_reuse_active = False
         self.transport_audit_handoff_active = False
@@ -6914,23 +6934,38 @@ class CompetitionMission:
         self._reset_delivery_evidence()
         self._set_state(CompetitionState.ORANGE_GATE_FILTER, now)
         return CompetitionOutput(self.state, self.orange_gate_filter_command,
+            "抓取点橙黑混装，保持车头方向横移滤除后原地复审" if pickup else
             "门口橙黑混装：转正后向黑块异侧移10cm，降86°，移回后复审；本批只试一次",
             self.selected_batch, event="orange_gate_filter_start", reason="orange_gate_filter_move",
             motion_expected=True, expected_stm_modes=self.expected_stm_modes())
+
+    def _orange_filter_review_mode(self) -> int:
+        command = self.orange_gate_filter_command
+        return (STM_MODE_POST_GRAB_AUDIT if command and command.flags & CMD_ORANGE_FILTER_AT_PICKUP
+                else STM_MODE_TRANSPORT_AUDIT)
+
+    def _resume_orange_filter_review(
+        self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
+    ) -> CompetitionOutput:
+        pickup = self._orange_filter_review_mode() == STM_MODE_POST_GRAB_AUDIT
+        self.orange_gate_filter_command = None
+        if pickup:
+            self._begin_post_grab_audit(vision, now)
+            return self._audit_output(vision, stm, now)
+        return self._begin_transport_audit(vision, pose, stm, now)
 
     def _orange_gate_filter_output(
         self, vision: VisionSnapshot, pose: PoseSnapshot, stm: StmSnapshot, now: float,
     ) -> CompetitionOutput:
         done = (stm.context_valid and stm.context_matches and
                 stm.accepted_command == CMD_ORANGE_GATE_FILTER and stm.action_status & 1 and
-                stm.action_status & 2 and stm.mode == STM_MODE_TRANSPORT_AUDIT and stm.gripper_closed)
+                stm.action_status & 2 and stm.mode == self._orange_filter_review_mode() and stm.gripper_closed)
         if done:
-            self.orange_gate_filter_command = None
             # Completion proves the round trip, NOT that the black is gone.
-            return replace(self._begin_transport_audit(vision, pose, stm, now),
+            return replace(self._resume_orange_filter_review(vision, pose, stm, now),
                 event="orange_gate_filter_reaudit", message="横移滤除已返回，保持86°，沿原140°复审实际载荷")
         return CompetitionOutput(self.state, self.orange_gate_filter_command,
-            "下位执行本次门口横移滤除，完成返回后才接复审", self.selected_batch,
+            "下位执行横移滤除，完成返回后复审", self.selected_batch,
             reason="orange_gate_filter_move", motion_expected=True,
             expected_stm_modes=self.expected_stm_modes())
 

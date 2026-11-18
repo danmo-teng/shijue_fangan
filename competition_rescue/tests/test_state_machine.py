@@ -4230,6 +4230,39 @@ def _orange_gate_confirm_review(m, view, current, status, start_frame=1, start_s
                   current, ready, start_s+.8)
 
 
+def test_post_grab_orange_core_filters_at_pickup_then_reaudits_once():
+    from protocol import CMD_ORANGE_FILTER_AT_PICKUP, CMD_ORANGE_GATE_FILTER
+    for black_side in ("left", "right"):
+        m, view, _, status = _orange_gate_fixture(black_side=black_side)
+        m.carried_manifest = ()
+        m.confirmed_delivery_destination = None
+        status = replace(status, mode=23, flags=3)
+        current = PoseSnapshot(True, .25, -.35, 42., 0.)
+        m._begin_post_grab_audit(view, 1.)
+        def review(start_frame, start_s):
+            for offset in range(1, 5):
+                now = start_s + offset * .15
+                image = replace(view, frame_sequence=start_frame+offset, observed_monotonic_s=now)
+                out = m.step(image, current, status, now)
+            assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.stable
+            ack = replace(relay_stm(out, mode=23, flags=67), camera_pitch_cdeg=14000,
+                          context_valid=True, context_matches=True,
+                          accepted_command=CMD_CARGO_AUDIT, action_status=1)
+            return m.step(image, current, ack, now+.02)
+        out = review(1, 1.)
+        assert out.command.opcode == CMD_ORANGE_GATE_FILTER
+        assert out.command.flags & CMD_ORANGE_FILTER_AT_PICKUP
+        assert bool(out.command.flags & CMD_TARGET_RIGHT) == (black_side == "right")
+        assert (out.command.arg_a, out.command.arg_b, out.command.aux) == (100, 8600, 0)
+        out.command.to_frame(1)
+        done = replace(status, context_valid=True, context_matches=True,
+                       accepted_command=CMD_ORANGE_GATE_FILTER, action_status=3)
+        image = replace(view, frame_sequence=10, observed_monotonic_s=2.)
+        assert m.step(image, current, replace(done, mode=48), 2.).command == out.command
+        assert m.step(image, current, done, 2.).state == CompetitionState.POST_GRAB_AUDIT
+        assert review(10, 2.).command.opcode == CMD_DISPERSE_PILE
+
+
 def test_orange_gate_filter_symmetric_once_and_real_reaudit():
     from protocol import CMD_ORANGE_GATE_FILTER, CMD_ALIGN_SAFE_ZONE
     for side in ('red', 'blue'):

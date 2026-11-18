@@ -2420,7 +2420,7 @@ class CompetitionPlanner:
         pending = self.protocol_last_output.command if self.protocol_last_output else None
         if not (self.mission.state == CompetitionState.ORANGE_GATE_FILTER and
                 pending is not None and pending.opcode == CMD_ORANGE_GATE_FILTER and
-                stm.context_valid and stm.mode == STM_MODE_TRANSPORT_AUDIT and not stm.fault and
+                stm.context_valid and stm.mode == self.mission._orange_filter_review_mode() and not stm.fault and
                 stm.action_status & 4 and stm.task_id == self.protocol_task and
                 stm.rejected_action_id == self.protocol_action):
             return None
@@ -2428,11 +2428,10 @@ class CompetitionPlanner:
                 stm.action_status & 1):
             return None  # A rejected duplicate cannot cancel an executing action.
         self._adopt_recovery_context()
-        self.mission.orange_gate_filter_command = None
-        return replace(self.mission._begin_transport_audit(
+        return replace(self.mission._resume_orange_filter_review(
             vision, pose, replace(stm, context_matches=True), now),
             event="orange_gate_filter_rejected", reason="orange_gate_filter_rejected",
-            message="门口横移请求未被接受，保留本批已尝试记录，重新复审后走原分离")
+            message="横移请求未被接受，保留本批已尝试记录，重新复审后走原分离")
 
     def _reconcile_separation_rejection(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float

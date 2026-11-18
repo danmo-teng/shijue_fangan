@@ -1,0 +1,159 @@
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index e1eda60..032bef6 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -148,6 +148,7 @@
+ /* DISPERSE_PILE bit5: first formal green only. Execute the short local
+  * backoff/Touch/forward/back/open bump, then return directly to SEARCH. */
+ #define VISION_CMD_FIRST_GREEN_BUMP  0x20U
++#define VISION_ORANGE_FILTER_AT_PICKUP 0x10U /* Opcode 0x16 only. */
+ #define VISION_CMD_KEEP_ORANGE 0x02U /* Scoped to selective separation opcodes. */
+ /* DISPERSE P1 bit4: near-claw keep-side evidence, never a cargo count/VALID. */
+ #define VISION_CMD_DISPERSE_NEAR_KEEP 0x10U
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index d2be9ab..7cba9b7 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -79,7 +79,7 @@ typedef struct {
+   bool restoring_gate_height;
+   uint32_t lift_started_ms;
+   int64_t straight_start_counts[3];
+-  bool lateral_started, black_right;
++  bool lateral_started, black_right, filter_at_pickup;
+   uint32_t started_ms;
+   uint32_t phase_path_mm;
+   bool done;
+@@ -6495,6 +6495,11 @@ static void task_process_orange_gate_filter(uint32_t now_ms)
+     case 0U: {
+       LocationPose pose;
+       if (!task_get_location_pose(&pose, now_ms)) { return; }
++      if (remote_action.filter_at_pickup) {
++        remote_action.heading_cdeg = (uint16_t)(((pose.heading_mdeg % 360000 + 360000) % 360000) / 10);
++        task_remote_action_advance(now_ms);
++        return;
++      }
+       const float error = task_wrap_angle(remote_action.heading_cdeg * 0.01f -
+                                          pose.heading_mdeg * 0.001f);
+       if (task_abs(error) <= APP_SAFE_ALIGN_TOLERANCE_DEG) {
+@@ -6527,7 +6532,7 @@ static void task_process_orange_gate_filter(uint32_t now_ms)
+     case 4U:
+       task_status.motors_active = false;
+       if (Motor_IsBraking() || now_ms - step_started_ms < remote_action.actuator_wait_ms) { return; }
+-      task_enter(TASK_TRANSPORT_AUDIT, now_ms);
++      task_enter(remote_action.filter_at_pickup ? TASK_POST_GRAB_AUDIT : TASK_TRANSPORT_AUDIT, now_ms);
+       remote_action.done = true;
+       accepted_context.completed = true;
+       return;
+@@ -7710,7 +7715,7 @@ static bool task_context_complete(void)
+     case VISION_CMD_CLEAR_SAFE_ZONE:
+       return state == TASK_SAFE_SWEEP_DONE;
+     case VISION_CMD_ORANGE_GATE_FILTER:
+-      return state == TASK_TRANSPORT_AUDIT && remote_action.done &&
++      return state == (remote_action.filter_at_pickup ? TASK_POST_GRAB_AUDIT : TASK_TRANSPORT_AUDIT) && remote_action.done &&
+           remote_action.type == REMOTE_ACTION_ORANGE_GATE_FILTER;
+     case VISION_CMD_RELEASE_LEFT: case VISION_CMD_RELEASE_RIGHT:
+     case VISION_CMD_RELEASE_BOTH: case VISION_CMD_DISPERSE_PILE:
+@@ -7775,7 +7780,7 @@ static bool task_same_side_blue_release_allowed(void)
+       (audit_last_flags & VISION_AUDIT_DANGER_PRESENT) != 0U;
+ }
+ 
+-static bool task_orange_gate_entry(bool black_right)
++static bool task_orange_gate_entry(bool black_right, bool at_pickup)
+ {
+   const uint8_t left = audit_last_counts & 3U, right = (audit_last_counts >> 2) & 3U;
+   const uint8_t black_class = black_right ? audit_last_right_class : audit_last_left_class;
+@@ -7786,10 +7791,14 @@ static bool task_orange_gate_entry(bool black_right)
+       other_class == VISION_CARGO_INJURED && other_count == 1U;
+   const bool mixed_side = black_class == VISION_CARGO_UNKNOWN &&
+       other_class == VISION_CARGO_NONE && other_count == 0U;
+-  return state == TASK_TRANSPORT_AUDIT && task_status.gripper_closed &&
+-      held_load == LIFT_LOAD_ORANGE && first_delivery_done && !orange_gate_attempted &&
++  const bool eligible_site = at_pickup ?
++      (state == TASK_POST_GRAB_AUDIT && !injury_recheck_pending && audit_last_total_count == 2U &&
++       audit_destination_injury) :
++      (state == TASK_TRANSPORT_AUDIT && held_load == LIFT_LOAD_ORANGE && transport_stage_injury);
++  return eligible_site && task_status.gripper_closed &&
++      first_delivery_done && !orange_gate_attempted &&
+       audit_received && audit_host_stable && !audit_valid && !audit_initial_stash &&
+-      !route_to_stash && !safe_sweep_recheck_pending && transport_stage_injury &&
++      !route_to_stash && !safe_sweep_recheck_pending &&
+       audit_last_total_count >= 2U && audit_last_total_count <= 3U &&
+       left + right == audit_last_total_count &&
+       (audit_last_flags & VISION_AUDIT_INJURY_MIXED) != 0U &&
+@@ -7904,17 +7913,18 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+   const bool new_action = new_task || incoming.action_id != accepted_context.action_id;
+   const bool orange_gate = incoming.command == VISION_CMD_ORANGE_GATE_FILTER;
+   if (orange_gate) {
++    const bool pickup = (incoming.flags & VISION_ORANGE_FILTER_AT_PICKUP) != 0U;
+     const uint8_t required = VISION_CMD_VALID | VISION_CMD_SIDE_VALID;
+-    const uint8_t allowed = required | VISION_CMD_RED_SIDE | VISION_CMD_TARGET_RIGHT;
++    const uint8_t allowed = required | VISION_CMD_RED_SIDE | VISION_CMD_TARGET_RIGHT | VISION_ORANGE_FILTER_AT_PICKUP;
+     if (new_target || !task_side_flag_valid(incoming.flags) || incoming.vision_frame != 0U ||
+         (incoming.flags & required) != required || (incoming.flags & (uint8_t)~allowed) != 0U ||
+         incoming.target_x_mm != 100 || incoming.target_y_mm != APP_LIFT_MATERIAL_TRAVEL_ANGLE * 100 ||
+-        incoming.heading_cdeg != (configured_color == VISION_COLOR_RED ? 9000U : 27000U))
++        incoming.heading_cdeg != (pickup ? 0U : (configured_color == VISION_COLOR_RED ? 9000U : 27000U)))
+       goto rejected;
+     if (new_action) {
+-      if (!task_orange_gate_entry((incoming.flags & VISION_CMD_TARGET_RIGHT) != 0U)) goto rejected;
+-    } else if (remote_action.type != REMOTE_ACTION_ORANGE_GATE_FILTER ||
+-        (state != TASK_REMOTE_ACTION && !(state == TASK_TRANSPORT_AUDIT && remote_action.done)))
++      if (!task_orange_gate_entry((incoming.flags & VISION_CMD_TARGET_RIGHT) != 0U, pickup)) goto rejected;
++    } else if (pickup != remote_action.filter_at_pickup || remote_action.type != REMOTE_ACTION_ORANGE_GATE_FILTER ||
++        (state != TASK_REMOTE_ACTION && !(state == (pickup ? TASK_POST_GRAB_AUDIT : TASK_TRANSPORT_AUDIT) && remote_action.done)))
+       goto rejected;
+   }
+   const bool same_side_blue = incoming.command == VISION_CMD_RELEASE_BOTH &&
+@@ -8201,6 +8211,7 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+     command_accepted = true;
+     orange_gate_attempted = true;
+     task_start_remote_action(REMOTE_ACTION_ORANGE_GATE_FILTER, &incoming, now_ms);
++    remote_action.filter_at_pickup = (incoming.flags & VISION_ORANGE_FILTER_AT_PICKUP) != 0U;
+     remote_action.black_right = (incoming.flags & VISION_CMD_TARGET_RIGHT) != 0U;
+     remote_action.separation_lift_angle = APP_LIFT_FIRST_GREEN_FILTER_ANGLE;
+     remote_action.lift_ready = false;
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 266595b..fe43345 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -284,10 +284,12 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+   const int16_t arg_b = (int16_t)vision_u16_be(&payload[4]);
+   if (code == VISION_CMD_ORANGE_GATE_FILTER) {
+     const uint8_t required = VISION_CMD_VALID | VISION_CMD_SIDE_VALID;
+-    const uint8_t allowed = required | VISION_CMD_RED_SIDE | VISION_CMD_TARGET_RIGHT;
++    const uint8_t allowed = required | VISION_CMD_RED_SIDE | VISION_CMD_TARGET_RIGHT | VISION_ORANGE_FILTER_AT_PICKUP;
++    const uint16_t expected_heading = (flags & VISION_ORANGE_FILTER_AT_PICKUP) ? 0U :
++        ((flags & VISION_CMD_RED_SIDE) ? 9000U : 27000U);
+     if ((flags & required) != required || (flags & (uint8_t)~allowed) != 0U ||
+         arg_a != 100 || arg_b != APP_LIFT_MATERIAL_TRAVEL_ANGLE * 100 ||
+-        heading != ((flags & VISION_CMD_RED_SIDE) != 0U ? 9000U : 27000U))
++        heading != expected_heading)
+       goto rejected_payload;
+   }
+   if (code == VISION_CMD_DISPERSE_PILE || code == VISION_CMD_RELEASE_LEFT ||
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index bec60fc..2ac2a16 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -70,6 +70,7 @@ CMD_CHANGE_LANE = 0x11
+ CMD_CARGO_AUDIT = 0x12
+ CMD_CLEAR_SAFE_ZONE = 0x13
+ CMD_BULLDOZER_STEP = 0x14
++CMD_ORANGE_FILTER_AT_PICKUP = 0x10  # Opcode 0x16 only.
+ CMD_ORANGE_GATE_FILTER = 0x16
+ 
+ CMD_VALID = 0x01
+@@ -365,10 +366,11 @@ def mission_frame(
+         raise ValueError("invalid mission flags")
+     if command == CMD_ORANGE_GATE_FILTER:
+         required = CMD_VALID | CMD_SIDE_VALID
+-        allowed = required | CMD_RED_SIDE | CMD_TARGET_RIGHT
++        allowed = required | CMD_RED_SIDE | CMD_TARGET_RIGHT | CMD_ORANGE_FILTER_AT_PICKUP
++        heading = 0 if flags & CMD_ORANGE_FILTER_AT_PICKUP else (9000 if flags & CMD_RED_SIDE else 27000)
+         if (flags & required != required or flags & ~allowed or
+                 target_x_mm != 100 or target_y_mm != 8600 or
+-                heading_cdeg != (9000 if flags & CMD_RED_SIDE else 27000)):
++                heading_cdeg != heading):
+             raise ValueError("orange gate filter requires black side, 100mm, lift86 and safe heading")
+     if command in (CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT):
+         if target_x_mm or target_y_mm or heading_cdeg not in (0, SEPARATION_ORANGE_CORE_82):

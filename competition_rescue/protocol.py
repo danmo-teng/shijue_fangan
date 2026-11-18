@@ -73,6 +73,7 @@ CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
 CMD_TARGET_RIGHT = 1 << 7
 CMD_KEEP_ORANGE = 1 << 1  # Selective separation only: apply the firmware opening offset to the retained claw.
+CMD_ORANGE_FILTER_AT_PICKUP = 1 << 4  # 0x16: hold chassis heading at the pickup site.
 CMD_DISPERSE_NEAR_KEEP = 1 << 4  # DISPERSE only: side evidence, never cargo validity.
 SEPARATION_ORANGE_CORE_82 = 8200  # Opcode-specific lift request; not a chassis heading.
 
@@ -148,11 +149,12 @@ def mission_frame(
         raise ValueError("command and flags must be bytes")
     if command == CMD_ORANGE_GATE_FILTER:
         required = CMD_VALID | CMD_SIDE_VALID
-        allowed = required | CMD_RED_SIDE | CMD_TARGET_RIGHT
+        allowed = required | CMD_RED_SIDE | CMD_TARGET_RIGHT | CMD_ORANGE_FILTER_AT_PICKUP
+        heading = 0 if flags & CMD_ORANGE_FILTER_AT_PICKUP else (9000 if flags & CMD_RED_SIDE else 27000)
         if (flags & required != required or flags & ~allowed or
                 arg_a != 100 or arg_b != 8600 or
-                aux_cdeg != (9000 if flags & CMD_RED_SIDE else 27000)):
-            raise ValueError("orange gate filter requires black side, 100mm, lift86 and safe heading")
+                aux_cdeg != heading):
+            raise ValueError("orange filter requires black side, 100mm, lift86 and the site heading mode")
     if command == CMD_CLOSED_DEFLECT:
         from closed_deflect import VIEW, PULL, STAGE, CARRYING, END_AT_ORIGINAL
         phase = flags >> 4
