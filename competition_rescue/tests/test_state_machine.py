@@ -4087,8 +4087,8 @@ def test_legal_side_then_more_green_with_mirrored_claws_and_orange_mechanics():
         for mirror in (False,True):
             a=audited(right,left) if mirror else audited(left,right)
             orange_side='right' if mirror else 'left'
-            # Single orange ties pure black on green count; absent a prior side, left wins.
-            orange_wins = len(left)==1 and 'green_supply' not in right and orange_side=='left'
+            # One core beats one orange; ties with a larger all-black group use the existing side rule.
+            orange_wins = len(left)==1 and len(right)>1 and 'green_supply' not in right and orange_side=='left'
             keep=orange_side if orange_wins else ('left' if mirror else 'right')
             m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
             m.first_common_delivered=True
@@ -4115,14 +4115,11 @@ def test_legal_side_then_more_green_with_mirrored_claws_and_orange_mechanics():
                 m._latch_carried_manifest(remaining)
                 assert m.carried_manifest==('injured_orange',)
     split = audited(["injured_orange"], ["core_black"])
-    m.cluster_keep_side = "right"
+    m.cluster_keep_side = "left"
     assert m._preferred_keep_side(split) == "right"
-    m.cluster_keep_side = None
-    m.separation_keep_side = "left"
-    assert m._preferred_keep_side(split) == "left"
     m._select_batch(CargoBatch((2,), ("core_black",), "material"))
     mixed_only = audited(["injured_orange", "core_black"], [])
-    assert m._preferred_keep_side(mixed_only) == "left" and m._audit_payload(mixed_only).destination_injury
+    assert m._preferred_keep_side(mixed_only) == "left" and not m._audit_payload(mixed_only).destination_injury
     # Blue-bearing/uncertain sides never gain the special orange mixture priority.
     m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False));m.first_common_delivered=True
     m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
@@ -4191,40 +4188,21 @@ def _orange_gate_confirm_review(m, view, current, status, start_frame=1, start_s
                   current, ready, start_s+.8)
 
 
-def test_post_grab_orange_core_filters_at_pickup_then_reaudits_once():
-    from protocol import CMD_ORANGE_FILTER_AT_PICKUP, CMD_ORANGE_GATE_FILTER
-    for black_side in ("left", "right"):
-        m, view, _, status = _orange_gate_fixture(black_side=black_side)
-        m.carried_manifest = ()
-        m.confirmed_delivery_destination = None
-        status = replace(status, mode=23, flags=3)
-        current = PoseSnapshot(True, .25, -.35, 42., 0.)
-        m._begin_post_grab_audit(view, 1.)
-        def review(start_frame, start_s):
-            for offset in range(1, 5):
-                now = start_s + offset * .15
-                image = replace(view, frame_sequence=start_frame+offset, observed_monotonic_s=now)
-                out = m.step(image, current, status, now)
-            assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.stable
-            assert out.command.audit.destination_injury == (not m.orange_gate_filter_attempted or black_side=="right")
-            ack = replace(relay_stm(out, mode=23, flags=67), camera_pitch_cdeg=14000,
-                          context_valid=True, context_matches=True,
-                          accepted_command=CMD_CARGO_AUDIT, action_status=1)
-            return m.step(image, current, ack, now+.02)
-        out = review(1, 1.)
-        assert out.command.opcode == CMD_ORANGE_GATE_FILTER
-        assert out.command.flags & CMD_ORANGE_FILTER_AT_PICKUP
-        assert bool(out.command.flags & CMD_TARGET_RIGHT) == (black_side == "right")
-        assert (out.command.arg_a, out.command.arg_b, out.command.aux) == (100, 8600, 0)
-        out.command.to_frame(1)
-        done = replace(status, context_valid=True, context_matches=True,
-                       accepted_command=CMD_ORANGE_GATE_FILTER, action_status=3)
-        image = replace(view, frame_sequence=10, observed_monotonic_s=2.)
-        assert m.step(image, current, replace(done, mode=48), 2.).command == out.command
-        assert m.step(image, current, done, 2.).state == CompetitionState.POST_GRAB_AUDIT
-        after = review(10, 2.)
-        assert after.command.opcode == CMD_DISPERSE_PILE
-        assert bool(after.command.flags & CMD_KEEP_ORANGE) == (black_side == "right")
+def test_pickup_keeps_core_without_orange_grip_or_lift_on_either_claw():
+    for side in ("left", "right"):
+        for together in (False, True):
+            m, view, _, _ = _orange_gate_fixture(black_side=side, same_side=together)
+            for mode in (37, 23):
+                m.state = CompetitionState.POST_GRAB_AUDIT if mode == 23 else CompetitionState.CAPTURE_AUDIT
+                audit = replace(view.capture_audit, stable=True)
+                m.cluster_keep_side = m._preferred_keep_side(audit)
+                assert m.cluster_keep_side == side and not m._audit_valid(audit)
+                assert not m._audit_payload(audit).destination_injury
+                out = m._start_disperse(audit, stm(mode=mode), 1.)
+                assert out.command.opcode == CMD_DISPERSE_PILE and out.command.aux == 0
+                assert not out.command.flags & CMD_KEEP_ORANGE
+                assert bool(out.command.flags & CMD_TARGET_RIGHT) == (side == "right")
+                assert m.separation_wanted_class == "core_black"
 
 
 def test_post_grab_side_swap_on_ack_reaudits_before_any_side_action():
@@ -4259,13 +4237,9 @@ def test_post_grab_side_swap_on_ack_reaudits_before_any_side_action():
             late = m.step(fresh, current, replace(ack(updated, 2), context_matches=False), 1.91)
             assert late.command == updated.command
             action = m.step(fresh, current, ack(updated, 3), 1.92).command
-            if already_filtered:
-                assert action.opcode == CMD_DISPERSE_PILE and not action.flags & CMD_TARGET_RIGHT
-                assert bool(action.flags & CMD_KEEP_ORANGE) == (new_black == "right")
-                assert action.aux == (8200 if new_black == "right" else 0)
-            else:
-                assert action.opcode == CMD_ORANGE_GATE_FILTER
-                assert bool(action.flags & CMD_TARGET_RIGHT) == (new_black == "right")
+            assert action.opcode == CMD_DISPERSE_PILE and action.aux == 0
+            assert not action.flags & CMD_KEEP_ORANGE
+            assert bool(action.flags & CMD_TARGET_RIGHT) == (new_black == "right")
 
 
 def test_orange_gate_filter_symmetric_once_and_real_reaudit():
@@ -4295,7 +4269,7 @@ def test_orange_gate_filter_symmetric_once_and_real_reaudit():
                 assert m.orange_gate_filter_attempted
                 # Still black: original separation, never repeat the lateral move.
                 out = _orange_gate_confirm_review(m, view, current, status, 9, 3.)
-                keep_orange = same_side or black_side == "right"
+                keep_orange = same_side
                 assert out.command.opcode == CMD_DISPERSE_PILE
                 assert bool(out.command.flags & CMD_KEEP_ORANGE) == keep_orange
                 assert out.command.aux == (8200 if keep_orange else 0)

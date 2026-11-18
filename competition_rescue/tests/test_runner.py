@@ -4101,3 +4101,45 @@ def test_map_recording_toggle_uses_click_and_preserves_current_warm_session(tmp_
     app.apply_recording_choice()
     assert not app.recording and os.environ["RDK_MATCH_RECORDING"] == "0"
     assert app.runtime.parent == Path("/dev/shm") and app.warm_status_path.parent == app.runtime
+
+
+def test_corridor_nudge_only_once_for_single_near_obstacle_then_realign_or_sweep():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from state_machine import CargoBatch
+    from protocol import CMD_CORRIDOR_NUDGE, CMD_TARGET_RIGHT
+    from rescue_vision.localizer import ApproachRangeCalibration
+
+    calibration = ApproachRangeCalibration.load(ROOT.parent / "vision/config/approach_range.json")
+    bands = calibration.data["angles"]["12000"]["bands"]
+    for pitch in (11500, 12000):
+        for band in bands:
+            item = SimpleNamespace(visible=True, center_px=(400, (band["y_min"]+band["y_max"])//2))
+            expected = band["advance_mm"] if band["band"] in {"B3", "B4", "B5"} else None
+            assert runner_module.corridor_nudge_distance([item], pitch, calibration) == expected
+            assert runner_module.corridor_nudge_distance([item, item], pitch, calibration) is None
+    for side, x in (("red", 700), ("blue", 430)):
+        m = CompetitionMission(CompetitionSettings(side=side, initial_stash_enabled=False, bulldozer_enabled=True))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((3,), ("green_supply",), "material"))
+        m.confirmed_delivery_destination = "material"
+        pose = PoseSnapshot(True, m.settings.material_target_x_m, m.settings.safe_staging_y_m,
+                            m.settings.safe_heading_deg, 0.)
+        stm = StmSnapshot(mode=11, flags=2, age_ms=0, camera_pitch_cdeg=11500)
+        view = VisionSnapshot(safe_corridor_obstacle_class="danger_cyan", safe_corridor_obstacle_count=1,
+            safe_corridor_obstacle_bbox=(x, 200, 90, 90), safe_corridor_obstacle_distance_mm=230)
+        for multi in (replace(view, safe_corridor_obstacle_count=2),
+                      replace(view,safe_corridor_obstacle_distance_mm=None)):
+            assert m._blocked_corridor_output(multi,stm,1.,pose=pose).event == "bulldozer_start"
+            assert m.obstacle_route.kind == "sweep"
+            m.obstacle_route = None
+        assert m._blocked_corridor_output(view, stm, 2., pose=replace(pose,y_m=0.)).reason == "corridor_return_to_staging"
+        cmd = m._blocked_corridor_output(view, stm, 3., pose=pose).command
+        assert cmd.opcode == CMD_CORRIDOR_NUDGE and (cmd.arg_a, cmd.arg_b) == (100,230)
+        assert bool(cmd.flags & CMD_TARGET_RIGHT) == (x>640)
+        cmd.to_frame(1)
+        done = replace(stm, mode=10, context_valid=True, context_matches=True, accepted_command=cmd.opcode, action_status=3)
+        assert m.step(view,pose,replace(done,context_matches=False),4.).command == cmd
+        assert m.step(view,pose,done,4.1).state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+        retry = m._blocked_corridor_output(replace(view,safe_corridor_obstacle_class="green_supply"),stm,5.,pose=pose)
+        assert retry.event == "bulldozer_start" and m.obstacle_route.kind == "sweep"

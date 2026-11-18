@@ -70,6 +70,7 @@ from protocol import (  # noqa: E402
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
+    CMD_CORRIDOR_NUDGE,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
@@ -837,6 +838,19 @@ def safe_zone_push_corridor(
     return polygon, obstacle, None, SAFE_CORRIDOR_BLOCKED
 
 
+def corridor_nudge_distance(items, pitch, calibration):
+    if len(items) != 1 or pitch not in {11500, 12000} or calibration is None or not items[0].visible:
+        return None
+    center = items[0].center_px
+    distance, _ = calibration.distance(12000, center, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    if distance is None:
+        return None
+    bands = calibration.data["angles"]["12000"]["bands"]
+    if any(b["band"] in {"B3", "B4", "B5"} and b["y_min"] <= center[1] < b["y_max"] for b in bands):
+        return distance
+    return None
+
+
 def sweep_obstacle_policy(items, safe_bbox, pitch, calibration):
     """Pixel decisions only; 115 uses the user-approved 120 band layout."""
     if safe_bbox is None or pitch not in {11500, 12000}:
@@ -1316,7 +1330,7 @@ def make_vision_snapshot(
     (
         corridor,
         corridor_obstacle,
-        corridor_distance_mm,
+        _,
         corridor_status,
     ) = safe_zone_push_corridor(
         cargo,
@@ -1410,7 +1424,8 @@ def make_vision_snapshot(
         safe_corridor_obstacle_classes=tuple(sorted(set(corridor_classes))),
         safe_corridor_edge_obstacle=corridor_edge,
         safe_corridor_b34_obstacle=corridor_b34,
-        safe_corridor_obstacle_distance_mm=corridor_distance_mm,
+        safe_corridor_obstacle_count=len(corridor_items),
+        safe_corridor_obstacle_distance_mm=corridor_nudge_distance(corridor_items, stm.camera_pitch_cdeg, range_calibration),
         safe_corridor_obstacle_track_id=(
             None if corridor_obstacle is None else corridor_obstacle.track_id
         ),
@@ -2689,7 +2704,15 @@ class CompetitionPlanner:
         reconciled = self._reconcile_approach_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
-        if (self.mission.state == CompetitionState.OBSTACLE_ROUTE and not stm.fault and
+        if (self.mission.state == CompetitionState.CORRIDOR_NUDGE and
+                stm.mode in {10, 11} and stm.context_valid and not stm.fault and
+                stm.task_id == self.protocol_task and stm.action_status & 4 and
+                stm.rejected_action_id == self.protocol_action and
+                not (matches and stm.accepted_command == CMD_CORRIDOR_NUDGE and stm.action_status & 2)):
+            self._adopt_recovery_context()
+            return replace(self.mission._resume_after_corridor_nudge(pose, stm, now),
+                event="corridor_nudge_rejected", message="挤障未完成，回预备线重新对准判障")
+        if (self.mission.state in {CompetitionState.OBSTACLE_ROUTE, CompetitionState.CORRIDOR_NUDGE} and not stm.fault and
                 stm.mode in {3, 10, 11, 25}):
             # Update live remaining H/D while the first paired status is in
             # flight. Only a matching action may advance the route step.
@@ -2999,6 +3022,7 @@ class CompetitionPlanner:
                 "safe_corridor_polygon": [list(point) for point in vision.safe_corridor_polygon],
                 "safe_sweep_search_polygon": [list(point) for point in vision.safe_sweep_search_polygon],
                 "safe_corridor_obstacle_class": vision.safe_corridor_obstacle_class,
+                "safe_corridor_obstacle_count": vision.safe_corridor_obstacle_count,
                 "safe_corridor_obstacle_distance_mm": vision.safe_corridor_obstacle_distance_mm,
                 "safe_corridor_obstacle_track_id": vision.safe_corridor_obstacle_track_id,
                 "safe_corridor_obstacle_bbox": vision.safe_corridor_obstacle_bbox,

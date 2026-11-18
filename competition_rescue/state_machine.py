@@ -36,6 +36,7 @@ from protocol import (
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
+    CMD_CORRIDOR_NUDGE,
     CMD_ORANGE_FILTER_AT_PICKUP,
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
@@ -418,6 +419,7 @@ class VisionSnapshot:
     range_reason: str = "range_calibration_missing"
     safe_sweep_search_polygon: tuple[tuple[int, int], ...] = ()
     safe_corridor_obstacle_classes: tuple[str, ...] = ()
+    safe_corridor_obstacle_count: int = 0
     safe_corridor_edge_obstacle: bool = False
     safe_corridor_b34_obstacle: bool = False
     zone_boxes: tuple = ()
@@ -540,6 +542,7 @@ class CompetitionState(str, Enum):
     NAVIGATE = "NAVIGATE"
     TRANSPORT_AUDIT = "TRANSPORT_AUDIT"
     ORANGE_GATE_FILTER = "ORANGE_GATE_FILTER"
+    CORRIDOR_NUDGE = "CORRIDOR_NUDGE"
     ALIGN_SAFE_ZONE_BY_POSE = "ALIGN_SAFE_ZONE_BY_POSE"
     ACQUIRE_SAFE_ZONE = "ACQUIRE_SAFE_ZONE"
     ALIGN_SAFE_ZONE_BY_LOCKED_BOX = "ALIGN_SAFE_ZONE_BY_LOCKED_BOX"
@@ -1025,6 +1028,8 @@ class CompetitionMission:
         self.transport_separation_active = False
         self.stage_redirect_active = False
         self.zone_observation = None
+        self.corridor_nudge_command: CommandRequest | None = None
+        self.corridor_nudge_attempted = False
         self.orange_gate_filter_attempted = False
         self.orange_gate_filter_command = None
 
@@ -1266,6 +1271,8 @@ class CompetitionMission:
     def expected_stm_modes(self) -> tuple[int, ...]:
         if self.state == CompetitionState.SEARCH_ZONE_VIEW:
             return (3, 20, 52, 24)
+        if self.state == CompetitionState.CORRIDOR_NUDGE:
+            return (STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_REMOTE_ACTION, STM_MODE_NAVIGATE)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
             return (STM_MODE_REMOTE_ACTION, self._orange_filter_review_mode())
         if self.state == CompetitionState.PRE_GRAB_ADVANCE:
@@ -1481,6 +1488,7 @@ class CompetitionMission:
 
     def _select_batch(self, batch: CargoBatch) -> None:
         self._clear_orange_top_view()
+        self.transport_separation_active = False
         self.staging_repair_target = None
         self.delivery_search_point_number = self.search_point_number
         self.pre_grab_command = None
@@ -1495,6 +1503,8 @@ class CompetitionMission:
         self.transport_audit_handoff_active = False
         if self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.task_generation += 1
+            self.corridor_nudge_attempted = False
+            self.corridor_nudge_command = None
             self.orange_gate_filter_attempted = False
             self.orange_gate_filter_command = None
             self.delivery_counted_for_batch = False
@@ -1716,7 +1726,7 @@ class CompetitionMission:
             return self.selected_batch.destination
         keep = self._post_first_preferred_keep_side(audit)
         if keep is not None:
-            return ("injury" if "injured_orange" in self._separation_side_manifest(audit, keep)
+            return ("injury" if self._retained_class(audit, keep) == "injured_orange"
                     else "material")
         manifest = self._manifest_for_audit(audit)
         if audit.total_count == 1 and manifest == ("injured_orange",):
@@ -1739,19 +1749,10 @@ class CompetitionMission:
         if not recovering_sweep and destination == "material" and audit.injury_mixed:
             # An indivisible orange mixture may still be the only side worth trying.
             keep = self._preferred_keep_side(audit)
-            if keep is not None and self._orange_mixed_side_manifest(audit, keep):
+            if keep is not None and self._retained_class(audit, keep) == "injured_orange":
                 destination = "injury"
         return audit.to_protocol(initial_stash=self.selected_batch.initial_stash,
                                  destination=destination, audit_id=self.audit_id)
-
-    def _capture_audit_payload(
-        self, audit: CargoAudit, vision: VisionSnapshot, stm: StmSnapshot,
-    ) -> CargoAuditPayload:
-        payload = self._audit_payload(audit)
-        if self._pickup_filter_side(audit, vision, stm) is not None:
-            # The first closed-claw orange/core review intends to keep orange.
-            return replace(payload, destination_injury=True)
-        return payload
 
     def _sweep_original_destination(self) -> str:
         return (self.confirmed_delivery_destination or
@@ -2396,10 +2397,7 @@ class CompetitionMission:
         self.separation_start_audit = audit if keep_count > 0 or near_keep else None
         self.separation_wanted_class = None
         if audit is not None and keep_side is not None and self.first_common_delivered:
-            manifest = self._separation_side_manifest(audit, keep_side)
-            if manifest:
-                self.separation_wanted_class = ("injured_orange" if "injured_orange" in manifest else
-                    "green_supply" if "green_supply" in manifest else "core_black")
+            self.separation_wanted_class = self._retained_class(audit, keep_side)
         if first_green_bump:
             self.disperse_context = "first_green_bump"
             self.disperse_command = CommandRequest(
@@ -2460,10 +2458,7 @@ class CompetitionMission:
             self.invalid_release_lift_cdeg = 0
             if audit is not None and self.first_common_delivered and self.invalid_release_side in {"left", "right"}:
                 keep = "right" if self.invalid_release_side == "left" else "left"
-                manifest = self._separation_side_manifest(audit, keep)
-                if manifest:
-                    self.separation_wanted_class = ("injured_orange" if "injured_orange" in manifest else
-                        "green_supply" if "green_supply" in manifest else "core_black")
+                self.separation_wanted_class = self._retained_class(audit, keep)
                 if self._orange_core_separation(audit, keep):
                     self.invalid_release_lift_cdeg = SEPARATION_ORANGE_CORE_82
             self.invalid_release_initial_ack = (
@@ -3148,7 +3143,7 @@ class CompetitionMission:
                 (vision.capture_audit is not None and
                  self._audit_signature_for_state(
                      vision.capture_audit, self._audit_valid(vision.capture_audit),
-                     self._capture_audit_payload(vision.capture_audit, vision, stm)
+                     self._audit_payload(vision.capture_audit)
                  ) != self.pending_audit_signature)
             ) and
             self._audit_vision_fresh(vision, now) and
@@ -3187,10 +3182,7 @@ class CompetitionMission:
             self.audit_hits = continued_hits
             self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
-        pickup_black_side = None
-        if self.pending_audit_release_context == "post_grab_invalid":
-            pickup_black_side = self._pickup_filter_side(self.pending_audit, vision, stm)
-        if (pickup_black_side is None and self._separation_limit_reached() and
+        if (self._separation_limit_reached() and
                 not self._orange_separation_rechecked_empty() and
                 not self.pending_audit_valid and stm.fresh and
                 stm.context_valid and stm.context_matches and
@@ -3416,8 +3408,6 @@ class CompetitionMission:
                 self._clear_pending_audit()
                 if audit.danger_present:
                     return self._start_danger_release(audit, stm, now)
-                if pickup_black_side:
-                    return self._begin_orange_gate_filter(pickup_black_side, stm, now)
                 keep_side = self._preferred_keep_side(audit)
                 if audit.total_count > 1 and keep_side is not None:
                     self.cluster_keep_side = keep_side
@@ -3918,9 +3908,30 @@ class CompetitionMission:
         return (self._legal_separation_side_manifest(audit, side) or
                 self._orange_mixed_side_manifest(audit, side))
 
+    def _priority_core_side(self, audit: CargoAudit) -> str | None:
+        if (not self.first_common_delivered or not self.selected_batch or self.selected_batch.initial_stash or
+                audit.total_count != 2 or audit.danger_present or audit.unknown_present or
+                Counter(self._manifest_for_audit(audit)) != {"core_black": 1, "injured_orange": 1}):
+            return None
+        for side in ("left", "right"):
+            items = self._separation_side_manifest(audit, side)
+            if "core_black" in items:
+                at_injury_gate = (self.state == CompetitionState.TRANSPORT_AUDIT or self.transport_separation_active)
+                if (at_injury_gate and self.carried_manifest == ("injured_orange",) and
+                        "injured_orange" in items):
+                    return None
+                return side
+        return None
+
+    def _retained_class(self, audit: CargoAudit, side: str) -> str | None:
+        if self._priority_core_side(audit) == side:
+            return "core_black"
+        items = self._separation_side_manifest(audit, side)
+        return next((name for name in ("injured_orange", "green_supply", "core_black") if name in items), None)
+
     def _orange_core_separation(self, audit: CargoAudit, keep_side: str | None) -> bool:
         if (keep_side is None or audit.danger_present or audit.unknown_present or
-                "injured_orange" not in self._separation_side_manifest(audit, keep_side)):
+                self._retained_class(audit, keep_side) != "injured_orange"):
             return False
         # The full real composition must identify black+orange. Do not infer
         # black from the wire UNKNOWN category or from a missed detection.
@@ -3931,6 +3942,9 @@ class CompetitionMission:
                 counts.get("core_black", 0) > 0 and counts.get("injured_orange", 0) > 0)
 
     def _post_first_preferred_keep_side(self, audit: CargoAudit) -> str | None:
+        core = self._priority_core_side(audit)
+        if core is not None:
+            return core
         candidates = {side: self._legal_separation_side_manifest(audit, side)
                       for side in ("left", "right")}
         candidates = {side: items for side, items in candidates.items() if items}
@@ -4394,7 +4408,7 @@ class CompetitionMission:
         )
         if new_frame:
             audit_signature = self._audit_signature_for_state(
-                audit, audit_valid, self._capture_audit_payload(audit, vision, stm) if not audit_valid else None
+                audit, audit_valid, self._audit_payload(audit) if not audit_valid else None
             )
             self._record_audit_frame(
                 audit_signature, vision.frame_sequence, observed_s
@@ -4518,7 +4532,7 @@ class CompetitionMission:
                 )
             self.cluster_keep_side = keep_side
             self.cluster_keep_side_count = keep_count
-        payload = self._capture_audit_payload(stable, vision, stm)
+        payload = self._audit_payload(stable)
         if stable.stable and audit_valid:
             if (self.selected_batch.initial_stash and
                     not self.selected_batch.track_ids and self.initial_claw_check_started):
@@ -5039,6 +5053,24 @@ class CompetitionMission:
                     "抽障后已回原朝向，按实际画面继续找后面的合法物块", new_visit=False)
         return self._closed_deflect_output()
 
+    def _corridor_nudge_output(self, pose: PoseSnapshot, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        command = self.corridor_nudge_command
+        assert command is not None
+        if (stm.context_valid and stm.context_matches and stm.accepted_command == CMD_CORRIDOR_NUDGE and
+                stm.action_status & 3 == 3 and stm.mode in {STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE} and
+                stm.gripper_closed):
+            return self._resume_after_corridor_nudge(pose, stm, now)
+        return CompetitionOutput(self.state, command, f"闭爪异侧横移100毫米，前进{command.arg_b}毫米，再横移回原线",
+            self.selected_batch, reason="corridor_nudge", motion_expected=True, expected_stm_modes=self.expected_stm_modes())
+
+    def _resume_after_corridor_nudge(self, pose: PoseSnapshot, stm: StmSnapshot, now: float) -> CompetitionOutput:
+        repair = self._ensure_delivery_staging(pose, stm, now)
+        if repair is not None:
+            return repair
+        self._begin_safe_zone_pose_align(stm, now)
+        return CompetitionOutput(self.state, self._safe_zone_pose_align_command(),
+            "挤障完成，重新对准、横移并检查通道", self.selected_batch, event="corridor_nudge_recheck")
+
     def _blocked_corridor_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
         *, pose: PoseSnapshot | None = None,
@@ -5054,8 +5086,23 @@ class CompetitionMission:
             if classes:
                 batch = self.selected_batch
                 destination = self.confirmed_delivery_destination or batch.destination
-                kind = ("sweep" if vision.safe_corridor_edge_obstacle else
+                kind = ("sweep" if (self.corridor_nudge_attempted or vision.safe_corridor_obstacle_count > 1 or
+                                    vision.safe_corridor_edge_obstacle) else
                         handling_kind(destination, classes, first=not self.first_common_delivered))
+                box = vision.safe_corridor_obstacle_bbox
+                distance = vision.safe_corridor_obstacle_distance_mm
+                if (kind == "sweep" and not self.corridor_nudge_attempted and
+                        vision.safe_corridor_obstacle_count == 1 and not vision.safe_corridor_obstacle_remembered and
+                        stm.mode == STM_MODE_ALIGN_SAFE_ZONE and stm.gripper_closed and
+                        distance is not None and distance > 0 and box is not None):
+                    offset = 2 * (box[0] - CAMERA_IMAGE_CENTER_X_PX) + box[2]
+                    if offset:
+                        flags = self._side_flags() | CMD_SIDE_VALID | (CMD_TARGET_RIGHT if offset > 0 else 0)
+                        self.corridor_nudge_command = CommandRequest(CMD_CORRIDOR_NUDGE, flags, 100, distance,
+                            round(self.settings.safe_heading_deg * 100) % 36000)
+                        self.corridor_nudge_attempted = True
+                        self._set_state(CompetitionState.CORRIDOR_NUDGE, now)
+                        return replace(self._corridor_nudge_output(pose, stm, now), event="corridor_nudge_start")
                 previous_stash = self.obstacle_route
                 self.obstacle_route = ObstacleRoute(
                     self.settings.side, batch.track_ids,
@@ -6635,9 +6682,8 @@ class CompetitionMission:
         batch = self.selected_batch
         keep = self._post_first_preferred_keep_side(audit)
         if keep is not None:
-            manifest = self._separation_side_manifest(audit, keep)
-            category = "injured_orange" if "injured_orange" in manifest else (
-                "green_supply" if "green_supply" in manifest else "core_black")
+            category = self._retained_class(audit, keep)
+            assert category is not None
             track_id = getattr(audit, keep + "_stable_track_id")
             self.selected_batch = replace(batch,
                 track_ids=(track_id,) if getattr(audit, keep + "_class") == category and track_id is not None else batch.track_ids,
@@ -6869,15 +6915,6 @@ class CompetitionMission:
                 abs(pose.y_m-self.settings.safe_staging_y_m) >
                     self.settings.safe_zone_staging_axial_tolerance_m + 1e-9 or
                 pose.x_m*self.settings.injury_target_x_m <= 0):
-            return None
-        return self._mixed_orange_black_side(audit, vision)
-
-    def _pickup_filter_side(self, audit: CargoAudit, vision: VisionSnapshot, stm: StmSnapshot) -> str | None:
-        if (not self.post_grab_audit_active or stm.mode != STM_MODE_POST_GRAB_AUDIT or
-                not stm.gripper_closed or not self.first_common_delivered or self.selected_batch is None or
-                self.selected_batch.initial_stash or self.safe_sweep_reaudit_active or
-                self.orange_gate_filter_attempted or audit.total_count != 2 or
-                not any(i.visible and i.class_name == "injured_orange" for i in vision.capture_cargo)):
             return None
         return self._mixed_orange_black_side(audit, vision)
 
@@ -7967,6 +8004,8 @@ class CompetitionMission:
 
         if self.state == CompetitionState.SEARCH_ZONE_VIEW:
             return self._zone_observation_output(vision, pose, stm, now)
+        if self.state == CompetitionState.CORRIDOR_NUDGE:
+            return self._corridor_nudge_output(pose, stm, now)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
             return self._orange_gate_filter_output(vision, pose, stm, now)
         if self.state == CompetitionState.TRANSPORT_AUDIT:

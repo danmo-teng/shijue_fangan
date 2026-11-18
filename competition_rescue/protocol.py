@@ -50,6 +50,7 @@ CMD_CARGO_AUDIT = 0x12
 CMD_CLEAR_SAFE_ZONE = 0x13
 CMD_BULLDOZER_STEP = 0x14  # Segmented motion; each extension requires matching F405 support.
 CMD_CLOSED_DEFLECT = 0x15  # TYPE=0x18 opcode, unrelated to TYPE=0x15 odometry.
+CMD_CORRIDOR_NUDGE = 0x17  # Closed, lateral/forward/lateral during delivery.
 CMD_ORANGE_GATE_FILTER = 0x16  # Paired firmware: closed lateral out/lower/return.
 
 CMD_VALID = 1 << 0
@@ -147,6 +148,11 @@ def mission_frame(
         raise ValueError("sequence must be in 0..255")
     if not 0 <= command <= 0xFF or not 0 <= flags <= 0xFF:
         raise ValueError("command and flags must be bytes")
+    if command == CMD_CORRIDOR_NUDGE:
+        required = CMD_VALID | CMD_SIDE_VALID
+        if (flags & required != required or flags & ~(required | CMD_RED_SIDE | CMD_TARGET_RIGHT) or
+                arg_a != 100 or not 0 < arg_b <= 2500 or aux_cdeg != (9000 if flags & CMD_RED_SIDE else 27000)):
+            raise ValueError("invalid corridor nudge")
     if command == CMD_ORANGE_GATE_FILTER:
         required = CMD_VALID | CMD_SIDE_VALID
         allowed = required | CMD_RED_SIDE | CMD_TARGET_RIGHT | CMD_ORANGE_FILTER_AT_PICKUP
@@ -243,10 +249,10 @@ def mission_frame(
         CMD_ENTER_SAFE_ZONE,
         CMD_DISPERSE_PILE,
         CMD_BULLDOZER_STEP,
-        CMD_ORANGE_GATE_FILTER,
+        CMD_ORANGE_GATE_FILTER, CMD_CORRIDOR_NUDGE,
     }:
         raise ValueError("bit6 is not valid for this command")
-    if flags & CMD_TARGET_RIGHT and command not in {CMD_DISPERSE_PILE, CMD_BULLDOZER_STEP, CMD_ORANGE_GATE_FILTER}:
+    if flags & CMD_TARGET_RIGHT and command not in {CMD_DISPERSE_PILE, CMD_BULLDOZER_STEP, CMD_ORANGE_GATE_FILTER, CMD_CORRIDOR_NUDGE}:
         raise ValueError("TARGET_RIGHT is not valid for this command")
     if command != CMD_BULLDOZER_STEP and flags & CMD_TARGET_RIGHT and not flags & CMD_SIDE_VALID:
         raise ValueError("TARGET_RIGHT requires SIDE_VALID")
