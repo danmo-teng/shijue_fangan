@@ -4293,9 +4293,14 @@ class CompetitionMission:
             self._begin_search_recovery(vision, now)
             return self._search_recovery_output(vision, stm, now)
         assert self.pre_grab_command is not None
+        # A stable audit can move the MCU from cluster capture to separation-ready
+        # between the 50 mm request and its acceptance. The action still owns its DONE.
+        returned_to_audit = (stm.mode == self.pre_grab_return_mode or
+                             (self.pre_grab_return_mode == STM_MODE_CLUSTER_CAPTURE_AUDIT and
+                              stm.mode == STM_MODE_CLUSTER_READY))
         done = (stm.context_valid and stm.context_matches and
                 stm.accepted_command == CMD_APPROACH_TARGET and stm.action_status & 3 == 3 and
-                stm.mode == self.pre_grab_return_mode)
+                returned_to_audit)
         if done and self.pre_grab_completed_frame is None:
             self.pre_grab_completed_frame = vision.frame_sequence
         if (done and self.pre_grab_completed_frame is not None and

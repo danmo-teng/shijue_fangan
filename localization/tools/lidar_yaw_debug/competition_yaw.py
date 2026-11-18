@@ -60,6 +60,22 @@ def reliable_delta(lines, center, yaw):
     return delta if fit['rank_xy']==2 else None
 
 
+def sync_applied_yaw(engine, round_token, delta):
+    """Finish the upper half of an acknowledged correction, including after a lost reply."""
+    with engine.lock:
+        reference = engine.refresh_native().get('reference') or {}
+        if not round_token or reference.get('round_token') != round_token:
+            raise ValueError('wall yaw belongs to a different round')
+        if 'wall_yaw_applied_cdeg' not in reference:
+            engine.runtime.command('wall_yaw_commit', dict(round_token=round_token, delta_cdeg=delta))
+            reference = engine.refresh_native().get('reference') or {}
+        if reference.get('round_token') != round_token or reference.get('wall_yaw_applied_cdeg') != delta:
+            raise ValueError('native wall yaw does not match the acknowledged correction')
+        engine.pending_reacquisition = None
+        engine.latest_points = []
+        engine.latest_matched_points = []
+
+
 def propose(socket_name, tag, delta):
     body=struct.pack('>BBHhI',0x21,0,tag,delta,0)
     crc=crc16_modbus(body)

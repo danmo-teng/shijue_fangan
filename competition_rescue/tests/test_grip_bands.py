@@ -248,3 +248,27 @@ def test_orange88_b2_requests_remeasure_then_finishes_near():
     assert m._range_approach_output(snap(3,box),done,.3).command.opcode==CMD_HOLD
     near=m._range_approach_output(snap(4,(600,430,80,90)),done,.4)
     assert (near.command.arg_a,near.command.arg_b,near.command.aux)==(260,10500,0)
+
+
+def test_cluster_advance_can_finish_in_separation_ready(tmp_path):
+    mission, view, status = capture_fixture(mode=38)
+    planner = runner.CompetitionPlanner(mission, tmp_path/'pose', tmp_path/'stm',
+        tmp_path/'command', tmp_path/'diag', runner.JsonlLog(tmp_path/'events'), 50)
+    pose = PoseSnapshot(valid=True)
+    out = planner._output_for_cycle(view, pose, status, False, 1.)
+    planner._publish(out)
+    assert (out.command.opcode, out.command.aux, out.command.arg_a) == (9, 2, 50)
+    done = replace(status, mode=37, task_id=planner.protocol_task,
+        action_id=planner.protocol_action, accepted_command=9, action_status=0x83)
+    view = replace(view, pre_grab_regions=((7, 'middle'),), frame_sequence=11)
+    for other in (replace(done, action_id=done.action_id+1), replace(done, task_id=done.task_id+1),
+                  replace(done, action_status=0x81), replace(done, accepted_command=CMD_CARGO_AUDIT)):
+        planner._output_for_cycle(view, pose, other, False, 1.1)
+        assert mission.pre_grab_completed_frame is None
+    assert planner._output_for_cycle(view, pose, done, False, 1.1).reason == 'pre_grab_advance_reobserve'
+    reviewed = planner._output_for_cycle(replace(view, frame_sequence=12), pose, done, False, 1.2)
+    assert reviewed.state == CompetitionState.CAPTURE_AUDIT and reviewed.command.opcode == CMD_CARGO_AUDIT
+    normal, view, status = capture_fixture(mode=21)
+    normal.step(view, pose, status, 1.)
+    normal.step(view, pose, replace(done, context_matches=True), 1.1)
+    assert normal.pre_grab_completed_frame is None

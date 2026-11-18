@@ -88,3 +88,33 @@ def test_start_uses_measured_still_interval():
                 result=rt.command('wall_yaw_still',dict(first_ns=1020000000,reference_ns=1100000000))
                 assert result['quiet']==(i==12)
     finally:rt.close()
+
+
+def test_retry_wall_yaw_before_write_and_after_write_without_double_rotation():
+    import pytest
+    from unittest.mock import patch
+    from lidar_yaw_debug.native_motion import NativeMotionRuntime, NativeDynamicFence
+    from lidar_yaw_debug.competition_yaw import sync_applied_yaw
+    rt = NativeMotionRuntime(dict(feedback_fd=-1, pose_fd=-1))
+    try:
+        engine = NativeDynamicFence({}, rt)
+        t = 1_000_000_000
+        engine.ingest_yaw(t, 40., dict(raw={}))
+        engine.ingest_pose(dict(session_id='retry', frame_number=1, timestamp_monotonic_ns=t,
+            receive_monotonic_ns=t, x_m=1., y_m=1., yaw_rad=.5, tracker_confidence=3))
+        engine.align('start', center_xy=(1., 1.), heading_deg=45, round_token='round', wall_yaw_word=0x807b)
+        initial = rt.snapshot()['last']['yaw_deg']
+        with patch.object(rt, 'command', side_effect=RuntimeError('write failed')), pytest.raises(RuntimeError):
+            sync_applied_yaw(engine, 'round', 350)
+        assert 'wall_yaw_applied_cdeg' not in rt.snapshot()['reference']
+        with patch.object(engine, 'refresh_native', side_effect=[engine.refresh_native(), RuntimeError('refresh failed')]), pytest.raises(RuntimeError):
+            sync_applied_yaw(engine, 'round', 350)
+        assert rt.snapshot()['reference']['wall_yaw_applied_cdeg'] == 350
+        with patch.object(rt, 'command', side_effect=AssertionError('second write')):
+            sync_applied_yaw(engine, 'round', 350)
+            for token, delta in [('old',350), ('round',351)]:
+                with pytest.raises(ValueError):
+                    sync_applied_yaw(engine, token, delta)
+        assert abs(rt.snapshot()['last']['yaw_deg'] - initial - 3.5) < 1e-7
+    finally:
+        rt.close()

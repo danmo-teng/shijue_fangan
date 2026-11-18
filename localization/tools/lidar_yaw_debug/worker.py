@@ -254,7 +254,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     if direct_socket is not None:direct_socket.setblocking(False)
     direct_sender=LocalDatagramSender(direct_socket,control_output['address']) if direct_socket is not None else None
 
-    from .competition_yaw import WallYawVote, reliable_delta, start_word, propose
+    from .competition_yaw import WallYawVote, reliable_delta, start_word, propose, sync_applied_yaw
     wall_config=config.get('competition_wall_yaw')
     vote=WallYawVote()
     preview=None
@@ -263,6 +263,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     sent_boundary=None
     candidate=None
     proposal_sent=False
+    lower_applied=False
+    sync_error=None
 
     def lower_status():
         try:
@@ -410,6 +412,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
 
     def consume(first):
         nonlocal reference_request_id,requested_lidar_enabled,latest_raw_pose,wall_tag,candidate,proposal_sent,vote,wall_round,sent_boundary
+        nonlocal lower_applied,sync_error
         changed=False
         for _ in range(16):
             if first is not None:
@@ -443,6 +446,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 except ValueError as exc:reply('reference_rejected',request_id=payload['request_id'],error=str(exc))
             elif kind=='field_start':
                 heading=payload['yaw_deg']
+                lower_applied=False
+                sync_error=None
                 wall_round=payload.get('round_token')
                 sent_boundary=None
                 word=0
@@ -758,24 +763,12 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 if control is not None:publish_control()
                 publish_sdk_policy()
             if time.monotonic()-last_publish>=.05:
-                if (wall_tag and candidate is not None and engine.reference and
+                if (wall_tag and not lower_applied and candidate is not None and engine.reference and
                         engine.reference.get('round_token')==wall_round):
                     status=lower_status()
                     if status.get('wall_yaw_tag')==wall_tag:
                         if proposal_sent and status.get('action_status',0)&64:
-                            try:
-                                with engine.lock:
-                                    native_runtime.command('wall_yaw_commit',dict(round_token=wall_round,
-                                        delta_cdeg=candidate))
-                                    engine.refresh_native()
-                                    engine.pending_reacquisition=None
-                                    engine.latest_points=[]
-                                    engine.latest_matched_points=[]
-                            except (ValueError,RuntimeError) as exc:
-                                event('wall_yaw_commit_error',tag=wall_tag,reason=str(exc))
-                            else:
-                                event('wall_yaw_committed',tag=wall_tag,delta_cdeg=candidate)
-                            wall_tag=0
+                            lower_applied=True
                         else:
                             boundary=(status.get('mode'),status.get('task_id'),status.get('action_id'))
                             retry_at_boundary=(boundary!=sent_boundary and boundary[0] in (22,23,37,48,52))
@@ -783,9 +776,27 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                                 if propose(wall_config['socket'],wall_tag,candidate):
                                     proposal_sent=True
                                     sent_boundary=boundary
+                if lower_applied:
+                    try:
+                        sync_applied_yaw(engine, wall_round, candidate)
+                    except (ValueError, RuntimeError) as exc:
+                        if str(exc) != sync_error:
+                            sync_error=str(exc)
+                            event('wall_yaw_commit_error',tag=wall_tag,reason=sync_error)
+                    else:
+                        event('wall_yaw_committed',tag=wall_tag,delta_cdeg=candidate)
+                        wall_tag=0
+                        lower_applied=False
+                        sync_error=None
                 if times and time.monotonic()-last_percentile>=1.:
                     p95=float(np.percentile(times,95));last_percentile=time.monotonic()
-                counters['display_updates_coalesced']+=offer_latest(display,state())
+                try:
+                    display_state=state()
+                except (ValueError, RuntimeError):
+                    if not lower_applied:
+                        raise
+                else:
+                    counters['display_updates_coalesced']+=offer_latest(display,display_state)
                 last_publish=time.monotonic()
             if not changed and not housekeeping_changed and latest is None:
                 waiting=[inbox._reader,updates._reader,scans._reader]
