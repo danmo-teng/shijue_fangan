@@ -1903,7 +1903,8 @@ def test_formal_dynamic_start_wiring(full_diagnostics=False):
                 assert start.call_count == 1 and app.official_wheel_input
                 profile = "full" if full_diagnostics else "summary"
                 assert cmd[:2] == ["env", f"RDK_WHEEL_SDK_LOG_PROFILE={profile}"]
-                assert app.dynamic.config["full_lidar_diagnostics"] is full_diagnostics
+                assert app.dynamic.config["full_lidar_diagnostics"] is True
+                assert json.loads((runtime / "session.json").read_text())["yaw_capture_requested"] is True
                 assert app.dynamic.field_start == dict(x_m=1.35,y_m=1.35,yaw_deg=45.)
                 assert cmd.count('--uart') == 1 and cmd[cmd.index('--uart')+1] == '/dev/ttyS1'
                 assert cmd[cmd.index('--baud')+1] == '921600'
@@ -2431,14 +2432,9 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
                 assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token) is None
                 app.localization_json.write_text(json.dumps(dict(reference=dict(round_token=token))))
                 assert runner_module.operator_start_request(app.operator.control_path,app.localization_json,token)['start_zone']==4
-                app.yaw_capture_session = 'capture-two'
-                ticket = runtime/'yaw_capture_plan.json'
-                ticket.write_text(json.dumps(dict(version=1,sessions=['capture-one'])))
                 app.warm_status_path.write_text(json.dumps(dict(session_token=token,ready=True,competition_started=True)))
                 app._update_warm_start()
                 assert app.session_started and not app.warming and not app.selecting
-                assert json.loads(ticket.read_text())['sessions']==['capture-one','capture-two']
-                assert app.yaw_capture_session is None
                 assert spawn.call_count==1 and app.localization_process is owner
             # Exactly the existing transform, sampled after carrying/turning.
             engine=DynamicFence({})

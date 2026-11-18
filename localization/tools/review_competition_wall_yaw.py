@@ -1,4 +1,8 @@
-"""Offline wall-heading review. Positive angle adds CCW to the reported field yaw."""
+"""Offline wall-heading review. Positive angles add CCW to reported field yaw.
+The reference assumes correctly placed, straight fence sections. A skewed wall
+biases the absolute correction; viewing a curved section from another position
+can also change the estimate between visits.
+"""
 import argparse
 import json
 import math
