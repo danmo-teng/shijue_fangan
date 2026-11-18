@@ -539,6 +539,34 @@ def test_planner_stop_records_unconfirmed_abort_timeout() -> None:
         assert planner.termination_result["timeout"] is True
 
 
+def test_closed_claw_recognizes_distinct_nested_orange_and_core_as_mixed():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from capture_roi import CaptureRois, split_capture_roi
+    from state_machine import CargoBatch, TrackedCargo
+
+    polygon = ((180, 140), (1120, 140), (1120, 660), (180, 660))
+    rois = CaptureRois(polygon, *split_capture_roi(polygon))
+    mission = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    mission.first_common_delivered = True
+    mission._select_batch(CargoBatch((584,), ("injured_orange",), "injury"))
+    orange = TrackedCargo(584, "injured_orange", .9, (450, 193, 441, 306), hits=6)
+    black = TrackedCargo(587, "core_black", .9, (493, 415, 131, 77), hits=6)
+    for mode in (23, 48):
+        status = StmSnapshot(mode=mode, flags=3, age_ms=0, camera_pitch_cdeg=14000)
+        for core, clear in ((black, True), (replace(black, bbox=orange.bbox), False)):
+            with patch.object(runner_module, "tracked_cargo", return_value=(orange, core)):
+                view = runner_module.make_vision_snapshot([], [], SimpleNamespace(calibrated=False),
+                    None, status, mission, 7672, capture_rois=rois, observed_s=1.)
+            assert view.capture_observation_valid == clear
+            if clear:
+                assert view.capture_audit.total_count == 2 and view.capture_audit.injury_mixed
+                assert not mission._audit_valid(view.capture_audit)
+            else:
+                assert view.capture_audit is None
+
+
 def test_claw_isolated_singleton_uses_existing_geometry_without_new_wire_fields() -> None:
     from dataclasses import replace
     from types import SimpleNamespace

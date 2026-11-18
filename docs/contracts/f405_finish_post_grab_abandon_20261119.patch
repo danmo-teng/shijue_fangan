@@ -1,0 +1,14 @@
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 953c192..d2be9ab 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -3605,8 +3605,7 @@ static void task_process_post_grab_audit(uint32_t now_ms)
+     case POST_AUDIT_RELEASE:
+       Camera_SetAngle(APP_GRAB_VIEW_ANGLE);
+       if (task_open_claws(now_ms)) {
+-        task_status.gripper_closed = false;
+-        task_clear_audit_result();
++        task_finish_abandoned_batch();
+         task_enter(TASK_SEARCH, now_ms);
+       }
+       break;

@@ -1126,7 +1126,8 @@ def make_vision_snapshot(
                 known_pair = (
                     (stm.mode in {21, 35, 37, 38} or
                      (stm.mode in {23, 48} and stm.gripper_closed and
-                      item.class_name in MATERIAL_CLASSES and other.class_name in MATERIAL_CLASSES)) and
+                      ((item.class_name in MATERIAL_CLASSES and other.class_name in MATERIAL_CLASSES) or
+                       {item.class_name, other.class_name} == {"injured_orange", "core_black"}))) and
                     item.track_id != other.track_id and item.bbox != other.bbox and
                     item.hits >= 2 and other.hits >= 2 and
                     item.class_name in {"green_supply", "core_black", "injured_orange"} and
@@ -1134,9 +1135,8 @@ def make_vision_snapshot(
                     not target_quality.get(item.track_id) and not target_quality.get(other.track_id)
                 )
                 if known_pair:
-                    # Overlap is not missing evidence when distinct green/core
-                    # boxes are still visible after closure. Count every real
-                    # item; the original audit still rejects mixed/overfull loads.
+                    # Count distinct, identified items. The cargo audit decides
+                    # whether this composition can travel or needs separation.
                     continue
                 capture_observation_valid = False
                 if capture_quality_reason != "claw_target_truncated":
