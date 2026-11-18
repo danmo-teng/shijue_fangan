@@ -39,6 +39,7 @@ from protocol import (
     CMD_CLUSTER_TARGET,
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
+    CMD_KEEP_ORANGE,
     SEPARATION_ORANGE_CORE_82,
     RELEASE_SAME_SIDE_BLUE,
     CMD_REUSE_POST_GRAB_AUDIT,
@@ -2407,6 +2408,8 @@ class CompetitionMission:
         flags = self._side_flags()
         if keep_side is not None:
             flags |= CMD_SIDE_VALID
+            if self.separation_wanted_class == "injured_orange":
+                flags |= CMD_KEEP_ORANGE
         if keep_side == "right":
             flags |= CMD_TARGET_RIGHT
         if near_keep:
@@ -4705,7 +4708,10 @@ class CompetitionMission:
         }[self.invalid_release_side]
         if opcode == CMD_RELEASE_BOTH and self.invalid_release_context == "same_side_blue_abandon":
             return CommandRequest(opcode, self._side_flags(), aux=RELEASE_SAME_SIDE_BLUE)
-        return CommandRequest(opcode, self._side_flags(), aux=(
+        flags = self._side_flags()
+        if opcode != CMD_RELEASE_BOTH and self.separation_wanted_class == "injured_orange":
+            flags |= CMD_KEEP_ORANGE
+        return CommandRequest(opcode, flags, aux=(
             self.invalid_release_lift_cdeg if self.invalid_release_side != "both" else 0))
 
     def _update_delivery_observation(self, vision: VisionSnapshot, now: float) -> None:

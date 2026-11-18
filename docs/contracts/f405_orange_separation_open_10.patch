@@ -1,0 +1,192 @@
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index 29d8cbf..b9c5659 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -721,7 +721,7 @@
+ #define APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG    20U
+ #define APP_CLAW_SEPARATE_THREE_CLOSE_DEG         10U
+ #define APP_CLAW_SEPARATE_SOFT_CLOSE_DEG           5U
+-#define APP_CLAW_SEPARATE_ORANGE_EXTRA_DEG         0U
++#define APP_CLAW_SEPARATE_ORANGE_OPEN_DEG         10U
+ #define APP_CLAW_SEPARATE_STEP_DEG                 4U /* Per 20 ms Task period. */
+ #define APP_CLAW_SEPARATE_SETTLE_MS              260U /* After the final angle command. */
+ #define APP_CARGO_SEPARATE_ARC_BACK_MM_S        300.0f
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index d698c94..0fd42a4 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -149,6 +149,7 @@
+  * backoff/Touch/forward/back/open bump, then return directly to SEARCH. */
+ #define VISION_CMD_FIRST_GREEN_BUMP  0x20U
+ /* DISPERSE P1 bit4: near-claw keep-side evidence, never a cargo count/VALID. */
++#define VISION_CMD_KEEP_ORANGE 0x02U /* Scoped to selective separation opcodes. */
+ #define VISION_CMD_DISPERSE_NEAR_KEEP 0x10U
+ /* Bit 6 is opcode-specific in shijue_fangan's current protocol. */
+ #define VISION_CMD_STAGE_ONLY        0x40U
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 323afad..953c192 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -339,7 +339,7 @@ static void task_capture_budget_sample(void);
+ static bool task_capture_observe(uint32_t now_ms);
+ static void task_begin_capture_escape(uint32_t now_ms);
+ static void task_process_capture_escape(uint32_t now_ms);
+-static bool task_prepare_separation(int8_t keep_side, uint32_t now_ms);
++static bool task_prepare_separation(int8_t keep_side, bool keep_orange, uint32_t now_ms);
+ static uint8_t locked_cargo_counts;
+ static uint8_t configured_color;
+ static bool initialized;
+@@ -3092,7 +3092,7 @@ static void task_process_pre_grab(uint32_t now_ms)
+   }
+ }
+ 
+-static bool task_prepare_separation(int8_t keep_side, uint32_t now_ms)
++static bool task_prepare_separation(int8_t keep_side, bool keep_orange, uint32_t now_ms)
+ {
+   if (!audit_received || !audit_host_stable || audit_consistent_count < APP_AUDIT_REQUIRED_SAMPLES ||
+       now_ms - audit_evidence_ms > APP_AUDIT_EVIDENCE_MAX_GAP_MS) {
+@@ -3129,7 +3129,7 @@ static bool task_prepare_separation(int8_t keep_side, uint32_t now_ms)
+   }
+   const uint8_t keep_count = keep_side > 0 ? left_count : right_count;
+   const uint8_t keep_class = keep_side > 0 ? audit_last_left_class : audit_last_right_class;
+-  if (keep_count == 1U && keep_class == VISION_CARGO_INJURED) {
++  if (keep_orange || (keep_count == 1U && keep_class == VISION_CARGO_INJURED)) {
+     Claw_SetOrangeSeparationHold(close_deg);
+   } else {
+     Claw_SetSeparationHold(close_deg);
+@@ -7590,7 +7590,7 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+     }
+     if (!first_green_bump && (command->flags & VISION_CMD_SIDE_VALID) != 0U &&
+         !task_prepare_separation((command->flags & VISION_CMD_TARGET_RIGHT) ? -1 : 1,
+-                                  now_ms)) {
++                                  (command->flags & VISION_CMD_KEEP_ORANGE) != 0U, now_ms)) {
+       return;
+     }
+     task_status.acknowledged_sequence = command->sequence;
+@@ -7629,7 +7629,7 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+             REMOTE_ACTION_RELEASE_RIGHT : REMOTE_ACTION_RELEASE_BOTH;
+     if (action != REMOTE_ACTION_RELEASE_BOTH &&
+         !task_prepare_separation(action == REMOTE_ACTION_RELEASE_LEFT ? -1 : 1,
+-                                  now_ms)) {
++                                  (command->flags & VISION_CMD_KEEP_ORANGE) != 0U, now_ms)) {
+       return;
+     }
+     task_status.acknowledged_sequence = command->sequence;
+diff --git a/Main/Src/mechanism.c b/Main/Src/mechanism.c
+index 36b5a39..a422df6 100644
+--- a/Main/Src/mechanism.c
++++ b/Main/Src/mechanism.c
+@@ -25,46 +25,42 @@ static uint8_t claw_step;
+ static uint32_t claw_step_ms;
+ static uint32_t claw_wait_ms;
+ static bool claw_done;
+-static uint8_t separation_extra_close_deg;
++static uint8_t separation_left_hold_angle = APP_CLAW_LEFT_TOUCH_ANGLE;
+ 
+ void Claw_RestartAction(void)
+ {
+   claw_action = CLAW_ACTION_NONE;
+ }
+ 
+-static void claw_set_separation_hold(uint8_t extra_close_deg, uint8_t limit_deg)
++static void claw_set_separation_angle(uint8_t left_angle)
+ {
+-  if (extra_close_deg > limit_deg) {
+-    extra_close_deg = limit_deg;
+-  }
+-  if (extra_close_deg != separation_extra_close_deg) {
+-    separation_extra_close_deg = extra_close_deg;
++  if (left_angle != separation_left_hold_angle) {
++    separation_left_hold_angle = left_angle;
+     claw_action = CLAW_ACTION_NONE;
+   }
+ }
+ 
+-void Claw_SetSeparationHold(uint8_t extra_close_deg)
++static uint8_t claw_hold_angle(uint8_t close_deg)
+ {
+-  claw_set_separation_hold(extra_close_deg, APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG);
++  if (close_deg > APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG) {
++    close_deg = APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG;
++  }
++  return APP_CLAW_LEFT_TOUCH_ANGLE - close_deg;
+ }
+ 
+-void Claw_SetOrangeSeparationHold(uint8_t base_close_deg)
++void Claw_SetSeparationHold(uint8_t extra_close_deg)
+ {
+-  if (base_close_deg > APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG) {
+-    base_close_deg = APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG;
+-  }
+-  claw_set_separation_hold(base_close_deg + APP_CLAW_SEPARATE_ORANGE_EXTRA_DEG,
+-      APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG + APP_CLAW_SEPARATE_ORANGE_EXTRA_DEG);
++  claw_set_separation_angle(claw_hold_angle(extra_close_deg));
+ }
+ 
+-static uint8_t claw_relaxed_left(void)
++void Claw_SetOrangeSeparationHold(uint8_t base_close_deg)
+ {
+-  return APP_CLAW_LEFT_TOUCH_ANGLE - separation_extra_close_deg;
++  claw_set_separation_angle(claw_hold_angle(base_close_deg) + APP_CLAW_SEPARATE_ORANGE_OPEN_DEG);
+ }
+ 
+ static uint8_t claw_relaxed_right(void)
+ {
+-  return APP_CLAW_RIGHT_FROM_LEFT(claw_relaxed_left());
++  return APP_CLAW_RIGHT_FROM_LEFT(separation_left_hold_angle);
+ }
+ 
+ static uint32_t servo_pulse_wait_ms(uint16_t from_us, uint16_t to_us)
+@@ -119,7 +115,7 @@ static bool claw_move_together(ClawAction action, uint32_t now_ms,
+ 
+ void Mechanism_Init(void)
+ {
+-  separation_extra_close_deg = 0U;
++  separation_left_hold_angle = APP_CLAW_LEFT_TOUCH_ANGLE;
+   claw_action = CLAW_ACTION_NONE;
+   claw_step = 0U;
+   claw_step_ms = 0U;
+@@ -275,7 +271,7 @@ bool Claw_OpenRight(uint32_t now_ms)
+ {
+   /* Mirror of Claw_OpenLeft: a smaller left-servo angle closes it farther. */
+   return claw_move_separation(CLAW_ACTION_OPEN_RIGHT, now_ms,
+-                              claw_relaxed_left(), APP_CLAW_RIGHT_RELEASE_ANGLE,
++                              separation_left_hold_angle, APP_CLAW_RIGHT_RELEASE_ANGLE,
+                               APP_CLAW_SEPARATE_SETTLE_MS);
+ }
+ 
+@@ -291,7 +287,7 @@ bool Claw_ClusterOpenRight(uint32_t now_ms)
+ {
+   /* Mirror of Claw_ClusterOpenLeft for a retained left-side target. */
+   return claw_move_separation(CLAW_ACTION_CLUSTER_OPEN_RIGHT, now_ms,
+-                              claw_relaxed_left(), APP_CLAW_RIGHT_RELEASE_ANGLE,
++                              separation_left_hold_angle, APP_CLAW_RIGHT_RELEASE_ANGLE,
+                               APP_CLAW_SEPARATE_SETTLE_MS);
+ }
+ 
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index fdb80cf..266595b 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -294,8 +294,10 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+       code == VISION_CMD_RELEASE_RIGHT) {
+     if (arg_a != 0 || arg_b != 0 ||
+         (heading != 0U && heading != VISION_SEPARATION_ORANGE_CORE_82)) goto rejected_payload;
++    if (code == VISION_CMD_DISPERSE_PILE && (flags & VISION_CMD_KEEP_ORANGE) != 0U &&
++        (flags & VISION_CMD_SIDE_VALID) == 0U) goto rejected_payload;
+     if (heading == VISION_SEPARATION_ORANGE_CORE_82) {
+-      uint8_t permitted = VISION_CMD_VALID | VISION_CMD_RED_SIDE;
++      uint8_t permitted = VISION_CMD_VALID | VISION_CMD_RED_SIDE | VISION_CMD_KEEP_ORANGE;
+       if (code == VISION_CMD_DISPERSE_PILE) {
+         permitted |= VISION_CMD_SIDE_VALID | VISION_CMD_TARGET_RIGHT;
+         if ((flags & VISION_CMD_SIDE_VALID) == 0U) goto rejected_payload;
+@@ -303,7 +305,8 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+       if ((flags & (uint8_t)~permitted) != 0U) goto rejected_payload;
+     }
+   }
+-  if (code == VISION_CMD_RELEASE_BOTH && heading == VISION_SEPARATION_ORANGE_CORE_82)
++  if (code == VISION_CMD_RELEASE_BOTH &&
++      ((flags & VISION_CMD_KEEP_ORANGE) != 0U || heading == VISION_SEPARATION_ORANGE_CORE_82))
+     goto rejected_payload;
+   if (code == VISION_CMD_RELEASE_BOTH && heading == VISION_RELEASE_SAME_SIDE_BLUE &&
+       (arg_a != 0 || arg_b != 0 ||

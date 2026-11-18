@@ -16,6 +16,7 @@ from protocol import (  # noqa: E402
     CMD_DISPERSE_PILE,
     CMD_GRAB_CONFIRMED,
     CMD_HOLD,
+    CMD_KEEP_ORANGE,
     CMD_NAVIGATE_WAYPOINT,
     CMD_RELEASE_BOTH,
     CMD_RELEASE_LEFT,
@@ -4147,6 +4148,7 @@ def test_orange_separation_tradeoff_is_symmetric_and_never_certifies_mixture():
             m.cluster_keep_side=keep
             out=m._start_disperse(a,stm(mode=37),1.)
             assert bool(out.command.flags & CMD_TARGET_RIGHT)==(keep=='right')
+            assert bool(out.command.flags & CMD_KEEP_ORANGE) == orange_wins
             expect_82=orange_wins and 'core_black' in left+right
             assert out.command.aux==(SEPARATION_ORANGE_CORE_82 if expect_82 else 0)
             out.command.to_frame(1)
@@ -4183,6 +4185,7 @@ def test_orange_core_lift_request_is_latched_for_repeated_disperse_and_release()
     m.cluster_keep_side='right'
     out=m._start_disperse(a,stm(mode=37),1.)
     assert out.command.aux==SEPARATION_ORANGE_CORE_82
+    assert out.command.flags & CMD_KEEP_ORANGE
     original=out.command
     assert m._disperse_output(VisionSnapshot(),stm(mode=25),1.1).command==original
     m.invalid_release_side='left';m.invalid_release_initial_ack=None
