@@ -1,0 +1,33 @@
+--- a/Boards/F405/Src/board_f405.c
++++ b/Boards/F405/Src/board_f405.c
+@@ -1,4 +1,7 @@
+ #include "main.h"
++#if defined(F405_USB_CAMERA_BENCH) && F405_USB_CAMERA_BENCH
++#include "board_f405.h"
++#endif
+ #include "Robot.h"
+ #include "DebugTelemetry.h"
+ #include "MotionDiag.h"
+@@ -339,7 +342,22 @@
+   board_timers();
+   uart_init(&huart1, USART1);
+   uart_init(&huart3, UART4);
++#if defined(F405_USB_CAMERA_BENCH) && F405_USB_CAMERA_BENCH
++  /* Fixture only. Keep the normal robot task and motor PWM unstarted. */
++  BoardF405_ServoTestSet(3U, 140U);
++  HAL_Delay(10000U);
++  for (unsigned int i = 0U; i < 20U; ++i) {
++    BoardF405_ServoTestSet(3U, 120U);
++    HAL_Delay(1500U);
++    BoardF405_ServoTestSet(3U, 140U);
++    HAL_Delay(1500U);
++  }
++  HAL_Delay(10000U);
++  BoardF405_ServoTestOff(3U);
++  while (1) { __WFI(); }
++#else
+   Robot_Init();
+   BoardF405_ReportVersion();
+   while (1) { Robot_Process(); }
++#endif
+ }
