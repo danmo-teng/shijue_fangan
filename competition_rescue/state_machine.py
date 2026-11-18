@@ -3917,24 +3917,25 @@ class CompetitionMission:
         return (self._legal_separation_side_manifest(audit, side) or
                 self._orange_mixed_side_manifest(audit, side))
 
-    def _priority_core_side(self, audit: CargoAudit) -> str | None:
+    def _orange_core_pair_choice(self, audit: CargoAudit) -> tuple[str, str] | None:
         if (not self.first_common_delivered or not self.selected_batch or self.selected_batch.initial_stash or
                 audit.total_count != 2 or audit.danger_present or audit.unknown_present or
                 Counter(self._manifest_for_audit(audit)) != {"core_black": 1, "injured_orange": 1}):
             return None
         for side in ("left", "right"):
             items = self._separation_side_manifest(audit, side)
-            if "core_black" in items:
-                at_injury_gate = (self.state == CompetitionState.TRANSPORT_AUDIT or self.transport_separation_active)
-                if (at_injury_gate and self.carried_manifest == ("injured_orange",) and
-                        "injured_orange" in items):
-                    return None
-                return side
+            if items == ("injured_orange",):
+                return side, "injured_orange"
+            if "core_black" in items and "injured_orange" in items:
+                at_injury_gate = self.state == CompetitionState.TRANSPORT_AUDIT or self.transport_separation_active
+                keep_orange = at_injury_gate and self.carried_manifest == ("injured_orange",)
+                return side, "injured_orange" if keep_orange else "core_black"
         return None
 
     def _retained_class(self, audit: CargoAudit, side: str) -> str | None:
-        if self._priority_core_side(audit) == side:
-            return "core_black"
+        choice = self._orange_core_pair_choice(audit)
+        if choice is not None and choice[0] == side:
+            return choice[1]
         items = self._separation_side_manifest(audit, side)
         return next((name for name in ("injured_orange", "green_supply", "core_black") if name in items), None)
 
@@ -3951,9 +3952,9 @@ class CompetitionMission:
                 counts.get("core_black", 0) > 0 and counts.get("injured_orange", 0) > 0)
 
     def _post_first_preferred_keep_side(self, audit: CargoAudit) -> str | None:
-        core = self._priority_core_side(audit)
-        if core is not None:
-            return core
+        choice = self._orange_core_pair_choice(audit)
+        if choice is not None:
+            return choice[0]
         candidates = {side: self._legal_separation_side_manifest(audit, side)
                       for side in ("left", "right")}
         candidates = {side: items for side, items in candidates.items() if items}

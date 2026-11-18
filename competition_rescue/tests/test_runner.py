@@ -4115,7 +4115,7 @@ def test_corridor_nudge_only_once_for_single_near_obstacle_then_realign_or_sweep
     for pitch in (11500, 12000):
         for band in bands:
             item = SimpleNamespace(visible=True, center_px=(400, (band["y_min"]+band["y_max"])//2))
-            expected = band["advance_mm"] if band["band"] in {"B3", "B4", "B5"} else None
+            expected = {"B1": None, "B2": 300, "B3": 230, "B4": 100, "B5": 50}[band["band"]]
             assert runner_module.corridor_nudge_distance([item], pitch, calibration) == expected
             assert runner_module.corridor_nudge_distance([item, item], pitch, calibration) is None
     for side, x in (("red", 700), ("blue", 430)):

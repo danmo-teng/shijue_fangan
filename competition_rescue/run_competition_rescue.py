@@ -846,8 +846,10 @@ def corridor_nudge_distance(items, pitch, calibration):
     if distance is None:
         return None
     bands = calibration.data["angles"]["12000"]["bands"]
-    if any(b["band"] in {"B3", "B4", "B5"} and b["y_min"] <= center[1] < b["y_max"] for b in bands):
-        return distance
+    for band in bands:
+        if band["y_min"] <= center[1] < band["y_max"]:
+            # Only the obstacle-clearing stroke uses these overrides.
+            return {"B2": 300, "B3": distance, "B4": distance, "B5": 50}.get(band["band"])
     return None
 
 
