@@ -201,3 +201,43 @@ def test_editor_saves_green_orange_lines_without_changing_roi(tmp_path, selector
     assert GripBands.load(args.grip_bands)==GripBands((320,500),(180,420))
     assert roi_path.read_bytes()==original_roi
     assert frames and camera.stop.call_count==1
+
+
+def test_blue_audit_precedes_depth_with_target_still_in_upper_band():
+    from run_competition_rescue import audit_from_cargo
+    m,view,status=capture_fixture()
+    green=view.cargo[0]
+    blue=replace(green,track_id=8,class_name='danger_cyan')
+    for items,sides in [((blue,),{8:'left'}),((green,blue),{7:'right',8:'left'}),
+                        ((green,blue),{7:'left',8:'left'})]:
+        audit=audit_from_cargo(items,side_by_track=sides)
+        example=replace(view,capture_audit=audit)
+        out=m._audit_output(example,status,1.)
+        assert out.command.opcode==CMD_CARGO_AUDIT
+        assert out.command.audit.total_count==len(items) and out.command.audit.danger_present
+        if len(items)==1:
+            assert out.reason=='capture_single_blue_approach'
+
+
+def test_orange88_b2_requests_remeasure_then_finishes_near():
+    from rescue_vision.localizer import ApproachRangeCalibration
+    m,v,s=capture_fixture('injured_orange')
+    m.first_common_delivered=True
+    m.settings=replace(m.settings,top_edge_range_reobserve_enabled=True)
+    m.state=CompetitionState.APPROACH
+    status=replace(s,mode=52,flags=0,camera_pitch_cdeg=10500,
+                   context_matches=True,accepted_command=CMD_APPROACH_TARGET,action_status=1)
+    calibration=ApproachRangeCalibration.load(ROOT.parent/'vision/config/approach_range.json')
+    def snap(n,box):
+        item=replace(v.cargo[0],bbox=box)
+        with patch.object(runner,'tracked_cargo',return_value=(item,)):
+            return runner.make_vision_snapshot([],[],SimpleNamespace(calibrated=False),None,status,m,n,
+                observed_s=n*.1,range_calibration=calibration)
+    box=(645,177,91,67)
+    for n in (1,2):
+        out=m._range_approach_output(snap(n,box),status,n*.1)
+    assert (out.command.arg_a,out.command.arg_b,out.command.aux)==(500,10500,1)
+    done=replace(status,action_status=3)
+    assert m._range_approach_output(snap(3,box),done,.3).command.opcode==CMD_HOLD
+    near=m._range_approach_output(snap(4,(600,430,80,90)),done,.4)
+    assert (near.command.arg_a,near.command.arg_b,near.command.aux)==(260,10500,0)

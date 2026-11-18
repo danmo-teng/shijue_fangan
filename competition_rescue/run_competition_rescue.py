@@ -1277,6 +1277,7 @@ def make_vision_snapshot(
         corridor_items, corridor_bbox, stm.camera_pitch_cdeg, range_calibration)
     range_distances = []
     range_top_band_ids = []
+    orange_far_reobserve_ids = []
     range_reason = ("range_calibration_missing" if range_calibration is None else
                     "range_status_unavailable" if not stm.fresh else
                     "range_pitch_not_applicable" if stm.camera_pitch_cdeg not in {10500, 12000} else
@@ -1292,6 +1293,11 @@ def make_vision_snapshot(
                     # Reuse the validated distance-table boundary. A nearby tall
                     # object can also touch the top; that alone must not keep driving.
                     bands = range_calibration.data["angles"][str(stm.camera_pitch_cdeg)]["bands"]
+                    if item.class_name == "injured_orange" and stm.camera_pitch_cdeg == 10500 and any(
+                        band.get("band") in {"B1", "B2"} and band["y_min"] <= item.center_px[1] < band["y_max"]
+                        for band in bands
+                    ):
+                        orange_far_reobserve_ids.append(item.track_id)
                     first_band = min(bands, key=lambda band: band["y_min"])
                     if first_band["y_min"] <= item.center_px[1] < first_band["y_max"]:
                         range_top_band_ids.append(item.track_id)
@@ -1307,6 +1313,7 @@ def make_vision_snapshot(
         pre_grab_regions=tuple(grip_regions), pre_grab_configured_classes=grip_configured,
         range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
         range_top_band_ids=tuple(range_top_band_ids),
+        orange_far_reobserve_ids=tuple(orange_far_reobserve_ids),
         range_reason=range_reason,
         roi_decisions=tuple(roi_decisions),
         roi_elapsed_ms=roi_elapsed_ms,

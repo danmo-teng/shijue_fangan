@@ -2769,25 +2769,17 @@ def test_same_side_blue_abandonment_mirrors_and_keeps_real_audit_and_budget():
                     a=replace(audit_from_cargo(items,side_by_track={1:side,2:side}),stable=True)
                     assert m._same_side_blue_mixture(a) and not m._audit_valid(a)
                     out=m._start_danger_release(a,stm(mode=mode),1.)
-                    assert out.command.opcode==CMD_RELEASE_BOTH and out.command.aux==RELEASE_SAME_SIDE_BLUE
-                    assert out.command.arg_a==out.command.arg_b==0 and out.audit==a
-                    assert m.disperse_attempts==0 and m.invalid_release_context=='same_side_blue_abandon'
-                    epoch=m.separation_request_epoch
-                    again=m._invalid_release_output(a,stm(mode=mode),1.1)
-                    assert again.command==out.command and m.separation_request_epoch==epoch
-                    opened_only=replace(stm(mode=34),context_valid=True,context_matches=True,
-                        accepted_command=CMD_RELEASE_BOTH,action_status=3)
-                    not_finished=m.step(VisionSnapshot(frame_sequence=19),pose(),opened_only,1.15)
-                    assert not_finished.state==CompetitionState.INVALID_RELEASE
-                    assert not_finished.command==out.command  # Opening alone is not escape completion.
-                    # Actual mode24 escape owns movement; host only HOLDs until SEARCH.
-                    before=(m.delivery_count,m.orange_search_round,m.search_point_number)
-                    v=VisionSnapshot(frame_sequence=20,capture_audit=a)
-                    recovered=m.step(v,pose(),stm(mode=24),1.2)
-                    assert recovered.command.opcode==CMD_HOLD
-                    searched=m.step(replace(v,frame_sequence=21),pose(),stm(mode=3),3.)
-                    assert searched.state==CompetitionState.SEARCH and m.selected_batch is None
-                    assert (m.delivery_count,m.orange_search_round,m.search_point_number)==before
+                    assert out.command.opcode==CMD_DISPERSE_PILE and m.separation_start_audit==a
+                    assert bool(out.command.flags & CMD_TARGET_RIGHT)==(side=="right")
+                    m._count_separation_acceptance(side)
+                    m._review_separation_result(a)
+                    again=m._start_danger_release(a,stm(mode=mode),2.)
+                    assert again.command.opcode==CMD_DISPERSE_PILE
+                    m._count_separation_acceptance(side)
+                    m._review_separation_result(a)
+                    assert m._separation_limit_reached()
+                    abandoned=m._start_disperse(a,stm(mode=mode),3.)
+                    assert abandoned.command.opcode==CMD_RELEASE_BOTH
     # Even after two earlier attempts, use the explicit reason, never fake the budget.
     m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
     m._select_batch(CargoBatch((1,),('green_supply',),'material'))
@@ -2823,7 +2815,7 @@ def test_same_side_blue_does_not_infer_empty_side_or_change_stash():
     assert not m._same_side_blue_mixture(a)
 
 
-def test_same_side_blue_release_follows_confirmed_audit_not_first_frame():
+def test_same_side_blue_separation_follows_confirmed_audit_not_first_frame():
     from run_competition_rescue import audit_from_cargo
     from protocol import RELEASE_SAME_SIDE_BLUE
     m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
@@ -2843,7 +2835,7 @@ def test_same_side_blue_release_follows_confirmed_audit_not_first_frame():
     accepted=replace(relay_stm(out,mode=21,flags=65,acknowledged_sequence=1,
         relay_mission_tx_frames=1),camera_pitch_cdeg=14000)
     out=m._audit_confirmation_output(v,accepted,1.01)
-    assert out.command.opcode==CMD_RELEASE_BOTH and out.command.aux==RELEASE_SAME_SIDE_BLUE
+    assert out.command.opcode==CMD_DISPERSE_PILE and out.command.flags & CMD_TARGET_RIGHT
 
 
 def test_single_anchor_audits_actual_load_before_grab_and_separates_overload():

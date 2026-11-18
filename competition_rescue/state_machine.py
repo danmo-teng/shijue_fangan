@@ -413,6 +413,7 @@ class VisionSnapshot:
     zone_boxes: tuple = ()
     clipped_zone_candidates: tuple = ()
     capture_explicit_sides: tuple[tuple[int, str], ...] = ()
+    orange_far_reobserve_ids: tuple[int, ...] = ()
 
 
 @dataclass
@@ -2195,10 +2196,11 @@ class CompetitionMission:
         flags = self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
         if self.state == CompetitionState.CLUSTER_APPROACH:
             flags |= CMD_CLUSTER_TARGET
-        finish_mode = (APPROACH_RANGE_REOBSERVE
-                       if (self.settings.top_edge_range_reobserve_enabled and target.bbox[1] <= 0 and
-                           target.track_id in vision.range_top_band_ids)
-                       else 0)
+        clipped_far = target.bbox[1] <= 0 and target.track_id in vision.range_top_band_ids
+        orange_far = (target.class_name == "injured_orange" and self.range_pitch_cdeg == 10500
+                      and target.track_id in vision.orange_far_reobserve_ids)
+        finish_mode = (APPROACH_RANGE_REOBSERVE if self.settings.top_edge_range_reobserve_enabled
+                       and (clipped_far or orange_far) else 0)
         self.range_command = CommandRequest(CMD_APPROACH_TARGET, flags, distance,
                                             self.range_pitch_cdeg, finish_mode,
                                             source_vision_frame=vision.frame_sequence)
@@ -4084,8 +4086,8 @@ class CompetitionMission:
         stm: StmSnapshot,
         now: float,
     ) -> CompetitionOutput:
-        if self._same_side_blue_mixture(audit):
-            return self._start_capture_abandon(audit, stm, now)
+        if self._same_side_blue_mixture(audit) and self._separation_limit_reached():
+            return self._start_capture_abandon(audit, stm, now, limit_reached=True)
         keep = self._preferred_keep_side(audit)
         if keep is not None and stm.mode != STM_MODE_RECOVERY_WAIT and not self._separation_limit_reached():
             self.cluster_keep_side = keep
@@ -4246,6 +4248,11 @@ class CompetitionMission:
                 stm.mode not in {STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT,
                                  STM_MODE_CLUSTER_READY}):
             return None
+        audit = vision.capture_audit
+        if vision.capture_observation_valid and audit is not None and (
+                audit.danger_present or (audit.total_count > 1 and not self._audit_valid(audit)
+                                         and self._preferred_keep_side(audit) is not None)):
+            return None  # Publish real cargo to the existing audit/side-selection path first.
         configured = set(vision.pre_grab_configured_classes)
         if not configured.intersection(self.selected_batch.classes):
             return None
@@ -4385,7 +4392,14 @@ class CompetitionMission:
             audit.left_class in {"", "none"} and audit.right_class in {"", "none"} and
             not (audit.danger_present or audit.unknown_present or audit.injury_mixed)
         )
-        if initial_empty:
+        initial_single_blue = (
+            stm.mode in {STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT}
+            and not stm.gripper_closed and not self.cargo_recheck_pending and not self.disperse_attempts
+            and not self.selected_batch.initial_stash and audit.danger_present and not audit.unknown_present
+            and audit.total_count == audit.left_count + audit.right_count == 1
+            and self._manifest_for_audit(audit) == ("danger_cyan",)
+        )
+        if initial_empty or initial_single_blue:
             stable = replace(stable, stable=(self.audit_hits >= max(2, required_audit_frames) and
                                             self._audit_stability_span_sufficient(observed_s)))
             opening_probe = (self.initial_claw_check_started and
@@ -4394,10 +4408,12 @@ class CompetitionMission:
             return CompetitionOutput(
                 self.state, CommandRequest(CMD_CARGO_AUDIT, CMD_VALID,
                     audit=self._audit_payload(stable), audit_vision_frame=vision.frame_sequence),
-                ("开局静止观察为空，发送真实空爪审核后返回原接近流程" if opening_probe else
+                ("途中仅见单蓝，继续上报真实载荷，由下位按本次行程处理" if initial_single_blue else
+                 "开局静止观察为空，发送真实空爪审核后返回原接近流程" if opening_probe else
                  "初次空爪继续真实审核，F405按原200mm补进额度及4秒决策出口执行"),
                 self.selected_batch, stable,
-                reason="initial_claw_check_empty" if opening_probe else "capture_empty_approach",
+                reason=("capture_single_blue_approach" if initial_single_blue else
+                        "initial_claw_check_empty" if opening_probe else "capture_empty_approach"),
                 tx_policy="audit_stable_publish" if stable.stable else "audit_unstable_publish",
             )
         normal_multi_candidate = (
