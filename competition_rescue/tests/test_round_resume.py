@@ -100,15 +100,15 @@ def test_resume_keeps_sdk_owner_and_new_stop_wins(tmp_path):
     assert panel.control_path.read_text()==before and panel.stopped
 
 
-def test_orange_search_hot_resume_retains_latest_live_angle():
-    m=CompetitionMission(CompetitionSettings(side='red'))
-    m.first_common_delivered=True;m.orange_search_round=2;m.orange_search_turn_deg=125.
-    m.orange_search_turn_deg=250.
-    new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
-    assert new.orange_search_round==2 and new.orange_search_turn_deg==250. and new._orange_only_search()
-    m.orange_search_turn_deg=360.
-    new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
-    assert not new._orange_only_search()
+def test_resume_ignores_obsolete_orange_round_fields():
+    from state_machine import TrackedCargo, VisionSnapshot
+    mission = CompetitionMission(CompetitionSettings(side="red"))
+    mission.first_common_delivered = True
+    saved = dict(match_progress(mission), orange_search_round=1, orange_search_turn_deg=0)
+    resumed = CompetitionMission(mission.settings)
+    restore_progress(resumed, saved)
+    black = TrackedCargo(17, "core_black", .9, (510, 480, 80, 80), hits=3)
+    assert resumed._choose_search_target(VisionSnapshot(cargo=(black,))) == black
 
 
 def test_button_tones_and_prestart_stop_new_round(tmp_path):

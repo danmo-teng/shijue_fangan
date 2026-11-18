@@ -2942,9 +2942,6 @@ class CompetitionPlanner:
             "search_points": {str(n): self.mission.settings.search_point(n) for n in (1, 3)},
             "search_visit": self.mission.search_visit,
             "search_site_turn_deg": self.mission.search_site_turn_deg,
-            "orange_search_round": self.mission.orange_search_round,
-            "orange_search_turn_deg": self.mission.orange_search_turn_deg,
-            "orange_only_search": self.mission._orange_only_search(),
             "failed_search_targets": [asdict(r) for r in self.mission.failed_search_targets],
             "safe_sweep_observation": {
                 "key": self.sweep_observation_key,

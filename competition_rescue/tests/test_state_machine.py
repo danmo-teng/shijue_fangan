@@ -1988,12 +1988,12 @@ def test_post_first_sorting_prefers_legal_more_green_over_visual_singleton() -> 
     mixed = CargoAudit(left_class="injured_orange", right_class="green_supply",
                        left_count=1, right_count=2, right_green_count=2,
                        total_count=3, injury_mixed=True, right_stable_track_id=20)
-    assert m._preferred_keep_side(mixed) == "left"
-    assert m._audit_payload(mixed).destination_injury
+    assert m._preferred_keep_side(mixed) == "right"
+    assert not m._audit_payload(mixed).destination_injury
     generation = m.task_generation
     m._prefer_green_batch(mixed)
-    assert m.selected_batch.destination == "injury"
-    assert m.selected_batch.classes == ("injured_orange",)
+    assert m.selected_batch.destination == "material"
+    assert m.selected_batch.classes == ("green_supply",)
     assert m.task_generation == generation  # No new task/handshake to change sorting priority.
     m.first_common_delivered = False
     assert not m._audit_valid(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
@@ -2930,7 +2930,7 @@ def test_blue_separation_after_closed_and_transport_audit_keeps_original_handoff
             assert m.transport_audit_command is None and m.transport_audit_value is None
 
 
-def test_first_green_prefers_near_pile_and_post_first_prefers_orange():
+def test_first_green_prefers_near_pile_and_post_first_can_choose_a_nearer_orange():
     near = TrackedCargo(1, "green_supply", .9, (600, 650, 100, 100), hits=5)
     neighbour = TrackedCargo(2, "core_black", .9, (710, 650, 100, 100), hits=5)
     far = TrackedCargo(3, "green_supply", .9, (100, 100, 180, 180), hits=5)
@@ -2954,7 +2954,7 @@ def test_first_green_prefers_near_pile_and_post_first_prefers_orange():
     assert m._choose_next_batch(replace(view, cargo=(far, neighbour, casualty))).classes == ("injured_orange",)
 
 
-def test_nearest_helper_distance_sources_and_post_first_orange_priority():
+def test_nearest_helper_distance_sources_and_post_first_nearest_legal():
     from itertools import permutations
 
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
@@ -2967,25 +2967,35 @@ def test_nearest_helper_distance_sources_and_post_first_orange_priority():
         # No ground coordinates: use one common pixel source, not box size/color.
         view = VisionSnapshot(cargo=(far, middle, near))
         assert m._choose_nearest_cargo(view, view.cargo) == near
-        orange = next(item for item in view.cargo if item.class_name == "injured_orange")
-        assert m._choose_next_batch(view).track_ids == (orange.track_id,)
+        assert m._choose_next_batch(view).track_ids == (near.track_id,)
         # Existing calibrated bands override pixel order for all classes.
         bands = replace(view, range_pitch_cdeg=12000,
                         range_distances=((1, 460), (2, 230), (3, 100)))
         assert m._choose_nearest_cargo(bands, bands.cargo) == far
-        assert m._choose_next_batch(bands).track_ids == (orange.track_id,)
+        assert m._choose_next_batch(bands).track_ids == (far.track_id,)
         # Ground coordinates, when available for every candidate, come first.
         ground = replace(bands, cargo=tuple(
             replace(item, relative_xy_m=(distance, 0))
             for item, distance in ((near, .6), (middle, .2), (far, 1.))
         ))
         assert m._choose_nearest_cargo(ground, ground.cargo).track_id == middle.track_id
-        assert m._choose_next_batch(ground).track_ids == (orange.track_id,)
+        assert m._choose_next_batch(ground).track_ids == (middle.track_id,)
     # Exactly tied appearance stays deterministic; class and input order do not win.
     tied = tuple(cargo(i, name, 500, 500) for i, name in enumerate(names, 1))
     for order in permutations(tied):
         assert m._choose_nearest_cargo(VisionSnapshot(cargo=order), order).track_id == 1
-        assert m._choose_next_batch(VisionSnapshot(cargo=order)).classes == ("injured_orange",)
+        assert m._choose_next_batch(VisionSnapshot(cargo=order)).track_ids == (1,)
+
+
+def test_clipped_safe_zone_recheck_chooses_nearer_candidate_after_first_green():
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = True
+    near = replace(cargo(1, "core_black", 500, 700), inside_safe_zone=True)
+    far = replace(cargo(2, "injured_orange", 500, 100), inside_safe_zone=True)
+    view = VisionSnapshot(frame_sequence=1, cargo=(far, near), range_pitch_cdeg=12000,
+                          clipped_zone_candidates=((2, "safe_red"), (1, "safe_red")))
+    out = m._start_zone_observation(view, replace(stm(mode=3), camera_pitch_cdeg=12000), 1.)
+    assert out.state == CompetitionState.SEARCH_ZONE_VIEW and m.selected_batch.track_ids == (1,)
 
 
 def test_search_selects_nearest_before_choosing_single_or_pile_path():
@@ -3012,7 +3022,7 @@ def test_search_selects_nearest_before_choosing_single_or_pile_path():
             assert resolver(changed).track_id == near.track_id
 
 
-def test_post_first_orange_preference_preserves_eligibility_and_material_fallback():
+def test_post_first_nearest_preserves_eligibility_lock_and_actual_cargo():
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     start_search(m)
     m.first_common_delivered = True
@@ -3028,9 +3038,9 @@ def test_post_first_orange_preference_preserves_eligibility_and_material_fallbac
     view = VisionSnapshot(frame_sequence=1, cargo=(green, black, orange_far, orange_near, *invalid))
     out = m.step(view, pose(), stm(), .1)
     assert out.state == CompetitionState.APPROACH
-    assert m.selected_batch.track_ids == (orange_near.track_id,)
+    assert m.selected_batch.track_ids == (green.track_id,)
     # No continuous reranking when a closer orange appears after locking.
-    assert m._target_for_batch(replace(view, cargo=(*view.cargo, cargo(8, "injured_orange", 700, 950)))) == orange_near
+    assert m._target_for_batch(replace(view, cargo=(*view.cargo, cargo(8, "injured_orange", 700, 950)))) == green
     assert m._choose_next_batch(replace(view, cargo=(green, black, *invalid))).track_ids == (green.track_id,)
     # New selection keeps the real cargo check; materials now allow three.
     assert m._audit_valid(CargoAudit(left_class="injured_orange", left_count=1, total_count=1))
@@ -4060,67 +4070,7 @@ def test_post_first_separation_prioritizes_no_blue_legal_side_and_tracks_orange_
     assert m._audit_valid(audit(['green_supply'],['green_supply']*2))
 
 
-def test_first_three_post_green_rounds_scan_orange_then_allow_materials():
-    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
-    start_search(m)
-    green=cargo(1,'green_supply',400,500);black=cargo(2,'core_black',850,500)
-    orange=cargo(3,'injured_orange',650,650)
-    v=VisionSnapshot(frame_sequence=10,cargo=(green,black))
-    # First green selection is unchanged before any delivery.
-    assert m._choose_initial_green(VisionSnapshot(cargo=(green,)))==green
-    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
-    m._latch_carried_manifest(CargoAudit(left_class='green_supply',left_count=1,total_count=1))
-    def finish(t):return m._finish_delivery(stm(mode=16),t,basis='test_existing_exit',message='',event='')
-    finish(1.)
-    for expected_round in (1,2,3):
-        assert m.orange_search_round==expected_round and m._orange_only_search()
-        assert m._choose_search_target(v) is None
-        assert m._choose_cluster_target(v) is None
-        assert m._choose_search_target(replace(v,cargo=(green,black,orange)))==orange
-        assert m._choose_search_target(replace(v,cargo=(green,replace(orange,inside_safe_zone=True)))) is None
-        m._set_state(CompetitionState.SEARCH,2.)
-        for yaw in [0.,90.,180.,270.]:m._update_search_scan_progress(replace(pose(),yaw_deg=yaw))
-        assert m.orange_search_turn_deg==270 and m._choose_search_target(v) is None
-        # Target alignment / failure is not part of the scan; resume preserves270.
-        m._set_state(CompetitionState.APPROACH,3.)
-        m._set_state(CompetitionState.SEARCH,4.)
-        m._update_search_scan_progress(replace(pose(),yaw_deg=45.))
-        assert m.orange_search_turn_deg==270
-        m._update_search_scan_progress(replace(pose(),yaw_deg=135.))
-        assert m.orange_search_turn_deg==360 and not m._orange_only_search()
-        assert m._choose_search_target(v) in (green,black)
-        assert m._choose_search_target(replace(v,cargo=(green,black,orange)))==orange
-        # Station visits do not consume or restart a round.
-        m._complete_return_search(v,5.,'',point_number=3)
-        assert m.orange_search_turn_deg==360 and m.orange_search_round==expected_round
-        m._select_batch(CargoBatch((3,),('injured_orange',),'injury'))
-        m._latch_carried_manifest(CargoAudit(left_class='injured_orange',left_count=1,total_count=1))
-        m.delivery_counted_for_batch=False
-        finish(6.)
-        after=m.orange_search_round
-        finish(6.1)  # Duplicate completion cannot count another search round.
-        assert m.orange_search_round==after
-    assert m.orange_search_round==4 and not m._orange_only_search()
-    assert m._choose_search_target(v) in (green,black)
-
-
-def test_orange_only_search_keeps_whole_claw_evidence_and_locks_once():
-    m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
-    start_search(m);m.first_common_delivered=True;m.orange_search_round=1
-    green=cargo(1,'green_supply',500,450);black=cargo(2,'core_black',570,450)
-    view=VisionSnapshot(frame_sequence=1,cargo=(green,black))
-    out=m._handle_search(view,pose(),stm(),1.)
-    assert m.selected_batch is None and out.reason=='orange_first_search_scan'
-    orange=cargo(3,'injured_orange',1100,800)
-    out=m._handle_search(replace(view,frame_sequence=2,cargo=(green,black,orange)),pose(),stm(),1.1)
-    assert m.selected_batch.track_ids==(3,) and m.state==CompetitionState.APPROACH
-    another=cargo(4,'injured_orange',1100,900)
-    assert m._target_for_batch(replace(view,cargo=(orange,another)))==orange
-    # Selection-only policy never changes the actual audited material permission.
-    assert m._audit_valid(CargoAudit(left_class='core_black',left_count=1,total_count=1))
-
-
-def test_orange_separation_tradeoff_is_symmetric_and_never_certifies_mixture():
+def test_legal_side_then_more_green_with_mirrored_claws_and_orange_mechanics():
     from itertools import product
     from run_competition_rescue import audit_from_cargo
     from protocol import CMD_TARGET_RIGHT,SEPARATION_ORANGE_CORE_82
@@ -4130,13 +4080,15 @@ def test_orange_separation_tradeoff_is_symmetric_and_never_certifies_mixture():
     cases=[]
     for n in (1,2,3):
         for materials in product(('green_supply','core_black'),repeat=n):
-            cases.append((['injured_orange'],list(materials),True))
+            cases.append((['injured_orange'],list(materials)))
             for mixed in [['injured_orange','core_black'],['injured_orange','green_supply']]:
-                cases.append((mixed,list(materials),n==1))
-    for left,right,orange_wins in cases:
+                cases.append((mixed,list(materials)))
+    for left,right in cases:
         for mirror in (False,True):
             a=audited(right,left) if mirror else audited(left,right)
             orange_side='right' if mirror else 'left'
+            # Single orange ties pure black on green count; absent a prior side, left wins.
+            orange_wins = len(left)==1 and 'green_supply' not in right and orange_side=='left'
             keep=orange_side if orange_wins else ('left' if mirror else 'right')
             m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
             m.first_common_delivered=True
@@ -4162,6 +4114,15 @@ def test_orange_separation_tradeoff_is_symmetric_and_never_certifies_mixture():
                 assert m.separation_progress_attempt==1 and m._audit_valid(remaining)
                 m._latch_carried_manifest(remaining)
                 assert m.carried_manifest==('injured_orange',)
+    split = audited(["injured_orange"], ["core_black"])
+    m.cluster_keep_side = "right"
+    assert m._preferred_keep_side(split) == "right"
+    m.cluster_keep_side = None
+    m.separation_keep_side = "left"
+    assert m._preferred_keep_side(split) == "left"
+    m._select_batch(CargoBatch((2,), ("core_black",), "material"))
+    mixed_only = audited(["injured_orange", "core_black"], [])
+    assert m._preferred_keep_side(mixed_only) == "left" and m._audit_payload(mixed_only).destination_injury
     # Blue-bearing/uncertain sides never gain the special orange mixture priority.
     m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False));m.first_common_delivered=True
     m._select_batch(CargoBatch((1,),('injured_orange',),'injury'))
@@ -4245,6 +4206,7 @@ def test_post_grab_orange_core_filters_at_pickup_then_reaudits_once():
                 image = replace(view, frame_sequence=start_frame+offset, observed_monotonic_s=now)
                 out = m.step(image, current, status, now)
             assert out.command.opcode == CMD_CARGO_AUDIT and out.command.audit.stable
+            assert out.command.audit.destination_injury == (not m.orange_gate_filter_attempted or black_side=="right")
             ack = replace(relay_stm(out, mode=23, flags=67), camera_pitch_cdeg=14000,
                           context_valid=True, context_matches=True,
                           accepted_command=CMD_CARGO_AUDIT, action_status=1)
@@ -4260,7 +4222,9 @@ def test_post_grab_orange_core_filters_at_pickup_then_reaudits_once():
         image = replace(view, frame_sequence=10, observed_monotonic_s=2.)
         assert m.step(image, current, replace(done, mode=48), 2.).command == out.command
         assert m.step(image, current, done, 2.).state == CompetitionState.POST_GRAB_AUDIT
-        assert review(10, 2.).command.opcode == CMD_DISPERSE_PILE
+        after = review(10, 2.)
+        assert after.command.opcode == CMD_DISPERSE_PILE
+        assert bool(after.command.flags & CMD_KEEP_ORANGE) == (black_side == "right")
 
 
 def test_orange_gate_filter_symmetric_once_and_real_reaudit():
@@ -4290,7 +4254,10 @@ def test_orange_gate_filter_symmetric_once_and_real_reaudit():
                 assert m.orange_gate_filter_attempted
                 # Still black: original separation, never repeat the lateral move.
                 out = _orange_gate_confirm_review(m, view, current, status, 9, 3.)
-                assert out.command.opcode == CMD_DISPERSE_PILE and out.command.aux == 8200
+                keep_orange = same_side or black_side == "right"
+                assert out.command.opcode == CMD_DISPERSE_PILE
+                assert bool(out.command.flags & CMD_KEEP_ORANGE) == keep_orange
+                assert out.command.aux == (8200 if keep_orange else 0)
                 assert m.orange_gate_filter_attempted
                 # A real single-orange review takes the normal alignment path.
                 from run_competition_rescue import audit_from_cargo

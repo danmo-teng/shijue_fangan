@@ -884,8 +884,6 @@ class CompetitionMission:
         self.search_visit = 0
         self.search_site_turn_deg = 0.0
         self.search_scan_direction = 1
-        self.orange_search_round = 0  # 0 before first green; 1..3 orange-first rounds; 4 done.
-        self.orange_search_turn_deg = 0.0
         self.failed_search_targets: deque[FailedSearchTarget] = deque(maxlen=16)
         self.search_observer: tuple[float, float, float, int] | None = None
         self.target_last_observer: tuple[float, float, float, int] | None = None
@@ -1626,8 +1624,6 @@ class CompetitionMission:
             increment = abs(angle_error_deg(pose.yaw_deg, self.search_last_yaw_deg))
             self.search_yaw_accum_deg += increment
             self.search_site_turn_deg += increment
-            if self._orange_only_search():
-                self.orange_search_turn_deg = min(360.0, self.orange_search_turn_deg + increment)
         self.search_last_yaw_deg = pose.yaw_deg
 
     def _remember_failed_search_target(self) -> None:
@@ -1734,12 +1730,23 @@ class CompetitionMission:
                             (self.state == CompetitionState.CLEAR_SAFE_ZONE and
                              self.safe_sweep_pickup is not None and
                              self.safe_sweep_pickup.recovering_original))
-        return audit.to_protocol(
-            initial_stash=self.selected_batch.initial_stash,
-            destination=(self._sweep_original_destination() if recovering_sweep
-                         else self._audit_destination(audit)),
-            audit_id=self.audit_id,
-        )
+        destination = self._sweep_original_destination() if recovering_sweep else self._audit_destination(audit)
+        if not recovering_sweep and destination == "material" and audit.injury_mixed:
+            # An indivisible orange mixture may still be the only side worth trying.
+            keep = self._preferred_keep_side(audit)
+            if keep is not None and self._orange_mixed_side_manifest(audit, keep):
+                destination = "injury"
+        return audit.to_protocol(initial_stash=self.selected_batch.initial_stash,
+                                 destination=destination, audit_id=self.audit_id)
+
+    def _capture_audit_payload(
+        self, audit: CargoAudit, vision: VisionSnapshot, stm: StmSnapshot,
+    ) -> CargoAuditPayload:
+        payload = self._audit_payload(audit)
+        if self._pickup_filter_side(audit, vision, stm) is not None:
+            # The first closed-claw orange/core review intends to keep orange.
+            return replace(payload, destination_injury=True)
+        return payload
 
     def _sweep_original_destination(self) -> str:
         return (self.confirmed_delivery_destination or
@@ -1969,10 +1976,6 @@ class CompetitionMission:
                  and item.class_name in MATERIAL_CLASSES | {"injured_orange"}]
         if not self.first_common_delivered:
             items = [i for i in items if i.class_name == "green_supply"]
-        else:
-            oranges = [i for i in items if i.class_name == "injured_orange"]
-            if oranges or self._orange_only_search():
-                items = oranges
         target = self._choose_nearest_cargo(vision, items)
         if target is None:
             return None
@@ -3028,7 +3031,7 @@ class CompetitionMission:
         self.pending_audit_final = final_release
         self.pending_audit_release_context = release_context
         self.pending_audit_signature = self._audit_signature_for_state(
-            audit, valid
+            audit, valid, payload
         )
         self.pending_audit_hits = self.audit_hits
         self.pending_audit_frame_sequence = self.audit_last_frame_sequence
@@ -3143,7 +3146,8 @@ class CompetitionMission:
                   self.pending_audit.left_class_counts, self.pending_audit.right_class_counts)) or
                 (vision.capture_audit is not None and
                  self._audit_signature_for_state(
-                     vision.capture_audit, self._audit_valid(vision.capture_audit)
+                     vision.capture_audit, self._audit_valid(vision.capture_audit),
+                     self._capture_audit_payload(vision.capture_audit, vision, stm)
                  ) != self.pending_audit_signature)
             ) and
             self._audit_vision_fresh(vision, now) and
@@ -3176,13 +3180,8 @@ class CompetitionMission:
             self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
         pickup_black_side = None
-        if (self.pending_audit_release_context == "post_grab_invalid" and
-                stm.mode == STM_MODE_POST_GRAB_AUDIT and stm.gripper_closed and
-                self.first_common_delivered and self.selected_batch is not None and
-                not self.selected_batch.initial_stash and not self.safe_sweep_reaudit_active and
-                not self.orange_gate_filter_attempted and self.pending_audit.total_count == 2 and
-                any(item.visible and item.class_name == "injured_orange" for item in vision.capture_cargo)):
-            pickup_black_side = self._mixed_orange_black_side(self.pending_audit, vision)
+        if self.pending_audit_release_context == "post_grab_invalid":
+            pickup_black_side = self._pickup_filter_side(self.pending_audit, vision, stm)
         if (pickup_black_side is None and self._separation_limit_reached() and
                 not self._orange_separation_rechecked_empty() and
                 not self.pending_audit_valid and stm.fresh and
@@ -3714,25 +3713,13 @@ class CompetitionMission:
         # needs separation, rather than skipping it for a distant singleton.
         return target if target is not None and self._is_isolated(target, self._visible_cargo(vision)) else None
 
-    def _orange_only_search(self) -> bool:
-        return (self.first_common_delivered and 1 <= self.orange_search_round <= 3 and
-                self.orange_search_turn_deg < 360.0)
-
     def _choose_search_target(self, vision: VisionSnapshot) -> TrackedCargo | None:
-        candidates = tuple(
+        # Post-first selection: compare every legal destination together before
+        # deciding whether the selected target needs the existing pile path.
+        return self._choose_nearest_cargo(vision, (
             item for item in self._visible_cargo(vision)
             if item.class_name in MATERIAL_CLASSES | {"injured_orange"} and item.hits >= 2
-        )
-        # Only rank a new search choice. A locked approach and the actual
-        # post-grab load remain independent of this preference. Selecting an
-        # orange does not certify a single-orange load; the original audit does.
-        if self.first_common_delivered:
-            orange = tuple(item for item in candidates if item.class_name == "injured_orange")
-            if orange:
-                candidates = orange
-            elif self._orange_only_search():
-                return None
-        return self._choose_nearest_cargo(vision, candidates)
+        ))
 
     def _choose_next_batch(self, vision: VisionSnapshot) -> CargoBatch | None:
         target = self._choose_search_target(vision)
@@ -3939,18 +3926,7 @@ class CompetitionMission:
         candidates = {side: self._legal_separation_side_manifest(audit, side)
                       for side in ("left", "right")}
         candidates = {side: items for side, items in candidates.items() if items}
-        mixed = {side: self._orange_mixed_side_manifest(audit, side) for side in ("left", "right")}
-        mixed = {side: items for side, items in mixed.items() if items}
-        orange = {side: items for side, items in candidates.items() if items == ("injured_orange",)}
-        if orange:
-            candidates = orange
-        elif mixed:
-            groups = {side: items for side, items in candidates.items() if len(items) >= 2}
-            candidates = groups or mixed
-            if not groups:
-                locked = self.cluster_keep_side or self.separation_keep_side
-                return locked if locked in candidates else next(iter(candidates))
-        elif not candidates:
+        if not candidates:
             return None
         most_green = max(items.count("green_supply") for items in candidates.values())
         choices = [side for side, items in candidates.items() if items.count("green_supply") == most_green]
@@ -4410,7 +4386,7 @@ class CompetitionMission:
         )
         if new_frame:
             audit_signature = self._audit_signature_for_state(
-                audit, audit_valid
+                audit, audit_valid, self._capture_audit_payload(audit, vision, stm) if not audit_valid else None
             )
             self._record_audit_frame(
                 audit_signature, vision.frame_sequence, observed_s
@@ -4534,7 +4510,7 @@ class CompetitionMission:
                 )
             self.cluster_keep_side = keep_side
             self.cluster_keep_side_count = keep_count
-        payload = self._audit_payload(stable)
+        payload = self._capture_audit_payload(stable, vision, stm)
         if stable.stable and audit_valid:
             if (self.selected_batch.initial_stash and
                     not self.selected_batch.track_ids and self.initial_claw_check_started):
@@ -5557,8 +5533,6 @@ class CompetitionMission:
         self, stm: StmSnapshot, now: float, *, basis: str, message: str, event: str
     ) -> CompetitionOutput:
         batch = self.selected_batch
-        first_green_before = self.first_common_delivered
-        new_delivery = not self.delivery_counted_for_batch
         if self.obstacle_route is not None and self.obstacle_route.awaiting_obstacle_delivery:
             self.obstacle_route.recover_after_delivery = True
         self.delivery_completion_basis = basis
@@ -5573,10 +5547,6 @@ class CompetitionMission:
             (batch is not None and "green_supply" in batch.classes)
         ):
             self.first_common_delivered = True
-        if new_delivery and self.first_common_delivered:
-            self.orange_search_round = (1 if not first_green_before else
-                                        min(4, self.orange_search_round + 1))
-            self.orange_search_turn_deg = 0.0
         return CompetitionOutput(
             self.state,
             CommandRequest(CMD_TASK_COMPLETE, self._side_flags()),
@@ -6246,8 +6216,7 @@ class CompetitionMission:
                 item for item in candidates if item.class_name == "green_supply"
             ]
         else:
-            # Use the same choice as SEARCH; an unrelated pile must not
-            # override the selected orange or the nearest material fallback.
+            # Use the same nearest legal target for both single and pile approaches.
             target = self._choose_search_target(vision)
             return target if target in candidates else None
         return self._choose_nearest_cargo(vision, candidates)
@@ -6895,8 +6864,17 @@ class CompetitionMission:
             return None
         return self._mixed_orange_black_side(audit, vision)
 
+    def _pickup_filter_side(self, audit: CargoAudit, vision: VisionSnapshot, stm: StmSnapshot) -> str | None:
+        if (not self.post_grab_audit_active or stm.mode != STM_MODE_POST_GRAB_AUDIT or
+                not stm.gripper_closed or not self.first_common_delivered or self.selected_batch is None or
+                self.selected_batch.initial_stash or self.safe_sweep_reaudit_active or
+                self.orange_gate_filter_attempted or audit.total_count != 2 or
+                not any(i.visible and i.class_name == "injured_orange" for i in vision.capture_cargo)):
+            return None
+        return self._mixed_orange_black_side(audit, vision)
+
     def _mixed_orange_black_side(self, audit: CargoAudit, vision: VisionSnapshot) -> str | None:
-        if not audit.stable or audit.danger_present or audit.unknown_present:
+        if audit.danger_present or audit.unknown_present:
             return None
         counts = Counter(dict(audit.class_counts))
         if (set(counts) != {"injured_orange", "core_black"} or
@@ -7479,11 +7457,6 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
             return self._begin_search_transfer(vision, pose, stm, now, empty_scan=True)
-        if self._orange_only_search():
-            return CompetitionOutput(self.state, self._hold(),
-                f"首绿后第{self.orange_search_round}/3轮优先找橙：已搜索"
-                f"{self.orange_search_turn_deg:.0f}/360°，暂不锁绿黑",
-                reason="orange_first_search_scan", tx_policy="hold")
         reject_reasons: list[str] = []
         if deferred_failure:
             reject_reasons.append("FAILED_TARGET_THIS_VISIT")
