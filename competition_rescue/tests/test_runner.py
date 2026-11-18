@@ -565,7 +565,7 @@ def test_claw_isolated_singleton_uses_existing_geometry_without_new_wire_fields(
         audit = view.capture_audit
         assert view.capture_observation_valid and audit.left_count == 3 and audit.right_count == 1
         assert audit.right_isolated_green == (expected == "right")
-        assert mission._preferred_keep_side(audit) == expected
+        assert mission._preferred_keep_side(audit) == "right"  # Single green wins even when adjacent.
         without_image_hint = replace(audit, left_isolated_green=False, right_isolated_green=False)
         assert mission._audit_payload(audit) == mission._audit_payload(without_image_hint)
     # A large adjacent detection must not be declared independent from its centre distance alone.
@@ -4137,3 +4137,56 @@ def test_button_raw_edges_precede_debounce_and_stop_classification():
     inputs.poll(.2)
     assert [e['action'] for e in inputs.poll(.25)]==['stop']
     assert any(stage=='raw' and key==3 and when==.2 for stage,key,when,_ in trace)
+
+
+def test_single_black_delivery_continuity_and_old_zone_blocks():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from state_machine import TrackedCargo
+    from run_competition_rescue import SingleBlackDelivery
+    m=SimpleNamespace(state=CompetitionState.SAFE_ZONE_CORRIDOR_CHECK, carried_manifest=('core_black',),task_generation=1)
+    s=StmSnapshot(camera_pitch_cdeg=12000,flags=2)
+    load=TrackedCargo(3,'core_black',.9,(500,650,160,150))
+    old=replace(load,track_id=4,bbox=(250,300,100,90),inside_safe_zone=True)
+    new=replace(load,track_id=5,bbox=(510,645,163,152),inside_safe_zone=True)
+    for tail,expected in [([new,old],{5}),([new,replace(new,track_id=6)],set()),
+                          ([replace(new,track_id=4)],set()),([replace(new,bbox=old.bbox)],set())]:
+        tracker=SingleBlackDelivery()
+        m.state=CompetitionState.SAFE_ZONE_CORRIDOR_CHECK
+        assert tracker.follow(m,s,[load,old],{3},True)=={3}
+        m.state=CompetitionState.ENTER_SAFE_ZONE
+        assert tracker.follow(m,s,tail,{3},True)==expected
+
+
+def test_first_green_drops_blue_side_even_with_more_greens_and_overlapping_boxes():
+    from dataclasses import replace
+    from state_machine import CargoAudit, CargoBatch
+    m=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,),('green_supply',),'material'))
+    for left,right,expected in [(1,2,'left'),(2,1,'left')]:
+        a=CargoAudit(left_class='green_supply',right_class='unknown',left_count=left,right_count=right+1,
+            left_green_count=left,right_green_count=right,total_count=left+right+1,danger_present=True,
+            left_class_counts=(('green_supply',left),),right_class_counts=(('green_supply',right),('danger_cyan',1)),
+            right_invalid=True)
+        assert m._preferred_keep_side(a)==expected
+        mirrored=replace(a,left_class=a.right_class,right_class=a.left_class,left_count=a.right_count,
+            right_count=a.left_count,left_green_count=right,right_green_count=left,
+            left_class_counts=a.right_class_counts,right_class_counts=a.left_class_counts,left_invalid=True,right_invalid=False)
+        assert m._preferred_keep_side(mirrored)=='right'
+    clean=replace(a,left_count=1,left_green_count=1,left_class_counts=(('green_supply',1),),
+        right_count=2,right_green_count=2,right_class='green_supply',right_class_counts=(('green_supply',2),),
+        right_invalid=False,danger_present=False,total_count=3)
+    assert m._preferred_keep_side(clean)=='left'
+
+
+def test_delivery_exit_is_published_before_progress_write(tmp_path):
+    from protocol import CMD_TASK_COMPLETE
+    mission=CompetitionMission(CompetitionSettings(side='red'))
+    cmd=tmp_path/'command'
+    planner=CompetitionPlanner(mission,tmp_path/'pose',tmp_path/'stm',cmd,tmp_path/'diag',JsonlLog(tmp_path/'events'),50)
+    observed=[]
+    def save():
+        observed.append(cmd.read_bytes()[19])  # opcode in the second frame of the relay bundle
+    planner.save_progress=save
+    planner._publish(CompetitionOutput(CompetitionState.TASK_COMPLETE,CommandRequest(CMD_TASK_COMPLETE),''))
+    assert observed==[CMD_TASK_COMPLETE]

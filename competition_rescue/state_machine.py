@@ -4003,6 +4003,22 @@ class CompetitionMission:
             return None
         left_green = self._side_green_count(audit, "left")
         right_green = self._side_green_count(audit, "right")
+        if not self.first_common_delivered and self.selected_batch and not self.selected_batch.initial_stash:
+            # The opening delivery needs one green. Prefer dropping the whole blue side.
+            left = dict(audit.left_class_counts)
+            right = dict(audit.right_class_counts)
+            left_blue = left.get("danger_cyan", 0) > 0 or audit.left_class == "danger_cyan"
+            right_blue = right.get("danger_cyan", 0) > 0 or audit.right_class == "danger_cyan"
+            if left_blue != right_blue:
+                if left_blue and right_green and not audit.right_invalid:
+                    return "right"
+                if right_blue and left_green and not audit.left_invalid:
+                    return "left"
+            if not (left_blue or right_blue):
+                left_one = audit.left_count == left_green == 1 and not audit.left_invalid
+                right_one = audit.right_count == right_green == 1 and not audit.right_invalid
+                if left_one != right_one:
+                    return "left" if left_one else "right"
         left_single = audit.left_isolated_green and audit.left_count == left_green == 1
         right_single = audit.right_isolated_green and audit.right_count == right_green == 1
         if left_single != right_single:

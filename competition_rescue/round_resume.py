@@ -41,12 +41,12 @@ class ProgressStore:
         if milestone == self.last:
             return
         # Only milestone changes write; not one disk operation per camera frame.
-        self.last = milestone
         value = dict(version=1, session_token=self.session, side=mission.settings.side,
                      start_zone=mission.settings.start_zone, progress=progress)
         temporary = self.path.with_suffix('.tmp')
         temporary.write_text(json.dumps(value, ensure_ascii=False)+'\n')
         temporary.replace(self.path)
+        self.last = milestone
 
 
 def resume_config_frame(sequence, side, zone, progress):

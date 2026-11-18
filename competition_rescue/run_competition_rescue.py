@@ -66,6 +66,7 @@ from protocol import (  # noqa: E402
     CMD_ABORT,
     CMD_ALIGN_SAFE_ZONE,
     CMD_ENTER_SAFE_ZONE,
+    CMD_TASK_COMPLETE,
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
@@ -646,6 +647,56 @@ def carried_boxes_shape_compatible(old_boxes, new_boxes, *, same_view=False) -> 
     return all(match(index, set()) for index in range(len(new_boxes)))
 
 
+class SingleBlackDelivery:
+    """Follow one audited black across the mouth of the zone within one camera view."""
+    def __init__(self):
+        self.owner = None
+        self.carried_id = None
+        self.box = None
+        self.zone_ids = set()
+        self.others = {}
+
+    def follow(self, mission, stm, cargo, known, zone_visible):
+        preparing = mission.state in (CompetitionState.ACQUIRE_SAFE_ZONE,
+            CompetitionState.ALIGN_SAFE_ZONE_BY_LOCKED_BOX, CompetitionState.SAFE_ZONE_CORRIDOR_CHECK)
+        pushing = mission.state in (CompetitionState.ENTER_SAFE_ZONE, CompetitionState.DELIVERY_VERIFY)
+        owner = (mission.task_generation, stm.camera_pitch_cdeg)
+        if (mission.carried_manifest != ("core_black",) or not (preparing or pushing)
+                or stm.camera_pitch_cdeg not in (11500, 12000)):
+            self.owner = None
+            return known
+        if owner != self.owner:
+            self.owner = owner
+            self.carried_id = self.box = None
+            self.zone_ids.clear()
+            self.others = {}
+        blacks = [v for v in cargo if v.visible and v.class_name == "core_black"]
+        if preparing and zone_visible:
+            self.zone_ids.update(v.track_id for v in blacks if v.inside_safe_zone and v.track_id != self.carried_id)
+        if self.carried_id is None:
+            seeds = [v for v in blacks if v.track_id in known and v.track_id not in self.zone_ids
+                     and not v.inside_safe_zone and stm.gripper_closed and zone_visible
+                     and cargo_on_carrying_platform(v, stm.camera_pitch_cdeg)]
+            if len(seeds) == 1:
+                self.carried_id = seeds[0].track_id
+        item = next((v for v in blacks if v.track_id == self.carried_id), None)
+        if item is None and self.box is not None and zone_visible:
+            def overlaps(a, b):
+                return carried_boxes_shape_compatible((a,), (b,), same_view=True)
+            nearby = [v for v in blacks if overlaps(self.box, v.bbox)]
+            if len(nearby) == 1:
+                new = nearby[0]
+                if (new.track_id not in self.zone_ids and new.track_id not in self.others
+                        and not any(overlaps(b, new.bbox) for b in self.others.values())):
+                    item = new
+                    self.carried_id = new.track_id
+        self.box = item.bbox if item else None
+        self.others = {v.track_id: v.bbox for v in blacks if v is not item}
+        if self.carried_id is not None:
+            return {self.carried_id} if item else set()
+        return known - self.zone_ids
+
+
 def carried_ids_after_pitch_change(cargo, stm, mission, known_ids,
                                    recent_carried_bboxes, recent_carried_pitch_cdeg):
     # Rebind only the still-held, already audited load while preparing delivery.
@@ -960,6 +1011,7 @@ def make_vision_snapshot(
     held_cargo_evidence: HeldCargoEvidence | None = None,
     grip_bands: GripBands | None = None,
     safe_zone_memory: SafeZoneCargoMemory | None = None,
+    black_delivery: SingleBlackDelivery | None = None,
 ) -> VisionSnapshot:
     # A cached rectangle from another camera angle cannot prove membership
     # in the current view. Retain the existing per-class area requirement.
@@ -1176,6 +1228,9 @@ def make_vision_snapshot(
         cargo, stm, mission, known_carried_ids,
         recent_carried_bboxes, recent_carried_pitch_cdeg,
     )
+    if black_delivery is not None:
+        known_carried_ids = black_delivery.follow(mission, stm, own_zone_cargo, known_carried_ids,
+            safe_bbox is not None and not safe_zone_filter_blocked)
     exact_delivery_items = [
         item for item in own_zone_cargo
         if item.visible and item.track_id in known_carried_ids
@@ -1187,7 +1242,8 @@ def make_vision_snapshot(
         item.track_id for item in delivery_items if item.inside_safe_zone
     )
     delivery_outside_ids = tuple(
-        item.track_id for item in delivery_items if not item.inside_safe_zone
+        item.track_id for item in delivery_items if not item.inside_safe_zone and
+        (expected_manifest != ("core_black",) or (safe_bbox is not None and not safe_zone_filter_blocked))
     )
     delivery_inside = bool(delivery_inside_ids)
     delivery_outside = bool(delivery_outside_ids)
@@ -1958,7 +2014,10 @@ class CompetitionPlanner:
                 self.events_log.write('match_progress_save_failed', dict(error=str(error)))
 
     def _publish(self, output: CompetitionOutput, *, stm: StmSnapshot | None = None) -> None:
-        self.save_progress()
+        exit_first = (not output.suppress_command_tx and output.command is not None
+                      and output.command.opcode == CMD_TASK_COMPLETE)
+        if not exit_first:
+            self.save_progress()
         if self.localization_wheel_policy is not None and stm is not None:
             matched = (stm.context_valid and stm.task_id == self.protocol_task and
                        stm.action_id == self.protocol_action)
@@ -2051,6 +2110,8 @@ class CompetitionPlanner:
                   command.flags & CMD_DISPERSE_NEAR_KEEP)) else 0,
         )
         write_command_frame(self.command_path, context + command.to_frame(self.sequence))
+        if exit_first:
+            self.save_progress()
         if command.opcode in {CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE}:
             self.published_safe_commands[command.opcode] = (
                 self.protocol_task, self.protocol_action, command)
@@ -3674,6 +3735,7 @@ def main() -> int:
     recent_carried_pitch_cdeg = 0
     held_cargo_evidence = HeldCargoEvidence()
     safe_zone_memory = SafeZoneCargoMemory()
+    black_delivery = SingleBlackDelivery()
     competition_started = False
     config_sent = False
     operator_stopped = False
@@ -3768,6 +3830,7 @@ def main() -> int:
         recent_carried_pitch_cdeg = 0
         held_cargo_evidence.clear()
         safe_zone_memory.clear()
+        black_delivery.owner = None
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
@@ -3972,6 +4035,7 @@ def main() -> int:
                 planner.set_vision(VisionSnapshot(capture_observation_valid=False,
                     capture_observation_reason="camera_recovery"))
                 camera_recovery_pending = True
+                black_delivery.owner = None
                 detector.reset()  # Outstanding results belong to the disconnected stream.
                 recent_safe_bbox, safe_zone_missing_frames = None, 0
                 camera.stop()
@@ -4064,7 +4128,7 @@ def main() -> int:
                     recent_carried_track_ids=recent_carried_track_ids,
                     recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
                     held_cargo_evidence=held_cargo_evidence,
-                    safe_zone_memory=safe_zone_memory,
+                    safe_zone_memory=safe_zone_memory, black_delivery=black_delivery,
                 )
                 if latest_vision.carried_reference_track_ids:
                     recent_carried_track_ids = latest_vision.carried_reference_track_ids
