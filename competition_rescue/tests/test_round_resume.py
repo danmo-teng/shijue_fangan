@@ -10,20 +10,22 @@ from state_machine import CompetitionMission, CompetitionSettings, CompetitionSt
 from protocol import crc16_modbus, CMD_BULLDOZER_STEP
 
 
-def test_stop_keeps_match_until_three_seconds_including_release_poll():
+def test_stop_keeps_match_even_after_long_hold_and_delayed_release():
     from button_input import SysfsButtonInput
-    # Both a held-key poll and the release fallback use the same 3s rule.
-    for hold, reset in ((2.1, False), (2.99, False), (3.0, True)):
+    # Release after a polling gap must never discard the match.
+    for hold in (2.1, 3., 5.45):
         levels = {key: 1 for key in range(1, 5)}
         buttons = SysfsButtonInput(read_level=lambda key: levels[key])
         buttons.poll(0.)
         levels[4] = 0
         buttons.poll(1.)
         assert [e['action'] for e in buttons.poll(1.04)] == ['stop']
+        if hold > 4.:
+            assert buttons.poll(4.1) == []
         levels[4] = 1
         buttons.poll(1. + hold)
         events = buttons.poll(1.04 + hold)
-        assert [e['action'] for e in events] == (['exit_session'] if reset else [])
+        assert [e['action'] for e in events] == []
 
 
 def test_match_progress_three_reachable_cases_drop_load_and_return_to_source(tmp_path):
@@ -145,22 +147,14 @@ def test_button_tones_and_prestart_stop_new_round(tmp_path):
         panel._accept_prewarm(1)  # Already warming.
         app.session_started = True
         panel.request_stop()
-        panel._accept_prewarm(2)  # STOP of an active match retains progress.
-        assert beep.call_count == 1 and app.reset_session.call_count == 1
-        app.session_started = False
+        app.selecting=False
+        panel._accept_prewarm(2)
+        assert beep.call_count == 2 and app.reset_session.call_count == 2
+        panel.request_stop()
         def stop_during_reset(source, stop_serial):
             panel.request_stop()
             panel.after_reset(stop_serial)
         app.reset_session.side_effect = stop_during_reset
-        panel._accept_prewarm(2)
+        panel._accept_prewarm(3)
         assert panel.stopped and panel.control_path.exists()
-        app.prepare_warm_session.assert_called_once()
-        beep.reset_mock()
-        panel.buttons = Mock()
-        panel.buttons.poll.return_value = [dict(action='exit_session', key=4)]
-        with patch.object(panel._quit, 'wait', side_effect=lambda _: panel._quit.set()):
-            panel._poll_buttons()
-        assert beep.call_count == 1 and beep.call_args.kwargs['count'] == 1
-        panel.silence()
-        panel.after_reset(panel._stop_serial)
-        assert beep.call_count == 1
+        assert app.prepare_warm_session.call_count == 2

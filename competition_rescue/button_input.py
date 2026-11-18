@@ -20,7 +20,7 @@ BUTTON_LINES = {
 
 LONG_PRESS = {
     1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
-    3: ('prewarm', 1.0), 4: ('exit_session', 3.0),
+    3: ('prewarm', 1.0),
 }
 
 
@@ -150,8 +150,7 @@ class SysfsButtonInput:
                 elif key == 3 and button.armed and not self._chord_blocked:
                     emit('start_pressed', key)
             else:
-                if (button.armed and not button.long_sent and
-                        (key == 4 or not self._chord_blocked)):
+                if button.armed and not button.long_sent and key in LONG_PRESS and not self._chord_blocked:
                     # A delayed launcher poll may first see a long hold at
                     # release; it must not turn that hold into a short press.
                     held_s = button.changed_at - button.pressed_at
@@ -159,16 +158,21 @@ class SysfsButtonInput:
                     action = (long_action if long_action and held_s >= duration else
                               {1: 'query_zone', 2: 'query_side', 3: 'start'}.get(key))
                     if action:
-                        emit(action, key)
+                        if action == "prewarm":
+                            emit(action, key, release_only=True)
+                        else:
+                            emit(action, key)
                 button.armed = True
                 button.long_sent = False
 
         for key, button in self._buttons.items():
             if not (button.raw and button.stable and button.armed) or button.long_sent:
                 continue
+            if key not in LONG_PRESS:
+                continue
             action, duration = LONG_PRESS[key]
             if action and now - button.pressed_at >= duration:
-                if key == 4 or not self._chord_blocked:
+                if not self._chord_blocked:
                     emit(action, key)
                 button.long_sent = True
 
@@ -179,7 +183,7 @@ class SysfsButtonInput:
                 self.trace('classified', event['key'], now, action=event['action'])
         # Even if a single poll observes a release at the same time as STOP,
         # STOP has priority over every other business action.
-        if any(event['action'] in ('stop', 'exit_session') for event in events):
+        if any(event['action'] == 'stop' for event in events):
             events = [event for event in events if event['action'] in
-                      ('stop', 'exit_session', 'input_error', 'input_recovered')]
+                      ('stop', 'input_error', 'input_recovered')]
         return events

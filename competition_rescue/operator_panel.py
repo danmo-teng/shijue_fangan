@@ -69,7 +69,7 @@ class OperatorPanel:
         self._alarm_on = False
         self._ready_feedback = False
         self._sound_lock = threading.RLock()
-        self._confirmation_key = None
+        self._confirming_prewarm = False
         self._next_ready_beep = 0.0
         self._start_press_token = None
         self.button_log = None
@@ -204,8 +204,8 @@ class OperatorPanel:
                     self._start_press_token = None
                 if event['action'] == 'stop':
                     self.request_stop()
-                elif event['action'] == 'exit_session':
-                    self._confirm_key(4)
+                if event['action'] == 'prewarm' and self.stopped and event.get('release_only'):
+                    continue  # A polling gap on release cannot discard a stopped match.
                 if (event['action'] == 'start' and self.transitioning
                         and not getattr(self.app, 'prewarm_enabled', False)):
                     continue
@@ -213,10 +213,10 @@ class OperatorPanel:
                 self._enqueue(event)
             self._quit.wait(.02)
 
-    def _confirm_key(self, key):
-        # Long 4 calls from the input thread; long 3 calls before archiving or spawning.
+    def _confirm_prewarm(self):
+        # Confirm long 3 before archiving or spawning.
         with self._sound_lock:
-            self._confirmation_key = key
+            self._confirming_prewarm = True
             self._alarm_on = self._ready_feedback = False
             self._beep_sequence = (self._beep_sequence + 1) & 255
             self._pending_alarm = (False, self._beep_sequence)
@@ -233,7 +233,7 @@ class OperatorPanel:
             if not send_alarm(self.socket_name, enabled, sequence):
                 return False
             self._pending_alarm = None
-        if self._alarm_on or (self.stopped and not self._confirmation_key):
+        if self._alarm_on or (self.stopped and not self._confirming_prewarm):
             self._pending_beep = None
             return True
         if self._pending_beep is None:
@@ -246,7 +246,7 @@ class OperatorPanel:
 
     def _beep(self, count, long=False):
         with self._sound_lock:
-            if self._confirmation_key:
+            if self._confirming_prewarm:
                 return
             if self._alarm_on or self.stopped:
                 return
@@ -258,10 +258,10 @@ class OperatorPanel:
 
     def set_alarm(self, enabled):
         with self._sound_lock:
-            if self._confirmation_key:
-                if not enabled or self._confirmation_key == 4:
+            if self._confirming_prewarm:
+                if not enabled:
                     return  # Owner cleanup must not cut off the accepted key's tone.
-                self._confirmation_key = None  # Prewarm failed; the alarm takes priority.
+                self._confirming_prewarm = False  # Prewarm failed; the alarm takes priority.
             self._ready_feedback = False
             self._pending_beep = None
             self._alarm_on = bool(enabled)
@@ -322,14 +322,7 @@ class OperatorPanel:
                            if self.app.session_started else '尚未发车，已停车；松开4，长按3可重开一局并预热')
                 if not self.app.session_started and getattr(self.app, 'start_released', False):
                     message = '已发出启动请求，已停车'
-                self._notice(message + '；按住4满3秒响一声清局', 'operator_stop')
-            elif action == 'exit_session':
-                if not self.transitioning:
-                    self.transitioning = True
-                    try:
-                        self.app.reset_session(source='gpio_buttons', stop_serial=event.get('_stop_serial'))
-                    finally:
-                        self.transitioning = False
+                self._notice(message + '；另开新局请松开4后长按3预热', 'operator_stop')
             elif action in ('query_zone', 'next_zone'):
                 if action == 'next_zone' and self.app.selecting and not self.transitioning:
                     self.app.zone = self.app.zone % 4 + 1
@@ -364,13 +357,12 @@ class OperatorPanel:
         self._ready_heartbeat()
 
     def _accept_prewarm(self, serial):
-        if (not self.app.prewarm_enabled or self.transitioning or not self.app.selecting
-                or self.app.session_started or self.app.start_released or serial != self._stop_serial):
+        if not self.app.prewarm_enabled or self.transitioning or serial != self._stop_serial:
             return
         restart = self.stopped
-        if self.app.warming and not restart:
+        if not restart and (not self.app.selecting or self.app.session_started or self.app.start_released or self.app.warming):
             return
-        self._confirm_key(3)
+        self._confirm_prewarm()
         try:
             if restart:
                 self.app.reset_session(source='gpio_prewarm_new_round', stop_serial=serial)
@@ -378,8 +370,7 @@ class OperatorPanel:
                 self.app.prepare_warm_session()
         finally:
             with self._sound_lock:
-                if self._confirmation_key == 3:
-                    self._confirmation_key = None
+                self._confirming_prewarm = False
 
     def before_start(self):
         self.silence()
@@ -398,7 +389,7 @@ class OperatorPanel:
         # Carry the latest sound state across UART ownership transfer. This is
         # one local request, not a firmware acknowledgment or periodic retry.
         with self._sound_lock:
-            if not self._confirmation_key:
+            if not self._confirming_prewarm:
                 self._pending_alarm = (self._alarm_on, self._beep_sequence)
         return True
 
@@ -446,9 +437,7 @@ class OperatorPanel:
         if self.active:
             self._start_standby()
         with self._sound_lock:
-            if self._confirmation_key:
-                if self._confirmation_key == 4 and (stop_serial is None or stop_serial == self._stop_serial):
-                    self._confirmation_key = None
+            if self._confirming_prewarm:
                 self._flush_beep()  # If no owner was bound, deliver through standby.
             else:
                 self.silence()

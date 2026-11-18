@@ -152,7 +152,7 @@ class CompetitionMapApp(RescueMapApp):
             self.record_reset_event('prewarm_ready', 'repeating_two_short_beeps; SDK Pose, gyro and actual inference present')
         if self.operator.stopped:
             self.start_requested = False
-            self.message = ('已请求停止；长按4满3秒清局' if self.start_released else
+            self.message = ('已请求停止；松开4，长按3重开一局并预热' if self.start_released else
                             '尚未发车，已停车；松开4，长按3重开一局并预热')
             return
         if self.start_requested and not ready and not self.start_released:
@@ -226,7 +226,7 @@ class CompetitionMapApp(RescueMapApp):
             if self.session_started:
                 return
             if self.operator.stopped:
-                self.message = '本轮已停止；长按4退出后可重新开始'
+                self.message = '本轮已停止；松开4，长按3重新预热'
                 return
             if self.start_requested or self.start_released:
                 return

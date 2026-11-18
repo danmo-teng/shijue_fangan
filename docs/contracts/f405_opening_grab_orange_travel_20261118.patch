@@ -1,0 +1,34 @@
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -1041,3 +1041,3 @@
+   injury_recheck_pending = false;
+-  const bool advance_for_core = complete_flow_active &&
++  const bool advance_for_core = complete_flow_active && !opening_claw_probe_active &&
+       audit_core_seen_in_streak;
+@@ -1499,3 +1499,3 @@
+   const LiftLoad restore = held_load == LIFT_LOAD_MATERIAL ? held_load : LIFT_LOAD_UNKNOWN;
+-  const uint8_t lift_angle = lift82 || continue82 ? APP_LIFT_ORANGE_TRAVEL_ANGLE :
++  const uint8_t lift_angle = lift82 || continue82 ? APP_LIFT_FIRST_GREEN_FILTER_ANGLE :
+       previous_82 ? task_loaded_travel_angle(restore) : 0U;
+@@ -1523,3 +1523,3 @@
+     remote_action.actuator_wait_ms = Lift_PositionWaitMs(lift_angle);
+-    if (lift82) Lift_SetLoadedTravelPosition(LIFT_LOAD_ORANGE);
++    if (lift82) Lift_SetFirstGreenFilterPosition();
+     else task_set_loaded_travel(restore);
+@@ -8225,6 +8225,6 @@
+     remote_action.black_right = (incoming.flags & VISION_CMD_TARGET_RIGHT) != 0U;
+-    remote_action.separation_lift_angle = APP_LIFT_ORANGE_TRAVEL_ANGLE;
++    remote_action.separation_lift_angle = APP_LIFT_FIRST_GREEN_FILTER_ANGLE;
+     remote_action.lift_ready = false;
+-    remote_action.actuator_wait_ms = Lift_PositionWaitMs(APP_LIFT_ORANGE_TRAVEL_ANGLE);
+-    Lift_SetLoadedTravelPosition(LIFT_LOAD_ORANGE);
++    remote_action.actuator_wait_ms = Lift_PositionWaitMs(APP_LIFT_FIRST_GREEN_FILTER_ANGLE);
++    Lift_SetFirstGreenFilterPosition();
+     task_clear_audit_result();
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -674,3 +674,3 @@
+ #define APP_LIFT_MATERIAL_TRAVEL_ANGLE    86U
+-#define APP_LIFT_ORANGE_TRAVEL_ANGLE      82U
++#define APP_LIFT_ORANGE_TRAVEL_ANGLE      86U
+ /* Calibrated pose only; the autonomous first-green filter is not enabled here. */
