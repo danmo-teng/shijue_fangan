@@ -4227,6 +4227,47 @@ def test_post_grab_orange_core_filters_at_pickup_then_reaudits_once():
         assert bool(after.command.flags & CMD_KEEP_ORANGE) == (black_side == "right")
 
 
+def test_post_grab_side_swap_on_ack_reaudits_before_any_side_action():
+    from protocol import CMD_ORANGE_GATE_FILTER
+    for original_black in ("left", "right"):
+        for already_filtered in (False, True):
+            m, original, current, status = _orange_gate_fixture(black_side=original_black)
+            new_black = "right" if original_black == "left" else "left"
+            _, swapped, _, _ = _orange_gate_fixture(black_side=new_black)
+            status = replace(status, mode=23, flags=3)
+            m.orange_gate_filter_attempted = already_filtered
+            m._begin_post_grab_audit(original, 1.)
+            for frame in range(2, 5):
+                now = 1. + .15 * frame
+                image = replace(original, frame_sequence=frame, observed_monotonic_s=now)
+                old = m.step(image, current, status, now)
+            assert old.command.audit.stable
+            def ack(output, count):
+                return replace(relay_stm(output, mode=23, flags=67, relay_mission_tx_frames=count),
+                               camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+                               accepted_command=CMD_CARGO_AUDIT, action_status=1)
+            old_epoch = m.audit_epoch
+            fresh = replace(swapped, frame_sequence=5, observed_monotonic_s=1.75)
+            out = m.step(fresh, current, ack(old, 1), 1.75)
+            assert out.command.opcode == CMD_CARGO_AUDIT and not out.command.audit.stable
+            assert m.audit_epoch == old_epoch + 1 and m.audit_hits == 1
+            fresh = replace(swapped, frame_sequence=6, observed_monotonic_s=1.90)
+            updated = m.step(fresh, current, replace(ack(old, 1), context_matches=False), 1.90)
+            assert updated.command.opcode == CMD_CARGO_AUDIT and updated.command.audit.stable
+            assert updated.command.audit.left_class == swapped.capture_audit.left_class
+            assert updated.command.audit.right_class == swapped.capture_audit.right_class
+            late = m.step(fresh, current, replace(ack(updated, 2), context_matches=False), 1.91)
+            assert late.command == updated.command
+            action = m.step(fresh, current, ack(updated, 3), 1.92).command
+            if already_filtered:
+                assert action.opcode == CMD_DISPERSE_PILE and not action.flags & CMD_TARGET_RIGHT
+                assert bool(action.flags & CMD_KEEP_ORANGE) == (new_black == "right")
+                assert action.aux == (8200 if new_black == "right" else 0)
+            else:
+                assert action.opcode == CMD_ORANGE_GATE_FILTER
+                assert bool(action.flags & CMD_TARGET_RIGHT) == (new_black == "right")
+
+
 def test_orange_gate_filter_symmetric_once_and_real_reaudit():
     from protocol import CMD_ORANGE_GATE_FILTER, CMD_ALIGN_SAFE_ZONE
     for side in ('red', 'blue'):

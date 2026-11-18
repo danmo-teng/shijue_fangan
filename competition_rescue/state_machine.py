@@ -301,6 +301,11 @@ class CargoAudit:
     first_green_core_conflict: bool = False
 
     @property
+    def side_composition(self) -> tuple:
+        return (self.left_class, self.left_count, self.left_green_count, self.left_class_counts,
+                self.right_class, self.right_count, self.right_green_count, self.right_class_counts)
+
+    @property
     def near_keep_side(self) -> str | None:
         if not self.danger_present or self.near_claw_green_id is None:
             return None
@@ -1773,6 +1778,9 @@ class CompetitionMission:
         # MIXED and overflow must compare as encoded, not reconstructed from
         # local class_counts/green counts that the MCU never receives.
         signature = ("INVALID", (payload or self._audit_payload(audit)).semantic_signature)
+        # A confirmed invalid grab can drive one claw or a lateral move.
+        if self.post_grab_audit_active and audit.total_count > 1:
+            signature += (audit.side_composition,)
         return signature + (("near_keep", audit.near_keep_side),) if audit.near_keep_side is not None else signature
 
     def _latch_carried_manifest(self, audit: CargoAudit) -> None:
@@ -3136,14 +3144,7 @@ class CompetitionMission:
                 (not self.pending_audit_valid and
                  self.pending_audit_release_context in {"cluster_capture", "disperse_reaudit"} and
                  vision.capture_audit is not None and
-                 (vision.capture_audit.left_class, vision.capture_audit.left_count,
-                  vision.capture_audit.right_class, vision.capture_audit.right_count,
-                  vision.capture_audit.left_green_count, vision.capture_audit.right_green_count,
-                  vision.capture_audit.left_class_counts, vision.capture_audit.right_class_counts) !=
-                 (self.pending_audit.left_class, self.pending_audit.left_count,
-                  self.pending_audit.right_class, self.pending_audit.right_count,
-                  self.pending_audit.left_green_count, self.pending_audit.right_green_count,
-                  self.pending_audit.left_class_counts, self.pending_audit.right_class_counts)) or
+                 vision.capture_audit.side_composition != self.pending_audit.side_composition) or
                 (vision.capture_audit is not None and
                  self._audit_signature_for_state(
                      vision.capture_audit, self._audit_valid(vision.capture_audit),
@@ -3166,6 +3167,13 @@ class CompetitionMission:
             }
         ):
             post_grab = self.post_grab_audit_active
+            if (self.pending_audit_release_context == "post_grab_invalid" and
+                    vision.capture_audit is not None and vision.capture_audit.total_count > 1 and
+                    self.pending_audit.total_count > 1 and self.pending_audit.side_composition != vision.capture_audit.side_composition):
+                # Give the changed audit its own action ID. The same 140-degree
+                # camera view already passed the observation check above.
+                self.audit_epoch += 1
+                self.audit_camera_key = (stm.mode, True, self.audit_epoch)
             continued_signature = self.pending_audit_signature
             continued_hits = self.pending_audit_hits
             continued_frame_sequence = self.pending_audit_frame_sequence
