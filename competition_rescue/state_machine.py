@@ -14,6 +14,7 @@ import math
 from statistics import median
 from typing import Iterable
 from sweep_boundaries import obstacle_reference_point
+from search_zone_view import ZoneObservation, clearly_outside
 from attack_return import AttackReturnRoute, opponent_heading_deg, centre_turn_direction
 from search_transfer import FailedSearchTarget, SearchTransferRoute
 from obstacle_route import LIVE_STEPS, ObstacleRoute, RouteStep, handling_kind
@@ -29,6 +30,7 @@ from protocol import (
     CMD_APPROACH_RANGE,
     APPROACH_RANGE_REOBSERVE,
     APPROACH_RANGE_PRE_GRAB,
+    APPROACH_RANGE_ZONE_VIEW,
     APPROACH_ORANGE_TOP_VIEW,
     CMD_CARGO_AUDIT,
     CMD_BULLDOZER_STEP,
@@ -408,6 +410,8 @@ class VisionSnapshot:
     safe_corridor_obstacle_classes: tuple[str, ...] = ()
     safe_corridor_edge_obstacle: bool = False
     safe_corridor_b34_obstacle: bool = False
+    zone_boxes: tuple = ()
+    clipped_zone_candidates: tuple = ()
     capture_explicit_sides: tuple[tuple[int, str], ...] = ()
 
 
@@ -517,6 +521,7 @@ class CompetitionState(str, Enum):
     INITIAL_RELEASE = "INITIAL_RELEASE"
     INITIAL_ATTACK_RETURN = "INITIAL_ATTACK_RETURN"
     SEARCH = "SEARCH"
+    SEARCH_ZONE_VIEW = "SEARCH_ZONE_VIEW"
     SEARCH_TRANSFER = "SEARCH_TRANSFER"
     CLUSTER_APPROACH = "CLUSTER_APPROACH"
     DISPERSE = "DISPERSE"
@@ -1003,10 +1008,12 @@ class CompetitionMission:
         self.range_epoch = 0
         self.orange_top_view_command = None
         self.orange_top_view_frame_floor = None
+        self.zone_unresolved = {}
         self.orange_top_view_used = False
         self.orange_top_view_bbox = None
         self.transport_separation_active = False
         self.stage_redirect_active = False
+        self.zone_observation = None
         self.orange_gate_filter_attempted = False
         self.orange_gate_filter_command = None
 
@@ -1246,6 +1253,8 @@ class CompetitionMission:
         return pose.valid
 
     def expected_stm_modes(self) -> tuple[int, ...]:
+        if self.state == CompetitionState.SEARCH_ZONE_VIEW:
+            return (3, 20, 52, 24)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
             return (STM_MODE_REMOTE_ACTION, STM_MODE_TRANSPORT_AUDIT)
         if self.state == CompetitionState.PRE_GRAB_ADVANCE:
@@ -1510,6 +1519,7 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
+        self.zone_observation = None
         self.orange_gate_filter_attempted = False
         self.orange_gate_filter_command = None
         self._clear_orange_top_view()
@@ -1627,6 +1637,11 @@ class CompetitionMission:
             self.target_search_bbox, self.target_search_observer))
 
     def _search_vision_without_failures(self, vision: VisionSnapshot) -> VisionSnapshot:
+        if self.zone_unresolved:
+            self.zone_unresolved = {i.track_id: self.zone_unresolved[i.track_id]
+                for i in vision.cargo if i.track_id in self.zone_unresolved and
+                not (i.visible and clearly_outside(i, vision.zone_boxes, self.zone_unresolved[i.track_id]))}
+            vision = replace(vision, cargo=tuple(i for i in vision.cargo if i.track_id not in self.zone_unresolved))
         records = [r for r in self.failed_search_targets if r.visit == self.search_visit]
         if not records:
             return vision
@@ -1928,6 +1943,103 @@ class CompetitionMission:
         self.orange_top_view_frame_floor = None
         self.orange_top_view_used = False
         self.orange_top_view_bbox = None
+
+    def _start_zone_observation(self, vision, stm, now):
+        if (stm.mode != STM_MODE_SEARCH or stm.gripper_closed or self.cargo_recheck_pending or
+                stm.camera_pitch_cdeg != 12000 or vision.range_pitch_cdeg != 12000 or
+                not vision.clipped_zone_candidates or not vision.frame_sequence):
+            return None
+        zones = dict(vision.clipped_zone_candidates)
+        items = [item for item in vision.cargo if item.visible and item.inside_safe_zone
+                 and item.track_id in zones and item.hits >= 2
+                 and item.class_name in MATERIAL_CLASSES | {"injured_orange"}]
+        if not self.first_common_delivered:
+            items = [i for i in items if i.class_name == "green_supply"]
+        else:
+            oranges = [i for i in items if i.class_name == "injured_orange"]
+            if oranges or self._orange_only_search():
+                items = oranges
+        target = self._choose_nearest_cargo(vision, items)
+        if target is None:
+            return None
+        batch = CargoBatch((target.track_id,), (target.class_name,),
+                           "injury" if target.class_name == "injured_orange" else "material")
+        self._select_batch(batch)
+        self._mark_target_seen(target, now)
+        self._arm_approach(stm)
+        self.zone_observation = ZoneObservation(zones[target.track_id], target, vision.frame_sequence)
+        self._set_state(CompetitionState.SEARCH_ZONE_VIEW, now)
+        return CompetitionOutput(self.state, self._approach_command(target),
+            "疑似被不完整安全区框盖住，原地对准后观察", batch, event="zone_view_align")
+
+    def _zone_observation_output(self, vision, pose, stm, now):
+        view = self.zone_observation
+        assert view is not None
+        paired = (stm.context_valid and stm.context_matches and stm.action_status & 1 and
+                  stm.accepted_command == CMD_APPROACH_TARGET)
+        def output(cmd, reason):
+            return CompetitionOutput(self.state, cmd, reason, self.selected_batch, reason=reason)
+        if view.realign is not None and not view.leaving and stm.mode in (20, 52):
+            if paired:
+                self.zone_observation = None
+                self._set_state(CompetitionState.APPROACH, now)
+                if stm.mode == STM_MODE_APPROACH_RANGE_WAIT:
+                    return self._range_approach_output(vision, stm, now, pose)
+            return output(view.realign, "zone_view_realign")
+        if stm.mode == STM_MODE_APPROACH_RECOVER:
+            view.leaving = True
+        if view.leaving:
+            if stm.mode == STM_MODE_SEARCH and not stm.gripper_closed:
+                progress = self.search_yaw_accum_deg
+                self._clear_selected_batch()
+                self._set_state(CompetitionState.SEARCH, now)
+                self.search_yaw_accum_deg = progress
+                self.search_epoch_frame_floor = vision.frame_sequence
+            return output(self._hold(), "zone_view_exit")
+        if view.request is None:
+            target = next((i for i in vision.cargo if i.visible and i.track_id == view.target.track_id
+                           and i.class_name == view.target.class_name), None)
+            if (target is None or stm.gripper_closed or stm.camera_pitch_cdeg != 12000 or
+                    vision.range_pitch_cdeg != 12000):
+                view.leaving = True
+                return output(self._hold(), "zone_view_alignment_lost")
+            view.target = target
+            if stm.mode == STM_MODE_APPROACH_RANGE_WAIT and paired and vision.frame_sequence > view.pixel_frame:
+                self.range_epoch += 1
+                view.request = CommandRequest(CMD_APPROACH_TARGET,
+                    self._side_flags() | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID,
+                    0, 10500, APPROACH_RANGE_ZONE_VIEW, source_vision_frame=vision.frame_sequence)
+            else:
+                view.pixel_frame = vision.frame_sequence
+                self._mark_target_seen(target, now)
+                return output(self._approach_command(target), "zone_view_align")
+            return output(view.request, "zone_view_lift")
+        if view.completed_frame is None:
+            if (paired and stm.mode == STM_MODE_APPROACH_RANGE_WAIT and
+                    stm.camera_pitch_cdeg == 10500 and stm.action_status & 2):
+                view.completed_frame = vision.frame_sequence
+                view.completed_s = now
+            return output(view.request, "zone_view_lift")
+        if (vision.frame_sequence > view.completed_frame and vision.range_pitch_cdeg == 10500
+                and stm.camera_pitch_cdeg == 10500 and vision.observed_monotonic_s is not None
+                and vision.observed_monotonic_s > view.completed_s):
+            x, _, w, _ = view.target.bbox
+            matches = [i for i in vision.cargo if i.visible and i.class_name == view.target.class_name
+                       and i.bbox[0] < x+w and i.bbox[0]+i.bbox[2] > x]
+            if (len(matches) == 1 and matches[0].track_id == view.target.track_id and
+                    clearly_outside(matches[0], vision.zone_boxes, view.zone)):
+                self._mark_target_seen(matches[0], now)
+                view.realign = self._approach_command(matches[0])
+                self._reset_delivery_evidence()
+                return output(view.realign, "zone_view_confirmed_outside")
+            if matches:
+                self.zone_unresolved.update({i.track_id: view.zone for i in matches})
+                view.leaving = True
+        if now-view.completed_s >= self._approach_missing_hold_window_s():
+            self.zone_unresolved[view.target.track_id] = view.zone
+            view.leaving = True
+        return output(self._hold() if view.leaving else view.request,
+                      "zone_view_exit" if view.leaving else "zone_view_next_frame")
 
     def _orange_top_view_output(
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
@@ -7237,6 +7349,9 @@ class CompetitionMission:
                     self._mark_target_seen(candidate, now)
                 return CompetitionOutput(self.state, self._approach_command(candidate), f"锁定{batch.total_count}件{batch.destination}批次", batch, event="batch_locked")
             self._observe_search_candidate(None, vision)
+        observation = self._start_zone_observation(vision, stm, now)
+        if observation is not None:
+            return observation
         if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= self.settings.search_min_turn_deg:
             if not (
                 stm.fresh and
@@ -7757,6 +7872,8 @@ class CompetitionMission:
         if self.state == CompetitionState.INITIAL_CLAW_CHECK:
             return self._initial_claw_check_output(vision, stm, now)
 
+        if self.state == CompetitionState.SEARCH_ZONE_VIEW:
+            return self._zone_observation_output(vision, pose, stm, now)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
             return self._orange_gate_filter_output(vision, pose, stm, now)
         if self.state == CompetitionState.TRANSPORT_AUDIT:

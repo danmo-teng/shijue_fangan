@@ -3417,6 +3417,7 @@ def test_delivery_early_exit_keeps_existing_evidence_rules_and_deployment_defaul
         m, status = _early_delivery_fixture(enabled=case != "disabled")
         if case == "not_accepted":
             m.enter_command_accepted = False
+            m.enter_command_published = True  # Real ENTER request in flight.
             status = replace(status, context_matches=False)
         if case == "no_outside":
             m.delivery_outside_seen = False

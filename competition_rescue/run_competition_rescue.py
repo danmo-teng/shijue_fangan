@@ -33,6 +33,7 @@ import cv2
 import numpy as np
 
 from vision_replay import VisionReplay
+from search_zone_view import clipped
 from safe_zone_memory import SafeZoneCargoMemory
 from sweep_boundaries import runtime_boundaries, corridor_polygon
 from async_diagnostics import AsyncDiagnosticWriter
@@ -960,16 +961,19 @@ def make_vision_snapshot(
     own_zone_cargo = tracked_cargo(tracks, None if safe_zone_filter_blocked else safe_bbox)
     # Both colours exclude search/approach targets. Only the selected own
     # rectangle remains delivery evidence; never credit the opponent's zone.
-    current_safe_boxes = tuple(item.bbox for item in detections
-                               if item.class_name in {"safe_red", "safe_blue"})
-    cargo = tuple(
-        replace(item, inside_safe_zone=True)
-        if not item.inside_safe_zone and any(
-            bbox_inside_safe_zone(item.bbox, box, item.class_name)
-            for box in current_safe_boxes
-        ) else item
-        for item in own_zone_cargo
-    )
+    zone_boxes = tuple((d.class_name, d.bbox) for d in detections
+                       if d.class_name in {"safe_red", "safe_blue"})
+    cargo_items = []
+    clipped_candidates = []
+    for item in own_zone_cargo:
+        covers = [(name, box) for name, box in zone_boxes
+                  if bbox_inside_safe_zone(item.bbox, box, item.class_name)]
+        if covers and not item.inside_safe_zone:
+            item = replace(item, inside_safe_zone=True)
+        if len(covers) == 1 and clipped(covers[0][1]):
+            clipped_candidates.append((item.track_id, covers[0][0]))
+        cargo_items.append(item)
+    cargo = tuple(cargo_items)
     if safe_zone_memory is not None:
         cargo = safe_zone_memory.apply(cargo, stm.camera_pitch_cdeg)
     rois = capture_rois or load_capture_rois(
@@ -1310,6 +1314,7 @@ def make_vision_snapshot(
         observed_monotonic_s=time.monotonic() if observed_s is None else observed_s,
         cargo=cargo,
         capture_cargo=capture,
+        zone_boxes=zone_boxes, clipped_zone_candidates=tuple(clipped_candidates),
         capture_explicit_sides=tuple(capture_explicit_sides.items()),
         safe_bbox=safe_bbox,
         danger_ahead=danger,
@@ -2444,6 +2449,18 @@ class CompetitionPlanner:
         if (reuse_conflict and stm.fresh and stm.gripper_closed and
                 self.mission.selected_batch is not None and stm.mode in {10, 11, 48}):
             return self.mission._begin_transport_audit(vision, pose, stm, now)
+        if (self.mission.state == CompetitionState.SEARCH_ZONE_VIEW and stm.fresh and
+                stm.mode in (3, 20, 24, 52) and not stm.fault):
+            if paused:
+                return CompetitionOutput(self.mission.state, CommandRequest(CMD_PAUSE),
+                    "相机恢复中，暂停观察", reason="camera_recovery")
+            matches = stm.context_valid and stm.task_id == self.protocol_task and stm.action_id == self.protocol_action
+            if (not self.mission.zone_observation.leaving and stm.context_valid and
+                    stm.task_id == self.protocol_task and stm.action_status & 4 and
+                    stm.rejected_action_id == self.protocol_action and not (matches and stm.action_status & 1)):
+                self._adopt_recovery_context()
+                self.mission.zone_observation.leaving = True
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.orange_top_view_command is not None or
                 self.mission.orange_top_view_frame_floor is not None):
             if paused:

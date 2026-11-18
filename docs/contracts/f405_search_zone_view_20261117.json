@@ -1,8 +1,8 @@
 {
   "request_id": "MATCH-SEARCH-ZONE-VIEW-20261117",
-  "status": "implementation_request_for_paired_review; upper_and_lower_runtime_not_implemented; do_not_deploy_as_done",
+  "status": "upper implemented; lower sources verified at e8d5a2d; pending vehicle validation",
   "wire": "existing TYPE0x18/opcode0x09 plus original TYPE0x1D context; aux3 reserved for this new view-only operation",
-  "production_support": "current upper mission_frame and lower parser reject aux3; examples below are design bytes with verified length/CRC, not successful production parsing",
+  "production_support": "red and blue examples checked against production upper packet builder; lower supports aligned noncluster mode52 aux3",
   "scope": "empty-claw SEARCH-derived approach, aligned mode52 only; ordinary legal candidates unchanged",
   "payload": {
     "flags": "VALID|APPROACH_RANGE|DISTANCE_VALID|selected side; no cluster or other bits for initial view",

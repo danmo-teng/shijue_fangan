@@ -2400,7 +2400,9 @@ def test_warm_start_binds_latest_pose_gyro_and_keeps_sdk_owner():
                 app.prepare_warm_session()
                 assert app.warming and app.selecting and not app.session_started
                 assert '--wait-for-operator' in spawn.call_args.args[0]
-                assert '--enable-top-edge-range-reobserve' in spawn.call_args.args[0]
+                assert {'--enable-top-edge-range-reobserve', '--enable-delivery-early-exit',
+                        '--enable-pre-grab-advance'} <= set(spawn.call_args.args[0])
+                assert '--enable-closed-deflect' not in spawn.call_args.args[0]
                 token = app.reset_session_token
                 app.zone,app.side = 4,'blue'
                 app.start_session()  # Press before ready must never be remembered.
@@ -4001,3 +4003,84 @@ def test_orange_gate_filter_keeps_explicit_roi_side_separate_from_old_fallback()
         assert view.capture_audit.total_count == 2
         assert view.capture_audit.left_class == 'core_black'
         assert dict(view.capture_explicit_sides).get(2) == ('left' if left else None)
+
+
+def test_aux3_replay_and_real_publisher():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from rescue_vision.models import TrackState
+    from protocol import CMD_APPROACH_TARGET, CMD_APPROACH_RANGE, CMD_HOLD, CMD_DISTANCE_VALID, mission_frame
+    record = json.loads((PROJECT_ROOT/'docs/reports/competition_20261117_1803/final_black_orange_evidence.json').read_text())
+    f = next(r for r in record['frames'] if r['frame']==20011)
+    old = next(t for t in f['tracks'] if t['id']==1005)
+    oldbox = next(d['bbox'] for d in f['detections'] if d['class']=='safe_red')
+    for outcome in ('outside','inside','missing_zone','unclear','ambiguous','new_id','lost'):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            m=CompetitionMission(CompetitionSettings(side='blue',initial_stash_enabled=False))
+            m.first_common_delivered=True
+            m._set_state(CompetitionState.SEARCH, 1.)
+            m.search_site_turn_deg=m.search_yaw_accum_deg=137.
+            planner=CompetitionPlanner(m,root/'pose',root/'stm',root/'cmd',root/'diag',JsonlLog(root/'events'),50)
+            track=SimpleNamespace(track_id=1005,class_name='injured_orange',confidence=.9,hits=old['hits'],
+                misses=0,state=TrackState.CONFIRMED,last_detection=SimpleNamespace(bbox=tuple(old['bbox']),ground_xy_mm=None))
+            status=StmSnapshot(mode=3,age_ms=0,camera_pitch_cdeg=12000)
+            def snapshot(box, n, pitch, tracks=None):
+                return runner_module.make_vision_snapshot(
+                    [SimpleNamespace(class_name='safe_red',bbox=box)] if box else [],
+                    [track] if tracks is None else tracks,SimpleNamespace(calibrated=False),None,
+                    replace(status,camera_pitch_cdeg=pitch),m,20011+n,observed_s=1+n*.05)
+            def cycle(v,st,n):
+                out=planner._output_for_cycle(v,PoseSnapshot(),st,False,1+n*.05)
+                planner._publish(out,stm=st)
+                return out
+            def ack(mode,pitch,action_status=1):
+                return replace(status,mode=mode,camera_pitch_cdeg=pitch,context_valid=True,
+                    task_id=planner.protocol_task,action_id=planner.protocol_action,
+                    accepted_command=CMD_APPROACH_TARGET,action_status=action_status)
+            initial=snapshot(tuple(oldbox),0,12000)
+            assert initial.cargo[0].inside_safe_zone and initial.clipped_zone_candidates==((1005,'safe_red'),)
+            first=cycle(initial,status,0)
+            assert first.state==CompetitionState.SEARCH_ZONE_VIEW and not first.command.flags & CMD_APPROACH_RANGE
+            pixel_action=planner.protocol_action
+            track.last_detection.bbox=(580,0,120,48)  # Robot completed the pixel turn.
+            aligned=ack(52,12000)
+            request=cycle(snapshot(tuple(oldbox),1,12000),aligned,1)
+            assert request.command.aux==3 and request.command.arg_a==0 and request.command.arg_b==10500
+            assert planner.protocol_action!=pixel_action and planner.protocol_vision_frame==20012
+            stale=replace(aligned,action_status=3,camera_pitch_cdeg=10500)
+            assert cycle(snapshot(None,2,10500),stale,2).command==request.command
+            assert m.zone_observation.completed_frame is None
+            done=ack(52,10500,3)
+            assert cycle(snapshot(None,3,10500),done,3).command==request.command
+            track.last_detection.bbox=(595,140,90,50)
+            box=(370,40,480,80)
+            if outcome=='inside':box=(360,40,500,220)
+            if outcome=='unclear':box=(360,1,500,79)
+            if outcome=='missing_zone':box=None
+            tracks=[track,SimpleNamespace(**{**vars(track),'track_id':1006})] if outcome=='ambiguous' else ([] if outcome=='lost' else [track])
+            if outcome == 'new_id':
+                tracks = [SimpleNamespace(**{**vars(track),'track_id':1006})]
+            reviewed=snapshot(box,4,10500,tracks)
+            delayed=replace(reviewed,observed_monotonic_s=1.14)
+            assert cycle(delayed,done,4).command==request.command
+            nextout=cycle(reviewed,done,4)
+            if outcome=='outside':
+                assert nextout.reason=='zone_view_confirmed_outside' and not nextout.command.flags & CMD_APPROACH_RANGE
+                assert planner.protocol_vision_frame==20015
+                cycle(snapshot(box,5,10500),ack(52,10500),5)
+                assert m.state==CompetitionState.APPROACH
+                v=replace(snapshot(box,6,10500),range_distances=((1005,320),))
+                moving=cycle(v,ack(52,10500),6)
+                assert moving.command.flags & CMD_APPROACH_RANGE and moving.command.arg_a>0 and moving.command.arg_b==10500
+            else:
+                if outcome=='lost':
+                    nextout=cycle(snapshot(box,100,10500,[]),done,100)
+                assert nextout.command.opcode==CMD_HOLD
+                assert cycle(reviewed,replace(done,mode=3),101).state==CompetitionState.SEARCH
+                assert m.search_site_turn_deg==m.search_yaw_accum_deg==137 and not m.failed_search_targets
+                if outcome=='missing_zone':
+                    assert not m._search_vision_without_failures(reviewed).cargo
+    for c in json.loads((PROJECT_ROOT/'docs/contracts/f405_search_zone_view_20261117.json').read_text())['examples']:
+        frame=bytes.fromhex(c['command_hex'])
+        assert mission_frame(frame[3],9,c['flags'],0,10500,3)==frame

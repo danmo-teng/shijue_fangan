@@ -681,6 +681,8 @@ class CompetitionMapApp(RescueMapApp):
             "--window-mode", "normal",
             "--enable-bulldozer",
             "--enable-top-edge-range-reobserve",
+            "--enable-delivery-early-exit",
+            "--enable-pre-grab-advance",
             "--startup-timeout", f"{max(60.0, self.relocalization_timeout_s + 20.0):.3f}",
         ]
         if self.operator is not None:

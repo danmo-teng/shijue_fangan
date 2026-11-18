@@ -112,14 +112,18 @@ def test_changed_id_inside_zone_is_not_approached():
     assert m._safe_zone_target_exit(view,done,1.2).event == "safe_zone_target_cancel"
 
 
-def test_protocol_no_translation_and_aux3_unchanged():
+def test_protocol_no_translation_and_aux3_noncluster_only():
     import pytest
     for side in (0,8):
         for cluster in (0,CMD_CLUSTER_TARGET):
             flags = 1 | side | cluster | CMD_APPROACH_RANGE | CMD_DISTANCE_VALID
             packet = mission_frame(7,CMD_APPROACH_TARGET,flags,0,10500,APPROACH_ORANGE_TOP_VIEW)
             assert packet[6:8] == bytes(2)
-            for a,b,aux in [(1,10500,4),(0,12000,4),(0,14000,4),(0,10500,3)]:
+            if cluster:
+                with pytest.raises(ValueError): mission_frame(7,CMD_APPROACH_TARGET,flags,0,10500,3)
+            else:
+                assert mission_frame(7,CMD_APPROACH_TARGET,flags,0,10500,3)[6:8] == bytes(2)
+            for a,b,aux in [(1,10500,4),(0,12000,4),(0,14000,4),(1,10500,3),(0,12000,3)]:
                 with pytest.raises(ValueError): mission_frame(7,CMD_APPROACH_TARGET,flags,a,b,aux)
 
 
