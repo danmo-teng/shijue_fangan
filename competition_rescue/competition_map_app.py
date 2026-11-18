@@ -331,7 +331,7 @@ class CompetitionMapApp(RescueMapApp):
             # field coordinates are anchored by the arena walls.
             command.remove("--enable-pose-jumping")
             command += ["--disable-pose-jumping", "--disable-relocalization",
-                        "--disable-mapping", "--disable-map-preservation"]
+                        "--enable-mapping", "--disable-map-preservation"]
         if self.operator is not None:
             command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:
