@@ -68,6 +68,8 @@ class OperatorPanel:
         self._pending_alarm = None
         self._alarm_on = False
         self._ready_feedback = False
+        self._sound_lock = threading.RLock()
+        self._confirmation_key = None
         self._next_ready_beep = 0.0
         self._start_press_token = None
         self.button_log = None
@@ -202,6 +204,8 @@ class OperatorPanel:
                     self._start_press_token = None
                 if event['action'] == 'stop':
                     self.request_stop()
+                elif event['action'] == 'exit_session':
+                    self._confirm_key(4)
                 if (event['action'] == 'start' and self.transitioning
                         and not getattr(self.app, 'prewarm_enabled', False)):
                     continue
@@ -209,13 +213,27 @@ class OperatorPanel:
                 self._enqueue(event)
             self._quit.wait(.02)
 
+    def _confirm_key(self, key):
+        # Long 4 calls from the input thread; long 3 calls before archiving or spawning.
+        with self._sound_lock:
+            self._confirmation_key = key
+            self._alarm_on = self._ready_feedback = False
+            self._beep_sequence = (self._beep_sequence + 1) & 255
+            self._pending_alarm = (False, self._beep_sequence)
+            self._pending_beep = (1, False, self._beep_sequence)
+            self._flush_beep()
+
     def _flush_beep(self):
+        with self._sound_lock:
+            return self._send_pending_sound()
+
+    def _send_pending_sound(self):
         if self._pending_alarm is not None:
             enabled, sequence = self._pending_alarm
             if not send_alarm(self.socket_name, enabled, sequence):
                 return False
             self._pending_alarm = None
-        if self._alarm_on or self.stopped:
+        if self._alarm_on or (self.stopped and not self._confirmation_key):
             self._pending_beep = None
             return True
         if self._pending_beep is None:
@@ -227,22 +245,30 @@ class OperatorPanel:
         return False
 
     def _beep(self, count, long=False):
-        if self._alarm_on or self.stopped:
-            return
-        self._beep_sequence = (self._beep_sequence + 1) & 255
-        # One replaceable local notification, never a UART acknowledgment wait.
-        self._pending_beep = (count, long, self._beep_sequence)
-        if not self._flush_beep():
-            self._record('operator_feedback_pending', '本地IPC暂未绑定；保留一条声音请求，不等待下位机回执')
+        with self._sound_lock:
+            if self._confirmation_key:
+                return
+            if self._alarm_on or self.stopped:
+                return
+            self._beep_sequence = (self._beep_sequence + 1) & 255
+            # One replaceable local notification, never a UART acknowledgment wait.
+            self._pending_beep = (count, long, self._beep_sequence)
+            if not self._flush_beep():
+                self._record('operator_feedback_pending', '本地IPC暂未绑定；保留一条声音请求，不等待下位机回执')
 
     def set_alarm(self, enabled):
-        self._ready_feedback = False
-        self._pending_beep = None
-        self._alarm_on = bool(enabled)
-        self._beep_sequence = (self._beep_sequence + 1) & 255
-        self._pending_alarm = (self._alarm_on, self._beep_sequence)
-        if not self._flush_beep():
-            self._record('operator_feedback_pending', '保留最新警报/消音请求，等待本地串口进程绑定；不等下位回执')
+        with self._sound_lock:
+            if self._confirmation_key:
+                if not enabled or self._confirmation_key == 4:
+                    return  # Owner cleanup must not cut off the accepted key's tone.
+                self._confirmation_key = None  # Prewarm failed; the alarm takes priority.
+            self._ready_feedback = False
+            self._pending_beep = None
+            self._alarm_on = bool(enabled)
+            self._beep_sequence = (self._beep_sequence + 1) & 255
+            self._pending_alarm = (self._alarm_on, self._beep_sequence)
+            if not self._flush_beep():
+                self._record('operator_feedback_pending', '保留最新警报/消音请求，等待本地串口进程绑定；不等下位回执')
 
     def silence(self):
         self.set_alarm(False)
@@ -292,12 +318,16 @@ class OperatorPanel:
                 self.silence()
                 self.app.vision_start_pending = False
                 self.app.start_requested = False
-                self._notice('已停车并保留本局；松开4，收纳后摆回原出发位短按3重发；按住4满5秒清空本局', 'operator_stop')
+                message = ('已停车并保留本局；松开4，收纳后摆回原出发位短按3重发'
+                           if self.app.session_started else '尚未发车，已停车；松开4，长按3可重开一局并预热')
+                if not self.app.session_started and getattr(self.app, 'start_released', False):
+                    message = '已发出启动请求，已停车'
+                self._notice(message + '；按住4满3秒响一声清局', 'operator_stop')
             elif action == 'exit_session':
                 if not self.transitioning:
                     self.transitioning = True
                     try:
-                        self.app.reset_session(source='gpio_buttons')
+                        self.app.reset_session(source='gpio_buttons', stop_serial=event.get('_stop_serial'))
                     finally:
                         self.transitioning = False
             elif action in ('query_zone', 'next_zone'):
@@ -315,10 +345,7 @@ class OperatorPanel:
                 self._trace_button('dispatch',3,event.get('monotonic'),action=action,
                     stopped=self.stopped,selecting=self.app.selecting,transitioning=self.transitioning,
                     same_stop=event.get('_stop_serial') == self._stop_serial)
-                if (getattr(self.app, 'prewarm_enabled', False) and self.app.selecting
-                        and not self.transitioning and not self.stopped
-                        and event.get('_stop_serial') == self._stop_serial):
-                    self.app.prepare_warm_session()
+                self._accept_prewarm(event.get('_stop_serial'))
             elif action == 'start':
                 self._trace_button('dispatch', 3, event['monotonic'] if 'monotonic' in event else time.monotonic(),
                     action='start', stopped=self.stopped, selecting=self.app.selecting,
@@ -332,9 +359,27 @@ class OperatorPanel:
                             (event.get('_ready_press_token') is None or
                              event['_ready_press_token'] != self.app.reset_session_token)):
                         self.app.reject_unready_start()
-                    else:
-                        self.app.start_session()
+                    elif self.app.start_session():
+                        self._beep(1)
         self._ready_heartbeat()
+
+    def _accept_prewarm(self, serial):
+        if (not self.app.prewarm_enabled or self.transitioning or not self.app.selecting
+                or self.app.session_started or self.app.start_released or serial != self._stop_serial):
+            return
+        restart = self.stopped
+        if self.app.warming and not restart:
+            return
+        self._confirm_key(3)
+        try:
+            if restart:
+                self.app.reset_session(source='gpio_prewarm_new_round', stop_serial=serial)
+            if serial == self._stop_serial and not self.stopped:
+                self.app.prepare_warm_session()
+        finally:
+            with self._sound_lock:
+                if self._confirmation_key == 3:
+                    self._confirmation_key = None
 
     def before_start(self):
         self.silence()
@@ -352,7 +397,9 @@ class OperatorPanel:
         self._stop_standby()
         # Carry the latest sound state across UART ownership transfer. This is
         # one local request, not a firmware acknowledgment or periodic retry.
-        self._pending_alarm = (self._alarm_on, self._beep_sequence)
+        with self._sound_lock:
+            if not self._confirmation_key:
+                self._pending_alarm = (self._alarm_on, self._beep_sequence)
         return True
 
     def release_start(self, zone, side, opening_strategy):
@@ -386,18 +433,25 @@ class OperatorPanel:
                     self._notice(f'启动期间STOP记录失败：{error}')
             self.transitioning = False
 
-    def after_reset(self):
+    def after_reset(self, stop_serial=None):
         with self._state_lock:
             self.app.reset_session_token = None
-            self.stopped = False
-            try:
-                self.control_path.unlink(missing_ok=True)
-            except OSError as error:
-                self._notice(f'按键控制记录清理失败：{error}')
+            if stop_serial is None or stop_serial == self._stop_serial:
+                self.stopped = False
+                try:
+                    self.control_path.unlink(missing_ok=True)
+                except OSError as error:
+                    self._notice(f'按键控制记录清理失败：{error}')
             self.transitioning = False
         if self.active:
             self._start_standby()
-        self.silence()
+        with self._sound_lock:
+            if self._confirmation_key:
+                if self._confirmation_key == 4 and (stop_serial is None or stop_serial == self._stop_serial):
+                    self._confirmation_key = None
+                self._flush_beep()  # If no owner was bound, deliver through standby.
+            else:
+                self.silence()
 
     def close(self):
         self.silence()

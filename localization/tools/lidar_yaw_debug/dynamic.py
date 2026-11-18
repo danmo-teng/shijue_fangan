@@ -63,8 +63,30 @@ def accepted_points(scan,mount):
         and bisect_right(bounds,p.raw_angle_deg)%2==0]
 
 
+def _safe_zone_front_only(fit, lines, prior, yaw):
+    """Does the proposed red/blue end wall also fit the mapped front lip?"""
+    # Map drawing: 0.66 m outer width, near/far faces at |Y|=1.14/1.20.
+    # Reuse the wall fit's 35 mm scatter and its supported-outlier rule.
+    end_walls = set(fit['wall_ids']).intersection((2, 3))
+    if len(end_walls) != 1:
+        return False
+    side = 1 if 3 in end_walls else -1
+    support = fit['wall_support_lines']['y']
+    for index in support:
+        projected = lines[index]['points'] @ rotation(yaw).T
+        distance = side * (np.median(projected[:, 1]) + prior[1])
+        if not 1.14 - .035 <= distance <= 1.20 + .035:
+            return False
+        # The separately solved X wall places these points across the field.
+        x = projected[:, 0] + fit['candidate_center_xy_m'][0]
+        outside = abs(x) > .33 + .035
+        if outside.sum() >= 6 and outside.mean() > .25:
+            return False
+    return bool(support)
+
+
 def solve_lines_position(points,ref,offset,lines):
-    """Original stateless local/reacquisition solves over frozen scan support."""
+    """Local tracking and fixed-yaw reacquisition over the same scan support."""
     prior=ref[:2]+offset
     local=fixed_yaw_position(points,prior,ref[2],[0.,0.,0.],_lines=lines,
                             max_correction_m=float('inf'),independent_axes=True)
@@ -87,6 +109,14 @@ def solve_lines_position(points,ref,offset,lines):
                     reacquisition_status='OPPOSING_WALL_AXIS_REACQUIRED',reacquired_axes=recovered)
     found=(None if local['rank_xy']>0 else
         reacquire_fixed_yaw_position(points,ref[2],_lines=lines))
+    if found and found['rank_xy'] == 2 and _safe_zone_front_only(found, lines, prior, ref[2]):
+        x = found['candidate_center_xy_m'][0]
+        found = dict(found, reason='SAFE_ZONE_FRONT_AMBIGUOUS_Y',
+            rank_xy=1, position_observed_axes=['x'], inherited_axes=['y'],
+            candidate_center_xy_m=[x, float(prior[1])],
+            wall_support_lines={'x': found['wall_support_lines']['x']},
+            wall_ids=[wall for wall in found['wall_ids'] if wall < 2],
+            axis_rejections={'y': ['safe_zone_front_or_outer_wall']})
     return local,found
 
 def matched_wall_display_points(lines, fit, yaw, center, limit=256):
@@ -314,8 +344,8 @@ class DynamicFence:
     def _fit_lines_position(self,points,ref,offset,scan_id,lines,*,revision=None,solved=None):
         """Local tracking, or two-scan enclosure reacquisition at fixed yaw.
 
-        Share line extraction. A bad wheel/T265 XY prior cannot veto a new
-        two-axis wall solution after local XY tracking is lost. Preserve a
+        Share line extraction. Independent outer-wall evidence can recover
+        XY even after the wheel/T265 prior has drifted. Preserve a
         surviving single-axis track: a distant parallel interior surface must
         not be promoted to the missing arena wall just to complete XY.
         Compare correction offsets, not absolute positions of a moving car.
@@ -335,20 +365,22 @@ class DynamicFence:
             if local['rank_xy']>0:
                 self.pending_reacquisition=None
                 return local
-            if found['rank_xy']!=2:
+            if not found['rank_xy']:
                 self.pending_reacquisition=None
                 return dict(local,reacquisition_status=found['reason'])
             candidate=np.asarray(found['candidate_center_xy_m'])
             proposed=candidate-ref[:2]
             previous=self.pending_reacquisition
-            agrees=(previous is not None and previous['scan_id']!=scan_id and
+            axes=found['position_observed_axes']
+            agrees=(previous is not None and previous['axes']==axes and previous['scan_id']!=scan_id and
                     np.linalg.norm(proposed-previous['offset'])<=REACQUISITION_OFFSET_AGREEMENT_M)
             if not agrees:
-                self.pending_reacquisition=dict(scan_id=scan_id,offset=proposed)
+                self.pending_reacquisition=dict(scan_id=scan_id,offset=proposed,axes=axes)
                 return dict(local,reacquisition_status='CONFIRMING_ENCLOSURE',
                     reacquisition_candidate_xy_m=candidate.tolist())
             self.pending_reacquisition=None
-            return dict(found,reason='FIXED_YAW_ENCLOSURE_REACQUIRED',position_reacquired=True,
+            reason = 'FIXED_YAW_ENCLOSURE_REACQUIRED' if len(axes)==2 else 'X_REACQUIRED_SAFE_ZONE_Y_INHERITED'
+            return dict(found,reason=reason,position_reacquired=True,
                 reacquisition_status='REACQUIRED',reacquisition_confirmations=2,
                 correction_m=float(np.linalg.norm(candidate-prior)),
                 local_reason=local['reason'],local_observed_axes=local['position_observed_axes'])

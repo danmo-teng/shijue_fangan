@@ -2501,7 +2501,7 @@ def test_prewarm_press_readiness_and_feedback_states():
     import operator_panel as panel_module
     app = SimpleNamespace(options=SimpleNamespace(zone=1,side='red'),zone=1,side='red',
         corner_offset_m=.2,record_reset_event=Mock(),prewarm_enabled=True,warm_ready=False,
-        reset_session_token='round',start_session=Mock(),reject_unready_start=Mock())
+        reset_session_token='round',session_started=False,start_session=Mock(),reject_unready_start=Mock())
     with tempfile.TemporaryDirectory() as directory, patch.object(panel_module,'RUNTIME',Path(directory)), \
          patch.object(panel_module,'send_alarm',return_value=True) as alarm, \
          patch.object(panel_module,'send_beep',return_value=True) as beep:

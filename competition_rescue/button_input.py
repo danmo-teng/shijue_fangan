@@ -18,6 +18,12 @@ BUTTON_LINES = {
 }
 
 
+LONG_PRESS = {
+    1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
+    3: ('prewarm', 1.0), 4: ('exit_session', 3.0),
+}
+
+
 @dataclass
 class _Button:
     raw: bool | None = None
@@ -149,11 +155,7 @@ class SysfsButtonInput:
                     # A delayed launcher poll may first see a long hold at
                     # release; it must not turn that hold into a short press.
                     held_s = button.changed_at - button.pressed_at
-                    long_action, duration = {
-                        1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
-                        3: ('prewarm', 1.0),
-                        4: ('exit_session', 5.0),
-                    }.get(key, (None, 0.0))
+                    long_action, duration = LONG_PRESS[key]
                     action = (long_action if long_action and held_s >= duration else
                               {1: 'query_zone', 2: 'query_side', 3: 'start'}.get(key))
                     if action:
@@ -164,11 +166,7 @@ class SysfsButtonInput:
         for key, button in self._buttons.items():
             if not (button.raw and button.stable and button.armed) or button.long_sent:
                 continue
-            action, duration = {
-                1: ('next_zone', 1.0), 2: ('toggle_side', 1.0),
-                3: ('prewarm', 1.0),
-                4: ('exit_session', 5.0),
-            }.get(key, (None, 0.0))
+            action, duration = LONG_PRESS[key]
             if action and now - button.pressed_at >= duration:
                 if key == 4 or not self._chord_blocked:
                     emit(action, key)

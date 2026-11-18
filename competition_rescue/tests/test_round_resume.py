@@ -10,10 +10,10 @@ from state_machine import CompetitionMission, CompetitionSettings, CompetitionSt
 from protocol import crc16_modbus, CMD_BULLDOZER_STEP
 
 
-def test_stop_keeps_match_until_five_seconds_including_release_poll():
+def test_stop_keeps_match_until_three_seconds_including_release_poll():
     from button_input import SysfsButtonInput
-    # Both a held-key poll and the release fallback use the same 5s rule.
-    for hold, reset in ((2.1, False), (4.9, False), (5.1, True)):
+    # Both a held-key poll and the release fallback use the same 3s rule.
+    for hold, reset in ((2.1, False), (2.99, False), (3.0, True)):
         levels = {key: 1 for key in range(1, 5)}
         buttons = SysfsButtonInput(read_level=lambda key: levels[key])
         buttons.poll(0.)
@@ -113,3 +113,54 @@ def test_orange_search_hot_resume_retains_angle_without_per_frame_disk_writes(tm
     assert store.path.read_bytes()!=initial
     new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
     assert not new._orange_only_search()
+
+
+def test_button_tones_and_prestart_stop_new_round(tmp_path):
+    import operator_panel as panel_module
+    app = SimpleNamespace(options=SimpleNamespace(zone=1, side='red'),
+        zone=1, side='red', corner_offset_m=.253, reset_session_token='old',
+        session_started=False, start_released=False, warming=True,
+        prewarm_enabled=True, record_reset_event=Mock(), prepare_warm_session=Mock())
+    with patch.object(panel_module, 'RUNTIME', tmp_path), \
+         patch.object(panel_module, 'send_abort', return_value=True), \
+         patch.object(panel_module, 'send_beep', return_value=True) as beep, \
+         patch.object(panel_module, 'send_alarm', return_value=True):
+        panel = panel_module.OperatorPanel(app)
+        app.start_session = Mock(return_value=True)
+        app.reject_unready_start = Mock()
+        panel._enqueue(dict(action='start', key=3, _stop_serial=0, _ready_press_token='old'))
+        panel.tick()
+        assert beep.call_count == 1 and beep.call_args.kwargs['count'] == 1
+        panel._enqueue(dict(action='start', key=3, _stop_serial=0, _ready_press_token=None))
+        panel.tick()
+        app.reject_unready_start.assert_called_once()
+        assert beep.call_count == 1
+        beep.reset_mock()
+        app.reset_session = Mock(side_effect=lambda source, stop_serial: panel.after_reset(stop_serial))
+        panel.request_stop()
+        panel._accept_prewarm(panel._stop_serial)
+        app.reset_session.assert_called_once_with(source='gpio_prewarm_new_round', stop_serial=1)
+        app.prepare_warm_session.assert_called_once()
+        assert not panel.stopped and beep.call_count == 1
+        panel._accept_prewarm(1)  # Already warming.
+        app.session_started = True
+        panel.request_stop()
+        panel._accept_prewarm(2)  # STOP of an active match retains progress.
+        assert beep.call_count == 1 and app.reset_session.call_count == 1
+        app.session_started = False
+        def stop_during_reset(source, stop_serial):
+            panel.request_stop()
+            panel.after_reset(stop_serial)
+        app.reset_session.side_effect = stop_during_reset
+        panel._accept_prewarm(2)
+        assert panel.stopped and panel.control_path.exists()
+        app.prepare_warm_session.assert_called_once()
+        beep.reset_mock()
+        panel.buttons = Mock()
+        panel.buttons.poll.return_value = [dict(action='exit_session', key=4)]
+        with patch.object(panel._quit, 'wait', side_effect=lambda _: panel._quit.set()):
+            panel._poll_buttons()
+        assert beep.call_count == 1 and beep.call_args.kwargs['count'] == 1
+        panel.silence()
+        panel.after_reset(panel._stop_serial)
+        assert beep.call_count == 1

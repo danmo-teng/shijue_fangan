@@ -152,7 +152,8 @@ class CompetitionMapApp(RescueMapApp):
             self.record_reset_event('prewarm_ready', 'repeating_two_short_beeps; SDK Pose, gyro and actual inference present')
         if self.operator.stopped:
             self.start_requested = False
-            self.message = '已请求停止；长按4回待机，再长按3预热'
+            self.message = ('已请求停止；长按4满3秒清局' if self.start_released else
+                            '尚未发车，已停车；松开4，长按3重开一局并预热')
             return
         if self.start_requested and not ready and not self.start_released:
             self.reject_unready_start()
@@ -220,11 +221,14 @@ class CompetitionMapApp(RescueMapApp):
                     self.odometry_trajectory.reset()
                     self.message = '已请求本局重发，按原出发位重设定位，保留首绿和进攻进度'
                     self.record_reset_event('operator_resume_requested', reference)
+                    return True
                 return
             if self.session_started:
                 return
             if self.operator.stopped:
                 self.message = '本轮已停止；长按4退出后可重新开始'
+                return
+            if self.start_requested or self.start_released:
                 return
             if not self.warming or not getattr(self, 'warm_ready', False):
                 self.reject_unready_start()
@@ -234,7 +238,7 @@ class CompetitionMapApp(RescueMapApp):
             self.record_reset_event('operator_start_requested', 'ready_press; no SDK restart')
             self._update_warm_start()
             self.selecting = not self.start_released
-            return
+            return self.start_released
         if self.session_started:
             return  # A new round starts after explicit exit/reset, never resumes old actions.
         try:
@@ -612,7 +616,7 @@ class CompetitionMapApp(RescueMapApp):
         except OSError as error:
             print(f"复位日志写入失败：{error}", file=sys.stderr)
 
-    def reset_session(self, source: str = "map_window") -> None:
+    def reset_session(self, source: str = "map_window", stop_serial=None) -> None:
         self.warm_ready = False
         self.warming = self.start_requested = self.start_released = False
         if self.operator is not None:
@@ -626,7 +630,7 @@ class CompetitionMapApp(RescueMapApp):
         self.reset_request_path.unlink(missing_ok=True)
         self.record_reset_event("session_reset_completed", source)
         if self.operator is not None:
-            self.operator.after_reset()
+            self.operator.after_reset(stop_serial)
             if self.prewarm_enabled:
                 self.message = '待机：长按3约1秒只预热，循环双短音后短按3发车'
 

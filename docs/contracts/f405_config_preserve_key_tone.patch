@@ -1,0 +1,38 @@
+--- a/Boards/F405/Inc/board_f405.h
++++ b/Boards/F405/Inc/board_f405.h
+@@ -38,4 +38,5 @@
+ void BoardF405_RequestBeep(uint8_t count, bool long_tone);
+ /* Persistent operator alarm; false cancels all queued/current operator sound. */
+ void BoardF405_SetOperatorAlarm(bool enabled);
++void BoardF405_ClearAlarmOnConfig(void);
+ void BoardF405_ProcessBeep(uint32_t now_ms);
+--- a/Boards/F405/Src/board_f405.c
++++ b/Boards/F405/Src/board_f405.c
+@@ -119,5 +119,17 @@
+     beep_request = BEEP_REQUEST_ALARM;
+   }
+   /* Repeated ON leaves both pending sound and the current phase intact. */
++  __set_PRIMASK(mask);
++}
++
++/* CONFIG stops a persistent alarm; a finite key tone may still be playing. */
++void BoardF405_ClearAlarmOnConfig(void)
++{
++  const uint32_t mask = __get_PRIMASK();
++  __disable_irq();
++  if (operator_alarm_requested) {
++    operator_alarm_requested = false;
++    beep_request = BEEP_REQUEST_SILENCE;
++  }
+   __set_PRIMASK(mask);
+ }
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -132,6 +132,6 @@
+   latest_data.mission = (VisionMissionCommand){0};
+   context_pending = false;
+ #if APP_BOARD_F405_ROBO
+-  BoardF405_SetOperatorAlarm(false);
++  BoardF405_ClearAlarmOnConfig();
+ #endif
+ }
