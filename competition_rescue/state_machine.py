@@ -1007,7 +1007,6 @@ class CompetitionMission:
         self.orange_top_view_bbox = None
         self.transport_separation_active = False
         self.stage_redirect_active = False
-        self.orange_gate_filter_completed = False
         self.orange_gate_filter_attempted = False
         self.orange_gate_filter_command = None
 
@@ -1476,7 +1475,6 @@ class CompetitionMission:
         self.transport_audit_handoff_active = False
         if self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.task_generation += 1
-            self.orange_gate_filter_completed = False
             self.orange_gate_filter_attempted = False
             self.orange_gate_filter_command = None
             self.delivery_counted_for_batch = False
@@ -1512,7 +1510,6 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
-        self.orange_gate_filter_completed = False
         self.orange_gate_filter_attempted = False
         self.orange_gate_filter_command = None
         self._clear_orange_top_view()
@@ -3787,8 +3784,6 @@ class CompetitionMission:
                 self._orange_mixed_side_manifest(audit, side))
 
     def _orange_core_separation(self, audit: CargoAudit, keep_side: str | None) -> bool:
-        if self.orange_gate_filter_completed:
-            return False  # This batch separates at its latched 86-degree height.
         if (keep_side is None or audit.danger_present or audit.unknown_present or
                 "injured_orange" not in self._separation_side_manifest(audit, keep_side)):
             return False
@@ -6743,7 +6738,6 @@ class CompetitionMission:
                 stm.accepted_command == CMD_ORANGE_GATE_FILTER and stm.action_status & 1 and
                 stm.action_status & 2 and stm.mode == STM_MODE_TRANSPORT_AUDIT and stm.gripper_closed)
         if done:
-            self.orange_gate_filter_completed = True
             self.orange_gate_filter_command = None
             # Completion proves the round trip, NOT that the black is gone.
             return replace(self._begin_transport_audit(vision, pose, stm, now),

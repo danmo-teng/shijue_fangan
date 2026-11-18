@@ -4227,8 +4227,7 @@ def test_orange_gate_filter_symmetric_once_and_real_reaudit():
                 assert m.orange_gate_filter_attempted
                 # Still black: original separation, never repeat the lateral move.
                 out = _orange_gate_confirm_review(m, view, current, status, 9, 3.)
-                assert out.command.opcode == CMD_DISPERSE_PILE and out.command.aux == 0
-                assert m.orange_gate_filter_completed
+                assert out.command.opcode == CMD_DISPERSE_PILE and out.command.aux == 8200
                 assert m.orange_gate_filter_attempted
                 # A real single-orange review takes the normal alignment path.
                 from run_competition_rescue import audit_from_cargo
