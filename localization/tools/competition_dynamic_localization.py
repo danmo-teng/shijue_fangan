@@ -101,6 +101,7 @@ class CompetitionDynamicLocalization:
         # One local coordinate bind; no MCU handshake or data-age policy.
         self.start_request = dict(center_xy_m=[field_start['x_m'],field_start['y_m']],
             yaw_deg=field_start['yaw_deg'],first_sample=False,round_token=round_token,
+            requested_at_ns=time.monotonic_ns(),
             description='operator start: bind current warm Pose and gyro to selected formal start')
         self.start_request_sent = False
         self.radar.control.wake()

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+localizer_dir="${RDK_FORMAL_LOCALIZATION_BUILD:-${script_dir}/build}"
 boot_tool="${script_dir}/../t265_trajectory/build/t265_boot"
 experimental_robust=false
 for argument in "$@"; do
@@ -10,7 +11,7 @@ for argument in "$@"; do
     fi
 done
 
-if [[ ! -x "${script_dir}/build/t265_omni_localizer" ]]; then
+if [[ ! -x "${localizer_dir}/t265_omni_localizer" ]]; then
     echo "Error: build/t265_omni_localizer is missing; build the project first." >&2
     exit 1
 fi
@@ -31,7 +32,7 @@ elif lsusb -d 03e7:2150 >/dev/null 2>&1; then
     fi
 fi
 
-exec "${script_dir}/build/t265_omni_localizer" \
+exec "${localizer_dir}/t265_omni_localizer" \
     --config "${script_dir}/config/localization.example.conf" \
     --output "${script_dir}/localization_result.json" \
     "$@"

@@ -95,7 +95,7 @@ def _load():
     if _load_error is not None:
         raise NativeReaderError(_load_error)
     try:
-        library = C.CDLL(str(Path(__file__).resolve().parents[2] / 'build/liblidar_geometry.so'))
+        library = C.CDLL(str(Path(os.environ.get('RDK_FORMAL_LOCALIZATION_BUILD',Path(__file__).resolve().parents[2]/'build'))/'liblidar_geometry.so'))
         abi = library.lidar_reader_abi_version
         abi.argtypes = []; abi.restype = C.c_uint32
         if abi() != 1:

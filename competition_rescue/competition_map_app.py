@@ -360,6 +360,9 @@ class CompetitionMapApp(RescueMapApp):
         session_tmp.replace(RUNTIME / "session.json")
         if self.dynamic_localization:
             dynamic_config = load_config(self.options.dynamic_config)
+            if self.operator is not None:
+                dynamic_config['competition_wall_yaw'] = dict(stm=str(self.stm_status_path),
+                    socket=self.operator.socket_name)
             dynamic_config["full_lidar_diagnostics"] = True  # Every formal radar session records raw RX and scan points.
             dynamic_config['lidar'].update(port=self.options.lidar, baud=self.options.lidar_baud)
             if self.options.lidar == self.options.uart:

@@ -29,7 +29,7 @@ _Order = ctypes.CFUNCTYPE(ctypes.c_int,ctypes.POINTER(ctypes.c_double),
 
 if os.environ.get('RDK_LIDAR_NATIVE', '1').lower() not in ('0','off','false'):
     try:
-        _library = ctypes.CDLL(str(Path(__file__).resolve().parents[2] / 'build/liblidar_geometry.so'))
+        _library = ctypes.CDLL(str(Path(os.environ.get('RDK_FORMAL_LOCALIZATION_BUILD',Path(__file__).resolve().parents[2]/'build'))/'liblidar_geometry.so'))
         _function = _library.lidar_best_hypothesis
         _function.argtypes = [ctypes.POINTER(ctypes.c_double),ctypes.c_size_t,
             ctypes.POINTER(ctypes.c_int64),ctypes.c_size_t,ctypes.c_double,ctypes.c_double,

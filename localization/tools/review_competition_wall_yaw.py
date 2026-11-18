@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+from lidar_yaw_debug.competition_yaw import wall_axis_angles
 from lidar_yaw_debug.dynamic import accepted_points, rotation
 from lidar_yaw_debug.static import extract_lines, outer_supported_lines
 
@@ -32,23 +33,7 @@ def wall_angles(scan, fit, mount):
     x, y, angle = mount['extrinsic']
     body = np.array([p.point_lidar_m for p in points]) @ rotation(math.radians(angle)).T + (x,y)
     prior = fit['prior_center_xy_m']
-    by_axis = [[], []]
-    for line in outer_supported_lines(extract_lines(body)):
-        normal = rotation(yaw) @ line['normal']
-        axis = int(abs(normal[1]) > abs(normal[0]))
-        angle = math.degrees(math.atan2(normal[1], normal[0]))
-        correction = (90*axis - angle + 90) % 180 - 90
-        projected = line['points'] @ rotation(yaw).T + prior
-        wall = 1.5 if np.median(projected[:,axis]) > 0 else -1.5
-        if (abs(correction) <= 12 and np.median(abs(projected[:,axis]-wall)) < .20
-                and np.mean(abs(projected[:,1-axis]) <= 1.55) > .85):
-            by_axis[axis].append(correction)
-    if not all(by_axis):
-        return None
-    # Reject incompatible lines rather than selecting the closest pair after seeing the answer.
-    if np.ptp(by_axis[0]+by_axis[1]) > 3:
-        return None
-    return tuple(float(np.median(g)) for g in by_axis)
+    return wall_axis_angles(outer_supported_lines(extract_lines(body)), prior, yaw)
 
 
 def review(path):

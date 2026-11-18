@@ -70,7 +70,9 @@ class OperatorPanel:
         self._ready_feedback = False
         self._next_ready_beep = 0.0
         self._start_press_token = None
-        self.buttons = SysfsButtonInput()
+        self.button_log = None
+        self.button_trace_run = secrets.token_hex(8)
+        self.buttons = SysfsButtonInput(trace=self._trace_button)
         selection = _read_json(self.selection_path)
         if not getattr(app.options, 'zone', None) and selection.get('zone') in (1, 2, 3, 4):
             app.zone = selection['zone']
@@ -100,7 +102,7 @@ class OperatorPanel:
         if self._standby is not None and self._standby.poll() is None:
             return
         options = self.app.options
-        command = [str(PROJECT_ROOT / 'localization/build/t265_omni_localizer'),
+        command = [str(Path(os.environ.get('RDK_FORMAL_LOCALIZATION_BUILD',PROJECT_ROOT/'localization/build')) / 't265_omni_localizer'),
                    '--operator-uart-only', '--operator-socket', self.socket_name,
                    '--uart', str(options.uart), '--baud', str(options.baud)]
         try:
@@ -126,6 +128,12 @@ class OperatorPanel:
                 process.wait(timeout=2)
         self._standby = None
 
+    def _trace_button(self, stage, key, when, **details):
+        if self.button_log is not None:
+            self.button_log.append(RUNTIME / 'operator_button_edges.jsonl', dict(
+                stage=stage, key=key, monotonic_s=when, run=self.button_trace_run,
+                session=getattr(self.app, 'reset_session_token', None), **details))
+
     def start(self):
         if self.active:
             return
@@ -136,6 +144,8 @@ class OperatorPanel:
         except OSError:
             lock_file.close()
             raise RuntimeError('已有实体按键/比赛入口运行，请使用现有入口') from None
+        from async_diagnostics import AsyncDiagnosticWriter
+        self.button_log = AsyncDiagnosticWriter(RUNTIME / "operator_button_logging_status.json")
         self._lock_file = lock_file
         self.active = True
         self._quit.clear()
@@ -302,11 +312,20 @@ class OperatorPanel:
                     self.save_selection()
                 self._query_side()
             elif action == 'prewarm':
+                self._trace_button('dispatch',3,event.get('monotonic'),action=action,
+                    stopped=self.stopped,selecting=self.app.selecting,transitioning=self.transitioning,
+                    same_stop=event.get('_stop_serial') == self._stop_serial)
                 if (getattr(self.app, 'prewarm_enabled', False) and self.app.selecting
                         and not self.transitioning and not self.stopped
                         and event.get('_stop_serial') == self._stop_serial):
                     self.app.prepare_warm_session()
             elif action == 'start':
+                self._trace_button('dispatch', 3, event['monotonic'] if 'monotonic' in event else time.monotonic(),
+                    action='start', stopped=self.stopped, selecting=self.app.selecting,
+                    session_started=self.app.session_started, transitioning=self.transitioning,
+                    same_stop=event.get('_stop_serial') == self._stop_serial,
+                    press_token_matches=(event.get('_ready_press_token') is not None and
+                                         event.get('_ready_press_token') == self.app.reset_session_token))
                 if ((self.app.selecting or (self.stopped and self.app.session_started)) and not self.transitioning and
                         event.get('_stop_serial') == self._stop_serial):
                     if (getattr(self.app, 'prewarm_enabled', False) and
@@ -393,4 +412,7 @@ class OperatorPanel:
                 fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
                 self._lock_file.close()
                 self._lock_file = None
+            if self.button_log is not None:
+                self.button_log.close()
+                self.button_log = None
             self.active = False

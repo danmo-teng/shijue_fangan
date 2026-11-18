@@ -695,6 +695,7 @@ std::string stm_status_json(std::uint64_t received_ns,
          << "  \"acknowledged_sequence\": "
          << static_cast<unsigned>(status.acknowledged_sequence) << ",\n"
          << "  \"fault_code\": " << static_cast<unsigned>(status.fault_code) << ",\n"
+         << "  \"wall_yaw_tag\": " << status.wall_yaw_tag << ",\n"
          << "  \"context_valid\": " << (status.context_valid ? "true" : "false") << ",\n"
          << "  \"task_id\": " << status.task_id << ",\n"
          << "  \"action_id\": " << status.action_id << ",\n"

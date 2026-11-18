@@ -320,6 +320,46 @@ public:
             if(get<bool>(p,"reset_wall_fixes",changed)){motion_.wall_fixes=0;last_fit_=nullptr;}
             if(has(p,"scan_count"))scan_count_=p.at("scan_count").get<std::uint64_t>();
         }
+        else if(kind=="wall_yaw_still"){
+            const double first=p.at("first_ns"), scan=p.at("reference_ns");
+            bool quiet=lidar_enabled_ && lidar_connected_ && !yaws_.empty() && !motion_.wheels.empty()
+                && yaws_.front()[0]<=first && motion_.wheels.front()[0]<=first
+                && yaws_.back()[0]>=scan && motion_.wheels.back()[0]>=scan;
+            if(quiet){
+                auto ys=window_values(yaws_,first,yaws_.back()[0]);
+                auto ws=window_values(motion_.wheels,first,motion_.wheels.back()[0]);
+                auto ps=window_values(poses_,first,poses_.empty()?scan:poses_.back()[0]);
+                quiet=ys.size()>1 && ws.size()>1 && ps.size()>1;
+                for(size_t i=1;quiet && i<ps.size();++i)
+                    quiet=std::hypot(ps[i][1]-ps[i-1][1],ps[i][2]-ps[i-1][2])<=
+                        .06*(ps[i][0]-ps[i-1][0])*1e-9;
+                for(size_t i=1;quiet && i<ys.size();++i)
+                    quiet=std::abs(ys[i][1]-ys[i-1][1])<=3.*PI/180.*(ys[i][0]-ys[i-1][0])*1e-9;
+                for(size_t i=1;quiet && i<ws.size();++i)
+                    quiet=ws[i][3]-ws[i-1][3]<=.06*(ws[i][0]-ws[i-1][0])*1e-9;
+            }
+            result["quiet"]=quiet;
+        }
+        else if(kind=="wall_yaw_commit"){
+            int cd=p.at("delta_cdeg"); auto token=p.at("round_token");
+            if(reference_.is_null() || reference_.value("round_token",std::string())!=token ||
+               reference_.count("wall_yaw_applied_cdeg") || std::abs(cd)>1200)
+                throw std::invalid_argument("wall yaw owner or range");
+            auto &track=motion_.history.empty()?poses_:motion_.history;
+            if(track.empty())throw std::invalid_argument("no pivot for wall yaw");
+            const auto &v=track.back();
+            Source::Vec3 point{{v[1],v[2],v[3]}};
+            auto old=field_xy(point);
+            for(auto k:{"vio_rotation","yaw_offset"})reference_[k]=reference_.at(k).get<double>()+cd*PI/18000.;
+            auto corrected=field_xy(point);
+            for(int i=0;i<2;++i)offset_[i]+=old[i]-corrected[i];
+            reference_["wall_yaw_applied_cdeg"]=cd;
+            motion_.reference=reference_; // basis depends on the difference of the two rotations
+            motion_.last_wall.reset();motion_.wall_window.reset();motion_.wall_fixes=0;
+            motion_.wall_evidence=nullptr;motion_.evidence_confirmations=0;motion_.evidence_verdict.reset();
+            last_fit_=nullptr;++revision_;
+            result["revision"]=revision_;
+        }
         else if(kind=="apply_wall")result=apply_wall(p);
         else throw std::invalid_argument("unknown native motion command: "+kind);
         publish();return result;
@@ -695,7 +735,7 @@ private:
             {"last_pose",poses_.empty()?Json(nullptr):Json(poses_.back())},{"first_yaw",yaws_.empty()?Json(nullptr):Json(yaws_.front())},
             {"last_yaw",yaws_.empty()?Json(nullptr):Json(yaws_.back())},
             {"last_yaw_row",yaws_.empty()?Json(nullptr):Json(yaws_.back())},{"last_sample",last_sample_},{"raw_pose",last_raw_pose_},
-            {"last_yaw_source",last_yaw_},{"have_tracked_pose",!poses_.empty()},{"have_primary_yaw",!yaws_.empty()},
+            {"wall_yaw_supported",true},{"last_yaw_source",last_yaw_},{"have_tracked_pose",!poses_.empty()},{"have_primary_yaw",!yaws_.empty()},
             {"pose_ingested",poses_ingested_},{"measured_wheel_ingested",wheels_ingested_},{"primary_yaw_ingested",yaws_ingested_},
             {"control_updates",control_updates_},{"native_feedback",feedback},{"motion_selection",motion_.snapshot()},
             {"reference",reference_},{"offset",offset_},{"revision",revision_},{"has_anchor",has_anchor_},

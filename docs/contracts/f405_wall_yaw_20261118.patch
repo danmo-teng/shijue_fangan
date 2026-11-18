@@ -1,0 +1,153 @@
+--- a/Main/Inc/Location.h
++++ b/Main/Inc/Location.h
+@@ -29,4 +29,5 @@
+ void Location_ResetReference(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg);
+ /* Re-anchor after stopped IMU recovery without erasing accumulated path. */
++void Location_AdjustFieldHeading(int16_t delta_cdeg);
+ void Location_Reanchor(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg);
+ void Location_Update10ms(void);
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -280,4 +280,6 @@
+   uint8_t config_resume_flags;
+   uint8_t config_delivery_count;
++  uint16_t yaw_config_word, yaw_offer_tag;
++  int16_t yaw_offer_cdeg;
+   bool config_resume;
+   uint8_t sequence;
+@@ -314,4 +316,5 @@
+   uint8_t action_status;
+   uint16_t rejected_action_id;
++  uint16_t yaw_round_tag;
+ } VisionStmStatus;
+
+--- a/Main/Src/Location.c
++++ b/Main/Src/Location.c
+@@ -224,4 +224,11 @@
+ }
+
++void Location_AdjustFieldHeading(int16_t delta_cdeg)
++{
++  const uint32_t mask=location_enter_critical();
++  location.heading_unwrapped_mdeg += (int32_t)delta_cdeg * 10;
++  location_leave_critical(mask);
++}
++
+ void Location_Reanchor(int32_t x_mm, int32_t y_mm, int32_t heading_mdeg)
+ {
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -110,5 +110,8 @@
+   const bool resume = payload[2] == VISION_CONFIG_RESUME;
+   const uint8_t required = resume ? VISION_RESUME_CONFIRM_FRAMES : APP_CONFIG_CONFIRM_FRAMES;
+-  const bool valid =
++  const uint16_t yaw_word = ((uint16_t)payload[6] << 8) | payload[7];
++  const bool yaw_word_ok = yaw_word == 0U || (yaw_word >= 0x4000U && yaw_word <= 0x4960U) ||
++      ((yaw_word & 0x8000U) && (yaw_word & 0x7fffU));
++  const bool valid = yaw_word_ok &&
+       ((color == VISION_COLOR_RED) || (color == VISION_COLOR_BLUE)) &&
+       (zone >= VISION_ZONE_1) && (zone <= VISION_ZONE_4) &&
+@@ -116,6 +119,6 @@
+                  color == latest_data.color && zone == latest_data.start_zone &&
+                  (payload[3] & ~(VISION_RESUME_FIRST_GREEN | VISION_RESUME_ATTACK_DONE)) == 0U &&
+-                 vision_padding_zero(payload, 6U) && sequence < required) :
+-                vision_padding_zero(payload, 2U));
++                 sequence < required) :
++                (payload[2]==0U && payload[3]==0U && payload[4]==0U && payload[5]==0U));
+
+   if (latest_data.config_ready) {
+@@ -155,4 +158,6 @@
+     latest_data.config_sequence = sequence;
+     latest_data.config_resume = resume;
++    latest_data.yaw_config_word = yaw_word;
++    latest_data.yaw_offer_tag = 0U;
+     latest_data.config_resume_flags = resume ? payload[3] : 0U;
+     latest_data.config_delivery_count = resume ? payload[4] : 0U;
+@@ -636,4 +641,17 @@
+   latest_data.last_frame_tick_ms = tick_ms;
+   latest_data.frame_received = true;
++  if (type == 0x21U) {
++    const uint16_t tag=vision_u16_be(payload);
++    const int16_t cd=(int16_t)vision_u16_be(payload+2);
++    if (!abort_pending && latest_data.config_ready && tag && tag<=0x7fffU &&
++        latest_data.yaw_config_word==(uint16_t)(0x8000U | tag) &&
++        cd>=-1200 && cd<=1200 && vision_padding_zero(payload,4U) &&
++        latest_data.yaw_offer_tag==0U) {
++      latest_data.yaw_offer_tag=tag;
++      latest_data.yaw_offer_cdeg=cd;
++    }
++    if (primask == 0U) __enable_irq();
++    return;
++  }
+   const bool paired = context_pending &&
+       (type == VISION_MSG_MISSION) && (sequence == context_sequence);
+@@ -676,5 +694,5 @@
+          ((type == VISION_MSG_CONFIG) || (type == VISION_MSG_REPORT) ||
+           (type == VISION_MSG_FUSED_POSE) ||
+-          (type == VISION_MSG_MISSION) || (type == VISION_MSG_COMMAND_CONTEXT)
++          (type == VISION_MSG_MISSION) || (type == VISION_MSG_COMMAND_CONTEXT) || (type == 0x21U)
+ #if APP_BOARD_F405_ROBO
+           || (type == VISION_MSG_OPERATOR_BEEP)
+@@ -881,6 +899,6 @@
+     status->acknowledged_sequence,
+     status->fault_code,
+-    0U,
+-    0U
++    (uint8_t)(status->yaw_round_tag >> 8U),
++    (uint8_t)status->yaw_round_tag
+   };
+   const uint8_t context_payload[VISION_PAYLOAD_SIZE] = {
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -396,4 +396,6 @@
+ static bool complete_flow_active;
+ static bool mission_paused;
++static uint16_t yaw_round_tag;
++static bool wall_yaw_taken;
+ static bool pause_clock_active;
+ static uint32_t pause_clock_ms;
+@@ -1555,7 +1557,8 @@
+     .action_id = accepted_context.action_id,
+     .accepted_opcode = accepted_context.opcode,
+-    .action_status = accepted_context.valid ?
++    .yaw_round_tag = yaw_round_tag,
++    .action_status = (uint8_t)(0x80U | (wall_yaw_taken ? 0x40U : 0U) | (accepted_context.valid ?
+         (uint8_t)(1U | ((accepted_context.completed || task_context_complete()) ? 2U : 0U) |
+-                  (accepted_context.rejection_valid ? 4U : 0U)) : 0U,
++                  (accepted_context.rejection_valid ? 4U : 0U)) : 0U)),
+     .rejected_action_id = accepted_context.rejection_valid ? accepted_context.rejected_action_id : 0U
+   };
+@@ -5336,4 +5339,8 @@
+       (vision->config_delivery_count & 1U) == 0U ? -1 : 1;
+   Location_Reset((LocationStart)vision->start_zone);
++  const uint16_t word=vision->yaw_config_word;
++  yaw_round_tag=(word & 0x8000U) ? word & 0x7fffU : 0U;
++  wall_yaw_taken=word>=0x4000U && word<=0x4960U;
++  if (wall_yaw_taken) Location_AdjustFieldHeading((int16_t)((int)word-0x4000-1200));
+   Vision_RequestConfigAck();
+   task_enter(TASK_START, now_ms);
+@@ -8591,4 +8598,18 @@
+ }
+
++static void task_adopt_parked_yaw(const VisionData *vision)
++{
++  if (wall_yaw_taken || !yaw_round_tag || vision->yaw_offer_tag != yaw_round_tag ||
++      mission_paused || pre_grab.moving || task_status.motors_active || Motor_IsBraking()) return;
++  if (state!=TASK_WAIT_NAVIGATION && state!=TASK_POST_GRAB_AUDIT &&
++      state!=TASK_TRANSPORT_AUDIT && state!=TASK_DISPERSE_READY &&
++      !(state==TASK_APPROACH && approach_phase==APPROACH_RANGE_WAIT && !zone_view.active)) return;
++  EncoderStatus wheels[3];
++  Encoder_GetAll(wheels);
++  for (unsigned i=0;i<3;i++) if (wheels[i].delta_10ms!=0) return;
++  Location_AdjustFieldHeading(vision->yaw_offer_cdeg);
++  wall_yaw_taken=true;
++}
++
+ void Task_Process(uint32_t now_ms)
+ {
+@@ -8629,4 +8650,5 @@
+     task_clear_sweep_audit_evidence();
+   }
++  task_adopt_parked_yaw(&vision);
+   task_accept_mission(&vision, now_ms);
+   if (state == TASK_STOPPED && task_status.fault == TASK_FAULT_REMOTE_STOP) {

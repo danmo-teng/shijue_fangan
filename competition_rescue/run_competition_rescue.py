@@ -245,13 +245,17 @@ def operator_start_request(control_path: Path | None, pose_path: Path, session_t
 
 
 
-def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None):
+def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None, wall_yaw_word=0):
     """Existing CONFIG sequence; remember the first write before any interruption."""
     for sequence in range(3):
         if not continue_start():
             return False
         frame = (config_frame(sequence, 0x11 if side == 'red' else 0x12, start_zone)
                  if resume_progress is None else resume_config_frame(sequence, side, start_zone, resume_progress))
+        if wall_yaw_word:
+            from protocol import crc16_modbus
+            body = frame[2:10] + wall_yaw_word.to_bytes(2,'big')
+            frame = frame[:2] + body + crc16_modbus(body).to_bytes(2,'little') + frame[-1:]
         write_command_frame(command_path, frame)
         on_sent()
         time.sleep(.04)
@@ -3625,6 +3629,7 @@ def main() -> int:
     warm_ready_written = False
     warm_status_error_reported = False
     next_operator_poll = 0.0
+    wall_yaw_word = 0
     last_start_reference = None
     resume_progress = None
     progress_store = (ProgressStore(args.operator_control.parent / 'competition_progress.json',
@@ -3650,7 +3655,7 @@ def main() -> int:
 
     def prepare_operator_start():
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
-        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress
+        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress, wall_yaw_word
         nonlocal wheel_policy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
         nonlocal recent_carried_track_ids, recent_carried_pitch_cdeg
@@ -3715,6 +3720,7 @@ def main() -> int:
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
         last_start_reference = request['reference_token']
+        wall_yaw_word = request['reference'].get('wall_yaw_config_word',0)
         events.write('warm_reference_bound', dict(session_token=args.reset_session_token,
             reference=request['reference'],side=side,start_zone=start_zone))
 
@@ -3753,7 +3759,7 @@ def main() -> int:
             nonlocal config_sent
             config_sent = True
         if not publish_start_config(args.command_file,side,start_zone,
-                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress):
+                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress, wall_yaw_word):
             return
         competition_started = True
         warm_ready_written = write_warm_status()

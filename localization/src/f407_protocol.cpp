@@ -96,8 +96,7 @@ std::array<std::uint8_t, kFrameSize> build_stm_status_frame(const StmStatusFrame
     put_u16_be(&frame[6], input.camera_pitch_cdeg);
     frame[8] = input.acknowledged_sequence;
     frame[9] = input.fault_code;
-    frame[10] = 0;
-    frame[11] = 0;
+    put_u16_be(&frame[10],input.wall_yaw_tag);
     const std::uint16_t crc = modbus_crc16(&frame[2], 10);
     frame[12] = static_cast<std::uint8_t>(crc & 0xffu);
     frame[13] = static_cast<std::uint8_t>((crc >> 8) & 0xffu);
@@ -240,6 +239,7 @@ void F407FrameParser::validate_frame()
         status.sequence = frame_[3];
         status.flags = frame_[4];
         status.mode = frame_[5];
+        status.wall_yaw_tag = get_u16_be(&frame_[10]);
         status.camera_pitch_cdeg = get_u16_be(&frame_[6]);
         status.acknowledged_sequence = frame_[8];
         status.fault_code = frame_[9];

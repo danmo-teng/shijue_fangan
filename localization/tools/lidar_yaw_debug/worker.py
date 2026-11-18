@@ -9,6 +9,7 @@ import os
 import socket
 import select
 import struct
+import math
 import json
 import queue
 import signal
@@ -93,7 +94,8 @@ def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
             log.submit('dynamic_scans.jsonl', dict(scan_id=scan.scan_id,
                 reference_ns=scan.reference_ns, time_qualified=False,
                 points=[vars(p).copy() for p in scan.points]))
-        state['scan_queue_drops'] += offer_latest(scans, scan)
+        item=(state['scans_received'],scan) if config.get('competition_wall_yaw') else scan
+        state['scan_queue_drops'] += offer_latest(scans, item)
 
     def release_reader():
         nonlocal reader
@@ -252,8 +254,23 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     if direct_socket is not None:direct_socket.setblocking(False)
     direct_sender=LocalDatagramSender(direct_socket,control_output['address']) if direct_socket is not None else None
 
+    from .competition_yaw import WallYawVote, reliable_delta, start_word, propose
+    wall_config=config.get('competition_wall_yaw')
+    vote=WallYawVote()
+    preview=None
+    wall_tag=0
+    wall_round=None
+    sent_boundary=None
+    candidate=None
+    proposal_sent=False
+
+    def lower_status():
+        try:
+            with open(wall_config['stm']) as stream:return json.load(stream)
+        except (OSError,ValueError):return {}
+
     def compute_geometry(*args,**kwargs):
-        nonlocal geometry_backend
+        nonlocal geometry_backend,preview
         geometry_parent.send((args,kwargs))
         while not geometry_parent.poll(.05):
             if stop.is_set() or not geometry_process.is_alive():
@@ -261,6 +278,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         success,result,status=geometry_parent.recv()
         geometry_backend=status
         if not success:raise ValueError(result)
+        if wall_config and args[0] in ('observe','wall_preview'):
+            scan=args[2]
+            preview=(scan, result.get('lines',[]))
         return result
 
     engine.geometry=compute_geometry
@@ -389,7 +409,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             # data-age gate, MCU handshake, motor STOP or blocking wait.
 
     def consume(first):
-        nonlocal reference_request_id,requested_lidar_enabled,latest_raw_pose
+        nonlocal reference_request_id,requested_lidar_enabled,latest_raw_pose,wall_tag,candidate,proposal_sent,vote,wall_round,sent_boundary
         changed=False
         for _ in range(16):
             if first is not None:
@@ -422,8 +442,38 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                     event('field_reference_search_started',request_id=reference_request_id,initialization=requested)
                 except ValueError as exc:reply('reference_rejected',request_id=payload['request_id'],error=str(exc))
             elif kind=='field_start':
+                heading=payload['yaw_deg']
+                wall_round=payload.get('round_token')
+                sent_boundary=None
+                word=0
+                wall_tag=0
+                vote=WallYawVote()
+                candidate=None
+                proposal_sent=False
+                if (wall_config and native_runtime is not None and payload.get('round_token')
+                        and engine.native_state.get('wall_yaw_supported') and lower_status().get('action_status',0)&128):
+                    import secrets
+                    delta=None
+                    cached=preview
+                    if (cached and cached[0].reference_ns<=payload.get('requested_at_ns',0) and
+                            reader_state['lidar_connected'] and requested_lidar_enabled):
+                        scan,lines=cached
+                        try:
+                            still=native_runtime.command('wall_yaw_still',dict(first_ns=scan.first_point_ns,
+                                reference_ns=scan.reference_ns))
+                            if still['quiet']:
+                                delta=reliable_delta(lines,payload['center_xy_m'],math.radians(heading))
+                        except (ValueError,RuntimeError) as exc:
+                            event('wall_yaw_start_unavailable',reason=str(exc))
+                    if delta is None:
+                        previous=lower_status().get('wall_yaw_tag',0)
+                        wall_tag=secrets.randbelow(32767)+1
+                        if wall_tag==previous:wall_tag=wall_tag%32767+1
+                    else:heading+=delta/100.
+                    word=start_word(delta,wall_tag)
+                    event('wall_yaw_start',round_token=payload['round_token'],delta_cdeg=delta,tag=wall_tag)
                 reference=engine.align(payload['description'],physical_confirmed=False,
-                    center_xy=payload['center_xy_m'],heading_deg=payload['yaw_deg'],
+                    center_xy=payload['center_xy_m'],heading_deg=heading,wall_yaw_word=word,
                     first_sample=payload.get('first_sample',True),round_token=payload.get('round_token'))
                 reference_request_id=None
                 # Pending observations belong to the previous placement.
@@ -535,7 +585,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             accuracy_verified=False,full_speed_physical_validation=False)
 
     def drain_reader():
-        nonlocal reader_state
+        nonlocal reader_state,preview,vote
         dirty=False
         while readable_nowait(updates._reader.fileno()):
             try:value=updates.get_nowait()
@@ -547,6 +597,8 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
             if native_runtime is not None and changed:
                 native_runtime.command('lidar_state',dict(connected=value['lidar_connected'],error=value['lidar_error']))
             if changed:
+                preview=None
+                vote=WallYawVote()
                 dirty=True
                 engine.set_lidar_enabled(requested_lidar_enabled and value['lidar_connected'])
                 event('lidar_connected' if value['lidar_connected'] else 'lidar_connection_error',
@@ -555,8 +607,9 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
 
     def fit_loop():
         while not fitting_stop.is_set():
-            try:scan,revision,request_id=fit_inbox.get(timeout=.05)
+            try:item,revision,request_id=fit_inbox.get(timeout=.05)
             except queue.Empty:continue
+            index,scan=item if wall_config else (0,item)
             try:
                 with engine.lock:
                     if revision!=engine.revision:continue
@@ -565,8 +618,16 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 if initializing:
                     result=engine.try_initialize(scan,expected_revision=revision)
                 else:
-                    if not have_reference:continue
+                    if not have_reference:
+                        if wall_config and engine.lidar_corrections_enabled:
+                            compute_geometry('wall_preview',engine.mount,scan)
+                        continue
                     result=engine.observe(scan,expected_revision=revision)
+                    if wall_tag and candidate is None and preview and preview[0] is scan:
+                        result['wall_yaw_index']=index
+                        result['wall_yaw_epoch']=scan.sensor_epoch
+                        result['wall_yaw_candidate_cdeg']=reliable_delta(preview[1],
+                            result['prior_center_xy_m'],result['primary_yaw_field_rad'])
                 fit_done.put((initializing,request_id,result),timeout=.05)
             except ValueError as exc:event('scan_not_fitted',scan_id=scan.scan_id,reason=str(exc))
             except queue.Full:event('fit_result_queue_full',scan_id=scan.scan_id)
@@ -587,7 +648,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
     fitter=threading.Thread(target=run_fit,name='lidar-fit',daemon=True)
 
     def drain_fits():
-        nonlocal reference_request_id
+        nonlocal reference_request_id,candidate
         changed=False
         for _ in range(8):
             try:initializing,request_id,result=fit_done.get_nowait()
@@ -600,6 +661,11 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                     event('field_reference_set',request_id=request_id,reference=result['reference'])
                     reference_request_id=None
             else:
+                if (wall_tag and candidate is None and result.get('reference_revision')==engine.revision
+                        and 'wall_yaw_index' in result and requested_lidar_enabled):
+                    candidate=vote.observe(result['wall_yaw_epoch'],result['wall_yaw_index'],
+                        result['wall_yaw_candidate_cdeg'])
+                    if candidate is not None:event('wall_yaw_nominated',tag=wall_tag,delta_cdeg=candidate)
                 times.append(result['compute_ms']);log.submit('dynamic_localization.jsonl',result)
                 if result.get('position_reacquired'):
                     event('lidar_position_reacquired',scan_id=result['scan_id'],
@@ -692,6 +758,31 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                 if control is not None:publish_control()
                 publish_sdk_policy()
             if time.monotonic()-last_publish>=.05:
+                if (wall_tag and candidate is not None and engine.reference and
+                        engine.reference.get('round_token')==wall_round):
+                    status=lower_status()
+                    if status.get('wall_yaw_tag')==wall_tag:
+                        if proposal_sent and status.get('action_status',0)&64:
+                            try:
+                                with engine.lock:
+                                    native_runtime.command('wall_yaw_commit',dict(round_token=wall_round,
+                                        delta_cdeg=candidate))
+                                    engine.refresh_native()
+                                    engine.pending_reacquisition=None
+                                    engine.latest_points=[]
+                                    engine.latest_matched_points=[]
+                            except (ValueError,RuntimeError) as exc:
+                                event('wall_yaw_commit_error',tag=wall_tag,reason=str(exc))
+                            else:
+                                event('wall_yaw_committed',tag=wall_tag,delta_cdeg=candidate)
+                            wall_tag=0
+                        else:
+                            boundary=(status.get('mode'),status.get('task_id'),status.get('action_id'))
+                            retry_at_boundary=(boundary!=sent_boundary and boundary[0] in (22,23,37,48,52))
+                            if not proposal_sent or retry_at_boundary:
+                                if propose(wall_config['socket'],wall_tag,candidate):
+                                    proposal_sent=True
+                                    sent_boundary=boundary
                 if times and time.monotonic()-last_percentile>=1.:
                     p95=float(np.percentile(times,95));last_percentile=time.monotonic()
                 counters['display_updates_coalesced']+=offer_latest(display,state())

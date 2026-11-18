@@ -249,7 +249,7 @@ class DynamicFence:
     def _initial_support(self,scan):
         return list(self.poses),list(self.yaws)
 
-    def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False,round_token=None):
+    def align(self,description,*,physical_confirmed=True,center_xy=(-1.35,1.35),heading_deg=135.,first_sample=False,round_token=None,wall_yaw_word=0):
         """Known field reference; legacy fixture defaults unchanged, formal start explicit."""
         with self.lock:
             if not self.poses or not self.yaws:raise ValueError("等待实际T265 Pose和主yaw数据")
@@ -272,6 +272,10 @@ class DynamicFence:
                     selected_start=dict(center_xy_m=list(center_xy),yaw_deg=heading_deg))
             self.offset[:]=0;self.last_fit=None;self.latest_points=[];self.latest_matched_points=[];self.has_anchor=False;self.revision+=1
             self.pending_reacquisition=None
+            if wall_yaw_word:
+                self.reference['wall_yaw_config_word']=wall_yaw_word
+                if wall_yaw_word & 0x4000 and not wall_yaw_word & 0x8000:
+                    self.reference['wall_yaw_applied_cdeg']=(wall_yaw_word & 0x3fff)-1200
             self.reference['reference_sample_ns']=p[0]
             self.motion.configure(self.reference)
             return dict(self.reference)

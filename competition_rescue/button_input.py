@@ -39,9 +39,10 @@ class SysfsButtonInput:
     """
 
     def __init__(self, sysfs_root='/sys/class/gpio', *, read_level=None,
-                 debounce_s=0.03):
+                 debounce_s=0.03, trace=None):
         self.sysfs_root = Path(sysfs_root)
         self._read_level = read_level or self._read_sysfs_level
+        self.trace = trace
         self.debounce_s = float(debounce_s)
         if self.debounce_s < 0:
             raise ValueError('debounce_s must be nonnegative')
@@ -106,6 +107,8 @@ class SysfsButtonInput:
                 del self._errors[key]
                 emit('input_recovered', key)
             pressed = level == 0
+            if self.trace is not None and pressed != button.raw:
+                self.trace('raw', key, now, level=level, initial=button.raw is None)
             if button.raw is None:
                 button.raw = button.stable = pressed
                 button.changed_at = now
@@ -130,6 +133,9 @@ class SysfsButtonInput:
 
         for key, pressed in transitions:
             button = self._buttons[key]
+            if self.trace is not None:
+                self.trace('debounced', key, now, pressed=pressed, armed=button.armed,
+                           chord_blocked=self._chord_blocked, long_sent=button.long_sent)
             if pressed:
                 button.pressed_at = button.changed_at
                 button.long_sent = False
@@ -170,6 +176,9 @@ class SysfsButtonInput:
 
         if not down and not self._errors:
             self._chord_blocked = False
+        if self.trace is not None:
+            for event in events:
+                self.trace('classified', event['key'], now, action=event['action'])
         # Even if a single poll observes a release at the same time as STOP,
         # STOP has priority over every other business action.
         if any(event['action'] in ('stop', 'exit_session') for event in events):

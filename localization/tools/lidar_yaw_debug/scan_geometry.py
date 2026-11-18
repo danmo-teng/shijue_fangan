@@ -18,7 +18,12 @@ def geometry_job(kind,mount,scan,poses=None,yaws=None,reference=None,offset=None
     cpu_began=time.thread_time_ns();began=time.monotonic_ns()
     accepted=accepted_points(scan,mount)
     result=dict(accepted_count=len(accepted))
-    if kind=='initialize':
+    if kind=='wall_preview':
+        points=np.array([p.point_lidar_m for p in accepted]).reshape(-1,2)
+        x,y,deg=mount['extrinsic']
+        from .dynamic import rotation
+        result['lines']=outer_supported_lines(extract_lines(points@rotation(math.radians(deg)).T+[x,y]))
+    elif kind=='initialize':
         points=np.array([p.point_lidar_m for p in accepted]).reshape(-1,2)
         ext=[*mount['extrinsic'][:2],math.radians(mount['extrinsic'][2])]
         found,reason=initialize(points,extrinsic=ext)

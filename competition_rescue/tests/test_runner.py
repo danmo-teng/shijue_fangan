@@ -4118,3 +4118,22 @@ def test_low_space_cleanup_uses_completion_order_only(tmp_path):
         removed,warning=store.trim_between_competition_sessions(root,folders[-1])
         assert removed==[folders[0].name] and warning
         assert all(f.is_dir() for f in folders[1:])
+
+
+def test_button_raw_edges_precede_debounce_and_stop_classification():
+    from button_input import SysfsButtonInput
+    levels={1:1,2:1,3:1,4:1}
+    trace=[]
+    def record(stage,key,now,**data):
+        trace.append((stage,key,now,data))
+    inputs=SysfsButtonInput(read_level=levels.get,trace=record)
+    inputs.poll(0.)
+    levels[3]=0
+    assert not inputs.poll(.1)
+    levels[3]=1
+    assert not inputs.poll(.12)
+    assert [(e[2],e[3]['level']) for e in trace if e[0]=='raw' and e[1]==3]==[(0.,1),(.1,0),(.12,1)]
+    levels[3]=levels[4]=0
+    inputs.poll(.2)
+    assert [e['action'] for e in inputs.poll(.25)]==['stop']
+    assert any(stage=='raw' and key==3 and when==.2 for stage,key,when,_ in trace)

@@ -18,6 +18,12 @@ bool validate_operator_frame(const std::uint8_t *data, std::size_t size)
         data[14] != kFrameTail) return false;
     const auto crc = modbus_crc16(data + 2, 10);
     if (data[12] != (crc & 0xff) || data[13] != (crc >> 8)) return false;
+    if (data[2] == 0x21U) {
+        int delta = static_cast<std::int16_t>((data[6]<<8) | data[7]);
+        const unsigned tag=(data[4]<<8) | data[5];
+        return tag>0 && tag<=0x7fff && delta>=-1200 && delta<=1200 &&
+            data[8]==0 && data[9]==0 && data[10]==0 && data[11]==0;
+    }
     if (data[2] == kOperatorBeepMessageType) {
         if (data[4] == 1) {
             if (data[5] < 1 || data[5] > 4 || data[6] > 1) return false;
@@ -42,10 +48,12 @@ bool is_operator_abort(const std::array<std::uint8_t, kFrameSize> &frame)
 bool is_resume_config_for_stop(const std::array<std::uint8_t, kFrameSize> &f,
                                std::uint8_t stop_sequence)
 {
+    const unsigned word=(f[10]<<8) | f[11];
+    const bool valid_heading=(word==0 || (word>=0x4000 && word<=0x4960) || word>0x8000);
     return validate_relay_frame(f.data(), f.size()) && f[2] == 0x11 &&
         (f[4] == 0x11 || f[4] == 0x12) && f[5] >= 1 && f[5] <= 4 &&
         f[6] == 0x52 && (f[7] & ~3u) == 0 && f[9] == stop_sequence &&
-        f[10] == 0 && f[11] == 0;
+        valid_heading;
 }
 
 OperatorUartRelay::OperatorUartRelay(const std::string &name, Send send)
@@ -93,7 +101,7 @@ void OperatorUartRelay::run()
         }
         try {
             const bool sent = send_(frame);
-            std::cerr << "[OPERATOR] " << (is_operator_abort(frame) ? "manual ABORT" : "beep")
+            std::cerr << "[OPERATOR] " << (is_operator_abort(frame) ? "manual ABORT" : frame[2]==0x21U ? "wall yaw proposal" : "beep")
                       << " uart_write=" << (sent ? "true" : "false")
                       << " (no firmware acknowledgement)\n";
         } catch (const std::exception &error) {

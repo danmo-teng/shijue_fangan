@@ -8,6 +8,7 @@ import json
 import threading
 import time
 from collections import deque
+import os
 from pathlib import Path
 import numpy as np
 from .dynamic import DynamicFence
@@ -15,7 +16,7 @@ from .dynamic import DynamicFence
 
 class NativeMotionRuntime:
     def __init__(self, config, *, library_path=None):
-        path=Path(library_path) if library_path is not None else Path(__file__).resolve().parents[2]/'build/libmotion_runtime.so'
+        path=Path(library_path) if library_path is not None else Path(os.environ.get('RDK_FORMAL_LOCALIZATION_BUILD',Path(__file__).resolve().parents[2]/'build'))/'libmotion_runtime.so'
         self.lib=ctypes.CDLL(str(path))
         self.lib.omni_motion_runtime_create.argtypes=[ctypes.c_char_p]
         self.lib.omni_motion_runtime_create.restype=ctypes.c_void_p
