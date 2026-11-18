@@ -49,6 +49,7 @@ public:
     void reset_sdk_session();
     void sdk_unavailable(const std::string &reason);
     Vec2 raw_sdk_point(const Vec2 &point) const;
+    void isolate_at_unload();
     void set_wheel_suppressed(bool suppressed, const std::string &reason);
     bool wheel_input_paused() const noexcept { return !continuous_competition_input && (phase_wheel_suppressed || wheel_suspect); }
     std::string wheel_input_reason() const;

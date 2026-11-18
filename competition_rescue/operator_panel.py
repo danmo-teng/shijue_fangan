@@ -17,10 +17,10 @@ import threading
 import time
 
 try:
-    from .button_input import SysfsButtonInput
+    from .button_input import IndependentButtons, SysfsButtonInput
     from .operator_protocol import send_abort, send_beep, send_alarm
 except ImportError:
-    from button_input import SysfsButtonInput
+    from button_input import IndependentButtons, SysfsButtonInput
     from operator_protocol import send_abort, send_beep, send_alarm
 
 try:
@@ -52,6 +52,8 @@ class OperatorPanel:
         self.socket_name = '@rescue-operator-' + str(os.getuid())
         control_root = (Path('/dev/shm') / f'rdk-rescue-match-{os.getuid()}'
                         if os.environ.get('RDK_MATCH_RECORDING') == '0' else RUNTIME)
+        if getattr(app, 'separate_control_ipc', False):
+            control_root = app.control_ipc_dir
         self.control_path = control_root / 'operator_control.json'
         self.selection_path = RUNTIME / 'operator_selection.json'
         self.stopped = False
@@ -69,6 +71,7 @@ class OperatorPanel:
         self._pending_beep = None
         self._pending_alarm = None
         self._alarm_on = False
+        self._ready_since = None
         self._ready_feedback = False
         self._sound_lock = threading.RLock()
         self._confirming_prewarm = False
@@ -141,7 +144,8 @@ class OperatorPanel:
 
     def set_recording(self, enabled, runtime):
         with self._state_lock:
-            self.control_path = runtime / 'operator_control.json'
+            if not getattr(self.app, 'separate_control_ipc', False):
+                self.control_path = runtime / 'operator_control.json'
             if self.stopped:
                 self._write_stop()
         if not self.active:
@@ -172,6 +176,10 @@ class OperatorPanel:
         self.control_path.parent.mkdir(parents=True, exist_ok=True)
         self._start_standby()
         self.silence()
+        try:
+            self.buttons = IndependentButtons(self.socket_name, self._stop_serial, self._trace_button)
+        except (OSError, RuntimeError) as error:
+            self._enqueue(dict(action='input_error', key=0, reason=f'独立采集启动失败，使用本地采样：{error}'))
         self._thread = threading.Thread(target=self._poll_buttons, name='competition-buttons', daemon=True)
         self._thread.start()
 
@@ -194,12 +202,12 @@ class OperatorPanel:
         _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
                                           action='stop', stop_serial=self._stop_serial))
 
-    def request_stop(self):
+    def request_stop(self, event=None):
         # UART first; no acknowledgement or GUI frame is required.
         # This counter has one producer: the GPIO polling thread. Publish the
         # new serial before UART, so an older resume cannot unlock this STOP.
-        self._stop_serial += 1
-        sent = send_abort(self.socket_name, sequence=self._stop_serial & 255)
+        self._stop_serial = (event or {}).get("gpio_stop_serial", self._stop_serial + 1)
+        sent = (event or {}).get("abort_sent", False) or send_abort(self.socket_name, sequence=self._stop_serial & 255)
         with self._state_lock:
             self.stopped = True
             try:
@@ -210,19 +218,35 @@ class OperatorPanel:
 
     def _poll_buttons(self):
         while not self._quit.is_set():
-            for event in self.buttons.poll():
+            try:
+                events = self.buttons.poll()
+            except RuntimeError as error:
+                if not isinstance(self.buttons, IndependentButtons):
+                    raise
+                serial = self.buttons.stop_serial.value
+                if serial > self._stop_serial:
+                    self.request_stop(dict(gpio_stop_serial=serial))
+                self.buttons.close()
+                self.buttons = SysfsButtonInput(trace=self._trace_button)
+                self._enqueue(dict(action='input_error', key=0, reason=f'{error}，已恢复本地采样'))
+                continue
+            for event in events:
+                if event['action'] != 'stop' and self._gpio_stop_pending():
+                    continue  # An independent STOP already outranks actions still queued in the map.
                 if event['action'] == 'start_pressed':
                     # Capture the readiness of this press, before the GUI can
                     # process a later release after prewarming has completed.
                     self._start_press_token = (self.app.reset_session_token
-                        if ((getattr(self.app, 'warm_ready', False) and not self.stopped) or
+                        if ((getattr(self.app, 'warm_ready', False) and not self.stopped and
+                             ('gpio_stop_serial' not in event or (self._ready_since is not None and
+                              event['monotonic'] >= self._ready_since))) or
                             (self.stopped and getattr(self.app, 'session_started', False))) else None)
                     continue
                 if event['action'] == 'start':
                     event['_ready_press_token'] = self._start_press_token
                     self._start_press_token = None
                 if event['action'] == 'stop':
-                    self.request_stop()
+                    self.request_stop(event)
                 if event['action'] == 'prewarm' and self.stopped and event.get('release_only'):
                     continue  # A polling gap on release cannot discard a stopped match.
                 if (event['action'] == 'start' and self.transitioning
@@ -297,6 +321,7 @@ class OperatorPanel:
         if ready and not self._ready_feedback:
             self.silence()
             self._next_ready_beep = 0.0
+            self._ready_since = time.monotonic()
         elif not ready and self._ready_feedback:
             self.silence()
         self._ready_feedback = ready
@@ -394,7 +419,7 @@ class OperatorPanel:
     def before_start(self):
         self.silence()
         with self._state_lock:
-            if getattr(self.app, 'prewarm_enabled', False) and self.stopped:
+            if getattr(self.app, 'prewarm_enabled', False) and (self.stopped or self._gpio_stop_pending()):
                 return False  # STOP may arrive after the caller's initial check.
             self.transitioning = True
             self.stopped = False
@@ -412,11 +437,15 @@ class OperatorPanel:
                 self._pending_alarm = (self._alarm_on, self._beep_sequence)
         return True
 
+    def _gpio_stop_pending(self):
+        buttons = getattr(self, 'buttons', None)
+        return isinstance(buttons, IndependentButtons) and buttons.stop_serial.value != self._stop_serial
+
     def release_start(self, zone, side, opening_strategy):
         # Serialize with the independent GPIO STOP writer: a STOP must never
         # be overwritten by a concurrently prepared START.
         with self._state_lock:
-            if self.stopped:
+            if self.stopped or self._gpio_stop_pending():
                 return False
             _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
                 action='start', start_zone=zone, side=side, opening_strategy=opening_strategy,
@@ -425,7 +454,7 @@ class OperatorPanel:
 
     def release_resume(self, zone, side, opening_strategy, reference_token, stop_serial):
         with self._state_lock:
-            if not self.stopped or self._stop_serial != stop_serial:
+            if not self.stopped or self._stop_serial != stop_serial or self._gpio_stop_pending():
                 return False
             _write_json(self.control_path, dict(session_token=self.app.reset_session_token,
                 action='resume', start_zone=zone, side=side, opening_strategy=opening_strategy,
@@ -467,6 +496,8 @@ class OperatorPanel:
         if self._thread is not None:
             self._thread.join(timeout=1)
             self._thread = None
+        if isinstance(self.buttons, IndependentButtons):
+            self.buttons.close()
         try:
             self._stop_standby()
         finally:

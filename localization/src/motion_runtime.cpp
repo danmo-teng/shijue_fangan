@@ -503,6 +503,21 @@ private:
         const auto reason=get<std::string>(packet,"reason","safe_zone_low_speed");
         competition_wheel_policy_=packet;competition_wheel_policy_["reason"]=reason;
         restore_competition_wheel_policy();
+        if (has(packet,"unload_reference_y_m") && !motion_.phase_wheel_suppressed &&
+                !reference_.is_null() && !poses_.empty() && !motion_.history.empty() &&
+                packet.value("round_token",std::string()) == reference_.value("round_token",std::string()) &&
+                !packet.value("round_token",std::string()).empty()) {
+            const auto stamp = packet.at("unload_report_ns").get<std::int64_t>();
+            const double expected_y = packet.at("unload_reference_y_m").get<double>();
+            if (stamp >= poses_.front()[0] && (expected_y == 1.03 || expected_y == -1.03)) {
+                const double sdk_y = field_xy(Source::sample(poses_, stamp))[1];
+                const bool isolate = std::abs(sdk_y - expected_y) + 1e-9 >= .35;
+                if (isolate) motion_.isolate_at_unload();
+                event("unload_T265_depth_check",Json{{"task_id",packet.at("task_id")},
+                    {"round_token",packet.at("round_token")},{"report_ns",stamp},
+                    {"raw_field_y_m",sdk_y},{"reference_y_m",expected_y},{"isolated",isolate}});
+            }
+        }
         event("competition_wheel_policy_applied",competition_wheel_policy_);
     }
     bool receive_wheel_policy() {

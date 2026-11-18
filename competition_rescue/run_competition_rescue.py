@@ -1570,6 +1570,8 @@ class LocalizationWheelPolicy:
         self.last_sent = None
         self.sequence = 0
         self.contact_task = None
+        self.round_token = None
+        self.push_owner = self.checked_owner = None
         self.error = None
 
     def _event(self, name, **data):
@@ -1579,7 +1581,7 @@ class LocalizationWheelPolicy:
             except (OSError, ValueError):
                 pass  # A diagnostic write must not block command publication.
 
-    def update(self, output, stm, task_id, action_id, *, depth_m=None):
+    def update(self, output, stm, task_id, action_id, *, depth_m=None, side_sign=None, visual_delivery=False):
         if self.closed:
             return
         interrupted = stm.fault or (output.command is not None and output.command.opcode in {CMD_ABORT, CMD_PAUSE})
@@ -1595,8 +1597,25 @@ class LocalizationWheelPolicy:
                   and stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.mode == STM_MODE_NAVIGATE
                   and depth_m is not None and depth_m >= self.CONTACT_DEPTH_M):
                 self.contact_task = task_id
+        if (not interrupted and stm.context_matches and stm.mode == STM_MODE_NAVIGATE and
+                stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.action_status & 1):
+            self.push_owner = (task_id, action_id)
         self.suppressed = self.contact_task is not None
-        self._send(output.state.value, task_id, action_id)
+        checkpoint = None
+        # An early visual COMPLETE in opening, or ENTER completed in the
+        # stationary verification state. A local push timeout can bypass both.
+        normal_open = ((stm.mode == 12 and stm.accepted_command == CMD_TASK_COMPLETE
+                        and visual_delivery) or
+                       (stm.mode == 15 and stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.action_status & 2))
+        if (not interrupted and normal_open and stm.context_valid and stm.action_status & 1
+                and self.push_owner is not None and stm.task_id == task_id == self.push_owner[0]
+                and (stm.context_matches or (stm.task_id, stm.action_id) == self.push_owner)
+                and self.checked_owner != self.push_owner
+                and self.round_token and side_sign in (-1, 1) and stm.received_monotonic_ns):
+            checkpoint = dict(unload_reference_y_m=side_sign*self.CONTACT_DEPTH_M,
+                unload_report_ns=stm.received_monotonic_ns, round_token=self.round_token)
+        if self._send(output.state.value, task_id, action_id, checkpoint) and checkpoint:
+            self.checked_owner = self.push_owner
 
     def release_contact(self):
         if self.contact_task is not None or self.last_sent is True:
@@ -1604,13 +1623,15 @@ class LocalizationWheelPolicy:
             self.suppressed = False
             self._send("stop", 0, 0)
 
-    def _send(self, state, task_id, action_id):
-        if self.last_sent == self.suppressed:
+    def _send(self, state, task_id, action_id, checkpoint=None):
+        if self.last_sent == self.suppressed and checkpoint is None:
             return
         packet = dict(schema=1, kind='competition_wheel_policy', session_id=self.session_id,
                       sequence=self.sequence, suppressed=self.suppressed,
                       reason='delivery_contact_zero_translation' if self.suppressed else 'normal_motion',
                       state=state, task_id=task_id, action_id=action_id)
+        if checkpoint:
+            packet.update(checkpoint)
         try:
             if self.socket is None:
                 self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
@@ -1625,6 +1646,7 @@ class LocalizationWheelPolicy:
         self.last_sent = self.suppressed
         self.sequence += 1
         self._event('localization_wheel_policy_sent', policy=packet)
+        return True
 
     def close(self):
         self.release_contact()
@@ -1977,7 +1999,9 @@ class CompetitionPlanner:
                        stm.action_id == self.protocol_action)
             self.localization_wheel_policy.update(output, replace(stm, context_matches=matched),
                 self.protocol_task, self.protocol_action,
-                depth_m=(self.mission.settings.side_sign * pose.y_m if pose is not None and pose.valid else None))
+                depth_m=(self.mission.settings.side_sign * pose.y_m if pose is not None and pose.valid else None),
+                side_sign=self.mission.settings.side_sign,
+                visual_delivery=self.mission.delivery_completion_basis in ("delivery_visual_early", "delivery_visual_confirmed"))
         if output.suppress_command_tx:
             return
         command = output.command or CommandRequest(CMD_HOLD)
@@ -3817,6 +3841,8 @@ def main() -> int:
             startup_pose=pose_dict(load_pose(args.pose)),stash_point_m=list(mission.settings.stash_point))
         operator_start_ready = True
         last_start_reference = request['reference_token']
+        if wheel_policy is not None:
+            wheel_policy.round_token = last_start_reference
         wall_yaw_word = request['reference'].get('wall_yaw_config_word',0)
         events.write('warm_reference_bound', dict(session_token=args.reset_session_token,
             reference=request['reference'],side=side,start_zone=start_zone))

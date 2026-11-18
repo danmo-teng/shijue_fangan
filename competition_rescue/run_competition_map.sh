@@ -15,7 +15,7 @@ for arg in "$@"; do
 done
 case "$RDK_MATCH_RECORDING" in 0|1) ;; *) echo 'RDK_MATCH_RECORDING must be 0 or 1' >&2; exit 2 ;; esac
 echo "比赛诊断记录 RDK_MATCH_RECORDING=$RDK_MATCH_RECORDING（0关闭，1开启）"
-export RDK_FORMAL_LOCALIZATION_BUILD="${RDK_FORMAL_LOCALIZATION_BUILD:-${project_dir}/localization/build/formal-contact-wheel}"
+export RDK_FORMAL_LOCALIZATION_BUILD="${RDK_FORMAL_LOCALIZATION_BUILD:-${project_dir}/localization/build/formal-unload-guard}"
 localizer="$RDK_FORMAL_LOCALIZATION_BUILD/t265_omni_localizer"
 vision_model="${project_dir}/yolo26n/x5_output_640_1117/yolo26n_6cls_640_1117_bpu_bayese_640x640_nv12.bin"
 

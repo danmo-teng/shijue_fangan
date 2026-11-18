@@ -270,7 +270,7 @@ void NativeMotionSource::pose(const Json &p) {
     const Vec2 velocity = have_velocity
         ? Vec2{{p.at("vx_local_mps").get<double>(), p.at("vy_local_mps").get<double>()}}
         : Vec2{{0., 0.}};
-    constexpr double max_center_speed = 1.5;  // m/s, planar chassis centre
+    constexpr double max_center_speed = 1.2;  // m/s, planar chassis centre
     const bool speed_exceeded = have_velocity && finite(velocity) && norm2(velocity) > max_center_speed;
     bool position_exceeded = last_tracked_ns && last_tracked_xy && t > *last_tracked_ns &&
         norm2(subtract(xy, *last_tracked_xy)) > max_center_speed * ((t - *last_tracked_ns) / 1e9);
@@ -361,7 +361,7 @@ void NativeMotionSource::pose(const Json &p) {
         if (confidence > 0 && !reference.is_null()) publish_vio(t, xy);
         return;
     }
-    if (resume_anchor_ns && confidence > 0) publish_vio(t, xy);
+    if (resume_anchor_ns && confidence > 0 && mode != "WHEEL_FALLBACK") publish_vio(t, xy);
     if (pending.size() == 4096) ++pending_pose_drops;
     append_bounded(pending, Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
     if (confidence <= 0 && anchor) fallback("SDK_tracking_lost", t);
@@ -419,6 +419,24 @@ NativeMotionSource::Vec3 NativeMotionSource::wheel_at(double t) const {
     const Vec3 w = sample(wheels, t);
     const Vec2 xy = rotate(basis, first2(w));
     return {{xy[0], xy[1], w[2]}};
+}
+
+void NativeMotionSource::isolate_at_unload() {
+    if (phase_wheel_suppressed || history.empty()) return;
+    const auto &trusted = history.back();
+    const auto t = static_cast<std::int64_t>(trusted[0]);
+    fallback("unload_T265_depth_disagreement", t);
+    reason = "unload_T265_depth_disagreement";
+    wall_window.reset(); wall_evidence = nullptr;
+    evidence_verdict.reset(); evidence_confirmations = 0; last_evidence_scan.reset();
+    pending.clear();
+    previous.reset();
+    window.reset();
+    // Start the wheel tail at the last selected position, without replaying
+    // the slipping wheel totals or replacing the radar translation offset.
+    resume_anchor_ns = t;
+    resume_anchor_xy = Vec2{{trusted[1], trusted[2]}};
+    process();
 }
 
 void NativeMotionSource::fallback(const std::string &why, double t) {

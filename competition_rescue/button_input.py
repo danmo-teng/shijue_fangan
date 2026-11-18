@@ -187,3 +187,63 @@ class SysfsButtonInput:
             events = [event for event in events if event['action'] in
                       ('stop', 'input_error', 'input_recovered')]
         return events
+
+
+def _sample_gpio(queue_out, stopping, stop_serial, socket_name, parent_pid, sysfs_root):
+    """Independent reader. Only transitions cross processes; no disk I/O here."""
+    import os
+    from operator_protocol import send_abort
+    trace = []
+    def record(stage, key, when, **detail):
+        trace.append((stage, key, when, detail))
+    reader = SysfsButtonInput(sysfs_root, trace=record)
+    queue_out.cancel_join_thread()
+    while not stopping.is_set() and os.getppid() == parent_pid:
+        events = reader.poll()
+        for event in events:
+            if event['action'] == 'stop':
+                stop_serial.value += 1
+                event['abort_sent'] = send_abort(socket_name, sequence=stop_serial.value & 255)
+            event['gpio_stop_serial'] = stop_serial.value
+        if trace or events:
+            queue_out.put((trace.copy(), events))
+            trace.clear()
+        stopping.wait(.02)
+
+
+class IndependentButtons:
+    def __init__(self, socket_name, serial, trace, sysfs_root="/sys/class/gpio"):
+        import multiprocessing
+        import os
+        ctx = multiprocessing.get_context('spawn')
+        self.trace = trace
+        self.stop_serial = ctx.RawValue('I', serial)
+        self.stopping = ctx.Event()
+        self.queue = ctx.Queue()
+        self.process = ctx.Process(target=_sample_gpio, args=(
+            self.queue, self.stopping, self.stop_serial, socket_name, os.getpid(), sysfs_root),
+            name='competition-gpio', daemon=True)
+        self.process.start()
+
+    def poll(self):
+        import queue
+        events = []
+        while True:
+            try:
+                trace, batch = self.queue.get_nowait()
+            except queue.Empty:
+                break
+            for stage, key, when, detail in trace:
+                self.trace(stage, key, when, **detail)
+            events.extend(batch)
+        if not events and not self.process.is_alive():
+            raise RuntimeError('按键采集进程已退出')
+        return events
+
+    def close(self):
+        self.stopping.set()
+        self.process.join(1)
+        if self.process.is_alive():
+            self.process.terminate()
+            self.process.join()
+        self.queue.close()
