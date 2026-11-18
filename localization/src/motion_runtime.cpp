@@ -438,7 +438,7 @@ private:
         return has(p,key)?p.at(key).get<std::vector<std::string>>():std::vector<std::string>{};
     }
     void event(const std::string &name,Json fields=Json::object()) {
-        fields["event"]=name;fields["timestamp_monotonic_ns"]=now_ns();events_log_->submit(fields.dump()+"\n");
+        fields["event"]=name;fields["timestamp_monotonic_ns"]=now_ns();if(events_log_->enabled()) events_log_->submit(fields.dump()+"\n");
     }
     void configure_reference(Json reference) {
         if(robust_enabled_)reference["robust_odometry_enabled"]=true;
@@ -521,11 +521,11 @@ private:
         if(robust_enabled_&&get<std::string>(sample,"kind","")=="sdk_availability"){
             sdk_available_=get<bool>(sample,"available",false);
             sdk_error_=sdk_available_?Json(nullptr):sample.value("reason",Json("SDK unavailable"));
-            pose_log_->submit(sample.dump()+"\n");
+            if(pose_log_->enabled()) pose_log_->submit(sample.dump()+"\n");
             if(!sdk_available_)motion_.sdk_unavailable(sdk_error_.is_string()?sdk_error_.get<std::string>():"SDK unavailable");
             event("sdk_availability",sample);return;
         }
-        last_raw_pose_=sample;++poses_ingested_;pose_log_->submit(sample.dump()+"\n");
+        last_raw_pose_=sample;++poses_ingested_;if(pose_log_->enabled()) pose_log_->submit(sample.dump()+"\n");
         for(const char *key:{"x_m","y_m","yaw_rad"})if(!has(sample,key)||!sample.at(key).is_number()||!std::isfinite(sample.at(key).get<double>()))return;
         if(!last_sample_.is_null()){
             const auto device_session=get<std::string>(sample,"sdk_device_session_id",get<std::string>(sample,"session_id",""));
@@ -702,7 +702,7 @@ private:
         if(value.at("ready").get<bool>())last_ready_packet_=stored;
         if(control_.fd>=0&&stored){
             auto encoded=stored->dump();
-            if(control_.send(encoded)){++packets_sent_;last_packet_=stored;control_log_->submit(encoded+"\n");}
+            if(control_.send(encoded)){++packets_sent_;last_packet_=stored;if(control_log_->enabled()) control_log_->submit(encoded+"\n");}
             else ++output_drops_;
         }
         ++control_updates_;last_key_=std::move(key);
@@ -775,7 +775,7 @@ private:
             auto sample=decode_feedback(data,std::size_t(count));++frames_;auto type=sample.at("type").get<int>();
             if(type==7||type==8){
                 if(type==7)++wheel_frames_;else ++gyro_frames_;
-                feedback_log_->submit(sample.dump()+"\n");
+                if(feedback_log_->enabled()) feedback_log_->submit(sample.dump()+"\n");
                 context(Json{{"kind",type==7?"timed_wheel_diagnostic":"timed_gyro_diagnostic"},{"sample",sample}});
             }
         }else{

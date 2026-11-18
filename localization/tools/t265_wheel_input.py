@@ -12,7 +12,7 @@ import queue
 import socket
 import time
 import threading
-from async_debug_log import AsyncDebugLog
+from async_debug_log import make_debug_log
 from f405_timed_measurements import TimedMeasurements
 
 TIME_POLICY = "received_feedback_no_age_gate_v1"
@@ -69,7 +69,7 @@ class WheelInputBridge:
         self.address = "\0t265-wheel-"+session_id
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.sock.setblocking(False)
-        self.log=AsyncDebugLog(root)
+        self.log=make_debug_log(root)
         self.inbox = queue.Queue(maxsize=256)
         self.overflow = False
         self.gyro = deque(maxlen=128)

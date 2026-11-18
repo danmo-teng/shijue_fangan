@@ -88,6 +88,8 @@ public:
     NativeMotionValue<Vec2> last_tracked_xy, resume_anchor_xy;
     bool phase_wheel_suppressed = false;
     std::string phase_wheel_reason;
+    bool phase_translation_held = false;
+    NativeMotionValue<Pair> phase_displacement_reference;
     bool phase_restore_wheel_fallback = false;
     std::uint64_t phase_position_bridges = 0;
     NativeMotionValue<std::uint64_t> phase_previous_frame;

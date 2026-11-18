@@ -10,6 +10,26 @@ import threading
 import time
 
 
+class DisabledDebugLog:
+    """No queue, disk writer or serialization in competition mode."""
+    error = None
+    dropped = 0
+    def submit(self, filename, value, *, atomic=False):
+        return True
+    def healthy(self):
+        return True
+    def statistics(self):
+        return {"recording": False, "dropped": 0}
+    def close(self):
+        pass
+
+
+def make_debug_log(root, *, process=False):
+    if os.environ.get("RDK_MATCH_RECORDING") == "0":
+        return DisabledDebugLog()
+    return ProcessDebugLog(root) if process else AsyncDebugLog(root)
+
+
 class AsyncDebugLog:
     def __init__(self, root, capacity=4096):
         self.root=root

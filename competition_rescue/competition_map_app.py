@@ -300,11 +300,11 @@ class CompetitionMapApp(RescueMapApp):
             return list(self.wheel_command)
         command = super().localization_command()
         if self.localization_mode == "t265":
-            # Formal field coordinates are corrected by lidar. Keep the local
-            # map, but do not let matching to an old SDK location jump Pose.
+            # Formal field coordinates are corrected by lidar. Use the SDK for relative motion;
+            # field coordinates are anchored by the arena walls.
             command.remove("--enable-pose-jumping")
             command += ["--disable-pose-jumping", "--disable-relocalization",
-                        "--enable-mapping", "--disable-map-preservation"]
+                        "--disable-mapping", "--disable-map-preservation"]
         if self.operator is not None:
             command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:
@@ -312,11 +312,12 @@ class CompetitionMapApp(RescueMapApp):
                 command += ["--raw-imu-csv", str(RUNTIME / "t265_raw_imu.csv")]
             return command
         full_diagnostics = getattr(self.options, "full_diagnostics", False)
+        recording = os.environ.get("RDK_MATCH_RECORDING", "1") != "0"
         sdk_log_profile = "full" if full_diagnostics else "summary"
-        root = RUNTIME / "history" / WHEEL_OWNER
+        root = RUNTIME / "history" / WHEEL_OWNER if recording else RUNTIME / WHEEL_OWNER
         root.mkdir(parents=True, exist_ok=True)
         try:
-            removed, warning = trim_between_competition_sessions(root, self.wheel_run_dir)
+            removed, warning = trim_between_competition_sessions(root, self.wheel_run_dir) if recording else ([], None)
             if removed or warning:
                 print("定位包空间管理", removed, warning, file=sys.stderr, flush=True)
         except OSError as error:
@@ -366,7 +367,7 @@ class CompetitionMapApp(RescueMapApp):
             if self.operator is not None:
                 dynamic_config['competition_wall_yaw'] = dict(stm=str(self.stm_status_path),
                     socket=self.operator.socket_name)
-            dynamic_config["full_lidar_diagnostics"] = True  # Every formal radar session records raw RX and scan points.
+            dynamic_config["full_lidar_diagnostics"] = recording
             dynamic_config['lidar'].update(port=self.options.lidar, baud=self.options.lidar_baud)
             if self.options.lidar == self.options.uart:
                 raise ValueError("雷达与底盘不能共用同一UART")
@@ -407,6 +408,9 @@ class CompetitionMapApp(RescueMapApp):
                     "--debug-wheel-session", session_id,
                     "--wheel-feedback-socket", "@" + self.wheel_input.address[1:],
                     "--wheel-feedback-requests", str(self.wheel_input.requests_path)]
+        if not recording:
+            for flag in ("--csv", "--events", "--raw-pose-csv", "--raw-imu-csv"):
+                command[command.index(flag) + 1] = ""
         if self.dynamic is not None:
             # C++ raw output is diagnostic only. Its dynamic relay writes the
             # formal JSON and 0x16 from the exact same worker snapshot.
@@ -467,6 +471,9 @@ class CompetitionMapApp(RescueMapApp):
             status['dynamic'] = dynamic.snapshot()
         adapter.bridge.log.submit("final_status.json", status, atomic=True)
         adapter.close()
+        if os.environ.get("RDK_MATCH_RECORDING") == "0":
+            shutil.rmtree(adapter.root, ignore_errors=True)  # This run's private RAM config and status.
+            return
         # Only completed packages can be considered for low-space cleanup at a later start.
         try:
             run_dir = adapter.root
@@ -648,6 +655,8 @@ class CompetitionMapApp(RescueMapApp):
         return True
 
     def archive_previous_runtime(self) -> None:
+        if os.environ.get("RDK_MATCH_RECORDING") == "0":
+            return
         super().archive_previous_runtime()
         candidates = (
             RUNTIME / "competition_diagnostics.json",

@@ -351,6 +351,8 @@ void DebugWheelInput::record(Json event)
 
 void DebugWheelInput::write_logs()
 {
+    const char *recording = std::getenv("RDK_MATCH_RECORDING");
+    const bool save_history = !recording || std::string(recording) != "0";
     Json latest;
     std::deque<std::uint64_t> success_times;
     auto last_write=std::chrono::steady_clock::now()-std::chrono::seconds(1);
@@ -366,7 +368,7 @@ void DebugWheelInput::write_logs()
         for(const auto &event:batch) {
             const auto kind=event.value("event",std::string());
             const bool sdk_success=kind=="wheel_sdk_result" && event.value("sdk_result",false);
-            if(full_diagnostics_ || !sdk_success)log_<<event.dump()<<'\n';
+            if(save_history && (full_diagnostics_ || !sdk_success))log_<<event.dump()<<'\n';
             latest=event;
             if(kind=="wheel_sdk_session_prepared")success_times.clear();
             if(sdk_success)

@@ -116,6 +116,8 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
         if (suppressed) { phase_wheel_reason = why; reason = why; }
         return;
     }
+    phase_translation_held = false;
+    phase_displacement_reference.reset();
     const auto previous_mode = mode;
     if (suppressed) phase_restore_wheel_fallback = previous_mode == "WHEEL_FALLBACK";
     phase_wheel_suppressed = suppressed; phase_wheel_reason = suppressed ? why : "";
@@ -185,6 +187,7 @@ void NativeMotionSource::configure(const Json &configuration) {
         // There is no delayed first-session transform left to discover.
         sdk_frame_translation_pending = false;
     }
+    phase_translation_held = false; phase_displacement_reference.reset();
     reference = configuration; history.clear(); anchor.reset();
     bias = {{0., 0.}}; previous.reset(); window.reset(); recovery_window.reset();
     if (keep_sdk_frame) bias = kept_bias;
@@ -265,6 +268,10 @@ void NativeMotionSource::pose(const Json &p) {
     const Vec2 velocity = have_velocity
         ? Vec2{{p.at("vx_local_mps").get<double>(), p.at("vy_local_mps").get<double>()}}
         : Vec2{{0., 0.}};
+    constexpr double max_center_speed = 1.5;  // m/s, planar chassis centre
+    const bool speed_exceeded = have_velocity && finite(velocity) && norm2(velocity) > max_center_speed;
+    bool position_exceeded = last_tracked_ns && last_tracked_xy && t > *last_tracked_ns &&
+        norm2(subtract(xy, *last_tracked_xy)) > max_center_speed * ((t - *last_tracked_ns) / 1e9);
     if (phase_wheel_suppressed && confidence > 0 && last_confidence && *last_confidence > 0 &&
             last_raw_ns && last_raw_xy && phase_previous_frame && phase_previous_velocity &&
             p.count("frame_number") && p.at("frame_number").get<std::uint64_t>() == *phase_previous_frame + 1 &&
@@ -276,7 +283,9 @@ void NativeMotionSource::pose(const Json &p) {
         // Adjacent SDK displacement/velocity consistency, not an age gate.
         // A conservative 20m/s^2 envelope permits genuine acceleration across
         // longer capture intervals instead of erasing real travelled distance.
-        if (norm2(subtract(step, physical)) > .05 + 10. * dt * dt) {
+        if (!speed_exceeded && norm2(physical) <= max_center_speed * dt &&
+                norm2(subtract(step, physical)) > .05 + 10. * dt * dt) {
+            position_exceeded = false; // This interval was repaired from plausible velocity.
             bias = add(bias, subtract(physical, step));
             ++phase_position_bridges; phase_restore_wheel_fallback = true;
             event({{"event", "phase_SDK_coordinate_jump_bridged"}, {"sample_monotonic_ns", t},
@@ -292,6 +301,58 @@ void NativeMotionSource::pose(const Json &p) {
         ? norm2(subtract(xy, *last_raw_xy)) : 0.;
     last_raw_ns = t; last_raw_xy = xy; last_confidence = confidence;
     if (confidence > 0) { last_tracked_ns = t; last_tracked_xy = xy; }
+    if (!reference.is_null() && confidence > 0 && (speed_exceeded || position_exceeded)) {
+        const Vec2 trusted = history.empty() ? xy_json(reference.at("pose_origin")) : Vec2{{history.back()[1], history.back()[2]}};
+        if (phase_wheel_suppressed) {
+            if (!phase_translation_held)
+                event({{"event","phase_T265_speed_rejected"},{"sample_monotonic_ns",t}});
+            phase_translation_held = true;
+            phase_restore_wheel_fallback = true;
+        } else {
+            bias = subtract(trusted, xy);
+            pending.clear(); previous.reset(); window.reset();
+            if (!wheels.empty() && !wheel_suspect) {
+                if (!anchor || mode != "WHEEL_FALLBACK") {
+                    anchor = trusted;
+                    anchor_wheel = first2(wheel_at(history.empty() ? t : history.back()[0]));
+                }
+                fallback("T265_implausible_center_speed", t);
+                process();
+            } else {
+                publish_vio(t, xy); // bias keeps this sample at the trusted centre.
+            }
+            return;
+        }
+    }
+    if (phase_wheel_suppressed && !reference.is_null()) {
+        // Compare net translation only on shared measured support. Wheels here
+        // diagnose drift; they never supply the held position or SDK input.
+        if (!phase_translation_held && !wheel_suspect && !wheels.empty() && !history.empty()) {
+            const double at = std::min(wheels.back()[0], history.back()[0]);
+            if (at >= wheels.front()[0] && at >= history.front()[0]) {
+                Pair current{first2(sample(history, at)), wheel_at(at)};
+                if (phase_displacement_reference) {
+                    const auto &base = *phase_displacement_reference;
+                    const double residual = norm2(subtract(subtract(current.xy, base.xy),
+                        subtract(first2(current.wheel), first2(base.wheel))));
+                    if (residual > .05) {
+                        phase_translation_held = phase_restore_wheel_fallback = true;
+                        event({{"event","phase_T265_displacement_rejected"},{"sample_monotonic_ns",t},
+                               {"residual_m",residual}});
+                    }
+                }
+                if (!phase_displacement_reference ||
+                    current.wheel[2] - phase_displacement_reference->wheel[2] >= .25)
+                    phase_displacement_reference = current;
+            }
+        }
+        if (phase_translation_held) {
+            const Vec2 trusted = history.empty() ? xy_json(reference.at("pose_origin")) : Vec2{{history.back()[1], history.back()[2]}};
+            bias = subtract(trusted, xy);
+            publish_vio(t, xy);
+            return;
+        }
+    }
     if (phase_wheel_suppressed) {
         if (confidence > 0 && !reference.is_null()) publish_vio(t, xy);
         return;
@@ -783,7 +844,7 @@ NativeMotionSource::Json NativeMotionSource::snapshot(bool include_evidence) con
         {"recovery_two_axis_fixes", wall_fixes}, {"t265_translation_rebase_m", bias}, {"policy", policy()},
         {"wheel_motion_suspect", wheel_suspect}, {"wall_motion_evidence", wall_evidence},
         {"phase_wheel_suppressed", phase_wheel_suppressed}, {"phase_wheel_suppression_reason", phase_wheel_reason},
-        {"phase_position_bridges", phase_position_bridges},
+        {"phase_position_bridges", phase_position_bridges}, {"phase_translation_held",phase_translation_held},
         {"phase_restore_wheel_fallback", phase_restore_wheel_fallback},
         {"wheel_input_policy", {{"pause_requested", wheel_input_paused()},
             {"reason", wheel_input_reason()},

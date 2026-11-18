@@ -1465,11 +1465,16 @@ def detection_log_record(
     }
 
 
+MATCH_RECORDING = os.environ.get("RDK_MATCH_RECORDING") != "0"
+
+
 class JsonlLog:
     def __init__(self, path: Path, writer: AsyncDiagnosticWriter | None = None) -> None:
         self.path = path
         self.writer = writer
         self.lock = threading.Lock()
+        if not MATCH_RECORDING:
+            return
         if writer is not None:
             writer.reset(path)
         else:
@@ -1477,6 +1482,8 @@ class JsonlLog:
             self.path.write_text("", encoding="utf-8")
 
     def write(self, event: str, data: dict) -> None:
+        if not MATCH_RECORDING:
+            return
         record = {
             "timestamp_monotonic_ns": time.monotonic_ns(),
             "event": event,
@@ -2800,6 +2807,8 @@ class CompetitionPlanner:
         *,
         now: float | None = None,
     ) -> None:
+        if not MATCH_RECORDING:
+            return
         diagnostic_now = time.monotonic() if now is None else now
         batch = None
         if output.batch is not None:
@@ -3161,6 +3170,8 @@ class CompetitionPlanner:
             self._record_diagnostic_error(error, now)
 
     def _log_capture_decision(self, output, vision, stm, now: float, pending_task: int, pending_action: int) -> None:
+        if not MATCH_RECORDING:
+            return
         try:
             self._write_capture_decision(output, vision, stm, now, pending_task, pending_action)
         except Exception as error:
@@ -3244,7 +3255,7 @@ class CompetitionPlanner:
                     event_key = (output.state, output.event, output.reason)
                     event_logged = bool(output.event and (state_changed or event_key != getattr(self, "last_output_event_key", None) or
                                          started - getattr(self, "last_output_event_s", -math.inf) >= 2.0))
-                    if event_logged:
+                    if event_logged and MATCH_RECORDING:
                         self.last_output_event_key, self.last_output_event_s = event_key, started
                         event_data = {
                             "state": output.state.value,
@@ -3562,7 +3573,7 @@ def main() -> int:
     side = str(session["side"])
     start_zone = int(session.get("start_zone", 1))
     opening_strategy = str(session.get("opening_strategy", "attack"))
-    diagnostic_writer = AsyncDiagnosticWriter(args.events_log.with_name("competition_logging_status.json"))
+    diagnostic_writer = AsyncDiagnosticWriter(args.events_log.with_name("competition_logging_status.json")) if MATCH_RECORDING else None
     events = JsonlLog(args.events_log, diagnostic_writer)
     detection_log = JsonlLog(args.detections_log, diagnostic_writer)
     events.write("runner_starting", {
@@ -3713,7 +3724,7 @@ def main() -> int:
     display_process = display_frames = display_messages = display_stop = display_render_ms = None
     replay = None
     replay_root = session.get('localization_log_dir')
-    if replay_root and session.get('sdk_session_id'):
+    if MATCH_RECORDING and replay_root and session.get('sdk_session_id'):
         try:
             replay = VisionReplay(Path(replay_root), session['sdk_session_id'])
             replay.start()
@@ -4190,7 +4201,7 @@ def main() -> int:
                                "previous_display": display_elapsed_ms,
                                "previous_log_write": log_write_elapsed_ms})
                 log_now = time.monotonic()
-                if log_now >= next_detection_log:
+                if MATCH_RECORDING and log_now >= next_detection_log:
                     log_write_started = time.monotonic()
                     detection_log.write(
                         "frame",
@@ -4306,8 +4317,8 @@ def main() -> int:
             "config_sent": config_sent,
             "operator_stopped": operator_stopped,
         })
-        logging_status = diagnostic_writer.close()
-        if logging_status["incomplete"]:
+        logging_status = diagnostic_writer.close() if diagnostic_writer is not None else None
+        if logging_status and logging_status["incomplete"]:
             print("competition diagnostic logging incomplete: " + json.dumps(logging_status), file=sys.stderr)
     return 0
 

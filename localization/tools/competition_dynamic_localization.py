@@ -8,6 +8,7 @@ import queue
 import socket
 import threading
 import time
+import os
 
 from f405_timed_measurements import TimedMeasurements
 from lidar_yaw_debug.inputs import forward_motion_event
@@ -21,6 +22,7 @@ class CompetitionDynamicLocalization:
     def __init__(self, root, session_id, config, field_start, log, *, defer_reference=False, native_feedback=False):
         self.root, self.session_id, self.config = root, session_id, config
         self.field_start, self.log = field_start, log
+        self.config_recording = os.environ.get("RDK_MATCH_RECORDING") != "0"
         self.radar = RadarWorker(control_updates=True)
         self.wheel_policy_address = self.radar.enable_competition_wheel_policy(session_id)
         self.native_feedback = bool(native_feedback)
@@ -214,7 +216,8 @@ class CompetitionDynamicLocalization:
                 if reply['kind'] == 'error':
                     self.error = reply['error']
                     self.devent('worker_error', reason=self.error)
-            self.log.submit('dynamic_status.json', self.snapshot(), atomic=True)
+            if self.config_recording:
+                self.log.submit('dynamic_status.json', self.snapshot(), atomic=True)
 
     def _schedule_thread(self, role):
         result=set_realtime_thread()

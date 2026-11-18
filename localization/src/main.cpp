@@ -276,7 +276,8 @@ void usage(const char *program)
         << "  --t265-only-output  output T265 directly, retaining wheel reference logs\n"
         << "  --enable-pose-jumping   enable T265 pose jumps and log debug continuity events\n"
         << "  --disable-pose-jumping  disable T265 pose jumps and log debug continuity events\n"
-        << "  --enable-mapping       keep T265 internal mapping enabled\n"
+        << "  --enable-mapping       enable T265 internal mapping\n"
+        << "  --disable-mapping      disable T265 internal mapping\n"
         << "  --disable-relocalization  disable matching back to previously mapped poses\n"
         << "  --disable-map-preservation  do not keep internal map across pipeline restarts\n"
         << "  --duration SEC      0 runs until Ctrl-C\n"
@@ -397,6 +398,8 @@ Options parse_options(int argc, char **argv)
             options.pose_jumping_override = 0;
         } else if (argument == "--enable-mapping") {
             options.mapping_override = 1;
+        } else if (argument == "--disable-mapping") {
+            options.mapping_override = 0;
         } else if (argument == "--disable-relocalization") {
             options.relocalization_override = 0;
         } else if (argument == "--disable-map-preservation") {
@@ -1132,7 +1135,9 @@ int main(int argc, char **argv)
         auto feedback_tap = std::make_shared<omni::WheelTelemetryTap>(options.wheel_feedback_socket);
         auto motion_feedback_tap = std::make_shared<omni::MotionTelemetryTap>(options.motion_feedback_socket);
         std::vector<std::uint8_t> feedback_requests;
-        const std::string uart_raw_path=options.debug_test_session.empty()||options.uart_path.empty()?"":
+        const bool match_recording = !std::getenv("RDK_MATCH_RECORDING") ||
+            std::string(std::getenv("RDK_MATCH_RECORDING")) != "0";
+        const std::string uart_raw_path=!match_recording || options.debug_test_session.empty()||options.uart_path.empty()?"":
             options.events_path.substr(0,options.events_path.find_last_of('/')+1)+"uart_rx_native.jsonl";
         omni::AsyncCsvLog uart_raw_log(uart_raw_path);
         if (!options.wheel_feedback_requests.empty()) {
@@ -2507,7 +2512,7 @@ int main(int argc, char **argv)
             const auto snapshot_ns = monotonic_ns();
             const auto encoder_fusion_weight = config.encoder_fusion_weight;
             const auto distance_compensation_enabled = config.navigation_distance_compensation_enabled;
-            raw_snapshot.submit([=] {
+            if (match_recording || !dynamic_relay) raw_snapshot.submit([=] {
                 return pose_snapshot_json(snapshot_ns, fused, latest_t265, filter, odometry,
                               wheel_debug, quality,
                               wheel_gate, uart_fresh, wheel_accepted, wheel_rejected,

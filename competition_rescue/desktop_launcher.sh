@@ -4,7 +4,7 @@ set -uo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "${script_dir}" || exit 1
 export DISPLAY="${DISPLAY:-:0}"
-./run_competition_map.sh
+./run_competition_map.sh "$@"
 status=$?
 
 if (( status != 0 )); then

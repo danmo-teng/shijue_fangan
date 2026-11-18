@@ -35,7 +35,8 @@ from field_model import (
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
-RUNTIME = ROOT / "runtime"
+RUNTIME = (Path("/dev/shm") / f"rdk-rescue-match-{os.getuid()}"
+           if os.environ.get("RDK_MATCH_RECORDING") == "0" else ROOT / "runtime")
 DEFAULT_T265_MAP = PROJECT_ROOT / "localization/maps/competition_field_v1/t265_localization.raw"
 # OpenCV's Qt backend can create a window for a Unicode title but then fail to
 # retrieve the native handle in cvSetMouseCallback.  Keep the internal key ASCII;

@@ -18,7 +18,7 @@ import time
 import uuid
 import numpy as np
 import serial
-from async_debug_log import AsyncDebugLog,ProcessDebugLog
+from async_debug_log import make_debug_log
 from local_packet_receiver import LocalPacketReceiver,LocalDatagramSender,readable_nowait
 from low_latency_scheduling import prepare_realtime, set_realtime_thread
 from .dynamic import DynamicFence
@@ -64,7 +64,7 @@ def offer_latest(channel, value):
 def run_lidar_receiver(config, port, baud, root, scans, updates, stop):
     """Sole lidar serial owner; fitting/motion/GUI cannot delay the next read."""
     scans.cancel_join_thread()
-    log = AsyncDebugLog(root)
+    log = make_debug_log(root)
     full_diagnostics = config.get("full_lidar_diagnostics", True)
     lidar = reader = None
     native_reader = True
@@ -217,7 +217,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
         profile=cProfile.Profile(timer=time.thread_time);profile.enable()
     def make_python_engine():
         return DynamicFence(config['installation'])
-    engine=make_python_engine();log=ProcessDebugLog(root)
+    engine=make_python_engine();log=make_debug_log(root, process=True)
     context=mp.get_context('spawn')
     geometry_parent,geometry_child=context.Pipe()
     geometry_process=context.Process(target=run_geometry_jobs,args=(geometry_child,),name='lidar-numerical-owner')
@@ -692,7 +692,7 @@ def run_worker(config,port,baud,root,inbox,display,replies,stop,control=None,sdk
                     control_address=address(control_output['address']) if control_output else '',
                     sdk_policy_address=address(sdk_policy['address']) if sdk_policy else '',
                     wheel_policy_fd=wheel_policy_input['socket'].fileno() if wheel_policy_input else -1,
-                    log_root=str(root),robust_odometry_enabled=experimental_robust_localization))
+                    log_root='' if os.environ.get('RDK_MATCH_RECORDING') == '0' else str(root),robust_odometry_enabled=experimental_robust_localization))
                 engine=NativeDynamicFence(config['installation'],native_runtime,
                     experimental_robust_localization=experimental_robust_localization);engine.geometry=compute_geometry
             except Exception as exc:

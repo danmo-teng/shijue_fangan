@@ -50,7 +50,9 @@ class OperatorPanel:
     def __init__(self, app):
         self.app = app
         self.socket_name = '@rescue-operator-' + str(os.getuid())
-        self.control_path = RUNTIME / 'operator_control.json'
+        control_root = (Path('/dev/shm') / f'rdk-rescue-match-{os.getuid()}'
+                        if os.environ.get('RDK_MATCH_RECORDING') == '0' else RUNTIME)
+        self.control_path = control_root / 'operator_control.json'
         self.selection_path = RUNTIME / 'operator_selection.json'
         self.stopped = False
         self.transitioning = False
@@ -147,10 +149,12 @@ class OperatorPanel:
             lock_file.close()
             raise RuntimeError('已有实体按键/比赛入口运行，请使用现有入口') from None
         from async_diagnostics import AsyncDiagnosticWriter
-        self.button_log = AsyncDiagnosticWriter(RUNTIME / "operator_button_logging_status.json")
+        if os.environ.get("RDK_MATCH_RECORDING") != "0":
+            self.button_log = AsyncDiagnosticWriter(RUNTIME / "operator_button_logging_status.json")
         self._lock_file = lock_file
         self.active = True
         self._quit.clear()
+        self.control_path.parent.mkdir(parents=True, exist_ok=True)
         self._start_standby()
         self.silence()
         self._thread = threading.Thread(target=self._poll_buttons, name='competition-buttons', daemon=True)
