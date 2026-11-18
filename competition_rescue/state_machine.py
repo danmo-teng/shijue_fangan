@@ -2727,6 +2727,15 @@ class CompetitionMission:
         if not any(item.visible and item.inside_safe_zone and item.track_id in ids
                    for item in vision.cargo):
             return None
+        # A distant target can first be covered by a zone during pixel alignment.
+        # No finite approach has been requested, so use the stationary loss exit.
+        if (self.state in {CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH} and
+                stm.mode == STM_MODE_APPROACH_TARGET and stm.camera_pitch_cdeg in {10500, 12000} and
+                self.range_command is None):
+            self._begin_search_recovery(vision, now)
+            return replace(self._search_recovery_output(vision, stm, now),
+                           event="safe_zone_target_reselect", reason="safe_zone_target_reselect",
+                           message="对准时目标被安全区覆盖，原地结束对准并重新搜索")
         # Must precede finite-range resend and the ordinary missing-target grace.
         self._clear_range_approach()
         result = self._start_capture_abandon(CargoAudit(), stm, now)

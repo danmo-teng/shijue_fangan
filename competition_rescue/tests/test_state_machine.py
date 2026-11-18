@@ -3867,6 +3867,23 @@ def test_closed_gap_reappearance_and_pause_do_not_discard_real_evidence():
     assert result.reason == 'confirmed_load_gap_resume'
 
 
+def test_distant_zone_target_uses_stationary_recovery_before_any_range_move():
+    for state in (CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((594,), ("injured_orange",), "injury"))
+        m.locked_target_track_id = m.cluster_target_track_id = 594
+        m._set_state(state, 1.)
+        item = replace(cargo(594, "injured_orange", 779, 195), inside_safe_zone=True)
+        view = VisionSnapshot(frame_sequence=8214, cargo=(item,), range_pitch_cdeg=10500)
+        st = replace(stm(mode=20), camera_pitch_cdeg=10500)
+        out = m.step(view, pose(), st, 1.1)
+        assert out.reason == "safe_zone_target_reselect" and out.command.opcode == CMD_HOLD
+        assert m.state == CompetitionState.WAIT_SEARCH_RECOVERY and m.selected_batch is None
+        assert m.step(view, pose(), replace(st, mode=24), 1.2).command.opcode == CMD_HOLD
+        assert m.step(view, pose(), replace(st, mode=3), 1.3).state == CompetitionState.SEARCH
+
+
 def test_safe_zone_target_cancels_before_finite_range_resend_and_waits_for_recovery():
     from state_machine import CommandRequest
     from protocol import CMD_APPROACH_RANGE, CMD_DISTANCE_VALID, CMD_VALID
