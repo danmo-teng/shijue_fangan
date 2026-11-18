@@ -72,7 +72,7 @@ CMD_STAGE_ONLY = 1 << 6
 CMD_VISUAL_CORRECTION_VALID = 1 << 6
 CMD_SIDE_VALID = 1 << 6
 CMD_TARGET_RIGHT = 1 << 7
-CMD_KEEP_ORANGE = 1 << 1  # Selective separation only: open retained claw 10 degrees farther.
+CMD_KEEP_ORANGE = 1 << 1  # Selective separation only: apply the firmware opening offset to the retained claw.
 CMD_DISPERSE_NEAR_KEEP = 1 << 4  # DISPERSE only: side evidence, never cargo validity.
 SEPARATION_ORANGE_CORE_82 = 8200  # Opcode-specific lift request; not a chassis heading.
 

@@ -1,0 +1,13 @@
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index b9c5659..aaf9d8d 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -721,7 +721,7 @@
+ #define APP_CLAW_SEPARATE_ONE_OR_TWO_CLOSE_DEG    20U
+ #define APP_CLAW_SEPARATE_THREE_CLOSE_DEG         10U
+ #define APP_CLAW_SEPARATE_SOFT_CLOSE_DEG           5U
+-#define APP_CLAW_SEPARATE_ORANGE_OPEN_DEG         10U
++#define APP_CLAW_SEPARATE_ORANGE_OPEN_DEG          5U
+ #define APP_CLAW_SEPARATE_STEP_DEG                 4U /* Per 20 ms Task period. */
+ #define APP_CLAW_SEPARATE_SETTLE_MS              260U /* After the final angle command. */
+ #define APP_CARGO_SEPARATE_ARC_BACK_MM_S        300.0f
