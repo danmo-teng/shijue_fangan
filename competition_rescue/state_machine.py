@@ -1813,13 +1813,19 @@ class CompetitionMission:
     def carried_delivery_count(self) -> int:
         return max(1, self.carried_total_count, len(self.carried_manifest))
 
+    def _orange_separation_rechecked_empty(self) -> bool:
+        return (self.cargo_recheck_context == "disperse_selective" and
+                self.separation_wanted_class == "injured_orange" and
+                self.pending_audit_release_context == "recheck_empty_to_search")
+
     def _clear_search_recovery_context(
         self,
         vision: VisionSnapshot,
         *,
         clear_carried: bool,
     ) -> None:
-        self._remember_failed_search_target()
+        if not self._orange_separation_rechecked_empty():
+            self._remember_failed_search_target()
         self._clear_range_approach()
         self._clear_pending_audit()
         self._clear_selected_batch()
@@ -3165,7 +3171,7 @@ class CompetitionMission:
             self.audit_hits = continued_hits
             self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
-        if (self._separation_limit_reached() and
+        if (self._separation_limit_reached() and not self._orange_separation_rechecked_empty() and
                 not self.pending_audit_valid and stm.fresh and
                 stm.context_valid and stm.context_matches and
                 stm.accepted_command == CMD_CARGO_AUDIT and bool(stm.action_status & 1) and

@@ -197,6 +197,35 @@ def test_abandoned_batch_budget_ends_only_after_actual_empty_search_exit():
     assert m.selected_batch.track_ids == (99,)
 
 
+def test_keep_orange_empty_recheck_can_reacquire_the_same_orange():
+    for recovery_mode in (3, 24):
+        m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((7,), ("injured_orange",), "injury"))
+        m.cargo_recheck_pending = True
+        m.cargo_recheck_context = "disperse_selective"
+        m.separation_wanted_class = "injured_orange"
+        m.disperse_attempts = m.settings.disperse_limit
+        m.audit_last_frame_sequence = 10
+        empty = CargoAudit(stable=True)
+        m._begin_audit_confirmation(empty, m._audit_payload(empty), False, "both", False,
+                                    "recheck_empty_to_search", stm(mode=35), 1.0)
+        view = VisionSnapshot(frame_sequence=10, capture_audit=empty)
+        pending = m.step(view, pose(), stm(mode=35), 1.01)
+        accepted = replace(relay_stm(pending, mode=35, flags=65), context_valid=True,
+                           context_matches=True, accepted_command=CMD_CARGO_AUDIT, action_status=1)
+        assert m.step(view, pose(), accepted, 1.02).reason == "recheck_empty_pending_search"
+        m.step(view, pose(), stm(mode=recovery_mode), 1.03)
+        search = replace(stm(mode=3), camera_pitch_cdeg=12000)
+        if recovery_mode == 24:
+            m.step(view, pose(), search, 1.04)
+        assert m.state == CompetitionState.SEARCH and not m.failed_search_targets
+        target = cargo(7, "injured_orange", 500, 150, hits=6)
+        out = m.step(VisionSnapshot(frame_sequence=11, cargo=(target,), range_pitch_cdeg=12000),
+                     pose(), search, 1.1)
+        assert out.command.opcode == CMD_APPROACH_TARGET and m.selected_batch.track_ids == (7,)
+
+
 def test_abandoned_empty_search_without_candidate_scans_without_forced_return():
     m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
     m.first_common_delivered = True
