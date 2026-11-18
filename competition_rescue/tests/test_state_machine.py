@@ -1182,7 +1182,7 @@ def test_4071_separation_evidence_and_fault_latch() -> None:
     vote_mission._select_batch(CargoBatch((1,), ("green_supply",), "material"))
     greens = CargoAudit(left_class="green_supply", right_class="green_supply",
                         left_count=2, right_count=1, left_green_count=2, right_green_count=1, total_count=3)
-    assert vote_mission._preferred_keep_side(greens) == "right"
+    assert vote_mission._preferred_keep_side(greens) == "left"
     vote_mission.separation_keep_side = "right"
     tied = replace(greens, left_count=1, left_green_count=1, total_count=2)
     assert vote_mission._preferred_keep_side(tied) == "right"
@@ -4019,7 +4019,12 @@ def test_post_first_separation_prioritizes_no_blue_legal_side_and_tracks_orange_
     assert not m._audit_payload(a).destination_injury
     first=audit(['green_supply']*3,['green_supply'])
     first=replace(first,right_isolated_green=True)
-    assert m._preferred_keep_side(first)=='right'
+    assert m._preferred_keep_side(first)=='left'
+    for pure, mixed in [(['green_supply'], ['green_supply']*2+['injured_orange']),
+                        (['green_supply']*2, ['injured_orange'])]:
+        assert m._preferred_keep_side(audit(pure,mixed))=='left'
+        assert m._preferred_keep_side(audit(mixed,pure))=='right'
+    assert not m._audit_valid(audit(['green_supply']*2,[]))
     # Legal whole material load still skips separation.
     m.first_common_delivered=True
     assert m._audit_valid(audit(['green_supply'],['green_supply']*2))

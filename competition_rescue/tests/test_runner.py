@@ -565,7 +565,7 @@ def test_claw_isolated_singleton_uses_existing_geometry_without_new_wire_fields(
         audit = view.capture_audit
         assert view.capture_observation_valid and audit.left_count == 3 and audit.right_count == 1
         assert audit.right_isolated_green == (expected == "right")
-        assert mission._preferred_keep_side(audit) == "right"  # Single green wins even when adjacent.
+        assert mission._preferred_keep_side(audit) == "left"  # Three greens versus one.
         without_image_hint = replace(audit, left_isolated_green=False, right_isolated_green=False)
         assert mission._audit_payload(audit) == mission._audit_payload(without_image_hint)
     # A large adjacent detection must not be declared independent from its centre distance alone.
@@ -4025,7 +4025,7 @@ def test_first_green_drops_blue_side_even_with_more_greens_and_overlapping_boxes
     clean=replace(a,left_count=1,left_green_count=1,left_class_counts=(('green_supply',1),),
         right_count=2,right_green_count=2,right_class='green_supply',right_class_counts=(('green_supply',2),),
         right_invalid=False,danger_present=False,total_count=3)
-    assert m._preferred_keep_side(clean)=='left'
+    assert m._preferred_keep_side(clean)=='right'
 
 
 def test_delivery_exit_is_published_and_timed_once(tmp_path):
