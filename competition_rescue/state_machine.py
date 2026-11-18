@@ -114,6 +114,11 @@ STM_MODE_POST_GRAB_HALF_CLOSE = 49
 STM_MODE_POST_GRAB_REGRIP = 50
 STM_MODE_APPROACH_RANGE_WAIT = 52
 STM_MODE_APPROACH_RANGE_MOVE = 53
+STM_MODE_NUDGE_CREDIT_READY = 54
+STM_MODE_REPUSH_OPENED = 55
+STM_MODE_REPUSH_RETREAT = 56
+STM_MODE_REPUSH_FORWARD = 57
+STM_MODE_REPUSH_EXIT = 58
 STM_MODE_RECOVERY_WAIT = 51
 
 SAFE_CORRIDOR_CLEAR = "CLEAR"
@@ -1030,6 +1035,7 @@ class CompetitionMission:
         self.transport_separation_active = False
         self.stage_redirect_active = False
         self.zone_observation = None
+        self.nudge_forward_position = False
         self.corridor_nudge_command: CommandRequest | None = None
         self.corridor_nudge_attempted = False
         self.orange_gate_filter_attempted = False
@@ -1275,7 +1281,7 @@ class CompetitionMission:
         if self.state == CompetitionState.SEARCH_ZONE_VIEW:
             return (3, 20, 52, 24)
         if self.state == CompetitionState.CORRIDOR_NUDGE:
-            return (STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_REMOTE_ACTION, STM_MODE_NAVIGATE)
+            return (STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_REMOTE_ACTION, STM_MODE_NAVIGATE, STM_MODE_NUDGE_CREDIT_READY)
         if self.state == CompetitionState.ORANGE_CORE_FILTER:
             return (21, 23, 25, 37)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
@@ -1492,6 +1498,7 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.nudge_forward_position = False
         self._clear_orange_top_view()
         self.transport_separation_active = False
         self.staging_repair_target = None
@@ -1546,6 +1553,7 @@ class CompetitionMission:
         self.last_approach_command = None
 
     def _clear_selected_batch(self) -> None:
+        self.nudge_forward_position = False
         self.zone_observation = None
         self.orange_gate_filter_attempted = False
         self.orange_gate_filter_command = None
@@ -5125,8 +5133,9 @@ class CompetitionMission:
         command = self.corridor_nudge_command
         assert command is not None
         if (stm.context_valid and stm.context_matches and stm.accepted_command == CMD_CORRIDOR_NUDGE and
-                stm.action_status & 3 == 3 and stm.mode in {STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE} and
-                stm.gripper_closed):
+                stm.action_status & 3 == 3 and stm.mode in {STM_MODE_NAVIGATE, STM_MODE_ALIGN_SAFE_ZONE,
+                                                           STM_MODE_NUDGE_CREDIT_READY} and stm.gripper_closed):
+            self.nudge_forward_position = stm.mode == STM_MODE_NUDGE_CREDIT_READY
             return self._resume_after_corridor_nudge(pose, stm, now)
         return CompetitionOutput(self.state, command, f"闭爪异侧横移100毫米，前进{command.arg_b}毫米，再横移回原线",
             self.selected_batch, reason="corridor_nudge", motion_expected=True, expected_stm_modes=self.expected_stm_modes())
@@ -5143,6 +5152,7 @@ class CompetitionMission:
         self, vision: VisionSnapshot, stm: StmSnapshot, now: float,
         *, pose: PoseSnapshot | None = None,
     ) -> CompetitionOutput:
+        self.nudge_forward_position = False  # A remaining obstacle uses the original sweep staging line.
         if pose is not None:
             repair = self._ensure_delivery_staging(pose, stm, now)
             if repair is not None:
@@ -5504,6 +5514,7 @@ class CompetitionMission:
     def _clear_for_boundary_recovery(
         self, vision: VisionSnapshot, now: float
     ) -> None:
+        self.nudge_forward_position = False
         self._clear_pending_audit()
         self._clear_selected_batch()
         self.post_grab_half_close_active = False
@@ -5643,7 +5654,7 @@ class CompetitionMission:
         return CommandRequest(
             CMD_ENTER_SAFE_ZONE,
             flags,
-            0,
+            -1 if self.nudge_forward_position else 0,
             0,
             (
                 0
@@ -5691,16 +5702,17 @@ class CompetitionMission:
                 not stm.fresh or stm.fault or stm.gripper_closed or
                 not stm.context_valid or not stm.context_matches or
                 stm.accepted_command != CMD_ENTER_SAFE_ZONE or stm.action_status & 3 != 3 or
-                stm.mode not in {STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER}):
+                stm.mode not in {STM_MODE_EXIT_SAFE_ZONE, STM_MODE_FACE_FIELD_CENTER, STM_MODE_REPUSH_EXIT}):
             return None
-        self._finish_delivery(stm, now, basis="delivery_push_timeout",
-                              message="下位推进超时，已开爪并进入退出", event="")
-        self.delivery_timeout_reason = "delivery_push_timeout"
+        repushed = stm.mode == STM_MODE_REPUSH_EXIT
+        basis = "delivery_repush_finished" if repushed else "delivery_push_timeout"
+        message = "三件材料已放下并完成重推流程，按原流程退出" if repushed else "下位已结束超时推送并放下，沿原退出流程返回搜索点"
+        self._finish_delivery(stm, now, basis=basis, message=message, event="")
+        if not repushed:
+            self.delivery_timeout_reason = basis
         self._clear_selected_batch()
         self._begin_return(stm, now, after_delivery=True)
-        return replace(self._return_center_output(
-            pose, now, "下位已结束本次超时推送并放下，沿原退出流程返回搜索点"),
-            event="delivery_push_timeout_exit", reason="delivery_push_timeout")
+        return replace(self._return_center_output(pose, now, message), event=basis+"_exit", reason=basis)
 
     def _delivery_timeout_output(
         self,
@@ -5734,6 +5746,8 @@ class CompetitionMission:
             return CompetitionOutput(self.state, self._hold(),
                 "判障前等待当前位置，尚未执行判障或推进", self.selected_batch,
                 reason="corridor_staging_pose_missing")
+        if self.nudge_forward_position:
+            return None
         if abs(pose.y_m-self.settings.safe_staging_y_m) <= self.settings.safe_zone_staging_axial_tolerance_m + 1e-9:
             return None
         # Keep the visually aligned lateral position; use the existing STAGE
@@ -7602,6 +7616,7 @@ class CompetitionMission:
         return CommandRequest(CMD_APPROACH_TARGET, self._side_flags(), x, y)
 
     def _enter_recovery_wait(self, vision: VisionSnapshot, now: float) -> None:
+        self.nudge_forward_position = False
         if self.recovery_wait_active:
             return
         self.recovery_origin_state = self.state
@@ -8697,11 +8712,21 @@ class CompetitionMission:
             if (self.settings.delivery_early_exit_enabled and self.enter_command_accepted and
                     self.delivery_visual_confirmed and stm.context_valid and stm.context_matches and
                     stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.action_status & 1 and
-                    stm.mode in {STM_MODE_NAVIGATE, 12, STM_MODE_RAM_VERIFY}):
+                    stm.mode in {STM_MODE_NAVIGATE, 12, STM_MODE_RAM_VERIFY, STM_MODE_REPUSH_OPENED,
+                                 STM_MODE_REPUSH_RETREAT, STM_MODE_REPUSH_FORWARD}):
                 return self._finish_delivery(
                     stm, now, basis="delivery_visual_early",
                     message="已确认本次载荷入区，请下位结束推进、开爪并退出",
                     event="delivery_early_complete_requested")
+            if (stm.context_valid and stm.context_matches and stm.accepted_command == CMD_ENTER_SAFE_ZONE and
+                    stm.mode in {STM_MODE_REPUSH_OPENED, STM_MODE_REPUSH_RETREAT, STM_MODE_REPUSH_FORWARD}):
+                reason, message = {
+                    STM_MODE_REPUSH_OPENED: ("delivery_repush_lift", "三件已放下，抬大舵机"),
+                    STM_MODE_REPUSH_RETREAT: ("delivery_repush_retreat", "退100毫米后降至86°"),
+                    STM_MODE_REPUSH_FORWARD: ("delivery_repush_forward", "保持张爪，前推150毫米"),
+                }[stm.mode]
+                return CompetitionOutput(self.state, self._enter_safe_zone_command(), message, self.selected_batch,
+                                         reason=reason, expected_stm_modes=(stm.mode,))
             # A queued ENTER may already be executing while status still says
             # mode10/11 and closed claws. Never replace that committed action
             # with sweep/ALIGN on a later image; the corridor was checked before

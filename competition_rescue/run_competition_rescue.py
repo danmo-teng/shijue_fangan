@@ -122,6 +122,9 @@ from state_machine import (  # noqa: E402
     STM_MODE_FACE_FIELD_CENTER,
     STM_MODE_SEARCH,
     STM_MODE_REMOTE_ACTION,
+    STM_MODE_NUDGE_CREDIT_READY,
+    STM_MODE_REPUSH_OPENED,
+    STM_MODE_REPUSH_FORWARD,
     cargo_in_front_region,
 )
 
@@ -1587,7 +1590,7 @@ class LocalizationWheelPolicy:
         self.suppressed = False
         self.last_sent = None
         self.sequence = 0
-        self.contact_task = None
+        self.contact_owner = None
         self.round_token = None
         self.push_owner = self.checked_owner = None
         self.error = None
@@ -1603,26 +1606,29 @@ class LocalizationWheelPolicy:
         if self.closed:
             return
         interrupted = stm.fault or (output.command is not None and output.command.opcode in {CMD_ABORT, CMD_PAUSE})
-        if interrupted or (self.contact_task is not None and task_id != self.contact_task):
-            self.contact_task = None
-        elif stm.context_valid and stm.action_status & 1:
-            if self.contact_task is not None:
-                # ENTER or an early COMPLETE can own the first opening report.
-                if stm.task_id == self.contact_task and stm.mode != STM_MODE_NAVIGATE:
-                    self.contact_task = None
-            elif (output.state == CompetitionState.ENTER_SAFE_ZONE and stm.context_matches
-                  and stm.task_id == task_id and stm.action_id == action_id
-                  and stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.mode == STM_MODE_NAVIGATE
-                  and depth_m is not None and depth_m >= self.CONTACT_DEPTH_M):
-                self.contact_task = task_id
+        owner = (stm.task_id, stm.action_id, stm.mode)
+        if interrupted or (self.contact_owner is not None and
+                (task_id != self.contact_owner[0] or
+                 (stm.context_valid and stm.task_id == task_id and stm.action_status & 1 and
+                  (stm.action_id, stm.mode) != self.contact_owner[1:]))):
+            self.contact_owner = None
+        current_push = (output.state == CompetitionState.ENTER_SAFE_ZONE and stm.context_matches and
+                        stm.action_id == action_id and stm.mode in {STM_MODE_NAVIGATE, STM_MODE_REPUSH_FORWARD})
+        finishing_repush = (output.state == CompetitionState.TASK_COMPLETE and stm.mode == STM_MODE_REPUSH_FORWARD and
+                            self.push_owner == (stm.task_id, stm.action_id))
+        if (not interrupted and (current_push or finishing_repush) and stm.context_valid and stm.action_status & 1 and
+                stm.task_id == task_id and stm.accepted_command == CMD_ENTER_SAFE_ZONE and
+                depth_m is not None and depth_m >= self.CONTACT_DEPTH_M):
+            self.contact_owner = owner
         if (not interrupted and stm.context_matches and stm.mode == STM_MODE_NAVIGATE and
                 stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.action_status & 1):
             self.push_owner = (task_id, action_id)
-        self.suppressed = self.contact_task is not None
+        self.suppressed = self.contact_owner is not None
         checkpoint = None
         # An early visual COMPLETE in opening, or ENTER completed in the
         # stationary verification state. A local push timeout can bypass both.
-        normal_open = ((stm.mode == 12 and stm.accepted_command == CMD_TASK_COMPLETE
+        normal_open = ((stm.mode == STM_MODE_REPUSH_OPENED and stm.accepted_command == CMD_ENTER_SAFE_ZONE) or
+                       (stm.mode == 12 and stm.accepted_command == CMD_TASK_COMPLETE
                         and visual_delivery) or
                        (stm.mode == 15 and stm.accepted_command == CMD_ENTER_SAFE_ZONE and stm.action_status & 2))
         if (not interrupted and normal_open and stm.context_valid and stm.action_status & 1
@@ -1636,8 +1642,8 @@ class LocalizationWheelPolicy:
             self.checked_owner = self.push_owner
 
     def release_contact(self):
-        if self.contact_task is not None or self.last_sent is True:
-            self.contact_task = None
+        if self.contact_owner is not None or self.last_sent is True:
+            self.contact_owner = None
             self.suppressed = False
             self._send("stop", 0, 0)
 
@@ -2316,12 +2322,15 @@ class CompetitionPlanner:
         # so publishing does not allocate a new action or restart the MCU.
         self.protocol_action_key = (command.opcode, command.flags, None, None, None)
         self.protocol_vision_frame = command.source_vision_frame or 0
+        if pending.opcode == CMD_ENTER_SAFE_ZONE and pending.arg_a == -1 and command.opcode == CMD_ALIGN_SAFE_ZONE:
+            self.mission.nudge_forward_position = False  # Credit rejected; stage before an uncredited ENTER.
         if self.mission.state == CompetitionState.OBSTACLE_ROUTE:
             self.mission.obstacle_route = None  # The rejected first step never executed.
         if restored_state == CompetitionState.ENTER_SAFE_ZONE:
             self.mission._set_state(restored_state, now)
             self.mission.enter_command_published = True
             self.mission.enter_command_accepted = True
+            self.mission.nudge_forward_position = command.arg_a == -1
             self.mission.safe_zone_visual_locked = bool(command.flags & CMD_VISUAL_CORRECTION_VALID)
         else:
             visual = bool(command.flags & CMD_VISUAL_CORRECTION_VALID)
@@ -2723,7 +2732,7 @@ class CompetitionPlanner:
             return replace(self.mission._resume_after_corridor_nudge(pose, stm, now),
                 event="corridor_nudge_rejected", message="挤障未完成，回预备线重新对准判障")
         if (self.mission.state in {CompetitionState.OBSTACLE_ROUTE, CompetitionState.CORRIDOR_NUDGE} and not stm.fault and
-                stm.mode in {3, 10, 11, 25}):
+                stm.mode in {3, 10, 11, 25, STM_MODE_NUDGE_CREDIT_READY}):
             # Update live remaining H/D while the first paired status is in
             # flight. Only a matching action may advance the route step.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)

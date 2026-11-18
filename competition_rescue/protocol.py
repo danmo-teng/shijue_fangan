@@ -297,10 +297,10 @@ def mission_frame(
         if (
             not flags & CMD_DRIVE_STRAIGHT or
             flags & CMD_DISTANCE_VALID or
-            arg_a != 0 or
+            arg_a not in (0, -1) or (arg_a == -1 and not visual) or
             arg_b != 0
         ):
-            raise ValueError("ENTER uses F407 encoder distance with zero D")
+            raise ValueError("ENTER requires zero payload or a visual nudge-credit request")
         if visual:
             if flags & CMD_USE_FINAL_HEADING or aux_cdeg != 0:
                 raise ValueError("visual ENTER must use the latched ALIGN heading")

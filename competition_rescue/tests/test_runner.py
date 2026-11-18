@@ -3548,6 +3548,15 @@ def test_recorded_partial_green_guides_separation_without_inflating_cargo():
 
 
 def test_delivery_local_timeout_exit_wins_pending_completion_without_reusing_action_ids():
+    _check_local_delivery_exit(16, 'delivery_push_timeout')
+
+
+def test_delivery_repush_exit_is_counted_once_with_or_without_pending_complete():
+    from state_machine import STM_MODE_REPUSH_EXIT
+    _check_local_delivery_exit(STM_MODE_REPUSH_EXIT, 'delivery_repush_finished')
+
+
+def _check_local_delivery_exit(exit_mode, basis):
     from dataclasses import replace
     from protocol import CMD_ENTER_SAFE_ZONE, CMD_TASK_COMPLETE, CMD_RETURN_CENTER
     from state_machine import CargoBatch
@@ -3563,7 +3572,7 @@ def test_delivery_local_timeout_exit_wins_pending_completion_without_reusing_act
                                          root/'diag', JsonlLog(root/'events'), 50)
             planner._publish(CompetitionOutput(m.state, m._enter_safe_zone_command(), 'fixture'))
             task, enter_action = planner.protocol_task, planner.protocol_action
-            status = StmSnapshot(mode=16, flags=0, age_ms=0, context_valid=True,
+            status = StmSnapshot(mode=exit_mode, flags=0, age_ms=0, context_valid=True,
                 task_id=task, action_id=enter_action, accepted_command=CMD_ENTER_SAFE_ZONE, action_status=3)
             if pending_complete:
                 out = m._finish_delivery(status, 1., basis='delivery_visual_early', message='fixture', event='')
@@ -3580,8 +3589,8 @@ def test_delivery_local_timeout_exit_wins_pending_completion_without_reusing_act
             assert paused.command.opcode == runner_module.CMD_PAUSE
             result = planner._output_for_cycle(VisionSnapshot(), PoseSnapshot(valid=True), status, False, 2.1)
             assert result.state == CompetitionState.RETURN_CENTER
-            assert result.event == 'delivery_push_timeout_exit'
-            assert m.delivery_completion_basis == 'delivery_push_timeout'
+            assert result.event == basis + '_exit'
+            assert m.delivery_completion_basis == basis
             assert m.delivery_count == 1
             planner._publish(result)
             assert result.command.opcode == CMD_RETURN_CENTER
@@ -4143,3 +4152,56 @@ def test_corridor_nudge_only_once_for_single_near_obstacle_then_realign_or_sweep
         assert m.step(view,pose,done,4.1).state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
         retry = m._blocked_corridor_output(replace(view,safe_corridor_obstacle_class="green_supply"),stm,5.,pose=pose)
         assert retry.event == "bulldozer_start" and m.obstacle_route.kind == "sweep"
+
+
+def test_nudge_credit_clear_pushes_only_remaining_and_blocked_repairs_staging():
+    from dataclasses import replace
+    from state_machine import CargoBatch, STM_MODE_NUDGE_CREDIT_READY
+    from protocol import CMD_CORRIDOR_NUDGE, CMD_ENTER_SAFE_ZONE
+    for side in ("blue", "red"):
+        for blocked in (False, True):
+            m = CompetitionMission(CompetitionSettings(side=side,initial_stash_enabled=False,bulldozer_enabled=True))
+            m.first_common_delivered = True
+            m._select_batch(CargoBatch((7,), ("core_black",), "material"))
+            m.confirmed_delivery_destination = "material"
+            pose = PoseSnapshot(True,m.settings.material_target_x_m,m.settings.safe_staging_y_m,m.settings.safe_heading_deg,0.)
+            st = StmSnapshot(mode=11,flags=2,age_ms=0,camera_pitch_cdeg=11500)
+            obstacle = VisionSnapshot(safe_corridor_obstacle_class="danger_cyan",safe_corridor_obstacle_count=1,
+                                      safe_corridor_obstacle_bbox=(750,400,90,90),safe_corridor_obstacle_distance_mm=230)
+            assert m._blocked_corridor_output(obstacle,st,1.,pose=pose).command.opcode == CMD_CORRIDOR_NUDGE
+            advanced = replace(pose,y_m=pose.y_m+.23*m.settings.side_sign)
+            done = replace(st,mode=STM_MODE_NUDGE_CREDIT_READY,context_valid=True,context_matches=True,
+                           accepted_command=CMD_CORRIDOR_NUDGE,action_status=3)
+            assert m.step(obstacle,advanced,done,1.2).state == CompetitionState.ALIGN_SAFE_ZONE_BY_POSE
+            assert m.nudge_forward_position
+            m.safe_zone_visual_locked = True
+            m.safe_zone_view_pitch_cdeg = st.camera_pitch_cdeg
+            m._begin_safe_corridor_check(obstacle,1.3)
+            frame=replace(obstacle,safe_bbox=(500,0,480,200),frame_sequence=42,observed_monotonic_s=1.4,safe_corridor_polygon=((0,0),(4,0),(4,4)),
+                          safe_corridor_obstacle_class="danger_cyan" if blocked else None)
+            out=m.step(frame,advanced,st,1.4)
+            if blocked:
+                assert out.reason=="corridor_return_to_staging" and not m.nudge_forward_position
+            else:
+                assert out.command.opcode==CMD_ENTER_SAFE_ZONE and out.command.arg_a==-1
+                out.command.to_frame(1)
+
+
+def test_repush_wheel_policy_restores_on_reverse_and_relatches_at_contact():
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from dataclasses import replace
+    from run_competition_rescue import LocalizationWheelPolicy
+    from protocol import CMD_ENTER_SAFE_ZONE
+    from state_machine import STM_MODE_REPUSH_OPENED, STM_MODE_REPUSH_RETREAT, STM_MODE_REPUSH_FORWARD
+    policy = LocalizationWheelPolicy("@test-repush-wheel", "test")
+    policy.socket=Mock()
+    out=SimpleNamespace(state=CompetitionState.ENTER_SAFE_ZONE,command=None)
+    st=StmSnapshot(mode=10,context_valid=True,context_matches=True,task_id=7,action_id=12,
+                   accepted_command=CMD_ENTER_SAFE_ZONE,action_status=1)
+    for mode,depth,disabled in [(10,1.04,True),(STM_MODE_REPUSH_OPENED,1.03,False),
+            (STM_MODE_REPUSH_RETREAT,1.04,False),(STM_MODE_REPUSH_FORWARD,.95,False),
+            (STM_MODE_REPUSH_FORWARD,1.03,True),(STM_MODE_REPUSH_FORWARD,1.00,True),(16,1.05,False)]:
+        policy.update(out,replace(st,mode=mode),7,12,depth_m=depth)
+        assert policy.suppressed == disabled
+    policy.close()

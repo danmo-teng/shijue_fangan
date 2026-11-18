@@ -1,0 +1,303 @@
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index 4773b38..e4c2b49 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -145,6 +145,11 @@
+ #define VISION_PRE_GRAB_ADVANCE_MM      50U
+ #define VISION_MODE_APPROACH_RANGE_WAIT 52U
+ #define VISION_MODE_APPROACH_RANGE_MOVE 53U
++#define VISION_MODE_NUDGE_CREDIT_READY 54U
++#define VISION_MODE_REPUSH_OPENED 55U
++#define VISION_MODE_REPUSH_RETREAT 56U
++#define VISION_MODE_REPUSH_FORWARD 57U
++#define VISION_MODE_REPUSH_EXIT 58U
+ /* DISPERSE_PILE bit5: first formal green only. Execute the short local
+  * backoff/Touch/forward/back/open bump, then return directly to SEARCH. */
+ #define VISION_CMD_FIRST_GREEN_BUMP  0x20U
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index e9b3030..bb77c36 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -82,6 +82,7 @@ typedef struct {
+   uint32_t lift_started_ms;
+   int64_t straight_start_counts[3];
+   bool lateral_started, obstacle_right, filter_at_pickup;
++  uint16_t nudge_forward_mm;
+   uint32_t started_ms;
+   uint32_t phase_path_mm;
+   bool done;
+@@ -382,12 +383,17 @@ typedef enum {
+   DELIVERY_FINISH_COMPLETE,
+   DELIVERY_FINISH_FRONT_TIMEOUT
+ } DeliveryFinishReason;
++typedef enum {
++  REPUSH_NONE, REPUSH_ARMED, REPUSH_RAISE, REPUSH_BACK, REPUSH_LOWER, REPUSH_FORWARD, REPUSH_DONE
++} RepushPhase;
+ static struct {
+   bool active;
+   bool front_budget_active;
+   uint32_t front_elapsed_ms;
+   uint32_t front_last_ms;
+   DeliveryFinishReason finish;
++  RepushPhase repush;
++  uint32_t repush_wait_ms;
+ } delivery;
+ static bool first_delivery_done;
+ /* Field yaw is CCW-positive. Explicit station direction survives deliveries. */
+@@ -748,7 +754,19 @@ static bool task_full_turn_reached(void)
+ static uint8_t task_protocol_mode(void)
+ {
+   if (pre_grab.moving) { return VISION_MODE_APPROACH_RANGE_MOVE; }
++  if (state == TASK_OPEN_FOR_RAM) {
++    if (delivery.repush == REPUSH_RAISE && delivery.finish == DELIVERY_FINISH_NONE)
++      return VISION_MODE_REPUSH_OPENED;
++    if (delivery.repush == REPUSH_BACK || delivery.repush == REPUSH_LOWER)
++      return VISION_MODE_REPUSH_RETREAT;
++    if (delivery.repush == REPUSH_FORWARD) return VISION_MODE_REPUSH_FORWARD;
++  }
++  if ((state == TASK_EXIT_SAFE_ZONE || state == TASK_FACE_FIELD_CENTER) &&
++      delivery.repush == REPUSH_DONE && delivery.finish == DELIVERY_FINISH_NONE &&
++      accepted_context.opcode == VISION_CMD_ENTER_SAFE_ZONE) return VISION_MODE_REPUSH_EXIT;
+   if (state == TASK_ALIGN_SAFE_ZONE) {
++    if (accepted_context.opcode == VISION_CMD_CORRIDOR_NUDGE && remote_action.done &&
++        remote_action.nudge_forward_mm != 0U) return VISION_MODE_NUDGE_CREDIT_READY;
+     return safe_align_done ? 11U : 10U;
+   }
+   if (complete_flow_active) {
+@@ -1642,6 +1660,7 @@ static void task_enter(TaskState next, uint32_t now_ms)
+   const bool return_just_completed =
+       (state == TASK_FACE_FIELD_CENTER) && (next == TASK_SEARCH);
+   Motor_Stop();
++  if (next != TASK_ALIGN_SAFE_ZONE) remote_action.nudge_forward_mm = 0U;
+   state = next;
+   if (next != TASK_NAVIGATE) { delivery.front_budget_active = false; }
+   if (next != TASK_NAVIGATE && next != TASK_OPEN_FOR_RAM &&
+@@ -4714,7 +4733,7 @@ static bool delivery_enter_command_ok(const VisionMissionCommand *command)
+          ((command->flags & VISION_CMD_DRIVE_STRAIGHT) != 0U) &&
+          ((command->flags & VISION_CMD_DISTANCE_VALID) == 0U) &&
+          task_side_flag_valid(command->flags) &&
+-         (command->target_x_mm == 0) &&
++         (command->target_x_mm == 0 || (visual && command->target_x_mm == -1)) &&
+          (command->target_y_mm == 0) &&
+          (visual ?
+               (((command->flags & VISION_CMD_USE_FINAL_HEADING) == 0U) &&
+@@ -4779,6 +4798,58 @@ static void task_finish_delivery_exit(uint32_t now_ms)
+   task_enter(TASK_EXIT_SAFE_ZONE, now_ms);
+ }
+ 
++static bool task_delivery_has_three_materials(void)
++{
++  if (audit_received && audit_host_stable)
++    return task_status.gripper_closed && audit_valid && !audit_initial_stash &&
++        audit_last_semantic == AUDIT_SEMANTIC_MATERIAL_LEGAL && audit_last_total_count == 3U;
++  return confirmed_load.active && task_confirmed_load_available() && !confirmed_load.injury &&
++      confirmed_load.total == 3U &&
++      confirmed_load.classes[VISION_CARGO_GREEN] + confirmed_load.classes[VISION_CARGO_CORE] == 3U;
++}
++
++static bool task_timeout_repush_can_complete(void)
++{
++  return delivery.finish == DELIVERY_FINISH_FRONT_TIMEOUT && delivery.repush != REPUSH_NONE &&
++      (state == TASK_OPEN_FOR_RAM || (delivery.repush == REPUSH_DONE &&
++       (state == TASK_EXIT_SAFE_ZONE || state == TASK_FACE_FIELD_CENTER)));
++}
++
++static void task_process_delivery_repush(uint32_t now_ms)
++{
++  if (delivery.repush == REPUSH_RAISE || delivery.repush == REPUSH_LOWER) {
++    if (now_ms - step_started_ms < delivery.repush_wait_ms) return;
++    delivery.repush = delivery.repush == REPUSH_RAISE ? REPUSH_BACK : REPUSH_FORWARD;
++    step_started_ms = now_ms;
++    return;
++  }
++  const bool forward = delivery.repush == REPUSH_FORWARD;
++  const bool timed_out = forward && now_ms - step_started_ms >= APP_SAFE_FINAL_PUSH_TIMEOUT_MS;
++  if (!timed_out) {
++    Motor_ResumeFiniteMotion();
++    const MotorDistanceStatus movement = Motor_MoveDistanceHeading(forward ? 0.150f : -0.100f,
++        forward ? APP_SAFE_FINAL_PUSH_SPEED_MM_S : APP_SAFE_SWEEP_RETURN_SPEED_MM_S, task_safe_zone_heading());
++    task_status.motors_active = movement == MOTOR_DISTANCE_RUNNING;
++    if (distance_failed(movement)) { task_stop(TASK_FAULT_MOTOR, now_ms); return; }
++    if (movement != MOTOR_DISTANCE_DONE) return;
++  }
++  if (forward) {
++    TaskDiag_Event("REPUSH_END", accepted_context.task_id, accepted_context.action_id,
++        (int32_t)Motor_GetDistanceTravelledMm(), timed_out, delivery.finish, now_ms - step_started_ms);
++  }
++  Motor_Stop();
++  task_status.motors_active = false;
++  if (forward) {
++    delivery.repush = REPUSH_DONE;
++    task_finish_delivery_exit(now_ms);
++    return;
++  }
++  delivery.repush_wait_ms = Lift_PositionWaitMs(APP_LIFT_MATERIAL_TRAVEL_ANGLE);
++  Lift_SetLoadedTravelPosition(LIFT_LOAD_MATERIAL);
++  delivery.repush = REPUSH_LOWER;
++  step_started_ms = now_ms;
++}
++
+ static void task_process_delivery_open(const VisionMissionCommand *command,
+                                        uint32_t now_ms)
+ {
+@@ -4787,10 +4858,19 @@ static void task_process_delivery_open(const VisionMissionCommand *command,
+   const bool local_finish_owned = task_delivery_is_finishing() &&
+       accepted_context.valid && !accepted_context.cancelled &&
+       accepted_context.opcode == owner_opcode;
++  if (task_delivery_is_finishing() ? !local_finish_owned :
++      !delivery_enter_command_ok(command)) {
++    if (delivery.repush == REPUSH_BACK || delivery.repush == REPUSH_FORWARD) Motor_PauseFiniteMotion();
++    else Motor_Stop();
++    task_status.motors_active = false;
++    return;
++  }
++  if (delivery.repush >= REPUSH_RAISE && delivery.repush <= REPUSH_FORWARD) {
++    task_process_delivery_repush(now_ms);
++    return;
++  }
+   Motor_Stop();
+   task_status.motors_active = false;
+-  if (task_delivery_is_finishing() ? !local_finish_owned :
+-      !delivery_enter_command_ok(command)) { return; }
+   if (task_status.gripper_closed) {
+     if (!task_open_claws(now_ms)) { return; }
+     task_status.gripper_closed = false;
+@@ -4800,6 +4880,13 @@ static void task_process_delivery_open(const VisionMissionCommand *command,
+       step_started_ms = now_ms;
+     }
+   }
++  if (delivery.repush == REPUSH_ARMED && delivery.finish != DELIVERY_FINISH_COMPLETE) {
++    delivery.repush_wait_ms = Lift_PositionWaitMs(APP_LIFT_RELEASE_RAISE_ANGLE);
++    Lift_SetReleaseRaisePosition();
++    delivery.repush = REPUSH_RAISE;
++    step_started_ms = now_ms;
++    return;
++  }
+   if (local_finish_owned) {
+     task_finish_delivery_exit(now_ms);
+   } else if ((uint32_t)(now_ms - step_started_ms) >= APP_DELIVERY_CAMERA_SETTLE_MS) {
+@@ -5303,7 +5390,8 @@ static void task_pause_runtime(uint32_t now_ms)
+   if (state == TASK_INJURY_BACKOFF) {
+     injury_backoff_last_ms = now_ms;
+   }
+-  if (state == TASK_INJURY_RECLOSE && single_filter_active) {
++  if ((state == TASK_INJURY_RECLOSE && single_filter_active) ||
++      (state == TASK_OPEN_FOR_RAM && (delivery.repush == REPUSH_BACK || delivery.repush == REPUSH_FORWARD))) {
+     Motor_PauseFiniteMotion();
+     task_status.motors_active = false;
+     return;
+@@ -6504,6 +6592,7 @@ static void task_closed_claw_lateral(bool returning, uint32_t now_ms)
+ static void task_end_corridor_nudge(bool finished, uint32_t now_ms)
+ {
+   task_enter(TASK_ALIGN_SAFE_ZONE, now_ms);
++  if (!finished) remote_action.nudge_forward_mm = 0U;
+   remote_action.done = finished;
+   accepted_context.completed = finished;
+   if (!finished) {
+@@ -6525,6 +6614,10 @@ static void task_process_corridor_nudge(uint32_t now_ms)
+           APP_SAFE_SWEEP_FORWARD_SPEED_MM_S, remote_action.heading_cdeg * 0.01f);
+       task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
+       if (result == MOTOR_DISTANCE_DONE) {
++        /* Capture this forward leg before Motor_Stop clears its origin. */
++        const float forward_mm = Motor_GetDistanceTravelledMm();
++        remote_action.nudge_forward_mm = (uint16_t)(fminf(fmaxf(0.0f, forward_mm),
++            APP_SAFE_ENTER_TOTAL_DISTANCE_MM - APP_SAFE_FINAL_PUSH_DISTANCE_MM) + 0.5f);
+         task_remote_action_advance(now_ms);
+       } else if (distance_failed(result)) {
+         task_end_corridor_nudge(false, now_ms);
+@@ -7510,10 +7603,17 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+              delivery_enter_command_ok(command) &&
+              (((command->flags & VISION_CMD_VISUAL_CORRECTION_VALID) != 0U) ==
+               safe_align_visual_confirmed)) {
++    if (command->target_x_mm == -1 && (remote_action.type != REMOTE_ACTION_CORRIDOR_NUDGE ||
++        !remote_action.done || !remote_action.nudge_forward_mm)) {
++      task_status.command_reject_reason = TASK_COMMAND_REJECT_STATE;
++      return;
++    }
+     task_status.acknowledged_sequence = command->sequence;
+     command_accepted = true;
++    if (command->target_x_mm == -1) safe_enter_resume_mm = remote_action.nudge_forward_mm;
+     task_enter(TASK_NAVIGATE, now_ms);
+     delivery_enter_active = true;
++    delivery.repush = task_delivery_has_three_materials() ? REPUSH_ARMED : REPUSH_NONE;
+     delivery.active = true;
+     delivery.front_budget_active = true;
+     delivery.front_elapsed_ms = 0U;
+@@ -7541,8 +7641,14 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+              delivery_enter_command_ok(command)) {
+     task_status.acknowledged_sequence = command->sequence;
+     command_accepted = true;
++  } else if (command->command == VISION_CMD_TASK_COMPLETE && delivery.repush == REPUSH_DONE &&
++             (state == TASK_EXIT_SAFE_ZONE || state == TASK_FACE_FIELD_CENTER)) {
++    /* ENTER may finish the repush as the host's visual COMPLETE is in flight. */
++    task_status.acknowledged_sequence = command->sequence;
++    command_accepted = true;
++    delivery.finish = DELIVERY_FINISH_COMPLETE;
+   } else if ((command->command == VISION_CMD_TASK_COMPLETE) &&
+-             delivery.finish == DELIVERY_FINISH_NONE &&
++             (delivery.finish == DELIVERY_FINISH_NONE || task_timeout_repush_can_complete()) &&
+              ((!task_status.gripper_closed && state == TASK_RAM_VERIFY) ||
+               (delivery.active &&
+                ((state == TASK_NAVIGATE && delivery_enter_active) ||
+@@ -7551,6 +7657,7 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+     command_accepted = true;
+     delivery.active = true;
+     delivery.finish = DELIVERY_FINISH_COMPLETE;
++    delivery.repush = REPUSH_NONE;
+     delivery.front_budget_active = false;
+     Motor_Stop();
+     task_status.motors_active = false;
+@@ -7772,7 +7879,7 @@ static bool task_context_complete(void)
+            safe_align_visual_confirmed);
+     case VISION_CMD_ENTER_SAFE_ZONE:
+       return state == TASK_RAM_VERIFY ||
+-          (delivery.finish == DELIVERY_FINISH_FRONT_TIMEOUT &&
++          ((delivery.finish == DELIVERY_FINISH_FRONT_TIMEOUT || delivery.repush == REPUSH_DONE) &&
+            !task_status.gripper_closed &&
+            (state == TASK_EXIT_SAFE_ZONE || state == TASK_FACE_FIELD_CENTER));
+     case VISION_CMD_TASK_COMPLETE:
+@@ -8182,15 +8289,14 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+         task_disperse_reject_reason(&incoming) != TASK_COMMAND_REJECT_NONE) goto rejected;
+   }
+   if (incoming.command == VISION_CMD_TASK_COMPLETE) {
+-    /* The original context checks above handle ordering and rollover. Only a
+-     * new completion of this ENTER may take ownership; late COMPLETE cannot
+-     * overwrite a locally latched timeout or an already accepted completion. */
++    /* Only the current ENTER can hand off to COMPLETE. A visual confirmation
++     * may end its three-material timeout repush, including at the exit boundary. */
+     if (new_target || !accepted_context.valid ||
+         !task_side_flag_valid(incoming.flags) ||
+         incoming.flags != (VISION_CMD_VALID | (incoming.flags & VISION_CMD_RED_SIDE)) ||
+         incoming.target_x_mm != 0 || incoming.target_y_mm != 0 || incoming.heading_cdeg != 0U ||
+         (new_action && (accepted_context.opcode != VISION_CMD_ENTER_SAFE_ZONE ||
+-                        delivery.finish != DELIVERY_FINISH_NONE))) goto rejected;
++                        (delivery.finish != DELIVERY_FINISH_NONE && !task_timeout_repush_can_complete())))) goto rejected;
+   }
+   if (incoming.command == VISION_CMD_ENTER_SAFE_ZONE && delivery.active && new_action &&
+       !(state == TASK_NAVIGATE && delivery_enter_active &&
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 863565c..4ccb79b 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -413,7 +413,7 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+     const uint16_t fallback_heading = red ? 9000U : 27000U;
+     if (((flags & VISION_CMD_DRIVE_STRAIGHT) == 0U) ||
+         ((flags & VISION_CMD_DISTANCE_VALID) != 0U) ||
+-        (arg_a != 0) || (arg_b != 0) ||
++        (arg_a != 0 && !(visual && arg_a == -1)) || (arg_b != 0) ||
+         (visual ? (((flags & VISION_CMD_USE_FINAL_HEADING) != 0U) ||
+                    (heading != 0U)) :
+                   (((flags & VISION_CMD_USE_FINAL_HEADING) == 0U) ||
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index 67e7240..8a078fa 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -463,7 +463,7 @@ def mission_frame(
+         fallback_heading = 9000 if flags & CMD_RED_SIDE else 27000
+         if (not flags & CMD_DRIVE_STRAIGHT or
+                 flags & CMD_DISTANCE_VALID or
+-                target_x_mm or target_y_mm):
++                target_x_mm not in (0, -1) or (target_x_mm == -1 and not visual) or target_y_mm):
+             raise ValueError("ENTER uses F407 encoder distance with zero D")
+         if visual:
+             if flags & CMD_USE_FINAL_HEADING or heading_cdeg:
