@@ -148,9 +148,9 @@ def mission_frame(
         required = CMD_VALID | CMD_SIDE_VALID
         allowed = required | CMD_RED_SIDE | CMD_TARGET_RIGHT
         if (flags & required != required or flags & ~allowed or
-                arg_a != 100 or arg_b != 8800 or
+                arg_a != 100 or arg_b != 8600 or
                 aux_cdeg != (9000 if flags & CMD_RED_SIDE else 27000)):
-            raise ValueError("orange gate filter requires black side, 100mm, lift88 and safe heading")
+            raise ValueError("orange gate filter requires black side, 100mm, lift86 and safe heading")
     if command == CMD_CLOSED_DEFLECT:
         from closed_deflect import VIEW, PULL, STAGE, CARRYING, END_AT_ORIGINAL
         phase = flags >> 4

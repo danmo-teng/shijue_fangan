@@ -278,15 +278,15 @@ def test_orange_gate_filter_packet_contract():
         for right in (False, True):
             flags = CMD_VALID | CMD_SIDE_VALID | (CMD_RED_SIDE if red else 0) | (CMD_TARGET_RIGHT if right else 0)
             heading = 9000 if red else 27000
-            packet = mission_frame(12, CMD_ORANGE_GATE_FILTER, flags, 100, 8800, heading)
+            packet = mission_frame(12, CMD_ORANGE_GATE_FILTER, flags, 100, 8600, heading)
             assert packet[2] == 0x18 and packet[4] == 0x16 and len(packet) == 15
             assert int.from_bytes(packet[6:8], 'big', signed=True) == 100
-            assert int.from_bytes(packet[8:10], 'big', signed=True) == 8800
+            assert int.from_bytes(packet[8:10], 'big', signed=True) == 8600
             assert int.from_bytes(packet[10:12], 'big') == heading
             assert int.from_bytes(packet[12:14], 'little') == crc16_modbus(packet[2:12])
-            for bad in [(flags & ~CMD_SIDE_VALID,100,8800,heading), (flags,150,8800,heading),
-                        (flags,100,8200,heading), (flags,100,8800,(heading+18000)%36000),
-                        (flags | 0x20,100,8800,heading)]:
+            for bad in [(flags & ~CMD_SIDE_VALID,100,8600,heading), (flags,150,8600,heading),
+                        (flags,100,8800,heading), (flags,100,8200,heading), (flags,100,8600,(heading+18000)%36000),
+                        (flags | 0x20,100,8600,heading)]:
                 try:
                     mission_frame(12, CMD_ORANGE_GATE_FILTER, *bad)
                 except ValueError:
