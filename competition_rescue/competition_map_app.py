@@ -73,7 +73,6 @@ class CompetitionMapApp(RescueMapApp):
         self.warm_error = None
         self.window_exit_requested = False
         self.warm_status_path = RUNTIME / 'operator_warm_status.json'
-        self.progress_path = RUNTIME / 'competition_progress.json'
         if self.localization_mode == "t265" or self.official_wheel_input:
             # Mounting is independent of SDK wheel injection. The normal writer
             # still sets the selected competition corner/heading, not the test centre.
@@ -624,8 +623,6 @@ class CompetitionMapApp(RescueMapApp):
             self.operator.transitioning = True
         self.record_reset_event("session_reset_requested", source)
         super().reset_session()
-        if isinstance(getattr(self, 'progress_path', None), Path):
-            self.progress_path.unlink(missing_ok=True)
         self.reset_session_token = None
         self.reset_request_path.unlink(missing_ok=True)
         self.record_reset_event("session_reset_completed", source)

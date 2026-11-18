@@ -1,6 +1,4 @@
-"""Small match checkpoint and explicit empty-load restart configuration."""
-import json
-from pathlib import Path
+"""In-memory match progress and explicit empty-load restart configuration."""
 from protocol import FRAME_HEAD, FRAME_TAIL, crc16_modbus
 
 
@@ -26,28 +24,6 @@ def restore_progress(mission, progress):
     mission.orange_search_turn_deg = float(progress.get('orange_search_turn_deg', 0.0))
     mission.stash_has_cargo = bool(progress['stash_has_cargo'])
     mission.resume_search_after_start = mission.initial_stash_done
-
-
-class ProgressStore:
-    def __init__(self, path, session):
-        self.path, self.session, self.last = Path(path), session, None
-
-    def save(self, mission):
-        progress = match_progress(mission)
-        # Retain the exact live angle for hot resume, but write only milestones
-        # (round changes/full circle), never one disk update per yaw sample.
-        milestone = dict(progress, orange_search_turn_deg=(
-            360.0 if progress['orange_search_turn_deg'] >= 360.0 else 0.0))
-        if milestone == self.last:
-            return False
-        # Only milestone changes write; not one disk operation per camera frame.
-        value = dict(version=1, session_token=self.session, side=mission.settings.side,
-                     start_zone=mission.settings.start_zone, progress=progress)
-        temporary = self.path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(value, ensure_ascii=False)+'\n')
-        temporary.replace(self.path)
-        self.last = milestone
-        return True
 
 
 def resume_config_frame(sequence, side, zone, progress):

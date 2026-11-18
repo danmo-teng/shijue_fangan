@@ -7,7 +7,7 @@ competition strategy and writes its command frames through the existing
 atomic command-file relay.
 """
 from __future__ import annotations
-from round_resume import ProgressStore, match_progress, restore_progress, resume_config_frame
+from round_resume import match_progress, restore_progress, resume_config_frame
 
 import argparse
 from collections import Counter
@@ -2005,26 +2005,14 @@ class CompetitionPlanner:
         from protocol import mission_frame
         return mission_frame(self.sequence, CMD_HOLD)
 
-    def save_progress(self) -> str:
-        progress_store = getattr(self, 'progress_store', None)
-        if progress_store is not None:
-            try:
-                return "written" if progress_store.save(self.mission) else "unchanged"
-            except OSError as error:
-                self.events_log.write('match_progress_save_failed', dict(error=str(error)))
-                return 'failed'
-        return 'disabled'
-
     def _publish(self, output: CompetitionOutput, *, stm: StmSnapshot | None = None,
                  cycle_start_s=None, previous_cycle_start_s=None) -> None:
-        exit_first = (not output.suppress_command_tx and output.command is not None
+        publishing_complete = (not output.suppress_command_tx and output.command is not None
                       and output.command.opcode == CMD_TASK_COMPLETE)
-        trace_exit = exit_first and output.event in {
+        trace_exit = publishing_complete and output.event in {
             "delivery_early_complete_requested", "delivery_confirmed", "delivery_timeout_complete"}
         if trace_exit:
             decision_ns = time.monotonic_ns()
-        if not exit_first:
-            self.save_progress()
         if self.localization_wheel_policy is not None and stm is not None:
             matched = (stm.context_valid and stm.task_id == self.protocol_task and
                        stm.action_id == self.protocol_action)
@@ -2120,36 +2108,31 @@ class CompetitionPlanner:
         if trace_exit:
             publish_start_ns = time.monotonic_ns()
         write_command_frame(self.command_path, packet)
-        if exit_first:
-            if trace_exit:
-                published_ns = time.monotonic_ns()
-            save_result = self.save_progress()
-            if trace_exit:
-                saved_ns = time.monotonic_ns()
-                try:
-                    vision = self.protocol_vision
-                    confirmed = self.mission.delivery_confirming_frame if self.mission.delivery_visual_confirmed else None
-                    self.events_log.write("delivery_exit_timing", dict(
-                        task_id=self.protocol_task, action_id=self.protocol_action,
-                        command_sequence=self.sequence, basis=output.reason,
-                        delivery_count=self.mission.delivery_count, cargo=list(self.mission.carried_manifest),
-                        frame=vision.frame_sequence, frame_source_s=vision.observed_monotonic_s,
-                        previous_cycle_start_s=previous_cycle_start_s, cycle_start_s=cycle_start_s,
-                        decision_ready_ns=decision_ns, ipc_write_start_ns=publish_start_ns,
-                        ipc_published_ns=published_ns, progress_finished_ns=saved_ns,
-                        progress_result=save_result, ipc_write_ms=(published_ns-publish_start_ns)/1e6,
-                        progress_save_ms=(saved_ns-published_ns)/1e6,
-                        observation_started_s=self.mission.delivery_observation_started_s,
-                        confirming_frame=confirmed[0] if confirmed else None,
-                        confirming_frame_source_s=confirmed[1] if confirmed else None,
-                        confirming_cycle_start_s=confirmed[2] if confirmed else None,
-                        inside_hits=self.mission.delivery_inside_hits,
-                        inside_track_ids=vision.delivery_target_inside_track_ids,
-                        outside_track_ids=vision.delivery_target_outside_track_ids,
-                        stm_mode=stm.mode if stm else None,
-                        stm_received_ns=stm.received_monotonic_ns if stm else None))
-                except Exception as error:
-                    self._record_diagnostic_error(error, saved_ns / 1e9)
+        if trace_exit:
+            published_ns = time.monotonic_ns()
+            try:
+                vision = self.protocol_vision
+                confirmed = self.mission.delivery_confirming_frame if self.mission.delivery_visual_confirmed else None
+                self.events_log.write("delivery_exit_timing", dict(
+                    task_id=self.protocol_task, action_id=self.protocol_action,
+                    command_sequence=self.sequence, basis=output.reason,
+                    delivery_count=self.mission.delivery_count, cargo=list(self.mission.carried_manifest),
+                    frame=vision.frame_sequence, frame_source_s=vision.observed_monotonic_s,
+                    previous_cycle_start_s=previous_cycle_start_s, cycle_start_s=cycle_start_s,
+                    decision_ready_ns=decision_ns, ipc_write_start_ns=publish_start_ns,
+                    ipc_published_ns=published_ns,
+                    ipc_write_ms=(published_ns-publish_start_ns)/1e6,
+                    observation_started_s=self.mission.delivery_observation_started_s,
+                    confirming_frame=confirmed[0] if confirmed else None,
+                    confirming_frame_source_s=confirmed[1] if confirmed else None,
+                    confirming_cycle_start_s=confirmed[2] if confirmed else None,
+                    inside_hits=self.mission.delivery_inside_hits,
+                    inside_track_ids=vision.delivery_target_inside_track_ids,
+                    outside_track_ids=vision.delivery_target_outside_track_ids,
+                    stm_mode=stm.mode if stm else None,
+                    stm_received_ns=stm.received_monotonic_ns if stm else None))
+            except Exception as error:
+                self._record_diagnostic_error(error, published_ns / 1e9)
         if command.opcode in {CMD_ALIGN_SAFE_ZONE, CMD_ENTER_SAFE_ZONE}:
             self.published_safe_commands[command.opcode] = (
                 self.protocol_task, self.protocol_action, command)
@@ -3787,9 +3770,6 @@ def main() -> int:
     wall_yaw_word = 0
     last_start_reference = None
     resume_progress = None
-    progress_store = (ProgressStore(args.operator_control.parent / 'competition_progress.json',
-                                   args.reset_session_token) if args.operator_control else None)
-    planner.progress_store = progress_store
 
     def write_warm_status():
         nonlocal warm_status_error_reported
@@ -3832,7 +3812,6 @@ def main() -> int:
                 return  # The old command producer must actually have ended.
             resume_progress = match_progress(mission)
             resume_progress['stop_serial'] = int(request['stop_serial'])
-            planner.save_progress()
             args.command_file.unlink(missing_ok=True)  # Do not replay the old ABORT/mission after rearm.
             if wheel_policy is not None:
                 address, session = wheel_policy.address, wheel_policy.session_id
@@ -3859,7 +3838,6 @@ def main() -> int:
             args.diagnostics,events,args.planner_fps)
         if resume_progress is not None:
             restore_progress(mission, resume_progress)
-        planner.progress_store = progress_store
         planner.localization_wheel_policy = wheel_policy
         if replay is not None:
             planner.replay_event_sink = replay.record_event
@@ -3893,7 +3871,6 @@ def main() -> int:
             return False
         operator_stopped = True
         planner.stop("operator_stop", preserve_warm=True)
-        planner.save_progress()
         with planner.lock:
             planner.latest_output = CompetitionOutput(
                 mission.state, None, "本局已停止并保留进度；摆回原出发位后短按3重发",

@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import threading
 import json
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from round_resume import ProgressStore, match_progress, restore_progress, resume_config_frame
+from round_resume import match_progress, restore_progress, resume_config_frame
 from state_machine import CompetitionMission, CompetitionSettings, CompetitionState, PoseSnapshot, StmSnapshot, VisionSnapshot, CargoBatch
 from protocol import crc16_modbus, CMD_BULLDOZER_STEP
 
@@ -28,7 +28,7 @@ def test_stop_keeps_match_even_after_long_hold_and_delayed_release():
         assert [e['action'] for e in events] == []
 
 
-def test_match_progress_three_reachable_cases_drop_load_and_return_to_source(tmp_path):
+def test_match_progress_three_reachable_cases_drop_load_and_return_to_source():
     for green,attack in ((False,False),(False,True),(True,True)):
         old=CompetitionMission(CompetitionSettings(side='red',initial_stash_enabled=True))
         old.initial_stash_done=attack;old.first_common_delivered=green
@@ -36,17 +36,15 @@ def test_match_progress_three_reachable_cases_drop_load_and_return_to_source(tmp
         old.search_scan_direction=-1
         old.selected_batch=CargoBatch((91,),('injured_orange',),'injury')
         old.carried_manifest=('injured_orange',);old.disperse_attempts=2
-        store=ProgressStore(tmp_path/'progress.json','this-match');store.save(old)
-        saved=json.loads(store.path.read_text())
-        assert saved['session_token']=='this-match'
-        new=CompetitionMission(old.settings);restore_progress(new,saved['progress'])
+        saved = match_progress(old)
+        new=CompetitionMission(old.settings);restore_progress(new,saved)
         assert new.selected_batch is None and not new.carried_manifest and new.disperse_attempts==0
         assert new.first_common_delivered==green and new.initial_stash_done==attack
         assert new.search_scan_direction==-1
-        legacy=dict(saved['progress']);legacy.pop('search_direction')
+        legacy=dict(saved);legacy.pop('search_direction')
         restore_progress(new,legacy)
         assert new.search_scan_direction==1
-        restore_progress(new,saved['progress'])
+        restore_progress(new,saved)
         p=PoseSnapshot(True,0,0,90,0);st=StmSnapshot(mode=3,age_ms=0,camera_pitch_cdeg=12000)
         out=new.step(VisionSnapshot(),p,st,1.)
         if attack:
@@ -102,17 +100,13 @@ def test_resume_keeps_sdk_owner_and_new_stop_wins(tmp_path):
     assert panel.control_path.read_text()==before and panel.stopped
 
 
-def test_orange_search_hot_resume_retains_angle_without_per_frame_disk_writes(tmp_path):
+def test_orange_search_hot_resume_retains_latest_live_angle():
     m=CompetitionMission(CompetitionSettings(side='red'))
     m.first_common_delivered=True;m.orange_search_round=2;m.orange_search_turn_deg=125.
-    store=ProgressStore(tmp_path/'progress.json','round');store.save(m)
-    initial=store.path.read_bytes()
-    m.orange_search_turn_deg=250.;store.save(m)
-    assert store.path.read_bytes()==initial
+    m.orange_search_turn_deg=250.
     new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
     assert new.orange_search_round==2 and new.orange_search_turn_deg==250. and new._orange_only_search()
-    m.orange_search_turn_deg=360.;store.save(m)
-    assert store.path.read_bytes()!=initial
+    m.orange_search_turn_deg=360.
     new=CompetitionMission(m.settings);restore_progress(new,match_progress(m))
     assert not new._orange_only_search()
 
