@@ -184,6 +184,7 @@ class TextPainter:
 
 class RescueMapApp:
     def __init__(self, options: argparse.Namespace) -> None:
+        self.runtime = RUNTIME
         self.options = options
         # Match the RDK X5 desktop panel exactly; the square field remains
         # undistorted and the status panel occupies the remaining width.
@@ -222,11 +223,11 @@ class RescueMapApp:
         if not math.isfinite(self.t265_translation_scale) or not 0.0 < self.t265_translation_scale <= 2.0:
             raise ValueError("T265 translation scale must be in (0,2]")
         initial_pose(self.zone, self.corner_offset_m)  # validates parameters
-        self.localization_json = options.localization_json or (RUNTIME / "localization_result.json")
-        self.uart_command_path = RUNTIME / "uart_command.bin"
-        self.stm_status_path = RUNTIME / "stm32_status.json"
+        self.localization_json = options.localization_json or (self.runtime / "localization_result.json")
+        self.uart_command_path = self.runtime / "uart_command.bin"
+        self.stm_status_path = self.runtime / "stm32_status.json"
         self.localization_log = Path(
-            getattr(options, "localization_log", None) or (RUNTIME / "localization_debug.csv")
+            getattr(options, "localization_log", None) or (self.runtime / "localization_debug.csv")
         )
         self.trajectory = Trajectory()
         self.odometry_trajectory = Trajectory()
@@ -576,13 +577,13 @@ class RescueMapApp:
         self.trajectory.seed(self.pose.x_m, self.pose.y_m)
         self.odometry_trajectory.seed(self.pose.x_m, self.pose.y_m)
         self.last_live_read_monotonic = None
-        RUNTIME.mkdir(parents=True, exist_ok=True)
+        self.runtime.mkdir(parents=True, exist_ok=True)
         self.localization_log.parent.mkdir(parents=True, exist_ok=True)
         if not self.runtime_archived_on_reset:
             self.archive_previous_runtime()
         self.runtime_archived_on_reset = False
         write_session(
-            RUNTIME / "session.json",
+            self.runtime / "session.json",
             self.zone,
             self.side,
             self.corner_offset_m,
@@ -598,17 +599,17 @@ class RescueMapApp:
         )
         write_localization_config(
             getattr(self, "localization_config_template", PROJECT_ROOT / "localization/config/localization.example.conf"),
-            RUNTIME / "localization.conf",
+            self.runtime / "localization.conf",
             self.zone,
             self.corner_offset_m,
             self.encoder_weight,
             self.t265_translation_scale_enabled,
             self.t265_translation_scale,
         )
-        (RUNTIME / "delivery_contact_pose.json").unlink(missing_ok=True)
-        (RUNTIME / "delivery_observation.jsonl").unlink(missing_ok=True)
-        (RUNTIME / "mission_diagnostics.json").unlink(missing_ok=True)
-        (RUNTIME / "localization_events.jsonl").unlink(missing_ok=True)
+        (self.runtime / "delivery_contact_pose.json").unlink(missing_ok=True)
+        (self.runtime / "delivery_observation.jsonl").unlink(missing_ok=True)
+        (self.runtime / "mission_diagnostics.json").unlink(missing_ok=True)
+        (self.runtime / "localization_events.jsonl").unlink(missing_ok=True)
         self.selecting = False
         self.session_started = True
         self.started_monotonic = time.monotonic()
@@ -623,7 +624,7 @@ class RescueMapApp:
                 self.localization_log.unlink(missing_ok=True)
                 (self.uart_command_path).unlink(missing_ok=True)
                 (self.stm_status_path).unlink(missing_ok=True)
-                (RUNTIME / "localization_events.jsonl").unlink(missing_ok=True)
+                (self.runtime / "localization_events.jsonl").unlink(missing_ok=True)
                 self.localization_process = self.start_owned_process(command, PROJECT_ROOT / "localization")
                 self.message = "融合定位进程已启动" if self.localization_mode == "fusion" else "T265定位进程已启动"
             except OSError as exc:
@@ -668,8 +669,8 @@ class RescueMapApp:
             self.runtime_archived_on_reset = True
         for path in (
             self.localization_json, self.stm_status_path,
-            self.uart_command_path, RUNTIME / "mission_diagnostics.json",
-            RUNTIME / "competition_diagnostics.json", RUNTIME / "delivery_contact_pose.json",
+            self.uart_command_path, self.runtime / "mission_diagnostics.json",
+            self.runtime / "competition_diagnostics.json", self.runtime / "delivery_contact_pose.json",
         ):
             path.unlink(missing_ok=True)
         self.session_started = False
@@ -686,24 +687,24 @@ class RescueMapApp:
         candidates = (
             self.localization_json,
             self.localization_log,
-            RUNTIME / "session.json",
-            RUNTIME / "localization.conf",
+            self.runtime / "session.json",
+            self.runtime / "localization.conf",
             self.stm_status_path,
-            RUNTIME / "localization_events.jsonl",
-            RUNTIME / "mission_diagnostics.json",
-            RUNTIME / "delivery_contact_pose.json",
-            RUNTIME / "delivery_observation.jsonl",
+            self.runtime / "localization_events.jsonl",
+            self.runtime / "mission_diagnostics.json",
+            self.runtime / "delivery_contact_pose.json",
+            self.runtime / "delivery_observation.jsonl",
             self.uart_command_path,
         )
         existing = [path for path in candidates if path.is_file()]
         if not existing:
             return
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        archive_dir = RUNTIME / "history" / stamp
+        archive_dir = self.runtime / "history" / stamp
         suffix = 1
         while archive_dir.exists():
             suffix += 1
-            archive_dir = RUNTIME / "history" / f"{stamp}_{suffix:02d}"
+            archive_dir = self.runtime / "history" / f"{stamp}_{suffix:02d}"
         archive_dir.mkdir(parents=True, exist_ok=False)
         for path in existing:
             try:
@@ -716,7 +717,7 @@ class RescueMapApp:
         """Build the localizer invocation for the selected hardware mode."""
         command = [
             str(PROJECT_ROOT / "localization/run_localization.sh"),
-            "--config", str(RUNTIME / "localization.conf"),
+            "--config", str(self.runtime / "localization.conf"),
             "--output", str(self.localization_json),
             "--csv", str(self.localization_log),
             "--rate", "20",
@@ -725,7 +726,7 @@ class RescueMapApp:
         command += [
             "--command-file", str(self.uart_command_path),
             "--stm-status", str(self.stm_status_path),
-            "--events", str(RUNTIME / "localization_events.jsonl"),
+            "--events", str(self.runtime / "localization_events.jsonl"),
         ]
         if self.t265_map_enabled:
             command += [

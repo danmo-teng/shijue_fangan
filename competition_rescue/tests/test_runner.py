@@ -2308,6 +2308,7 @@ def test_operator_standby_returns_after_failed_start_only_after_cleanup():
         app = formal.CompetitionMapApp.__new__(formal.CompetitionMapApp)
         app.session_started = False
         app.prewarm_enabled = False
+        app.recording = app.next_recording = True
         app.selecting = True
         app.message = ''
         app.record_reset_event = Mock()
@@ -4194,3 +4195,33 @@ def test_delivery_exit_is_published_and_timed_once(tmp_path):
     row,=[r for r in rows if r['event']=='delivery_exit_timing']
     assert row['previous_cycle_start_s']==.98 and row['stm_mode']==15 and row['confirming_frame'] is None
     assert row['decision_ready_ns'] <= row['ipc_write_start_ns'] <= row['ipc_published_ns']
+
+def test_map_recording_toggle_uses_click_and_preserves_current_warm_session(tmp_path, monkeypatch):
+    import cv2, os
+    from types import SimpleNamespace
+    import competition_map_app as formal
+    import map_app
+    monkeypatch.setenv("RDK_MATCH_RECORDING", "0")
+    monkeypatch.setattr(map_app, "RUNTIME", tmp_path / "quiet")
+    monkeypatch.setattr(formal, "PROJECT_ROOT", tmp_path)
+    options = SimpleNamespace(zone=1, side="red", corner_offset_mm=253, encoder_weight=0.,
+        localization_mode="t265", localization_json=None, localization_log=None,
+        fullscreen=False, gpio_buttons=True, dynamic_localization=True, headless=False,
+        demo=False, screenshot=None, disk_control_ipc=True)
+    app = formal.CompetitionMapApp(options)
+    app.render()
+    x0,y0,x1,y1 = app.hitboxes["recording_toggle"]
+    click = lambda: app.mouse_callback(cv2.EVENT_LBUTTONUP,(x0+x1)//2,(y0+y1)//2,0,None)
+    click()
+    assert app.recording and app.next_recording and os.environ["RDK_MATCH_RECORDING"] == "1"
+    assert app.runtime == tmp_path / "rescue_map/runtime" and app.operator.control_path.parent == app.runtime
+    command = app.vision_command()
+    assert Path(command[command.index("--session")+1]).parent == app.runtime
+    app.warming = True
+    click()
+    assert app.recording and not app.next_recording and os.environ["RDK_MATCH_RECORDING"] == "1"
+    assert app.vision_command() == command
+    app.warming = False
+    app.apply_recording_choice()
+    assert not app.recording and os.environ["RDK_MATCH_RECORDING"] == "0"
+    assert app.runtime.parent == Path("/dev/shm") and app.warm_status_path.parent == app.runtime

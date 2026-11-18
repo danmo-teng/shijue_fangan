@@ -43,18 +43,21 @@ class CompetitionMapApp(RescueMapApp):
 
     def __init__(self, options) -> None:
         super().__init__(options)
+        self.recording = os.environ.get("RDK_MATCH_RECORDING", "1") != "0"
+        self.next_recording = self.recording
         self.localization_overlay = LocalizationOverlay()
-        self.control_ipc_dir = RUNTIME
+        self.control_ipc_dir = self.runtime
         if not getattr(options, "disk_control_ipc", False):
             try:
                 self.control_ipc_dir = Path(tempfile.mkdtemp(prefix="rdk-rescue-control-", dir="/dev/shm"))
             except OSError:
                 pass  # Continue with the established paths; never add a start interlock.
-        if self.control_ipc_dir != RUNTIME:
+        if self.control_ipc_dir != self.runtime:
             self.localization_json = self.control_ipc_dir / "localization_result.json"
             self.uart_command_path = self.control_ipc_dir / "uart_command.bin"
             self.stm_status_path = self.control_ipc_dir / "stm32_status.json"
-        self.reset_request_path = RUNTIME / "startup_reset_request.json"
+        self.separate_control_ipc = self.control_ipc_dir != self.runtime
+        self.reset_request_path = self.runtime / "startup_reset_request.json"
         self.reset_session_token = None
         self.dynamic_localization = getattr(options, "dynamic_localization", False)
         self.dynamic = None
@@ -72,7 +75,7 @@ class CompetitionMapApp(RescueMapApp):
         self.warm_ready_announced = False
         self.warm_error = None
         self.window_exit_requested = False
-        self.warm_status_path = RUNTIME / 'operator_warm_status.json'
+        self.warm_status_path = self.runtime / 'operator_warm_status.json'
         if self.localization_mode == "t265" or self.official_wheel_input:
             # Mounting is independent of SDK wheel injection. The normal writer
             # still sets the selected competition corner/heading, not the test centre.
@@ -86,10 +89,33 @@ class CompetitionMapApp(RescueMapApp):
         if (getattr(options, 'gpio_buttons', False) and not options.demo and not options.screenshot):
             self.operator = OperatorPanel(self)
 
+    def apply_recording_choice(self):
+        if self.next_recording == self.recording:
+            return
+        runtime = (PROJECT_ROOT / "rescue_map/runtime" if self.next_recording else
+                   Path("/dev/shm") / f"rdk-rescue-match-{os.getuid()}")
+        runtime.mkdir(parents=True, exist_ok=True)
+        self.runtime = runtime
+        if not self.separate_control_ipc:
+            self.control_ipc_dir = runtime
+            self.localization_json = self.options.localization_json or runtime / "localization_result.json"
+            self.uart_command_path = runtime / "uart_command.bin"
+            self.stm_status_path = runtime / "stm32_status.json"
+        if not getattr(self.options, "localization_log", None):
+            self.localization_log = runtime / "localization_debug.csv"
+        self.reset_request_path = runtime / "startup_reset_request.json"
+        self.warm_status_path = runtime / "operator_warm_status.json"
+        self.runtime_archived_on_reset = False
+        self.recording = self.next_recording
+        os.environ["RDK_MATCH_RECORDING"] = "1" if self.recording else "0"
+        if self.operator is not None:
+            self.operator.set_recording(self.recording, runtime)
+
     def prepare_warm_session(self):
         """Start the one SDK/UART and vision owners, with command production disarmed."""
         if self.warming or self.session_started or self.operator.stopped:
             return
+        self.apply_recording_choice()
         self.warm_ready = False
         self.warm_error = None
         self.start_requested = self.start_released = self.warm_ready_announced = False
@@ -160,15 +186,15 @@ class CompetitionMapApp(RescueMapApp):
             selected = initial_pose(self.zone, self.corner_offset_m)
             start = dict(x_m=selected.x_m, y_m=selected.y_m, yaw_deg=selected.yaw_deg)
             self.dynamic.request_start(start, self.reset_session_token)
-            metadata = read_json(RUNTIME / 'session.json')
+            metadata = read_json(self.runtime / 'session.json')
             metadata.setdefault('warm_selection',dict(start_zone=metadata.get('start_zone'),side=metadata.get('side'),initial_pose=metadata.get('initial_pose')))
             metadata.update(start_zone=self.zone,side=self.side,opening_strategy=self.opening_strategy,
                 actual_start_selection=dict(start_zone=self.zone,side=self.side,initial_pose=start),
                 initial_pose=start,round_reference_token=self.reset_session_token)
             try:
-                temporary = RUNTIME / 'session.json.tmp'
+                temporary = self.runtime / 'session.json.tmp'
                 temporary.write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n')
-                temporary.replace(RUNTIME / 'session.json')
+                temporary.replace(self.runtime / 'session.json')
             except OSError as error:
                 self.record_reset_event('session_metadata_write_failed', str(error))
             if self.wheel_input is not None:
@@ -241,6 +267,7 @@ class CompetitionMapApp(RescueMapApp):
         if self.session_started:
             return  # A new round starts after explicit exit/reset, never resumes old actions.
         try:
+            self.apply_recording_choice()
             if self.operator is not None:
                 self.operator.before_start()
             super().start_session()
@@ -309,12 +336,12 @@ class CompetitionMapApp(RescueMapApp):
             command += ['--operator-socket', self.operator.socket_name]
         if not self.official_wheel_input:
             if self.localization_mode == "t265":
-                command += ["--raw-imu-csv", str(RUNTIME / "t265_raw_imu.csv")]
+                command += ["--raw-imu-csv", str(self.runtime / "t265_raw_imu.csv")]
             return command
         full_diagnostics = getattr(self.options, "full_diagnostics", False)
         recording = os.environ.get("RDK_MATCH_RECORDING", "1") != "0"
         sdk_log_profile = "full" if full_diagnostics else "summary"
-        root = RUNTIME / "history" / WHEEL_OWNER if recording else RUNTIME / WHEEL_OWNER
+        root = self.runtime / "history" / WHEEL_OWNER if recording else self.runtime / WHEEL_OWNER
         root.mkdir(parents=True, exist_ok=True)
         try:
             removed, warning = trim_between_competition_sessions(root, self.wheel_run_dir) if recording else ([], None)
@@ -331,15 +358,15 @@ class CompetitionMapApp(RescueMapApp):
         session_id = secrets.token_hex(16)
         self.wheel_run_dir = run_dir
         config_path = run_dir / "localization.conf"
-        shutil.copyfile(RUNTIME / "localization.conf", config_path)
+        shutil.copyfile(self.runtime / "localization.conf", config_path)
         config = dict(line.split("#", 1)[0].strip().split("=", 1)
                       for line in config_path.read_text().splitlines() if "=" in line.split("#", 1)[0])
         config = {k.strip(): v.strip() for k, v in config.items()}
         self.wheel_input = CompetitionWheelInput(run_dir, config, session_id)
-        metadata = read_json(RUNTIME / "session.json")
+        metadata = read_json(self.runtime / "session.json")
         metadata['control_ipc'] = dict(pose=str(self.localization_json),
             stm_status=str(self.stm_status_path),command=str(self.uart_command_path),
-            memory_backed=self.control_ipc_dir!=RUNTIME,persistent_logs=str(RUNTIME))
+            memory_backed=self.control_ipc_dir!=self.runtime,persistent_logs=str(self.runtime))
         # The old formal template's expected F407 identity is not actual F405.
         for key in ("expected_lower_firmware", "expected_lower_mode"):
             metadata.pop(key, None)
@@ -359,9 +386,9 @@ class CompetitionMapApp(RescueMapApp):
         metadata["heading_conventions"]["f407_raw_imu"] = "F405 0x08 measured angular rate; gyro CCW positive"
         # The runner also reads session.json: do not leave an old expected F407
         # identity there while the actual UART identity is recorded separately.
-        session_tmp = RUNTIME / "session.json.tmp"
+        session_tmp = self.runtime / "session.json.tmp"
         session_tmp.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
-        session_tmp.replace(RUNTIME / "session.json")
+        session_tmp.replace(self.runtime / "session.json")
         if self.dynamic_localization:
             dynamic_config = load_config(self.options.dynamic_config)
             if self.operator is not None:
@@ -391,7 +418,7 @@ class CompetitionMapApp(RescueMapApp):
                 raw_projected_pose_frame='warm_SDK_local_projection' if self.prewarm_enabled else 'field',
                 round_start_reference='latest_warm_pose_and_primary_yaw_on_operator_start' if self.prewarm_enabled else 'first_pose')
             session_tmp.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
-            session_tmp.replace(RUNTIME / "session.json")
+            session_tmp.replace(self.runtime / "session.json")
             self.dynamic.start()
         self.wheel_input.bridge.log.submit("metadata.json", metadata, atomic=True)
         self.wheel_input.start()
@@ -504,6 +531,14 @@ class CompetitionMapApp(RescueMapApp):
 
     def draw_panel(self, canvas, text):
         super().draw_panel(canvas, text)
+        active = self.warming or self.session_started or self.start_released
+        prefix = "下局录像与日志" if active else "录像与日志"
+        self.button(canvas, text, "recording_toggle",
+                    prefix + ("  开" if self.next_recording else "  关"),
+                    (32, 955, 328, 1005), self.next_recording, (40, 135, 75))
+        if active:
+            text.add("本局记录已开启" if self.recording else "本局记录已关闭",
+                     (345, 968), 17, (210, 210, 210))
         if not self.selecting:
             axes='/'.join(self.localization_overlay.axes)
             label='青点：本次匹配墙面' + ('（仅'+axes+'方向有约束）' if axes and len(self.localization_overlay.axes)==1 else '')
@@ -512,7 +547,7 @@ class CompetitionMapApp(RescueMapApp):
         if self.operator is not None:
             y = 890 if self.selecting else 570
             for line in ('实体键：1长按选起点 / 2长按选红蓝',
-                         '3启动 / 4按下停止，长按退出本轮',
+                         '3长按预热、短按发车 / 4停车保局',
                          '1、2短按：声音查询当前选择'):
                 text.add(line, (920, y), 14, (200, 210, 225))
                 y += 25
@@ -582,6 +617,12 @@ class CompetitionMapApp(RescueMapApp):
             cv2.resizeWindow(WINDOW_NAME, self.width, self.height)
 
     def select_at(self, x, y):
+        rect = self.hitboxes.get("recording_toggle")
+        if rect and rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]:
+            self.next_recording = not self.next_recording
+            if not (self.warming or self.session_started or self.start_released):
+                self.apply_recording_choice()
+            return
         for name, action in (
             ('window_minimize', self.minimize_window),
             ('window_fullscreen', self.toggle_window_fullscreen),
@@ -611,8 +652,8 @@ class CompetitionMapApp(RescueMapApp):
 
     def record_reset_event(self, event: str, source: str) -> None:
         try:
-            RUNTIME.mkdir(parents=True, exist_ok=True)
-            with (RUNTIME / "startup_events.jsonl").open("a", encoding="utf-8") as stream:
+            self.runtime.mkdir(parents=True, exist_ok=True)
+            with (self.runtime / "startup_events.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps({
                     "event": event, "source": source,
                     "timestamp_monotonic_ns": time.monotonic_ns(),
@@ -659,20 +700,20 @@ class CompetitionMapApp(RescueMapApp):
             return
         super().archive_previous_runtime()
         candidates = (
-            RUNTIME / "competition_diagnostics.json",
-            RUNTIME / "competition_detections.jsonl",
-            RUNTIME / "competition_events.jsonl",
-            RUNTIME / "competition_logging_status.json",
+            self.runtime / "competition_diagnostics.json",
+            self.runtime / "competition_detections.jsonl",
+            self.runtime / "competition_events.jsonl",
+            self.runtime / "competition_logging_status.json",
         )
         existing = [path for path in candidates if path.is_file()]
         if not existing:
             return
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        archive_dir = RUNTIME / "history" / f"{stamp}_competition"
+        archive_dir = self.runtime / "history" / f"{stamp}_competition"
         suffix = 1
         while archive_dir.exists():
             suffix += 1
-            archive_dir = RUNTIME / "history" / f"{stamp}_competition_{suffix:02d}"
+            archive_dir = self.runtime / "history" / f"{stamp}_competition_{suffix:02d}"
         archive_dir.mkdir(parents=True, exist_ok=False)
         for path in existing:
             try:
@@ -686,15 +727,15 @@ class CompetitionMapApp(RescueMapApp):
             self.reset_session_token = secrets.token_hex(16)
         command = [
             str(PROJECT_ROOT / "competition_rescue/run_competition_rescue.sh"),
-            "--session", str(RUNTIME / "session.json"),
+            "--session", str(self.runtime / "session.json"),
             "--pose", str(self.localization_json),
             "--stm-status", str(self.stm_status_path),
             "--command-file", str(self.uart_command_path),
             "--config", str(PROJECT_ROOT / "vision/config/rescue_vision.json"),
             "--homography", str(PROJECT_ROOT / "vision/config/homography.txt"),
-            "--diagnostics", str(RUNTIME / "competition_diagnostics.json"),
-            "--detections-log", str(RUNTIME / "competition_detections.jsonl"),
-            "--events-log", str(RUNTIME / "competition_events.jsonl"),
+            "--diagnostics", str(self.runtime / "competition_diagnostics.json"),
+            "--detections-log", str(self.runtime / "competition_detections.jsonl"),
+            "--events-log", str(self.runtime / "competition_events.jsonl"),
             "--reset-request", str(self.reset_request_path),
             "--reset-session-token", self.reset_session_token,
             "--window-mode", "normal",

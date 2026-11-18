@@ -133,10 +133,25 @@ class OperatorPanel:
         self._standby = None
 
     def _trace_button(self, stage, key, when, **details):
-        if self.button_log is not None:
-            self.button_log.append(RUNTIME / 'operator_button_edges.jsonl', dict(
+        writer = self.button_log
+        if writer is not None:
+            writer.append(RUNTIME / 'operator_button_edges.jsonl', dict(
                 stage=stage, key=key, monotonic_s=when, run=self.button_trace_run,
                 session=getattr(self.app, 'reset_session_token', None), **details))
+
+    def set_recording(self, enabled, runtime):
+        with self._state_lock:
+            self.control_path = runtime / 'operator_control.json'
+            if self.stopped:
+                self._write_stop()
+        if not self.active:
+            return
+        if enabled and self.button_log is None:
+            from async_diagnostics import AsyncDiagnosticWriter
+            self.button_log = AsyncDiagnosticWriter(RUNTIME / "operator_button_logging_status.json")
+        elif not enabled and self.button_log is not None:
+            writer, self.button_log = self.button_log, None
+            writer.close()
 
     def start(self):
         if self.active:
