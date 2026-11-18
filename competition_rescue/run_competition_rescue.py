@@ -70,6 +70,7 @@ from protocol import (  # noqa: E402
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
+    CMD_ORANGE_CORE_FILTER,
     CMD_CORRIDOR_NUDGE,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
@@ -2706,6 +2707,13 @@ class CompetitionPlanner:
         reconciled = self._reconcile_approach_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
+        if self.mission.state == CompetitionState.ORANGE_CORE_FILTER and not stm.fault and not paused:
+            if (stm.context_valid and stm.task_id == self.protocol_task and stm.action_status & 4 and
+                    stm.rejected_action_id == self.protocol_action and stm.mode in (21, 23, 37) and
+                    not (matches and stm.accepted_command == CMD_ORANGE_CORE_FILTER and stm.action_status & 1)):
+                self._adopt_recovery_context()
+                return self.mission._start_capture_abandon(vision.capture_audit or CargoAudit(), stm, now)
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if (self.mission.state == CompetitionState.CORRIDOR_NUDGE and
                 stm.mode in {10, 11} and stm.context_valid and not stm.fault and
                 stm.task_id == self.protocol_task and stm.action_status & 4 and

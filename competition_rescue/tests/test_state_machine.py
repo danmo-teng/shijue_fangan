@@ -4205,31 +4205,65 @@ def _orange_gate_confirm_review(m, view, current, status, start_frame=1, start_s
                   current, ready, start_s+.8)
 
 
-def test_pickup_keeps_split_orange_and_uses_normal_height_for_same_claw_pair():
-    for side in ("left", "right"):
-        for together in (False, True):
-            m, view, _, _ = _orange_gate_fixture(black_side=side, same_side=together)
-            for mode in (37, 23):
-                m.state = CompetitionState.POST_GRAB_AUDIT if mode == 23 else CompetitionState.CAPTURE_AUDIT
-                audit = replace(view.capture_audit, stable=True)
-                m.cluster_keep_side = m._preferred_keep_side(audit)
-                keep = side if together else ("right" if side == "left" else "left")
-                assert m.cluster_keep_side == keep and not m._audit_valid(audit)
-                assert m._audit_payload(audit).destination_injury == (not together)
-                out = m._start_disperse(audit, stm(mode=mode), 1.)
-                assert out.command.opcode == CMD_DISPERSE_PILE and out.command.aux == (0 if together else 8200)
-                assert bool(out.command.flags & CMD_KEEP_ORANGE) == (not together)
-                assert bool(out.command.flags & CMD_TARGET_RIGHT) == (keep == "right")
-                assert m.separation_wanted_class == ("core_black" if together else "injured_orange")
+def test_pickup_pair_uses_one_straight_filter_and_real_closed_reaudit():
+    from protocol import CMD_ORANGE_CORE_FILTER, CMD_RELEASE_BOTH
+    from run_competition_rescue import audit_from_cargo
+    for mode in (21, 38, 23):
+        for same_claw in (False, True):
+            for remains in (False, True):
+                m, view, current, status = _orange_gate_fixture(black_side="right", same_side=same_claw)
+                m.carried_manifest = ()
+                m.confirmed_delivery_destination = None
+                status = replace(status, mode=mode, flags=3 if mode == 23 else 1)
+                if mode == 23:
+                    m._begin_post_grab_audit(view, 1.)
+                else:
+                    m._begin_capture_audit(view, 1., cluster_active=mode==38,
+                                           recheck_pending=False, recheck_context="none")
+                def review(image, start, st):
+                    for k in range(1, 5):
+                        now = 1. + (start+k)*.15
+                        frame = replace(image, frame_sequence=start+k, observed_monotonic_s=now)
+                        result = m.step(frame, current, st, now)
+                    assert result.command.opcode == CMD_CARGO_AUDIT and result.command.audit.stable
+                    ack = replace(relay_stm(result, mode=37 if st.mode==38 else st.mode,
+                                  flags=st.flags|64, relay_mission_tx_frames=start+2),
+                                  camera_pitch_cdeg=14000, context_valid=True, context_matches=True,
+                                  accepted_command=CMD_CARGO_AUDIT, action_status=1)
+                    return m.step(frame, current, ack, now+.01)
+                first = review(view, 1, status)
+                cmd = first.command
+                assert cmd.opcode == CMD_ORANGE_CORE_FILTER and (cmd.arg_a,cmd.arg_b,cmd.aux)==(-100,8600,8200)
+                cmd.to_frame(1)
+                done = replace(status, mode=23, flags=3, context_valid=True, context_matches=True,
+                               accepted_command=cmd.opcode, action_status=3)
+                assert m.step(view,current,replace(done,context_matches=False),2.).command == cmd
+                image = replace(view, frame_sequence=8, observed_monotonic_s=2.2)
+                assert m.step(image, current, done, 2.2).state == CompetitionState.POST_GRAB_AUDIT
+                if remains:
+                    result = review(image, 9, replace(status, mode=23, flags=3))
+                    assert result.command.opcode == CMD_RELEASE_BOTH
+                else:
+                    orange = view.capture_cargo[0]
+                    single = audit_from_cargo((orange,), side_by_track={orange.track_id:"left"})
+                    result = review(replace(image,capture_audit=single,capture_cargo=(orange,)),9,
+                                    replace(status,mode=23,flags=3))
+                    assert result.command.opcode == CMD_CARGO_AUDIT and result.command.audit.total_count==1
+                    assert m.pending_audit_valid and m.pending_audit_release_context == "post_grab_valid"
 
 
 def test_post_grab_side_swap_on_ack_reaudits_before_any_side_action():
-    from protocol import CMD_ORANGE_GATE_FILTER
+    from run_competition_rescue import audit_from_cargo
     for original_black in ("left", "right"):
         for already_filtered in (False, True):
             m, original, current, status = _orange_gate_fixture(black_side=original_black)
             new_black = "right" if original_black == "left" else "left"
             _, swapped, _, _ = _orange_gate_fixture(black_side=new_black)
+            def green_for_core(v):
+                items = tuple(replace(i, class_name="green_supply") if i.class_name=="core_black" else i
+                              for i in v.capture_cargo)
+                return replace(v,capture_cargo=items,capture_audit=audit_from_cargo(items,side_by_track=dict(v.capture_explicit_sides)))
+            original, swapped = green_for_core(original), green_for_core(swapped)
             status = replace(status, mode=23, flags=3)
             m.orange_gate_filter_attempted = already_filtered
             m._begin_post_grab_audit(original, 1.)
@@ -4255,9 +4289,9 @@ def test_post_grab_side_swap_on_ack_reaudits_before_any_side_action():
             late = m.step(fresh, current, replace(ack(updated, 2), context_matches=False), 1.91)
             assert late.command == updated.command
             action = m.step(fresh, current, ack(updated, 3), 1.92).command
-            assert action.opcode == CMD_DISPERSE_PILE and action.aux == 8200
-            assert action.flags & CMD_KEEP_ORANGE
-            assert bool(action.flags & CMD_TARGET_RIGHT) == (new_black == "left")
+            assert action.opcode == CMD_DISPERSE_PILE and action.aux == 0
+            assert not action.flags & CMD_KEEP_ORANGE
+            assert bool(action.flags & CMD_TARGET_RIGHT) == (new_black == "right")
 
 
 def test_orange_gate_filter_symmetric_once_and_real_reaudit():
@@ -4328,6 +4362,49 @@ def test_orange_gate_filter_does_not_guess_load_side_or_expand_scope():
     m.first_common_delivered = True
     m.carried_manifest = ('core_black',)
     assert m._orange_gate_filter_side(audit, view, current, status) is None
+
+def test_zone_recheck_preserves_scan_and_resumes_at_actual_search_heading():
+    from state_machine import CommandRequest
+    from protocol import CMD_APPROACH_TARGET
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = m.initial_stash_done = True
+    m.state = CompetitionState.SEARCH
+    m.search_site_turn_deg = m.search_yaw_accum_deg = 535.
+    m.search_last_yaw_deg = 10.
+    orange = replace(cargo(8, "injured_orange", 700, 140), inside_safe_zone=True)
+    v = VisionSnapshot(frame_sequence=1, cargo=(orange,), range_pitch_cdeg=12000,
+                       clipped_zone_candidates=((8, "safe_blue"),))
+    st = replace(stm(mode=3), camera_pitch_cdeg=12000)
+    base = pose(*m.settings.search_point(1))
+    assert m._handle_search(v,replace(base,yaw_deg=12.),st,1.).state == CompetitionState.SEARCH_ZONE_VIEW
+    assert m.search_site_turn_deg == 537.
+    # Camera lift was requested, then the MCU went directly back to SEARCH.
+    m.zone_observation.request = CommandRequest(CMD_APPROACH_TARGET,1)
+    assert m.step(v,replace(base,yaw_deg=80.),st,1.1).state == CompetitionState.SEARCH
+    assert m.search_site_turn_deg == 537. and m.search_last_yaw_deg == 80.
+    assert m.step(replace(v,frame_sequence=2),replace(base,yaw_deg=81.),st,1.2).state == CompetitionState.SEARCH
+    assert m.search_site_turn_deg == 538.
+    assert m.step(replace(v,frame_sequence=3),replace(base,yaw_deg=83.),st,1.3).state == CompetitionState.SEARCH_TRANSFER
+
+
+def test_uncertain_zone_target_cannot_preempt_station_transfer_at_540():
+    for point, next_point in ((1, 3), (3, 1)):
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m.initial_stash_done = True
+        m.state = CompetitionState.SEARCH
+        m.search_point_number = point
+        m.search_site_turn_deg = 539.
+        m.search_last_yaw_deg = 20.
+        pos = replace(pose(*m.settings.search_point(point)), yaw_deg=21.)
+        orange = replace(cargo(594, "injured_orange", 780, 195), inside_safe_zone=True)
+        frame = VisionSnapshot(frame_sequence=1, cargo=(orange,), range_pitch_cdeg=12000,
+                               clipped_zone_candidates=((594, "safe_blue"),))
+        status = replace(stm(mode=3), camera_pitch_cdeg=12000)
+        out = m._handle_search(frame, pos, status, 1.)
+        assert out.state == CompetitionState.SEARCH_TRANSFER and m.search_site_turn_deg == 540.
+        assert m.search_transfer_route.target_point == next_point
+
 
 def test_empty_stations_one_and_three_both_switch_at_540():
     m = CompetitionMission(CompetitionSettings(side='red', initial_stash_enabled=False))

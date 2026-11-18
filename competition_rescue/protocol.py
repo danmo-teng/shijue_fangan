@@ -50,6 +50,7 @@ CMD_CARGO_AUDIT = 0x12
 CMD_CLEAR_SAFE_ZONE = 0x13
 CMD_BULLDOZER_STEP = 0x14  # Segmented motion; each extension requires matching F405 support.
 CMD_CLOSED_DEFLECT = 0x15  # TYPE=0x18 opcode, unrelated to TYPE=0x15 odometry.
+CMD_ORANGE_CORE_FILTER = 0x18  # Close both claws and use the straight 82-degree filter.
 CMD_CORRIDOR_NUDGE = 0x17  # Closed, lateral/forward/lateral during delivery.
 CMD_ORANGE_GATE_FILTER = 0x16  # Paired firmware: closed lateral out/lower/return.
 
@@ -148,6 +149,9 @@ def mission_frame(
         raise ValueError("sequence must be in 0..255")
     if not 0 <= command <= 0xFF or not 0 <= flags <= 0xFF:
         raise ValueError("command and flags must be bytes")
+    if command == CMD_ORANGE_CORE_FILTER and (
+            flags not in (CMD_VALID, CMD_VALID | CMD_RED_SIDE) or (arg_a, arg_b, aux_cdeg) != (-100, 8600, 8200)):
+        raise ValueError("invalid orange/core straight filter")
     if command == CMD_CORRIDOR_NUDGE:
         required = CMD_VALID | CMD_SIDE_VALID
         if (flags & required != required or flags & ~(required | CMD_RED_SIDE | CMD_TARGET_RIGHT) or

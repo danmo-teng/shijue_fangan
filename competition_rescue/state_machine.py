@@ -36,6 +36,7 @@ from protocol import (
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
+    CMD_ORANGE_CORE_FILTER,
     CMD_CORRIDOR_NUDGE,
     CMD_ORANGE_FILTER_AT_PICKUP,
     CMD_CLUSTER_TARGET,
@@ -541,6 +542,7 @@ class CompetitionState(str, Enum):
     APPROACH = "APPROACH"
     NAVIGATE = "NAVIGATE"
     TRANSPORT_AUDIT = "TRANSPORT_AUDIT"
+    ORANGE_CORE_FILTER = "ORANGE_CORE_FILTER"
     ORANGE_GATE_FILTER = "ORANGE_GATE_FILTER"
     CORRIDOR_NUDGE = "CORRIDOR_NUDGE"
     ALIGN_SAFE_ZONE_BY_POSE = "ALIGN_SAFE_ZONE_BY_POSE"
@@ -1031,6 +1033,7 @@ class CompetitionMission:
         self.corridor_nudge_command: CommandRequest | None = None
         self.corridor_nudge_attempted = False
         self.orange_gate_filter_attempted = False
+        self.orange_core_filter_attempted = False
         self.orange_gate_filter_command = None
 
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
@@ -1273,6 +1276,8 @@ class CompetitionMission:
             return (3, 20, 52, 24)
         if self.state == CompetitionState.CORRIDOR_NUDGE:
             return (STM_MODE_ALIGN_SAFE_ZONE, STM_MODE_REMOTE_ACTION, STM_MODE_NAVIGATE)
+        if self.state == CompetitionState.ORANGE_CORE_FILTER:
+            return (21, 23, 25, 37)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
             return (STM_MODE_REMOTE_ACTION, self._orange_filter_review_mode())
         if self.state == CompetitionState.PRE_GRAB_ADVANCE:
@@ -1506,6 +1511,7 @@ class CompetitionMission:
             self.corridor_nudge_attempted = False
             self.corridor_nudge_command = None
             self.orange_gate_filter_attempted = False
+            self.orange_core_filter_attempted = False
             self.orange_gate_filter_command = None
             self.delivery_counted_for_batch = False
             self.separation_keep_side = None
@@ -1920,6 +1926,8 @@ class CompetitionMission:
             if resume_state == CompetitionState.SEARCH and not stm.gripper_closed:
                 self._finish_abandoned_batch_budget()
             self._set_state(resume_state, now)
+            if resume_state == CompetitionState.SEARCH and self.search_observer is not None:
+                self.search_last_yaw_deg = self.search_observer[2]
             self.search_epoch_frame_floor = (
                 vision.frame_sequence if vision.frame_sequence > 0 else None
             )
@@ -2012,14 +2020,19 @@ class CompetitionMission:
                 if stm.mode == STM_MODE_APPROACH_RANGE_WAIT:
                     return self._range_approach_output(vision, stm, now, pose)
             return output(view.realign, "zone_view_realign")
-        if stm.mode == STM_MODE_APPROACH_RECOVER:
+        # A lift request is created only after the MCU reached range-wait.
+        # If it has already returned to SEARCH, replaying that request cannot finish it.
+        if stm.mode == STM_MODE_APPROACH_RECOVER or (stm.mode == STM_MODE_SEARCH and view.request is not None):
             view.leaving = True
         if view.leaving:
             if stm.mode == STM_MODE_SEARCH and not stm.gripper_closed:
                 progress = self.search_yaw_accum_deg
+                if view.realign is None:
+                    self.zone_unresolved[view.target.track_id] = view.zone
                 self._clear_selected_batch()
                 self._set_state(CompetitionState.SEARCH, now)
                 self.search_yaw_accum_deg = progress
+                self.search_last_yaw_deg = pose.yaw_deg if pose.valid else None
                 self.search_epoch_frame_floor = vision.frame_sequence
             return output(self._hold(), "zone_view_exit")
         if view.request is None:
@@ -3145,6 +3158,8 @@ class CompetitionMission:
                     stm.mode == STM_MODE_CLUSTER_CAPTURE_AUDIT
                 ) or
                 self.pending_audit_release_context == "recheck_empty_to_search" or
+                (self.pending_audit_release_context == "pickup_orange_core" and vision.capture_audit is not None and
+                 not self._pickup_orange_core_pair(vision.capture_audit, vision)) or
                 (not self.pending_audit_valid and
                  self.pending_audit_release_context in {"cluster_capture", "disperse_reaudit"} and
                  vision.capture_audit is not None and
@@ -3191,6 +3206,23 @@ class CompetitionMission:
             self.audit_hits = continued_hits
             self.audit_last_frame_sequence = continued_frame_sequence
             return self._audit_output(vision, stm, now)
+        if self.pending_audit_release_context == "pickup_orange_core":
+            if (stm.mode in {STM_MODE_CAPTURE_AUDIT, STM_MODE_POST_GRAB_AUDIT, STM_MODE_CLUSTER_READY} and
+                    stm.audit_ready and not stm.audit_valid and
+                    self._fresh_mode_after(stm, stm.mode, self.pending_audit_initial_ack) and
+                    self._relay_sent_since(stm, stable_command, self.pending_audit_tx_baseline)):
+                audit = self.pending_audit
+                self._clear_pending_audit()
+                if self.orange_core_filter_attempted:
+                    return self._start_capture_abandon(audit, stm, now)
+                self.orange_core_filter_attempted = True
+                self._clear_carried_manifest()
+                self.cargo_recheck_pending = False
+                self.cargo_recheck_context = "none"
+                self._set_state(CompetitionState.ORANGE_CORE_FILTER, now)
+                return replace(self._orange_core_filter_output(), event="orange_core_straight_filter_start")
+            return CompetitionOutput(self.state, stable_command, "确认爪内一黑一橙后直退滤除", self.selected_batch,
+                self.pending_audit, reason="orange_core_filter_audit", tx_policy="audit_stable_publish")
         if (self._separation_limit_reached() and
                 not self._orange_separation_rechecked_empty() and
                 not self.pending_audit_valid and stm.fresh and
@@ -3917,6 +3949,23 @@ class CompetitionMission:
         return (self._legal_separation_side_manifest(audit, side) or
                 self._orange_mixed_side_manifest(audit, side))
 
+    def _pickup_orange_core_pair(self, audit: CargoAudit, vision: VisionSnapshot) -> bool:
+        if (not self.first_common_delivered or not self.selected_batch or self.selected_batch.initial_stash or
+                self.transport_separation_active or self.safe_sweep_reaudit_active or
+                audit.total_count != 2 or audit.left_count + audit.right_count != 2 or
+                audit.danger_present or audit.unknown_present or not audit.injury_mixed):
+            return False
+        pair = {"injured_orange": 1, "core_black": 1}
+        return (Counter(self._manifest_for_audit(audit)) == pair and
+                Counter(i.class_name for i in vision.capture_cargo if i.visible) == pair and
+                not any(row.get("transport_eligible") is False for row in vision.roi_decisions))
+
+    def _orange_core_filter_output(self) -> CompetitionOutput:
+        return CompetitionOutput(self.state, CommandRequest(CMD_ORANGE_CORE_FILTER, self._side_flags(),
+            -100, 8600, 8200), "双爪合住一黑一橙，抬82°直退100毫米，回86°后复审",
+            self.selected_batch, reason="orange_core_straight_filter", motion_expected=True,
+            expected_stm_modes=self.expected_stm_modes())
+
     def _orange_core_pair_choice(self, audit: CargoAudit) -> tuple[str, str] | None:
         if (not self.first_common_delivered or not self.selected_batch or self.selected_batch.initial_stash or
                 audit.total_count != 2 or audit.danger_present or audit.unknown_present or
@@ -4481,6 +4530,15 @@ class CompetitionMission:
                         "initial_claw_check_empty" if opening_probe else "capture_empty_approach"),
                 tx_policy="audit_stable_publish" if stable.stable else "audit_unstable_publish",
             )
+        if self._pickup_orange_core_pair(audit, vision):
+            payload = self._audit_payload(stable)
+            if stable.stable:
+                self._begin_audit_confirmation(stable, payload, False, "both", False,
+                                               "pickup_orange_core", stm, now)
+                return self._audit_confirmation_output(vision, stm, now)
+            return CompetitionOutput(self.state, CommandRequest(CMD_CARGO_AUDIT, CMD_VALID, audit=payload,
+                audit_vision_frame=vision.frame_sequence), "审核爪内一黑一橙", self.selected_batch, stable,
+                reason="orange_core_filter_audit_wait", tx_policy="audit_unstable_publish")
         normal_multi_candidate = (
             stm.mode == STM_MODE_CAPTURE_AUDIT and not self.post_grab_audit_active and
             not self.cargo_recheck_pending and not audit_valid and audit.total_count > 1 and
@@ -7494,9 +7552,6 @@ class CompetitionMission:
                     self._mark_target_seen(candidate, now)
                 return CompetitionOutput(self.state, self._approach_command(candidate), f"锁定{batch.total_count}件{batch.destination}批次", batch, event="batch_locked")
             self._observe_search_candidate(None, vision)
-        observation = self._start_zone_observation(vision, stm, now)
-        if observation is not None:
-            return observation
         if max(self.search_yaw_accum_deg, self.search_site_turn_deg) >= self.settings.search_min_turn_deg:
             if not (
                 stm.fresh and
@@ -7512,6 +7567,9 @@ class CompetitionMission:
                     expected_stm_modes=(STM_MODE_SEARCH,),
                 )
             return self._begin_search_transfer(vision, pose, stm, now, empty_scan=True)
+        observation = self._start_zone_observation(vision, stm, now)
+        if observation is not None:
+            return observation
         reject_reasons: list[str] = []
         if deferred_failure:
             reject_reasons.append("FAILED_TARGET_THIS_VISIT")
@@ -8014,6 +8072,12 @@ class CompetitionMission:
 
         if self.state == CompetitionState.SEARCH_ZONE_VIEW:
             return self._zone_observation_output(vision, pose, stm, now)
+        if self.state == CompetitionState.ORANGE_CORE_FILTER:
+            if (stm.context_valid and stm.context_matches and stm.accepted_command == CMD_ORANGE_CORE_FILTER and
+                    stm.action_status & 3 == 3 and stm.mode == STM_MODE_POST_GRAB_AUDIT and stm.gripper_closed):
+                self._begin_post_grab_audit(vision, now)
+                return replace(self._audit_output(vision, stm, now), event="orange_core_straight_filter_reaudit")
+            return self._orange_core_filter_output()
         if self.state == CompetitionState.CORRIDOR_NUDGE:
             return self._corridor_nudge_output(pose, stm, now)
         if self.state == CompetitionState.ORANGE_GATE_FILTER:
