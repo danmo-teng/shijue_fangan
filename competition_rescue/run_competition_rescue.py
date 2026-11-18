@@ -1608,6 +1608,11 @@ class LocalizationWheelPolicy:
         overlay = (output.suppress_command_tx or command is None or
                    command.opcode in {CMD_HOLD, CMD_PAUSE, CMD_ABORT})
         belongs = stm.context_valid and stm.task_id in self.contact_task_ids
+        # Release the phase exclusion once this push has actually stopped to unload.
+        # A pending COMPLETE can race the ENTER receipt, so match task/action ownership.
+        unloading = (belongs and stm.context_matches and stm.action_status & 1 and not stm.fault
+                     and stm.mode in (12, 15, 16)
+                     and stm.accepted_command in (CMD_ENTER_SAFE_ZONE, CMD_TASK_COMPLETE))
         face_center = (output.state in {CompetitionState.TASK_COMPLETE, CompetitionState.RETURN_CENTER}
                        and stm.mode == STM_MODE_FACE_FIELD_CENTER and belongs)
         later_navigation = (
@@ -1648,13 +1653,12 @@ class LocalizationWheelPolicy:
         completed_departure = ((pickup_departed or station_departed) and
             not output.suppress_command_tx and command is not None and
             command.opcode not in {CMD_PAUSE, CMD_ABORT})
-        if self.suppressed and ((not overlay and (face_center or later_navigation or deflect_motion)) or
+        if self.suppressed and (unloading or (not overlay and (face_center or later_navigation or deflect_motion)) or
                                 completed_departure):
             self.suppressed = False
             self.safe_cycle_departed = True
             self.contact_task_ids.clear()
         self.last_state = output.state
-        # mode16 only announces EXIT_SAFE_ZONE, not departure from the ramp.
         # HOLD/PAUSE/recovery/FAULT do not imply that contact risk has ended.
         if self.last_sent == self.suppressed:
             return

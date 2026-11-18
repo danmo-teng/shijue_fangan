@@ -1718,6 +1718,23 @@ def test_safe_zone_wheel_policy_preserves_phase_and_requires_own_departure():
         receiver.close()
 
 
+def test_unload_restores_wheels_only_on_current_delivery():
+    from unittest.mock import Mock
+    from protocol import CMD_ENTER_SAFE_ZONE, CMD_TASK_COMPLETE
+    policy = runner_module.LocalizationWheelPolicy('@fixture', 'session')
+    policy.socket = Mock()
+    output = CompetitionOutput(CompetitionState.ENTER_SAFE_ZONE, CommandRequest(CMD_ENTER_SAFE_ZONE), '')
+    for mode, matched, accepted in [(10, True, 1), (12, False, 1), (12, True, 0)]:
+        policy.update(output, StmSnapshot(mode=mode, task_id=7, action_id=8, context_valid=True,
+            context_matches=matched, accepted_command=CMD_ENTER_SAFE_ZONE, action_status=accepted), 7, 8)
+        assert policy.suppressed
+    for mode in (12, 15, 16):
+        policy.update(output, StmSnapshot(mode=mode, task_id=7, action_id=8, context_valid=True,
+            context_matches=True, accepted_command=CMD_TASK_COMPLETE, action_status=1), 7, 8)
+        assert not policy.suppressed
+    assert policy.socket.sendto.call_count == 2
+
+
 def test_safe_zone_wheel_policy_sweep_exit_requires_owned_completion():
     from dataclasses import replace
     from unittest.mock import Mock
