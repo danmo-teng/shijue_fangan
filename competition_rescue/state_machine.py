@@ -4399,6 +4399,11 @@ class CompetitionMission:
             and audit.total_count == audit.left_count + audit.right_count == 1
             and self._manifest_for_audit(audit) == ("danger_cyan",)
         )
+        if (initial_single_blue and new_frame and stm.context_valid and stm.context_matches
+                and stm.accepted_command == CMD_CARGO_AUDIT and stm.action_status & 1):
+            # The paired MCU is consuming crawl observations; its wheel progress
+            # owns this phase. Keep the old handoff watchdog for a missing reply.
+            self.audit_wire_mode_started_s = now
         if initial_empty or initial_single_blue:
             stable = replace(stable, stable=(self.audit_hits >= max(2, required_audit_frames) and
                                             self._audit_stability_span_sufficient(observed_s)))

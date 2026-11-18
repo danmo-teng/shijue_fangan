@@ -217,6 +217,13 @@ def test_blue_audit_precedes_depth_with_target_still_in_upper_band():
         assert out.command.audit.total_count==len(items) and out.command.audit.danger_present
         if len(items)==1:
             assert out.reason=='capture_single_blue_approach'
+            accepted=replace(status,context_matches=True,action_status=1,accepted_command=CMD_CARGO_AUDIT)
+            next_view=replace(example,frame_sequence=example.frame_sequence+1,observed_monotonic_s=1.1)
+            m._audit_output(next_view,accepted,1.1)
+            assert m.audit_wire_mode_started_s==1.1
+            m._audit_output(next_view,accepted,1.2)
+            assert m.audit_wire_mode_started_s==1.1  # An old image cannot renew the handoff.
+
 
 
 def test_orange88_b2_requests_remeasure_then_finishes_near():

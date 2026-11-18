@@ -1,0 +1,121 @@
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 674f4b4..39317b0 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -328,4 +328,6 @@ static uint32_t injury_backoff_last_ms, injury_backoff_elapsed_ms;
+ static float injury_backoff_heading_deg;
+ static uint32_t capture_forward_used_mm, capture_wait_started_ms;
++static uint32_t blue_progress_mm;
++static bool blue_crawl_active;
+ static LocationPose capture_budget_pose;
+ static uint8_t capture_escape_phase, separation_total_attempts;
+@@ -333,4 +335,5 @@ static uint32_t capture_escape_path_mm;
+ static float capture_escape_heading_deg, capture_escape_turn_deg;
+ static void task_capture_budget_begin(void);
++static bool task_initial_single_blue(void);
+ static void task_capture_budget_sample(void);
+ static bool task_capture_observe(uint32_t now_ms);
+@@ -1397,4 +1400,5 @@ static void task_latch_audit(const VisionMissionCommand *command, uint32_t now_m
+   task_status.audit_valid = audit_valid;
+   task_remember_confirmed_load();
++  if (task_initial_single_blue()) audit_watch_started_ms = now_ms;
+   TaskDiag_Event("AUDIT_RESULT", audit_consistent_count,
+       (uint32_t)audit_host_stable | ((uint32_t)audit_valid << 1U), semantic,
+@@ -2730,4 +2734,5 @@ static void task_capture_budget_begin(void)
+ {
+   if (capture_budget_active) return;
++  blue_crawl_active = false;
+   capture_budget_active = true;
+   capture_forward_used_mm = 0U;
+@@ -2888,4 +2893,18 @@ static void task_process_capture_escape(uint32_t now_ms)
+ /* True means this cycle must not crawl. The host owns the visual choice of
+  * retained side; the MCU never guesses an easy separation from a count. */
++static bool task_initial_single_blue(void)
++{
++  const bool left = audit_last_counts == 1U &&
++      audit_last_left_class == VISION_CARGO_DANGER && audit_last_right_class == VISION_CARGO_NONE;
++  const bool right = audit_last_counts == 4U &&
++      audit_last_right_class == VISION_CARGO_DANGER && audit_last_left_class == VISION_CARGO_NONE;
++  return capture_budget_active && !task_status.gripper_closed && !opening_claw_probe_active &&
++      !audit_initial_stash && !cargo_recheck_pending && separation_total_attempts == 0U &&
++      (state == TASK_GRAB_OBSERVE || (state == TASK_APPROACH &&
++       approach_phase == APPROACH_CLUSTER_CAPTURE)) && audit_consistent_count > 0U &&
++      audit_last_total_count == 1U && (left || right) &&
++      (audit_last_flags & (VISION_AUDIT_UNKNOWN_PRESENT | VISION_AUDIT_INJURY_MIXED)) == 0U;
++}
++
+ static bool task_capture_observe(uint32_t now_ms)
+ {
+@@ -2914,4 +2933,51 @@ static bool task_capture_observe(uint32_t now_ms)
+     return true;
+   }
++  if (task_initial_single_blue()) {
++    if (limit) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      if (audit_received && audit_host_stable) task_begin_capture_escape(now_ms);
++      return true;
++    }
++    /* For a blue on the way, the 4 seconds measure absence of progress.
++     * Reuse the capture budget's measured path; never reset that distance. */
++    if (!blue_crawl_active || capture_forward_used_mm > blue_progress_mm) {
++      blue_progress_mm = capture_forward_used_mm;
++      capture_wait_active = blue_crawl_active = true;
++      capture_wait_started_ms = now_ms;
++    }
++    if (now_ms - capture_wait_started_ms >= APP_CAPTURE_DECISION_WAIT_MS) {
++      Motor_Stop();
++      task_status.motors_active = false;
++      task_finish_abandoned_batch();
++      task_enter(TASK_SEARCH, now_ms);
++      return true;
++    }
++    return false;
++  }
++  blue_crawl_active = false;
++  /* A completed aux2 needs the new 140-degree audit (or the next
++   * real aux2). Its previous movement's 4 s cannot choose a release here. */
++  if (pre_grab.active && !pre_grab.moving && audit_consistent_count == 0U) {
++    Motor_Stop();
++    task_status.motors_active = false;
++    return true;
++  }
++  /* The host sends real non-STABLE composition while voting on a side.
++   * Keep the original audit watchdog and the existing stable permission checks.
++   * Cluster must still hand its confirmed audit to TASK_DISPERSE_READY. */
++  const bool separation_review = (initial_capture || state == TASK_DISPERSE_READY) &&
++      audit_consistent_count > 0U &&
++      !audit_initial_stash && audit_last_semantic == AUDIT_SEMANTIC_INVALID &&
++      audit_last_total_count > 1U &&
++      (task_capture_has_eligible() || audit_last_left_class == VISION_CARGO_UNKNOWN ||
++       audit_last_right_class == VISION_CARGO_UNKNOWN ||
++       (audit_last_flags & VISION_AUDIT_INJURY_MIXED) != 0U);
++  if (separation_review) {
++    Motor_Stop();
++    task_status.motors_active = false;
++    return !(audit_received && state == TASK_APPROACH &&
++             approach_phase == APPROACH_CLUSTER_CAPTURE);
++  }
+   /* Keep the existing empty-pickup decision clock running across reports,
+    * even when the wheels gain no distance. */
+@@ -3250,5 +3316,5 @@ static void task_process_approach(const VisionData *vision, uint32_t now_ms)
+       camera_angle = (float)APP_DISPERSE_CAPTURE_ANGLE;
+       if (task_capture_observe(now_ms)) return;
+-      if (audit_consistent_count >= APP_AUDIT_REQUIRED_SAMPLES && audit_last_total_count > 0U) {
++      if (!task_initial_single_blue() && audit_consistent_count >= APP_AUDIT_REQUIRED_SAMPLES && audit_last_total_count > 0U) {
+         Motor_Stop();
+         task_status.motors_active = false;
+@@ -3256,5 +3322,5 @@ static void task_process_approach(const VisionData *vision, uint32_t now_ms)
+         return;
+       }
+-      if (pre_grab.active) {
++      if (pre_grab.active && !task_initial_single_blue()) {
+         Motor_Stop();
+         task_status.motors_active = false;
+@@ -3388,5 +3454,5 @@ static void task_process_grab_observe(const VisionData *vision,
+      * already inside".  Crawl straight until the upper computer confirms a
+      * stable non-empty claw audit, then stop before it sends GRAB. */
+-    if (pre_grab.active || cargo_recheck_pending || sampled_nonempty_audit) {
++    if (!task_initial_single_blue() && (pre_grab.active || cargo_recheck_pending || sampled_nonempty_audit)) {
+       Motor_Stop();
+       task_status.motors_active = false;
