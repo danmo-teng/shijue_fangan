@@ -4547,15 +4547,16 @@ def test_outer_blue_and_inner_blue_both_turn_toward_gap_after_first_delivery():
             assert out.command.opcode == CMD_DISPERSE_PILE and out.command.arg_a == angle
 
 
-def test_visible_first_green_can_continue_separating_after_three_attempts():
+def test_visible_first_green_stops_after_five_accepted_separations():
     from run_competition_rescue import audit_from_cargo
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
     g, black = cargo(1, "green_supply", 450, 400), cargo(2, "core_black", 800, 400)
     a = audit_from_cargo((g, black), side_by_track={1:"left",2:"right"})
-    for attempts in (2, 3, 4, 20):
+    for attempts in (2, 3, 4, 5, 6):
         m.disperse_attempts = m.separation_reviewed_attempt = attempts
-        assert not m._separation_limit_reached(a)
+        assert m._separation_limit_reached(a) == (attempts >= 5)
+    m.disperse_attempts = m.separation_reviewed_attempt = 2
     assert m._separation_limit_reached(audit_from_cargo((black,), side_by_track={2: "right"}))
     m.first_common_delivered = True
     assert m._separation_limit_reached(a)

@@ -26,3 +26,16 @@ index cc25bbf..4743970 100644
    const uint8_t left_count = audit_last_counts & 0x03U;
    const uint8_t right_count = (audit_last_counts >> 2U) & 0x03U;
    const uint8_t release_count = keep_side > 0 ? right_count : left_count;
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 9701f30..1525ee7 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -456,7 +456,7 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+        (payload[3] == VISION_CARGO_MIXED_MATERIAL && ((payload[4] >> 2) & 3U) < 2U) ||
+        (payload[2] == VISION_CARGO_MIXED_TWO_GREEN && (payload[4] & 3U) != 3U) ||
+        (payload[3] == VISION_CARGO_MIXED_TWO_GREEN && ((payload[4] >> 2) & 3U) != 3U) ||
+-       ((payload[4] & 0xF0U) != 0U) || ((payload[5] & 0x80U) != 0U))) {
++       ((payload[4] & 0xF0U) != 0U))) {
+     goto rejected_payload;
+   }
+   if (code == VISION_CMD_CLEAR_SAFE_ZONE) {

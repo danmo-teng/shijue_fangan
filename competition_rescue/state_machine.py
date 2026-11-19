@@ -6925,7 +6925,7 @@ class CompetitionMission:
 
     def _separation_limit_reached(self, audit: CargoAudit | None = None) -> bool:
         if self._first_green_still_visible(audit):
-            return False
+            return self.disperse_attempts >= 5
         # Keep the old two-failure policy, but successful reduction earns another
         # attempt. Total accepted actions remain visible in the existing log.
         return (self.separation_reviewed_attempt - self.separation_progress_attempt >=
