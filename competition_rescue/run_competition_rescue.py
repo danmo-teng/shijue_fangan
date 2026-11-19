@@ -11,7 +11,7 @@ from round_resume import match_progress, restore_progress, resume_config_frame
 
 import argparse
 from collections import Counter
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 import json
 import hashlib
 import queue
@@ -1003,6 +1003,86 @@ class HeldCargoEvidence:
                      for name, (item, frame) in self.items.items() if name not in classes)
 
 
+@dataclass
+class GreenAlongsideOrange:
+    start_xy: tuple[float, float]
+    relative_center: tuple[int, int]
+    moved_with_load: bool = False
+
+
+class SingleOrangeCompanions:
+    """Follow visible pairs en route; only a live gate frame can supply cargo."""
+    MIN_TRAVEL_M = 0.20
+    MAX_RELATIVE_SHIFT_PX = 20
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.task_id = None
+        self.orange_id = None
+        self.greens: dict[int, GreenAlongsideOrange] = {}
+
+    def gate_greens(self, cargo, mission, stm, pose, polygon, image_ok):
+        en_route = (stm.mode == STM_MODE_NAVIGATE and stm.accepted_command == CMD_NAVIGATE_WAYPOINT and
+                    mission.state == CompetitionState.NAVIGATE)
+        at_gate = stm.mode == STM_MODE_TRANSPORT_AUDIT and mission.state in (
+            CompetitionState.NAVIGATE, CompetitionState.TRANSPORT_AUDIT)
+        if (not (en_route or at_gate) or not stm.gripper_closed or stm.camera_pitch_cdeg != 14000 or
+                mission.carried_manifest != ("injured_orange",) or mission.carried_total_count != 1):
+            if self.task_id is not None:
+                self.clear()
+            return ()
+        if stm.task_id != self.task_id:
+            self.clear()
+            self.task_id = stm.task_id
+        if self.orange_id is None and en_route:
+            audit = mission.confirmed_load_audit
+            if audit is not None and audit.total_count == 1:
+                if audit.left_class == "injured_orange":
+                    self.orange_id = audit.left_stable_track_id
+                elif audit.right_class == "injured_orange":
+                    self.orange_id = audit.right_stable_track_id
+        if self.orange_id is None:
+            return ()
+
+        orange = next((t for t in cargo if t.track_id == self.orange_id and
+                       t.class_name == "injured_orange"), None)
+        current = {}
+        confirmed = []
+        if orange is not None:
+            ox, oy = orange.center_px
+            for green in cargo:
+                if green.class_name != "green_supply":
+                    continue
+                pair = self.greens.get(green.track_id)
+                if not (image_ok and orange.visible and green.visible):
+                    # A tracker can survive a missed detection. Keep only an already
+                    # proven association, and never use it as a current detection.
+                    if pair and pair.moved_with_load:
+                        current[green.track_id] = pair
+                    continue
+                if (bbox_overlap_ratio(green.bbox, orange.bbox) <= 0 or
+                        bbox_capture_roi_overlap_ratio(green.bbox, polygon) <= 0):
+                    continue
+                gx, gy = green.center_px
+                offset = (gx - ox, gy - oy)
+                if pair and math.dist(offset, pair.relative_center) > self.MAX_RELATIVE_SHIFT_PX:
+                    pair = None
+                if en_route and pose is not None and pose.valid and stm.motors_active:
+                    xy = (pose.x_m, pose.y_m)
+                    if pair is None:
+                        pair = GreenAlongsideOrange(xy, offset)
+                    elif math.dist(xy, pair.start_xy) >= self.MIN_TRAVEL_M:
+                        pair.moved_with_load = True
+                if pair is not None:
+                    current[green.track_id] = pair
+                    if at_gate and pair.moved_with_load:
+                        confirmed.append(green)
+        self.greens = current
+        return confirmed
+
+
 def partial_orange_mixed_evidence(cargo, capture, polygon):
     """Contact evidence for closed-claw separation, never single-injury permission."""
     materials = [item for item in capture if item.class_name in MATERIAL_CLASSES]
@@ -1068,6 +1148,8 @@ def make_vision_snapshot(
     grip_bands: GripBands | None = None,
     safe_zone_memory: SafeZoneCargoMemory | None = None,
     black_delivery: SingleBlackDelivery | None = None,
+    orange_companions: SingleOrangeCompanions | None = None,
+    pose: PoseSnapshot | None = None,
 ) -> VisionSnapshot:
     # A cached rectangle from another camera angle cannot prove membership
     # in the current view. Retain the existing per-class area requirement.
@@ -1169,6 +1251,20 @@ def make_vision_snapshot(
             for decision in roi_decisions:
                 if decision['track_id']==item.track_id:
                     decision.update(included=True,reason='partial_orange_mixed_separation_only',transport_eligible=False)
+    if orange_companions is not None:
+        companions = orange_companions.gate_greens(cargo, mission, stm, pose, rois.overall, not image_quality_reason)
+        if (capture_observation_valid and companions and any(t.track_id == orange_companions.orange_id
+                and t.class_name == "injured_orange" for t in capture_items)):
+            for green in companions:
+                if green.track_id in capture_side_by_track:
+                    continue  # The normal ROI already counted this live box.
+                capture_items.append(green)
+                side = capture_side_for_bbox(green.bbox, rois, overall_included=True)
+                capture_side_by_track[green.track_id] = side or ("left" if green.center_px[0] <= CLAW_SPLIT_X else "right")
+                for decision in roi_decisions:
+                    if decision["track_id"] == green.track_id:
+                        decision.update(included=True, reason="green_moved_with_confirmed_orange",
+                                        transport_eligible=False, orange_track_id=orange_companions.orange_id)
     capture = tuple(capture_items)
     remembered_capture = ()
     if held_cargo_evidence is not None:
@@ -1451,6 +1547,8 @@ def make_vision_snapshot(
         observed_monotonic_s=time.monotonic() if observed_s is None else observed_s,
         cargo=cargo,
         capture_cargo=capture,
+        orange_companion_needs_gate_review=(orange_companions is not None and
+            any(pair.moved_with_load for pair in orange_companions.greens.values())),
         zone_boxes=zone_boxes, clipped_zone_candidates=tuple(clipped_candidates),
         capture_explicit_sides=tuple(capture_explicit_sides.items()),
         safe_bbox=safe_bbox,
@@ -3848,6 +3946,7 @@ def main() -> int:
     recent_carried_track_ids: tuple[int, ...] = ()
     recent_carried_pitch_cdeg = 0
     held_cargo_evidence = HeldCargoEvidence()
+    orange_companions = SingleOrangeCompanions()
     safe_zone_memory = SafeZoneCargoMemory()
     black_delivery = SingleBlackDelivery()
     competition_started = False
@@ -3938,6 +4037,7 @@ def main() -> int:
         recent_carried_track_ids = ()
         recent_carried_pitch_cdeg = 0
         held_cargo_evidence.clear()
+        orange_companions.clear()
         safe_zone_memory.clear()
         black_delivery.owner = None
         startup_details.update(side=side,start_zone=start_zone,opening_strategy=opening_strategy,
@@ -4237,7 +4337,8 @@ def main() -> int:
                     grip_bands=grip_bands,
                     recent_carried_track_ids=recent_carried_track_ids,
                     recent_carried_pitch_cdeg=recent_carried_pitch_cdeg,
-                    held_cargo_evidence=held_cargo_evidence,
+                    held_cargo_evidence=held_cargo_evidence, orange_companions=orange_companions,
+                    pose=planner.snapshot()[1] if mission.carried_manifest == ("injured_orange",) else None,
                     safe_zone_memory=safe_zone_memory, black_delivery=black_delivery,
                 )
                 if latest_vision.carried_reference_track_ids:

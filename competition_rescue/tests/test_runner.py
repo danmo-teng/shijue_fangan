@@ -4244,3 +4244,41 @@ def test_old_search_receipt_cannot_finish_release_or_block_station_transfer(tmp_
     out=planner._output_for_cycle(replace(v,frame_sequence=8264),p,done,False,1.4)
     assert (planner.protocol_task,planner.protocol_action)==(done.task_id,done.action_id)
     assert out.state == CompetitionState.SEARCH_TRANSFER and m.search_transfer_route.target_point==3
+
+
+def test_single_orange_partial_green_requires_travel_and_current_contact():
+    from dataclasses import replace
+    from state_machine import CargoAudit, TrackedCargo
+    m = CompetitionMission(CompetitionSettings(side="red"))
+    m._latch_carried_manifest(CargoAudit(right_class="injured_orange", right_count=1,
+        total_count=1, right_stable_track_id=380, class_counts=(("injured_orange", 1),)))
+    memory = runner_module.SingleOrangeCompanions()
+    poly = ((200,150),(760,150),(1050,400),(1050,700),(200,700))
+    orange = TrackedCargo(380, "injured_orange", .95, (599,58,278,405))
+    green = TrackedCargo(387, "green_supply", .81, (798,64,207,258))
+    def frame(at_gate, x, g=green, o=orange, task=1, closed=True):
+        m.state = CompetitionState.TRANSPORT_AUDIT if at_gate else CompetitionState.NAVIGATE
+        stm = StmSnapshot(mode=48 if at_gate else 10, flags=(2 if closed else 0) | (1 if at_gate else 4),
+            camera_pitch_cdeg=14000, task_id=task, accepted_command=18 if at_gate else 3)
+        return memory.gate_greens((o,g),m,stm,PoseSnapshot(True,x,0.,0.,0.),poly,True)
+    def moved():
+        frame(False,0.)
+        frame(False,.21)
+    frame(False,0.)
+    frame(False,.19)
+    assert not frame(True,.3)  # Movement credited only while transporting.
+    memory.clear()
+    moved()
+    assert not frame(True,.21,replace(green,visible=False,misses=1))
+    assert frame(True,.21) == [green]
+    assert not frame(True,.21,replace(green,track_id=999))
+    memory.clear()
+    moved()
+    assert not frame(True,.21,replace(green,bbox=(820,64,207,258)))  # Still overlaps, shifted 22 px.
+    memory.clear()
+    moved()
+    assert not frame(True,.21,task=2)
+    memory.clear()
+    moved()
+    assert not frame(True,.21,closed=False)
+    assert not frame(True,.21)

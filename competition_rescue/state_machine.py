@@ -406,6 +406,7 @@ class VisionSnapshot:
     delivery_target_outside_track_ids: tuple[int, ...] = ()
     safe_zone_filter_blocked: bool = False
     carried_incompatible_cargo: tuple[TrackedCargo, ...] = ()
+    orange_companion_needs_gate_review: bool = False
     low_conf_green_seen: bool = False
     safe_corridor_polygon: tuple[tuple[int, int], ...] = ()
     safe_corridor_obstacle_class: str | None = None
@@ -2690,6 +2691,11 @@ class CompetitionMission:
 
     def _observe_confirmed_load(self, vision: VisionSnapshot, stm: StmSnapshot) -> bool:
         """Revoke reuse on real change, never manufacture a current-frame count."""
+        if (vision.orange_companion_needs_gate_review and self.carried_manifest == ("injured_orange",) and
+                self.state == CompetitionState.NAVIGATE):
+            # Take the normal staging-point review, including after an obstacle-pickup recovery.
+            self.recovered_injury_audit_reuse = False
+            self.transport_load_reuse_active = False
         prior = self.confirmed_load_audit
         if prior is None:
             return False
