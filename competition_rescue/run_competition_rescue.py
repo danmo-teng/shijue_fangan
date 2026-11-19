@@ -70,7 +70,7 @@ from protocol import (  # noqa: E402
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
-    CMD_ORANGE_CORE_FILTER,
+    CMD_ORANGE_CORE_FILTER, CMD_GREEN_TOPUP, TopupStep,
     CMD_CORRIDOR_NUDGE,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
@@ -508,24 +508,25 @@ def audit_from_cargo(
         any(item.class_name == "injured_orange" for item in right) and
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
-    green_blue_view = None
-    if len(visible) == 2 and all_names == {"green_supply", "danger_cyan"} and not remembered_items:
-        green, blue = visible
-        if green.class_name != "green_supply":
-            green, blue = blue, green
-        gx, _, gw, _ = green.bbox
+    blue_pair_geometry = None
+    if (len(visible) == 2 and has_danger and not unassigned and not remembered_items and
+            len(all_names) == 2 and all_names <= {"danger_cyan", "green_supply", "core_black", "injured_orange"}):
+        wanted, blue = visible
+        if wanted.class_name == "danger_cyan":
+            wanted, blue = blue, wanted
+        wx, _, ww, _ = wanted.bbox
         bx, _, bw, _ = blue.bbox
-        if ((gx >= CLAW_SPLIT_X and bx + bw <= CLAW_SPLIT_X and green in right and blue in left) or
-                (gx + gw <= CLAW_SPLIT_X and bx >= CLAW_SPLIT_X and green in left and blue in right)):
-            green_blue_view = "separated"
-        elif gx < CLAW_SPLIT_X < gx + gw and not unassigned:
-            if bx + bw <= CLAW_SPLIT_X and blue in left:
-                green_blue_view = "left"
-            elif bx >= CLAW_SPLIT_X and blue in right:
-                green_blue_view = "right"
+        if ((wx >= CLAW_SPLIT_X and bx + bw <= CLAW_SPLIT_X and wanted in right and blue in left) or
+                (wx + ww <= CLAW_SPLIT_X and bx >= CLAW_SPLIT_X and wanted in left and blue in right)):
+            blue_pair_geometry = "separated"
+        elif wanted.center_px[0] != blue.center_px[0]:
+            gap_x = (wanted.center_px[0] + blue.center_px[0]) / 2
+            if gap_x != CLAW_SPLIT_X:
+                blue_pair_geometry = "left" if gap_x < CLAW_SPLIT_X else "right"
     isolated_track_ids = isolated_track_ids or set()
     return CargoAudit(
-        green_blue_view=green_blue_view,
+        blue_pair_geometry=blue_pair_geometry,
+        visible_green_in_claw=any(item.visible and item.class_name == "green_supply" for item in items),
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
         left_class_counts=tuple(sorted(Counter(item.class_name for item in left).items())),
         right_class_counts=tuple(sorted(Counter(item.class_name for item in right).items())),
@@ -1412,6 +1413,11 @@ def make_vision_snapshot(
                 grip_regions.append((item.track_id, region))
     return VisionSnapshot(
         pre_grab_regions=tuple(grip_regions), pre_grab_configured_classes=grip_configured,
+        topup_floor_ids=tuple(t.track_id for t in cargo if t.visible and t.track_id not in known_carried_ids and
+            (not bbox_bottom_center_in_roi(t.bbox, rois.overall) if stm.camera_pitch_cdeg == 14000 else
+             not cargo_on_carrying_platform(t, 12000))) if (stm.camera_pitch_cdeg in (12000, 14000) and
+            not image_quality_reason and (mission.state == CompetitionState.GREEN_TOPUP or
+            (mission.first_common_delivered and stm.mode == 22 and mission.green_topup is None))) else (),
         range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
         range_top_band_ids=tuple(range_top_band_ids), range_maximum_mm=range_maximum_mm,
         orange_far_reobserve_ids=tuple(orange_far_reobserve_ids),
@@ -2080,6 +2086,8 @@ class CompetitionPlanner:
             range_epoch = ("search_transfer", self.mission.search_transfer_epoch,
                            self.mission.search_transfer_route.move_epoch,
                            self.mission.search_transfer_route.index)
+        if command.opcode == CMD_GREEN_TOPUP:
+            range_epoch = command.arg_a
         if command.opcode == CMD_CLOSED_DEFLECT:
             range_epoch = ("closed_deflect", self.mission.deflect_epoch)
         key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
@@ -2096,7 +2104,9 @@ class CompetitionPlanner:
                 self.published_audit_handoff = None
                 self.protocol_source_stamp = None
                 self.protocol_vision_frame = 0
-        if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
+        if command.opcode == CMD_GREEN_TOPUP:
+            self.protocol_vision_frame = command.source_vision_frame if command.arg_a == TopupStep.ALIGN else 0
+        elif command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
             self.protocol_vision_frame = command.source_vision_frame or 0
         elif command.opcode == CMD_ALIGN_SAFE_ZONE and command.flags & CMD_VISUAL_CORRECTION_VALID:
             self.protocol_vision_frame = command.source_vision_frame or 0
@@ -2124,7 +2134,7 @@ class CompetitionPlanner:
             owner.task_id if owner is not None else self.protocol_task,
             owner.action_id if owner is not None else self.protocol_action,
             self.protocol_vision_frame if (command.opcode in {
-                CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE,
+                CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE, CMD_GREEN_TOPUP,
             } or (command.opcode == CMD_DISPERSE_PILE and
                   command.flags & CMD_DISPERSE_NEAR_KEEP)) else 0,
         )
@@ -2733,6 +2743,8 @@ class CompetitionPlanner:
         reconciled = self._reconcile_approach_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
+        if self.mission.state == CompetitionState.GREEN_TOPUP and not stm.fault and not paused:
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if self.mission.state == CompetitionState.ORANGE_CORE_FILTER and not stm.fault and not paused:
             if (stm.context_valid and stm.task_id == self.protocol_task and stm.action_status & 4 and
                     stm.rejected_action_id == self.protocol_action and stm.mode in (21, 23, 37) and

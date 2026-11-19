@@ -1,0 +1,468 @@
+diff --git a/Main/Inc/motor.h b/Main/Inc/motor.h
+index 2a626f8..f6bd8b5 100644
+--- a/Main/Inc/motor.h
++++ b/Main/Inc/motor.h
+@@ -40,7 +40,7 @@ MotorDistanceStatus Motor_MoveDistanceHeading(float distance_m,
+                                               float max_speed_mm_s,
+                                               float field_heading_deg);
+ /* Closed single-load filter: reverse 100 mm on the latched field heading. */
+-MotorDistanceStatus Motor_MoveSingleFilterBack(float field_heading_deg);
++MotorDistanceStatus Motor_MoveSingleFilterBack(float field_heading_deg, bool first_green);
+ /* Opening forward leg with its own acceleration and heading-based speed cap. */
+ MotorDistanceStatus Motor_MoveStartForward(float field_heading_deg);
+ /* Distance progress along the latched request; wrong-way travel is negative. */
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index e4c2b49..479079d 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -92,6 +92,10 @@
+ #define VISION_ZONE_3             0x03U
+ #define VISION_ZONE_4             0x04U
+ 
++typedef enum {
++  TOPUP_VIEW = 1, TOPUP_ALIGN, TOPUP_ADVANCE, TOPUP_CANCEL, TOPUP_ROLLBACK
++} GreenTopupStep;
++
+ #define VISION_COUNT_NORMAL(v)    ((uint8_t)((v) & 0x03U))
+ #define VISION_COUNT_CORE(v)      ((uint8_t)(((v) >> 2) & 0x03U))
+ #define VISION_COUNT_CASUALTY(v)  ((uint8_t)(((v) >> 4) & 0x03U))
+@@ -195,7 +199,8 @@ typedef enum {
+   VISION_CMD_BULLDOZER_STEP = 20,
+   VISION_CMD_ORANGE_GATE_FILTER = 22,
+   VISION_CMD_CORRIDOR_NUDGE = 23,
+-  VISION_CMD_ORANGE_CORE_FILTER = 24
++  VISION_CMD_ORANGE_CORE_FILTER = 24,
++  VISION_CMD_GREEN_TOPUP = 25
+ } VisionMissionCode;
+ 
+ typedef enum {
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index a983376..0c76128 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -64,7 +64,8 @@ typedef enum {
+   REMOTE_ACTION_BULLDOZER,
+   REMOTE_ACTION_ORANGE_GATE_FILTER,
+   REMOTE_ACTION_CORRIDOR_NUDGE,
+-  REMOTE_ACTION_ORANGE_CORE_FILTER
++  REMOTE_ACTION_ORANGE_CORE_FILTER,
++  REMOTE_ACTION_GREEN_TOPUP
+ } RemoteAction;
+ 
+ typedef struct {
+@@ -76,11 +77,13 @@ typedef struct {
+   uint16_t heading_cdeg;
+   uint8_t step;
+   bool station_move;
++  uint8_t attack_return_leg; /* 1 = lateral wheel distance, 2 = coarse/fine return. */
+   uint32_t actuator_wait_ms;
+   uint8_t separation_lift_angle;
+   bool orange_core_82, lift_ready;
+   bool restoring_gate_height;
+   uint32_t lift_started_ms;
++  float topup_forward_mm, topup_heading_deg;
+   int64_t straight_start_counts[3];
+   bool lateral_started, obstacle_right, filter_at_pickup;
+   uint16_t nudge_forward_mm;
+@@ -237,6 +240,7 @@ static bool audit_frame_floor_valid;
+ static bool app_visual_valid;
+ static int16_t last_app_x, last_app_y;
+ static bool task_context_complete(void);
++static bool task_serial32_newer(uint32_t value, uint32_t base);
+ static LiftLoad task_audited_load(void);
+ static bool recovery_reference_ready;
+ static uint32_t recovery_started_ms, recovery_pose_tick;
+@@ -494,6 +498,7 @@ static uint8_t remote_target_sequence;
+ static uint32_t remote_target_generation;
+ static bool remote_target_sequence_valid;
+ static RemoteActionState remote_action;
++static bool green_topup_used;
+ static NavProgress nav_progress;
+ static NavCoarse nav_coarse;
+ 
+@@ -1204,11 +1209,11 @@ static TaskCommandReject task_disperse_reject_reason(
+        (audit_last_total_count < 2U) || !task_audit_has_green())) {
+     return TASK_COMMAND_REJECT_AUDIT;
+   }
+-  /* The upper 140-degree image distinguishes a center green in a mixed side.
++  /* The upper 140-degree image distinguishes a wanted block beside a blue one.
+    * The compact audit can encode that side as UNKNOWN. */
+   if (command != NULL && command->command == VISION_CMD_DISPERSE_PILE &&
+       command->target_x_mm != 0 &&
+-      (first_delivery_done || audit_initial_stash || task_status.gripper_closed ||
++      (audit_initial_stash || task_status.gripper_closed ||
+        (state != TASK_GRAB_OBSERVE && state != TASK_DISPERSE_READY) ||
+        !task_audit_has_danger() || audit_last_total_count != 2U)) {
+     return TASK_COMMAND_REJECT_AUDIT;
+@@ -1526,7 +1531,7 @@ static void task_start_remote_action(RemoteAction type,
+   const uint8_t lift_angle = lift82 || continue82 ? APP_LIFT_FIRST_GREEN_FILTER_ANGLE :
+       restore_previous_lift ? task_loaded_travel_angle(restore) : 0U;
+   /* Staging repair after a closed-claw nudge can reuse this load's audit. */
+-  if (type != REMOTE_ACTION_CORRIDOR_NUDGE) { task_clear_confirmed_load(); }
++  if (type != REMOTE_ACTION_CORRIDOR_NUDGE && type != REMOTE_ACTION_GREEN_TOPUP) { task_clear_confirmed_load(); }
+   task_enter(TASK_REMOTE_ACTION, now_ms);
+   separation_motion = (SeparationMotion){0};
+   remote_action = (RemoteActionState){
+@@ -1933,6 +1938,7 @@ static void task_enter(TaskState next, uint32_t now_ms)
+ 
+ static void task_initialize(uint32_t now_ms, bool claws_already_stowed)
+ {
++  green_topup_used = false;
+   held_load = LIFT_LOAD_UNKNOWN;
+   orange_gate_attempted = orange_gate_lowered = orange_core_filter_attempted = false;
+   task_clear_confirmed_load();
+@@ -2227,6 +2233,8 @@ static float task_tracking_dt(uint32_t tick_ms)
+ 
+ static float task_approach_alignment_tolerance(void)
+ {
++  if (state == TASK_REMOTE_ACTION && remote_action.type == REMOTE_ACTION_GREEN_TOPUP &&
++      remote_action.arg_a == TOPUP_ALIGN) return APP_APPROACH_TRACK_CENTER_TOLERANCE_PX;
+   if (state != TASK_APPROACH) {
+     return 0.0f;
+   }
+@@ -3141,6 +3149,10 @@ static bool task_prepare_separation(int8_t keep_side, bool keep_orange, uint32_t
+     task_status.command_reject_reason = TASK_COMMAND_REJECT_AUDIT;
+     return false;
+   }
++  if (!first_delivery_done && !audit_initial_stash && separation_total_attempts >= 3U) {
++    task_status.command_reject_reason = TASK_COMMAND_REJECT_AUDIT;
++    return false;
++  }
+   const uint8_t left_count = audit_last_counts & 0x03U;
+   const uint8_t right_count = (audit_last_counts >> 2U) & 0x03U;
+   const uint8_t release_count = keep_side > 0 ? right_count : left_count;
+@@ -3791,7 +3803,7 @@ static void task_process_single_filter(uint32_t now_ms)
+     Motor_ResumeFiniteMotion();
+     const bool single = !mixed_pair && audit_last_total_count == 1U;
+     const MotorDistanceStatus result = single ?
+-        Motor_MoveSingleFilterBack(single_filter_heading_deg) :
++        Motor_MoveSingleFilterBack(single_filter_heading_deg, audit_last_semantic == AUDIT_SEMANTIC_FIRST_GREEN) :
+         Motor_MoveDistanceHeading(-0.100f, APP_SINGLE_CARGO_FILTER_BACK_SPEED_MM_S,
+                                   single_filter_heading_deg);
+     task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
+@@ -5151,7 +5163,7 @@ static void task_bulldozer_prepare_search(uint32_t now_ms, bool begin_scan)
+   }
+ }
+ 
+-/* Upper D/H keep flowing during both phases. Only D=0 finishes the action. */
++/* Station and opening return share a wheel origin and a locked coarse line. */
+ static float task_station_move_speed(const LocationPose *pose, float live_distance_mm,
+                                      float *field_direction_deg)
+ {
+@@ -5161,11 +5173,19 @@ static float task_station_move_speed(const LocationPose *pose, float live_distan
+     nav_latch_coarse_line(remote_action.arg_a, (float)remote_action.arg_b * 0.01f);
+     nav_coarse.origin_x_mm = (float)pose->x_mm;
+     nav_coarse.origin_y_mm = (float)pose->y_mm;
+-    nav_coarse.phase = remote_action.arg_a > APP_EMPTY_STATION_FINE_ENTRY_MM ?
++    nav_coarse.phase = remote_action.attack_return_leg == 1U ||
++        remote_action.arg_a > APP_EMPTY_STATION_FINE_ENTRY_MM ?
+         NAV_COARSE_DRIVE : NAV_COARSE_FINE;
+   }
+   if (nav_coarse.phase == NAV_COARSE_DRIVE) {
+     nav_update_coarse_progress(pose);
++    if (remote_action.attack_return_leg == 1U) {
++      const float remaining = nav_coarse.target_progress_mm - nav_coarse.progress_mm;
++      *field_direction_deg = nav_coarse.heading_deg;
++      if (remaining <= APP_GO_DISTANCE_TOLERANCE_MM) { return 0.0f; }
++      return task_entry_speed(remaining - APP_GO_DISTANCE_TOLERANCE_MM,
++          APP_GO_DISTANCE_MIN_SPEED_MM_S, APP_EMPTY_STATION_MAX_SPEED_MM_S, APP_OMNI_DECEL_MM_S2);
++    }
+     /* A nearer fused fix can shorten the goal along this line. A later larger
+      * D or a backward wheel delta cannot give this coarse leg extra travel. */
+     nav_coarse.target_progress_mm = fminf(nav_coarse.target_progress_mm,
+@@ -5173,6 +5193,10 @@ static float task_station_move_speed(const LocationPose *pose, float live_distan
+     const float remaining_mm = nav_coarse.target_progress_mm - nav_coarse.progress_mm;
+     if (remaining_mm > APP_EMPTY_STATION_FINE_ENTRY_MM) {
+       *field_direction_deg = nav_coarse.heading_deg;
++      if (remote_action.attack_return_leg == 2U) {
++        return task_entry_speed(remaining_mm - APP_EMPTY_STATION_FINE_ENTRY_MM,
++            APP_EMPTY_STATION_FINE_SPEED_MM_S, APP_EMPTY_STATION_MAX_SPEED_MM_S, APP_OMNI_DECEL_MM_S2);
++      }
+       return fminf(APP_EMPTY_STATION_MAX_SPEED_MM_S, remaining_mm);
+     }
+     nav_coarse.phase = NAV_COARSE_FINE;
+@@ -5188,7 +5212,7 @@ static void task_process_bulldozer(const VisionMissionCommand *command,
+   if (task_bulldozer_live_step(remote_action.step)) {
+     /* A/B are current remaining D/field translation H. U remains the original
+      * chassis heading; neither a heartbeat nor a new D can relatch that goal. */
+-    if (command->target_x_mm == 0) {
++    if (command->target_x_mm == 0 && (remote_action.attack_return_leg != 1U || remote_action.arg_a == 0)) {
+       task_remote_action_finish();
+       return;
+     }
+@@ -5199,10 +5223,11 @@ static void task_process_bulldozer(const VisionMissionCommand *command,
+       return;
+     }
+     float field_direction_deg = (float)command->target_y_mm * 0.01f;
+-    const float speed = remote_action.station_move ?
++    const float speed = (remote_action.station_move || remote_action.attack_return_leg) ?
+         task_station_move_speed(&pose, (float)command->target_x_mm, &field_direction_deg) :
+         fminf(APP_SAFE_SWEEP_RETURN_SPEED_MM_S,
+               fmaxf(APP_NAV_TERMINAL_MIN_SPEED_MM_S, (float)command->target_x_mm));
++    if (speed == 0.0f) { task_remote_action_finish(); return; }
+     const float body_angle = task_wrap_angle(field_direction_deg - pose.heading_mdeg * 0.001f);
+     task_status.motors_active = Motor_MoveAngleFineHeading(speed, body_angle, heading_deg);
+     return;
+@@ -5436,9 +5461,15 @@ static bool task_accept_bulldozer(const VisionMissionCommand *command,
+    * legs start at RELEASE or ATTACK_BACK_100 and retain their existing cap. */
+   const bool station_move = empty_search_entry ||
+       (empty_move && previous_step_done && remote_action.station_move);
++  uint8_t attack_leg = 0U;
++  if (empty_move && previous_step_done && !empty_search_entry) {
++    if (remote_action.step == VISION_BULLDOZER_ATTACK_BACK_100) { attack_leg = 1U; }
++    else if (remote_action.attack_return_leg == 1U) { attack_leg = 2U; }
++  }
+   task_start_remote_action(REMOTE_ACTION_BULLDOZER, command, now_ms);
+   remote_action.station_move = station_move;
+-  if (station_move) { nav_reset_coarse(); }
++  remote_action.attack_return_leg = attack_leg;
++  if (station_move || attack_leg) { nav_reset_coarse(); }
+   if (station_turn) {
+     search_yaw_direction = (int8_t)command->target_y_mm;
+     search_direction_latched = true;
+@@ -6783,6 +6814,89 @@ static void task_process_orange_gate_filter(uint32_t now_ms)
+   }
+ }
+ 
++/* The only retained distance belongs to this top-up, on the same task. */
++static bool task_topup_allowed(const VisionMissionCommand *cmd, bool new_action)
++{
++  const bool owned = remote_action.type == REMOTE_ACTION_GREEN_TOPUP;
++  if (!new_action)
++    return owned && cmd->target_x_mm == remote_action.arg_a &&
++        (cmd->target_x_mm == TOPUP_ALIGN || cmd->target_y_mm == remote_action.arg_b);
++  switch (cmd->target_x_mm) {
++    case TOPUP_VIEW:
++      return state == TASK_WAIT_NAVIGATION && !green_topup_used && first_delivery_done && !audit_initial_stash &&
++          task_confirmed_load_available() && !confirmed_load.injury && confirmed_load.total == 1U &&
++          accepted_context.opcode == VISION_CMD_CARGO_AUDIT;
++    case TOPUP_ALIGN:
++      return owned && state == TASK_REMOTE_ACTION && remote_action.arg_a == TOPUP_VIEW && remote_action.done;
++    case TOPUP_ADVANCE:
++      return owned && state == TASK_REMOTE_ACTION && remote_action.arg_a == TOPUP_ALIGN && remote_action.done;
++    case TOPUP_CANCEL:
++      return owned && state == TASK_REMOTE_ACTION && task_status.gripper_closed &&
++          (remote_action.arg_a == TOPUP_VIEW || remote_action.arg_a == TOPUP_ALIGN);
++    case TOPUP_ROLLBACK:
++      return owned && state == TASK_POST_GRAB_AUDIT && remote_action.arg_a == TOPUP_ADVANCE &&
++          remote_action.done && task_status.gripper_closed;
++    default: return false;
++  }
++}
++
++static void task_process_green_topup(const VisionMissionCommand *command, uint32_t now_ms)
++{
++  const int step = remote_action.arg_a;
++  if (step == TOPUP_ALIGN) {
++    const bool fresh_report = command->vision_frame != 0U &&
++        (!tracking_valid || task_serial32_newer(command->vision_frame, tracking_report_generation));
++    if (fresh_report) {
++      const VisionData target = {.x = command->target_y_mm, .y = APP_VISION_TARGET_Y,
++          .tick_ms = command->tick_ms, .report_generation = command->vision_frame};
++      (void)task_track_target(&target, false);
++    }
++    if (task_approach_align_output(fresh_report)) task_remote_action_finish();
++    return;
++  }
++  const uint8_t pitch = step == TOPUP_VIEW ? 120U : APP_GRAB_VIEW_ANGLE;
++  if (remote_action.phase == 0U) {
++    remote_action.actuator_wait_ms = Camera_PositionWaitMs(pitch);
++    Camera_SetAngle(pitch);
++    camera_angle = (float)pitch;
++    remote_action.phase = 1U;
++    step_started_ms = now_ms;
++  }
++  if (step == TOPUP_VIEW || step == TOPUP_CANCEL) {
++    if (now_ms - step_started_ms < remote_action.actuator_wait_ms) return;
++    if (step == TOPUP_CANCEL) task_enter(TASK_WAIT_NAVIGATION, now_ms);
++    task_remote_action_finish();
++    return;
++  }
++  if (remote_action.phase == 1U) {
++    if (!task_open_claws(now_ms)) return;
++    task_status.gripper_closed = false;
++    task_clear_confirmed_load();
++    task_clear_audit_result();
++    remote_action.phase = 2U;
++  }
++  if (remote_action.phase == 2U) {
++    Motor_ResumeFiniteMotion();
++    const MotorDistanceStatus result = step == TOPUP_ADVANCE ?
++        Motor_MoveDistanceLinear(remote_action.arg_b * 0.001f, APP_APPROACH_RANGE_SPEED_MM_S,
++                                APP_APPROACH_RANGE_SLOW_MM, APP_APPROACH_RANGE_END_MM_S) :
++        Motor_MoveDistanceHeading(-remote_action.topup_forward_mm * 0.001f,
++                                  APP_APPROACH_RANGE_SPEED_MM_S, remote_action.topup_heading_deg);
++    task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
++    if (distance_failed(result)) { task_stop(TASK_FAULT_MOTOR, now_ms); return; }
++    if (result != MOTOR_DISTANCE_DONE) return;
++    if (step == TOPUP_ADVANCE) remote_action.topup_forward_mm = Motor_GetDistanceTravelledMm();
++    Motor_Stop();
++    task_status.motors_active = false;
++    remote_action.phase = 3U;
++  }
++  if (now_ms - step_started_ms < remote_action.actuator_wait_ms || !Claw_Touch(now_ms)) return;
++  task_status.gripper_closed = true;
++  single_filter_armed = true;
++  task_enter(TASK_POST_GRAB_AUDIT, now_ms);
++  remote_action.done = true;
++}
++
+ static void task_process_remote_action(const VisionMissionCommand *command,
+                                        uint32_t now_ms)
+ {
+@@ -6820,6 +6934,10 @@ static void task_process_remote_action(const VisionMissionCommand *command,
+     }
+     return;
+   }
++  if (remote_action.type == REMOTE_ACTION_GREEN_TOPUP) {
++    task_process_green_topup(command, now_ms);
++    return;
++  }
+   if (remote_action.type == REMOTE_ACTION_BULLDOZER) {
+     Motor_ResumeFiniteMotion();
+     task_process_bulldozer(command, now_ms);
+@@ -7989,6 +8107,8 @@ static bool task_context_complete(void)
+     case VISION_CMD_CORRIDOR_NUDGE:
+       return state == TASK_ALIGN_SAFE_ZONE && remote_action.type == REMOTE_ACTION_CORRIDOR_NUDGE &&
+           remote_action.done;
++    case VISION_CMD_GREEN_TOPUP:
++      return remote_action.type == REMOTE_ACTION_GREEN_TOPUP && remote_action.done;
+     case VISION_CMD_ORANGE_CORE_FILTER:
+       return state == TASK_POST_GRAB_AUDIT && remote_action.type == REMOTE_ACTION_ORANGE_CORE_FILTER &&
+           remote_action.done;
+@@ -8225,6 +8345,10 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+                (state != TASK_REMOTE_ACTION && !(state == TASK_ALIGN_SAFE_ZONE && remote_action.done)))
+       goto rejected;
+   }
++  const bool topup = incoming.command == VISION_CMD_GREEN_TOPUP;
++  if (topup && (new_target || !task_side_flag_valid(incoming.flags) ||
++      (incoming.target_x_mm == TOPUP_ALIGN) != (incoming.vision_frame != 0U) ||
++      !task_topup_allowed(&incoming, new_action))) goto rejected;
+   const bool pair_filter = incoming.command == VISION_CMD_ORANGE_CORE_FILTER;
+   if (pair_filter) {
+     if (new_target || !task_side_flag_valid(incoming.flags) || incoming.vision_frame != 0U) goto rejected;
+@@ -8542,6 +8666,20 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+     task_status.acknowledged_sequence = incoming.sequence;
+     command_accepted = true;
+     mission_paused = false;
++  } else if (topup) {
++    if (new_action) {
++      const float forward_mm = remote_action.topup_forward_mm;
++      const float heading = incoming.target_x_mm == TOPUP_ADVANCE ?
++          Location_GetPose().heading_mdeg * 0.001f : remote_action.topup_heading_deg;
++      task_start_remote_action(REMOTE_ACTION_GREEN_TOPUP, &incoming, now_ms);
++      remote_action.topup_forward_mm = forward_mm;
++      remote_action.topup_heading_deg = heading;
++      if (incoming.target_x_mm == TOPUP_ALIGN) task_reset_tracking();
++      if (incoming.target_x_mm == TOPUP_VIEW) green_topup_used = true;
++    }
++    task_status.acknowledged_sequence = incoming.sequence;
++    command_accepted = true;
++    mission_paused = false;
+   } else if (pair_filter) {
+     if (new_action) {
+       task_start_remote_action(REMOTE_ACTION_ORANGE_CORE_FILTER, &incoming, now_ms);
+@@ -8625,6 +8763,7 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+                  incoming.sequence, incoming.vision_frame, incoming.flags);
+ 
+   if (new_target) {
++    green_topup_used = false;
+     remote_action.nudge_forward_mm = 0U;
+     orange_gate_attempted = orange_gate_lowered = orange_core_filter_attempted = false;
+     task_clear_confirmed_load();
+diff --git a/Main/Src/motor.c b/Main/Src/motor.c
+index 4d4ce4a..bdf33d1 100644
+--- a/Main/Src/motor.c
++++ b/Main/Src/motor.c
+@@ -2129,10 +2129,10 @@ MotorDistanceStatus Motor_MoveDistanceHeading(float distance_m, float max_speed_
+                                      field_heading_deg, false);
+ }
+ 
+-MotorDistanceStatus Motor_MoveSingleFilterBack(float field_heading_deg)
++MotorDistanceStatus Motor_MoveSingleFilterBack(float field_heading_deg, bool first_green)
+ {
+-  return motor_move_distance(-0.100f, APP_SINGLE_FILTER_FAST_BACK_MM_S,
+-                             APP_SINGLE_FILTER_BACK_SLOW_MM, APP_GO_DISTANCE_MIN_SPEED_MM_S,
++  return motor_move_distance(-0.100f, first_green ? 500.0f : APP_SINGLE_FILTER_FAST_BACK_MM_S,
++                             first_green ? 40.0f : APP_SINGLE_FILTER_BACK_SLOW_MM, APP_GO_DISTANCE_MIN_SPEED_MM_S,
+                              false, true, field_heading_deg, DISTANCE_SINGLE_FILTER);
+ }
+ 
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 7fbf784..5169757 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -203,7 +203,7 @@ static bool vision_mission_code_valid(uint8_t command)
+ {
+   return (command == VISION_CMD_STOP) ||
+          (command == VISION_CMD_PAUSE) ||
+-         (command == VISION_CMD_ORANGE_CORE_FILTER) ||
++         (command == VISION_CMD_ORANGE_CORE_FILTER) || (command == VISION_CMD_GREEN_TOPUP) ||
+          (command == VISION_CMD_ORANGE_GATE_FILTER) || (command == VISION_CMD_CORRIDOR_NUDGE) ||
+          ((command >= VISION_CMD_GRAB_CONFIRMED) &&
+            (command <= VISION_CMD_BULLDOZER_STEP));
+@@ -284,6 +284,14 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+ 
+   const int16_t arg_a = (int16_t)vision_u16_be(&payload[2]);
+   const int16_t arg_b = (int16_t)vision_u16_be(&payload[4]);
++  if (code == VISION_CMD_GREEN_TOPUP) {
++    const bool argument_ok =
++        ((arg_a == TOPUP_VIEW || arg_a == TOPUP_CANCEL || arg_a == TOPUP_ROLLBACK) && arg_b == 0) ||
++        (arg_a == TOPUP_ALIGN && arg_b >= 0 && arg_b <= APP_VISION_MAX_X) ||
++        (arg_a == TOPUP_ADVANCE && arg_b > 0 && arg_b <= APP_APPROACH_RANGE_MAX_MM);
++    if (!argument_ok || heading != 0U ||
++        flags != (VISION_CMD_VALID | (flags & VISION_CMD_RED_SIDE))) goto rejected_payload;
++  }
+   if (code == VISION_CMD_ORANGE_CORE_FILTER &&
+       ((flags & (uint8_t)~(VISION_CMD_VALID | VISION_CMD_RED_SIDE)) != 0U ||
+        arg_a != -100 || arg_b != APP_LIFT_ORANGE_TRAVEL_ANGLE * 100 ||
+diff --git a/tools/test_injury_backoff.c b/tools/test_injury_backoff.c
+index 31f594a..35a710b 100644
+--- a/tools/test_injury_backoff.c
++++ b/tools/test_injury_backoff.c
+@@ -87,9 +87,9 @@ MotorDistanceStatus Motor_MoveDistanceHeading(float distance, float speed, float
+   ++distance_calls;
+   return distance_result;
+ }
+-MotorDistanceStatus Motor_MoveSingleFilterBack(float heading)
++MotorDistanceStatus Motor_MoveSingleFilterBack(float heading, bool first_green)
+ {
+-  return Motor_MoveDistanceHeading(-0.100f, APP_SINGLE_FILTER_FAST_BACK_MM_S, heading);
++  return Motor_MoveDistanceHeading(-0.100f, first_green ? 500.0f : APP_SINGLE_FILTER_FAST_BACK_MM_S, heading);
+ }
+ MotorDistanceStatus Motor_MoveStartForward(float heading)
+ {
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index 39cb553..dbede06 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -71,6 +71,7 @@ CMD_CARGO_AUDIT = 0x12
+ CMD_CLEAR_SAFE_ZONE = 0x13
+ CMD_BULLDOZER_STEP = 0x14
+ CMD_ORANGE_FILTER_AT_PICKUP = 0x10  # Opcode 0x16 only.
++CMD_GREEN_TOPUP = 0x19
+ CMD_ORANGE_CORE_FILTER = 0x18
+ CMD_CORRIDOR_NUDGE = 0x17
+ CMD_ORANGE_GATE_FILTER = 0x16
+@@ -349,7 +350,7 @@ def mission_frame(
+     heading_cdeg: int = 0,
+ ) -> bytes:
+     if (command not in (CMD_STOP, CMD_PAUSE, CMD_ORANGE_GATE_FILTER,
+-                        CMD_CORRIDOR_NUDGE, CMD_ORANGE_CORE_FILTER) and
++                        CMD_CORRIDOR_NUDGE, CMD_ORANGE_CORE_FILTER, CMD_GREEN_TOPUP) and
+             not CMD_GRAB_CONFIRMED <= command <= CMD_BULLDOZER_STEP):
+         raise ValueError("invalid mission command")
+     allowed_flags = 0xF9 if command == CMD_BULLDOZER_STEP else 0x1F
+@@ -367,6 +368,12 @@ def mission_frame(
+         )
+     if not flags & CMD_VALID or flags & ~allowed_flags:
+         raise ValueError("invalid mission flags")
++    if command == CMD_GREEN_TOPUP and not (
++            flags in (CMD_VALID, CMD_VALID | CMD_RED_SIDE) and heading_cdeg == 0 and
++            ((target_x_mm in (1,4,5) and target_y_mm == 0) or
++             (target_x_mm == 2 and 0 <= target_y_mm < 1280) or
++             (target_x_mm == 3 and 0 < target_y_mm <= 2500))):
++        raise ValueError("invalid green top-up")
+     if command == CMD_ORANGE_CORE_FILTER and (
+             flags not in (CMD_VALID, CMD_VALID | CMD_RED_SIDE) or
+             (target_x_mm, target_y_mm, heading_cdeg) != (-100, 8600, 8200)):

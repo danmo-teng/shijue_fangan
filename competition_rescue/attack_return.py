@@ -71,7 +71,7 @@ class AttackReturnRoute:
                 self.centre_yaw_deg = centre_heading_deg(x_m, y_m)
             return 0, 0, round(self.centre_yaw_deg*100)%36000
         assert self.index in {1, 2}
-        dx = self.return_point[0]-x_m if self.index == 1 else 0.0
+        dx = self.return_point[0]-x_m
         dy = self.return_point[1]-y_m if self.index == 2 else 0.0
         distance = math.hypot(dx, dy)
         self.arrival_latched |= distance <= self.tolerance_m+1e-9

@@ -3211,11 +3211,11 @@ def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_read
             assert m.step(v,replace(q,valid=False),done,1.2).command.arg_a==-100
             out=m.step(v,q,done,1.3)
             assert r.index==1 and out.command.flags>>4==13
-            assert m.step(v,q,done,1.4).command.arg_a>0 and r.index==1
-            q=replace(q,x_m=r.return_point[0])
+            assert m.step(v,q,replace(done,action_status=1),1.4).command.arg_a>0 and r.index==1
+            q=replace(q,x_m=r.return_point[0]+.06)  # wheel DONE, lateral residual remains
             out=m.step(v,q,done,1.5)
             assert r.index==2 and out.command.flags>>4==13
-            at=replace(q,y_m=0.)
+            at=replace(q,x_m=r.return_point[0],y_m=0.)
             out=m.step(v,at,done,1.6)
             assert r.index==3 and out.command.flags>>4==14
             assert m.step(v,at,replace(done,context_matches=False),1.7).command.flags>>4==14
@@ -4468,7 +4468,7 @@ def test_empty_stations_one_and_three_both_switch_at_540():
     assert m.search_transfer_route.target_point == 1 and not m.search_transfer_route.high_start
 
 
-def test_first_green_view_turns_toward_blue_and_reaudits_before_deciding():
+def test_blue_pair_view_turns_toward_blue_and_reaudits_before_deciding():
     from run_competition_rescue import audit_from_cargo
     from protocol import CMD_SIDE_VALID
 
@@ -4479,7 +4479,7 @@ def test_first_green_view_turns_toward_blue_and_reaudits_before_deciding():
                        bbox=(243 if sign > 0 else 758, 221, 279, 265))
         pair = (green, blue)
         a = audit_from_cargo(pair, side_by_track={87: side, 88: side})
-        assert a.green_blue_view == side
+        assert a.blue_pair_geometry == side
         for resolved in (True, False):
             m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
             m._select_batch(CargoBatch((87,), ("green_supply",), "material"))
@@ -4493,14 +4493,14 @@ def test_first_green_view_turns_toward_blue_and_reaudits_before_deciding():
                 done = replace(s, mode=35, context_valid=True, context_matches=True,
                                accepted_command=CMD_DISPERSE_PILE, action_status=3)
                 m._disperse_output(v, replace(done, action_status=1), 2.0+n)
-                assert m.first_green_view_deg == n * sign
+                assert m.blue_pair_view_deg == n * sign
                 m._disperse_output(v, done, 2.1+n)
-                assert m.first_green_view_deg == (n+1) * sign and m.disperse_attempts == 0
+                assert m.blue_pair_view_deg == (n+1) * sign and m.disperse_attempts == 0
                 # Exercise the actual post-turn stable audit and its STM handoff.
                 if resolved:
                     pair_after = (replace(green, bbox=(700 if sign > 0 else 300, 199, 200, 285)), blue)
                     a_after = audit_from_cargo(pair_after, side_by_track={87:other, 88:side})
-                    assert a_after.green_blue_view == "separated"
+                    assert a_after.blue_pair_geometry == "separated"
                 else:
                     pair_after, a_after = pair, a
                 for j in range(5):
@@ -4516,4 +4516,46 @@ def test_first_green_view_turns_toward_blue_and_reaudits_before_deciding():
                 assert output.command.flags & CMD_SIDE_VALID
                 assert bool(output.command.flags & CMD_TARGET_RIGHT) == (other == "right")
             else:
-                assert output.command.opcode == CMD_RELEASE_BOTH
+                assert output.command.opcode == CMD_DISPERSE_PILE and output.command.flags & CMD_SIDE_VALID
+                assert output.command.arg_a == 0
+
+
+def test_outer_blue_and_inner_blue_both_turn_toward_gap_after_first_delivery():
+    from run_competition_rescue import audit_from_cargo
+    for side, target_x, blue_x, angle in (("right", 654, 949, -10), ("left", 386, 620, 10)):
+        for category in ("core_black", "green_supply", "injured_orange"):
+            m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+            m.first_common_delivered = True
+            m._select_batch(CargoBatch((1,), (category,), "injury" if category == "injured_orange" else "material"))
+            items = (cargo(1, category, target_x - 20, 350), cargo(2, "danger_cyan", blue_x - 20, 370))
+            a = audit_from_cargo(items, side_by_track={1: side, 2: side})
+            out = m._start_danger_release(a, stm(mode=37, flags=0x41), 1.)
+            assert out.command.opcode == CMD_DISPERSE_PILE and out.command.arg_a == angle
+
+
+def test_first_green_three_physical_attempts_and_topup_invalid_rollback_once():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import CMD_GREEN_TOPUP, TopupStep
+    from state_machine import GreenTopup
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    g, black = cargo(1, "green_supply", 450, 400), cargo(2, "core_black", 800, 400)
+    a = audit_from_cargo((g, black), side_by_track={1:"left",2:"right"})
+    m.disperse_attempts = m.separation_reviewed_attempt = 2
+    assert not m._separation_limit_reached(a)
+    m.disperse_attempts = 3
+    assert m._separation_limit_reached(a)
+    m.first_common_delivered = True
+    m.green_topup = GreenTopup(g, TopupStep.ADVANCE, 230)
+    m._set_state(CompetitionState.GREEN_TOPUP, 1.)
+    s = replace(stm(mode=23, flags=3), context_valid=True, context_matches=True,
+                accepted_command=CMD_GREEN_TOPUP, action_status=3, camera_pitch_cdeg=14000)
+    blue = cargo(3, "danger_cyan", 330, 460)
+    mixed = audit_from_cargo((g, blue), side_by_track={1:"right",3:"left"})
+    v = VisionSnapshot(frame_sequence=1,capture_audit=mixed,capture_cargo=(g,blue))
+    m.step(v,pose(),s,1.)
+    for n in range(2,9):
+        out=m.step(replace(v,frame_sequence=n,observed_monotonic_s=1+n*.15),pose(),s,1+n*.15)
+        if out.command and out.command.opcode == CMD_GREEN_TOPUP: break
+    assert out.command.opcode == CMD_GREEN_TOPUP and out.command.arg_a == TopupStep.ROLLBACK
+    assert not m.green_topup.review_forward
