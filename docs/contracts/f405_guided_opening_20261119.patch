@@ -1,0 +1,188 @@
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index 479079d..5192958 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -56,6 +56,7 @@
+ 
+ 
+ #define VISION_MSG_CONFIG         0x11U
++#define VISION_CONFIG_GUIDED_OPENING 0x47U
+ #define VISION_CONFIG_RESUME      0x52U
+ #define VISION_RESUME_FIRST_GREEN 0x01U
+ #define VISION_RESUME_ATTACK_DONE 0x02U
+@@ -304,6 +305,8 @@ typedef struct {
+   uint16_t yaw_offer_tag;
+   int16_t yaw_offer_cdeg;
+   bool config_resume;
++  bool guided_opening;
++  int16_t opening_axis_mm;
+   uint8_t sequence;
+   uint8_t cargo_counts;
+   uint8_t last_frame[VISION_FRAME_SIZE];
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index b41f02f..5ac5c19 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -308,6 +308,14 @@ static uint32_t approach_phase_path_mm;
+ static uint32_t tracking_report_generation;
+ static uint8_t mission_sequence;
+ static float start_target_heading_deg;
++static struct {
++  bool enabled, have_fix;
++  float goal_x, goal_y, nominal_heading;
++  float remaining_x, remaining_y;
++  int32_t origin_x, origin_y;
++  uint32_t last_fix_tick;
++  float speed;
++} opening_line;
+ static uint32_t scan_entry_report_generation;
+ static uint32_t nav_final_push_start_path_mm;
+ static uint32_t safe_enter_start_path_mm;
+@@ -1763,7 +1771,7 @@ static void task_enter(TaskState next, uint32_t now_ms)
+ 
+   if (next == TASK_START) {
+     const LocationPose pose = Location_GetPose();
+-    start_target_heading_deg = task_wrap_angle(
++    start_target_heading_deg = opening_line.enabled ? opening_line.nominal_heading : task_wrap_angle(
+         (float)pose.heading_mdeg * 0.001f + APP_START_TURN_DEG);
+     start_motion_phase = START_REVERSE;
+   } else if (next == TASK_SEARCH) {
+@@ -2026,6 +2034,7 @@ static void task_initialize(uint32_t now_ms, bool claws_already_stowed)
+   approach_phase_path_mm = 0U;
+   mission_sequence = 0U;
+   start_target_heading_deg = 0.0f;
++  memset(&opening_line, 0, sizeof(opening_line));
+   scan_entry_report_generation = 0U;
+   nav_final_push_start_path_mm = 0U;
+   safe_enter_start_path_mm = 0U;
+@@ -2405,9 +2414,57 @@ static void task_finish_start(uint32_t now_ms, bool center_reached)
+   task_enter(TASK_OPEN_CLAW, now_ms);
+ }
+ 
++/* Keep the field goal fixed. Between fused packets propagate its remaining
++ * vector by local wheel displacement, without restarting the speed ramp. */
++static void task_guided_start_forward(const LocationPose *pose, const VisionFusedPose *fix, uint32_t now_ms)
++{
++  const bool new_fix = fix->received && fix->tick_ms != opening_line.last_fix_tick &&
++      (int32_t)(fix->tick_ms - step_started_ms) >= 0;
++  if (new_fix) {
++    opening_line.last_fix_tick = fix->tick_ms;
++    opening_line.have_fix = (fix->status & VISION_POSE_VALID) != 0U;
++    if (opening_line.have_fix) {
++      opening_line.origin_x = pose->x_mm;
++      opening_line.origin_y = pose->y_mm;
++      opening_line.remaining_x = opening_line.goal_x - fix->x_mm;
++      opening_line.remaining_y = opening_line.goal_y - fix->y_mm;
++      if (hypotf(opening_line.remaining_x, opening_line.remaining_y) <= APP_START_CENTER_ARRIVAL_MM) {
++        TaskDiag_Event("START_GRIP", fix->x_mm, fix->y_mm, (int32_t)opening_line.goal_x,
++                       (int32_t)opening_line.goal_y, pose->heading_mdeg, 0U);
++        task_begin_close_claw(now_ms);
++        return;
++      }
++    }
++  }
++  const float dx = opening_line.remaining_x - (float)(pose->x_mm - opening_line.origin_x);
++  const float dy = opening_line.remaining_y - (float)(pose->y_mm - opening_line.origin_y);
++  const float remaining = hypotf(dx, dy);
++  if (remaining <= APP_GO_DISTANCE_TOLERANCE_MM ||
++      dx * opening_line.remaining_x + dy * opening_line.remaining_y <= 0.0f) {
++    task_finish_start(now_ms, false); /* Wheel endpoint without confirmed arrival: visual pickup. */
++    return;
++  }
++  const float yaw = pose->heading_mdeg * 0.001f;
++  const float error = task_abs(task_wrap_angle(opening_line.nominal_heading - yaw));
++  const float fraction = fminf(1.0f, fmaxf(0.0f, (error - APP_START_FORWARD_FULL_SPEED_ERROR_DEG) /
++      (APP_START_FORWARD_SLOW_SPEED_ERROR_DEG - APP_START_FORWARD_FULL_SPEED_ERROR_DEG)));
++  const float yaw_cap = APP_START_FORWARD_SPEED_MM_S + fraction *
++      (APP_START_FORWARD_LARGE_ERROR_SPEED_MM_S - APP_START_FORWARD_SPEED_MM_S);
++  const float slow_mm = APP_GO_DISTANCE_SLOWDOWN_MM * APP_START_FORWARD_SPEED_MM_S / APP_GO_DISTANCE_SPEED_MM_S;
++  const float target = fminf(yaw_cap, APP_GO_DISTANCE_MIN_SPEED_MM_S +
++      (APP_START_FORWARD_SPEED_MM_S - APP_GO_DISTANCE_MIN_SPEED_MM_S) * fminf(1.0f, remaining / slow_mm));
++  const float rate = target < opening_line.speed ? APP_GO_DISTANCE_DECEL_MM_S2 : APP_START_FORWARD_ACCEL_MM_S2;
++  opening_line.speed = task_step_toward(opening_line.speed, target, rate * APP_TASK_PERIOD_MS * .001f);
++  const float direction = atan2f(dy, dx) * 57.2957795f;
++  if (!Motor_MoveAngleHeading(opening_line.speed, task_wrap_angle(direction - yaw), opening_line.nominal_heading)) {
++    task_stop(TASK_FAULT_MOTOR, now_ms);
++    return;
++  }
++  task_status.motors_active = true;
++}
++
+ static void task_process_start(const VisionFusedPose *fused_pose, uint32_t now_ms)
+ {
+-  (void)fused_pose;
+   if ((uint32_t)(now_ms - state_started_ms) >= APP_START_TIMEOUT_MS) {
+     task_stop(TASK_FAULT_START_TIMEOUT, now_ms);
+     return;
+@@ -2468,11 +2525,25 @@ static void task_process_start(const VisionFusedPose *fused_pose, uint32_t now_m
+     task_status.motors_active = false;
+     const bool claws_ready = task_open_claws(now_ms);
+     if (now_ms - step_started_ms >= APP_START_SETTLE_MS && claws_ready) {
++      if (opening_line.enabled) {
++        const float angle = opening_line.nominal_heading * 0.01745329252f;
++        opening_line.origin_x = pose.x_mm;
++        opening_line.origin_y = pose.y_mm;
++        opening_line.remaining_x = 1000.0f * APP_START_FORWARD_DISTANCE_M * cosf(angle);
++        opening_line.remaining_y = 1000.0f * APP_START_FORWARD_DISTANCE_M * sinf(angle);
++        step_started_ms = now_ms;
++        Camera_SetAngle(APP_GRAB_VIEW_ANGLE);
++        camera_angle = (float)APP_GRAB_VIEW_ANGLE;
++      }
+       start_motion_phase = START_FORWARD;
+     }
+     return;
+   }
+   if (start_motion_phase == START_FORWARD) {
++    if (opening_line.enabled) {
++      task_guided_start_forward(&pose, fused_pose, now_ms);
++      return;
++    }
+     const MotorDistanceStatus result = Motor_MoveStartForward(start_target_heading_deg);
+     task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
+     if (distance_failed(result)) {
+@@ -5558,6 +5629,15 @@ static void task_start_configured_round(const VisionData *vision, uint32_t now_m
+   /* A recognized first delivery plus low byte 0 is a positive even count. */
+   search_yaw_direction = first_delivery_done &&
+       (vision->config_delivery_count & 1U) == 0U ? -1 : 1;
++  memset(&opening_line, 0, sizeof(opening_line));
++  if (vision->guided_opening && !vision->config_resume) {
++    const float sx = vision->start_zone == VISION_ZONE_1 || vision->start_zone == VISION_ZONE_3 ? -1.0f : 1.0f;
++    const float sy = vision->start_zone <= VISION_ZONE_2 ? 1.0f : -1.0f;
++    opening_line.enabled = true;
++    opening_line.goal_x = sx * vision->opening_axis_mm;
++    opening_line.goal_y = sy * vision->opening_axis_mm;
++    opening_line.nominal_heading = atan2f(-sy, -sx) * 57.2957795f;
++  }
+   Location_Reset((LocationStart)vision->start_zone);
+   const uint16_t word = vision->yaw_config_word;  /* validated by vision_save_config */
+   yaw_round_tag = word & VISION_YAW_ROUND_FLAG ? word & ~VISION_YAW_ROUND_FLAG : 0U;
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 5169757..c0df748 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -105,6 +105,8 @@ static void vision_save_config(const uint8_t *payload, uint8_t sequence)
+   const uint8_t color = payload[0];
+   const uint8_t zone = payload[1];
+   const bool resume = payload[2] == VISION_CONFIG_RESUME;
++  const bool guided = payload[2] == VISION_CONFIG_GUIDED_OPENING;
++  const int16_t axis = (int16_t)vision_u16_be(payload + 3);
+   const uint16_t yaw_word = vision_u16_be(payload + 6);
+   const bool yaw_word_ok = yaw_word == 0U || yaw_word > VISION_YAW_ROUND_FLAG ||
+       (yaw_word >= VISION_YAW_START_BASE && yaw_word <= VISION_YAW_START_BASE + 2U * VISION_YAW_MAX_CDEG);
+@@ -115,6 +117,7 @@ static void vision_save_config(const uint8_t *payload, uint8_t sequence)
+                  color == latest_data.color && zone == latest_data.start_zone &&
+                  (payload[3] & ~(VISION_RESUME_FIRST_GREEN | VISION_RESUME_ATTACK_DONE)) == 0U &&
+                  payload[5] == config_stop_sequence && sequence <= VISION_CONFIG_LAST_RETRY_SEQ) :
++                guided ? (axis >= -1500 && axis <= 1500 && payload[5] == 0U) :
+                 (payload[2] == 0U && payload[3] == 0U && payload[4] == 0U && payload[5] == 0U));
+   if (latest_data.config_ready || abort_pending || !valid) { return; }
+ 
+@@ -124,6 +127,8 @@ static void vision_save_config(const uint8_t *payload, uint8_t sequence)
+   latest_data.start_zone = zone;
+   latest_data.config_sequence = sequence;
+   latest_data.config_resume = resume;
++  latest_data.guided_opening = guided;
++  latest_data.opening_axis_mm = guided ? axis : 0;
+   latest_data.yaw_config_word = yaw_word;
+   latest_data.yaw_offer_tag = 0U;
+   latest_data.config_resume_flags = resume ? payload[3] : 0U;

@@ -66,7 +66,16 @@ public:
     static const Json &policy();
     Vec3 wheel_at(double t) const;
 
-    History wheels, pending, history;
+    struct PendingPose : Row {
+        PendingPose(Row row) : Row(row) {}
+        std::int64_t prior_ns = 0;
+        Vec2 reported_velocity{};
+        bool has_velocity = false, slight_excess = false;
+    };
+    struct StepOrigin { double t; Vec2 xy; };
+    NativeMotionValue<StepOrigin> before_soft_step;
+    History wheels, history;
+    std::deque<PendingPose> pending;
     YawHistory native_yaws;
     std::deque<Json> events;
     Json reference = nullptr;

@@ -252,16 +252,22 @@ def operator_start_request(control_path: Path | None, pose_path: Path, session_t
 
 
 
-def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None, wall_yaw_word=0):
+def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None, wall_yaw_word=0, opening_axis_mm=None):
     """Existing CONFIG sequence; remember the first write before any interruption."""
     for sequence in range(3):
         if not continue_start():
             return False
         frame = (config_frame(sequence, 0x11 if side == 'red' else 0x12, start_zone)
                  if resume_progress is None else resume_config_frame(sequence, side, start_zone, resume_progress))
-        if wall_yaw_word:
+        # The final existing retry also starts legacy firmware. A paired MCU
+        # keeps the first accepted CONFIG, even when this last copy arrives.
+        guided = opening_axis_mm is not None and resume_progress is None and sequence < 2
+        if guided or wall_yaw_word:
             from protocol import crc16_modbus
-            body = frame[2:10] + wall_yaw_word.to_bytes(2,'big')
+            body = bytearray(frame[2:12])
+            if guided:
+                body[4:7] = b'G' + opening_axis_mm.to_bytes(2, 'big', signed=True)
+            body[8:10] = wall_yaw_word.to_bytes(2, 'big')
             frame = frame[:2] + body + crc16_modbus(body).to_bytes(2,'little') + frame[-1:]
         write_command_frame(command_path, frame)
         on_sent()
@@ -3832,6 +3838,7 @@ def main() -> int:
     warm_status_error_reported = False
     next_operator_poll = 0.0
     wall_yaw_word = 0
+    opening_axis_mm = None
     last_start_reference = None
     resume_progress = None
 
@@ -3854,7 +3861,7 @@ def main() -> int:
 
     def prepare_operator_start():
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
-        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress, wall_yaw_word
+        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress, wall_yaw_word, opening_axis_mm
         nonlocal wheel_policy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
         nonlocal recent_carried_track_ids, recent_carried_pitch_cdeg
@@ -3921,6 +3928,10 @@ def main() -> int:
         if wheel_policy is not None:
             wheel_policy.round_token = last_start_reference
         wall_yaw_word = request['reference'].get('wall_yaw_config_word',0)
+        center = request['reference'].get('start_center_xy_m')
+        opening_axis_mm = (round(1000 * (abs(center[0]) - 1.70 / math.sqrt(2)))
+                           if center and resume_progress is None and mission.settings.initial_stash_enabled else None)
+        mission.opening_direct_enabled = opening_axis_mm is not None
         events.write('warm_reference_bound', dict(session_token=args.reset_session_token,
             reference=request['reference'],side=side,start_zone=start_zone))
 
@@ -3958,7 +3969,7 @@ def main() -> int:
             nonlocal config_sent
             config_sent = True
         if not publish_start_config(args.command_file,side,start_zone,
-                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress, wall_yaw_word):
+                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress, wall_yaw_word, opening_axis_mm):
             return
         competition_started = True
         warm_ready_written = write_warm_status()
@@ -3968,6 +3979,7 @@ def main() -> int:
             "first_vision_sequence": vision_sequence,
             "start_basis": "warm_operator_start_and_reference_bound" if args.wait_for_operator else "explicit_session_start_and_first_inference",
             "resume_progress": resume_progress,
+            "opening_design_axis_mm": opening_axis_mm,
         })
         planner.set_paused(False, reason="camera_recovery")
         planner.start()

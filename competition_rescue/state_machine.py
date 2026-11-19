@@ -796,6 +796,7 @@ class CompetitionMission:
         self.stash_zero_tx_baseline: int | None = None
         self.stash_handoff_hold_tx_baseline: int | None = None
         self.first_common_delivered = False
+        self.opening_direct_enabled = False
         self.resume_search_after_start = False
         self.first_green_core_evidence: tuple[int, int, int, tuple[int, int, int, int]] | None = None
         self.first_green_bump_used = False
@@ -3345,6 +3346,8 @@ class CompetitionMission:
             ):
                 empty_audit = self.pending_audit
                 post_grab_empty = self.post_grab_audit_active
+                opening_empty = (post_grab_empty and self.selected_batch is not None and
+                                 self.selected_batch.initial_stash and not self.initial_stash_done)
                 self._clear_selected_batch()
                 self._clear_cluster_context(reset_attempts=True)
                 self.post_grab_audit_active = False
@@ -3362,7 +3365,7 @@ class CompetitionMission:
                 self._clear_pending_audit()
                 if not stm.gripper_closed:
                     self._finish_abandoned_batch_budget()
-                self._set_state(CompetitionState.SEARCH, now)
+                self._set_state(CompetitionState.INITIAL_OBSERVE if opening_empty else CompetitionState.SEARCH, now)
                 return CompetitionOutput(
                     self.state,
                     self._hold(),
@@ -8207,6 +8210,12 @@ class CompetitionMission:
             )
 
         if self.state == CompetitionState.WAIT_START:
+            if (self.opening_direct_enabled and not self.initial_stash_done and
+                    stm.mode == STM_MODE_POST_GRAB_AUDIT and stm.gripper_closed and stm.claw_visible):
+                self.initial_claw_check_started = True
+                self._select_batch(CargoBatch((), (), "stash", initial_stash=True))
+                self._begin_post_grab_audit(vision, now)
+                return replace(self._audit_output(vision, stm, now), event="opening_direct_grab_review")
             if self._start_ready(pose, stm):
                 if self.resume_search_after_start:
                     self.resume_search_after_start = False

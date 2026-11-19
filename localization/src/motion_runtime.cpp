@@ -391,7 +391,7 @@ public:
                 if(!geometry_only){raw_copy=window_values(poses_,first,last);history_copy=window_values(motion_.history,first,last);}
             }else if(kind=="histories"){
                 raw_copy=poses_;yaw_copy=yaws_;history_copy=motion_.history;wheel_copy=motion_.wheels;
-                native_yaw_copy=motion_.native_yaws;pending_copy=motion_.pending;
+                native_yaw_copy=motion_.native_yaws;pending_copy.assign(motion_.pending.begin(),motion_.pending.end());
                 if(robust_enabled_)initialization_copy=initialization_history();
             }
             if(consume)motion_.events.clear();

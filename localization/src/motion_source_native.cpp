@@ -11,6 +11,7 @@ using Source = NativeMotionSource;
 using Vec2 = Source::Vec2;
 using Vec3 = Source::Vec3;
 using Json = Source::Json;
+constexpr double max_center_speed = 1.5;  // m/s in the field plane
 
 template<class T> void append_bounded(std::deque<T> &rows, T row, std::size_t capacity = 4096) {
     if (rows.size() == capacity) rows.pop_front();
@@ -118,6 +119,7 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
         if (suppressed) { phase_wheel_reason = why; reason = why; }
         return;
     }
+    before_soft_step.reset();
     phase_translation_held = false;
     phase_displacement_reference.reset();
     const auto previous_mode = mode;
@@ -163,6 +165,7 @@ void NativeMotionSource::set_wheel_suppressed(bool suppressed, const std::string
 }
 
 void NativeMotionSource::configure(const Json &configuration) {
+    before_soft_step.reset();
     const bool keep_sdk_frame = robust_odometry_enabled && configuration.value("robust_odometry_enabled", false) &&
         configuration.value("reference_coordinate_source", std::string()) == "selected_odometry_local";
     const Basis kept_sdk_basis = sdk_basis;
@@ -214,6 +217,7 @@ void NativeMotionSource::configure(const Json &configuration) {
 }
 
 void NativeMotionSource::reset_sdk_session() {
+    before_soft_step.reset();
     if (!robust_odometry_enabled) return;
     pending.clear(); continuous_poses.clear(); previous_valid_pose = nullptr; latest_pose = nullptr;
     raw_sdk_frame_poses.clear(); sdk_frame_translation = {{0., 0.}}; sdk_frame_translation_pending = true;
@@ -242,6 +246,7 @@ NativeMotionSource::Vec2 NativeMotionSource::raw_sdk_point(const Vec2 &point) co
 }
 
 void NativeMotionSource::sdk_unavailable(const std::string &why) {
+    before_soft_step.reset();
     if (!robust_odometry_enabled) return;
     sdk_stream_available = false; t265_suspect = true; sdk_adopted = false;
     pending.clear(); previous.reset(); window.reset(); recovery_window.reset();
@@ -270,10 +275,19 @@ void NativeMotionSource::pose(const Json &p) {
     const Vec2 velocity = have_velocity
         ? Vec2{{p.at("vx_local_mps").get<double>(), p.at("vy_local_mps").get<double>()}}
         : Vec2{{0., 0.}};
-    constexpr double max_center_speed = 1.2;  // m/s, planar chassis centre
     const bool speed_exceeded = have_velocity && finite(velocity) && norm2(velocity) > max_center_speed;
     bool position_exceeded = last_tracked_ns && last_tracked_xy && t > *last_tracked_ns &&
         norm2(subtract(xy, *last_tracked_xy)) > max_center_speed * ((t - *last_tracked_ns) / 1e9);
+    PendingPose sample_row(Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
+    sample_row.has_velocity = have_velocity && finite(velocity);
+    sample_row.reported_velocity = velocity;
+    if (last_tracked_ns) sample_row.prior_ns = *last_tracked_ns;
+    if (position_exceeded && !speed_exceeded && sample_row.has_velocity && confidence > 0 &&
+            last_confidence && *last_confidence > 0 && !phase_wheel_suppressed && !wheel_suspect &&
+            mode == "T265_WITH_WHEEL_TAIL" && anchor && previous && last_tracked_xy) {
+        const double dt = (t - sample_row.prior_ns) / 1e9;
+        sample_row.slight_excess = norm2(subtract(xy, *last_tracked_xy)) <= max_center_speed * dt + .001;
+    }
     if (phase_wheel_suppressed && confidence > 0 && last_confidence && *last_confidence > 0 &&
             last_raw_ns && last_raw_xy && phase_previous_frame && phase_previous_velocity &&
             p.count("frame_number") && p.at("frame_number").get<std::uint64_t>() == *phase_previous_frame + 1 &&
@@ -303,7 +317,7 @@ void NativeMotionSource::pose(const Json &p) {
         ? norm2(subtract(xy, *last_raw_xy)) : 0.;
     last_raw_ns = t; last_raw_xy = xy; last_confidence = confidence;
     if (confidence > 0) { last_tracked_ns = t; last_tracked_xy = xy; }
-    if (!reference.is_null() && confidence > 0 && (speed_exceeded || position_exceeded)) {
+    if (!reference.is_null() && confidence > 0 && (speed_exceeded || (position_exceeded && !sample_row.slight_excess))) {
         const Vec2 trusted = history.empty() ? xy_json(reference.at("pose_origin")) : Vec2{{history.back()[1], history.back()[2]}};
         if (phase_wheel_suppressed) {
             if (!phase_translation_held)
@@ -363,7 +377,7 @@ void NativeMotionSource::pose(const Json &p) {
     }
     if (resume_anchor_ns && confidence > 0 && mode != "WHEEL_FALLBACK") publish_vio(t, xy);
     if (pending.size() == 4096) ++pending_pose_drops;
-    append_bounded(pending, Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
+    append_bounded(pending, sample_row);
     if (confidence <= 0 && anchor) fallback("SDK_tracking_lost", t);
     else if (mode == "T265_PRIMARY_WHEEL_SUSPECT" && raw_step > .05)
         fallback("SDK_single_step_jump_while_wheel_suspect", t);
@@ -440,6 +454,7 @@ void NativeMotionSource::isolate_at_unload() {
 }
 
 void NativeMotionSource::fallback(const std::string &why, double t) {
+    before_soft_step.reset();
     if (robust_odometry_enabled) { robust_fallback(why, t); return; }
     if (phase_wheel_suppressed) return;
     if (mode == "T265_PRIMARY_WHEEL_SUSPECT" && !wheels.empty() && !history.empty()) {
@@ -478,7 +493,7 @@ void NativeMotionSource::process() {
         mode = "T265_WITH_WHEEL_TAIL"; reason = "paired_field_reference"; last_paired_ns = ref_ns;
     }
     while (!pending.empty() && pending.front()[0] <= wheels.back()[0]) {
-        const Row p = pending.front(); pending.pop_front();
+        const PendingPose p = pending.front(); pending.pop_front();
         const double t = p[0]; const Vec2 xy{{p[1], p[2]}}; const int confidence = static_cast<int>(p[3]);
         if (t < wheels.front()[0]) continue;
         const Vec3 w = wheel_at(t);
@@ -496,13 +511,39 @@ void NativeMotionSource::process() {
             const double conflict = norm2(subtract(subtract(xy, base.xy), subtract(first2(w), first2(base.wheel))));
             last_conflict_m = std::max(step, conflict);
             const bool bad = step > .05 || conflict > .05;
-            if (bad) {
-                if (mode != "T265_PRIMARY_WHEEL_SUSPECT") fallback("T265_wheel_displacement_conflict", t);
+            // Leave previous/window in raw SDK coordinates so a series of
+            // repaired intervals cannot hide a cumulative wheel discrepancy.
+            bool reject_soft = false, wheel_bridge = false;
+            if ((p.slight_excess || before_soft_step) && mode == "T265_WITH_WHEEL_TAIL") {
+                const double dt = (t - p.prior_ns) / 1e9;
+                const Vec2 dw = subtract(first2(w), first2(prev.wheel));
+                const bool paired = !wheel_suspect && last_paired_ns && p.prior_ns == *last_paired_ns &&
+                    wheels.front()[0] <= p.prior_ns && dt > 0. && p.has_velocity;
+                const bool velocities_agree = paired && std::hypot(dw[0] / dt - p.reported_velocity[0],
+                    dw[1] / dt - p.reported_velocity[1]) <= .15;
+                reject_soft = !velocities_agree || (before_soft_step && (p.slight_excess ||
+                    norm2(subtract(xy, before_soft_step->xy)) > max_center_speed * (t-before_soft_step->t) / 1e9));
+                if (!bad && !reject_soft) {
+                    wheel_bridge = true;
+                    if (!before_soft_step) {
+                        before_soft_step = StepOrigin{static_cast<double>(p.prior_ns), prev.xy};
+                        event({{"event","T265_single_step_using_wheel"},{"sample_monotonic_ns",p[0]}});
+                    } else {
+                        // The wheel tail already covered both intervals. Resume
+                        // subsequent SDK increments from this exact wheel pose.
+                        bias = subtract(add(*anchor, subtract(first2(w), *anchor_wheel)), xy);
+                        before_soft_step.reset();
+                    }
+                }
+            }
+            if (bad || reject_soft) {
+                if (mode != "T265_PRIMARY_WHEEL_SUSPECT") fallback(reject_soft ?
+                    "T265_implausible_center_speed" : "T265_wheel_displacement_conflict", t);
                 else { recovery_window.reset(); recovery_travel = 0.; }
                 window = Pair{xy, w};
             } else if (mode == "T265_WITH_WHEEL_TAIL") {
-                anchor = add(xy, bias); anchor_wheel = first2(w);
-                if (w[2] - base.wheel[2] >= .25) window = Pair{xy, w};
+                if (!wheel_bridge) { anchor = add(xy, bias); anchor_wheel = first2(w); }
+                if (!wheel_bridge && w[2] - base.wheel[2] >= .25) window = Pair{xy, w};
             } else {
                 if (!recovery_window) recovery_window = Pair{xy, w};
                 const Pair recovery = *recovery_window;
@@ -628,7 +669,7 @@ void NativeMotionSource::robust_pose(const Json &p) {
         }
     }
     if (pending.size() == 4096) ++pending_pose_drops;
-    append_bounded(pending, Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}});
+    append_bounded(pending, PendingPose(Row{{static_cast<double>(t), xy[0], xy[1], static_cast<double>(confidence)}}));
     robust_process();
 }
 

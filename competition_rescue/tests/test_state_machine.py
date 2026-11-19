@@ -4610,3 +4610,21 @@ def test_blue_side_priority_counts_only_eligible_cargo_before_tiebreak():
         assert m._preferred_keep_side(audit([b,g,g],[g]))=="right"
         assert m._preferred_keep_side(audit([g],[b,g,g]))=="left"
         assert m._preferred_keep_side(audit([b,k,o],[b,g]))==("left" if first_done else "right")
+
+
+def test_opening_direct_close_uses_actual_post_grab_audit_or_legacy_search():
+    m = CompetitionMission(CompetitionSettings(side="red"))
+    m.opening_direct_enabled = True
+    seen = cargo(3, "green_supply", 600, 400)
+    a = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
+    closed = replace(stm(mode=23, flags=3), camera_pitch_cdeg=14000)
+    for i in range(1,6):
+        v = VisionSnapshot(frame_sequence=i, observed_monotonic_s=i*.15, capture_audit=a, capture_cargo=(seen,))
+        out = m.step(v,pose(),closed,i*.15)
+        if m.state == CompetitionState.AUDIT_CONFIRM: break
+    assert m.selected_batch.initial_stash and m.pending_audit_release_context == "post_grab_valid"
+    assert out.command.opcode == CMD_CARGO_AUDIT and m.selected_batch.track_ids == (3,)
+    fallback = CompetitionMission(CompetitionSettings(side="red"))
+    fallback.opening_direct_enabled = True
+    assert fallback.step(VisionSnapshot(), pose(), stm(), 0.).state == CompetitionState.INITIAL_OBSERVE
+    assert not fallback.initial_claw_check_started
