@@ -1,0 +1,71 @@
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index ea49012..b20a622 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -1196,6 +1196,15 @@ static TaskCommandReject task_disperse_reject_reason(
+        (audit_last_total_count < 2U) || !task_audit_has_green())) {
+     return TASK_COMMAND_REJECT_AUDIT;
+   }
++  /* The upper 140-degree image distinguishes a center green in a mixed side.
++   * The compact audit can encode that side as UNKNOWN. */
++  if (command != NULL && command->command == VISION_CMD_DISPERSE_PILE &&
++      command->target_x_mm != 0 &&
++      (first_delivery_done || audit_initial_stash || task_status.gripper_closed ||
++       (state != TASK_GRAB_OBSERVE && state != TASK_DISPERSE_READY) ||
++       !task_audit_has_danger() || audit_last_total_count != 2U)) {
++    return TASK_COMMAND_REJECT_AUDIT;
++  }
+   if (!task_disperse_keep_side_valid(command)) {
+     return TASK_COMMAND_REJECT_SIDE;
+   }
+@@ -6938,7 +6947,9 @@ static void task_process_remote_action(const VisionMissionCommand *command,
+           /* When the host cannot distinguish left from right, do not ram or
+            * guess a claw. Shift the view by a small in-place turn, then ask
+            * for a fresh 140-degree claw audit. */
+-          (void)task_remote_turn(APP_DISPERSE_OBSERVE_TURN_DEG, now_ms);
++          const float turn_deg = remote_action.arg_a == 0 ?
++              APP_DISPERSE_OBSERVE_TURN_DEG : (float)remote_action.arg_a;
++          (void)task_remote_turn(turn_deg, now_ms);
+         } else if (remote_action.phase == 1U) {
+           if (task_scan_camera_to(APP_GRAB_VIEW_ANGLE, now_ms)) {
+             task_remote_action_advance(now_ms);
+@@ -8346,6 +8357,8 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+   reject_stage = 7U;
+   if (separation_request && new_action && state == TASK_REMOTE_ACTION &&
+       remote_action.orange_core_82) goto rejected;
++  if (incoming.command == VISION_CMD_DISPERSE_PILE && !new_action &&
++      incoming.target_x_mm != remote_action.arg_a) goto rejected;
+   if (separation_request && !new_action &&
+       incoming.heading_cdeg != (remote_action.orange_core_82 ? VISION_SEPARATION_ORANGE_CORE_82 : 0U))
+     goto rejected;
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 4ccb79b..7fbf784 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -307,7 +307,10 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+   }
+   if (code == VISION_CMD_DISPERSE_PILE || code == VISION_CMD_RELEASE_LEFT ||
+       code == VISION_CMD_RELEASE_RIGHT) {
+-    if (arg_a != 0 || arg_b != 0 ||
++    const bool view_turn = code == VISION_CMD_DISPERSE_PILE &&
++        flags == (VISION_CMD_VALID | (flags & VISION_CMD_RED_SIDE)) &&
++        (arg_a == 10 || arg_a == -10) && heading == 0U;
++    if ((arg_a != 0 && !view_turn) || arg_b != 0 ||
+         (heading != 0U && heading != VISION_SEPARATION_ORANGE_CORE_82)) goto rejected_payload;
+     if (code == VISION_CMD_DISPERSE_PILE && (flags & VISION_CMD_KEEP_ORANGE) != 0U &&
+         (flags & VISION_CMD_SIDE_VALID) == 0U) goto rejected_payload;
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index c478d53..39cb553 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -386,7 +386,9 @@ def mission_frame(
+                 heading_cdeg != heading):
+             raise ValueError("orange filter requires black side, 100mm, lift86 and the site heading mode")
+     if command in (CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT):
+-        if target_x_mm or target_y_mm or heading_cdeg not in (0, SEPARATION_ORANGE_CORE_82):
++        view_turn = (command == CMD_DISPERSE_PILE and flags in (CMD_VALID, CMD_VALID | CMD_RED_SIDE)
++                     and target_x_mm in (-10, 10) and heading_cdeg == 0)
++        if (target_x_mm and not view_turn) or target_y_mm or heading_cdeg not in (0, SEPARATION_ORANGE_CORE_82):
+             raise ValueError("invalid separation lift payload")
+         if command == CMD_DISPERSE_PILE and flags & CMD_KEEP_ORANGE and not flags & CMD_SIDE_VALID:
+             raise ValueError("orange separation requires an explicit retained side")

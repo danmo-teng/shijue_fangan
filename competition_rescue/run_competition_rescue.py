@@ -94,6 +94,7 @@ from capture_grip_bands import GripBands, CLASSES as GRIP_CLASSES  # noqa: E402
 from capture_roi import (  # noqa: E402
     bbox_capture_roi_overlap_ratio,
     CaptureRois,
+    CLAW_SPLIT_X,
     bbox_in_capture_roi,
     capture_side_for_bbox,
     capture_overlap_for_class,
@@ -507,8 +508,24 @@ def audit_from_cargo(
         any(item.class_name == "injured_orange" for item in right) and
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
+    green_blue_view = None
+    if len(visible) == 2 and all_names == {"green_supply", "danger_cyan"} and not remembered_items:
+        green, blue = visible
+        if green.class_name != "green_supply":
+            green, blue = blue, green
+        gx, _, gw, _ = green.bbox
+        bx, _, bw, _ = blue.bbox
+        if ((gx >= CLAW_SPLIT_X and bx + bw <= CLAW_SPLIT_X and green in right and blue in left) or
+                (gx + gw <= CLAW_SPLIT_X and bx >= CLAW_SPLIT_X and green in left and blue in right)):
+            green_blue_view = "separated"
+        elif gx < CLAW_SPLIT_X < gx + gw and not unassigned:
+            if bx + bw <= CLAW_SPLIT_X and blue in left:
+                green_blue_view = "left"
+            elif bx >= CLAW_SPLIT_X and blue in right:
+                green_blue_view = "right"
     isolated_track_ids = isolated_track_ids or set()
     return CargoAudit(
+        green_blue_view=green_blue_view,
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
         left_class_counts=tuple(sorted(Counter(item.class_name for item in left).items())),
         right_class_counts=tuple(sorted(Counter(item.class_name for item in right).items())),

@@ -4466,3 +4466,54 @@ def test_empty_stations_one_and_three_both_switch_at_540():
     m.search_site_turn_deg = 540
     m._handle_search(high,at,ready,1.7)
     assert m.search_transfer_route.target_point == 1 and not m.search_transfer_route.high_start
+
+
+def test_first_green_view_turns_toward_blue_and_reaudits_before_deciding():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import CMD_SIDE_VALID
+
+    for sign, side, other in ((10, "left", "right"), (-10, "right", "left")):
+        green = replace(cargo(87, "green_supply", 0, 0),
+                        bbox=(494 if sign > 0 else 498, 199, 288, 285))
+        blue = replace(cargo(88, "danger_cyan", 0, 0),
+                       bbox=(243 if sign > 0 else 758, 221, 279, 265))
+        pair = (green, blue)
+        a = audit_from_cargo(pair, side_by_track={87: side, 88: side})
+        assert a.green_blue_view == side
+        for resolved in (True, False):
+            m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+            m._select_batch(CargoBatch((87,), ("green_supply",), "material"))
+            s = replace(stm(mode=37, flags=0x41), camera_pitch_cdeg=14000)
+            v = VisionSnapshot(frame_sequence=562, capture_audit=a, capture_cargo=pair)
+            output = m._start_danger_release(a, s, 1.0)
+            for n in range(1 if resolved else 2):
+                assert output.command.arg_a == sign and output.command.opcode == CMD_DISPERSE_PILE
+                assert not output.command.flags & CMD_SIDE_VALID
+                output.command.to_frame(n)
+                done = replace(s, mode=35, context_valid=True, context_matches=True,
+                               accepted_command=CMD_DISPERSE_PILE, action_status=3)
+                m._disperse_output(v, replace(done, action_status=1), 2.0+n)
+                assert m.first_green_view_deg == n * sign
+                m._disperse_output(v, done, 2.1+n)
+                assert m.first_green_view_deg == (n+1) * sign and m.disperse_attempts == 0
+                # Exercise the actual post-turn stable audit and its STM handoff.
+                if resolved:
+                    pair_after = (replace(green, bbox=(700 if sign > 0 else 300, 199, 200, 285)), blue)
+                    a_after = audit_from_cargo(pair_after, side_by_track={87:other, 88:side})
+                    assert a_after.green_blue_view == "separated"
+                else:
+                    pair_after, a_after = pair, a
+                for j in range(5):
+                    now = 2.2+n+j*.12
+                    v = replace(v, frame_sequence=v.frame_sequence+1, observed_monotonic_s=now,
+                                capture_audit=a_after, capture_cargo=pair_after)
+                    output = m.step(v, pose(), replace(s, mode=21), now)
+                    if m.state == CompetitionState.AUDIT_CONFIRM:
+                        ack = replace(relay_stm(output, flags=0x41), camera_pitch_cdeg=14000)
+                        output = m.step(v, pose(), ack, now+.01)
+                        break
+            if resolved:
+                assert output.command.flags & CMD_SIDE_VALID
+                assert bool(output.command.flags & CMD_TARGET_RIGHT) == (other == "right")
+            else:
+                assert output.command.opcode == CMD_RELEASE_BOTH
