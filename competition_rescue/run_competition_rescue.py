@@ -531,7 +531,11 @@ def audit_from_cargo(
             if ((blue in left and wanted in right and bc < CLAW_SPLIT_X < wc) or
                     (wanted in left and blue in right and wc < CLAW_SPLIT_X < bc)):
                 midline_target = wanted.class_name
-        if ((wx >= CLAW_SPLIT_X and bx + bw <= CLAW_SPLIT_X and wanted in right and blue in left) or
+        # A live green and blue assigned to opposite claws can be sorted even
+        # when their boxes cross the image midline after a view turn.
+        green_blue_split = wanted.class_name == "green_supply" and len(left) == len(right) == 1
+        if (green_blue_split or
+                (wx >= CLAW_SPLIT_X and bx + bw <= CLAW_SPLIT_X and wanted in right and blue in left) or
                 (wx + ww <= CLAW_SPLIT_X and bx >= CLAW_SPLIT_X and wanted in left and blue in right)):
             blue_pair_geometry = "separated"
         elif wanted.center_px[0] != blue.center_px[0]:

@@ -4562,6 +4562,42 @@ def test_visible_first_green_stops_after_five_accepted_separations():
     assert m._separation_limit_reached(a)
 
 
+def test_stopped_green_blue_pair_keeps_green_after_two_turns_even_if_boxes_cross():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import CMD_SIDE_VALID
+
+    # Red 1, frame 2652. Both boxes cross x=640 after the second right turn.
+    for mirror in (False, True):
+        def block(track_id, name, x, y, w, h):
+            return replace(cargo(track_id, name, 0, 0), bbox=(1280-x-w if mirror else x, y, w, h))
+        green = block(222, "green_supply", 532, 247, 247, 250)
+        blue = block(223, "danger_cyan", 516, 86, 228, 175)
+        pair = (green, blue)
+        green_side, blue_side = ("left", "right") if mirror else ("right", "left")
+        audit = audit_from_cargo(pair, side_by_track={222: green_side, 223: blue_side})
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((222,), ("green_supply",), "material"))
+        m.state = CompetitionState.CAPTURE_AUDIT
+        m.cargo_recheck_pending = True
+        m.cargo_recheck_context = "disperse_observe"
+        m.disperse_context = "blue_pair_view"
+        m.blue_pair_turns = 2 if mirror else -2
+        status = replace(stm(mode=21, flags=0x41), camera_pitch_cdeg=14000)
+        for j in range(5):
+            now = 2.0 + j*.12
+            view = VisionSnapshot(frame_sequence=2652+j, observed_monotonic_s=now,
+                                  capture_audit=audit, capture_cargo=pair)
+            out = m.step(view, pose(), status, now)
+            if m.state == CompetitionState.AUDIT_CONFIRM:
+                ack = replace(relay_stm(out, flags=0x41), camera_pitch_cdeg=14000)
+                out = m.step(view, pose(), ack, now+.01)
+                break
+        assert out.command.opcode == CMD_DISPERSE_PILE and out.command.flags & CMD_SIDE_VALID
+        assert bool(out.command.flags & CMD_TARGET_RIGHT) == (green_side == "right")
+        assert out.command.arg_a == out.command.arg_b == out.command.aux == 0
+
+
 def test_outer_blue_brakes_same_turn_while_boxes_still_overlap_then_reaudits():
     from run_competition_rescue import audit_from_cargo
     from protocol import CMD_SIDE_VALID
