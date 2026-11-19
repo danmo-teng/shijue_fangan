@@ -1812,7 +1812,7 @@ class CompetitionMission:
         signature = ("INVALID", (payload or self._audit_payload(audit)).semantic_signature)
         if audit.black_blue_plan and self.first_common_delivered and not self.post_grab_audit_active:
             plan = audit.black_blue_plan
-            signature += (("black_clearance", plan.keep_side, plan.turn_deg == 0, plan.turn_deg is None),)
+            signature += (("black_clearance", plan.keep_side, plan.turn_deg == 0),)
         # A confirmed invalid grab can drive one claw or a lateral move.
         if (audit.blue_pair_geometry and
                 self.state in {CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM} and
@@ -4289,7 +4289,7 @@ class CompetitionMission:
             black_pair = dict(audit.class_counts) == {"core_black": 1, "danger_cyan": 1}
             if black_pair and self.first_common_delivered:
                 plan = audit.black_blue_plan
-                if (plan is None or plan.turn_deg is None or
+                if (plan is None or
                         (self.black_turn_keep_side is not None and plan.keep_side != self.black_turn_keep_side) or
                         (plan.turn_deg != 0 and self.black_turn_requests >= 2)):
                     return self._start_capture_abandon(audit, stm, now)

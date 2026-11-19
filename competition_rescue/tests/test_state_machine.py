@@ -4629,6 +4629,7 @@ def test_pregrab_lost_green_with_visible_replacement_relooks_in_place():
 
 def test_black_clearance_photos_and_two_bounded_turns():
     from copy import deepcopy
+    from black_blue_clearance import black_blue_plan
     from run_competition_rescue import audit_from_cargo
     from protocol import CMD_SIDE_VALID, SEPARATION_BLACK_CLEARANCE
 
@@ -4644,6 +4645,10 @@ def test_black_clearance_photos_and_two_bounded_turns():
         m = CompetitionMission(CompetitionSettings(side="blue",initial_stash_enabled=False))
         m.first_common_delivered = True
         m._select_batch(CargoBatch((1,), ("core_black",), "material"))
+        # Move the black box toward blue without swapping their order.
+        # That used to hit a photo-specific reach limit, even with blue unchanged.
+        moved_core = (core[0] + angle * 6, core[1], core[2], core[3])
+        assert black_blue_plan(moved_core, blue) == black_blue_plan(core, blue)
         ready = audit()
         assert ready.black_blue_plan.keep_side == side and ready.black_blue_plan.turn_deg == 0
         status = replace(stm(mode=37,flags=0x41),camera_pitch_cdeg=14000)
