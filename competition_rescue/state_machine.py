@@ -308,6 +308,7 @@ class CargoAudit:
     near_claw_green_id: int | None = None
     near_claw_frame: int = 0
     first_green_core_conflict: bool = False
+    stacked_green_keep: tuple[str, int] | None = None  # Chosen claw and source frame.
     black_blue_plan: BlackBluePlan | None = None
     outer_blue_target: str | None = None
     midline_target: str | None = None
@@ -1051,6 +1052,7 @@ class CompetitionMission:
         self.orange_core_filter_attempted = False
         self.orange_gate_filter_command = None
         self.blue_pair_turns = 0
+        self.stacked_green_used = False
         self.black_turn_keep_side = None
         self.black_turn_requests = 0
         self.blue_pair_live_target = None
@@ -1530,6 +1532,7 @@ class CompetitionMission:
         if self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.task_generation += 1
             self.blue_pair_turns = 0
+            self.stacked_green_used = False
             self.black_turn_keep_side = None
             self.black_turn_requests = 0
             self.blue_pair_live_target = None
@@ -1814,6 +1817,8 @@ class CompetitionMission:
         if audit.black_blue_plan and self.first_common_delivered and not self.post_grab_audit_active:
             plan = audit.black_blue_plan
             signature += (("black_clearance", plan.keep_side, plan.turn_deg == 0),)
+        if audit.stacked_green_keep and not self.stacked_green_used:
+            signature += (("stacked_green_keep", audit.stacked_green_keep[0]),)
         # A confirmed invalid grab can drive one claw or a lateral move.
         if (audit.blue_pair_geometry and
                 self.state in {CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM} and
@@ -2439,6 +2444,7 @@ class CompetitionMission:
         *,
         first_green_bump: bool = False,
         black_clearance: bool = False,
+        empty_side_frame: int | None = None,
         keep_count: int = 0,
         audit: CargoAudit | None = None,
     ) -> None:
@@ -2446,7 +2452,9 @@ class CompetitionMission:
         self.transport_load_reuse_active = False
         self.separation_request_epoch += 1
         self.separation_request_counted = False
-        near_keep = audit is not None and audit.near_keep_side == keep_side and keep_side is not None
+        if empty_side_frame is None and audit is not None and keep_side is not None and audit.near_keep_side == keep_side:
+            empty_side_frame = audit.near_claw_frame
+        near_keep = empty_side_frame is not None
         self.separation_start_audit = audit if keep_count > 0 or near_keep or black_clearance else None
         self.separation_wanted_class = None
         if audit is not None and keep_side is not None and self.first_common_delivered:
@@ -2489,7 +2497,7 @@ class CompetitionMission:
         elif not near_keep and audit is not None and self._orange_core_separation(audit, keep_side):
             aux = SEPARATION_ORANGE_CORE_82
         self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags, aux=aux,
-            source_vision_frame=audit.near_claw_frame if near_keep else None)
+            source_vision_frame=empty_side_frame)
         self.disperse_initial_ack = stm.acknowledged_sequence if stm.fresh else None
         self.disperse_relay_tx_baseline = stm.relay_mission_tx_frames
         self.disperse_command_accepted = False
@@ -3592,6 +3600,7 @@ class CompetitionMission:
             final_release = self.pending_audit_final
             release_context = self.pending_audit_release_context
             if (not valid and self._reviewing_blue_pair_turn() and abs(self.blue_pair_turns) == 2 and
+                    not (audit.stacked_green_keep and not self.stacked_green_used) and
                     not self._blue_pair_separated(audit) and not self._first_green_still_visible(audit)):
                 self._clear_pending_audit()
                 return self._start_capture_abandon(audit, stm, now)
@@ -4292,6 +4301,18 @@ class CompetitionMission:
                 not self.safe_sweep_reaudit_active and not self._separation_limit_reached(audit)):
             blue = audit.blue_pair_geometry
             reviewing = self._reviewing_blue_pair_turn()
+            if audit.stacked_green_keep and not self.stacked_green_used:
+                side, frame = audit.stacked_green_keep
+                count = audit.left_count if side == "left" else audit.right_count
+                self.stacked_green_used = True
+                self._set_state(CompetitionState.DISPERSE, now)
+                self._arm_disperse(stm, side, keep_count=count, audit=audit,
+                                   empty_side_frame=frame if count == 0 else None)
+                self.separation_wanted_class = "green_supply"
+                return CompetitionOutput(self.state, self.disperse_command,
+                    "绿蓝前后叠，本批拨一次：" + ("左爪保绿、右爪放蓝" if side == "left" else "右爪保绿、左爪放蓝"),
+                    self.selected_batch, audit, event="stacked_green_blue_separation", motion_expected=True,
+                    tx_policy="disperse_command", expected_stm_modes=(STM_MODE_DISPERSE_DONE,))
             black_pair = dict(audit.class_counts) == {"core_black": 1, "danger_cyan": 1}
             if black_pair and self.first_common_delivered:
                 plan = audit.black_blue_plan
@@ -4390,12 +4411,13 @@ class CompetitionMission:
             self.disperse_side_votes.clear()
             self.disperse_side_vote_last_sample_s = None
         self.disperse_side_vote_signature = signature
-        keep_side = self._preferred_keep_side(audit)
+        stack = audit.stacked_green_keep if not self.stacked_green_used else None
+        keep_side = stack[0] if stack else self._preferred_keep_side(audit)
         keep_count = {
             "left": audit.left_count,
             "right": audit.right_count,
         }.get(keep_side, 0)
-        if keep_count <= 0 and audit.near_keep_side != keep_side:
+        if keep_count <= 0 and not stack and audit.near_keep_side != keep_side:
             keep_side = None
             keep_count = 0
         if self.disperse_side_votes and (
@@ -6915,7 +6937,10 @@ class CompetitionMission:
                 before.total_count,
                 before.total_count - old[wanted],
             )
-            if gained_green or reduced:
+            split_after_nudge = (self.stacked_green_used and before.stacked_green_keep is not None and
+                                 audit.blue_pair_geometry == "separated" and
+                                 current == {"green_supply": 1, "danger_cyan": 1})
+            if gained_green or reduced or split_after_nudge:
                 self.separation_progress_attempt = self.disperse_attempts
         self.separation_reviewed_attempt = self.disperse_attempts
 

@@ -4562,6 +4562,57 @@ def test_visible_first_green_stops_after_five_accepted_separations():
     assert m._separation_limit_reached(a)
 
 
+def test_stacked_green_blue_paddles_once_then_reviews_real_claw_counts():
+    from copy import deepcopy
+    from protocol import CMD_DISPERSE_NEAR_KEEP, CMD_SIDE_VALID
+    from run_competition_rescue import audit_from_cargo
+
+    # Red 1, frame 3741: both tracks were in the right claw ROI.
+    for mirror in (False, True):
+        side, opposite = ("left", "right") if mirror else ("right", "left")
+        gx, bx = (1280-525-241, 1280-606-250) if mirror else (525, 606)
+        green = replace(cargo(331, "green_supply", 0, 0), bbox=(gx, 254, 241, 243))
+        blue = replace(cargo(332, "danger_cyan", 0, 0), bbox=(bx, 47, 250, 277))
+        pair = (green, blue)
+        audit = audit_from_cargo(pair, side_by_track={331:side, 332:side}, frame_sequence=3741)
+        assert audit.stacked_green_keep == (opposite, 3741)
+        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+        m.first_common_delivered = True
+        m._select_batch(CargoBatch((331,), ("green_supply",), "material"))
+        m.state = CompetitionState.CAPTURE_AUDIT
+        m.cluster_audit_active = not mirror
+        status = replace(stm(mode=38 if m.cluster_audit_active else 21, flags=1), camera_pitch_cdeg=14000)
+        for j in range(5):
+            now = 1. + j*.12
+            view = VisionSnapshot(frame_sequence=3741+j, observed_monotonic_s=now,
+                                  capture_audit=audit, capture_cargo=pair)
+            out = m.step(view, pose(), status, now)
+            if m.state == CompetitionState.AUDIT_CONFIRM:
+                assert out.command.audit.total_count == 2 and out.command.audit.danger_present
+                assert getattr(out.command.audit, opposite+"_count") == 0
+                ack = replace(relay_stm(out, mode=37 if m.cluster_audit_active else 21, flags=0x41),
+                              camera_pitch_cdeg=14000)
+                out = m.step(view, pose(), ack, now+.01)
+                break
+        assert out.event == "stacked_green_blue_separation"
+        cmd = out.command
+        assert cmd.flags & CMD_SIDE_VALID and cmd.flags & CMD_DISPERSE_NEAR_KEEP
+        assert bool(cmd.flags & CMD_TARGET_RIGHT) == (opposite == "right")
+        assert cmd.source_vision_frame == 3741
+        cmd.to_frame(7)
+        done = replace(status, mode=35, context_valid=True, context_matches=True,
+                       accepted_command=CMD_DISPERSE_PILE, action_status=3)
+        assert m._disperse_output(view, replace(done, mode=25, action_status=1), 2.).command == cmd
+        assert m._disperse_output(view, done, 2.3).command.opcode == CMD_CARGO_AUDIT
+        unchanged = deepcopy(m)
+        assert unchanged._start_danger_release(audit, status, 3.).event != "stacked_green_blue_separation"
+        split = audit_from_cargo(pair, side_by_track={331:opposite, 332:side}, frame_sequence=3758)
+        assert split.stacked_green_keep is None
+        keep = m._start_danger_release(split, status, 3.).command
+        assert keep.flags & CMD_SIDE_VALID and not keep.flags & CMD_DISPERSE_NEAR_KEEP
+        assert bool(keep.flags & CMD_TARGET_RIGHT) == (opposite == "right")
+
+
 def test_stopped_green_blue_pair_keeps_green_after_two_turns_even_if_boxes_cross():
     from run_competition_rescue import audit_from_cargo
     from protocol import CMD_SIDE_VALID

@@ -452,6 +452,7 @@ def audit_from_cargo(
     *,
     isolated_track_ids: set[int] | None = None,
     remembered_items: tuple[TrackedCargo, ...] = (),
+    frame_sequence: int = 0,
 ) -> CargoAudit | None:
     # Remembered positives are explicitly supplied only by the closed-load
     # evidence path. Their detector visibility stays false in snapshots/logs.
@@ -513,14 +514,23 @@ def audit_from_cargo(
     )
     blue_pair_geometry = None
     black_plan = None
+    stacked_green_keep = None
     outer_blue_target = midline_target = None
     if (len(visible) == 2 and has_danger and not unassigned and not remembered_items and
             len(all_names) == 2 and all_names <= {"danger_cyan", "green_supply", "core_black", "injured_orange"}):
         wanted, blue = visible
         if wanted.class_name == "danger_cyan":
             wanted, blue = blue, wanted
-        wx, _, ww, _ = wanted.bbox
-        bx, _, bw, _ = blue.bbox
+        wx, wy, ww, wh = wanted.bbox
+        bx, by, bw, bh = blue.bbox
+        if frame_sequence and wanted.class_name == "green_supply" and (not left or not right):
+            # In the 140° view the nearer block has the lower bottom edge.
+            overlap_x = min(wx + ww, bx + bw) - max(wx, bx)
+            blue_bottom = by + bh
+            dx = blue.center_px[0] - wanted.center_px[0]
+            if (2 * overlap_x > min(ww, bw) and by < wy <= blue_bottom and
+                    wy + wh - blue_bottom > max(abs(dx), min(wh, bh) / 2) and dx != 0):
+                stacked_green_keep = ("left" if dx > 0 else "right", frame_sequence)
         if wanted.class_name == "core_black":
             black_plan = black_blue_plan(wanted.bbox, blue.bbox)
         if wanted.class_name in MATERIAL_CLASSES:
@@ -544,7 +554,7 @@ def audit_from_cargo(
                 blue_pair_geometry = "left" if gap_x < CLAW_SPLIT_X else "right"
     isolated_track_ids = isolated_track_ids or set()
     return CargoAudit(
-        black_blue_plan=black_plan,
+        black_blue_plan=black_plan, stacked_green_keep=stacked_green_keep,
         blue_pair_geometry=blue_pair_geometry, outer_blue_target=outer_blue_target, midline_target=midline_target,
         visible_green_in_claw=any(item.visible and item.class_name == "green_supply" for item in items),
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
@@ -1332,6 +1342,8 @@ def make_vision_snapshot(
                     for other in capture)
             },
             remembered_items=tuple(item for item, _ in remembered_capture),
+            frame_sequence=(frame_sequence if stm.mode in {21, 35, 37, 38} and not stm.gripper_closed
+                            and stm.camera_pitch_cdeg == 14000 and not mission.safe_sweep_reaudit_active else 0),
         )
         if capture_observation_valid else None
     )
