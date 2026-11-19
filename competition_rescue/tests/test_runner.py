@@ -2604,13 +2604,17 @@ def test_held_mixture_survives_detector_gap_and_clears_on_physical_separation():
     observe((orange, green), 3083, mode=10, flags=2)
     m.state = CompetitionState.TRANSPORT_AUDIT
     observe((orange,), 3119, flags=2)
+    at_gate = observe((orange,), 3120)
+    assert at_gate.capture_audit.total_count == 1
+    assert not any("remembered_source_frame" in d for d in at_gate.roi_decisions)
+    observe((orange, green), 3122)  # Both are actually visible at this gate review.
     for frame in (3123, 3126):
         actual = observe((orange,), frame)
         assert actual.capture_audit.total_count == 2 and actual.capture_audit.injury_mixed
         assert not m._audit_valid(actual.capture_audit)
         assert actual.capture_cargo == (orange,)  # Not a fabricated detector box.
         remembered = [d for d in actual.roi_decisions if "remembered_source_frame" in d]
-        assert remembered[0]["remembered_source_frame"] == 3083
+        assert remembered[0]["remembered_source_frame"] == 3122
     assert observe((), 3127).capture_audit.total_count == 0
     observe((orange,), 3128, mode=25, flags=2)  # Actual separation clears old load evidence.
     clean = observe((orange,), 3130)

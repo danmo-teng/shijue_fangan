@@ -116,6 +116,8 @@ from state_machine import (  # noqa: E402
     StmSnapshot,
     TrackedCargo,
     VisionSnapshot,
+    STM_MODE_POST_GRAB_AUDIT,
+    STM_MODE_SAFE_SWEEP_DONE,
     STM_MODE_TRANSPORT_AUDIT,
     STM_MODE_RECOVERY_WAIT,
     STM_MODE_NAVIGATE,
@@ -936,27 +938,29 @@ def capture_image_quality(image, pixel_format: str, rois: CaptureRois,
 
 
 class HeldCargoEvidence:
-    """Positive 140-degree load evidence, scoped to physical claw holding.
+    """Retain incompatible classes across missed frames within one stationary claw review."""
 
-    This is not a detector track or a fresh observation. It only prevents an
-    already seen casualty/material mixture becoming legal on missed frames.
-    Opening, releasing or separating the load clears the evidence.
-    """
-
-    HOLD_MODES = frozenset({10, 11, 22, 23, 40, 48, 51})
+    REVIEW_MODES = frozenset({STM_MODE_POST_GRAB_AUDIT, STM_MODE_SAFE_SWEEP_DONE,
+                              STM_MODE_TRANSPORT_AUDIT, STM_MODE_RECOVERY_WAIT})
 
     def __init__(self):
         self.items: dict[str, tuple[TrackedCargo, int]] = {}
+        self.review = None
         self.view_140_confirmed = False
 
     def clear(self):
         self.items.clear()
+        self.review = None
         self.view_140_confirmed = False
 
     def observe(self, cargo, stm, rois, frame_sequence, image_quality_reason, partial_orange_ids=()):
-        if not stm.gripper_closed or stm.mode not in self.HOLD_MODES:
+        if not stm.gripper_closed or stm.mode not in self.REVIEW_MODES:
             self.clear()
             return
+        review = (stm.task_id, stm.mode)
+        if review != self.review:
+            self.clear()
+            self.review = review
         if stm.camera_pitch_cdeg != 14000:
             self.view_140_confirmed = False
             return
