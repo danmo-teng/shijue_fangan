@@ -24,6 +24,8 @@ GREEN_CAPTURE_OVERLAP_RATIO = .45
 
 
 def capture_overlap_for_class(class_name: str) -> float:
+    if class_name == "danger_cyan":
+        return .40
     return GREEN_CAPTURE_OVERLAP_RATIO if class_name == "green_supply" else .60
 
 

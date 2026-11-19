@@ -70,7 +70,7 @@ from protocol import (  # noqa: E402
     CMD_BULLDOZER_STEP,
     CMD_CLOSED_DEFLECT,
     CMD_ORANGE_GATE_FILTER,
-    CMD_ORANGE_CORE_FILTER, CMD_GREEN_TOPUP, TopupStep,
+    CMD_ORANGE_CORE_FILTER,
     CMD_CORRIDOR_NUDGE,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_GRAB_CONFIRMED,
@@ -252,22 +252,16 @@ def operator_start_request(control_path: Path | None, pose_path: Path, session_t
 
 
 
-def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None, wall_yaw_word=0, opening_axis_mm=None):
+def publish_start_config(command_path, side, start_zone, continue_start, on_sent, resume_progress=None, wall_yaw_word=0):
     """Existing CONFIG sequence; remember the first write before any interruption."""
     for sequence in range(3):
         if not continue_start():
             return False
         frame = (config_frame(sequence, 0x11 if side == 'red' else 0x12, start_zone)
                  if resume_progress is None else resume_config_frame(sequence, side, start_zone, resume_progress))
-        # The final existing retry also starts legacy firmware. A paired MCU
-        # keeps the first accepted CONFIG, even when this last copy arrives.
-        guided = opening_axis_mm is not None and resume_progress is None and sequence < 2
-        if guided or wall_yaw_word:
+        if wall_yaw_word:
             from protocol import crc16_modbus
-            body = bytearray(frame[2:12])
-            if guided:
-                body[4:7] = b'G' + opening_axis_mm.to_bytes(2, 'big', signed=True)
-            body[8:10] = wall_yaw_word.to_bytes(2, 'big')
+            body = frame[2:10] + wall_yaw_word.to_bytes(2,'big')
             frame = frame[:2] + body + crc16_modbus(body).to_bytes(2,'little') + frame[-1:]
         write_command_frame(command_path, frame)
         on_sent()
@@ -1428,11 +1422,6 @@ def make_vision_snapshot(
                 grip_regions.append((item.track_id, region))
     return VisionSnapshot(
         pre_grab_regions=tuple(grip_regions), pre_grab_configured_classes=grip_configured,
-        topup_floor_ids=tuple(t.track_id for t in cargo if t.visible and t.track_id not in known_carried_ids and
-            (not bbox_bottom_center_in_roi(t.bbox, rois.overall) if stm.camera_pitch_cdeg == 14000 else
-             not cargo_on_carrying_platform(t, 12000))) if (stm.camera_pitch_cdeg in (12000, 14000) and
-            not image_quality_reason and (mission.state == CompetitionState.GREEN_TOPUP or
-            (mission.first_common_delivered and stm.mode == 22 and mission.green_topup is None))) else (),
         range_pitch_cdeg=stm.camera_pitch_cdeg, range_distances=tuple(range_distances),
         range_top_band_ids=tuple(range_top_band_ids), range_maximum_mm=range_maximum_mm,
         orange_far_reobserve_ids=tuple(orange_far_reobserve_ids),
@@ -2101,8 +2090,6 @@ class CompetitionPlanner:
             range_epoch = ("search_transfer", self.mission.search_transfer_epoch,
                            self.mission.search_transfer_route.move_epoch,
                            self.mission.search_transfer_route.index)
-        if command.opcode == CMD_GREEN_TOPUP:
-            range_epoch = command.arg_a
         if command.opcode == CMD_CLOSED_DEFLECT:
             range_epoch = ("closed_deflect", self.mission.deflect_epoch)
         key = (command.opcode, command.flags, audit_role, separation_epoch, range_epoch)
@@ -2119,9 +2106,7 @@ class CompetitionPlanner:
                 self.published_audit_handoff = None
                 self.protocol_source_stamp = None
                 self.protocol_vision_frame = 0
-        if command.opcode == CMD_GREEN_TOPUP:
-            self.protocol_vision_frame = command.source_vision_frame if command.arg_a == TopupStep.ALIGN else 0
-        elif command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
+        if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE:
             self.protocol_vision_frame = command.source_vision_frame or 0
         elif command.opcode == CMD_ALIGN_SAFE_ZONE and command.flags & CMD_VISUAL_CORRECTION_VALID:
             self.protocol_vision_frame = command.source_vision_frame or 0
@@ -2149,7 +2134,7 @@ class CompetitionPlanner:
             owner.task_id if owner is not None else self.protocol_task,
             owner.action_id if owner is not None else self.protocol_action,
             self.protocol_vision_frame if (command.opcode in {
-                CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE, CMD_GREEN_TOPUP,
+                CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE,
             } or (command.opcode == CMD_DISPERSE_PILE and
                   (command.flags & CMD_DISPERSE_NEAR_KEEP or command.arg_b == 1))) else 0,
         )
@@ -2758,8 +2743,6 @@ class CompetitionPlanner:
         reconciled = self._reconcile_approach_rejection(vision, pose, stm, now)
         if reconciled is not None:
             return reconciled
-        if self.mission.state == CompetitionState.GREEN_TOPUP and not stm.fault and not paused:
-            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if self.mission.state == CompetitionState.ORANGE_CORE_FILTER and not stm.fault and not paused:
             if (stm.context_valid and stm.task_id == self.protocol_task and stm.action_status & 4 and
                     stm.rejected_action_id == self.protocol_action and stm.mode in (21, 23, 37) and
@@ -3838,7 +3821,6 @@ def main() -> int:
     warm_status_error_reported = False
     next_operator_poll = 0.0
     wall_yaw_word = 0
-    opening_axis_mm = None
     last_start_reference = None
     resume_progress = None
 
@@ -3861,7 +3843,7 @@ def main() -> int:
 
     def prepare_operator_start():
         nonlocal operator_start_ready, mission, planner, side, start_zone, opening_strategy
-        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress, wall_yaw_word, opening_axis_mm
+        nonlocal operator_stopped, competition_started, config_sent, last_start_reference, resume_progress, wall_yaw_word
         nonlocal wheel_policy
         nonlocal tracker, recent_safe_bbox, safe_zone_missing_frames, recent_carried_bboxes
         nonlocal recent_carried_track_ids, recent_carried_pitch_cdeg
@@ -3928,10 +3910,6 @@ def main() -> int:
         if wheel_policy is not None:
             wheel_policy.round_token = last_start_reference
         wall_yaw_word = request['reference'].get('wall_yaw_config_word',0)
-        center = request['reference'].get('start_center_xy_m')
-        opening_axis_mm = (round(1000 * (abs(center[0]) - 1.70 / math.sqrt(2)))
-                           if center and resume_progress is None and mission.settings.initial_stash_enabled else None)
-        mission.opening_direct_enabled = opening_axis_mm is not None
         events.write('warm_reference_bound', dict(session_token=args.reset_session_token,
             reference=request['reference'],side=side,start_zone=start_zone))
 
@@ -3969,7 +3947,7 @@ def main() -> int:
             nonlocal config_sent
             config_sent = True
         if not publish_start_config(args.command_file,side,start_zone,
-                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress, wall_yaw_word, opening_axis_mm):
+                lambda: running and not apply_operator_stop(force=True),remember_config_sent, resume_progress, wall_yaw_word):
             return
         competition_started = True
         warm_ready_written = write_warm_status()
@@ -3979,7 +3957,6 @@ def main() -> int:
             "first_vision_sequence": vision_sequence,
             "start_basis": "warm_operator_start_and_reference_bound" if args.wait_for_operator else "explicit_session_start_and_first_inference",
             "resume_progress": resume_progress,
-            "opening_design_axis_mm": opening_axis_mm,
         })
         planner.set_paused(False, reason="camera_recovery")
         planner.start()

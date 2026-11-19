@@ -4533,10 +4533,8 @@ def test_outer_blue_and_inner_blue_both_turn_toward_gap_after_first_delivery():
             assert out.command.opcode == CMD_DISPERSE_PILE and out.command.arg_a == angle
 
 
-def test_first_green_three_physical_attempts_and_topup_invalid_rollback_once():
+def test_first_green_three_physical_attempts():
     from run_competition_rescue import audit_from_cargo
-    from protocol import CMD_GREEN_TOPUP, TopupStep
-    from state_machine import GreenTopup
     m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
     m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
     g, black = cargo(1, "green_supply", 450, 400), cargo(2, "core_black", 800, 400)
@@ -4545,20 +4543,6 @@ def test_first_green_three_physical_attempts_and_topup_invalid_rollback_once():
     assert not m._separation_limit_reached(a)
     m.disperse_attempts = 3
     assert m._separation_limit_reached(a)
-    m.first_common_delivered = True
-    m.green_topup = GreenTopup(g, TopupStep.ADVANCE, 230)
-    m._set_state(CompetitionState.GREEN_TOPUP, 1.)
-    s = replace(stm(mode=23, flags=3), context_valid=True, context_matches=True,
-                accepted_command=CMD_GREEN_TOPUP, action_status=3, camera_pitch_cdeg=14000)
-    blue = cargo(3, "danger_cyan", 330, 460)
-    mixed = audit_from_cargo((g, blue), side_by_track={1:"right",3:"left"})
-    v = VisionSnapshot(frame_sequence=1,capture_audit=mixed,capture_cargo=(g,blue))
-    m.step(v,pose(),s,1.)
-    for n in range(2,9):
-        out=m.step(replace(v,frame_sequence=n,observed_monotonic_s=1+n*.15),pose(),s,1+n*.15)
-        if out.command and out.command.opcode == CMD_GREEN_TOPUP: break
-    assert out.command.opcode == CMD_GREEN_TOPUP and out.command.arg_a == TopupStep.ROLLBACK
-    assert not m.green_topup.review_forward
 
 
 def test_outer_blue_brakes_same_turn_while_boxes_still_overlap_then_reaudits():
@@ -4592,6 +4576,11 @@ def test_outer_blue_brakes_same_turn_while_boxes_still_overlap_then_reaudits():
             assert m.blue_pair_turns == sign//10 and m.state == CompetitionState.CAPTURE_AUDIT
             assert m.audit_recheck_frame_floor == 101
             out = m._start_danger_release(v.capture_audit,s,1.8)
+            if name == "core_black":
+                assert out.event == "black_side_turn_start" and out.command.arg_a == -sign
+                assert m._disperse_output(v,moving,1.9).command.arg_b == 0
+                m._disperse_output(v,replace(moving,mode=35,action_status=3),2.)
+                out = m._start_danger_release(v.capture_audit,s,2.3)
             assert out.command.flags & CMD_SIDE_VALID and out.command.arg_a == 0
             assert bool(out.command.flags & CMD_TARGET_RIGHT) == (inner=="right")
 
@@ -4612,19 +4601,18 @@ def test_blue_side_priority_counts_only_eligible_cargo_before_tiebreak():
         assert m._preferred_keep_side(audit([b,k,o],[b,g]))==("left" if first_done else "right")
 
 
-def test_opening_direct_close_uses_actual_post_grab_audit_or_legacy_search():
-    m = CompetitionMission(CompetitionSettings(side="red"))
-    m.opening_direct_enabled = True
-    seen = cargo(3, "green_supply", 600, 400)
-    a = CargoAudit(left_class="green_supply", left_count=1, left_green_count=1, total_count=1)
-    closed = replace(stm(mode=23, flags=3), camera_pitch_cdeg=14000)
-    for i in range(1,6):
-        v = VisionSnapshot(frame_sequence=i, observed_monotonic_s=i*.15, capture_audit=a, capture_cargo=(seen,))
-        out = m.step(v,pose(),closed,i*.15)
-        if m.state == CompetitionState.AUDIT_CONFIRM: break
-    assert m.selected_batch.initial_stash and m.pending_audit_release_context == "post_grab_valid"
-    assert out.command.opcode == CMD_CARGO_AUDIT and m.selected_batch.track_ids == (3,)
-    fallback = CompetitionMission(CompetitionSettings(side="red"))
-    fallback.opening_direct_enabled = True
-    assert fallback.step(VisionSnapshot(), pose(), stm(), 0.).state == CompetitionState.INITIAL_OBSERVE
-    assert not fallback.initial_claw_check_started
+def test_pregrab_lost_green_with_visible_replacement_relooks_in_place():
+    from protocol import APPROACH_PRE_GRAB_RELOOK
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False, pre_grab_advance_enabled=True))
+    m._select_batch(CargoBatch((277,), ("green_supply",), "material"))
+    m._set_state(CompetitionState.CAPTURE_AUDIT,1.)
+    s = replace(stm(mode=21, flags=1), camera_pitch_cdeg=14000)
+    v = VisionSnapshot(frame_sequence=4248, cargo=(cargo(281,"green_supply",818,44),),
+                       capture_audit=CargoAudit(),pre_grab_configured_classes=("green_supply",))
+    out = m._pre_grab_depth_output(v,s,2.)
+    assert (out.command.aux,out.command.arg_a,out.command.arg_b)==(APPROACH_PRE_GRAB_RELOOK,0,12000)
+    out.command.to_frame(1)
+    accepted=replace(s,mode=3,camera_pitch_cdeg=12000,context_matches=True,
+                     accepted_command=CMD_APPROACH_TARGET,action_status=1)
+    m._pre_grab_advance_output(v,accepted,3.)
+    assert m.state == CompetitionState.SEARCH and m.selected_batch is None
