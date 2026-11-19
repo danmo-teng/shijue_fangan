@@ -3226,11 +3226,37 @@ def test_opening_attack_return_requires_paired_done_for_each_leg_and_search_read
             assert out.state==CompetitionState.SEARCH and m.search_point_number==1
             assert m.return_search_frame_floor==21
 
-    defense=CompetitionMission(CompetitionSettings(side='red',opening_strategy='defense'))
-    defense._select_batch(CargoBatch((1,),('green_supply',),'stash',initial_stash=True))
-    defense._set_state(CompetitionState.INITIAL_RELEASE,1.)
-    out=defense.step(VisionSnapshot(),pose(),release,1.)
-    assert out.state==CompetitionState.RETURN_CENTER and out.command.opcode==CMD_RETURN_CENTER
+
+def test_defense_release_backs_off_locally_before_direct_transfer_to_one():
+    import math
+    from protocol import CMD_BULLDOZER_STEP
+    for side in ("red", "blue"):
+        for zone in (1, 2, 3, 4):
+            m = CompetitionMission(CompetitionSettings(side=side, start_zone=zone, opening_strategy="defense"))
+            m._select_batch(CargoBatch((1,), ("green_supply",), "stash", initial_stash=True))
+            m._set_state(CompetitionState.INITIAL_RELEASE, 1.)
+            release = StmSnapshot(mode=34, flags=0, age_ms=0, context_valid=True, context_matches=True,
+                                  accepted_command=CMD_RELEASE_BOTH, action_status=3)
+            v = VisionSnapshot()
+            at = pose(*m.settings.stash_point)
+            out = m.step(v, at, release, 1.1)
+            assert m.initial_stash_done and m.return_search_station == 1
+            assert out.command.opcode == CMD_RETURN_CENTER and out.command.arg_a == 0
+            # A remembered pose at the centre or the previous batch's DONE cannot start the move.
+            returning = replace(release, mode=17, accepted_command=CMD_RETURN_CENTER, action_status=1)
+            assert m.step(v, at, returning, 1.2).command.arg_a == 0
+            done = replace(returning, mode=3, action_status=3)
+            assert m.step(v, at, replace(done, context_matches=False), 1.3).state == CompetitionState.RETURN_CENTER
+            # Historical blue/1 release heading was about 230 degrees; route uses the new live pose.
+            after = replace(at, x_m=at.x_m+.20, y_m=at.y_m+.27, yaw_deg=230.)
+            out = m.step(v, after, done, 1.4)
+            target = m.settings.search_point(1)
+            assert out.state == CompetitionState.SEARCH_TRANSFER and out.command.opcode == CMD_BULLDOZER_STEP
+            assert out.command.flags >> 4 == 13 and out.command.aux == 23000
+            assert m.search_transfer_route.waypoints == (target,)
+            assert out.command.arg_a == round(1000*math.hypot(target[0]-after.x_m, target[1]-after.y_m))
+            assert m.delivery_count == 0 and not m.first_common_delivered
+
 
 
 def test_search_stations_one_and_three_alternate_directly_for_all_starts():
@@ -3278,7 +3304,7 @@ def test_saved_search_station_does_not_skip_retrieval_after_obstacle_delivery():
         (-.15, -.54), (-.29, -.51), ('injured_orange',), 'pickup', recover_after_delivery=True)
     status = StmSnapshot(mode=17, age_ms=0, context_valid=True, context_matches=True,
         accepted_command=CMD_RETURN_CENTER, action_status=1)
-    m._begin_return(status, 1., after_delivery=True)
+    m._begin_return(status, 1., station=m.delivery_search_point_number)
     m.step(VisionSnapshot(), pose(), status, 1.1)
     out = m.step(VisionSnapshot(), pose(), replace(status, mode=3), 1.2)
     assert out.state == CompetitionState.OBSTACLE_ROUTE

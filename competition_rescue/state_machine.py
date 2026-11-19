@@ -858,7 +858,7 @@ class CompetitionMission:
         self.return_station_scan = False
         self.return_search_mode_seen = False
         self.return_arrival_latched = False
-        self.return_after_delivery = False
+        self.return_search_station: int | None = None
         self.stash_zero_initial_ack: int | None = None
         self.stash_handoff_initial_ack: int | None = None
         self.cargo_recheck_pending = False
@@ -5711,7 +5711,7 @@ class CompetitionMission:
         if not repushed:
             self.delivery_timeout_reason = basis
         self._clear_selected_batch()
-        self._begin_return(stm, now, after_delivery=True)
+        self._begin_return(stm, now, station=self.delivery_search_point_number)
         return replace(self._return_center_output(pose, now, message), event=basis+"_exit", reason=basis)
 
     def _delivery_timeout_output(
@@ -6229,13 +6229,13 @@ class CompetitionMission:
                 tx_policy="pause",
                 reason="return_pose_stale",
             )
-        target_x, target_y = (pose.x_m, pose.y_m) if self.return_after_delivery else (0.0, 0.0)
+        target_x, target_y = (pose.x_m, pose.y_m) if self.return_search_station is not None else (0.0, 0.0)
         if self.obstacle_route is not None and self.obstacle_route.recover_after_delivery:
             target_x, target_y = self.obstacle_route.return_point
-        # Delivery RETURN D=0 only finishes the local exit. After matching
-        # SEARCH, the one-leg transfer targets the saved station directly.
+        # D=0 lets the MCU finish its stash backoff or local delivery exit.
+        # The subsequent station move starts at the actual post-retreat pose.
         tolerance = (
-            self.settings.post_delivery_return_tolerance_m if self.return_after_delivery
+            self.settings.post_delivery_return_tolerance_m if self.return_search_station is not None
             else self.settings.return_zero_tolerance_m
         )
         dx, dy = target_x - pose.x_m, target_y - pose.y_m
@@ -6261,10 +6261,10 @@ class CompetitionMission:
         )
 
     def _begin_return(
-        self, stm: StmSnapshot, now: float, *, after_delivery: bool = False,
+        self, stm: StmSnapshot, now: float, *, station: int | None = None,
     ) -> None:
         self.return_arrival_latched = False
-        self.return_after_delivery = after_delivery
+        self.return_search_station = station
         self.return_initial_ack = (
             stm.acknowledged_sequence if stm.fresh else None
         )
@@ -8686,8 +8686,8 @@ class CompetitionMission:
                     self._set_state(CompetitionState.INITIAL_ATTACK_RETURN, now)
                     return replace(self._attack_return_output(vision, pose, stm, now),
                                    event="attack_return_start")
-                self._begin_return(stm, now)
-                return self._return_center_output(pose, now, "临时物资已放下，返回中心寻找首件绿色")
+                self._begin_return(stm, now, station=1)
+                return self._return_center_output(pose, now, "防守首放完成，沿原朝向后退35厘米后直返①")
             return CompetitionOutput(
                 self.state,
                 initial_release_command,
@@ -8805,7 +8805,7 @@ class CompetitionMission:
                 }
             ):
                 self._clear_selected_batch()
-                self._begin_return(stm, now, after_delivery=True)
+                self._begin_return(stm, now, station=self.delivery_search_point_number)
                 return self._return_center_output(
                     pose,
                     now,
@@ -8815,7 +8815,7 @@ class CompetitionMission:
                 stm, STM_MODE_SEARCH, self.task_complete_initial_ack
             ):
                 self._clear_selected_batch()
-                self._begin_return(stm, now, after_delivery=True)
+                self._begin_return(stm, now, station=self.delivery_search_point_number)
                 return self._return_center_output(pose, now, "投送后接回记住的搜索点")
             return CompetitionOutput(self.state, CommandRequest(CMD_TASK_COMPLETE, self._side_flags()), "等待下位机张爪并退出安全区")
 
@@ -8835,18 +8835,17 @@ class CompetitionMission:
                         replace(stm, context_matches=False), now)
                 # The matching RETURN completes the local mechanical exit;
                 # its D=0 skips the old own-side waypoint entirely.
-                if self.return_after_delivery:
+                if self.return_search_station is not None:
                     if not pose.valid:
-                        return self._return_center_output(pose, now, "投送退出完成，等待位置直返搜索点")
+                        return self._return_center_output(pose, now, "脱离完成，等待位置直返搜索点")
                     return self._begin_search_transfer(vision, pose, stm, now,
-                        target_point=self.delivery_search_point_number)
+                        target_point=self.return_search_station)
                 return self._complete_return_search(vision, now,
-                    f"回到{'己方' if self.return_after_delivery else '中心'}搜索区，"
-                    f"等待相机120°和新视觉帧；已完成{self.delivery_count}件",
-                    new_visit=self.return_after_delivery)
+                    f"回到中心搜索区，等待相机120°和新视觉帧；已完成{self.delivery_count}件",
+                    new_visit=False)
             return self._return_center_output(
                 pose, now,
-                "完成投送退出，接直线返搜索点" if self.return_after_delivery else "持续返回中心",
+                "完成脱离后直返搜索点" if self.return_search_station is not None else "持续返回中心",
             )
 
         return CompetitionOutput(
