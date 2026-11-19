@@ -1,0 +1,75 @@
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 7596cda..56449f0 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -7200,7 +7200,7 @@ static void task_process_remote_action(const VisionMissionCommand *command,
+               APP_DISPERSE_OBSERVE_TURN_DEG : (float)remote_action.arg_a;
+           (void)task_remote_turn(turn_deg, now_ms);
+         } else if (remote_action.phase == 1U) {
+-          if (task_scan_camera_to(APP_GRAB_VIEW_ANGLE, now_ms)) {
++          if (!Motor_IsBraking() && task_scan_camera_to(APP_GRAB_VIEW_ANGLE, now_ms)) {
+             task_remote_action_advance(now_ms);
+           }
+         } else if ((uint32_t)(now_ms - step_started_ms) >=
+@@ -8115,6 +8115,9 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+       /* Marker for the observation-turn variant. It deliberately retains no
+        * side until the upper computer has received a new audit. */
+       remote_action.arg_b = 1;
++      /* The signed observation starts in the audited 140-degree claw view. */
++      if (remote_action.arg_a != 0 && Camera_GetAngle() == APP_GRAB_VIEW_ANGLE)
++        task_status.claw_visible = true;
+       separation_keep_side = 0;
+     }
+   } else if (command->command == VISION_CMD_DISPERSE_PILE) {
+@@ -8614,6 +8617,10 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+       remote_action.orange_core_82) goto rejected;
+   if (incoming.command == VISION_CMD_DISPERSE_PILE && !new_action &&
+       incoming.target_x_mm != remote_action.arg_a) goto rejected;
++  const bool view_brake = incoming.command == VISION_CMD_DISPERSE_PILE && incoming.target_y_mm == 1;
++  if (view_brake && (new_action || incoming.vision_frame == 0U ||
++      state != TASK_REMOTE_ACTION || remote_action.type != REMOTE_ACTION_DISPERSE ||
++      remote_action.arg_b != 1 || remote_action.arg_a != incoming.target_x_mm)) goto rejected;
+   if (separation_request && !new_action &&
+       incoming.heading_cdeg != (remote_action.orange_core_82 ? VISION_SEPARATION_ORANGE_CORE_82 : 0U))
+     goto rejected;
+@@ -8836,6 +8843,13 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+     command_accepted = true;
+     task_begin_capture_escape(now_ms);
+     mission_paused = false;
++  } else if (view_brake) {
++    /* Finish only the rotation leg. Repeated brakes and older turn heartbeats
++     * cannot re-enter phase zero; camera review and DONE follow normally. */
++    if (!remote_action.done && remote_action.phase == 0U) task_remote_action_advance(now_ms);
++    task_status.acknowledged_sequence = incoming.sequence;
++    command_accepted = true;
++    mission_paused = false;
+   } else if (!new_action && !overlay && !task_dynamic_opcode(incoming.command) && !live_bulldozer) {
+     /* A finite action is an epoch, not a pulse repeated at 100 Hz. */
+     task_status.acknowledged_sequence = incoming.sequence;
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 5169757..8814ab9 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -318,7 +318,7 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+     const bool view_turn = code == VISION_CMD_DISPERSE_PILE &&
+         flags == (VISION_CMD_VALID | (flags & VISION_CMD_RED_SIDE)) &&
+         (arg_a == 10 || arg_a == -10) && heading == 0U;
+-    if ((arg_a != 0 && !view_turn) || arg_b != 0 ||
++    if ((arg_a != 0 && !view_turn) || (arg_b != 0 && !(view_turn && arg_b == 1)) ||
+         (heading != 0U && heading != VISION_SEPARATION_ORANGE_CORE_82)) goto rejected_payload;
+     if (code == VISION_CMD_DISPERSE_PILE && (flags & VISION_CMD_KEEP_ORANGE) != 0U &&
+         (flags & VISION_CMD_SIDE_VALID) == 0U) goto rejected_payload;
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index 8907e44..c390c3a 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -395,7 +395,8 @@ def mission_frame(
+     if command in (CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT):
+         view_turn = (command == CMD_DISPERSE_PILE and flags in (CMD_VALID, CMD_VALID | CMD_RED_SIDE)
+                      and target_x_mm in (-10, 10) and heading_cdeg == 0)
+-        if (target_x_mm and not view_turn) or target_y_mm or heading_cdeg not in (0, SEPARATION_ORANGE_CORE_82):
++        if ((target_x_mm and not view_turn) or (target_y_mm and not (view_turn and target_y_mm == 1)) or
++                heading_cdeg not in (0, SEPARATION_ORANGE_CORE_82)):
+             raise ValueError("invalid separation lift payload")
+         if command == CMD_DISPERSE_PILE and flags & CMD_KEEP_ORANGE and not flags & CMD_SIDE_VALID:
+             raise ValueError("orange separation requires an explicit retained side")

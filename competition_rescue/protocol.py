@@ -295,7 +295,7 @@ def mission_frame(
     if command in {CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT}:
         view_turn = (command == CMD_DISPERSE_PILE and flags in {CMD_VALID, CMD_VALID | CMD_RED_SIDE}
                      and arg_a in {-10, 10} and aux_cdeg == 0)
-        if (arg_a != 0 and not view_turn) or arg_b != 0 or aux_cdeg not in {0, SEPARATION_ORANGE_CORE_82}:
+        if (arg_a != 0 and not view_turn) or (arg_b != 0 and not (view_turn and arg_b == 1)) or aux_cdeg not in {0, SEPARATION_ORANGE_CORE_82}:
             raise ValueError("separation requires zero motion and a supported lift mode")
         if aux_cdeg == SEPARATION_ORANGE_CORE_82:
             allowed = CMD_VALID | CMD_RED_SIDE | CMD_KEEP_ORANGE

@@ -318,6 +318,8 @@ class CargoAudit:
     near_claw_green_id: int | None = None
     near_claw_frame: int = 0
     first_green_core_conflict: bool = False
+    outer_blue_target: str | None = None
+    midline_target: str | None = None
     blue_pair_geometry: str | None = None
     visible_green_in_claw: bool = False
 
@@ -1057,7 +1059,8 @@ class CompetitionMission:
         self.orange_gate_filter_attempted = False
         self.orange_core_filter_attempted = False
         self.orange_gate_filter_command = None
-        self.blue_pair_view_deg = 0
+        self.blue_pair_turns = 0
+        self.blue_pair_live_target = None
         self.green_topup: GreenTopup | None = None
 
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
@@ -1536,7 +1539,8 @@ class CompetitionMission:
         if self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.task_generation += 1
             self.green_topup = None
-            self.blue_pair_view_deg = 0
+            self.blue_pair_turns = 0
+            self.blue_pair_live_target = None
             self.corridor_nudge_attempted = False
             self.corridor_nudge_command = None
             self.orange_gate_filter_attempted = False
@@ -1819,7 +1823,7 @@ class CompetitionMission:
         if (audit.blue_pair_geometry and
                 self.state in {CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM} and
                 not self.post_grab_audit_active and not self.safe_sweep_reaudit_active):
-            signature += (("blue_pair_geometry", audit.blue_pair_geometry),)
+            signature += (("blue_pair_geometry", audit.blue_pair_geometry, audit.outer_blue_target, audit.midline_target),)
         if self.post_grab_audit_active and audit.total_count > 1:
             signature += (audit.side_composition,)
         return signature + (("near_keep", audit.near_keep_side),) if audit.near_keep_side is not None else signature
@@ -3567,8 +3571,8 @@ class CompetitionMission:
             release_side = self.pending_audit_release_side
             final_release = self.pending_audit_final
             release_context = self.pending_audit_release_context
-            if (not valid and self._reviewing_blue_pair_turn() and abs(self.blue_pair_view_deg) == 20 and
-                    audit.blue_pair_geometry != "separated" and not self._first_green_still_visible(audit)):
+            if (not valid and self._reviewing_blue_pair_turn() and abs(self.blue_pair_turns) == 2 and
+                    not self._blue_pair_separated(audit) and not self._first_green_still_visible(audit)):
                 self._clear_pending_audit()
                 return self._start_capture_abandon(audit, stm, now)
             if valid and self.safe_sweep_reaudit_active:
@@ -4187,6 +4191,21 @@ class CompetitionMission:
         return category in MATERIAL_CLASSES | {"mixed_material"}
 
     def _preferred_keep_side(self, audit: CargoAudit) -> str | None:
+        if (audit.danger_present and self.selected_batch and not self.selected_batch.initial_stash and
+                audit.left_count + audit.right_count == audit.total_count):
+            eligible = MATERIAL_CLASSES | {"injured_orange"} if self.first_common_delivered else {"green_supply"}
+            left = dict(audit.left_class_counts)
+            right = dict(audit.right_class_counts)
+            if left or right:
+                left_blue, right_blue = left.get("danger_cyan", 0), right.get("danger_cyan", 0)
+                left_useful = sum(left.get(name, 0) for name in eligible)
+                right_useful = sum(right.get(name, 0) for name in eligible)
+                if left_blue and not right_blue and right_useful:
+                    return "right"
+                if right_blue and not left_blue and left_useful:
+                    return "left"
+                if left_blue and right_blue and left_useful != right_useful:
+                    return "left" if left_useful > right_useful else "right"
         legal = self._post_first_preferred_keep_side(audit)
         if legal is not None:
             return legal
@@ -4298,7 +4317,15 @@ class CompetitionMission:
         return False
 
     def _reviewing_blue_pair_turn(self) -> bool:
-        return bool(self.blue_pair_view_deg) and self.cargo_recheck_pending and self.disperse_context == "blue_pair_view"
+        return bool(self.blue_pair_turns) and self.cargo_recheck_pending and self.disperse_context == "blue_pair_view"
+
+    def _midline_between_pair(self, audit: CargoAudit, direction: int) -> bool:
+        return (self.blue_pair_live_target is not None and audit.midline_target == self.blue_pair_live_target and
+                (audit.right_class if direction > 0 else audit.left_class) == audit.midline_target)
+
+    def _blue_pair_separated(self, audit: CargoAudit) -> bool:
+        return (audit.blue_pair_geometry == "separated" or
+                (self._reviewing_blue_pair_turn() and self._midline_between_pair(audit, self.blue_pair_turns)))
 
     def _start_danger_release(
         self,
@@ -4312,20 +4339,23 @@ class CompetitionMission:
                 not self.safe_sweep_reaudit_active and not self._separation_limit_reached(audit)):
             blue = audit.blue_pair_geometry
             reviewing = self._reviewing_blue_pair_turn()
-            if blue in {"left", "right"} and (reviewing or min(audit.left_count, audit.right_count) == 0):
+            if (not self._blue_pair_separated(audit) and blue in {"left", "right"} and
+                    (reviewing or min(audit.left_count, audit.right_count) == 0)):
                 angle = 10 if blue == "left" else -10
-                if self.blue_pair_view_deg in (0, angle):
+                if self.blue_pair_turns in (0, angle // 10):
+                    if not reviewing:
+                        self.blue_pair_live_target = audit.outer_blue_target
                     self._set_state(CompetitionState.DISPERSE, now)
                     self._arm_disperse(stm, None)
                     self.disperse_context = "blue_pair_view"
                     self.disperse_command = replace(self.disperse_command, arg_a=angle)
                     return CompetitionOutput(self.state, self.disperse_command,
-                        f"蓝和目标未分清，朝两块之间转10°复看（已转{abs(self.blue_pair_view_deg)}°）",
+                        f"蓝和目标未分清，朝两块之间转10°复看（第{abs(self.blue_pair_turns) + 1}次，最多10°）",
                         self.selected_batch, audit, event="blue_pair_view_turn", motion_expected=True,
                         tx_policy="disperse_command", expected_stm_modes=(STM_MODE_DISPERSE_DONE,))
                 if not self._first_green_still_visible(audit):
                     return self._start_capture_abandon(audit, stm, now)
-            if reviewing and blue != "separated" and not self._first_green_still_visible(audit):
+            if reviewing and not self._blue_pair_separated(audit) and not self._first_green_still_visible(audit):
                 return self._start_capture_abandon(audit, stm, now)
         if self._same_side_blue_mixture(audit) and self._separation_limit_reached(audit):
             return self._start_capture_abandon(audit, stm, now, limit_reached=True)
@@ -7007,6 +7037,17 @@ class CompetitionMission:
             self.disperse_initial_ack,
             self.disperse_command_accepted,
         )
+        if (self.disperse_context == "blue_pair_view" and self.disperse_command.arg_b == 0 and
+                stm.mode == STM_MODE_REMOTE_ACTION and stm.context_valid and stm.context_matches and
+                stm.accepted_command == CMD_DISPERSE_PILE and stm.action_status & 1 and
+                stm.camera_pitch_cdeg == 14000 and stm.claw_visible and vision.capture_observation_valid and
+                vision.frame_sequence > 0 and vision.capture_audit is not None and
+                self._midline_between_pair(vision.capture_audit, self.disperse_command.arg_a)):
+            # Latch the brake on this action, even if a later picture loses a box.
+            self.disperse_command = replace(self.disperse_command, arg_b=1, source_vision_frame=vision.frame_sequence)
+            return CompetitionOutput(self.state, self.disperse_command, "中线已在两块之间，请求停车复审",
+                self.selected_batch, vision.capture_audit, event="blue_pair_midline_stop",
+                tx_policy="disperse_command", expected_stm_modes=(STM_MODE_DISPERSE_DONE,))
         if self.disperse_command_accepted and self.disperse_context == "selective":
             self._count_separation_acceptance(
                 "right" if self.disperse_command.flags & CMD_TARGET_RIGHT else "left"
@@ -7078,7 +7119,7 @@ class CompetitionMission:
               stm.accepted_command == CMD_DISPERSE_PILE and bool(stm.action_status & 2)))
         ):
             if self.disperse_context == "blue_pair_view":
-                self.blue_pair_view_deg += self.disperse_command.arg_a
+                self.blue_pair_turns += self.disperse_command.arg_a // 10
             elif self.disperse_context == "observe":
                 self.disperse_observe_attempts += 1
             elif self.disperse_context == "selective":

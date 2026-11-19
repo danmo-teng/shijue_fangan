@@ -509,6 +509,7 @@ def audit_from_cargo(
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
     blue_pair_geometry = None
+    outer_blue_target = midline_target = None
     if (len(visible) == 2 and has_danger and not unassigned and not remembered_items and
             len(all_names) == 2 and all_names <= {"danger_cyan", "green_supply", "core_black", "injured_orange"}):
         wanted, blue = visible
@@ -516,6 +517,14 @@ def audit_from_cargo(
             wanted, blue = blue, wanted
         wx, _, ww, _ = wanted.bbox
         bx, _, bw, _ = blue.bbox
+        if wanted.class_name in MATERIAL_CLASSES:
+            wc, bc = wanted.center_px[0], blue.center_px[0]
+            if ((blue in left and wanted in left and bc < wc <= CLAW_SPLIT_X) or
+                    (blue in right and wanted in right and CLAW_SPLIT_X <= wc < bc)):
+                outer_blue_target = wanted.class_name
+            if ((blue in left and wanted in right and bc < CLAW_SPLIT_X < wc) or
+                    (wanted in left and blue in right and wc < CLAW_SPLIT_X < bc)):
+                midline_target = wanted.class_name
         if ((wx >= CLAW_SPLIT_X and bx + bw <= CLAW_SPLIT_X and wanted in right and blue in left) or
                 (wx + ww <= CLAW_SPLIT_X and bx >= CLAW_SPLIT_X and wanted in left and blue in right)):
             blue_pair_geometry = "separated"
@@ -525,7 +534,7 @@ def audit_from_cargo(
                 blue_pair_geometry = "left" if gap_x < CLAW_SPLIT_X else "right"
     isolated_track_ids = isolated_track_ids or set()
     return CargoAudit(
-        blue_pair_geometry=blue_pair_geometry,
+        blue_pair_geometry=blue_pair_geometry, outer_blue_target=outer_blue_target, midline_target=midline_target,
         visible_green_in_claw=any(item.visible and item.class_name == "green_supply" for item in items),
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),
         left_class_counts=tuple(sorted(Counter(item.class_name for item in left).items())),
@@ -2126,7 +2135,7 @@ class CompetitionPlanner:
             if command.audit_vision_frame is not None:
                 frame = command.audit_vision_frame
             self.protocol_vision_frame = frame & 0xFFFFFFFF
-        elif command.opcode == CMD_DISPERSE_PILE and command.flags & CMD_DISPERSE_NEAR_KEEP:
+        elif command.opcode == CMD_DISPERSE_PILE and (command.flags & CMD_DISPERSE_NEAR_KEEP or command.arg_b == 1):
             self.protocol_vision_frame = command.source_vision_frame or 0
         owner = self.protocol_accepted if overlay else None
         context = command_context_frame(
@@ -2136,7 +2145,7 @@ class CompetitionPlanner:
             self.protocol_vision_frame if (command.opcode in {
                 CMD_APPROACH_TARGET, CMD_CARGO_AUDIT, CMD_ALIGN_SAFE_ZONE, CMD_GREEN_TOPUP,
             } or (command.opcode == CMD_DISPERSE_PILE and
-                  command.flags & CMD_DISPERSE_NEAR_KEEP)) else 0,
+                  (command.flags & CMD_DISPERSE_NEAR_KEEP or command.arg_b == 1))) else 0,
         )
         packet = context + command.to_frame(self.sequence)
         if trace_exit:

@@ -4493,9 +4493,9 @@ def test_blue_pair_view_turns_toward_blue_and_reaudits_before_deciding():
                 done = replace(s, mode=35, context_valid=True, context_matches=True,
                                accepted_command=CMD_DISPERSE_PILE, action_status=3)
                 m._disperse_output(v, replace(done, action_status=1), 2.0+n)
-                assert m.blue_pair_view_deg == n * sign
+                assert m.blue_pair_turns == n * (sign // 10)
                 m._disperse_output(v, done, 2.1+n)
-                assert m.blue_pair_view_deg == (n+1) * sign and m.disperse_attempts == 0
+                assert m.blue_pair_turns == (n+1) * (sign // 10) and m.disperse_attempts == 0
                 # Exercise the actual post-turn stable audit and its STM handoff.
                 if resolved:
                     pair_after = (replace(green, bbox=(700 if sign > 0 else 300, 199, 200, 285)), blue)
@@ -4559,3 +4559,54 @@ def test_first_green_three_physical_attempts_and_topup_invalid_rollback_once():
         if out.command and out.command.opcode == CMD_GREEN_TOPUP: break
     assert out.command.opcode == CMD_GREEN_TOPUP and out.command.arg_a == TopupStep.ROLLBACK
     assert not m.green_topup.review_forward
+
+
+def test_outer_blue_brakes_same_turn_while_boxes_still_overlap_then_reaudits():
+    from run_competition_rescue import audit_from_cargo
+    from protocol import CMD_SIDE_VALID
+    for name in ("core_black", "green_supply"):
+        for sign, outer, inner in ((10, "left", "right"), (-10, "right", "left")):
+            m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+            m.first_common_delivered = True
+            m._select_batch(CargoBatch((1,), (name,), "material"))
+            def item(tid, category, cx):
+                return replace(cargo(tid, category, 0, 0), bbox=(cx-90, 300, 180, 150))
+            target = item(1, name, 640-sign)
+            blue = item(2, "danger_cyan", 640-15*sign)
+            initial = audit_from_cargo((target, blue), side_by_track={1:outer,2:outer})
+            s = replace(stm(mode=37, flags=0x41), camera_pitch_cdeg=14000)
+            start = m._start_danger_release(initial, s, 1.)
+            epoch = m.separation_request_epoch
+            assert (start.command.arg_a, start.command.arg_b) == (sign, 0)
+            v = VisionSnapshot(frame_sequence=101, capture_audit=audit_from_cargo(
+                (item(1,name,640+2*sign),item(2,"danger_cyan",640-4*sign)),
+                side_by_track={1:inner,2:outer}))
+            moving = replace(s, mode=25, context_valid=True, context_matches=True,
+                             accepted_command=CMD_DISPERSE_PILE, action_status=1)
+            assert m._disperse_output(v,replace(moving,context_matches=False),1.1).command.arg_b == 0
+            out = m._disperse_output(v,moving,1.2)
+            assert (out.command.arg_a,out.command.arg_b,out.command.source_vision_frame) == (sign,1,101)
+            assert m.separation_request_epoch == epoch and m.blue_pair_turns == 0
+            assert m._disperse_output(VisionSnapshot(),moving,1.3).command == out.command
+            m._disperse_output(v,replace(moving,mode=35,action_status=3),1.5)
+            assert m.blue_pair_turns == sign//10 and m.state == CompetitionState.CAPTURE_AUDIT
+            assert m.audit_recheck_frame_floor == 101
+            out = m._start_danger_release(v.capture_audit,s,1.8)
+            assert out.command.flags & CMD_SIDE_VALID and out.command.arg_a == 0
+            assert bool(out.command.flags & CMD_TARGET_RIGHT) == (inner=="right")
+
+
+def test_blue_side_priority_counts_only_eligible_cargo_before_tiebreak():
+    from run_competition_rescue import audit_from_cargo
+    m = CompetitionMission(CompetitionSettings(side="blue", initial_stash_enabled=False))
+    m._select_batch(CargoBatch((1,), ("green_supply",), "material"))
+    def audit(left,right):
+        pairs=[(side,name) for side,group in (("left",left),("right",right)) for name in group]
+        return audit_from_cargo(tuple(cargo(i,name,200 if side=="left" else 900,300)
+            for i,(side,name) in enumerate(pairs)),side_by_track={i:side for i,(side,_) in enumerate(pairs)})
+    b,g,k,o="danger_cyan","green_supply","core_black","injured_orange"
+    for first_done in (False, True):
+        m.first_common_delivered=first_done
+        assert m._preferred_keep_side(audit([b,g,g],[g]))=="right"
+        assert m._preferred_keep_side(audit([g],[b,g,g]))=="left"
+        assert m._preferred_keep_side(audit([b,k,o],[b,g]))==("left" if first_done else "right")
