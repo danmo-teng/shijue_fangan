@@ -254,6 +254,7 @@ class TrackedCargo:
     misses: int = 0
     visible: bool = True
     inside_safe_zone: bool = False
+    safe_zone_name: str | None = None
 
     @property
     def center_px(self) -> tuple[int, int]:
@@ -1031,6 +1032,7 @@ class CompetitionMission:
         self.range_frame_floor = 0
         self.range_pitch_cdeg = 0
         self.range_epoch = 0
+        self.pickup_distance_published = False
         self.orange_top_view_command = None
         self.orange_top_view_frame_floor = None
         self.zone_unresolved = {}
@@ -1505,6 +1507,7 @@ class CompetitionMission:
             self.last_selected_track_ids = (candidate.track_id,)
 
     def _select_batch(self, batch: CargoBatch) -> None:
+        self.pickup_distance_published = False
         self.nudge_forward_position = False
         self._clear_orange_top_view()
         self.transport_separation_active = False
@@ -2060,8 +2063,9 @@ class CompetitionMission:
         if view.request is None:
             target = next((i for i in vision.cargo if i.visible and i.track_id == view.target.track_id
                            and i.class_name == view.target.class_name), None)
-            if (target is None or stm.gripper_closed or stm.camera_pitch_cdeg != 12000 or
-                    vision.range_pitch_cdeg != 12000):
+            if (target is None or stm.gripper_closed or view.start_pitch not in (10500, 12000) or
+                    stm.camera_pitch_cdeg != view.start_pitch or
+                    vision.range_pitch_cdeg != view.start_pitch):
                 view.leaving = True
                 return output(self._hold(), "zone_view_alignment_lost")
             view.target = target
@@ -2073,7 +2077,10 @@ class CompetitionMission:
             else:
                 view.pixel_frame = vision.frame_sequence
                 self._mark_target_seen(target, now)
-                return output(self._approach_command(target), "zone_view_align")
+                pixel = self._approach_command(target)
+                if view.cluster_alignment:
+                    pixel = replace(pixel, flags=pixel.flags | CMD_CLUSTER_TARGET)
+                return output(pixel, "zone_view_align")
             return output(view.request, "zone_view_lift")
         if view.completed_frame is None:
             if (paired and stm.mode == STM_MODE_APPROACH_RANGE_WAIT and
@@ -2089,6 +2096,8 @@ class CompetitionMission:
                        and i.bbox[0] < x+w and i.bbox[0]+i.bbox[2] > x]
             if (len(matches) == 1 and matches[0].track_id == view.target.track_id and
                     clearly_outside(matches[0], vision.zone_boxes, view.zone)):
+                self.selected_batch = replace(self.selected_batch, track_ids=(matches[0].track_id,),
+                    classes=(matches[0].class_name,), destination="injury" if matches[0].class_name == "injured_orange" else "material")
                 self._mark_target_seen(matches[0], now)
                 view.realign = self._approach_command(matches[0])
                 self._reset_delivery_evidence()
@@ -2759,18 +2768,36 @@ class CompetitionMission:
             return None
         ids = {self.locked_target_track_id, self.cluster_target_track_id}
         ids.update(self.selected_batch.track_ids)
-        if not any(item.visible and item.inside_safe_zone and item.track_id in ids
-                   for item in vision.cargo):
+        target = next((item for item in vision.cargo if item.visible and item.inside_safe_zone
+                       and item.track_id in ids), None)
+        if target is None:
             return None
-        # A distant target can first be covered by a zone during pixel alignment.
-        # No finite approach has been requested, so use the stationary loss exit.
         if (self.state in {CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH} and
-                stm.mode == STM_MODE_APPROACH_TARGET and stm.camera_pitch_cdeg in {10500, 12000} and
-                self.range_command is None):
-            self._begin_search_recovery(vision, now)
-            return replace(self._search_recovery_output(vision, stm, now),
-                           event="safe_zone_target_reselect", reason="safe_zone_target_reselect",
-                           message="对准时目标被安全区覆盖，原地结束对准并重新搜索")
+                not self.pickup_distance_published and
+                stm.mode in {STM_MODE_SEARCH, STM_MODE_APPROACH_TARGET, STM_MODE_APPROACH_RANGE_WAIT}):
+            # SEARCH may still describe the previous action immediately after publishing a lock.
+            # Continue pixel alignment on the current task; never send a release for this race.
+            cluster = self.state == CompetitionState.CLUSTER_APPROACH
+            anchor = self.cluster_target_track_id if cluster else self.locked_target_track_id
+            if anchor is not None:
+                target = next((i for i in vision.cargo if i.visible and i.inside_safe_zone and i.track_id == anchor), None)
+                if target is None:
+                    return None
+            zone = target.safe_zone_name or dict(vision.clipped_zone_candidates).get(target.track_id)
+            self._clear_range_approach()
+            self.zone_observation = ZoneObservation(zone, target, vision.frame_sequence,
+                start_pitch=stm.camera_pitch_cdeg, cluster_alignment=cluster)
+            self._set_state(CompetitionState.SEARCH_ZONE_VIEW, now)
+            self._mark_target_seen(target, now)
+            pixel = self._approach_command(target)
+            if cluster:
+                pixel = replace(pixel, flags=pixel.flags | CMD_CLUSTER_TARGET)
+            return CompetitionOutput(self.state, pixel, "远目标被安全区盖住，原地对准并抬头复审",
+                                     self.selected_batch, event="locked_zone_view", reason="zone_view_align")
+        if (self.state in {CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH} and
+                not self.pickup_distance_published and stm.mode not in {STM_MODE_APPROACH_RANGE_MOVE,
+                STM_MODE_CAPTURE_AUDIT, STM_MODE_CLUSTER_CAPTURE_AUDIT, STM_MODE_CLUSTER_READY}):
+            return None  # An unrelated or recovery mode is not permission to execute a claw escape.
         # Must precede finite-range resend and the ordinary missing-target grace.
         self._clear_range_approach()
         result = self._start_capture_abandon(CargoAudit(), stm, now)
@@ -8005,6 +8032,14 @@ class CompetitionMission:
                 reason="stm_status_stale_pause",
                 expected_stm_modes=self.expected_stm_modes(),
             )
+        if (self.state == CompetitionState.INVALID_RELEASE and self.invalid_release_context == "safe_zone_target"
+                and stm.mode in {STM_MODE_APPROACH_RECOVER, STM_MODE_SEARCH}):
+            accepted = (stm.context_valid and stm.context_matches and
+                        stm.accepted_command == CMD_RELEASE_BOTH and bool(stm.action_status & 1))
+            if accepted and stm.mode == STM_MODE_SEARCH and stm.action_status & 2:
+                return self._audit_reacquire_output(vision, stm, now)
+            return CompetitionOutput(self.state, self._hold() if accepted else self._invalid_release_command(),
+                "等待本次弃批动作实际结束", self.selected_batch, reason="zone_release_wait_done")
         if self._original_recovery_lost(stm):
             return self._abandon_original_recovery(vision, pose, stm, now)
         if self._first_green_reaudit_needed(stm):

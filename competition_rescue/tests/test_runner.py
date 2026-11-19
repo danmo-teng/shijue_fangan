@@ -4209,3 +4209,38 @@ def test_repush_wheel_policy_restores_on_reverse_and_relatches_at_contact():
         policy.update(out,replace(st,mode=mode),7,12,depth_m=depth)
         assert policy.suppressed == disabled
     policy.close()
+
+
+def test_old_search_receipt_cannot_finish_release_or_block_station_transfer(tmp_path):
+    from dataclasses import replace
+    from protocol import CMD_APPROACH_TARGET, CMD_RELEASE_BOTH, CMD_HOLD
+    from state_machine import CommandRequest, CompetitionOutput
+    m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+    m.first_common_delivered = m.initial_stash_done = True
+    planner = CompetitionPlanner(m,tmp_path/'pose',tmp_path/'stm',tmp_path/'cmd',tmp_path/'diag',
+                                 JsonlLog(tmp_path/'events'),50)
+    p = PoseSnapshot(True,-.4,0.,22.,0)
+    v = VisionSnapshot(frame_sequence=8263,range_pitch_cdeg=12000)
+    old = StmSnapshot(mode=3,age_ms=0,camera_pitch_cdeg=12000,context_valid=True,task_id=32519,
+                      action_id=58402,accepted_command=CMD_APPROACH_TARGET,action_status=3)
+    planner.protocol_task = planner.protocol_task_cursor = 32520
+    planner.protocol_action = planner.protocol_action_cursor = 58404
+    pending = CommandRequest(CMD_RELEASE_BOTH,m._side_flags())
+    m._set_state(CompetitionState.INVALID_RELEASE,1.)
+    m.invalid_release_context, m.invalid_release_side, m.invalid_release_final = "safe_zone_target", "both", True
+    planner.protocol_last_output = CompetitionOutput(m.state,pending,"")
+    assert planner._output_for_cycle(v,p,old,False,1.1).command == pending
+    assert m.state == CompetitionState.INVALID_RELEASE
+    owner = replace(old,mode=24,task_id=32520,action_id=58404,accepted_command=CMD_RELEASE_BOTH,action_status=1)
+    assert planner._output_for_cycle(v,p,owner,False,1.2).command.opcode == CMD_HOLD
+    done = replace(owner,mode=3,action_status=3)
+    assert planner._output_for_cycle(v,p,done,False,1.3).state == CompetitionState.SEARCH
+
+    # The observed field failure: both ends already searching, upper bookkeeping still on 58402.
+    planner.protocol_task,planner.protocol_action = old.task_id,old.action_id
+    planner.protocol_last_output = CompetitionOutput(m.state,m._hold(),"")
+    m.search_site_turn_deg = m.search_yaw_accum_deg = 539.
+    m.search_last_yaw_deg = 20.
+    out=planner._output_for_cycle(replace(v,frame_sequence=8264),p,done,False,1.4)
+    assert (planner.protocol_task,planner.protocol_action)==(done.task_id,done.action_id)
+    assert out.state == CompetitionState.SEARCH_TRANSFER and m.search_transfer_route.target_point==3

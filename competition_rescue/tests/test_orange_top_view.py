@@ -109,7 +109,9 @@ def test_changed_id_inside_zone_is_not_approached():
     item = replace(v.cargo[0],track_id=500,bbox=(970,200,100,100),inside_safe_zone=True)
     view = replace(v,frame_sequence=11,range_pitch_cdeg=10500,cargo=(item,))
     assert m._orange_top_view_output(view,done,1.2) is None
-    assert m._safe_zone_target_exit(view,done,1.2).event == "safe_zone_target_cancel"
+    review = m._safe_zone_target_exit(view,done,1.2)
+    assert review.event == "locked_zone_view" and m.state == CompetitionState.SEARCH_ZONE_VIEW
+    assert review.command.opcode == CMD_APPROACH_TARGET and not review.command.flags & CMD_APPROACH_RANGE
 
 
 def test_protocol_no_translation_and_aux3_noncluster_only():

@@ -33,7 +33,7 @@ import cv2
 import numpy as np
 
 from vision_replay import VisionReplay
-from search_zone_view import clipped
+from search_zone_view import clipped, clearly_outside
 from safe_zone_memory import SafeZoneCargoMemory
 from sweep_boundaries import runtime_boundaries, corridor_polygon
 from async_diagnostics import AsyncDiagnosticWriter
@@ -1076,14 +1076,24 @@ def make_vision_snapshot(
     for item in own_zone_cargo:
         covers = [(name, box) for name, box in zone_boxes
                   if bbox_inside_safe_zone(item.bbox, box, item.class_name)]
-        if covers and not item.inside_safe_zone:
-            item = replace(item, inside_safe_zone=True)
+        if covers:
+            item = replace(item, inside_safe_zone=True, safe_zone_name=covers[0] if len(covers) == 1 else None)
+        elif item.inside_safe_zone:
+            item = replace(item, safe_zone_name="safe_" + mission.settings.side)
         if len(covers) == 1 and clipped(covers[0][1]):
             clipped_candidates.append((item.track_id, covers[0][0]))
         cargo_items.append(item)
     cargo = tuple(cargo_items)
     if safe_zone_memory is not None:
-        cargo = safe_zone_memory.apply(cargo, stm.camera_pitch_cdeg)
+        reviewed_id = None
+        view = mission.zone_observation
+        if (view is not None and view.completed_frame is not None and stm.camera_pitch_cdeg == 10500 and
+                frame_sequence > view.completed_frame and observed_s is not None and observed_s > view.completed_s):
+            if any(item.visible and item.track_id == view.target.track_id and
+                   item.class_name == view.target.class_name and clearly_outside(item, zone_boxes, view.zone)
+                   for item in cargo):
+                reviewed_id = view.target.track_id
+        cargo = safe_zone_memory.apply(cargo, stm.camera_pitch_cdeg, reviewed_outside_id=reviewed_id)
     rois = capture_rois or load_capture_rois(
         VISION_ROOT / "config/capture_roi.json"
     )
@@ -2146,6 +2156,8 @@ class CompetitionPlanner:
         if trace_exit:
             publish_start_ns = time.monotonic_ns()
         write_command_frame(self.command_path, packet)
+        if command.opcode == CMD_APPROACH_TARGET and command.flags & CMD_APPROACH_RANGE and command.arg_a > 0:
+            self.mission.pickup_distance_published = True
         if trace_exit:
             published_ns = time.monotonic_ns()
             try:
@@ -2237,6 +2249,9 @@ class CompetitionPlanner:
         if self.mission._original_recovery_lost(stm):
             return True
         state = self.mission.state
+        if (state == CompetitionState.INVALID_RELEASE and self.mission.invalid_release_context == "safe_zone_target"
+                and stm.mode in {24, 3}):
+            return False  # The release state itself consumes its matching DONE, not a generic recovery.
         if stm.mode in {24, 3} and self.mission.committed_audit_handoff_mode is not None:
             return True
         if stm.mode == 41:
@@ -2692,6 +2707,10 @@ class CompetitionPlanner:
             return handoff
         # Recovery is an observation from the MCU, not an ACK of the last
         # requested action. Handle it before context_pending/camera pause.
+        if (self.mission.state == CompetitionState.INVALID_RELEASE and self.mission.invalid_release_context == "safe_zone_target"
+                and stm.mode in {24, 3} and not paused and not stm.fault):
+            matches = (stm.context_valid and stm.task_id == self.protocol_task and stm.action_id == self.protocol_action)
+            return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
         if self._is_recovery_observation(stm):
             self._adopt_recovery_context()
             result = self.mission.step(vision, pose, replace(stm, context_matches=True), now)
@@ -2800,6 +2819,15 @@ class CompetitionPlanner:
             # forever after the actual image has recovered. Higher-view
             # reacquisition belongs to that same dynamic visual action.
             return self.mission.step(vision, pose, replace(stm, context_matches=matches), now)
+        if (self.mission.state == CompetitionState.SEARCH and stm.mode == STM_MODE_SEARCH and
+                stm.fresh and stm.context_valid and stm.action_status & 1 and not stm.gripper_closed and
+                not matches and self.protocol_last_output is not None and
+                (self.protocol_last_output.command is None or
+                 self.protocol_last_output.command.opcode in {CMD_HOLD, CMD_PAUSE})):
+            # Both ends are searching with no pending mechanical request. Follow the actual owner
+            # so an old HOLD cannot bypass target selection and station-angle accounting forever.
+            self._adopt_recovery_context()
+            return self.mission.step(vision, pose, replace(stm, context_matches=True), now)
         if (self.protocol_last_output is not None and stm.fresh and
                 not matches and stm.mode != 41 and not stm.fault):
             pending = self.protocol_last_output.command

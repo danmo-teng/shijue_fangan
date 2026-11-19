@@ -1,0 +1,41 @@
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 8a479db..dd05454 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -1636,7 +1636,8 @@ static void task_enter(TaskState next, uint32_t now_ms)
+   if (next == TASK_SEARCH) Lift_SetTravelPosition();
+   if (next == TASK_APPROACH && state == TASK_SEARCH) {
+     memset(&zone_view, 0, sizeof(zone_view));
+-    zone_view.search_entry = Camera_GetAngle() == APP_SEARCH_HIGH_CAMERA_ANGLE;
++    zone_view.search_entry = Camera_GetAngle() == APP_SEARCH_HIGH_CAMERA_ANGLE ||
++        Camera_GetAngle() == APP_SEARCH_LOW_CAMERA_ANGLE;
+     zone_view.search_phase = search_phase;
+     zone_view.search_turn_mdeg = turn_tracker.accumulated_mdeg;
+   } else {
+@@ -7539,6 +7540,7 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+       zone_view.done = false;
+       zone_view.orange_top = command->heading_cdeg == VISION_APPROACH_ORANGE_TOP_VIEW;
+       if (zone_view.orange_top) approach_phase = APPROACH_TRACK;
++      else cluster_target_active = false;  /* A zone-reviewed anchor resumes as a single target. */
+       mission_paused = false;
+       zone_view.source_frame = zone_view.frame_floor = command->vision_frame;
+       zone_view.wait_ms = Camera_PositionWaitMs(APP_SEARCH_LOW_CAMERA_ANGLE);
+@@ -8630,7 +8632,7 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+     const uint8_t expected = VISION_CMD_VALID | VISION_CMD_APPROACH_RANGE |
+         VISION_CMD_DISTANCE_VALID | (incoming.flags & VISION_CMD_RED_SIDE);
+     if (new_target || state != TASK_APPROACH || task_status.gripper_closed ||
+-        cluster_target_active || opening_claw_probe_active || cargo_recheck_pending ||
++        opening_claw_probe_active || cargo_recheck_pending ||
+         !zone_view.search_entry || !task_side_flag_valid(incoming.flags) ||
+         incoming.flags != expected || incoming.target_x_mm != 0 ||
+         incoming.target_y_mm != APP_SEARCH_LOW_CAMERA_ANGLE * 100 ||
+@@ -8638,7 +8640,8 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+     if (zone_view.active) {
+       if (zone_view.orange_top || new_action || incoming.vision_frame != zone_view.source_frame) goto rejected;
+     } else if (!new_action || !command_visual_new ||
+-               approach_measure_pitch != APP_SEARCH_HIGH_CAMERA_ANGLE) goto rejected;
++               (approach_measure_pitch != APP_SEARCH_HIGH_CAMERA_ANGLE &&
++                approach_measure_pitch != APP_SEARCH_LOW_CAMERA_ANGLE)) goto rejected;
+   } else if (pickup_relook) {
+     if (new_target || !task_side_flag_valid(incoming.flags) || incoming.vision_frame == 0U ||
+         (new_action ? (!task_pre_grab_entry() || pre_grab.moving || !command_visual_new ||

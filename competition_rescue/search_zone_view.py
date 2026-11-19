@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class ZoneObservation:
-    zone: str
+    zone: str | None
     target: 'TrackedCargo'
     pixel_frame: int
     request: 'CommandRequest | None' = None
@@ -16,6 +16,8 @@ class ZoneObservation:
     completed_s: float = 0.
     realign: 'CommandRequest | None' = None
     leaving: bool = False
+    start_pitch: int = 12000
+    cluster_alignment: bool = False
 
 
 def clipped(box):

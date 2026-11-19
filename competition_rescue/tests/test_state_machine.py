@@ -3893,21 +3893,31 @@ def test_closed_gap_reappearance_and_pause_do_not_discard_real_evidence():
     assert result.reason == 'confirmed_load_gap_resume'
 
 
-def test_distant_zone_target_uses_stationary_recovery_before_any_range_move():
+def test_locked_zone_target_reviews_without_release_before_any_range_move():
+    from protocol import CMD_APPROACH_RANGE
     for state in (CompetitionState.APPROACH, CompetitionState.CLUSTER_APPROACH):
-        m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
-        m.first_common_delivered = True
-        m._select_batch(CargoBatch((594,), ("injured_orange",), "injury"))
-        m.locked_target_track_id = m.cluster_target_track_id = 594
-        m._set_state(state, 1.)
-        item = replace(cargo(594, "injured_orange", 779, 195), inside_safe_zone=True)
-        view = VisionSnapshot(frame_sequence=8214, cargo=(item,), range_pitch_cdeg=10500)
-        st = replace(stm(mode=20), camera_pitch_cdeg=10500)
-        out = m.step(view, pose(), st, 1.1)
-        assert out.reason == "safe_zone_target_reselect" and out.command.opcode == CMD_HOLD
-        assert m.state == CompetitionState.WAIT_SEARCH_RECOVERY and m.selected_batch is None
-        assert m.step(view, pose(), replace(st, mode=24), 1.2).command.opcode == CMD_HOLD
-        assert m.step(view, pose(), replace(st, mode=3), 1.3).state == CompetitionState.SEARCH
+        for name, pitch in (("green_supply",12000), ("injured_orange",10500)):
+            m = CompetitionMission(CompetitionSettings(side="red", initial_stash_enabled=False))
+            m.first_common_delivered = True
+            m._select_batch(CargoBatch((56,), (name,), "injury" if name == "injured_orange" else "material"))
+            m.locked_target_track_id = m.cluster_target_track_id = 56
+            m._set_state(state, 1.)
+            m.search_site_turn_deg = m.search_yaw_accum_deg = 535.
+            item = replace(cargo(56, name, 779, 195), inside_safe_zone=True, safe_zone_name="safe_blue")
+            view = VisionSnapshot(frame_sequence=8263, cargo=(item,), range_pitch_cdeg=pitch)
+            old = replace(stm(mode=3), camera_pitch_cdeg=pitch, context_valid=True, action_status=3)
+            out = m.step(view, pose(), old, 1.1)
+            assert out.reason == "zone_view_align" and out.command.opcode == CMD_APPROACH_TARGET
+            assert not out.command.flags & CMD_APPROACH_RANGE
+            paired = replace(old, mode=52, context_matches=True, accepted_command=CMD_APPROACH_TARGET)
+            out = m.step(replace(view,frame_sequence=8264),pose(),paired,1.2)
+            assert (out.command.arg_a,out.command.arg_b,out.command.aux)==(0,10500,3)
+            high = replace(paired,camera_pitch_cdeg=10500)
+            m.step(replace(view,frame_sequence=8265),pose(),high,1.3)
+            frame = replace(view,frame_sequence=8266,range_pitch_cdeg=10500,observed_monotonic_s=1.4)
+            assert m.step(frame,pose(),high,1.4).command.opcode==CMD_HOLD
+            assert m.step(frame,pose(),replace(high,mode=3),1.5).state==CompetitionState.SEARCH
+            assert m.search_site_turn_deg == 535.
 
 
 def test_safe_zone_target_cancels_before_finite_range_resend_and_waits_for_recovery():
@@ -3927,8 +3937,12 @@ def test_safe_zone_target_cancels_before_finite_range_resend_and_waits_for_recov
         assert m.range_command is None
         again = m.step(replace(v, cargo=(), frame_sequence=11), pose(), stm(53), 1.1)
         assert again.command.opcode == CMD_RELEASE_BOTH
-        m.step(v, pose(), stm(24), 1.2)
-        m.step(v, pose(), stm(3), 1.8)
+        old = replace(stm(3),context_valid=True,context_matches=False,accepted_command=CMD_APPROACH_TARGET,action_status=3)
+        assert m.step(v,pose(),old,1.15).command.opcode==CMD_RELEASE_BOTH
+        ack = replace(old,context_matches=True,accepted_command=CMD_RELEASE_BOTH,action_status=1)
+        assert m.step(v,pose(),replace(ack,mode=24),1.2).command.opcode==CMD_HOLD
+        assert m.state==CompetitionState.INVALID_RELEASE
+        m.step(v,pose(),replace(ack,action_status=3),1.8)
         assert m.state == CompetitionState.SEARCH and m.selected_batch is None
 
 

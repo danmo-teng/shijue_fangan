@@ -24,7 +24,7 @@ class SafeZoneCargoMemory:
                 math.hypot(nx + nw / 2 - x - w / 2,
                            ny + nh / 2 - y - h / 2) <= max(w, h, nw, nh))
 
-    def apply(self, cargo, pitch):
+    def apply(self, cargo, pitch, *, reviewed_outside_id=None):
         if pitch != self.pitch:
             self.clear()
             self.pitch = pitch
@@ -34,9 +34,9 @@ class SafeZoneCargoMemory:
             held_missing_track = (old is not None and not item.visible and
                                   old.class_name == item.class_name and
                                   old.hits == item.hits and old.bbox == item.bbox)
-            if (not item.inside_safe_zone and old is not None and old.inside_safe_zone and
+            if (item.track_id != reviewed_outside_id and not item.inside_safe_zone and old is not None and old.inside_safe_zone and
                     (held_missing_track or (item.visible and self.continuous(old, item)))):
-                item = replace(item, inside_safe_zone=True)
+                item = replace(item, inside_safe_zone=True, safe_zone_name=old.safe_zone_name)
             result.append(item)
         # Keep the tracker's existing missed-frame continuity, but removal of
         # the track breaks the chain. No permanent ID blacklist or old rectangle.
