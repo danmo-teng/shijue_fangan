@@ -1,0 +1,229 @@
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index dad6f6b..0da3c03 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -472,6 +472,7 @@
+ #define APP_APPROACH_RANGE_WAIT_MS      5000U
+ #define APP_APPROACH_RANGE_TIMEOUT_MS  12000U
+ #define APP_APPROACH_RANGE_MAX_MM       2500U
++#define APP_APPROACH_RANGE_FAST_MM_S   1000.0f
+ #define APP_APPROACH_RANGE_SPEED_MM_S   500.0f
+ #define APP_APPROACH_RANGE_END_MM_S     200.0f
+ #define APP_APPROACH_RANGE_SLOW_MM      250.0f
+@@ -619,6 +620,7 @@
+ #define APP_SAFE_ALIGN_LATERAL_MM_S_PER_PX    1.0f
+ #define APP_SAFE_ALIGN_LATERAL_MIN_MM_S     270.0f
+ #define APP_SAFE_ALIGN_LATERAL_MAX_MM_S     400.0f
++#define APP_SAFE_ENTER_FAST_MM_S           800.0f
+ #define APP_SAFE_ENTER_CRUISE_SPEED_MM_S   400.0f
+ #define APP_SAFE_ENTER_MIN_SPEED_MM_S      200.0f
+ #define APP_SAFE_ENTER_SLOWDOWN_MM         300.0f
+@@ -674,6 +676,8 @@
+ /* Temporary lift position for filtering and orange/core separation. */
+ #define APP_LIFT_FIRST_GREEN_FILTER_ANGLE 82U
+ #define APP_SINGLE_CARGO_FILTER_BACK_SPEED_MM_S 250.0f
++#define APP_SINGLE_FILTER_FAST_BACK_MM_S      300.0f
++#define APP_SINGLE_FILTER_BACK_SLOW_MM         20.0f
+ /* S2/S4 mounting: 1 mirrors the PWM angle, 0 selects the original mounting. */
+ #define APP_CLAW_SERVOS_INVERTED           1
+ #define APP_CLAW_MOUNT_ANGLE(deg) (APP_CLAW_SERVOS_INVERTED ? (180U - (deg)) : (deg))
+diff --git a/Main/Inc/motor.h b/Main/Inc/motor.h
+index da9d0b6..2a626f8 100644
+--- a/Main/Inc/motor.h
++++ b/Main/Inc/motor.h
+@@ -39,6 +39,8 @@ MotorDistanceStatus Motor_MoveDistance(float distance_m,
+ MotorDistanceStatus Motor_MoveDistanceHeading(float distance_m,
+                                               float max_speed_mm_s,
+                                               float field_heading_deg);
++/* Closed single-load filter: reverse 100 mm on the latched field heading. */
++MotorDistanceStatus Motor_MoveSingleFilterBack(float field_heading_deg);
+ /* Opening forward leg with its own acceleration and heading-based speed cap. */
+ MotorDistanceStatus Motor_MoveStartForward(float field_heading_deg);
+ /* Distance progress along the latched request; wrong-way travel is negative. */
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index ea49012..70f46ef 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -533,6 +533,14 @@ static bool task_report_valid(const VisionData *vision)
+   return (vision != NULL) && vision->valid && (vision->tick_ms != 0U);
+ }
+ 
++/* Speed from which the existing deceleration can reach the old profile at
++ * the join. Only the distance before that join earns additional speed. */
++static float task_entry_speed(float extra_mm, float join_speed, float limit, float decel)
++{
++  if (extra_mm <= 0.0f) { return join_speed; }
++  return fminf(limit, sqrtf(join_speed * join_speed + 2.0f * decel * extra_mm));
++}
++
+ static float task_step_toward(float current, float target, float step)
+ {
+   if (current < target) {
+@@ -3246,8 +3254,11 @@ static void task_process_approach(const VisionData *vision, uint32_t now_ms)
+         return;
+       }
+       Motor_ResumeFiniteMotion();
++      const float remaining_mm = (float)approach_range_mm - fmaxf(0.0f, Motor_GetDistanceTravelledMm());
++      const float cruise = task_entry_speed(remaining_mm - APP_APPROACH_RANGE_SLOW_MM,
++          APP_APPROACH_RANGE_SPEED_MM_S, APP_APPROACH_RANGE_FAST_MM_S, APP_GO_DISTANCE_DECEL_MM_S2);
+       const MotorDistanceStatus result = Motor_MoveDistanceLinear(
+-          approach_range_mm * 0.001f, APP_APPROACH_RANGE_SPEED_MM_S,
++          approach_range_mm * 0.001f, cruise,
+           APP_APPROACH_RANGE_SLOW_MM, APP_APPROACH_RANGE_END_MM_S);
+       task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
+       const bool range_done = result == MOTOR_DISTANCE_DONE ||
+@@ -3767,8 +3778,11 @@ static void task_process_single_filter(uint32_t now_ms)
+   }
+   if (single_filter_phase == 2U) {
+     Motor_ResumeFiniteMotion();
+-    const MotorDistanceStatus result = Motor_MoveDistanceHeading(
+-        -0.100f, APP_SINGLE_CARGO_FILTER_BACK_SPEED_MM_S, single_filter_heading_deg);
++    const bool single = !mixed_pair && audit_last_total_count == 1U;
++    const MotorDistanceStatus result = single ?
++        Motor_MoveSingleFilterBack(single_filter_heading_deg) :
++        Motor_MoveDistanceHeading(-0.100f, APP_SINGLE_CARGO_FILTER_BACK_SPEED_MM_S,
++                                  single_filter_heading_deg);
+     task_status.motors_active = result == MOTOR_DISTANCE_RUNNING;
+     if (result == MOTOR_DISTANCE_FAULT || result == MOTOR_DISTANCE_INVALID) {
+       task_stop(TASK_FAULT_MOTOR, now_ms);
+@@ -4537,7 +4551,10 @@ static void task_process_safe_align(uint32_t now_ms)
+ static float safe_enter_speed(int16_t fence_distance_mm)
+ {
+   if (fence_distance_mm >= (int16_t)APP_SAFE_ENTER_SLOWDOWN_MM) {
+-    return APP_SAFE_ENTER_CRUISE_SPEED_MM_S;
++    const float front_mm = APP_SAFE_ENTER_TOTAL_DISTANCE_MM - APP_SAFE_FINAL_PUSH_DISTANCE_MM;
++    const float remaining_mm = (float)fence_distance_mm - APP_SAFE_ENTER_CONTACT_DISTANCE_MM;
++    return task_entry_speed(remaining_mm - 0.5f * front_mm, APP_SAFE_ENTER_CRUISE_SPEED_MM_S,
++                            APP_SAFE_ENTER_FAST_MM_S, APP_NAV_SPEED_DECEL_MM_S2);
+   }
+   const float span_mm = APP_SAFE_ENTER_SLOWDOWN_MM -
+                         (float)APP_SAFE_ENTER_CONTACT_DISTANCE_MM;
+diff --git a/Main/Src/motor.c b/Main/Src/motor.c
+index 66bfe50..5fca1f0 100644
+--- a/Main/Src/motor.c
++++ b/Main/Src/motor.c
+@@ -33,12 +33,18 @@ typedef struct {
+ } MotorPwm;
+ #endif
+ 
++typedef enum {
++  DISTANCE_STANDARD,
++  DISTANCE_START_FORWARD,
++  DISTANCE_SINGLE_FILTER
++} MotorDistanceProfile;
++
+ typedef struct {
+   MotorDistanceStatus status;
+   bool slowing;
+   bool waiting_for_stop;
+   bool field_heading_hold;
+-  bool start_forward;
++  MotorDistanceProfile profile;
+   int32_t field_heading_mdeg;
+   float travelled_mm;
+   float target_mm;
+@@ -350,7 +356,7 @@ static void motor_set_target_counts(uint8_t id, float target_counts)
+     zero_limit_mm_s = APP_NAV_FINE_WHEEL_ZERO_MM_S;
+   } else if (id == 3U &&
+              ((distance_move.status == MOTOR_DISTANCE_RUNNING &&
+-               distance_move.start_forward) ||
++               distance_move.profile == DISTANCE_START_FORWARD) ||
+               (direction_move.active && direction_move.absolute_heading &&
+                direction_move.low_rear_deadband && !direction_move.reversing))) {
+     zero_limit_mm_s = APP_MOTOR_REAR_HEADING_ZERO_MM_S;
+@@ -750,8 +756,10 @@ static void motor_update_distance_move(const EncoderStatus encoder[MOTOR_COUNT])
+   if (remaining_mm < distance_move.slowdown_start_mm) {
+     if (!distance_move.slowing) {
+       distance_move.slowing = true;
+-      Pid_Reset(&speed_pids[0]);
+-      Pid_Reset(&speed_pids[1]);
++      if (distance_move.profile != DISTANCE_SINGLE_FILTER) {
++        Pid_Reset(&speed_pids[0]);
++        Pid_Reset(&speed_pids[1]);
++      }
+     }
+ 
+     const float usable_slowdown =
+@@ -778,7 +786,7 @@ static void motor_update_distance_move(const EncoderStatus encoder[MOTOR_COUNT])
+   }
+   const float heading_error_deg = (float)heading_error_mdeg / 1000.0f;
+   float accel_mm_s2 = APP_GO_DISTANCE_ACCEL_MM_S2;
+-  if (distance_move.start_forward) {
++  if (distance_move.profile == DISTANCE_START_FORWARD) {
+     const float error_span_deg = APP_START_FORWARD_SLOW_SPEED_ERROR_DEG -
+                                  APP_START_FORWARD_FULL_SPEED_ERROR_DEG;
+     const float speed_fraction = motor_clamp_float(
+@@ -1990,7 +1998,7 @@ static MotorDistanceStatus motor_move_distance(float distance_m,
+                                                bool limit_slowdown_to_half,
+                                                bool field_heading_hold,
+                                                float field_heading_deg,
+-                                               bool start_forward)
++                                               MotorDistanceProfile profile)
+ {
+   const uint32_t primask = motor_enter_critical();
+   if (distance_move.status != MOTOR_DISTANCE_IDLE) {
+@@ -2070,7 +2078,7 @@ static MotorDistanceStatus motor_move_distance(float distance_m,
+   distance_move.start_m2_count = 0;
+   distance_move.target_yaw_mdeg = 0;
+   distance_move.field_heading_hold = field_heading_hold;
+-  distance_move.start_forward = start_forward;
++  distance_move.profile = profile;
+   distance_move.field_heading_mdeg = field_heading_hold ?
+       (int32_t)lroundf(motor_wrap_angle_deg(field_heading_deg) * 1000.0f) : 0;
+   distance_move.slowdown_start_mm = slowdown_mm;
+@@ -2106,7 +2114,7 @@ static MotorDistanceStatus motor_move_distance_default(float distance_m,
+       max_speed_mm_s / APP_GO_DISTANCE_SPEED_MM_S;
+   return motor_move_distance(distance_m, max_speed_mm_s, slowdown_mm,
+                              end_speed_mm_s, true, field_heading_hold,
+-                             field_heading_deg, start_forward);
++                             field_heading_deg, start_forward ? DISTANCE_START_FORWARD : DISTANCE_STANDARD);
+ }
+ 
+ MotorDistanceStatus Motor_MoveDistance(float distance_m, float max_speed_mm_s)
+@@ -2121,6 +2129,13 @@ MotorDistanceStatus Motor_MoveDistanceHeading(float distance_m, float max_speed_
+                                      field_heading_deg, false);
+ }
+ 
++MotorDistanceStatus Motor_MoveSingleFilterBack(float field_heading_deg)
++{
++  return motor_move_distance(-0.100f, APP_SINGLE_FILTER_FAST_BACK_MM_S,
++                             APP_SINGLE_FILTER_BACK_SLOW_MM, APP_GO_DISTANCE_MIN_SPEED_MM_S,
++                             false, true, field_heading_deg, DISTANCE_SINGLE_FILTER);
++}
++
+ MotorDistanceStatus Motor_MoveStartForward(float field_heading_deg)
+ {
+   return motor_move_distance_default(APP_START_FORWARD_DISTANCE_M,
+@@ -2143,7 +2158,7 @@ MotorDistanceStatus Motor_MoveDistanceLinear(float distance_m,
+                                              float end_speed_mm_s)
+ {
+   return motor_move_distance(distance_m, max_speed_mm_s, slowdown_mm,
+-                             end_speed_mm_s, false, false, 0.0f, false);
++                             end_speed_mm_s, false, false, 0.0f, DISTANCE_STANDARD);
+ }
+ 
+ MotorDistanceStatus Motor_MoveDistanceConstant(float distance_m,
+@@ -2151,7 +2166,7 @@ MotorDistanceStatus Motor_MoveDistanceConstant(float distance_m,
+ {
+   return motor_move_distance(distance_m, speed_mm_s,
+                              APP_GO_DISTANCE_TOLERANCE_MM + 1.0f,
+-                             speed_mm_s, false, false, 0.0f, false);
++                             speed_mm_s, false, false, 0.0f, DISTANCE_STANDARD);
+ }
+ 
+ MotorTurnStatus Motor_TurnAngle(float angle_deg)
+diff --git a/tools/test_injury_backoff.c b/tools/test_injury_backoff.c
+index cfd8f2c..31f594a 100644
+--- a/tools/test_injury_backoff.c
++++ b/tools/test_injury_backoff.c
+@@ -87,6 +87,10 @@ MotorDistanceStatus Motor_MoveDistanceHeading(float distance, float speed, float
+   ++distance_calls;
+   return distance_result;
+ }
++MotorDistanceStatus Motor_MoveSingleFilterBack(float heading)
++{
++  return Motor_MoveDistanceHeading(-0.100f, APP_SINGLE_FILTER_FAST_BACK_MM_S, heading);
++}
+ MotorDistanceStatus Motor_MoveStartForward(float heading)
+ {
+   return Motor_MoveDistanceHeading(APP_START_FORWARD_DISTANCE_M,
