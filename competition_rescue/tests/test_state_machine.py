@@ -4627,7 +4627,8 @@ def test_pregrab_lost_green_with_visible_replacement_relooks_in_place():
     assert m.state == CompetitionState.SEARCH and m.selected_batch is None
 
 
-def test_black_clearance_photos_and_one_bounded_turn():
+def test_black_clearance_photos_and_two_bounded_turns():
+    from copy import deepcopy
     from run_competition_rescue import audit_from_cargo
     from protocol import CMD_SIDE_VALID, SEPARATION_BLACK_CLEARANCE
 
@@ -4656,4 +4657,16 @@ def test_black_clearance_photos_and_one_bounded_turn():
         done = replace(status,context_valid=True,context_matches=True,mode=35,accepted_command=CMD_DISPERSE_PILE,action_status=3)
         m._disperse_output(VisionSnapshot(frame_sequence=100),done,2.5)
         assert m.audit_recheck_frame_floor==100 and m.disperse_attempts==0
-        assert m._start_danger_release(audit(angle),status,3.).command.opcode==CMD_RELEASE_BOTH
+        assert m.black_turn_requests == 1
+        first_ready = deepcopy(m)
+        assert first_ready._start_danger_release(ready,status,3.).event == "black_clearance_keep"
+        residual = 3 if angle > 0 else -3
+        second = m._start_danger_release(audit(residual),status,3.)
+        assert second.event == "black_clearance_turn_start" and second.command.arg_a == residual
+        assert m._disperse_output(VisionSnapshot(frame_sequence=101),replace(done,mode=25,action_status=1),3.1).command == second.command
+        assert m.black_turn_requests == 2
+        m._disperse_output(VisionSnapshot(frame_sequence=102),done,3.5)
+        assert m.audit_recheck_frame_floor == 102 and m.disperse_attempts == 0
+        still_blocked = deepcopy(m)
+        assert m._start_danger_release(ready,status,4.).event == "black_clearance_keep"
+        assert still_blocked._start_danger_release(audit(residual),status,4.).command.opcode == CMD_RELEASE_BOTH

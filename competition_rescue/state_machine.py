@@ -1051,6 +1051,7 @@ class CompetitionMission:
         self.orange_gate_filter_command = None
         self.blue_pair_turns = 0
         self.black_turn_keep_side = None
+        self.black_turn_requests = 0
         self.blue_pair_live_target = None
 
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
@@ -1529,6 +1530,7 @@ class CompetitionMission:
             self.task_generation += 1
             self.blue_pair_turns = 0
             self.black_turn_keep_side = None
+            self.black_turn_requests = 0
             self.blue_pair_live_target = None
             self.corridor_nudge_attempted = False
             self.corridor_nudge_command = None
@@ -4288,17 +4290,18 @@ class CompetitionMission:
             if black_pair and self.first_common_delivered:
                 plan = audit.black_blue_plan
                 if (plan is None or plan.turn_deg is None or
-                        (self.black_turn_keep_side is not None and
-                         (plan.keep_side != self.black_turn_keep_side or plan.turn_deg != 0))):
+                        (self.black_turn_keep_side is not None and plan.keep_side != self.black_turn_keep_side) or
+                        (plan.turn_deg != 0 and self.black_turn_requests >= 2)):
                     return self._start_capture_abandon(audit, stm, now)
                 self._set_state(CompetitionState.DISPERSE, now)
                 if plan.turn_deg:
                     self.black_turn_keep_side = plan.keep_side
+                    self.black_turn_requests += 1
                     self._arm_disperse(stm, None)
                     self.disperse_context = "black_clearance_turn"
                     self.disperse_command = replace(self.disperse_command, arg_a=plan.turn_deg,
                                                     aux=SEPARATION_BLACK_CLEARANCE)
-                    message = f"蓝黑按限位原地转{plan.turn_deg:+d}°，停车后复审"
+                    message = f"蓝黑第{self.black_turn_requests}次调整：原地转{plan.turn_deg:+d}°，停车后复审"
                     event = "black_clearance_turn_start"
                 else:
                     self._arm_disperse(stm, plan.keep_side, audit=audit, black_clearance=True)
