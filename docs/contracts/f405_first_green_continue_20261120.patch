@@ -1,0 +1,28 @@
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index 5ef7faa..b020102 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -484,7 +484,6 @@
+ #define APP_CAPTURE_ESCAPE_SPEED_MM_S   300.0f
+ #define APP_CAPTURE_ESCAPE_TURN_DEG      90.0f
+ #define APP_SEPARATION_MAX_ATTEMPTS        2U
+-#define APP_FIRST_GREEN_MAX_SEPARATIONS    3U
+ #define APP_POST_GRAB_AUDIT_WINDOW_MS     3500U
+ #define APP_POST_GRAB_CAMERA_NUDGE_MS      400U
+ #define APP_POST_GRAB_DECISION_WAIT_MS    4000U
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index cc25bbf..4743970 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -3167,11 +3167,6 @@ static bool task_prepare_separation(int8_t keep_side, bool keep_orange, uint32_t
+     task_status.command_reject_reason = TASK_COMMAND_REJECT_AUDIT;
+     return false;
+   }
+-  if (!first_delivery_done && !audit_initial_stash &&
+-      separation_total_attempts >= APP_FIRST_GREEN_MAX_SEPARATIONS) {
+-    task_status.command_reject_reason = TASK_COMMAND_REJECT_AUDIT;
+-    return false;
+-  }
+   const uint8_t left_count = audit_last_counts & 0x03U;
+   const uint8_t right_count = (audit_last_counts >> 2U) & 0x03U;
+   const uint8_t release_count = keep_side > 0 ? right_count : left_count;
