@@ -1,0 +1,145 @@
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index 7fed04e..dad6f6b 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -693,6 +693,8 @@
+ #define APP_DELIVERY_EXIT_DISTANCE_M       0.30f
+ #define APP_DELIVERY_EXIT_SPEED_MM_S      400.0f
+ #define APP_EMPTY_STATION_MAX_SPEED_MM_S 1000.0f
++#define APP_EMPTY_STATION_FINE_ENTRY_MM   350U
++#define APP_EMPTY_STATION_FINE_SPEED_MM_S 350.0f
+ #define APP_RETURN_CENTER_SPEED_MM_S       600.0f
+ #define APP_RETURN_CENTER_HEADING_MAX_MM_S 100.0f
+ #define APP_RETURN_CENTER_TURN_TOLERANCE_DEG 3.0f
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 5b414ba..64f4d99 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -129,7 +129,7 @@ typedef enum {
+ 
+ typedef struct {
+   NavCoarsePhase phase;
+-  float initial_remaining_mm, heading_deg;
++  float target_progress_mm, heading_deg;
+   float origin_x_mm, origin_y_mm, direction_x, direction_y;
+   float progress_mm;
+   bool valid;
+@@ -4118,6 +4118,25 @@ static RemoteRouteStatus nav_push(uint32_t now_ms)
+   return REMOTE_ROUTE_RUNNING;
+ }
+ 
++static void nav_latch_coarse_line(int16_t initial_distance_mm, float field_heading_deg)
++{
++  nav_coarse.valid = true;
++  nav_coarse.target_progress_mm = (float)initial_distance_mm;
++  nav_coarse.heading_deg = field_heading_deg;
++  const float radians = field_heading_deg * (3.14159265358979323846f / 180.0f);
++  nav_coarse.direction_x = cosf(radians);
++  nav_coarse.direction_y = sinf(radians);
++}
++
++static void nav_update_coarse_progress(const LocationPose *pose)
++{
++  const float projection_mm =
++      ((float)pose->x_mm - nav_coarse.origin_x_mm) * nav_coarse.direction_x +
++      ((float)pose->y_mm - nav_coarse.origin_y_mm) * nav_coarse.direction_y;
++  /* Backward travel or a larger remote D cannot renew the coarse budget. */
++  nav_coarse.progress_mm = fmaxf(nav_coarse.progress_mm, projection_mm);
++}
++
+ static RemoteRouteStatus nav_follow_coarse(
+     const VisionMissionCommand *command, const LocationPose *pose,
+     float cruise_speed_mm_s, bool stage_route, uint32_t now_ms)
+@@ -4126,13 +4145,7 @@ static RemoteRouteStatus nav_follow_coarse(
+                                              APP_NAV_LINEAR_SLOWDOWN_MM;
+   if (!nav_coarse.valid) {
+     /* Owned by the accepted task/action, not by SEQ or each H/D refresh. */
+-    nav_coarse.valid = true;
+-    nav_coarse.initial_remaining_mm = (float)command->target_x_mm;
+-    nav_coarse.heading_deg = (float)command->heading_cdeg * 0.01f;
+-    const float heading_rad = nav_coarse.heading_deg *
+-        (3.14159265358979323846f / 180.0f);
+-    nav_coarse.direction_x = cosf(heading_rad);
+-    nav_coarse.direction_y = sinf(heading_rad);
++    nav_latch_coarse_line(command->target_x_mm, (float)command->heading_cdeg * 0.01f);
+     nav_coarse.phase = command->target_x_mm <= coarse_start_mm ?
+         NAV_COARSE_BRAKE : NAV_COARSE_ALIGN;
+     nav_terminal_translate = false;
+@@ -4173,13 +4186,9 @@ static RemoteRouteStatus nav_follow_coarse(
+   }
+ 
+   if (nav_coarse.phase == NAV_COARSE_DRIVE) {
+-    const float projection_mm =
+-        ((float)pose->x_mm - nav_coarse.origin_x_mm) * nav_coarse.direction_x +
+-        ((float)pose->y_mm - nav_coarse.origin_y_mm) * nav_coarse.direction_y;
+-    /* Backward travel or a larger remote D cannot renew the coarse budget. */
+-    nav_coarse.progress_mm = fmaxf(nav_coarse.progress_mm, projection_mm);
++    nav_update_coarse_progress(pose);
+     const float remaining_mm = fminf(
+-        nav_coarse.initial_remaining_mm - nav_coarse.progress_mm,
++        nav_coarse.target_progress_mm - nav_coarse.progress_mm,
+         (float)command->target_x_mm);
+     const float reserve_mm = stage_route ? APP_NAV_STAGE_COARSE_RESERVE_MM :
+                                           APP_NAV_COARSE_RESERVE_MM;
+@@ -5114,6 +5123,35 @@ static void task_bulldozer_prepare_search(uint32_t now_ms, bool begin_scan)
+   }
+ }
+ 
++/* Upper D/H keep flowing during both phases. Only D=0 finishes the action. */
++static float task_station_move_speed(const LocationPose *pose, float live_distance_mm,
++                                     float *field_direction_deg)
++{
++  if (!nav_coarse.valid) {
++    /* arg_a/arg_b are the accepted first packet, not the latest D/H. The
++     * local wheel origin is taken before issuing the first movement. */
++    nav_latch_coarse_line(remote_action.arg_a, (float)remote_action.arg_b * 0.01f);
++    nav_coarse.origin_x_mm = (float)pose->x_mm;
++    nav_coarse.origin_y_mm = (float)pose->y_mm;
++    nav_coarse.phase = remote_action.arg_a > APP_EMPTY_STATION_FINE_ENTRY_MM ?
++        NAV_COARSE_DRIVE : NAV_COARSE_FINE;
++  }
++  if (nav_coarse.phase == NAV_COARSE_DRIVE) {
++    nav_update_coarse_progress(pose);
++    /* A nearer fused fix can shorten the goal along this line. A later larger
++     * D or a backward wheel delta cannot give this coarse leg extra travel. */
++    nav_coarse.target_progress_mm = fminf(nav_coarse.target_progress_mm,
++        nav_coarse.progress_mm + live_distance_mm);
++    const float remaining_mm = nav_coarse.target_progress_mm - nav_coarse.progress_mm;
++    if (remaining_mm > APP_EMPTY_STATION_FINE_ENTRY_MM) {
++      *field_direction_deg = nav_coarse.heading_deg;
++      return fminf(APP_EMPTY_STATION_MAX_SPEED_MM_S, remaining_mm);
++    }
++    nav_coarse.phase = NAV_COARSE_FINE;
++  }
++  return fminf(APP_EMPTY_STATION_FINE_SPEED_MM_S, fmaxf(APP_NAV_TERMINAL_MIN_SPEED_MM_S, live_distance_mm));
++}
++
+ static void task_process_bulldozer(const VisionMissionCommand *command,
+                                    uint32_t now_ms)
+ {
+@@ -5131,12 +5169,11 @@ static void task_process_bulldozer(const VisionMissionCommand *command,
+       task_status.motors_active = false;
+       return;
+     }
+-    const float body_angle = task_wrap_angle(command->target_y_mm * 0.01f -
+-                                             pose.heading_mdeg * 0.001f);
+-    const float max_speed = remote_action.station_move ?
+-        APP_EMPTY_STATION_MAX_SPEED_MM_S : APP_SAFE_SWEEP_RETURN_SPEED_MM_S;
+-    const float speed = fminf(max_speed,
+-        fmaxf(APP_NAV_TERMINAL_MIN_SPEED_MM_S, (float)command->target_x_mm));
++    float field_direction_deg = (float)command->target_y_mm * 0.01f;
++    const float speed = remote_action.station_move ?
++        task_station_move_speed(&pose, (float)command->target_x_mm, &field_direction_deg) :
++        fminf(APP_SAFE_SWEEP_RETURN_SPEED_MM_S, fmaxf(APP_NAV_TERMINAL_MIN_SPEED_MM_S, (float)command->target_x_mm));
++    const float body_angle = task_wrap_angle(field_direction_deg - pose.heading_mdeg * 0.001f);
+     task_status.motors_active = Motor_MoveAngleFineHeading(speed, body_angle, heading_deg);
+     return;
+   }
+@@ -5371,6 +5408,7 @@ static bool task_accept_bulldozer(const VisionMissionCommand *command,
+       (empty_move && previous_step_done && remote_action.station_move);
+   task_start_remote_action(REMOTE_ACTION_BULLDOZER, command, now_ms);
+   remote_action.station_move = station_move;
++  if (station_move) nav_reset_coarse();
+   if (station_turn) {
+     search_yaw_direction = (int8_t)command->target_y_mm;
+     search_direction_latched = true;
