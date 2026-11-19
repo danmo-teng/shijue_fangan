@@ -1,0 +1,56 @@
+diff --git a/Main/Inc/app_config.h b/Main/Inc/app_config.h
+index aaf9d8d..1874584 100644
+--- a/Main/Inc/app_config.h
++++ b/Main/Inc/app_config.h
+@@ -427,7 +427,7 @@
+ #define APP_START_FORWARD_DISTANCE_M    1.10f
+ #define APP_START_CLEARANCE_DISTANCE_M   0.60f
+ #define APP_START_CLEARANCE_SPEED_MM_S  600.0f
+-#define APP_START_FORWARD_SPEED_MM_S    800.0f
++#define APP_START_FORWARD_SPEED_MM_S   1000.0f
+ #define APP_START_FORWARD_ACCEL_MM_S2  1000.0f
+ #define APP_START_FORWARD_FULL_SPEED_ERROR_DEG 3.0f
+ #define APP_START_FORWARD_SLOW_SPEED_ERROR_DEG 8.0f
+@@ -651,6 +651,7 @@
+ #define APP_SAFE_SWEEP_FORWARD_SPEED_MM_S   300.0f
+ #define APP_SAFE_SWEEP_1000_SPEED_MM_S      500.0f
+ #define APP_SAFE_SWEEP_RETURN_SPEED_MM_S    350.0f
++#define APP_EMPTY_STATION_MAX_MM_S         1000.0f
+ #define APP_SAFE_SWEEP_RETURN_FINE_MIN_MM_S 250.0f
+ #define APP_SAFE_SWEEP_RETURN_FINE_MAX_MM_S 250.0f
+ #define APP_SAFE_SWEEP_MODE39_HOLD_MS         500U
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 9c12acf..5ad0e37 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -75,6 +75,7 @@ typedef struct {
+   int16_t arg_b;
+   uint16_t heading_cdeg;
+   uint8_t step;
++  bool station_move;
+   uint32_t actuator_wait_ms;
+   uint8_t separation_lift_angle;
+   bool orange_core_82, lift_ready;
+@@ -5132,8 +5133,8 @@ static void task_process_bulldozer(const VisionMissionCommand *command,
+     }
+     const float body_angle = task_wrap_angle(command->target_y_mm * 0.01f -
+                                              pose.heading_mdeg * 0.001f);
+-    const float speed = fminf(APP_SAFE_SWEEP_RETURN_SPEED_MM_S,
+-        fmaxf(APP_NAV_TERMINAL_MIN_SPEED_MM_S, (float)command->target_x_mm));
++    const float limit = remote_action.station_move ? APP_EMPTY_STATION_MAX_MM_S : APP_SAFE_SWEEP_RETURN_SPEED_MM_S;
++    const float speed = fminf(limit, fmaxf(APP_NAV_TERMINAL_MIN_SPEED_MM_S, (float)command->target_x_mm));
+     task_status.motors_active = Motor_MoveAngleFineHeading(speed, body_angle, heading_deg);
+     return;
+   }
+@@ -5362,7 +5363,11 @@ static bool task_accept_bulldozer(const VisionMissionCommand *command,
+       !attack_face_entry) {
+     return false;
+   }
++  /* Station transfers start in SEARCH. An opening detour starts from release
++   * or ATTACK_BACK_100, even though both transmit EMPTY_BODY_MOVE. */
++  const bool station_move = empty_move && (empty_search_entry || (previous_step_done && remote_action.station_move));
+   task_start_remote_action(REMOTE_ACTION_BULLDOZER, command, now_ms);
++  remote_action.station_move = station_move;
+   if (station_turn) {
+     search_yaw_direction = (int8_t)command->target_y_mm;
+     search_direction_latched = true;
