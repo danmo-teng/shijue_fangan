@@ -14,6 +14,7 @@ import math
 from statistics import median
 from typing import Iterable
 from sweep_boundaries import obstacle_reference_point
+from black_blue_clearance import BlackBluePlan
 from search_zone_view import ZoneObservation, clearly_outside
 from attack_return import AttackReturnRoute, opponent_heading_deg, centre_turn_direction
 from search_transfer import FailedSearchTarget, SearchTransferRoute
@@ -43,7 +44,7 @@ from protocol import (
     CMD_DISPERSE_PILE,
     CMD_DISPERSE_NEAR_KEEP,
     CMD_KEEP_ORANGE,
-    SEPARATION_ORANGE_CORE_82,
+    SEPARATION_ORANGE_CORE_82, SEPARATION_BLACK_CLEARANCE,
     RELEASE_SAME_SIDE_BLUE,
     CMD_REUSE_POST_GRAB_AUDIT,
     CMD_REUSE_CONFIRMED_LOAD,
@@ -307,6 +308,7 @@ class CargoAudit:
     near_claw_green_id: int | None = None
     near_claw_frame: int = 0
     first_green_core_conflict: bool = False
+    black_blue_plan: BlackBluePlan | None = None
     outer_blue_target: str | None = None
     midline_target: str | None = None
     blue_pair_geometry: str | None = None
@@ -1048,7 +1050,7 @@ class CompetitionMission:
         self.orange_core_filter_attempted = False
         self.orange_gate_filter_command = None
         self.blue_pair_turns = 0
-        self.black_side_turn_used = False
+        self.black_turn_keep_side = None
         self.blue_pair_live_target = None
 
         self.delivery_window: deque[bool] = deque(maxlen=settings.delivery_window_frames)
@@ -1526,7 +1528,7 @@ class CompetitionMission:
         if self.disperse_attempts == 0 and not self.recovery_task_locked:
             self.task_generation += 1
             self.blue_pair_turns = 0
-            self.black_side_turn_used = False
+            self.black_turn_keep_side = None
             self.blue_pair_live_target = None
             self.corridor_nudge_attempted = False
             self.corridor_nudge_command = None
@@ -1806,6 +1808,9 @@ class CompetitionMission:
         # MIXED and overflow must compare as encoded, not reconstructed from
         # local class_counts/green counts that the MCU never receives.
         signature = ("INVALID", (payload or self._audit_payload(audit)).semantic_signature)
+        if audit.black_blue_plan and self.first_common_delivered and not self.post_grab_audit_active:
+            plan = audit.black_blue_plan
+            signature += (("black_clearance", plan.keep_side, plan.turn_deg == 0, plan.turn_deg is None),)
         # A confirmed invalid grab can drive one claw or a lateral move.
         if (audit.blue_pair_geometry and
                 self.state in {CompetitionState.CAPTURE_AUDIT, CompetitionState.AUDIT_CONFIRM} and
@@ -2430,6 +2435,7 @@ class CompetitionMission:
         keep_side: str | None,
         *,
         first_green_bump: bool = False,
+        black_clearance: bool = False,
         keep_count: int = 0,
         audit: CargoAudit | None = None,
     ) -> None:
@@ -2438,7 +2444,7 @@ class CompetitionMission:
         self.separation_request_epoch += 1
         self.separation_request_counted = False
         near_keep = audit is not None and audit.near_keep_side == keep_side and keep_side is not None
-        self.separation_start_audit = audit if keep_count > 0 or near_keep else None
+        self.separation_start_audit = audit if keep_count > 0 or near_keep or black_clearance else None
         self.separation_wanted_class = None
         if audit is not None and keep_side is not None and self.first_common_delivered:
             self.separation_wanted_class = self._retained_class(audit, keep_side)
@@ -2455,7 +2461,10 @@ class CompetitionMission:
             self.disperse_command_accepted = False
             self.disperse_expected_done_mode = STM_MODE_SEARCH
             return
-        if keep_count <= 0 and not near_keep:
+        if black_clearance:
+            self.separation_wanted_class = "core_black"
+            keep_count = audit.left_count if keep_side == "left" else audit.right_count
+        if keep_count <= 0 and not near_keep and not black_clearance:
             keep_side = None
         self.cluster_keep_side = keep_side
         self.cluster_keep_side_count = keep_count if keep_side is not None else 0
@@ -2471,9 +2480,12 @@ class CompetitionMission:
         self.disperse_context = (
             "selective" if keep_side is not None else "observe"
         )
-        self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags,
-            aux=(SEPARATION_ORANGE_CORE_82 if not near_keep and audit is not None and
-                 self._orange_core_separation(audit, keep_side) else 0),
+        aux = 0
+        if black_clearance:
+            aux = SEPARATION_BLACK_CLEARANCE
+        elif not near_keep and audit is not None and self._orange_core_separation(audit, keep_side):
+            aux = SEPARATION_ORANGE_CORE_82
+        self.disperse_command = CommandRequest(CMD_DISPERSE_PILE, flags, aux=aux,
             source_vision_frame=audit.near_claw_frame if near_keep else None)
         self.disperse_initial_ack = stm.acknowledged_sequence if stm.fresh else None
         self.disperse_relay_tx_baseline = stm.relay_mission_tx_frames
@@ -4273,17 +4285,29 @@ class CompetitionMission:
             blue = audit.blue_pair_geometry
             reviewing = self._reviewing_blue_pair_turn()
             black_pair = dict(audit.class_counts) == {"core_black": 1, "danger_cyan": 1}
-            if reviewing and black_pair and not self.black_side_turn_used and self._blue_pair_separated(audit):
-                self.black_side_turn_used = True
-                angle = 10 if audit.left_class == "core_black" else -10
+            if black_pair and self.first_common_delivered:
+                plan = audit.black_blue_plan
+                if (plan is None or plan.turn_deg is None or
+                        (self.black_turn_keep_side is not None and
+                         (plan.keep_side != self.black_turn_keep_side or plan.turn_deg != 0))):
+                    return self._start_capture_abandon(audit, stm, now)
                 self._set_state(CompetitionState.DISPERSE, now)
-                self._arm_disperse(stm, None)
-                self.disperse_context = "black_side_turn"
-                self.disperse_command = replace(self.disperse_command, arg_a=angle)
-                return CompetitionOutput(self.state, self.disperse_command, "中线停车复审已分清，向黑块侧再转10°",
-                    self.selected_batch, audit, event="black_side_turn_start", motion_expected=True,
-                    tx_policy="disperse_command", expected_stm_modes=(STM_MODE_DISPERSE_DONE,))
-            if (not (black_pair and self.black_side_turn_used) and not self._blue_pair_separated(audit) and blue in {"left", "right"} and
+                if plan.turn_deg:
+                    self.black_turn_keep_side = plan.keep_side
+                    self._arm_disperse(stm, None)
+                    self.disperse_context = "black_clearance_turn"
+                    self.disperse_command = replace(self.disperse_command, arg_a=plan.turn_deg,
+                                                    aux=SEPARATION_BLACK_CLEARANCE)
+                    message = f"蓝黑按限位原地转{plan.turn_deg:+d}°，停车后复审"
+                    event = "black_clearance_turn_start"
+                else:
+                    self._arm_disperse(stm, plan.keep_side, audit=audit, black_clearance=True)
+                    message = "蓝已让开爪路，" + ("左爪" if plan.keep_side == "left" else "右爪") + "保黑"
+                    event = "black_clearance_keep"
+                return CompetitionOutput(self.state, self.disperse_command, message, self.selected_batch, audit,
+                    event=event, motion_expected=True, tx_policy="disperse_command",
+                    expected_stm_modes=(STM_MODE_DISPERSE_DONE,))
+            if (not self._blue_pair_separated(audit) and blue in {"left", "right"} and
                     (reviewing or min(audit.left_count, audit.right_count) == 0)):
                 angle = 10 if blue == "left" else -10
                 if self.blue_pair_turns in (0, angle // 10):
@@ -4570,7 +4594,8 @@ class CompetitionMission:
         waiting = self._audit_observation_wait(vision, stm, now)
         if waiting is not None:
             return waiting
-        if (self._reviewing_blue_pair_turn() and self.audit_recheck_started_s is not None and
+        if ((self._reviewing_blue_pair_turn() or self.disperse_context == "black_clearance_turn") and
+                self.audit_recheck_started_s is not None and
                 vision.observed_monotonic_s is not None and vision.observed_monotonic_s < self.audit_recheck_started_s):
             return self._audit_placeholder("audit_recheck_wait_frame")
         if (self.audit_recheck_frame_floor is not None and
@@ -7073,7 +7098,7 @@ class CompetitionMission:
             stm.claw_visible and
             stm.camera_pitch_cdeg == 14000 and
             self.disperse_command_accepted and
-            ((self.disperse_context not in {"blue_pair_view", "black_side_turn"} and not self._first_green_core_conflict_active()) or
+            ((self.disperse_context not in {"blue_pair_view", "black_clearance_turn"} and not self._first_green_core_conflict_active()) or
              (stm.context_valid and stm.context_matches and
               stm.accepted_command == CMD_DISPERSE_PILE and bool(stm.action_status & 2)))
         ):
@@ -7092,7 +7117,7 @@ class CompetitionMission:
                 recheck_pending=True,
                 recheck_context=(
                     "disperse_observe"
-                    if self.disperse_context in {"observe", "blue_pair_view", "black_side_turn"} else
+                    if self.disperse_context in {"observe", "blue_pair_view", "black_clearance_turn"} else
                     "disperse_selective"
                 ),
             )

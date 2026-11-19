@@ -34,6 +34,7 @@ import numpy as np
 
 from vision_replay import VisionReplay
 from search_zone_view import clipped, clearly_outside
+from black_blue_clearance import black_blue_plan
 from safe_zone_memory import SafeZoneCargoMemory
 from sweep_boundaries import runtime_boundaries, corridor_polygon
 from async_diagnostics import AsyncDiagnosticWriter
@@ -511,6 +512,7 @@ def audit_from_cargo(
         any(item.class_name in {"green_supply", "core_black"} for item in right)
     )
     blue_pair_geometry = None
+    black_plan = None
     outer_blue_target = midline_target = None
     if (len(visible) == 2 and has_danger and not unassigned and not remembered_items and
             len(all_names) == 2 and all_names <= {"danger_cyan", "green_supply", "core_black", "injured_orange"}):
@@ -519,6 +521,8 @@ def audit_from_cargo(
             wanted, blue = blue, wanted
         wx, _, ww, _ = wanted.bbox
         bx, _, bw, _ = blue.bbox
+        if wanted.class_name == "core_black":
+            black_plan = black_blue_plan(wanted.bbox, blue.bbox)
         if wanted.class_name in MATERIAL_CLASSES:
             wc, bc = wanted.center_px[0], blue.center_px[0]
             if ((blue in left and wanted in left and bc < wc <= CLAW_SPLIT_X) or
@@ -536,6 +540,7 @@ def audit_from_cargo(
                 blue_pair_geometry = "left" if gap_x < CLAW_SPLIT_X else "right"
     isolated_track_ids = isolated_track_ids or set()
     return CargoAudit(
+        black_blue_plan=black_plan,
         blue_pair_geometry=blue_pair_geometry, outer_blue_target=outer_blue_target, midline_target=midline_target,
         visible_green_in_claw=any(item.visible and item.class_name == "green_supply" for item in items),
         class_counts=tuple(sorted(Counter(item.class_name for item in visible).items())),

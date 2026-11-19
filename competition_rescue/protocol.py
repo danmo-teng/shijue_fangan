@@ -78,6 +78,7 @@ CMD_TARGET_RIGHT = 1 << 7
 CMD_KEEP_ORANGE = 1 << 1  # Selective separation only: apply the firmware opening offset to the retained claw.
 CMD_ORANGE_FILTER_AT_PICKUP = 1 << 4  # 0x16: hold chassis heading at the pickup site.
 CMD_DISPERSE_NEAR_KEEP = 1 << 4  # DISPERSE only: side evidence, never cargo validity.
+SEPARATION_BLACK_CLEARANCE = 1  # Calibrated black/blue turn or claw choice at 140 degrees.
 SEPARATION_ORANGE_CORE_82 = 8200  # Opcode-specific lift request; not a chassis heading.
 
 AUDIT_INITIAL_STASH = 1 << 0
@@ -282,7 +283,13 @@ def mission_frame(
     if command in {CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT}:
         view_turn = (command == CMD_DISPERSE_PILE and flags in {CMD_VALID, CMD_VALID | CMD_RED_SIDE}
                      and arg_a in {-10, 10} and aux_cdeg == 0)
-        if (arg_a != 0 and not view_turn) or (arg_b != 0 and not (view_turn and arg_b == 1)) or aux_cdeg not in {0, SEPARATION_ORANGE_CORE_82}:
+        if aux_cdeg == SEPARATION_BLACK_CLEARANCE:
+            side_flags = CMD_VALID | (flags & CMD_RED_SIDE)
+            turn = flags == side_flags and 2 <= abs(arg_a) <= 20
+            keep = flags in {side_flags | CMD_SIDE_VALID, side_flags | CMD_SIDE_VALID | CMD_TARGET_RIGHT} and arg_a == 0
+            if command != CMD_DISPERSE_PILE or arg_b != 0 or not (turn or keep):
+                raise ValueError("invalid black/blue clearance action")
+        elif (arg_a != 0 and not view_turn) or (arg_b != 0 and not (view_turn and arg_b == 1)) or aux_cdeg not in {0, SEPARATION_ORANGE_CORE_82}:
             raise ValueError("separation requires zero motion and a supported lift mode")
         if aux_cdeg == SEPARATION_ORANGE_CORE_82:
             allowed = CMD_VALID | CMD_RED_SIDE | CMD_KEEP_ORANGE

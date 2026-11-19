@@ -1,0 +1,150 @@
+diff --git a/MISSION_PROTOCOL.md b/MISSION_PROTOCOL.md
+index 054824b..0cc5ec9 100644
+--- a/MISSION_PROTOCOL.md
++++ b/MISSION_PROTOCOL.md
+@@ -136,6 +136,7 @@ A3 B3 12 10 02 80 02 00 00 00 01 09 DD FD C3
+ - 门口已确认运输单橙、复审发现混黑时，上位仍可用任务命令 0x16，A=100 mm、B=8600、U 为红方 9000 或蓝方 27000。先向黑块异侧横移，降到 86° 移回，回 mode48 报 DONE 并复审。
+ - 通道单障碍侧挤使用 TYPE 0x18 的操作码 0x17。完成航向和视觉对准后，上位发送 VALID、SIDE_VALID、队色及障碍侧；A=100 mm，B2/B3/B4/B5 的前进距离 B 分别为 300/230/100/50 mm，B1 直接扫障，U 为本方航向。下位闭爪向异侧横移 A，前进 B，再反向横移 A。实测前进量在结束直行时取值，回线完成后报同动作 DONE/mode54。上位在当前位置重新对准和判障；通道清空用 A=-1 续推，仍堵或侧挤失败按原预备线流程处理。
+ - 抓前 140° 审核发现蓝块与单件目标在同侧时，上位可按两框中心的中点选择无侧观察方向。沿用 0x10，A=+10° 向左、−10° 向右，起转 B=U=0，仅置 VALID 和队色。转动中报告 140° 爪区可见；上位看到两块分居中线两侧，可保持相同任务号、动作号和 A，发 B=1、U=0 及真实帧号提前停车，再按原出口复审。下位回 mode35/DONE 后取新图，同向最多两次。首绿仍可见时转普通分离；首绿之后仍分不清则弃批。A=0 的无侧观察保留原 20°。 黑蓝中线停车并复审分清时，上位随后可在本批仅发一次同类型独立10°观察动作，方向指向当前黑块侧；新动作结束再审核。
++- 抓前单黑单蓝、首绿已送：0x10 的 U=1 表示按左右机械限位照片执行。无SIDE_VALID时 A 为有符号有限原地转角（±2至20度），B=0，目标最大20度/秒；同action重复不重启。达到后原140度复审。有SIDE_VALID时 A=B=0，TARGET_RIGHT指定实际保黑爪；上位按蓝边与黑底边位置授权，爪内计数继续按真实框回报。
+ - 闭爪后追加绿块的任务 opcode 0x19 已撤回。140°抓前原目标丢失、空爪且有合法候选时，0x09测距变体U=5、A=0、B=12000：结束旧批并进入120°原地搜索，按新画面重新选择。U=2抓前50 mm轮程补进沿用。
+ - 首件绿色若在140°ROI中与其他物资挤在中心且曲线无法取出，上位机可发送`DISPERSE_PILE + FIRST_GREEN_BUMP(bit5)`，不得同时置SIDE_VALID/TARGET_RIGHT。F407仅在首件尚未完成、审核至少2件且含绿色时接受，并且每轮任务最多一次：后退0.10 m→Touch闭爪→前进0.20 m→后退0.10 m→双爪全开→直接回SEARCH。该动作不改变无侧DISPERSE的20°观察语义。
+ - 防守开局暂存到点后执行 `RELEASE_BOTH`。上位收到 mode34 后同批发送 `RETURN_CENTER`（D=0）。F405 保持释放航向直退 350 mm，完成后回 SEARCH。上位再按退完时的定位发 step13 直达 S1。正式投送则在退出安全区 300 mm 后返回本次出发的搜索点。
+diff --git a/Main/Inc/vision.h b/Main/Inc/vision.h
+index 587c820..d3f56da 100644
+--- a/Main/Inc/vision.h
++++ b/Main/Inc/vision.h
+@@ -141,6 +141,7 @@
+ #define VISION_APPROACH_RANGE_ZONE_VIEW 3U
+ #define VISION_APPROACH_ORANGE_TOP_VIEW 4U
+ #define VISION_APPROACH_PRE_GRAB_RELOOK 5U
++#define VISION_SEPARATION_BLACK_CLEARANCE 1U
+ #define VISION_SEPARATION_ORANGE_CORE_82 8200U
+ #define VISION_RELEASE_SAME_SIDE_BLUE      1U
+ #define VISION_PRE_GRAB_ADVANCE_MM      50U
+diff --git a/Main/Src/Task.c b/Main/Src/Task.c
+index 8a479db..329bda1 100644
+--- a/Main/Src/Task.c
++++ b/Main/Src/Task.c
+@@ -89,6 +89,7 @@ typedef struct {
+   bool orange_core_82, lift_ready;
+   bool restoring_gate_height;
+   uint32_t lift_started_ms;
++  int64_t black_turn_start_yaw_mdeg;
+   int64_t straight_start_counts[3];
+   bool lateral_started, obstacle_right, filter_at_pickup;
+   uint16_t nudge_forward_mm;
+@@ -1030,6 +1031,19 @@ static bool task_disperse_keep_side_valid(
+   if (command == NULL) {
+     return true;
+   }
++  if (command->heading_cdeg == VISION_SEPARATION_BLACK_CLEARANCE) {
++    const uint8_t left = audit_last_counts & 3U, right = (audit_last_counts >> 2U) & 3U;
++    /* In one image half the wire class is UNKNOWN. The host still sends the
++     * real counts; its mechanical reach decision can name the opposite claw. */
++    const bool mixed = (left == 2U && right == 0U && audit_last_left_class == VISION_CARGO_UNKNOWN) ||
++                       (right == 2U && left == 0U && audit_last_right_class == VISION_CARGO_UNKNOWN);
++    const bool split = left == 1U && right == 1U &&
++        ((audit_last_left_class == VISION_CARGO_CORE && audit_last_right_class == VISION_CARGO_DANGER) ||
++         (audit_last_right_class == VISION_CARGO_CORE && audit_last_left_class == VISION_CARGO_DANGER));
++    return command->command == VISION_CMD_DISPERSE_PILE && first_delivery_done && !audit_initial_stash &&
++        !task_status.gripper_closed && (state == TASK_GRAB_OBSERVE || state == TASK_DISPERSE_READY) &&
++        audit_last_total_count == 2U && task_audit_has_danger() && (mixed || split);
++  }
+   if ((command->flags & VISION_CMD_SIDE_VALID) == 0U) {
+     return (command->flags & VISION_CMD_DISPERSE_NEAR_KEEP) == 0U;
+   }
+@@ -7141,7 +7155,16 @@ static void task_process_remote_action(const VisionMissionCommand *command,
+            * for a fresh 140-degree claw audit. */
+           const float turn_deg = remote_action.arg_a == 0 ?
+               APP_DISPERSE_OBSERVE_TURN_DEG : (float)remote_action.arg_a;
+-          (void)task_remote_turn(turn_deg, now_ms);
++          if (remote_action.heading_cdeg == VISION_SEPARATION_BLACK_CLEARANCE) {
++            const float travelled = (IMU_GetData().yaw_mdeg - remote_action.black_turn_start_yaw_mdeg) *
++                                    .001f * APP_LOCATION_IMU_YAW_SIGN;
++            const MotorTurnStatus result = Motor_MoveSpinAngle(0.0f, 0.0f, turn_deg - travelled, 20.0f);
++            task_status.motors_active = result == MOTOR_TURN_RUNNING;
++            if (result == MOTOR_TURN_DONE) task_remote_action_advance(now_ms);
++            else if (result == MOTOR_TURN_FAULT || result == MOTOR_TURN_INVALID) task_stop(TASK_FAULT_MOTOR, now_ms);
++          } else {
++            (void)task_remote_turn(turn_deg, now_ms);
++          }
+         } else if (remote_action.phase == 1U) {
+           if ((remote_action.arg_a == 0 || !Motor_IsBraking()) &&
+               task_scan_camera_to(APP_GRAB_VIEW_ANGLE, now_ms)) {
+@@ -8059,6 +8082,8 @@ static void task_accept_mission_legacy(const VisionMissionCommand *command,
+       /* Marker for the observation-turn variant. It deliberately retains no
+        * side until the upper computer has received a new audit. */
+       remote_action.arg_b = 1;
++      if (remote_action.heading_cdeg == VISION_SEPARATION_BLACK_CLEARANCE)
++        remote_action.black_turn_start_yaw_mdeg = IMU_GetData().yaw_mdeg;
+       /* The signed observation starts in the audited 140-degree claw view. */
+       if (remote_action.arg_a != 0 && Camera_GetAngle() == APP_GRAB_VIEW_ANGLE)
+         task_status.claw_visible = true;
+@@ -8561,7 +8586,7 @@ static void task_accept_mission(VisionData *vision, uint32_t now_ms)
+       state != TASK_REMOTE_ACTION || remote_action.type != REMOTE_ACTION_DISPERSE ||
+       remote_action.arg_b != 1 || remote_action.arg_a != incoming.target_x_mm)) goto rejected;
+   if (separation_request && !new_action &&
+-      incoming.heading_cdeg != (remote_action.orange_core_82 ? VISION_SEPARATION_ORANGE_CORE_82 : 0U))
++      incoming.heading_cdeg != (remote_action.orange_core_82 ? VISION_SEPARATION_ORANGE_CORE_82 : remote_action.heading_cdeg))
+     goto rejected;
+   if (separation82 && new_action) {
+     const bool keep_right = incoming.command == VISION_CMD_RELEASE_LEFT ||
+diff --git a/Main/Src/vision.c b/Main/Src/vision.c
+index 9275638..9701f30 100644
+--- a/Main/Src/vision.c
++++ b/Main/Src/vision.c
+@@ -310,7 +310,12 @@ static void vision_save_mission(const uint8_t *payload, uint8_t sequence,
+     const bool view_turn = code == VISION_CMD_DISPERSE_PILE &&
+         flags == (VISION_CMD_VALID | (flags & VISION_CMD_RED_SIDE)) &&
+         (arg_a == 10 || arg_a == -10) && heading == 0U;
+-    if ((arg_a != 0 && !view_turn) || (arg_b != 0 && !(view_turn && arg_b == 1)) ||
++    if (heading == VISION_SEPARATION_BLACK_CLEARANCE) {
++      const uint8_t side = VISION_CMD_VALID | (flags & VISION_CMD_RED_SIDE);
++      const bool turn = flags == side && ((arg_a >= 2 && arg_a <= 20) || (arg_a <= -2 && arg_a >= -20));
++      const bool keep = flags == (side | VISION_CMD_SIDE_VALID | (flags & VISION_CMD_TARGET_RIGHT)) && arg_a == 0;
++      if (code != VISION_CMD_DISPERSE_PILE || arg_b != 0 || !(turn || keep)) goto rejected_payload;
++    } else if ((arg_a != 0 && !view_turn) || (arg_b != 0 && !(view_turn && arg_b == 1)) ||
+         (heading != 0U && heading != VISION_SEPARATION_ORANGE_CORE_82)) goto rejected_payload;
+     if (code == VISION_CMD_DISPERSE_PILE && (flags & VISION_CMD_KEEP_ORANGE) != 0U &&
+         (flags & VISION_CMD_SIDE_VALID) == 0U) goto rejected_payload;
+diff --git a/tools/test_injury_backoff.c b/tools/test_injury_backoff.c
+index aecfbb8..ad965dc 100644
+--- a/tools/test_injury_backoff.c
++++ b/tools/test_injury_backoff.c
+@@ -111,6 +111,8 @@ MotorDistanceStatus Motor_MoveDistanceLinear(float distance, float speed, float
+ float Motor_GetDistanceTravelledMm(void) { return distance_travelled_mm; }
+ MotorDistanceStatus Motor_MoveDistanceConstant(float distance, float speed)
+ { (void)distance; (void)speed; return MOTOR_DISTANCE_DONE; }
++MotorTurnStatus Motor_MoveSpinAngle(float speed, float direction, float turn, float max_rate)
++{ (void)speed; (void)direction; (void)turn; (void)max_rate; return MOTOR_TURN_DONE; }
+ MotorTurnStatus Motor_TurnAngle(float angle) { (void)angle; return MOTOR_TURN_DONE; }
+ MotorTurnStatus Motor_TurnAngleSpeed(float angle, float speed)
+ { (void)angle; (void)speed; return MOTOR_TURN_DONE; }
+diff --git a/tools/vision_protocol.py b/tools/vision_protocol.py
+index a06c767..4f00180 100644
+--- a/tools/vision_protocol.py
++++ b/tools/vision_protocol.py
+@@ -90,6 +90,7 @@ APPROACH_RANGE_PRE_GRAB = 2
+ APPROACH_RANGE_ZONE_VIEW = 3
+ APPROACH_ORANGE_TOP_VIEW = 4
+ APPROACH_PRE_GRAB_RELOOK = 5
++SEPARATION_BLACK_CLEARANCE = 1
+ SEPARATION_ORANGE_CORE_82 = 8200
+ RELEASE_SAME_SIDE_BLUE = 1
+ MODE_APPROACH_RANGE_WAIT = 52
+@@ -389,7 +390,13 @@ def mission_frame(
+     if command in (CMD_DISPERSE_PILE, CMD_RELEASE_LEFT, CMD_RELEASE_RIGHT):
+         view_turn = (command == CMD_DISPERSE_PILE and flags in (CMD_VALID, CMD_VALID | CMD_RED_SIDE)
+                      and target_x_mm in (-10, 10) and heading_cdeg == 0)
+-        if ((target_x_mm and not view_turn) or (target_y_mm and not (view_turn and target_y_mm == 1)) or
++        if heading_cdeg == SEPARATION_BLACK_CLEARANCE:
++            side = CMD_VALID | (flags & CMD_RED_SIDE)
++            turn = flags == side and 2 <= abs(target_x_mm) <= 20
++            keep = flags in (side | CMD_SIDE_VALID, side | CMD_SIDE_VALID | CMD_TARGET_RIGHT) and target_x_mm == 0
++            if command != CMD_DISPERSE_PILE or target_y_mm != 0 or not (turn or keep):
++                raise ValueError("invalid black/blue clearance action")
++        elif ((target_x_mm and not view_turn) or (target_y_mm and not (view_turn and target_y_mm == 1)) or
+                 heading_cdeg not in (0, SEPARATION_ORANGE_CORE_82)):
+             raise ValueError("invalid separation lift payload")
+         if command == CMD_DISPERSE_PILE and flags & CMD_KEEP_ORANGE and not flags & CMD_SIDE_VALID:
